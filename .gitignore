@@ -2,6 +2,9 @@
 # Created by https://www.gitignore.io/api/c++,cmake,ninja,python,visualstudio,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=c++,cmake,ninja,python,visualstudio,visualstudiocode
 
+### Shell ###
+*.sh
+
 ### C++ ###
 # Prerequisites
 *.d
@@ -537,3 +540,4 @@ CMakeSettings
 out
 main6
 main8
+CLAUDE.md
