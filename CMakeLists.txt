@@ -261,8 +261,8 @@ elseif(APPLE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
       # fina_package(OpenMP REQUIRED) will fail with AppleClang so 
       # we need this to point towards the homebrew libomp
-      include_directories("/opt/homebrew/Cellar/libomp/20.1.8/include/")
-      link_directories("/opt/homebrew/Cellar/libomp/20.1.8/lib/")
+      include_directories("/opt/homebrew/Cellar/libomp/22.1.0/include/")
+      link_directories("/opt/homebrew/Cellar/libomp/22.1.0/lib/")
       list(APPEND COMPILE_FLAGS "-Xclang")
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
@@ -354,13 +354,14 @@ endif()
 
 
 if(NOT PIP_INSTALL)
-  if(WIN32)
-    set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})
-    
-  else()
-    execute_process ( COMMAND ${PYTHON_EXECUTABLE} -m site --user-site
-    OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(PYTHON_LOCAL_INSTALL_DIR ${PYTHON_SITE_PACKAGES})
+  if(NOT PYTHON_LOCAL_INSTALL_DIR)
+    if(WIN32)
+      set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})
+    else()
+      execute_process ( COMMAND ${PYTHON_EXECUTABLE} -m site --user-site
+      OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
+      set(PYTHON_LOCAL_INSTALL_DIR ${PYTHON_SITE_PACKAGES})
+    endif()
   endif()
 
   if(PYTHON_LOCAL_INSTALL_DIR)

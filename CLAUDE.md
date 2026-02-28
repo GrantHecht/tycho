@@ -74,10 +74,58 @@ notices/                Third-party license notices — DO NOT modify or delete
 
 ## Build System
 
-This is a CMake + pybind11 project. `CMakePresets.json` defines the standard configure/build
-presets; `config_and_build.sh` is a convenience wrapper for Linux/macOS. The `dep/`
-submodules must be initialised before building (`git submodule update --init --recursive`
-or the cmake helpers in `cmake/git-submodule-*.cmake` will do it automatically).
+This is a CMake + pybind11 project. The output is a pybind11 shared library
+(`asset.cpython-<ver>-darwin.so`) plus the pure-Python `asset_asrl/` package, both
+installed directly into the active Python environment's site-packages by the build step.
+
+### macOS (Apple Silicon) — canonical development setup
+
+**System tools required (install once via Homebrew):**
+```
+brew install llvm ninja
+```
+Current versions in use: LLVM 22.1.0, Ninja 1.13+.
+
+**Python environment — conda env named `tycho` (Python 3.13):**
+```bash
+conda create -n tycho python=3.13
+conda activate tycho
+pip install numpy scipy matplotlib spiceypy pybind11
+```
+
+**First-time build:**
+```bash
+mkdir build
+bash config_and_build.sh
+```
+
+**Subsequent builds** (after C++ source changes):
+```bash
+cd build && ninja -j6 all
+```
+
+**Running examples:**
+```bash
+conda activate tycho
+python examples/Brachistochrone.py
+```
+
+### Key CMake variables
+
+| Variable | Purpose |
+|---|---|
+| `Python_EXECUTABLE` | Path to Python interpreter to build against |
+| `PYTHON_LOCAL_INSTALL_DIR` | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
+| `STRICT_IEEE_COMPLIANCE` | `ON` to disable fast-math and enforce proper NaN handling (default `OFF`) |
+| `BUILD_SPHINX_DOCS` | `ON` to also build documentation (requires sphinx, breathe, furo, exhale) |
+
+`config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
+`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
+the correct interpreter. When updating LLVM, change `LLVM_VERSION` in that script and
+the hardcoded libomp path in `CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
+
+The `dep/` submodules (eigen, autodiff, fmt, pybind11) must be initialised before the
+first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
 ## Key Concepts and Domain Language
 
@@ -144,6 +192,50 @@ Use descriptive commit messages. Prefix with type where clear:
 - `refactor:` restructuring without behavior change
 - `docs:` documentation only
 - `chore:` build system, tooling, dependency updates
+
+## Testing
+
+Tycho does not yet have a formal unit test suite. The example scripts under
+`examples/` serve as the **integration test suite** and act as the acceptance
+gate for all changes merged into `main`.
+
+### Running the tests
+
+```bash
+conda activate tycho
+python run_examples.py
+```
+
+The runner (`run_examples.py` at the repo root) executes all 38 example scripts
+non-interactively (using the `Agg` matplotlib backend), enforces per-example
+timeouts, and exits with code 0 only if every example passes.
+
+Options:
+```
+--timeout SECONDS   Override the default 300 s per-example limit.
+--filter SUBSTRING  Run only examples whose path contains SUBSTRING.
+```
+
+### Merge policy
+
+**All 38 examples must pass before any pull request can be merged into `main`.**
+This is the project's definition of a green build.  Reviewers must verify that
+`python run_examples.py` exits 0 with no failures before approving a PR.
+
+If a change intentionally breaks an example (e.g. an API change that requires
+updating an example), the example must be fixed in the same PR.
+
+### Required dependencies for the test environment
+
+The following packages must be present in the `tycho` conda environment for all
+examples to run (none will be skipped):
+
+| Package | Install |
+|---|---|
+| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib` |
+| seaborn | `pip install seaborn` |
+| spiceypy | `pip install spiceypy` |
+| basemap | `conda install -c conda-forge basemap` |
 
 ## Things to Flag for Human Review
 

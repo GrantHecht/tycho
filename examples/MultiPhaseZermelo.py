@@ -204,8 +204,8 @@ def plot2DTrajListVF(tList, wFunc_num):
     for i in range(nVecPlot):
         for j in range(nVecPlot):
             u_ij, v_ij = wFunc_num([xPlot[i, j], yPlot[i, j]])
-            uPlot[i, j] = u_ij
-            vPlot[i, j] = v_ij
+            uPlot[i, j] = u_ij.item()
+            vPlot[i, j] = v_ij.item()
             
     QV = axes[0].quiver(xPlot, yPlot, uPlot, vPlot, label = "Wind", color = "blue")
     
