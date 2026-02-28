@@ -1,3 +1,4 @@
-from asset.Extensions import *
-import asset as _asset
 import inspect
+
+import asset as _asset
+from asset.Extensions import *

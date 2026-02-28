@@ -20,7 +20,6 @@ in the LICENSE file in ASSET's top level directory.
 
 */
 
-
 #pragma once
 
 #include "SolverFunctionBase.h"
@@ -28,17 +27,16 @@ in the LICENSE file in ASSET's top level directory.
 
 namespace ASSET {
 
-  struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
-    ObjectiveFunction() {
-    }
+struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
+    ObjectiveFunction() {}
 
-    ObjectiveFunction(const ObjectiveInterface& f, const MatrixXi& vindex) {
-      this->function = f;
-      this->index_data = SolverIndexingData(f.IRows(), vindex);
+    ObjectiveFunction(const ObjectiveInterface &f, const MatrixXi &vindex) {
+        this->function = f;
+        this->index_data = SolverIndexingData(f.IRows(), vindex);
     }
-    ObjectiveFunction(const ObjectiveInterface& f, const SolverIndexingData& data) {
-      this->function = f;
-      this->index_data = data;
+    ObjectiveFunction(const ObjectiveInterface &f, const SolverIndexingData &data) {
+        this->function = f;
+        this->index_data = data;
     }
 
     /*
@@ -46,12 +44,12 @@ namespace ASSET {
     will be called on multiple threads.
     */
     std::vector<ObjectiveFunction> thread_split(int Thr) const {
-      std::vector<SolverIndexingData> idat = this->index_data.thread_split(Thr);
-      std::vector<ObjectiveFunction> split(idat.size());
-      for (int i = 0; i < idat.size(); i++) {
-        split[i] = ObjectiveFunction(this->function, idat[i]);
-      }
-      return split;
+        std::vector<SolverIndexingData> idat = this->index_data.thread_split(Thr);
+        std::vector<ObjectiveFunction> split(idat.size());
+        for (int i = 0; i < idat.size(); i++) {
+            split[i] = ObjectiveFunction(this->function, idat[i]);
+        }
+        return split;
     }
 
     /*
@@ -59,8 +57,8 @@ namespace ASSET {
     Passes the arguments from PSIOPT and NonLinearProgram as well as the indexing data struct to the
     underlying vector function.
     */
-    void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double& Val) const {
-      this->function.objective(ObjScale, X, Val, this->index_data);
+    void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val) const {
+        this->function.objective(ObjScale, X, Val, this->index_data);
     }
 
     /*
@@ -68,11 +66,9 @@ namespace ASSET {
     Passes the arguments from PSIOPT and NonLinearProgram as well as the indexing data struct to the
     underlying vector function.
     */
-    void objective_gradient(double ObjScale,
-                            ConstEigenRef<Eigen::VectorXd> X,
-                            double& Val,
+    void objective_gradient(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
                             EigenRef<Eigen::VectorXd> GX) const {
-      this->function.objective_gradient(ObjScale, X, Val, GX, this->index_data);
+        this->function.objective_gradient(ObjScale, X, Val, GX, this->index_data);
     }
 
     /*
@@ -80,17 +76,15 @@ namespace ASSET {
     Passes the arguments from PSIOPT and NonLinearProgram as well as the indexing data struct to the
     underlying vector function.
     */
-    void objective_gradient_hessian(double ObjScale,
-                                    ConstEigenRef<Eigen::VectorXd> X,
-                                    double& Val,
+    void objective_gradient_hessian(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
                                     EigenRef<Eigen::VectorXd> GX,
-                                    Eigen::SparseMatrix<double, Eigen::RowMajor>& KKTmat,
+                                    Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                                     EigenRef<Eigen::VectorXi> KKTLocations,
                                     EigenRef<Eigen::VectorXi> KKTClashes,
-                                    std::vector<std::mutex>& KKTLocks) {
-      this->function.objective_gradient_hessian(
-          ObjScale, X, Val, GX, KKTmat, KKTLocations, KKTClashes, KKTLocks, this->index_data);
+                                    std::vector<std::mutex> &KKTLocks) {
+        this->function.objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
+                                                  KKTClashes, KKTLocks, this->index_data);
     }
-  };
+};
 
-}  // namespace ASSET
+} // namespace ASSET

@@ -4,7 +4,6 @@
 
 namespace ASSET {
 
-
-	void ExtensionsBuild(FunctionRegistry& reg, py::module& extmod);
+void ExtensionsBuild(FunctionRegistry &reg, py::module &extmod);
 
 }

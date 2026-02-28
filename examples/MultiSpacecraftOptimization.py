@@ -1,8 +1,9 @@
-import numpy as np
-import asset_asrl as ast
-import matplotlib.pyplot as plt
 import time
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+import asset_asrl as ast
 
 ################################################################################
 ## Setup
@@ -20,7 +21,7 @@ class TwoBody(oc.ode_x_u.ode):
         Uvars = 0
         if ltacc != False:
             Uvars = 3
-    
+
         args = oc.ODEArguments(Xvars, Uvars)
         r = args.head3()
         v = args.segment3(3)
@@ -49,7 +50,7 @@ def MakeCircIG(r, thetadeg):
 
 def MakeCircTraj(r, thetadeg, tf, n):
     ode = TwoBody(1)
-    integ = ode.integrator(.01)
+    integ = ode.integrator(0.01)
     IGC = MakeCircIG(r, thetadeg)
     Temp = integ.integrate_dense(IGC, tf, n)
     Traj = []
@@ -72,7 +73,6 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
     ode = TwoBody(1, LTacc)
 
     for i, T in enumerate(Trajs):
-
         ## Create a phase for Each Spacecraft
         phase = ode.phase("LGL5")
         ## Set Initial Guess
@@ -95,7 +95,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         ocp.addPhase(phase)
 
     ####################################################
-    #Section 2:
+    # Section 2:
     """
     Adding a Link constraint to enforce that the terminal state and time
     of each phase must be equal to a free state added as LinkParameters of the ocp
@@ -115,8 +115,8 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
     LinkFun = Args(14).head(7) - Args(14).tail(7)
 
     # Forward the back state in each phase and the linkParams to the function
-    for i in range(0,len(Trajs)):
-        ocp.addLinkEqualCon(LinkFun,[(i,"Back",range(0,7),[],[])],range(0,7))
+    for i in range(0, len(Trajs)):
+        ocp.addLinkEqualCon(LinkFun, [(i, "Back", range(0, 7), [], [])], range(0, 7))
 
     ocp.addLinkParamEqualCon(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
 
@@ -130,7 +130,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
     Data = []
 
     ##################################################################
-    #Section 3:
+    # Section 3:
     """
     Now we are going to run an optimization continuation scheme to compute
     the constellation trajectory for each list of initial states of the spacecraft
@@ -138,7 +138,6 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
     """
 
     for j, Ist in enumerate(IStates):
-
         ## For each set Initial condtions subsitute the fixed intial conditions
         ## to each phase, Because we locked them, they will be fixed at these values
         ## this avoids having to retranscribe to the problem for every optimize
@@ -169,7 +168,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 ################################################################################
 ## Plotting Utilities
 def colorScale(x, left=[48, 59, 194], right=[208, 35, 70]):
-    return [int(round((x * right[i]) + ((1 - x) * left[i])))/(256) for i in range(3)]
+    return [int(round((x * right[i]) + ((1 - x) * left[i]))) / (256) for i in range(3)]
 
 
 def plotPhaseAndThrottle(tList):
@@ -183,28 +182,31 @@ def plotPhaseAndThrottle(tList):
             else:
                 unitJ = tList[j][i][0:3] / np.linalg.norm(tList[j][i][0:3])
                 angs[j].append(np.arccos(np.dot(base, unitJ)))
-    fig, axes = plt.subplots(2, 1, figsize = (12, 8))
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
     for i, t in enumerate(tList):
         clr = colorScale(i / len(tList))
-        x1=[X[6] for X in t]
-        y1=[A for A in angs[i]]
-        axes[0].plot(x1, y1, color = [(clr[0]), (clr[1]), (clr[2])],
-                     label = "S/C "+str(i))
-        
-        x2=[X[6] for X in t]
-        y2=[X[7] ** 2 + X[8] ** 2 + X[9] ** 2 for X in t]
-        axes[1].plot(x2, y2, color = [(clr[0]), (clr[1]), (clr[2])])
+        x1 = [X[6] for X in t]
+        y1 = [A for A in angs[i]]
+        axes[0].plot(
+            x1, y1, color=[(clr[0]), (clr[1]), (clr[2])], label="S/C " + str(i)
+        )
+
+        x2 = [X[6] for X in t]
+        y2 = [X[7] ** 2 + X[8] ** 2 + X[9] ** 2 for X in t]
+        axes[1].plot(x2, y2, color=[(clr[0]), (clr[1]), (clr[2])])
     axes[0].grid(True)
     axes[0].set_ylabel("Phase Angle (rad)")
-    
+
     axes[1].grid(True)
     axes[1].set_xlabel("Time (ND)")
     axes[1].set_ylabel("Control Magnitude")
     plt.tight_layout()
     axes[0].legend()
-    plt.savefig("Plots/MultiSpacecraftOptimization/multispacecraftoptimization.svg",
-                dpi = 500)
+    plt.savefig(
+        "Plots/MultiSpacecraftOptimization/multispacecraftoptimization.svg", dpi=500
+    )
     plt.show()
+
 
 ################################################################################
 ## Main
@@ -239,4 +241,3 @@ def main():
 ## Run
 if __name__ == "__main__":
     main()
-

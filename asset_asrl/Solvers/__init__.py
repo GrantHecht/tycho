@@ -1,6 +1,7 @@
-from asset.Solvers import *
-import asset as _asset
 import inspect
+
+import asset as _asset
+from asset.Solvers import *
 
 AlgorithmModes = _asset.Solvers.AlgorithmModes
 BarrierModes = _asset.Solvers.BarrierModes
@@ -17,5 +18,5 @@ QPPivotModes = _asset.Solvers.QPPivotModes
 
 if __name__ == "__main__":
     mlist = inspect.getmembers(_asset.Solvers)
-    for m in mlist:print(m[0],'= _asset.Solvers.'+str(m[0]))
-  
+    for m in mlist:
+        print(m[0], "= _asset.Solvers." + str(m[0]))

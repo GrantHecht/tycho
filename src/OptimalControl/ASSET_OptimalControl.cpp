@@ -5,12 +5,10 @@
 
 namespace ASSET {
 
-
-  void OptimalControlBuild(FunctionRegistry& reg, py::module& m) {
-    auto& oc = reg.getOptimalControlModule();
+void OptimalControlBuild(FunctionRegistry &reg, py::module &m) {
+    auto &oc = reg.getOptimalControlModule();
     RKFlagsBuild(oc);
     OCPFlagsBuild(oc);
-
 
     StateFunction<GenericFunction<-1, -1>>::Build(oc, "StateConstraint");
     StateFunction<GenericFunction<-1, 1>>::Build(oc, "StateObjective");
@@ -31,13 +29,12 @@ namespace ASSET {
     FDDerivArbitrary<Eigen::VectorXd>::Build(oc, "FiniteDiffTable");
     ODEArguments<-1, -1, -1>::Build(oc, "ODEArguments");
 
-
     GenericODESBuildPart1(reg, oc);
     GenericODESBuildPart2(reg, oc);
     GenericODESBuildPart3(reg, oc);
     GenericODESBuildPart4(reg, oc);
     GenericODESBuildPart5(reg, oc);
     GenericODESBuildPart6(reg, oc);
-  }
+}
 
-}  // namespace ASSET
+} // namespace ASSET

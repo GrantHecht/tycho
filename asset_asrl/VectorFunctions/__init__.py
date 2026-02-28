@@ -1,8 +1,7 @@
-from asset.VectorFunctions import *
-import asset as _asset
 import inspect
 
-
+import asset as _asset
+from asset.VectorFunctions import *
 
 Arguments = _asset.VectorFunctions.Arguments
 ColMatrix = _asset.VectorFunctions.ColMatrix
@@ -58,9 +57,7 @@ tanh = _asset.VectorFunctions.tanh
 
 from .Extensions.DerivChecker import FDDerivChecker
 
-
 if __name__ == "__main__":
     mlist = inspect.getmembers(_asset.VectorFunctions)
-    for m in mlist:print(m[0],'= _asset.VectorFunctions.'+str(m[0]))
-    
-    
+    for m in mlist:
+        print(m[0], "= _asset.VectorFunctions." + str(m[0]))

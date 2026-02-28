@@ -15,10 +15,10 @@
 
 namespace ASSET {
 
-  void SolversBuild(FunctionRegistry& reg, py::module& m) {
+void SolversBuild(FunctionRegistry &reg, py::module &m) {
     // auto sol = m.def_submodule("Solvers","SubModule Containing PSIOPT,NLP, and Solver Flags");
 
-    auto& sol = reg.getSolversModule();
+    auto &sol = reg.getSolversModule();
 #ifndef USE_ACCELERATE_SPARSE
     int DSECOND = dsecnd();
 #endif
@@ -26,7 +26,6 @@ namespace ASSET {
     OptimizationProblemBase::Build(sol);
     Jet::Build(sol);
     OptimizationProblem::Build(sol);
-  }
+}
 
-
-}  // namespace ASSET
+} // namespace ASSET

@@ -34,257 +34,230 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-  struct KeperPropagator_Impl {
+struct KeperPropagator_Impl {
 
     static auto C2(double tol) {
 
-      auto psi = Arguments<1>().coeff<0>();
-      auto sqsi = sqrt(psi);
+        auto psi = Arguments<1>().coeff<0>();
+        auto sqsi = sqrt(psi);
 
+        auto ell = (1.0 - cos(sqsi)) / psi;
+        auto hyp = (1.0 - cosh(sqrt(-1.0 * psi))) / psi;
+        Vector1<double> v;
+        v[0] = .5;
 
-      auto ell = (1.0 - cos(sqsi)) / psi;
-      auto hyp = (1.0 - cosh(sqrt(-1.0 * psi))) / psi;
-      Vector1<double> v;
-      v[0] = .5;
+        auto par = Constant<1, 1>(1, v);
 
-      auto par = Constant<1, 1>(1, v);
+        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
 
-      auto f = IfElseFunction {psi > tol, ell, IfElseFunction {psi < -tol, hyp, par}};
-
-      return GenericFunction<1, 1>(f);
+        return GenericFunction<1, 1>(f);
     }
 
     static auto C3(double tol) {
 
-      auto psi = Arguments<1>().coeff<0>();
-      auto sqsi = sqrt(psi);
+        auto psi = Arguments<1>().coeff<0>();
+        auto sqsi = sqrt(psi);
 
+        auto ell = (sqsi - sin(sqsi)) / (sqsi * psi);
+        auto hyp = (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi);
 
-      auto ell = (sqsi - sin(sqsi)) / (sqsi * psi);
-      auto hyp = (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi);
+        Vector1<double> v;
 
-      Vector1<double> v;
+        v[0] = 1 / 6.0;
 
-      v[0] = 1 / 6.0;
+        auto par = Constant<1, 1>(1, v);
 
-      auto par = Constant<1, 1>(1, v);
+        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
 
-      auto f = IfElseFunction {psi > tol, ell, IfElseFunction {psi < -tol, hyp, par}};
-
-
-      return GenericFunction<1, 1>(f);
+        return GenericFunction<1, 1>(f);
     }
-
 
     static auto C2C3(double tol) {
 
-      auto psi = Arguments<1>().coeff<0>();
-      auto sqsi = sqrt(psi);
+        auto psi = Arguments<1>().coeff<0>();
+        auto sqsi = sqrt(psi);
 
+        auto ell = stack((1.0 - cos(sqsi)) / psi, (sqsi - sin(sqsi)) / (sqsi * psi));
+        auto hyp =
+            stack((1.0 - cosh(sqrt(-1.0 * psi))) / psi,
+                  (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi));
 
-      auto ell = stack((1.0 - cos(sqsi)) / psi, (sqsi - sin(sqsi)) / (sqsi * psi));
-      auto hyp = stack((1.0 - cosh(sqrt(-1.0 * psi))) / psi,
-                       (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi));
+        Vector2<double> v;
+        v[0] = .5;
+        v[1] = 1 / 6.0;
 
-      Vector2<double> v;
-      v[0] = .5;
-      v[1] = 1 / 6.0;
+        auto par = Constant<1, 2>(1, v);
 
-      auto par = Constant<1, 2>(1, v);
+        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
 
-      auto f = IfElseFunction {psi > tol, ell, IfElseFunction {psi < -tol, hyp, par}};
-
-
-      return GenericFunction<1, 2>(f);
+        return GenericFunction<1, 2>(f);
     }
 
     static auto Funiv(double mu, double conictol, double roottol, int iters) {
 
-      auto args = Arguments<5>();
-
-      auto X0 = args.coeff<0>();
-      auto dt = args.coeff<1>();
-      auto r = args.coeff<2>();
-      auto drv = args.coeff<3>();
-      auto alpha = args.coeff<4>();
-
-
-      auto X02 = X0 * X0;
-
-
-      auto psi = X02 * alpha;
-
-      auto c2 = C2(conictol).eval(psi);
-      auto c3 = C3(conictol).eval(psi);
-
-      auto c2c3 = C2C3(conictol).eval(psi);
-
-      auto Nargs = stack(args.head<4>(), psi, c2c3);
-
-      auto [F, dF] = [mu]() {
-        auto args = Arguments<7>();
+        auto args = Arguments<5>();
 
         auto X0 = args.coeff<0>();
         auto dt = args.coeff<1>();
         auto r = args.coeff<2>();
         auto drv = args.coeff<3>();
-        auto psi = args.coeff<4>();
-        auto c2 = args.coeff<5>();
-        auto c3 = args.coeff<6>();
+        auto alpha = args.coeff<4>();
 
         auto X02 = X0 * X0;
-        auto X03 = X0 * X0 * X0;
 
+        auto psi = X02 * alpha;
 
-        auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-        auto X02tC2 = X02 * c2;
+        auto c2 = C2(conictol).eval(psi);
+        auto c3 = C3(conictol).eval(psi);
 
-        auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
-        auto dFU = -1.0 * (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
+        auto c2c3 = C2C3(conictol).eval(psi);
 
-        return std::tuple<decltype(FU), decltype(dFU)> {FU, dFU};
-      }();
+        auto Nargs = stack(args.head<4>(), psi, c2c3);
 
-      auto FU = F.eval(Nargs);
-      auto dFU = dF.eval(Nargs);
+        auto [F, dF] = [mu]() {
+            auto args = Arguments<7>();
 
+            auto X0 = args.coeff<0>();
+            auto dt = args.coeff<1>();
+            auto r = args.coeff<2>();
+            auto drv = args.coeff<3>();
+            auto psi = args.coeff<4>();
+            auto c2 = args.coeff<5>();
+            auto c3 = args.coeff<6>();
 
-      auto X0F = ScalarRootFinder<decltype(FU), decltype(dFU)> {FU, dFU, iters, roottol};
+            auto X02 = X0 * X0;
+            auto X03 = X0 * X0 * X0;
 
-      return stack(GenericFunction<5, 1>(X0F), args.tail<4>());
+            auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
+            auto X02tC2 = X02 * c2;
+
+            auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
+            auto dFU = -1.0 * (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
+
+            return std::tuple<decltype(FU), decltype(dFU)>{FU, dFU};
+        }();
+
+        auto FU = F.eval(Nargs);
+        auto dFU = dF.eval(Nargs);
+
+        auto X0F = ScalarRootFinder<decltype(FU), decltype(dFU)>{FU, dFU, iters, roottol};
+
+        return stack(GenericFunction<5, 1>(X0F), args.tail<4>());
     }
-
 
     static auto FGs(double mu, double conictol) {
 
-      auto args = Arguments<5>();
-
-      auto X0 = args.coeff<0>();
-      auto dt = args.coeff<1>();
-      auto r = args.coeff<2>();
-      auto drv = args.coeff<3>();
-      auto alpha = args.coeff<4>();
-
-
-      auto X02 = X0 * X0;
-
-
-      auto psi = X02 * alpha;
-
-      auto c2 = C2(conictol).eval(psi);
-      auto c3 = C3(conictol).eval(psi);
-
-      auto c2c3 = C2C3(conictol).eval(psi);
-
-
-      auto Nargs = stack(args.head<4>(), psi, c2c3);
-
-      auto FG = [mu]() {
-        double SQM = sqrt(mu);
-
-        auto args = Arguments<7>();
+        auto args = Arguments<5>();
 
         auto X0 = args.coeff<0>();
         auto dt = args.coeff<1>();
         auto r = args.coeff<2>();
         auto drv = args.coeff<3>();
-        auto psi = args.coeff<4>();
-        auto c2 = args.coeff<5>();
-        auto c3 = args.coeff<6>();
+        auto alpha = args.coeff<4>();
 
         auto X02 = X0 * X0;
-        auto X03 = X0 * X0 * X0;
 
+        auto psi = X02 * alpha;
 
-        auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-        auto X02tC2 = X02 * c2;
+        auto c2 = C2(conictol).eval(psi);
+        auto c3 = C3(conictol).eval(psi);
 
-        auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
-        auto rs = (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
+        auto c2c3 = C2C3(conictol).eval(psi);
 
-        auto f = 1.0 - X02 * c2 / r;
-        auto g = dt - (X02 * X0) * c3 / SQM;
-        auto fdot = X0 * (psi * c3 - 1.0) * SQM / (rs * r);
-        auto gdot = 1.0 - c2 * (X02) / rs;
+        auto Nargs = stack(args.head<4>(), psi, c2c3);
 
+        auto FG = [mu]() {
+            double SQM = sqrt(mu);
 
-        return stack(f, g, fdot, gdot);
-      }();
+            auto args = Arguments<7>();
 
+            auto X0 = args.coeff<0>();
+            auto dt = args.coeff<1>();
+            auto r = args.coeff<2>();
+            auto drv = args.coeff<3>();
+            auto psi = args.coeff<4>();
+            auto c2 = args.coeff<5>();
+            auto c3 = args.coeff<6>();
 
-      return FG.eval(Nargs);
+            auto X02 = X0 * X0;
+            auto X03 = X0 * X0 * X0;
+
+            auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
+            auto X02tC2 = X02 * c2;
+
+            auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
+            auto rs = (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
+
+            auto f = 1.0 - X02 * c2 / r;
+            auto g = dt - (X02 * X0) * c3 / SQM;
+            auto fdot = X0 * (psi * c3 - 1.0) * SQM / (rs * r);
+            auto gdot = 1.0 - c2 * (X02) / rs;
+
+            return stack(f, g, fdot, gdot);
+        }();
+
+        return FG.eval(Nargs);
     }
-
 
     static auto ApplyRVFG() {
 
-      auto args = Arguments<10>();
+        auto args = Arguments<10>();
 
-      auto R = args.head<3>();
-      auto V = args.segment<3, 3>();
+        auto R = args.head<3>();
+        auto V = args.segment<3, 3>();
 
-      auto f = args.coeff<6>();
-      auto g = args.coeff<7>();
-      auto fdot = args.coeff<8>();
-      auto gdot = args.coeff<9>();
+        auto f = args.coeff<6>();
+        auto g = args.coeff<7>();
+        auto fdot = args.coeff<8>();
+        auto gdot = args.coeff<9>();
 
-      auto Rf = f * R + g * V;
-      auto Vf = fdot * R + gdot * V;
+        auto Rf = f * R + g * V;
+        auto Vf = fdot * R + gdot * V;
 
-      return stack(Rf, Vf);
+        return stack(Rf, Vf);
     }
-
 
     static auto Definition(double mu, double conictol, double roottol, int iters) {
 
-      double SQM = sqrt(mu);
+        double SQM = sqrt(mu);
 
-      auto RVdt = Arguments<7>();
+        auto RVdt = Arguments<7>();
 
-      auto R = RVdt.head<3>();
-      auto V = RVdt.segment<3, 3>();
-      auto dt = RVdt.coeff<6>();
+        auto R = RVdt.head<3>();
+        auto V = RVdt.segment<3, 3>();
+        auto dt = RVdt.coeff<6>();
 
+        auto r = R.norm();
+        auto v = V.norm();
+        auto drv = R.dot(V) / SQM;
+        auto alpha = -1.0 * (v * v) / (mu) + (2.0 / r);
 
-      auto r = R.norm();
-      auto v = V.norm();
-      auto drv = R.dot(V) / SQM;
-      auto alpha = -1.0 * (v * v) / (mu) + (2.0 / r);
+        auto X0ell = SQM * dt * alpha;
 
-      auto X0ell = SQM * dt * alpha;
+        auto signdt = SignFunction{dt};
+        auto X0hyp = signdt * sqrt(-1.0 / alpha) *
+                     log(abs((-2.0 * mu * alpha * dt) / (R.dot(V) + signdt) * sqrt(-mu / alpha) *
+                             (1.0 - r * alpha)));
 
+        auto X0IG = GenericFunction<7, 1>(IfElseFunction{alpha >= 0.0, X0ell, X0hyp});
 
-      auto signdt = SignFunction {dt};
-      auto X0hyp =
-          signdt * sqrt(-1.0 / alpha)
-          * log(abs((-2.0 * mu * alpha * dt) / (R.dot(V) + signdt) * sqrt(-mu / alpha) * (1.0 - r * alpha)));
+        auto XF = Funiv(mu, conictol, roottol, iters).eval(stack(X0IG, dt, r, drv, alpha));
 
-      auto X0IG = GenericFunction<7, 1>(IfElseFunction {alpha >= 0.0, X0ell, X0hyp});
+        auto FG = FGs(mu, conictol).eval(XF);
 
-      auto XF = Funiv(mu, conictol, roottol, iters).eval(stack(X0IG, dt, r, drv, alpha));
+        constexpr bool d = FG.IsVectorizable;
 
-      auto FG = FGs(mu, conictol).eval(XF);
-
-      constexpr bool d = FG.IsVectorizable;
-
-      return ApplyRVFG().eval(stack(RVdt.head<6>(), FG));
+        return ApplyRVFG().eval(stack(RVdt.head<6>(), FG));
     }
-  };
+};
 
-
-  struct KeplerPropagator : VectorFunction<KeplerPropagator,
-                                           7,
-                                           6,
-                                           ASSET::DenseDerivativeModes::Analytic,
-                                           ASSET::DenseDerivativeModes::Analytic> {
-    using Base = VectorFunction<KeplerPropagator,
-                                7,
-                                6,
-                                ASSET::DenseDerivativeModes::Analytic,
+struct KeplerPropagator
+    : VectorFunction<KeplerPropagator, 7, 6, ASSET::DenseDerivativeModes::Analytic,
+                     ASSET::DenseDerivativeModes::Analytic> {
+    using Base = VectorFunction<KeplerPropagator, 7, 6, ASSET::DenseDerivativeModes::Analytic,
                                 ASSET::DenseDerivativeModes::Analytic>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
-
 
     GenericFunction<-1, -1> propfunc;
     double mu = 1.0;
@@ -297,63 +270,55 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     static const bool IsVectorizable = true;
 
     KeplerPropagator(double m) {
-      this->mu = m;
-      this->propfunc = KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
+        this->mu = m;
+        this->propfunc =
+            KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
     }
     KeplerPropagator() {
-      this->propfunc = KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
+        this->propfunc =
+            KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
     }
 
-    static void Build(py::module& m, const char* name) {
-      auto obj = py::class_<KeplerPropagator>(m, name);
-      obj.def(py::init<double>());
-      Base::DenseBaseBuild(obj);
+    static void Build(py::module &m, const char *name) {
+        auto obj = py::class_<KeplerPropagator>(m, name);
+        obj.def(py::init<double>());
+        Base::DenseBaseBuild(obj);
     }
 
-    template<class Scalar>
-    static Scalar CBRT(Scalar x) {
-      if constexpr (std::is_same<Scalar, double>::value) {
-        return cbrt(x);
-      } else {
-        return Scalar(pow(x, 1.0 / 3.0));
-      }
+    template <class Scalar> static Scalar CBRT(Scalar x) {
+        if constexpr (std::is_same<Scalar, double>::value) {
+            return cbrt(x);
+        } else {
+            return Scalar(pow(x, 1.0 / 3.0));
+        }
     }
 
-    template<class InType, class OutType>
-    inline void compute_impl(const Eigen::MatrixBase<InType>& x,
-                             Eigen::MatrixBase<OutType> const& fx_) const {
-      typedef typename InType::Scalar Scalar;
-      Eigen::MatrixBase<OutType>& fx = fx_.const_cast_derived();
-      this->propfunc.compute(x, fx_);
+    template <class InType, class OutType>
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             Eigen::MatrixBase<OutType> const &fx_) const {
+        typedef typename InType::Scalar Scalar;
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        this->propfunc.compute(x, fx_);
     }
 
-    template<class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType>& x,
-                                      Eigen::MatrixBase<OutType> const& fx_,
-                                      Eigen::MatrixBase<JacType> const& jx_) const {
-      typedef typename InType::Scalar Scalar;
-      this->propfunc.compute_jacobian(x, fx_, jx_);
+    template <class InType, class OutType, class JacType>
+    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
+                                      Eigen::MatrixBase<OutType> const &fx_,
+                                      Eigen::MatrixBase<JacType> const &jx_) const {
+        typedef typename InType::Scalar Scalar;
+        this->propfunc.compute_jacobian(x, fx_, jx_);
     }
 
-
-    template<class InType,
-             class OutType,
-             class JacType,
-             class AdjGradType,
-             class AdjHessType,
-             class AdjVarType>
+    template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
+              class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x,
-        ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_,
-        ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_,
-        ConstVectorBaseRef<AdjVarType> adjvars) const {
-      typedef typename InType::Scalar Scalar;
+        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
+        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
+        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        typedef typename InType::Scalar Scalar;
 
-
-      this->propfunc.compute_jacobian_adjointgradient_adjointhessian(
-          x, fx_, jx_, adjgrad_, adjhess_, adjvars);
+        this->propfunc.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                                                                       adjhess_, adjvars);
     }
 
     /*
@@ -579,7 +544,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
     }*/
-  };
+};
 
-
-}  // namespace ASSET
+} // namespace ASSET
