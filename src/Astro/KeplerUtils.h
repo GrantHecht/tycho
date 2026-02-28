@@ -493,6 +493,11 @@ namespace ASSET {
     const int iters = 19;
     const double conictol = 1.0e-11;
 
+    Vector6<Scalar> fx;
+    if (dt == 0.0) {
+      fx = RV;
+      return fx;
+    }
 
     Scalar r = RV.template head<3>().norm();
     Scalar v = RV.template tail<3>().norm();
@@ -549,8 +554,6 @@ namespace ASSET {
     Scalar g = dt - (Xn2 * Xn) * c3 / SQM;
     Scalar fdot = Xn * (psi * c3 - 1.0) * SQM / (rs * r);
     Scalar gdot = 1.0 - c2 * (Xn2) / rs;
-
-    Vector6<Scalar> fx;
 
     fx.template head<3>() = f * RV.template head<3>() + g * RV.template tail<3>();
     fx.template tail<3>() = fdot * RV.template head<3>() + gdot * RV.template tail<3>();

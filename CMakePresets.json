@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "x64-Clang-Release",
+      "displayName": "x64 Clang Release",
+      "description": "Release build using Clang compiler on Windows x64",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "STRICT_IEEE_COMPLIANCE": "ON",
+        "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
+        "CMAKE_C_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
+        "CMAKE_C_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
+        "CMAKE_CXX_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
+        "CMAKE_CXX_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
+        "CMAKE_LINKER": "C:/Program Files/LLVM/bin/lld-link.exe"
+      },
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "x64-Clang-Release",
+      "displayName": "x64 Clang Release Build",
+      "configurePreset": "x64-Clang-Release",
+      "nativeToolOptions": [
+        "-j4",
+        "-v"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "x64-Clang-Release",
+      "displayName": "x64 Clang Release Test",
+      "configurePreset": "x64-Clang-Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -31,7 +31,12 @@ endif()
 set(LINK_TIME_OPT FALSE)          ### DO LTO - Recommended for full release
 set(CLANG_MAX_INLINE_DEPTH 225)
 #set(BUILD_ASSET_WHEEL TRUE)      ### CI Build for generic wheels
-#set(BUILD_SPHINX_DOCS TRUE)      
+#set(BUILD_SPHINX_DOCS TRUE)
+
+# Option to enable strict IEEE 754 compliance for proper NaN handling
+# When OFF (default): Uses fast-math optimizations that may ignore NaNs
+# When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
+option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
 
 
 ################################################################################
@@ -102,7 +107,12 @@ if(WIN32)
      list(APPEND RELEASE_FLAGS "/O2")
      list(APPEND RELEASE_FLAGS "/Ob2")
      list(APPEND RELEASE_FLAGS "/arch:AVX2")
-     list(APPEND RELEASE_FLAGS "/fp:fast")
+     # Floating-point handling: strict IEEE 754 compliance or fast-math
+     if(STRICT_IEEE_COMPLIANCE)
+         list(APPEND RELEASE_FLAGS "/fp:strict")
+     else()
+         list(APPEND RELEASE_FLAGS "/fp:fast")
+     endif()
      list(APPEND RELEASE_FLAGS "/GS-")
      list(APPEND RELEASE_FLAGS "/Gw")
 endif()
@@ -162,9 +172,18 @@ if(NOT WIN32)
   list(APPEND RELEASE_FLAGS "-fno-stack-protector")
   #list(APPEND RELEASE_FLAGS "-fcf-protection=none")
   list(APPEND RELEASE_FLAGS "-fno-asynchronous-unwind-tables")
-  list(APPEND RELEASE_FLAGS "-ffast-math")
-  if (NOT APPLE)
-    #list(APPEND RELEASE_FLAGS "-fno-stack-clash-protection")
+  
+  # Floating-point handling: strict IEEE 754 compliance or fast-math
+  if(STRICT_IEEE_COMPLIANCE)
+      # Enforce proper NaN handling with selective optimizations
+      list(APPEND RELEASE_FLAGS "-fno-math-errno")
+      list(APPEND RELEASE_FLAGS "-fno-trapping-math")
+      list(APPEND RELEASE_FLAGS "-fno-signaling-nans")
+      # Ensure NaN handling is correct (no finite-math-only)
+      list(APPEND RELEASE_FLAGS "-fno-finite-math-only")
+  else()
+      # Use fast-math for performance (may not handle NaNs properly)
+      list(APPEND RELEASE_FLAGS "-ffast-math")
   endif()
 endif()
  
@@ -355,6 +374,13 @@ message(STATUS "CMAKE DIR LOC" ${CMAKE_CURRENT_SOURCE_DIR})
 message(STATUS ${OpenMP_CXX_FLAGS})
 message(STATUS ${OpenMP_CXX_LIBRARIES})
 message(STATUS ${PYTHON_EXECUTABLE})
+
+# Display IEEE compliance setting
+if(STRICT_IEEE_COMPLIANCE)
+    message(STATUS "IEEE 754 Compliance: STRICT (NaNs will be properly handled)")
+else()
+    message(STATUS "IEEE 754 Compliance: FAST-MATH (NaNs may not be properly handled)")
+endif()
 
 ################################################################################
 # Code Directories
