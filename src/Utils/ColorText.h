@@ -6,12 +6,10 @@
 
 #include "fmtlib.h"
 
-
 namespace ASSET {
 
-  struct ColorScheme {};
+struct ColorScheme {};
 
+void enable_color_console();
 
-  void enable_color_console();
-
-}  // namespace ASSET
+} // namespace ASSET

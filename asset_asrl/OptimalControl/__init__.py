@@ -1,7 +1,7 @@
-from   asset.OptimalControl import *
-import asset as _asset
 import inspect
 
+import asset as _asset
+from asset.OptimalControl import *
 
 ###############################################################################
 ## Exposing Compiled Module Elements to improve autocomplete
@@ -42,15 +42,8 @@ ode_x_u_p = _asset.OptimalControl.ode_x_u_p
 
 from .ODEBaseClass import ODEBase
 
-
-
 ##############################################################################
 if __name__ == "__main__":
-    
     mlist = inspect.getmembers(_asset.OptimalControl)
-    for m in mlist:print(m[0],'= _asset.OptimalControl.'+str(m[0]))
-    
-    
-    
-
-
+    for m in mlist:
+        print(m[0], "= _asset.OptimalControl." + str(m[0]))

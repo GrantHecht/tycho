@@ -1,8 +1,7 @@
-from asset.Astro import *
-import asset as _asset
 import inspect
 
-
+import asset as _asset
+from asset.Astro import *
 
 Kepler = _asset.Astro.Kepler
 ModifiedDynamics = _asset.Astro.ModifiedDynamics
@@ -23,4 +22,5 @@ from .AstroFrames import CR3BPFrame
 
 if __name__ == "__main__":
     mlist = inspect.getmembers(_asset.Astro)
-    for m in mlist:print(m[0],'= _asset.Astro.'+str(m[0]))
+    for m in mlist:
+        print(m[0], "= _asset.Astro." + str(m[0]))

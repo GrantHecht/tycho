@@ -1,11 +1,12 @@
-import numpy as np
 import asset as ast
+import numpy as np
 
 vf = ast.VectorFunctions
 oc = ast.OptimalControl
 Args = vf.Arguments
 
-class TwoBodyFrame():
+
+class TwoBodyFrame:
     """
     Two body dynamics
 
@@ -26,7 +27,8 @@ class TwoBodyFrame():
     mustar : float
         system characteristic gravity parameter
     """
-    def __init__(self,P1mu,lstar):
+
+    def __init__(self, P1mu, lstar):
         """
         TwoBodyFrame init function. Be sure that P1mu and lstar are of the same units.
 
@@ -38,13 +40,14 @@ class TwoBodyFrame():
             characteristic length of system
         """
         self.mu = 1
-        self.P1mu   = P1mu
-        self.lstar  = lstar
-        self.tstar  = np.sqrt((lstar**3)/(P1mu))
-        self.vstar  = lstar/self.tstar
-        self.astar  = (P1mu)/(lstar**2)
-        self.mustar = (P1mu)
-    def TwoBodyEOMs(self,r,v,otherAccs=[],otherEOMs=[]):
+        self.P1mu = P1mu
+        self.lstar = lstar
+        self.tstar = np.sqrt((lstar**3) / (P1mu))
+        self.vstar = lstar / self.tstar
+        self.astar = (P1mu) / (lstar**2)
+        self.mustar = P1mu
+
+    def TwoBodyEOMs(self, r, v, otherAccs=[], otherEOMs=[]):
         """
         Two body equations of motion
 
@@ -65,6 +68,6 @@ class TwoBodyFrame():
             All equations of motion for two body model
 
         """
-        accG = (-self.mu )* r.normalized_power3() 
-        accT = vf.sum([accG ]+ otherAccs)
-        return vf.stack([v, accT]+otherEOMs)
+        accG = (-self.mu) * r.normalized_power3()
+        accT = vf.sum([accG] + otherAccs)
+        return vf.stack([v, accT] + otherEOMs)

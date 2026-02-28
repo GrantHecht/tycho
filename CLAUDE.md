@@ -171,13 +171,43 @@ Python imports, and documentation.
 
 ## Code Style
 
-- C++ does not currently follow a standard convention. We eventually want to format code 
-  via clang-format and the LLVM format
-- Python does not currently follow a standard convention. We eventually want to format 
-  code via Ruff and the black format
-- Do not introduce new external dependencies without discussion
-- Prefer modifying existing files over creating new ones unless the feature is
-  clearly self-contained
+All source code is formatted by automated tools. **Always run the formatter before
+committing.** Do not introduce new external dependencies without discussion.
+Prefer modifying existing files over creating new ones unless the feature is
+clearly self-contained.
+
+### C++ — clang-format (LLVM style)
+
+Config: `.clang-format` at the repo root (LLVM base, 4-space indent, 100-column limit).
+The CMake `clang-format` target applies it to `src/` and `extensions/`.
+
+**Format all C++ source files:**
+```bash
+find src extensions \( -name "*.cpp" -o -name "*.h" \) -print0 \
+  | xargs -0 /opt/homebrew/opt/llvm/bin/clang-format -style=file -i
+```
+
+Or via CMake after configuring:
+```bash
+cd build && ninja clang-format
+```
+
+Do **not** add or modify `.clang-format` files inside `src/` — the root config is
+authoritative. The `dep/` vendored dependencies have their own configs and must
+not be reformatted.
+
+### Python — ruff (Black-compatible format + isort)
+
+Config: `pyproject.toml` at the repo root.
+Required packages (in the `tycho` conda env): `ruff`, `isort`.
+
+**Format all Python files:**
+```bash
+ruff format .          # Black-compatible formatting
+ruff check --select I --fix .  # isort import sorting
+```
+
+Line length: 88 (Black default). `dep/` and `build/` are excluded automatically.
 
 ## What to Preserve from the Original ASSET
 

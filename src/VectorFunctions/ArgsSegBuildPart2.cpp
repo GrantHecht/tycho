@@ -1,7 +1,7 @@
 #include "ASSET_VectorFunctions.h"
 
 namespace ASSET {
-  void ArgsSegBuildPart2(FunctionRegistry& reg, py::module& m) {
+void ArgsSegBuildPart2(FunctionRegistry &reg, py::module &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using SEG = Segment<-1, -1, -1>;
@@ -11,6 +11,6 @@ namespace ASSET {
     using ELEM = Segment<-1, 1, -1>;
 
     reg.Build_Register<ELEM>(m, "Element");
-  }
+}
 
-}  // namespace ASSET
+} // namespace ASSET

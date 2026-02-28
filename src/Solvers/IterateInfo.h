@@ -1,10 +1,8 @@
 #pragma once
 
-
 namespace ASSET {
 
-  struct IterateInfo {
-
+struct IterateInfo {
 
     int iter = 0;
 
@@ -37,6 +35,6 @@ namespace ASSET {
     double MaxEMult = 0;
     double MaxIMult = 0;
     double MeritVal = 0.0;
-  };
+};
 
-}  // namespace ASSET
+} // namespace ASSET

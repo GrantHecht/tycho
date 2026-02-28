@@ -9,10 +9,8 @@
 #include "VectorFunctions/ASSET_VectorFunctions.h"
 #include "pch.h"
 
-
 namespace ASSET {
 
-  void AstroBuild(FunctionRegistry& reg, py::module& m);
-
+void AstroBuild(FunctionRegistry &reg, py::module &m);
 
 }
