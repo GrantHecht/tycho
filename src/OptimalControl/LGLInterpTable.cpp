@@ -227,6 +227,7 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
     mesh_errors.col(this->NumBlocks) = mesh_errors.col(this->NumBlocks - 1);
 }
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void Tycho::LGLInterpTable::Build(py::module &m) {
     auto obj = py::class_<LGLInterpTable, std::shared_ptr<LGLInterpTable>>(m, "LGLInterpTable");
     obj.def(py::init<VectorFunctionalX, int, int, TranscriptionModes,
@@ -269,3 +270,4 @@ void Tycho::LGLInterpTable::Build(py::module &m) {
 
     obj.def("InterpNonDim", py::overload_cast<int, double, double>(&LGLInterpTable::NDequidist));
 }
+#endif // TYCHO_PYTHON_BINDINGS

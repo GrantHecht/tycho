@@ -6,12 +6,14 @@ namespace Tycho {
 
 enum RKOptions { RK4Classic, RK438, DOPRI54, DOPRI87, RK54, RK78, Ralston3, Ralston2, DOPRI5 };
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void RKFlagsBuild(py::module &m) {
     py::enum_<RKOptions>(m, "RKOptions")
         .value("RK4", RKOptions::RK4Classic)
         .value("DOPRI54", RKOptions::DOPRI54)
         .value("DOPRI87", RKOptions::DOPRI87);
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 template <RKOptions opt> struct RKCoeffs {};
 

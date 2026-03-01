@@ -7,6 +7,7 @@
 #include "PyDocString/OptimalControl/ODEPhaseBase_doc.h"
 #include "ValueLock.h"
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void Tycho::ODEPhaseBase::setUnits(const py::kwargs &kwargs) {
 
     py::module builtins = py::module::import("builtins");
@@ -60,6 +61,7 @@ void Tycho::ODEPhaseBase::setUnits(const py::kwargs &kwargs) {
 
     this->setUnits(Units);
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 int Tycho::ODEPhaseBase::addBoundaryValue(RegionType reg, VarIndexType args,
                                           const std::variant<double, VectorXd> &value_t,

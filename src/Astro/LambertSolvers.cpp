@@ -1,5 +1,6 @@
 #include "LambertSolvers.h"
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void Tycho::LambertSolversBuild(FunctionRegistry &reg, py::module &m) {
 
     m.def("lambert_izzo",
@@ -128,3 +129,4 @@ void Tycho::LambertSolversBuild(FunctionRegistry &reg, py::module &m) {
               return exitcodes;
           });
 }
+#endif // TYCHO_PYTHON_BINDINGS

@@ -836,6 +836,7 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, Analytic, Analy
     }
 };
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void InterpTable3DBuild(py::module &m) {
 
     auto obj = py::class_<InterpTable3D, std::shared_ptr<InterpTable3D>>(m, "InterpTable3D");
@@ -941,5 +942,6 @@ static void InterpTable3DBuild(py::module &m) {
               return tmp;
           });
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

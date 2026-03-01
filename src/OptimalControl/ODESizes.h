@@ -191,6 +191,7 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     Eigen::VectorXi Uidxs(int zidxs) const { return idxs_impl(zidxs, this->Uidxs()); }
     Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     template <class Obj, class Derived> static void BuildODESizeMembers(Obj &obj) {
         obj.def("XVars", &Derived::XVars);
         obj.def("UVars", &Derived::UVars);
@@ -221,6 +222,7 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
         obj.def("set_idxs", &Derived::set_idxs);
         obj.def("idx", &Derived::idx);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

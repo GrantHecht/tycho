@@ -30,6 +30,7 @@
 #include "Utils/fmtlib.h"
 
 ////////////////////////////////////
+#ifdef TYCHO_PYTHON_BINDINGS
 #include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -38,6 +39,7 @@
 #include <pybind11/stl.h>
 
 namespace py = pybind11;
+#endif // TYCHO_PYTHON_BINDINGS
 
 /////////////////////////////////
 

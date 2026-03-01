@@ -453,6 +453,7 @@ struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, Analytic, Analy
     }
 };
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void InterpTable2DBuild(py::module &m) {
     using MatType = InterpTable2D::MatType;
     auto obj = py::class_<InterpTable2D, std::shared_ptr<InterpTable2D>>(m, "InterpTable2D");
@@ -553,5 +554,6 @@ static void InterpTable2DBuild(py::module &m) {
         return tmp;
     });
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

@@ -37,6 +37,7 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 # When OFF (default): Uses fast-math optimizations that may ignore NaNs
 # When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
 option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
+option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 
 
 ################################################################################
@@ -240,11 +241,12 @@ include_directories(dep/eigen)
 include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
 
-find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
-
-set(PYBIND11_CPP_STANDARD -std=c++17)
-set(PYBIND11_FINDPYTHON ON)
-add_subdirectory(dep)
+if(ENABLE_PYTHON_BINDINGS)
+    find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
+    set(PYBIND11_CPP_STANDARD -std=c++17)
+    set(PYBIND11_FINDPYTHON ON)
+    add_subdirectory(dep)
+endif()
 
 # Set up external dependencies
 find_package(Threads REQUIRED)
@@ -287,10 +289,16 @@ else()
   find_package(MKL REQUIRED)
 endif()
 
-find_package(Python ${PYVERSION_EXACT} REQUIRED COMPONENTS Interpreter Development)
+if(ENABLE_PYTHON_BINDINGS)
+    find_package(Python ${PYVERSION_EXACT} REQUIRED COMPONENTS Interpreter Development)
+endif()
 
 # Set dependency variables
-set(INCLUDE_DIRS ${PYBIND11_INCLUDE_DIR} ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
+if(ENABLE_PYTHON_BINDINGS)
+    set(INCLUDE_DIRS ${PYBIND11_INCLUDE_DIR} ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
+else()
+    set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
+endif()
 set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS} ${AccelerateSparse_LIBRARIES})
 
 # Handle OpenMP for Apple
@@ -302,23 +310,28 @@ if (APPLE)
   endif()
 endif()
 
-# Handle Python executable variable 
-if (NOT DEFINED PYTHON_EXECUTABLE)
-    set(PYTHON_EXECUTABLE ${Python_EXECUTABLE})
-endif()
-if(DEFINED Python_INCLUDE_DIRS)
-    list(APPEND INCLUDE_DIRS ${Python_INCLUDE_DIRS})    
-elseif(DEFINED PYTHON_INCLUDE_DIRS)
-    list(APPEND INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS})
-endif()
-if (NOT APPLE)
-    # Don't directly link with python library on mac and instead rely on -undefined dynamic_lookup 
-    # to bind to the python symbols at runtime from the interpreter
-    if(DEFINED Python_LIBRARIES)
-        list(APPEND LINK_LIBS ${Python_LIBRARIES})
-    elseif(DEFINED PYTHON_LIBRARIES)
-        list(APPEND LINK_LIBS ${PYTHON_LIBRARIES})
+if(ENABLE_PYTHON_BINDINGS)
+    # Handle Python executable variable
+    if (NOT DEFINED PYTHON_EXECUTABLE)
+        set(PYTHON_EXECUTABLE ${Python_EXECUTABLE})
     endif()
+    if(DEFINED Python_INCLUDE_DIRS)
+        list(APPEND INCLUDE_DIRS ${Python_INCLUDE_DIRS})
+    elseif(DEFINED PYTHON_INCLUDE_DIRS)
+        list(APPEND INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS})
+    endif()
+    if (NOT APPLE)
+        # Don't directly link with python library on mac and instead rely on -undefined dynamic_lookup
+        # to bind to the python symbols at runtime from the interpreter
+        if(DEFINED Python_LIBRARIES)
+            list(APPEND LINK_LIBS ${Python_LIBRARIES})
+        elseif(DEFINED PYTHON_LIBRARIES)
+            list(APPEND LINK_LIBS ${PYTHON_LIBRARIES})
+        endif()
+    endif()
+
+    # Define TYCHO_PYTHON_BINDINGS globally when building Python bindings
+    add_compile_definitions(TYCHO_PYTHON_BINDINGS)
 endif()
 
 if(UNIX)
@@ -352,23 +365,24 @@ endif()
 ###########################################################
 ######## Find Correct Python Install Location  ############
 
+if(ENABLE_PYTHON_BINDINGS)
+    if(NOT PIP_INSTALL)
+      if(NOT PYTHON_LOCAL_INSTALL_DIR)
+        if(WIN32)
+          set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})
+        else()
+          execute_process ( COMMAND ${PYTHON_EXECUTABLE} -m site --user-site
+          OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
+          set(PYTHON_LOCAL_INSTALL_DIR ${PYTHON_SITE_PACKAGES})
+        endif()
+      endif()
 
-if(NOT PIP_INSTALL)
-  if(NOT PYTHON_LOCAL_INSTALL_DIR)
-    if(WIN32)
-      set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})
-    else()
-      execute_process ( COMMAND ${PYTHON_EXECUTABLE} -m site --user-site
-      OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-      set(PYTHON_LOCAL_INSTALL_DIR ${PYTHON_SITE_PACKAGES})
+      if(PYTHON_LOCAL_INSTALL_DIR)
+        message(STATUS "Tycho will be installed to " ${PYTHON_LOCAL_INSTALL_DIR})
+      else()
+        message(STATUS "Could not find appropriate install directory")
+      endif()
     endif()
-  endif()
-
-  if(PYTHON_LOCAL_INSTALL_DIR)
-    message(STATUS "Tycho will be installed to " ${PYTHON_LOCAL_INSTALL_DIR})
-  else()
-    message(STATUS "Could not find appropriate install directory")
-  endif()
 endif()
 
 message(STATUS "CMAKE DIR LOC" ${CMAKE_CURRENT_SOURCE_DIR})
@@ -387,7 +401,9 @@ endif()
 # Code Directories
 add_subdirectory(src)
 
-add_subdirectory(extensions)
+if(ENABLE_PYTHON_BINDINGS)
+    add_subdirectory(extensions)
+endif()
 
 
 # Documentation
@@ -397,7 +413,9 @@ if(BUILD_SPHINX_DOCS)
   add_subdirectory(doc)
 endif()
 
-add_subdirectory(pypiwheel)
+if(ENABLE_PYTHON_BINDINGS)
+    add_subdirectory(pypiwheel)
+endif()
 
 # Formatting
 include(cmake/clang-format.cmake)

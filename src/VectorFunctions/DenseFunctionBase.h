@@ -1458,6 +1458,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef TYCHO_PYTHON_BINDINGS
     /*
      * Code for binding public members to python, self explanatory, hopefully....
      * Could/should probably be moved to another file, but leaving it here for now.
@@ -2224,6 +2225,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         }
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

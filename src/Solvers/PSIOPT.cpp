@@ -1185,6 +1185,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void Tycho::PSIOPT::Build(py::module &m) {
     using namespace doc;
     auto obj = py::class_<PSIOPT, std::shared_ptr<PSIOPT>>(m, "PSIOPT");
@@ -1378,3 +1379,4 @@ void Tycho::PSIOPT::Build(py::module &m) {
         .value("METIS", QPOrderingModes::METIS)
         .value("PARMETIS", QPOrderingModes::PARMETIS);
 }
+#endif // TYCHO_PYTHON_BINDINGS

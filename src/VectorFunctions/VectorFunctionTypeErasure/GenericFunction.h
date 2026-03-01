@@ -340,6 +340,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         MemoryManager::resize(64, 64);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     template <class PYClass> static void GenericBuild(PYClass &obj) {
         using Gen = GenericFunction<-1, -1>;
         using GenS = GenericFunction<-1, 1>;
@@ -361,6 +362,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
         Base::DenseBaseBuild(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

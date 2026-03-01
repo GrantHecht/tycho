@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef TYCHO_PYTHON_BINDINGS
+
 #include "VectorFunction.h"
 
 namespace Tycho {
@@ -134,3 +136,5 @@ struct NumbaVectorFunction
 };
 
 } // namespace Tycho
+
+#endif // TYCHO_PYTHON_BINDINGS

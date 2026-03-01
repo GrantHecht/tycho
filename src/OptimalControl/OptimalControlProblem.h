@@ -1632,6 +1632,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     void print_stats(bool showfuns);
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m);
     static void
     BuildNewLinkIterface(py::class_<OptimalControlProblem, std::shared_ptr<OptimalControlProblem>,
@@ -1639,6 +1640,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
     static void
     BuildOldLinkIterface(py::class_<OptimalControlProblem, std::shared_ptr<OptimalControlProblem>,
                                     OptimizationProblemBase> &);
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

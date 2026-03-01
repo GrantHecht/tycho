@@ -2072,6 +2072,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef TYCHO_PYTHON_BINDINGS
     template <class PyDODE> static void BuildConstructors(PyDODE &obj) {
 
         obj.def("integrator", [](const DODE &od, double ds) { return Integrator<DODE>(od, ds); });
@@ -2105,7 +2106,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             });
         }
     }
+#endif // TYCHO_PYTHON_BINDINGS
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<Integrator>(m, name);
 
@@ -2297,6 +2300,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         obj.def_readwrite("MaxEventIters", &Integrator::MaxEventIters);
         obj.def_readwrite("VectorizeBatchCalls", &Integrator::VectorizeBatchCalls);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

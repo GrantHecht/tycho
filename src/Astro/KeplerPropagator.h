@@ -279,11 +279,13 @@ struct KeplerPropagator
             KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<KeplerPropagator>(m, name);
         obj.def(py::init<double>());
         Base::DenseBaseBuild(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 
     template <class Scalar> static Scalar CBRT(Scalar x) {
         if constexpr (std::is_same<Scalar, double>::value) {

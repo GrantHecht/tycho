@@ -113,6 +113,7 @@ void Tycho::OptimizationProblem::transcribe() {
     ////////////////////////////////////
 }
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void Tycho::OptimizationProblem::Build(py::module &m) {
 
     auto obj = py::class_<OptimizationProblem, std::shared_ptr<OptimizationProblem>,
@@ -148,3 +149,4 @@ void Tycho::OptimizationProblem::Build(py::module &m) {
     obj.def("solve_optimize", &OptimizationProblem::solve_optimize,
         py::call_guard<py::gil_scoped_release>());*/
 }
+#endif // TYCHO_PYTHON_BINDINGS

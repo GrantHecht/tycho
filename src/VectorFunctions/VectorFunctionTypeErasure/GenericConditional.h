@@ -56,6 +56,7 @@ template <int IR> struct GenericConditional : rubber_types::TypeErasure<Conditio
         this->reset_container(obj.get_container());
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void ConditionalBuild(py::module &m) {
 
         using GenCon = GenericConditional<IR>;
@@ -134,6 +135,7 @@ template <int IR> struct GenericConditional : rubber_types::TypeErasure<Conditio
             return Gen(IfElseFunction{test, tf, ff});
         });
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

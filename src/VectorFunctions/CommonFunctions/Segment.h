@@ -14,6 +14,7 @@ template <int IR_OR> struct Arguments : Segment_Impl<Arguments<IR_OR>, IR_OR, IR
     using Base::Base;
     Arguments(int iror) : Base(iror, iror, 0) {}
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<Arguments<IR_OR>>(m, name);
         obj.def(py::init<int>());
@@ -28,17 +29,20 @@ template <int IR_OR> struct Arguments : Segment_Impl<Arguments<IR_OR>, IR_OR, IR
         Base::DenseBaseBuild(obj);
         Base::SegBuild(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 template <int IR, int OR, int ST> struct Segment : Segment_Impl<Segment<IR, OR, ST>, IR, OR, ST> {
     using Base = Segment_Impl<Segment<IR, OR, ST>, IR, OR, ST>;
     using Base::Base;
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<Segment<IR, OR, ST>>(m, name);
         obj.def(py::init<int, int, int>());
         Base::DenseBaseBuild(obj);
         Base::SegBuild(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <class T> struct Is_Segment : std::false_type {};
@@ -298,6 +302,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         return Base::template EVALOP<Func>::make_nested(this->derived(), f.derived());
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     template <class PyClass> static void SegBuild(PyClass &obj) {
         using Gen = GenericFunction<-1, -1>;
         using GenS = GenericFunction<-1, 1>;
@@ -358,6 +363,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
             return segs;
         });
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

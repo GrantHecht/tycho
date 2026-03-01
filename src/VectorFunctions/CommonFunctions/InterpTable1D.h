@@ -371,6 +371,7 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
     }
 };
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void InterpTable1DBuild(py::module &m) {
 
     using MatType = InterpTable1D::MatType;
@@ -438,5 +439,6 @@ static void InterpTable1DBuild(py::module &m) {
         return GenericFunction<-1, -1>(InterpFunction1D<-1>(self));
     });
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho
