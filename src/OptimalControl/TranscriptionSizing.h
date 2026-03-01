@@ -2,7 +2,7 @@
 
 #include "Utils/SizingHelpers.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
     static const int CS = _CS;
@@ -12,4 +12,4 @@ template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
     static const int DefORC = SZ_PROD<IS, ODEXV>::value;
 };
 
-} // namespace ASSET
+} // namespace Tycho

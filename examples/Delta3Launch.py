@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
-import asset_asrl as ast
+import tycho as ast
 
 vf = ast.VectorFunctions
 oc = ast.OptimalControl

@@ -1,7 +1,7 @@
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct InterpTable1D {
 
@@ -325,7 +325,7 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
             fx = v;
         };
 
-        ASSET::MemoryManager::allocate_run(this->ORows(), Impl,
+        Tycho::MemoryManager::allocate_run(this->ORows(), Impl,
                                            TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
     template <class InType, class OutType, class JacType>
@@ -341,7 +341,7 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
             jx = dv_dt;
         };
 
-        ASSET::MemoryManager::allocate_run(this->ORows(), Impl,
+        Tycho::MemoryManager::allocate_run(this->ORows(), Impl,
                                            TempSpec<Output<Scalar>>(this->ORows(), 1),
                                            TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
@@ -365,7 +365,7 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
             adjhess(0, 0) = dv2_dt2.dot(adjvars);
         };
 
-        ASSET::MemoryManager::allocate_run(
+        Tycho::MemoryManager::allocate_run(
             this->ORows(), Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
             TempSpec<Output<Scalar>>(this->ORows(), 1), TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
@@ -439,4 +439,4 @@ static void InterpTable1DBuild(py::module &m) {
     });
 }
 
-} // namespace ASSET
+} // namespace Tycho

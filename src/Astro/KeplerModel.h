@@ -2,9 +2,9 @@
 #include "KeplerPropagator.h"
 #include "OptimalControl/ODE.h"
 #include "OptimalControl/ODEPhase.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct Kepler_Impl : ODESize<6, 0, 0> {
     static auto Definition(double mu) {
@@ -33,7 +33,7 @@ struct KeplerPhase : ODEPhase<Kepler> {
     using Base::Base;
     bool UseKeplerPropagator = true;
 
-    ASSET::ConstraintInterface make_shooter() {
+    Tycho::ConstraintInterface make_shooter() {
         if (UseKeplerPropagator) {
             auto kprop = KeplerPropagator(this->ode.mu);
             auto Args = Arguments<14>();
@@ -47,7 +47,7 @@ struct KeplerPhase : ODEPhase<Kepler> {
 
             auto shooter = kprop.eval(Xk1) - kprop.eval(Xk2);
 
-            return ASSET::ConstraintInterface(shooter);
+            return Tycho::ConstraintInterface(shooter);
         } else {
             return Base::make_shooter();
         }
@@ -64,4 +64,4 @@ struct KeplerPhase : ODEPhase<Kepler> {
 
 void BuildKeplerMod(FunctionRegistry &reg, py::module &m);
 
-} // namespace ASSET
+} // namespace Tycho

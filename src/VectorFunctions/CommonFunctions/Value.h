@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     using Base = VectorFunction<Value<OSZ>, OSZ, OSZ>;
@@ -34,4 +34,4 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

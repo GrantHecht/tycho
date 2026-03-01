@@ -29,7 +29,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "Utils/BenchUtils.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;
@@ -426,4 +426,4 @@ struct NonLinearProgram {
                         std::shared_ptr<NonLinearProgram> nlp2);
 };
 
-} // namespace ASSET
+} // namespace Tycho

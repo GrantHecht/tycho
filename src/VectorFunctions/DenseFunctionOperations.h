@@ -3,7 +3,7 @@
 #include "AssigmentTypes.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Target, class Left, class Right, class Assignment, bool Aliased>
 void right_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
@@ -60,11 +60,11 @@ void right_jacobian_product_constant_impl(const INPUT_DOMAIN &SubDomains,
     const Eigen::MatrixBase<Right> &right_ref(right.derived());
     Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
 
-    ASSET::constexpr_for_loop(
+    Tycho::constexpr_for_loop(
         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
             constexpr int Start1 = INPUT_DOMAIN::SubDomains[i.value][0];
             constexpr int Size1 = INPUT_DOMAIN::SubDomains[i.value][1];
-            ASSET::right_jacobian_product_impl(
+            Tycho::right_jacobian_product_impl(
                 target_ref.template middleCols<Size1>(Start1, Size1), left,
                 right_ref.template middleCols<Size1>(Start1, Size1), assign, aliased);
         });
@@ -79,7 +79,7 @@ void right_jacobian_product_dynamic_impl(const DomainMatrix &SubDomains,
     const int sds = SubDomains.cols();
 
     if (sds == 0) {
-        // ASSET::right_jacobian_product_impl(target_, left, right, assign, aliased);
+        // Tycho::right_jacobian_product_impl(target_, left, right, assign, aliased);
     } else {
         const Eigen::MatrixBase<Right> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -88,7 +88,7 @@ void right_jacobian_product_dynamic_impl(const DomainMatrix &SubDomains,
             int start = SubDomains(0, i);
             int size = SubDomains(1, i);
 
-            ASSET::right_jacobian_product_impl(target_ref.middleCols(start, size), left,
+            Tycho::right_jacobian_product_impl(target_ref.middleCols(start, size), left,
                                                right_ref.middleCols(start, size), assign, aliased);
         }
     }
@@ -161,14 +161,14 @@ void symetric_jacobian_product_constant_impl(const INPUT_DOMAIN &SubDomains,
     Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
 
     if constexpr (sds != 1) {
-        ASSET::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
+        Tycho::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
 
     } else {
-        ASSET::constexpr_for_loop(
+        Tycho::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                 constexpr int Start1 = INPUT_DOMAIN::SubDomains[i.value][0];
                 constexpr int Size1 = INPUT_DOMAIN::SubDomains[i.value][1];
-                ASSET::symetric_jacobian_product_impl(
+                Tycho::symetric_jacobian_product_impl(
                     target_ref.template block<Size1, Size1>(Start1, Start1, Size1, Size1), left,
                     right_ref.template middleCols<Size1>(Start1, Size1), assign, aliased);
             });
@@ -184,7 +184,7 @@ void symetric_jacobian_product_dynamic_impl(const DomainMatrix &SubDomains,
     const int sds = SubDomains.cols();
 
     if (sds == 0 || sds > 1) {
-        ASSET::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
+        Tycho::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
     } else {
         const Eigen::MatrixBase<Right> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -193,7 +193,7 @@ void symetric_jacobian_product_dynamic_impl(const DomainMatrix &SubDomains,
             int start = SubDomains(0, i);
             int size = SubDomains(1, i);
 
-            ASSET::symetric_jacobian_product_impl(target_ref.block(start, start, size, size), left,
+            Tycho::symetric_jacobian_product_impl(target_ref.block(start, start, size, size), left,
                                                   right_ref.middleCols(start, size), assign,
                                                   aliased);
 
@@ -238,7 +238,7 @@ void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &SubDomains,
                                            Assignment assign) {
     int sds = SubDomains.cols();
     if (sds == 0) {
-        // ASSET::accumulate_impl(target_, right, assign);
+        // Tycho::accumulate_impl(target_, right, assign);
     } else {
         const Eigen::MatrixBase<JacType> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -247,7 +247,7 @@ void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &SubDomains,
             int start = SubDomains(0, i);
             int size = SubDomains(1, i);
 
-            ASSET::accumulate_impl(target_ref.middleCols(start, size),
+            Tycho::accumulate_impl(target_ref.middleCols(start, size),
                                    right_ref.middleCols(start, size), assign);
         }
     }
@@ -263,12 +263,12 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &SubDomai
     Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
 
     if (sds == 0) {
-        // ASSET::accumulate_impl(target_, right, assign);
+        // Tycho::accumulate_impl(target_, right, assign);
     } else if (sds == 1) {
 
         int Start1 = SubDomains(0, 0);
         int Size1 = SubDomains(1, 0);
-        ASSET::accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
+        Tycho::accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
                                right_ref.block(Start1, Start1, Size1, Size1), assign);
     } else if (sds == 2) {
 
@@ -277,16 +277,16 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &SubDomai
         int Start2 = SubDomains(0, 1);
         int Size2 = SubDomains(1, 1);
 
-        ASSET::accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
+        Tycho::accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
                                right_ref.block(Start1, Start1, Size1, Size1), assign);
 
-        ASSET::accumulate_impl(target_ref.block(Start2, Start1, Size2, Size1),
+        Tycho::accumulate_impl(target_ref.block(Start2, Start1, Size2, Size1),
                                right_ref.block(Start2, Start1, Size2, Size1), assign);
 
-        ASSET::accumulate_impl(target_ref.block(Start1, Start2, Size1, Size2),
+        Tycho::accumulate_impl(target_ref.block(Start1, Start2, Size1, Size2),
                                right_ref.block(Start1, Start2, Size1, Size2), assign);
 
-        ASSET::accumulate_impl(target_ref.block(Start2, Start2, Size2, Size2),
+        Tycho::accumulate_impl(target_ref.block(Start2, Start2, Size2, Size2),
                                right_ref.block(Start2, Start2, Size2, Size2), assign);
 
     } else {
@@ -295,7 +295,7 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &SubDomai
             int start = SubDomains(0, i);
             int size = SubDomains(1, i);
 
-            ASSET::accumulate_impl(target_ref.middleCols(start, size),
+            Tycho::accumulate_impl(target_ref.middleCols(start, size),
                                    right_ref.middleCols(start, size), assign);
         }
     }
@@ -308,7 +308,7 @@ void accumulate_vector_dynamic_domain_impl(const DomainMatrix &SubDomains,
                                            Assignment assign) {
     int sds = SubDomains.cols();
     if (sds == 0) {
-        // ASSET::accumulate_impl(target_, right, assign);
+        // Tycho::accumulate_impl(target_, right, assign);
     } else {
         const Eigen::MatrixBase<JacType> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -316,7 +316,7 @@ void accumulate_vector_dynamic_domain_impl(const DomainMatrix &SubDomains,
         for (int i = 0; i < sds; i++) {
             int start = SubDomains(0, i);
             int size = SubDomains(1, i);
-            ASSET::accumulate_impl(target_ref.segment(start, size), right_ref.segment(start, size),
+            Tycho::accumulate_impl(target_ref.segment(start, size), right_ref.segment(start, size),
                                    assign);
         }
     }
@@ -356,4 +356,4 @@ void scale_matrix_dynamic_domain_impl(const DomainMatrix &SubDomains,
     }
 }
 
-} // namespace ASSET
+} // namespace Tycho

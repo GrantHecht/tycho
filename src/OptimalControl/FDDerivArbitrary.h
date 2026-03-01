@@ -4,7 +4,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class VectorType>
 std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, bool inctime) {
@@ -195,4 +195,4 @@ template <class DType> struct FDDerivArbitrary {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

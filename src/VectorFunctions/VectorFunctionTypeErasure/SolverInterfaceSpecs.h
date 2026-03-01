@@ -29,7 +29,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "VectorFunctions/CommonFunctions/ExpressionFwdDeclarations.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 /*
  * Spec for vector function that can be used as a constraint inside of PSIOPT. Erases all
@@ -345,4 +345,4 @@ struct ObjectiveInterface
     ObjectiveInterface() {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

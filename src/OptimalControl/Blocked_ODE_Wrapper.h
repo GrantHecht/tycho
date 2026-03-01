@@ -2,7 +2,7 @@
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     static const int UV = 0;
@@ -18,4 +18,4 @@ template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     Blocked_ODE_Wrapper(const DODE &ode) : Base(ode) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

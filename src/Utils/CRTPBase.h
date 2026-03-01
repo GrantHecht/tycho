@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 /*!
  * @brief Curiosly Recurring Template Pattern base class.
@@ -60,4 +60,4 @@ template <class Derived, template <typename> class Mixin> struct CRTPMixin {
     friend Mixin<Derived>;
 };
 
-} // namespace ASSET
+} // namespace Tycho

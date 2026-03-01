@@ -2,7 +2,7 @@
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR> struct ConditionalSpec {
 
@@ -136,4 +136,4 @@ template <int IR> struct GenericConditional : rubber_types::TypeErasure<Conditio
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

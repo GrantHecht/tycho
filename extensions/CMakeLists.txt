@@ -9,15 +9,15 @@ include_directories(${PROJECT_SOURCE_DIR}/src/Utils)
 include_directories(${PROJECT_SOURCE_DIR}/src/VectorFunctions)
 include_directories(${PROJECT_SOURCE_DIR}/src/Integrators)
 
-add_library(asset_extensions STATIC 
-ASSET_Extensions.h
-ASSET_Extensions.cpp)
+add_library(tycho_extensions STATIC 
+Tycho_Extensions.h
+Tycho_Extensions.cpp)
 
-add_dependencies(asset_extensions pch)
-target_include_directories(asset_extensions PRIVATE ${INCLUDE_DIRS})
+add_dependencies(tycho_extensions pch)
+target_include_directories(tycho_extensions PRIVATE ${INCLUDE_DIRS})
 
 message(STATUS  ${INCLUDE_DIRS})
 
 
-target_compile_options(asset_extensions PUBLIC ${COMPILE_FLAGS})
-target_precompile_headers(asset_extensions REUSE_FROM pch)
+target_compile_options(tycho_extensions PUBLIC ${COMPILE_FLAGS})
+target_precompile_headers(tycho_extensions REUSE_FROM pch)

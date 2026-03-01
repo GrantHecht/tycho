@@ -1,5 +1,5 @@
 #pragma once
-namespace ASSET {
+namespace Tycho {
 
 /// <summary>
 /// Attempts to calculate number of physical CPU cores
@@ -7,4 +7,4 @@ namespace ASSET {
 /// <returns></returns>
 int get_core_count();
 
-} // namespace ASSET
+} // namespace Tycho

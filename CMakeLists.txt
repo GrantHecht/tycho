@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ASSET VERSION 0.5.2 LANGUAGES CXX)
+project(Tycho VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
@@ -20,7 +20,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
 endif()
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
-  message(FATAL_ERROR "You cannot build ASSET with the Microsoft Compiler. Please use Clang or GCC and try again.")
+  message(FATAL_ERROR "You cannot build Tycho with the Microsoft Compiler. Please use Clang or GCC and try again.")
 endif()
 
 ################################################################################
@@ -30,7 +30,7 @@ endif()
 
 set(LINK_TIME_OPT FALSE)          ### DO LTO - Recommended for full release
 set(CLANG_MAX_INLINE_DEPTH 225)
-#set(BUILD_ASSET_WHEEL TRUE)      ### CI Build for generic wheels
+#set(BUILD_TYCHO_WHEEL TRUE)      ### CI Build for generic wheels
 #set(BUILD_SPHINX_DOCS TRUE)
 
 # Option to enable strict IEEE 754 compliance for proper NaN handling
@@ -54,7 +54,7 @@ list(APPEND RELEASE_FLAGS "-O2")
 
 
 ## Generic Binary Flags
-if(BUILD_ASSET_WHEEL)
+if(BUILD_TYCHO_WHEEL)
     # Detect architecture for wheel builds
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
         # ARM64 (Apple Silicon, ARM servers) - use NEON
@@ -129,7 +129,7 @@ if(LINK_TIME_OPT)
   if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     if(WIN32)
         ## clang-cl flag
-        if(BUILD_ASSET_WHEEL)
+        if(BUILD_TYCHO_WHEEL)
             ## Do full LTO for CI builds since it is single threaded anyway
             list(APPEND RELEASE_FLAGS "-flto=full")
             list(APPEND RELEASE_FLAGS "/opt:lldltojobs=1")
@@ -196,28 +196,28 @@ list(APPEND COMPILE_FLAGS "$<$<OR:$<CONFIG:DEBUG>,$<CONFIG:RELWITHDEBINFO>>:${DE
 
 
 ################################################################################
-################## ASSET PREPROCCESSOR MACROS  #################################
+################## TYCHO PREPROCCESSOR MACROS  #################################
 ################################################################################
 
 add_definitions(-DEIGEN_INITIALIZE_MATRICES_BY_ZERO) ##NEVER EVER GET RID OF THIS EVER
 add_definitions(-DEIGEN_DONT_PARALLELIZE) ##NEVER EVER GET RID OF THIS EVER
 
 
-add_definitions(-DASSET_DEFAULT_QP_THREADS=8) ## no spaces between = !!!! otherwise it is set to one
-add_definitions(-DASSET_DEFAULT_FUNC_THREADS=16) ## no spaces between = !!!! otherwise it is set to one
+add_definitions(-DTYCHO_DEFAULT_QP_THREADS=8) ## no spaces between = !!!! otherwise it is set to one
+add_definitions(-DTYCHO_DEFAULT_FUNC_THREADS=16) ## no spaces between = !!!! otherwise it is set to one
 
 ###  initial size of asset arena memory allocator in number of doubles/superscalars
-add_definitions(-DASSET_DEFAULT_ARENA_SIZE=256) ## no spaces between = !!!! otherwise it is set to one
+add_definitions(-DTYCHO_DEFAULT_ARENA_SIZE=256) ## no spaces between = !!!! otherwise it is set to one
 
 ### Comment out to roll back to old memory allocator. We will get rid of this once confident in arena
-add_definitions(-DASSET_MEMORYMAN)
+add_definitions(-DTYCHO_MEMORYMAN)
 
-add_definitions(-DASSET_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
-add_definitions(-DASSET_VERSIONSTRING="${CMAKE_PROJECT_VERSION}")
-add_definitions(-DASSET_COMPILERSTRING="${CMAKE_CXX_COMPILER_ID}")
-add_definitions(-DASSET_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
-add_definitions(-DASSET_OS="${CMAKE_SYSTEM_NAME}")
-add_definitions(-DASSET_OSVERSION="${CMAKE_SYSTEM_VERSION}")
+add_definitions(-DTYCHO_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
+add_definitions(-DTYCHO_VERSIONSTRING="${CMAKE_PROJECT_VERSION}")
+add_definitions(-DTYCHO_COMPILERSTRING="${CMAKE_CXX_COMPILER_ID}")
+add_definitions(-DTYCHO_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
+add_definitions(-DTYCHO_OS="${CMAKE_SYSTEM_NAME}")
+add_definitions(-DTYCHO_OSVERSION="${CMAKE_SYSTEM_VERSION}")
 add_definitions(-DFMT_HEADER_ONLY)
 
 if(WIN32)
@@ -365,7 +365,7 @@ if(NOT PIP_INSTALL)
   endif()
 
   if(PYTHON_LOCAL_INSTALL_DIR)
-    message(STATUS "ASSET will be installed to " ${PYTHON_LOCAL_INSTALL_DIR})
+    message(STATUS "Tycho will be installed to " ${PYTHON_LOCAL_INSTALL_DIR})
   else()
     message(STATUS "Could not find appropriate install directory")
   endif()

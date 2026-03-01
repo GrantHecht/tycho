@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func1, class Func2> struct FunctionDotProduct_Impl;
 
@@ -221,7 +221,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                     }
                 } else {
                     constexpr int sds = Func1::INPUT_DOMAIN::SubDomains.size();
-                    ASSET::constexpr_for_loop(
+                    Tycho::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
                             constexpr int start = Func1::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -261,4 +261,4 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -1,7 +1,7 @@
 #pragma once
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct MeshIterateInfo {
 
@@ -136,4 +136,4 @@ struct MeshIterateInfo {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

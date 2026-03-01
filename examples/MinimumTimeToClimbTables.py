@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl.VectorFunctions as vf
+import tycho.VectorFunctions as vf
 
 """
 Aerodynamic Data taken from ICLOS2s implentation of the problem

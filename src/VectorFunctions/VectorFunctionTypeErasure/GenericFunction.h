@@ -33,7 +33,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "SolverInterfaceSpecs.h"
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 namespace detail {
 
@@ -197,7 +197,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     ////////////////////////////////////////////////////////////////////////////////
     template <class JacType, class Scalar>
     void scale_jacobian(ConstMatrixBaseRef<JacType> target_, Scalar s) const {
-        if constexpr (std::is_same<Scalar, ASSET::DefaultSuperScalar>::value) {
+        if constexpr (std::is_same<Scalar, Tycho::DefaultSuperScalar>::value) {
             Base::scale_jacobian(target_, s);
         } else {
             this->func.scale_jacobian(target_, s);
@@ -224,12 +224,12 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         Hessian<double> hx(this->IRows(), this->IRows());
         Output<double> l(this->ORows());
 
-        Input<ASSET::DefaultSuperScalar> X = xt.template cast<ASSET::DefaultSuperScalar>();
-        Output<ASSET::DefaultSuperScalar> FX(this->ORows());
-        Jacobian<ASSET::DefaultSuperScalar> JX(this->ORows(), this->IRows());
-        Gradient<ASSET::DefaultSuperScalar> GX(this->IRows());
-        Hessian<ASSET::DefaultSuperScalar> HX(this->IRows(), this->IRows());
-        Output<ASSET::DefaultSuperScalar> L(this->ORows());
+        Input<Tycho::DefaultSuperScalar> X = xt.template cast<Tycho::DefaultSuperScalar>();
+        Output<Tycho::DefaultSuperScalar> FX(this->ORows());
+        Jacobian<Tycho::DefaultSuperScalar> JX(this->ORows(), this->IRows());
+        Gradient<Tycho::DefaultSuperScalar> GX(this->IRows());
+        Hessian<Tycho::DefaultSuperScalar> HX(this->IRows(), this->IRows());
+        Output<Tycho::DefaultSuperScalar> L(this->ORows());
 
         l.setOnes();
         fx.setZero();
@@ -250,11 +250,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
         std::cout << dummy << std::endl;
 
-        ASSET::DefaultSuperScalar dummy2(0);
+        Tycho::DefaultSuperScalar dummy2(0);
         t2.start();
-        int n2 = n / ASSET::DefaultSuperScalar::SizeAtCompileTime;
+        int n2 = n / Tycho::DefaultSuperScalar::SizeAtCompileTime;
         for (int i = 0; i < n2; i++) {
-            X[0] += ASSET::DefaultSuperScalar((1.0 / double(n + 1)));
+            X[0] += Tycho::DefaultSuperScalar((1.0 / double(n + 1)));
             this->func.compute_jacobian_adjointgradient_adjointhessian(X, FX, JX, GX, HX, L);
             dummy2 += FX[0] + JX(0, 0) + HX(0, 0);
         }
@@ -274,12 +274,12 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         Hessian<double> hx(this->IRows(), this->IRows());
         Output<double> l(this->ORows());
 
-        Input<ASSET::DefaultSuperScalar> X = xt.template cast<ASSET::DefaultSuperScalar>();
-        Output<ASSET::DefaultSuperScalar> FX(this->ORows());
-        Jacobian<ASSET::DefaultSuperScalar> JX(this->ORows(), this->IRows());
-        Gradient<ASSET::DefaultSuperScalar> GX(this->IRows());
-        Hessian<ASSET::DefaultSuperScalar> HX(this->IRows(), this->IRows());
-        Output<ASSET::DefaultSuperScalar> L(this->ORows());
+        Input<Tycho::DefaultSuperScalar> X = xt.template cast<Tycho::DefaultSuperScalar>();
+        Output<Tycho::DefaultSuperScalar> FX(this->ORows());
+        Jacobian<Tycho::DefaultSuperScalar> JX(this->ORows(), this->IRows());
+        Gradient<Tycho::DefaultSuperScalar> GX(this->IRows());
+        Hessian<Tycho::DefaultSuperScalar> HX(this->IRows(), this->IRows());
+        Output<Tycho::DefaultSuperScalar> L(this->ORows());
 
         Eigen::BenchTimer t1;
         Eigen::BenchTimer t2;
@@ -307,11 +307,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
         std::cout << dummy << std::endl;
 
-        ASSET::DefaultSuperScalar dummy2(0.0);
+        Tycho::DefaultSuperScalar dummy2(0.0);
         t2.start();
-        int n2 = n / ASSET::DefaultSuperScalar::SizeAtCompileTime;
+        int n2 = n / Tycho::DefaultSuperScalar::SizeAtCompileTime;
         for (int i = 0; i < n2; i++) {
-            // X[0] += ASSET::DefaultSuperScalar((1.0 / double(n + 1)));
+            // X[0] += Tycho::DefaultSuperScalar((1.0 / double(n + 1)));
 
             FX.setZero();
             JX.setZero();
@@ -334,7 +334,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         std::cout << "  Scalar     : " << MemoryManager::size_scalar() * 8 << std::endl;
         std::cout << "  SuperScalar: "
                   << MemoryManager::size_super_scalar() * 8 *
-                         ASSET::DefaultSuperScalar::SizeAtCompileTime
+                         Tycho::DefaultSuperScalar::SizeAtCompileTime
                   << std::endl;
 
         MemoryManager::resize(64, 64);
@@ -363,4 +363,4 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

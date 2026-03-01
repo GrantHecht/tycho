@@ -3,7 +3,7 @@
 #include "FDCoeffs.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 // Notes: "time axis" must be monotonic increasing
 
@@ -88,4 +88,4 @@ template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

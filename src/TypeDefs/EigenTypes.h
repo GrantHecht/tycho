@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Scalar, int rows> using Vector = Eigen::Matrix<Scalar, rows, 1>;
 
@@ -57,4 +57,4 @@ using DefaultSuperScalar = SuperScalarType<double, 2>;
 using DefaultSuperScalar = SuperScalarType<double, 4>;
 #endif
 
-} // namespace ASSET
+} // namespace Tycho

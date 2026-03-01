@@ -22,7 +22,7 @@ in the LICENSE file in ASSET's top level directory.
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func, class Value> struct StaticScaled_Impl;
 
@@ -303,7 +303,7 @@ struct RowScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> 
         };
 
         const int orows = this->ORows();
-        ASSET::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1));
+        Tycho::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -322,7 +322,7 @@ struct RowScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> 
         };
 
         const int orows = this->ORows();
-        ASSET::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1));
+        Tycho::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -348,7 +348,7 @@ struct RowScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> 
         };
 
         const int orows = this->ORows();
-        ASSET::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1),
+        Tycho::MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1),
                                            TempSpec<Output<Scalar>>(orows, 1));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -456,7 +456,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
                 fx = (mattmp * fx).eval();
             };
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
         } else {
 
@@ -467,7 +467,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
             };
 
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
         }
@@ -488,7 +488,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
                                                   std::bool_constant<true>());
             };
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
         } else {
 
@@ -501,7 +501,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
             };
 
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
@@ -531,7 +531,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
                                                   std::bool_constant<true>());
             };
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1)
 
@@ -549,7 +549,7 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
             };
 
             const int orows = this->ORows();
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 orows, Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),
@@ -558,4 +558,4 @@ struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

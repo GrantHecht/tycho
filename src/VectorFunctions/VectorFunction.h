@@ -6,7 +6,7 @@
 #include "DenseDifferentiation/DenseFDiffFwd.h"
 #include "Utils/FunctionReturnType.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR, DenseDerivativeModes Jm = DenseDerivativeModes::Analytic,
           DenseDerivativeModes Hm = DenseDerivativeModes::Analytic>
@@ -58,4 +58,4 @@ struct VectorExpression<Derived, ExprImpl>
         using Base::Base;                                                                          \
     };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -22,7 +22,7 @@ in the LICENSE file in ASSET's top level directory.
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, Analytic, Analytic> {
 
@@ -105,4 +105,4 @@ template <class YFunc, class XFunc> struct ArcTan2Impl {
     static auto Definition(YFunc yf, XFunc xf) { return ArcTan2Op().eval(StackedOutputs{yf, xf}); }
 };
 
-} // namespace ASSET
+} // namespace Tycho

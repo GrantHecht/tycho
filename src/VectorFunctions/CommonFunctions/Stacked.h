@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func1, class Func2> struct StackTwoOutputs_Impl;
 
@@ -63,7 +63,7 @@ RetType make_dynamic_stack(const std::vector<FuncType> &funcs) {
         for (int i = 5; i < funcs.size(); i++) {
             nfuncs.push_back(funcs[i]);
         }
-        RetType rest = ASSET::make_dynamic_stack<RetType, FuncType>(nfuncs);
+        RetType rest = Tycho::make_dynamic_stack<RetType, FuncType>(nfuncs);
         stacked = StackedOutputs{stackedT, rest};
     }
     return stacked;
@@ -391,4 +391,4 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

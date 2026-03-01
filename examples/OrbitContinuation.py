@@ -3,9 +3,9 @@ import copy
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
-import asset_asrl.Astro.Constants as c
-from asset_asrl.Astro.AstroModels import CR3BP
+import tycho as ast
+import tycho.Astro.Constants as c
+from tycho.Astro.AstroModels import CR3BP
 
 ################################################################################
 # Setup

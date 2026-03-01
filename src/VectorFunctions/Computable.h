@@ -2,7 +2,7 @@
 
 #include "ComputableBase.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR> struct Computable : ComputableBase<Derived, IR, OR> {
     using Base = ComputableBase<Derived, IR, OR>;
@@ -27,4 +27,4 @@ struct Computable<Derived, IR, 1> : ComputableBase<Derived, IR, 1> {
     template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
 };
 
-} // namespace ASSET
+} // namespace Tycho

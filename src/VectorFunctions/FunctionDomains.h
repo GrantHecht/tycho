@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR, int Start, int Size> struct SingleDomain {
     static const int DomainSize = IR;
@@ -148,4 +148,4 @@ template <> struct DomainHolder<-1> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

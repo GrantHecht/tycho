@@ -1,9 +1,9 @@
 #pragma once
 #include "CommonFunctions/IOScaled.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func>
 Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd &input_scales,
@@ -53,4 +53,4 @@ Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd
     return output_scales;
 }
 
-} // namespace ASSET
+} // namespace Tycho

@@ -5,7 +5,7 @@
 #include "ODEPhaseBase.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct OptimalControlProblem : OptimizationProblemBase {
     using VectorXi = Eigen::VectorXi;
@@ -1641,4 +1641,4 @@ struct OptimalControlProblem : OptimizationProblemBase {
                                     OptimizationProblemBase> &);
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -6,7 +6,7 @@
 #include "Solvers/NonLinearProgram.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct PhaseIndexer : ODESize<-1, -1, -1> {
     using VectorXi = Eigen::VectorXi;
@@ -209,4 +209,4 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     static void Test();
 };
 
-} // namespace ASSET
+} // namespace Tycho

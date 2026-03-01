@@ -8,7 +8,7 @@ For now, the standard problem procedure is the same, where we need to import eve
 .. code-block:: python
 
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
     import matplotlib.pyplot as plt
     import time
 
@@ -338,7 +338,7 @@ Full Code:
 .. code-block:: python
 
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
     import matplotlib.pyplot as plt
     import time
 

@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func, int IR, int OR>
 struct FunctionHolder : VectorFunction<Derived, IR, OR, Analytic> {
@@ -88,4 +88,4 @@ struct FunctionHolder : VectorFunction<Derived, IR, OR, Analytic> {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

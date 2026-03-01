@@ -3,7 +3,7 @@ ASSET Astro Library
 
 Included with the ASSET install are a subset of dynamical models that are available for use through the Python interface. 
 These models include standard two-body, circular restricted three body problem (CR3BP), ephemeris, and low-thrust models.
-The Python implementation of these files can be found in asset/src/asset_asrl/Astro.
+The Python implementation of these files can be found in asset/src/tycho/Astro.
 Below we will demonstrate some of the sample models that can be found.
 
 .. warning::
@@ -45,9 +45,9 @@ Two-Body Ballistic
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import TwoBody
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import TwoBody
+	import tycho.Astro.Constants as c
 
 	#BE SURE YOUR UNITS ARE SCALED CORRECTLY
 
@@ -61,10 +61,10 @@ Two-Body Low-Thrust
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import TwoBody_LT
-	import asset_asrl.Astro.Constants as c
-	from asset_asrl.Astro.Extensions.ThrusterModels import LowThrustAcc
+	import tycho as ast
+	from tycho.Astro.AstroModels import TwoBody_LT
+	import tycho.Astro.Constants as c
+	from tycho.Astro.Extensions.ThrusterModels import LowThrustAcc
 
 	#BE SURE YOUR UNITS ARE SCALED CORRECTLY
 
@@ -81,9 +81,9 @@ CR3BP Ballistic
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import CR3BP
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import CR3BP
+	import tycho.Astro.Constants as c
 
 	#BE SURE YOUR UNITS ARE SCALED CORRECTLY
 
@@ -99,10 +99,10 @@ CR3BP Low-Thrust
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import CR3BP_LT
-	from asset_asrl.Astro.Extensions.ThrusterModels import LowThrustAcc
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import CR3BP_LT
+	from tycho.Astro.Extensions.ThrusterModels import LowThrustAcc
+	import tycho.Astro.Constants as c
 
 	#BE SURE YOUR UNITS ARE SCALED CORRECTLY
 
@@ -134,9 +134,9 @@ EPPR Ballistic
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import EPPR, EPPRFrame
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import EPPR, EPPRFrame
+	import tycho.Astro.Constants as c
 	import spiceypy as sppy
 
 	#For example, load de432s.
@@ -170,10 +170,10 @@ EPPR Low-Thrust
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import EPPR_LT, EPPRFrame
-	from asset_asrl.Astro.Extensions.ThrusterModels import LowThrustAcc
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import EPPR_LT, EPPRFrame
+	from tycho.Astro.Extensions.ThrusterModels import LowThrustAcc
+	import tycho.Astro.Constants as c
 	import spiceypy as sppy
 
 	#For example, load de432s.
@@ -213,9 +213,9 @@ NBody Ballistic
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import NBody, NBodyFrame
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import NBody, NBodyFrame
+	import tycho.Astro.Constants as c
 	import spiceypy as sppy
 
 	#For example, load de432s.
@@ -249,10 +249,10 @@ NBody Low-Thrust
 
 .. code-block:: python
 	
-	import asset_asrl as ast
-	from asset_asrl.Astro.AstroModels import NBody_LT, NBodyFrame
-	from asset_asrl.Astro.Extensions.ThrusterModels import LowThrustAcc
-	import asset_asrl.Astro.Constants as c
+	import tycho as ast
+	from tycho.Astro.AstroModels import NBody_LT, NBodyFrame
+	from tycho.Astro.Extensions.ThrusterModels import LowThrustAcc
+	import tycho.Astro.Constants as c
 	import spiceypy as sppy
 
 	#For example, load de432s.

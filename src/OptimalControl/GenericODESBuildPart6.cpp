@@ -1,6 +1,6 @@
-#include "ASSET_OptimalControl.h"
+#include "Tycho_OptimalControl.h"
 
-namespace ASSET {
+namespace Tycho {
 
 void GenericODESBuildPart6(FunctionRegistry &reg, py::module &m) {
 
@@ -9,4 +9,4 @@ void GenericODESBuildPart6(FunctionRegistry &reg, py::module &m) {
     PythonGenericODE<4, 0, 0>::BuildGenODEModule("ode_4", m, reg);
 }
 
-} // namespace ASSET
+} // namespace Tycho

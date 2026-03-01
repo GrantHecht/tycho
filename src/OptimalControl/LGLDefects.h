@@ -4,7 +4,7 @@
 #include "TranscriptionSizing.h"
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
@@ -525,4 +525,4 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

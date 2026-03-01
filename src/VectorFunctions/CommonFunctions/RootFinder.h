@@ -22,7 +22,7 @@ in the LICENSE file in ASSET's top level directory.
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class FX, class DFX> struct ScalarRootFinder_Impl;
 
@@ -176,4 +176,4 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

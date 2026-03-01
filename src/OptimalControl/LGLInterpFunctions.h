@@ -2,7 +2,7 @@
 
 #include "LGLInterpTable.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int OR>
 struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Analytic> {
@@ -152,4 +152,4 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Anal
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

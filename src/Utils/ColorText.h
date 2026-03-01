@@ -6,10 +6,10 @@
 
 #include "fmtlib.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct ColorScheme {};
 
 void enable_color_console();
 
-} // namespace ASSET
+} // namespace Tycho

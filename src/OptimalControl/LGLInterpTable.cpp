@@ -1,6 +1,6 @@
 #include "LGLInterpTable.h"
 
-void ASSET::LGLInterpTable::setMethod(TranscriptionModes m) {
+void Tycho::LGLInterpTable::setMethod(TranscriptionModes m) {
     this->Method = m;
     switch (this->Method) {
 
@@ -82,7 +82,7 @@ void ASSET::LGLInterpTable::setMethod(TranscriptionModes m) {
     }
 }
 
-std::vector<Eigen::VectorXd> ASSET::LGLInterpTable::NewErrorIntegral() {
+std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
 
     auto factorial = [](int n) {
         double fact = 1;
@@ -156,7 +156,7 @@ std::vector<Eigen::VectorXd> ASSET::LGLInterpTable::NewErrorIntegral() {
     return std::vector{tsnd, errs2, errint};
 }
 
-void ASSET::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
+void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                                             Eigen::MatrixXd &mesh_dist) const {
 
     auto factorial = [](int n) {
@@ -227,7 +227,7 @@ void ASSET::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
     mesh_errors.col(this->NumBlocks) = mesh_errors.col(this->NumBlocks - 1);
 }
 
-void ASSET::LGLInterpTable::Build(py::module &m) {
+void Tycho::LGLInterpTable::Build(py::module &m) {
     auto obj = py::class_<LGLInterpTable, std::shared_ptr<LGLInterpTable>>(m, "LGLInterpTable");
     obj.def(py::init<VectorFunctionalX, int, int, TranscriptionModes,
                      const std::vector<Eigen::VectorXd> &, int>());

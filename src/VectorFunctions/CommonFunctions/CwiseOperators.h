@@ -22,7 +22,7 @@ in the LICENSE file in ASSET's top level directory.
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func> struct CwiseFunctionOperator;
 
@@ -980,4 +980,4 @@ template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, 
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

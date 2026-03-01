@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR, int OR> struct InputOutputSize {
     static const int InputRows = IR;
@@ -22,4 +22,4 @@ template <int IR> struct InputOutputSize<IR, -1> {
     int OutputRows = 0;
 };
 
-} // namespace ASSET
+} // namespace Tycho

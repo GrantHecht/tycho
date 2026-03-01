@@ -1,7 +1,7 @@
 #pragma once
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 struct J2Cartesian_Impl {
     /// <summary>
     /// Computes J2 effect given position vector relative to body and the north pole vector of the
@@ -67,4 +67,4 @@ struct J2Modified_Impl {
 
 // BUILD_FROM_EXPRESSION(J2Modified, J2Modified_Impl, double, double,double );
 
-} // namespace ASSET
+} // namespace Tycho

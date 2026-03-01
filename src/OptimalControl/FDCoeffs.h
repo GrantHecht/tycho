@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 enum FDCoeffType { Backwards, Central, Forwards };
 
@@ -268,4 +268,4 @@ template <> struct FDCoeffs<4, 6, FDCoeffType::Central, 0> {
                                        -122 / 15.0, 169 / 60.0, -2 / 5.0,   7 / 240.0};
 };
 
-} // namespace ASSET
+} // namespace Tycho

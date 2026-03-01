@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
-import asset_asrl.OptimalControl as oc
-import asset_asrl.VectorFunctions as vf
-from asset_asrl.VectorFunctions import Arguments as Args
+import tycho as ast
+import tycho.OptimalControl as oc
+import tycho.VectorFunctions as vf
+from tycho.VectorFunctions import Arguments as Args
 
 """
 Classic Goddard rocket problem with singular arc

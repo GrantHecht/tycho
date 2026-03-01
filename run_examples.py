@@ -37,16 +37,16 @@ DEFAULT_TIMEOUT = 300  # seconds
 
 # Examples that are genuinely slow get a higher ceiling.
 TIMEOUT_OVERRIDES = {
-    "BettsLowThrust.py":                    600,
-    "DionysusLowThrust.py":                 600,
-    "Heteroclinic.py":                      600,
-    "OrbitContinuation.py":                 600,
-    "MultiSpacecraftOptimization.py":       600,
-    "MeshRefinement/CartPole.py":           600,
-    "MeshRefinement/Delta3Launch.py":       600,
-    "MeshRefinement/Reentry.py":            600,
-    "MeshRefinement/HyperSensLong.py":      900,
-    "UpdatedInterface/BettsLowThrust.py":   600,
+    "BettsLowThrust.py": 600,
+    "DionysusLowThrust.py": 600,
+    "Heteroclinic.py": 600,
+    "OrbitContinuation.py": 600,
+    "MultiSpacecraftOptimization.py": 600,
+    "MeshRefinement/CartPole.py": 600,
+    "MeshRefinement/Delta3Launch.py": 600,
+    "MeshRefinement/Reentry.py": 600,
+    "MeshRefinement/HyperSensLong.py": 900,
+    "UpdatedInterface/BettsLowThrust.py": 600,
 }
 
 # Ordered list of all examples to run, relative to EXAMPLES_DIR.
@@ -100,14 +100,14 @@ ALL_EXAMPLES = [
 # skipped rather than failed, so the suite stays green when optional system
 # packages are absent.
 OPTIONAL_DEPS: dict[str, list[str]] = {
-    "BettsLowThrust.py":                   ["mpl_toolkits.basemap"],
-    "Delta3Launch.py":                     ["mpl_toolkits.basemap"],
-    "DionysusLowThrust.py":               ["mpl_toolkits.basemap"],
-    "Reentry.py":                          ["mpl_toolkits.basemap"],
-    "MeshRefinement/Delta3Launch.py":      ["mpl_toolkits.basemap"],
-    "MeshRefinement/Reentry.py":           ["mpl_toolkits.basemap"],
-    "UpdatedInterface/BettsLowThrust.py":  ["mpl_toolkits.basemap"],
-    "UpdatedInterface/Delta3Launch.py":    ["mpl_toolkits.basemap"],
+    "BettsLowThrust.py": ["mpl_toolkits.basemap"],
+    "Delta3Launch.py": ["mpl_toolkits.basemap"],
+    "DionysusLowThrust.py": ["mpl_toolkits.basemap"],
+    "Reentry.py": ["mpl_toolkits.basemap"],
+    "MeshRefinement/Delta3Launch.py": ["mpl_toolkits.basemap"],
+    "MeshRefinement/Reentry.py": ["mpl_toolkits.basemap"],
+    "UpdatedInterface/BettsLowThrust.py": ["mpl_toolkits.basemap"],
+    "UpdatedInterface/Delta3Launch.py": ["mpl_toolkits.basemap"],
 }
 
 # Output directories that some examples assume already exist.
@@ -121,10 +121,10 @@ REQUIRED_DIRS = [
 # Helpers
 # ---------------------------------------------------------------------------
 
-GREEN  = "\033[32m"
-RED    = "\033[31m"
+GREEN = "\033[32m"
+RED = "\033[31m"
 YELLOW = "\033[33m"
-RESET  = "\033[0m"
+RESET = "\033[0m"
 
 
 def _can_import(module: str) -> bool:
@@ -155,7 +155,9 @@ def _build_env() -> dict[str, str]:
     env["MPLBACKEND"] = "Agg"
     existing_pythonpath = env.get("PYTHONPATH", "")
     extra = str(EXAMPLES_DIR)
-    env["PYTHONPATH"] = f"{extra}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else extra
+    env["PYTHONPATH"] = (
+        f"{extra}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else extra
+    )
     return env
 
 
@@ -163,13 +165,23 @@ def _build_env() -> dict[str, str]:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
-                        help="Default per-example timeout in seconds (default: %(default)s)")
-    parser.add_argument("--filter", metavar="SUBSTRING", default="",
-                        help="Only run examples whose path contains SUBSTRING")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help="Default per-example timeout in seconds (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--filter",
+        metavar="SUBSTRING",
+        default="",
+        help="Only run examples whose path contains SUBSTRING",
+    )
     args = parser.parse_args()
 
     dep_cache = _check_optional_deps()
@@ -194,9 +206,13 @@ def main() -> None:
         label = rel.ljust(col_width)
 
         # Skip if optional deps are missing.
-        missing_deps = [m for m in OPTIONAL_DEPS.get(rel, []) if not dep_cache.get(m, True)]
+        missing_deps = [
+            m for m in OPTIONAL_DEPS.get(rel, []) if not dep_cache.get(m, True)
+        ]
         if missing_deps:
-            print(f"  {label} {YELLOW}SKIP{RESET}  (missing: {', '.join(missing_deps)})")
+            print(
+                f"  {label} {YELLOW}SKIP{RESET}  (missing: {', '.join(missing_deps)})"
+            )
             results.append((rel, "SKIP", 0.0, f"missing: {', '.join(missing_deps)}"))
             continue
 
@@ -234,12 +250,14 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
-    passed  = [r for r in results if r[1] == "PASS"]
-    failed  = [r for r in results if r[1] == "FAIL"]
+    passed = [r for r in results if r[1] == "PASS"]
+    failed = [r for r in results if r[1] == "FAIL"]
     skipped = [r for r in results if r[1] == "SKIP"]
 
     print("\n" + "=" * 72)
-    print(f"Results: {len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped\n")
+    print(
+        f"Results: {len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped\n"
+    )
 
     if failed:
         print(f"{RED}Failed examples:{RESET}")

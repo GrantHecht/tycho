@@ -1,6 +1,6 @@
 #include "PhaseIndexer.h"
 
-int ASSET::PhaseIndexer::addEquality(ConstraintInterface eqfun, PhaseRegionFlags sreg,
+int Tycho::PhaseIndexer::addEquality(ConstraintInterface eqfun, PhaseRegionFlags sreg,
                                      const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
                                      const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode) {
     int index = this->nlp->EqualityConstraints.size();
@@ -14,7 +14,7 @@ int ASSET::PhaseIndexer::addEquality(ConstraintInterface eqfun, PhaseRegionFlags
     return index;
 }
 
-void ASSET::PhaseIndexer::addPartitionedEquality(const std::vector<ConstraintInterface> &eqfuns,
+void Tycho::PhaseIndexer::addPartitionedEquality(const std::vector<ConstraintInterface> &eqfuns,
                                                  PhaseRegionFlags sreg,
                                                  const Eigen::VectorXi &rxtuv,
                                                  const Eigen::VectorXi &rodepv,
@@ -36,7 +36,7 @@ void ASSET::PhaseIndexer::addPartitionedEquality(const std::vector<ConstraintInt
     this->numPhaseEqCons += this->nextPhaseEqCon - temp;
 }
 
-int ASSET::PhaseIndexer::addAccumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
+int Tycho::PhaseIndexer::addAccumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
                                          const Eigen::VectorXi &rxtuv,
                                          const Eigen::VectorXi &rodepv,
                                          const Eigen::VectorXi &rstatpv, ConstraintInterface accfun,
@@ -71,7 +71,7 @@ int ASSET::PhaseIndexer::addAccumulation(ConstraintInterface eqfun, PhaseRegionF
     return index + 1;
 }
 
-int ASSET::PhaseIndexer::addInequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
+int Tycho::PhaseIndexer::addInequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
                                        const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
                                        const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode) {
     int index = this->nlp->InequalityConstraints.size();
@@ -85,7 +85,7 @@ int ASSET::PhaseIndexer::addInequality(ConstraintInterface iqfun, PhaseRegionFla
     return index;
 }
 
-void ASSET::PhaseIndexer::addPartitionedInequality(const std::vector<ConstraintInterface> &iqfuns,
+void Tycho::PhaseIndexer::addPartitionedInequality(const std::vector<ConstraintInterface> &iqfuns,
                                                    PhaseRegionFlags sreg,
                                                    const Eigen::VectorXi &rxtuv,
                                                    const Eigen::VectorXi &rodepv,
@@ -108,7 +108,7 @@ void ASSET::PhaseIndexer::addPartitionedInequality(const std::vector<ConstraintI
     this->numPhaseIqCons += this->nextPhaseIqCon - temp;
 }
 
-int ASSET::PhaseIndexer::addObjective(ObjectiveInterface objfun, PhaseRegionFlags sreg,
+int Tycho::PhaseIndexer::addObjective(ObjectiveInterface objfun, PhaseRegionFlags sreg,
                                       const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
                                       const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode)
 
@@ -122,7 +122,7 @@ int ASSET::PhaseIndexer::addObjective(ObjectiveInterface objfun, PhaseRegionFlag
 }
 
 std::array<Eigen::MatrixXi, 2>
-ASSET::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorXi &rxtuv,
+Tycho::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorXi &rxtuv,
                                         const VectorXi &rodepv, const VectorXi &rstatpv, int orows,
                                         int &NextCLoc) const {
     int xsize = rxtuv.size();
@@ -402,7 +402,7 @@ ASSET::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorXi &r
 }
 
 Eigen::VectorXd
-ASSET::PhaseIndexer::makeSolverInput(const std::vector<Eigen::VectorXd> &ActiveTraj,
+Tycho::PhaseIndexer::makeSolverInput(const std::vector<Eigen::VectorXd> &ActiveTraj,
                                      const Eigen::VectorXd &ActiveStaticParams) const {
     Eigen::VectorXd Vars(this->numPhaseVars);
 
@@ -441,7 +441,7 @@ ASSET::PhaseIndexer::makeSolverInput(const std::vector<Eigen::VectorXd> &ActiveT
     return Vars;
 }
 
-void ASSET::PhaseIndexer::collectSolverOutput(const Eigen::VectorXd &Vars,
+void Tycho::PhaseIndexer::collectSolverOutput(const Eigen::VectorXd &Vars,
                                               std::vector<Eigen::VectorXd> &ActiveTraj,
                                               Eigen::VectorXd &ActiveStaticParams) const {
     Eigen::VectorXd opv(this->PVars());
@@ -488,7 +488,7 @@ void ASSET::PhaseIndexer::collectSolverOutput(const Eigen::VectorXd &Vars,
 }
 
 std::vector<Eigen::VectorXd>
-ASSET::PhaseIndexer::getFuncEqMultipliers(int Gindex, const Eigen::VectorXd &EMultphase) const {
+Tycho::PhaseIndexer::getFuncEqMultipliers(int Gindex, const Eigen::VectorXd &EMultphase) const {
 
     Eigen::MatrixXi CDX = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
     std::vector<Eigen::VectorXd> mults;
@@ -504,7 +504,7 @@ ASSET::PhaseIndexer::getFuncEqMultipliers(int Gindex, const Eigen::VectorXd &EMu
 }
 
 std::vector<Eigen::VectorXd>
-ASSET::PhaseIndexer::getFuncIqMultipliers(int Gindex, const Eigen::VectorXd &IMultphase) const {
+Tycho::PhaseIndexer::getFuncIqMultipliers(int Gindex, const Eigen::VectorXd &IMultphase) const {
     Eigen::MatrixXi CDX = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
     std::vector<Eigen::VectorXd> mults;
     for (int i = 0; i < CDX.cols(); i++) {
@@ -518,7 +518,7 @@ ASSET::PhaseIndexer::getFuncIqMultipliers(int Gindex, const Eigen::VectorXd &IMu
     return mults;
 }
 
-void ASSET::PhaseIndexer::print_stats(bool showfuns) const {
+void Tycho::PhaseIndexer::print_stats(bool showfuns) const {
     using std::cout;
     using std::endl;
 
@@ -557,7 +557,7 @@ void ASSET::PhaseIndexer::print_stats(bool showfuns) const {
     }
 }
 
-void ASSET::PhaseIndexer::Test() {
+void Tycho::PhaseIndexer::Test() {
     using std::cin;
     using std::cout;
     using std::endl;

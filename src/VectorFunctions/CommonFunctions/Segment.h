@@ -5,7 +5,7 @@
 #include "DetectDiagonal.h"
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR, int ST> struct Segment_Impl;
 
@@ -360,4 +360,4 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

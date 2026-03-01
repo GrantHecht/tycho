@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int MRows, int MCols> struct MatrixRowsCols;
 
@@ -62,4 +62,4 @@ template <int MRows> struct MatrixRowsCols<MRows, -1> {
     MatrixRowsCols(int rows, int cols) : MatrixCols(cols) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

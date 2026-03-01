@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 struct IterateInfo {
 
@@ -37,4 +37,4 @@ struct IterateInfo {
     double MeritVal = 0.0;
 };
 
-} // namespace ASSET
+} // namespace Tycho

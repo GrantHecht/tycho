@@ -1,6 +1,6 @@
 #include "KeplerModel.h"
 
-void ASSET::BuildKeplerMod(FunctionRegistry &reg, py::module &m) {
+void Tycho::BuildKeplerMod(FunctionRegistry &reg, py::module &m) {
     auto odemod = m.def_submodule("Kepler");
     reg.template Build_Register<Kepler>(odemod, "ode");
     reg.template Build_Register<Integrator<Kepler>>(odemod, "integrator");
@@ -8,7 +8,7 @@ void ASSET::BuildKeplerMod(FunctionRegistry &reg, py::module &m) {
     KeplerPhase::Build(odemod);
 }
 
-void ASSET::Kepler::Build(py::module &m, const char *name) {
+void Tycho::Kepler::Build(py::module &m, const char *name) {
     auto obj = py::class_<Kepler>(m, name).def(py::init<double>());
     Base::DenseBaseBuild(obj);
     obj.def("phase", [](const Kepler &od, TranscriptionModes Tmode) {

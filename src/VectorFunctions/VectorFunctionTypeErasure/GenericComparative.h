@@ -4,7 +4,7 @@
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR> struct GenericComparative : rubber_types::TypeErasure<ConditionalSpec<IR>> {
     using Base = rubber_types::TypeErasure<ConditionalSpec<IR>>;
@@ -110,4 +110,4 @@ template <int IR> struct GenericComparative : rubber_types::TypeErasure<Conditio
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

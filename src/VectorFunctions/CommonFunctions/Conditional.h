@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 enum ConditionalFlags {
     LessThanFlag,
@@ -201,4 +201,4 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

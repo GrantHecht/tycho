@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 namespace doc {
 
 const char *const PSIOPT_optimize =
@@ -179,4 +179,4 @@ const char *const PSIOPT_CNRMode = "";
 // const char* const PSIOPT_ConvergenceFlags = "";
 
 } // namespace doc
-} // namespace ASSET
+} // namespace Tycho

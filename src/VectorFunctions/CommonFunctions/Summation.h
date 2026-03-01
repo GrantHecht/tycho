@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func1, class Func2, bool DoDifference> struct TwoFunctionSum_Impl;
 
@@ -84,7 +84,7 @@ RetType make_dynamic_sum(const std::vector<FuncType> &funcs) {
         for (int i = 5; i < funcs.size(); i++) {
             nfuncs.push_back(funcs[i]);
         }
-        RetType rest = ASSET::make_dynamic_sum<RetType, FuncType>(nfuncs);
+        RetType rest = Tycho::make_dynamic_sum<RetType, FuncType>(nfuncs);
         summed = make_sum(summedT, rest);
     }
     return summed;
@@ -353,7 +353,7 @@ struct MultiFunctionSum_Impl
     MultiFunctionSum_Impl(std::tuple<Func1, Func2, Funcs...> fs) {
         this->func1 = std::get<0>(fs);
         this->func2 = std::get<1>(fs);
-        ASSET::constexpr_for_loop(
+        Tycho::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(Funcs)>(),
             [&](auto i) { std::get<i.value>(this->funcs) = std::get<i.value + 2>(fs); });
 
@@ -384,7 +384,7 @@ struct MultiFunctionSum_Impl
             throw std::invalid_argument("");
         }
 
-        ASSET::constexpr_for_loop(
+        Tycho::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(Funcs)>(),
             [&](auto i) {
                 tmp.push_back(std::get<i.value>(this->funcs).input_domain());
@@ -423,7 +423,7 @@ struct MultiFunctionSum_Impl
             this->func2.compute(x, func2_fx);
             fx += func2_fx;
 
-            ASSET::tuple_for_each(this->funcs, [&](const auto &funci) {
+            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
                 funci.compute(x, func2_fx);
                 fx += func2_fx;
@@ -448,7 +448,7 @@ struct MultiFunctionSum_Impl
             fx += func2_fx;
             this->func2.accumulate_jacobian(jx, func2_jx, PlusEqualsAssignment());
 
-            ASSET::tuple_for_each(this->funcs, [&](const auto &funci) {
+            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
 
                 typedef typename std::remove_reference<decltype(funci)>::type FunciType;
@@ -456,7 +456,7 @@ struct MultiFunctionSum_Impl
                     func2_jx.setZero();
                 } else {
                     constexpr int sds = FunciType::INPUT_DOMAIN::SubDomains.size();
-                    ASSET::constexpr_for_loop(
+                    Tycho::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
                             constexpr int Start1 = FunciType::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -505,7 +505,7 @@ struct MultiFunctionSum_Impl
             this->func2.accumulate_gradient(adjgrad_, func2_adjgrad, PlusEqualsAssignment());
             this->func2.accumulate_hessian(adjhess_, func2_adjhess, PlusEqualsAssignment());
 
-            ASSET::tuple_for_each(this->funcs, [&](const auto &funci) {
+            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
                 func2_adjgrad.setZero();
 
@@ -552,13 +552,13 @@ struct MultiFunctionSum_Impl
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
                                                    aliased);
-                ASSET::tuple_for_each(this->funcs, [&](const auto &func) {
+                Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
                     func.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
                                                 aliased);
                 });
             } else {
                 this->func2.right_jacobian_product(target_, left, right, assign, aliased);
-                ASSET::tuple_for_each(this->funcs, [&](const auto &func) {
+                Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
                     func.right_jacobian_product(target_, left, right, assign, aliased);
                 });
             }
@@ -569,4 +569,4 @@ struct MultiFunctionSum_Impl
     ///////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

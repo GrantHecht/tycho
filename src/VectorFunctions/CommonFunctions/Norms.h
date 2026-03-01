@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int USZ, int Power> struct IntegralNorm_Impl;
 
@@ -170,4 +170,4 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

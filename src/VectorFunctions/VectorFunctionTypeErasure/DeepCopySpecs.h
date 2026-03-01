@@ -30,7 +30,7 @@ in the LICENSE file in ASSET's top level directory.
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class T> struct SingleDeepCopySpec {
     struct Concept { // abstract base class for model.
@@ -84,4 +84,4 @@ template <class... Specs> struct DeepCopySpecOverloaded {
 template <class... Types>
 using DeepCopySpecs = DeepCopySpecOverloaded<SingleDeepCopySpec<Types>...>;
 
-} // namespace ASSET
+} // namespace Tycho

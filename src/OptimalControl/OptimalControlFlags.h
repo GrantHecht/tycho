@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 enum PhaseRegionFlags {
     NotSet,
@@ -195,7 +195,7 @@ static void OCPFlagsBuild(py::module &m) {
         .value("FrontTwoToTwoBack", LinkFlags::FrontTwoToTwoBack);
 
     m.def("strto_PhaseRegionFlag",
-          py::overload_cast<const std::string &>(&ASSET::strto_PhaseRegionFlag));
+          py::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
 }
 
-} // namespace ASSET
+} // namespace Tycho

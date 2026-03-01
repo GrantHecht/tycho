@@ -3,7 +3,7 @@
 #include "bench/BenchTimer.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Functor, class... Args>
 double BenchLoopFunctor(std::string name, int n, const Functor &f, Args... args) {
@@ -30,4 +30,4 @@ double BenchFunctor(std::string name, const Functor &f, Args... args) {
     return t.total();
 }
 
-} // namespace ASSET
+} // namespace Tycho

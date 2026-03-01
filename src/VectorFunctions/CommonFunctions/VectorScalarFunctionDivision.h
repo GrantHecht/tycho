@@ -1,7 +1,7 @@
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class VecFunc, class ScalFunc> struct VectorScalarFunctionDivision_Impl;
 
@@ -155,7 +155,7 @@ struct VectorScalarFunctionDivision_Impl
                 }
             } else {
                 constexpr int sds = ScalFunc::INPUT_DOMAIN::SubDomains.size();
-                ASSET::constexpr_for_loop(std::integral_constant<int, 0>(),
+                Tycho::constexpr_for_loop(std::integral_constant<int, 0>(),
                                           std::integral_constant<int, sds>(), [&](auto i) {
                                               constexpr int start =
                                                   ScalFunc::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -188,7 +188,7 @@ struct VectorScalarFunctionDivision_Impl
             } else {
                 constexpr int sds = ScalFunc::INPUT_DOMAIN::SubDomains.size();
 
-                ASSET::constexpr_for_loop(
+                Tycho::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
                         constexpr int start = ScalFunc::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -226,4 +226,4 @@ struct VectorScalarFunctionDivision_Impl
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

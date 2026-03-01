@@ -2,7 +2,7 @@
 
 #include "DenseDerivatives.h"
 
-namespace ASSET {
+namespace Tycho {
 
 //! First derivatives using forward finite difference
 /*!
@@ -143,4 +143,4 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeModes::FDif
     Input<double> hessFDSteps;
 };
 
-} // namespace ASSET
+} // namespace Tycho

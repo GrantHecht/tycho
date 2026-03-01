@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class FType> void DefineListEval(py::class_<FType> &obj) {
     using Gen = GenericFunction<-1, -1>;
@@ -61,4 +61,4 @@ void VectorFunctionBuildPart2(FunctionRegistry &reg, py::module &m) {
     DefineListEval(reg.sfuncx);
 }
 
-} // namespace ASSET
+} // namespace Tycho

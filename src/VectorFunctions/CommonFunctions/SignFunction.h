@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func>
 struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
@@ -68,4 +68,4 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

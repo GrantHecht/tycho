@@ -1,9 +1,9 @@
 #pragma once
 
 #include "RKCoeffs.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class DODE, RKOptions RKOp>
 struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
@@ -879,4 +879,4 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -1,7 +1,7 @@
 #include "OptimalControlProblem.h"
 #include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
 
-void ASSET::OptimalControlProblem::Build(py::module &m) {
+void Tycho::OptimalControlProblem::Build(py::module &m) {
     using namespace doc;
     auto obj = py::class_<OptimalControlProblem, std::shared_ptr<OptimalControlProblem>,
                           OptimizationProblemBase>(m, "OptimalControlProblem");
@@ -118,7 +118,7 @@ void ASSET::OptimalControlProblem::Build(py::module &m) {
     obj.def("setMeshErrorEstimator", &OptimalControlProblem::setMeshErrorEstimator);
 }
 
-void ASSET::OptimalControlProblem::BuildNewLinkIterface(
+void Tycho::OptimalControlProblem::BuildNewLinkIterface(
     py::class_<OptimalControlProblem, std::shared_ptr<OptimalControlProblem>,
                OptimizationProblemBase> &obj) {
 
@@ -255,7 +255,7 @@ void ASSET::OptimalControlProblem::BuildNewLinkIterface(
     }
 }
 
-void ASSET::OptimalControlProblem::BuildOldLinkIterface(
+void Tycho::OptimalControlProblem::BuildOldLinkIterface(
     py::class_<OptimalControlProblem, std::shared_ptr<OptimalControlProblem>,
                OptimizationProblemBase> &obj) {
     using namespace doc;

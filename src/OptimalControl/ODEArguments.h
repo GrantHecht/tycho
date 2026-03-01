@@ -1,8 +1,8 @@
 #pragma once
 #include "ODESizes.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int _XV, int _UV, int _PV>
 struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV, _PV> {
@@ -36,4 +36,4 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

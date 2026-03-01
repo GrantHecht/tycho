@@ -27,7 +27,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "AssigmentTypes.h"
 #include "DetectSuperScalar.h"
 #include "pch.h"
-namespace ASSET {
+namespace Tycho {
 
 template <int IR, int OR> struct DenseFunctionSpec {
     template <class Scalar> using Output = Eigen::Matrix<Scalar, OR, 1>;
@@ -54,24 +54,24 @@ template <int IR, int OR> struct DenseFunctionSpec {
     using AdjVarType = Eigen::Ref<const Output<double>>;
     using AdjHessType = Eigen::Ref<Hessian<double>>;
 
-    using SuperInType = Eigen::Ref<const Input<ASSET::DefaultSuperScalar>>;
-    using SuperOutType = Eigen::Ref<Output<ASSET::DefaultSuperScalar>>;
+    using SuperInType = Eigen::Ref<const Input<Tycho::DefaultSuperScalar>>;
+    using SuperOutType = Eigen::Ref<Output<Tycho::DefaultSuperScalar>>;
 
     using SuperJacType = typename std::conditional<
         OR == 1,
-        Eigen::Ref<Eigen::Matrix<ASSET::DefaultSuperScalar, -1, IR>, 0, Eigen::Stride<-1, -1>>,
-        Eigen::Ref<Jacobian<ASSET::DefaultSuperScalar>>>::type;
+        Eigen::Ref<Eigen::Matrix<Tycho::DefaultSuperScalar, -1, IR>, 0, Eigen::Stride<-1, -1>>,
+        Eigen::Ref<Jacobian<Tycho::DefaultSuperScalar>>>::type;
 
-    using SuperAdjGradType = Eigen::Ref<Input<ASSET::DefaultSuperScalar>>;
-    using SuperAdjVarType = Eigen::Ref<const Output<ASSET::DefaultSuperScalar>>;
-    using SuperAdjHessType = Eigen::Ref<Hessian<ASSET::DefaultSuperScalar>>;
+    using SuperAdjGradType = Eigen::Ref<Input<Tycho::DefaultSuperScalar>>;
+    using SuperAdjVarType = Eigen::Ref<const Output<Tycho::DefaultSuperScalar>>;
+    using SuperAdjHessType = Eigen::Ref<Hessian<Tycho::DefaultSuperScalar>>;
 
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
     using LeftJacMatrix = Eigen::Ref<const Eigen::Matrix<double, -1, OR>>;
     using LeftDiagMatrix = Eigen::DiagonalMatrix<double, OR>;
 
-    using SuperLeftJacMatrix = Eigen::Ref<const Eigen::Matrix<ASSET::DefaultSuperScalar, -1, OR>>;
-    using SuperRightJacTarget = Eigen::Ref<Eigen::Matrix<ASSET::DefaultSuperScalar, -1, IR>>;
+    using SuperLeftJacMatrix = Eigen::Ref<const Eigen::Matrix<Tycho::DefaultSuperScalar, -1, OR>>;
+    using SuperRightJacTarget = Eigen::Ref<Eigen::Matrix<Tycho::DefaultSuperScalar, -1, IR>>;
 
     struct Concept { // abstract base class for model.
         virtual ~Concept() = default;
@@ -577,4 +577,4 @@ template <int IR, int OR> struct DenseFunctionSpec {
     };
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -1,9 +1,9 @@
-import asset as ast
+import tycho as ast
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
+import tycho as ast
 
 # Change a few of the matplotlib label sizes for ease of reading plots
 params = {

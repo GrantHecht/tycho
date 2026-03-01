@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 struct DirectAssignment {};
 struct PlusEqualsAssignment {};
@@ -17,4 +17,4 @@ template <class Scalar> struct ScaledPlusEqualsAssignment {
     ScaledPlusEqualsAssignment(Scalar v) : value(v) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

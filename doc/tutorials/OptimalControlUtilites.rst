@@ -16,7 +16,7 @@ simple two-body low-thrust ODE below.
 
 .. code-block:: python
 	
-    import asset_asrl as ast
+    import tycho as ast
     import matplotlib.pyplot as plt
     import numpy as np
 

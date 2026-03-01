@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR, OR> {
     using Base = VectorFunction<Constant<IR, OR>, IR, OR>;
@@ -57,4 +57,4 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

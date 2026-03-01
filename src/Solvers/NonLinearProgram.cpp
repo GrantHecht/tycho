@@ -21,7 +21,7 @@ in the LICENSE file in ASSET's top level directory.
 
 #include "NonLinearProgram.h"
 
-void ASSET::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
+void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->PrimalVars = PV;
     this->EqualCons = EQ;
     this->InequalCons = IQ;
@@ -37,7 +37,7 @@ void ASSET::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->finalizeData();
 }
 
-void ASSET::NonLinearProgram::countElems() {
+void Tycho::NonLinearProgram::countElems() {
     int nkkt = 0;
 
     int npgx = 0;
@@ -67,7 +67,7 @@ void ASSET::NonLinearProgram::countElems() {
     this->numEConElems = nec;
 }
 
-void ASSET::NonLinearProgram::analyzeThreading() {
+void Tycho::NonLinearProgram::analyzeThreading() {
     /*
     This function loops over the Master list of objective and constraints and partitions them onto
     the different threads allocated for function evaluation.
@@ -107,7 +107,7 @@ void ASSET::NonLinearProgram::analyzeThreading() {
     analyzeOP(this->InequalityConstraints, this->ThrIq);
 }
 
-void ASSET::NonLinearProgram::getMATSpace() {
+void Tycho::NonLinearProgram::getMATSpace() {
     /*
      * Loops over all constraints and objectives on each thread and has each claim its
      * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with thread that will be
@@ -165,7 +165,7 @@ void ASSET::NonLinearProgram::getMATSpace() {
     this->KKTLocks.swap(kktemp);
 }
 
-void ASSET::NonLinearProgram::getRHSSpace() {
+void Tycho::NonLinearProgram::getRHSSpace() {
     int PGXfreeloc = 0;
     int AGXfreeloc = 0;
     int FXEfreeloc = 0;
@@ -186,7 +186,7 @@ void ASSET::NonLinearProgram::getRHSSpace() {
     }
 }
 
-void ASSET::NonLinearProgram::setMATDimensions() {
+void Tycho::NonLinearProgram::setMATDimensions() {
     this->KKTdim = this->PrimalVars + this->SlackVars + this->EqualCons + this->InequalCons;
 
     ////////////////// This is the storage order of Solver data/////////////////
@@ -220,7 +220,7 @@ void ASSET::NonLinearProgram::setMATDimensions() {
     ///////////////////////////////////////////////////////////////////////////////////
 }
 
-void ASSET::NonLinearProgram::setRHSDimensions() {
+void Tycho::NonLinearProgram::setRHSDimensions() {
     this->numRHSElems =
         this->numPGXElems + this->numAGXElems + this->numEConElems + this->numIConElems;
 
@@ -233,7 +233,7 @@ void ASSET::NonLinearProgram::setRHSDimensions() {
     this->RHScoeffRows = Eigen::VectorXi::Constant(this->numRHSElems, -1);
 }
 
-void ASSET::NonLinearProgram::finalizeData() {
+void Tycho::NonLinearProgram::finalizeData() {
     for (int i = 0; i < this->PrimalVars; i++) {
         this->PrimalDiagCoeffCols()[i] = i;
         this->PrimalDiagCoeffRows()[i] = i;
@@ -256,7 +256,7 @@ void ASSET::NonLinearProgram::finalizeData() {
     }
 }
 
-void ASSET::NonLinearProgram::analyzeSparsity(
+void Tycho::NonLinearProgram::analyzeSparsity(
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     /*
     Calculates Sparsity Pattern of NLP. PSIOPT requires that only the upper triangular part of a CSR
@@ -337,7 +337,7 @@ void ASSET::NonLinearProgram::analyzeSparsity(
     /////////////////////////////////////////////////////////////
 }
 
-void ASSET::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X,
+void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
@@ -369,7 +369,7 @@ void ASSET::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillRHS(PGX, AGX, FXE, FXI);
 }
 
-void ASSET::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
+void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> PGX, EigenRef<VectorXd> FXE,
                                       EigenRef<VectorXd> FXI) {
     int Thrmin1 = this->Threads - 1;
@@ -402,7 +402,7 @@ void ASSET::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillFXI(FXI);
 }
 
-void ASSET::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
+void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
     int Thrmin1 = this->Threads - 1;
     std::vector<std::future<void>> results(Thrmin1);
@@ -433,7 +433,7 @@ void ASSET::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillFXI(FXI);
 }
 
-void ASSET::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
+void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
     int Thrmin1 = this->Threads - 1;
     std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
@@ -454,7 +454,7 @@ void ASSET::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
         val += Vals[i];
 }
 
-void ASSET::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X,
+void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -499,7 +499,7 @@ void ASSET::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
     fill.get();
 }
 
-void ASSET::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
+void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
                                         ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                         double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -535,7 +535,7 @@ void ASSET::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
 
     this->fillRHS(PGX, AGX, FXE, FXI);
 }
-void ASSET::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
+void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -567,7 +567,7 @@ void ASSET::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillSolverCoeffs(KKTmat);
     fill.get();
 }
-void ASSET::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
+void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -610,7 +610,7 @@ void ASSET::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
     fill.get();
 }
 
-void ASSET::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
+void Tycho::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
                                       std::shared_ptr<NonLinearProgram> nlp1,
                                       std::shared_ptr<NonLinearProgram> nlp2) {
     using std::cout;

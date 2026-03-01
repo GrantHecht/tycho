@@ -1,7 +1,7 @@
 #pragma once
 #include "CommonFunctions/ExpressionFwdDeclarations.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func1, int IR1, int OR1, class Func2, int IR2, int OR2>
 auto crossProduct(const DenseFunctionBase<Func1, IR1, OR1> &f1,
@@ -33,4 +33,4 @@ auto cwiseQuotient(const DenseFunctionBase<Func1, IR1, OR1> &f1,
                                                             CwiseInverse<Func2>(f2.derived()));
 }
 
-} // namespace ASSET
+} // namespace Tycho

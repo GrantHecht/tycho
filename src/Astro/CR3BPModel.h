@@ -1,9 +1,9 @@
 #pragma once
 #include "OptimalControl/ODE.h"
 #include "OptimalControl/ODEPhase.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct CR3BP_Impl : ODESize<6, 0, 0> {
     static auto Definition(double mu) {
@@ -42,4 +42,4 @@ struct CR3BP_Impl : ODESize<6, 0, 0> {
 
 BUILD_ODE_FROM_EXPRESSION(CR3BP, CR3BP_Impl, double);
 
-} // namespace ASSET
+} // namespace Tycho

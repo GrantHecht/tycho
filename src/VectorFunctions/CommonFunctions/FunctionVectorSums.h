@@ -3,7 +3,7 @@
 #include "DetectDiagonal.h"
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func, bool NegateFunction> struct FunctionVectorSum_Impl;
 
@@ -118,4 +118,4 @@ struct FunctionVectorSum_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, An
         this->func.scale_hessian(target_, s);
     }
 };
-} // namespace ASSET
+} // namespace Tycho

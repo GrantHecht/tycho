@@ -3,7 +3,7 @@
 #include "VectorFunctionTypeErasure/GenericFunction.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class T> struct FuncPack {
     using type = T;
@@ -72,4 +72,4 @@ struct FunctionRegistry {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

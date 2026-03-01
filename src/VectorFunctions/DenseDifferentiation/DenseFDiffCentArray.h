@@ -2,7 +2,7 @@
 
 #include "DenseDerivatives.h"
 
-namespace ASSET {
+namespace Tycho {
 
 //! First derivatives using forward finite difference
 /*!
@@ -52,4 +52,4 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::FDiffCentArr
   protected:
     Eigen::VectorXd jacFDSteps;
 };
-} // namespace ASSET
+} // namespace Tycho

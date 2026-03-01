@@ -4,7 +4,7 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 
 #include "VectorFunction.h"
-namespace ASSET {
+namespace Tycho {
 
 struct InterpTable4D {
 
@@ -3096,4 +3096,4 @@ static void InterpTable4DBuild(py::module &m) {
           });
 }
 
-} // namespace ASSET
+} // namespace Tycho

@@ -4,7 +4,7 @@
 #include "OptimalControlFlags.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class FuncType> struct StateFunction {
     FuncType Func;
@@ -116,4 +116,4 @@ template <class FuncType> struct StateFunction {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

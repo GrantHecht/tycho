@@ -15,9 +15,9 @@ Obviously, we will need ASSET, but we will also use numpy for arrays and matplot
 
 .. code-block:: python
 
-    import asset_asrl as ast
-    from asset_asrl.Astro.AstroModels import CR3BP 
-    import asset_asrl.Astro.Constants as c
+    import tycho as ast
+    from tycho.Astro.AstroModels import CR3BP 
+    import tycho.Astro.Constants as c
     import numpy as np
     import copy
     import matplotlib.pyplot as plt
@@ -328,9 +328,9 @@ Full Code
 
 .. code-block:: python
 
-    import asset_asrl as ast
-    from asset_asrl.Astro.AstroModels import CR3BP
-    import asset_asrl.Astro.Constants as c
+    import tycho as ast
+    from tycho.Astro.AstroModels import CR3BP
+    import tycho.Astro.Constants as c
     import numpy as np
     import copy
     import matplotlib.pyplot as plt

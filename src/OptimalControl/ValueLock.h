@@ -1,7 +1,7 @@
 #pragma once
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     using Base = VectorFunction<LockArgs<USZ>, USZ, USZ>;
@@ -44,4 +44,4 @@ template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

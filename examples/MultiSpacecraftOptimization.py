@@ -3,7 +3,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
+import tycho as ast
 
 ################################################################################
 ## Setup

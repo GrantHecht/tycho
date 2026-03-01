@@ -3,7 +3,7 @@
 #include "Solvers/PSIOPT.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct OptimizationProblemBase {
 
@@ -17,7 +17,7 @@ struct OptimizationProblemBase {
         OptimizeSolve
     };
 
-    int Threads = ASSET_DEFAULT_FUNC_THREADS;
+    int Threads = TYCHO_DEFAULT_FUNC_THREADS;
     int JetJobMode = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
@@ -38,8 +38,8 @@ struct OptimizationProblemBase {
 
     virtual void initThreads() {
         this->Threads =
-            std::min(ASSET_DEFAULT_FUNC_THREADS, int(std::thread::hardware_concurrency()));
-        this->optimizer->QPThreads = std::min(ASSET_DEFAULT_QP_THREADS, get_core_count());
+            std::min(TYCHO_DEFAULT_FUNC_THREADS, int(std::thread::hardware_concurrency()));
+        this->optimizer->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
         ;
     }
 
@@ -127,4 +127,4 @@ struct OptimizationProblemBase {
     static void Build(py::module &m);
 };
 
-} // namespace ASSET
+} // namespace Tycho

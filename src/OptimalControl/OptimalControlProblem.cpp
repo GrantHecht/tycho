@@ -3,7 +3,7 @@
 #include "AutoScalingUtils.h"
 #include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
 
-Eigen::VectorXd ASSET::OptimalControlProblem::get_input_scale(
+Eigen::VectorXd Tycho::OptimalControlProblem::get_input_scale(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,
     std::vector<VectorXi> XtUVars, std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
     std::vector<VectorXi> LVars) {
@@ -50,7 +50,7 @@ Eigen::VectorXd ASSET::OptimalControlProblem::get_input_scale(
     return input_scales;
 }
 
-std::vector<Eigen::VectorXd> ASSET::OptimalControlProblem::get_test_inputs(
+std::vector<Eigen::VectorXd> Tycho::OptimalControlProblem::get_test_inputs(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,
     std::vector<VectorXi> XtUVars, std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
     std::vector<VectorXi> LVars) {
@@ -100,7 +100,7 @@ std::vector<Eigen::VectorXd> ASSET::OptimalControlProblem::get_test_inputs(
     return test_inputs;
 }
 
-void ASSET::OptimalControlProblem::transcribe_phases() {
+void Tycho::OptimalControlProblem::transcribe_phases() {
 
     if (this->phases.size() > 0) {
 
@@ -140,7 +140,7 @@ void ASSET::OptimalControlProblem::transcribe_phases() {
     }
 }
 
-void ASSET::OptimalControlProblem::check_functions() {
+void Tycho::OptimalControlProblem::check_functions() {
     /*
     Loops through all user defined functions and checks that they do not
     reference non-existent variables. Should be run prior to any transcribing any
@@ -239,7 +239,7 @@ void ASSET::OptimalControlProblem::check_functions() {
         CheckFunc(obj, f);
 }
 
-void ASSET::OptimalControlProblem::transcribe_links() {
+void Tycho::OptimalControlProblem::transcribe_links() {
 
     int NextEq = this->numPhaseEqCons.sum();
     int NextIq = this->numPhaseIqCons.sum();
@@ -323,7 +323,7 @@ void ASSET::OptimalControlProblem::transcribe_links() {
     this->numLinkIqCons = NextIq - this->numPhaseIqCons.sum();
 }
 
-void ASSET::OptimalControlProblem::calc_auto_scales() {
+void Tycho::OptimalControlProblem::calc_auto_scales() {
     for (int i = 0; i < this->phases.size(); i++) {
         this->phases[i]->calc_auto_scales();
     }
@@ -350,7 +350,7 @@ void ASSET::OptimalControlProblem::calc_auto_scales() {
     calc_impl(this->LinkObjectives);
 }
 
-std::vector<double> ASSET::OptimalControlProblem::get_objective_scales() {
+std::vector<double> Tycho::OptimalControlProblem::get_objective_scales() {
     std::vector<double> scales;
     for (auto &[key, obj] : this->LinkObjectives) {
         if (obj.ScaleMode == "auto") {
@@ -367,7 +367,7 @@ std::vector<double> ASSET::OptimalControlProblem::get_objective_scales() {
     return scales;
 }
 
-void ASSET::OptimalControlProblem::update_objective_scales(double scale) {
+void Tycho::OptimalControlProblem::update_objective_scales(double scale) {
     for (auto &[key, obj] : this->LinkObjectives) {
         if (obj.ScaleMode == "auto") {
             obj.OutputScales[0] = scale;
@@ -378,7 +378,7 @@ void ASSET::OptimalControlProblem::update_objective_scales(double scale) {
     }
 }
 
-void ASSET::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
+void Tycho::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
 
     this->nlp = std::make_shared<NonLinearProgram>(this->Threads);
 
@@ -412,7 +412,7 @@ void ASSET::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
     this->doTranscription = false;
 }
 
-ASSET::PSIOPT::ConvergenceFlags ASSET::OptimalControlProblem::psipot_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::psipot_call_impl(std::string mode) {
 
     this->checkTranscriptions();
     if (this->doTranscription)
@@ -442,7 +442,7 @@ ASSET::PSIOPT::ConvergenceFlags ASSET::OptimalControlProblem::psipot_call_impl(s
     return this->optimizer->ConvergeFlag;
 }
 
-ASSET::PSIOPT::ConvergenceFlags ASSET::OptimalControlProblem::ocp_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(std::string mode) {
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
@@ -524,7 +524,7 @@ ASSET::PSIOPT::ConvergenceFlags ASSET::OptimalControlProblem::ocp_call_impl(std:
     return flag;
 }
 
-void ASSET::OptimalControlProblem::print_stats(bool showfuns) {
+void Tycho::OptimalControlProblem::print_stats(bool showfuns) {
     using std::cout;
     using std::endl;
     cout << "Problem Statistics" << endl << endl;
@@ -571,7 +571,7 @@ void ASSET::OptimalControlProblem::print_stats(bool showfuns) {
     }
 }
 
-std::array<Eigen::MatrixXi, 2> ASSET::OptimalControlProblem::make_link_Vindex_Cindex(
+std::array<Eigen::MatrixXi, 2> Tycho::OptimalControlProblem::make_link_Vindex_Cindex(
     LinkFlags Reg, const Eigen::Matrix<PhaseRegionFlags, -1, 1> &PhaseRegs,
     const std::vector<Eigen::VectorXi> &PTL, const std::vector<Eigen::VectorXi> &xtv,
     const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,

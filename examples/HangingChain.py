@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-import asset_asrl as ast
+import tycho as ast
 
 norm = np.linalg.norm
 vf = ast.VectorFunctions

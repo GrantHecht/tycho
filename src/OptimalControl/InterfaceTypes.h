@@ -6,7 +6,7 @@
 #include "OptimalControlFlags.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
 using ScaleType = std::variant<double, Eigen::VectorXd, std::string, py::none>;
@@ -61,4 +61,4 @@ static std::tuple<std::string, bool, Eigen::VectorXd> get_scale_info(int orows, 
     return std::tuple{ScaleMode, ScalesSet, OutputScales};
 }
 
-} // namespace ASSET
+} // namespace Tycho

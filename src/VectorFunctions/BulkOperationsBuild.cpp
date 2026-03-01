@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 GenericFunction<-1, -1> DynamicStack(const std::vector<GenericFunction<-1, -1>> &elems) {
     using Gen = GenericFunction<-1, -1>;
@@ -21,9 +21,9 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
     return make_dynamic_sum<GenS, GenS>(elems);
 }
 
-} // namespace ASSET
+} // namespace Tycho
 
-void ASSET::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using SEG = Segment<-1, -1, -1>;

@@ -2,7 +2,7 @@
 
 #include "ComputableBase.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR>
 struct SparseFunctionBase : ComputableBase<Derived, IR, OR> {
@@ -24,4 +24,4 @@ struct SparseFunctionBase : ComputableBase<Derived, IR, OR> {
     mutable Hessian<double> HessianTemplate;
 };
 
-} // namespace ASSET
+} // namespace Tycho

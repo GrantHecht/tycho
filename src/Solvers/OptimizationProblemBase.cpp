@@ -1,6 +1,6 @@
 #include "OptimizationProblemBase.h"
 
-void ASSET::OptimizationProblemBase::Build(py::module &m) {
+void Tycho::OptimizationProblemBase::Build(py::module &m) {
     auto obj = py::class_<OptimizationProblemBase, std::shared_ptr<OptimizationProblemBase>>(
         m, "OptimizationProblemBase");
     obj.def_readwrite("JetJobMode", &OptimizationProblemBase::JetJobMode);

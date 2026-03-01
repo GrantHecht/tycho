@@ -2,7 +2,7 @@
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int _XV, int _UV, int _PV> struct ODEConstSizes {
     static const int XV = _XV;
@@ -223,4 +223,4 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

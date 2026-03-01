@@ -6,7 +6,7 @@
 #include "mkl.h"
 #endif
 
-namespace ASSET {
+namespace Tycho {
 
 struct Jet {
 
@@ -209,4 +209,4 @@ struct Jet {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

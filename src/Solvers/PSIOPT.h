@@ -12,7 +12,7 @@
 #include "Utils/ColorText.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct IterateInfo;
 
@@ -109,7 +109,7 @@ struct PSIOPT {
     Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> KKTSol;
 #endif
 
-    int QPThreads = ASSET_DEFAULT_QP_THREADS;
+    int QPThreads = TYCHO_DEFAULT_QP_THREADS;
     QPAlgModes QPAlg = QPAlgModes::Classic;
     QPOrderingModes QPOrd = QPOrderingModes::METIS;
     QPPivotModes QPPivotStrategy = QPPivotModes::TwoByTwo;
@@ -368,9 +368,9 @@ struct PSIOPT {
 
     ////////////////////////////////////////////////////////////////////
 
-    PSIOPT() { this->QPThreads = std::min(ASSET_DEFAULT_QP_THREADS, get_core_count()); }
+    PSIOPT() { this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count()); }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        this->QPThreads = std::min(ASSET_DEFAULT_QP_THREADS, get_core_count());
+        this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
         this->setNLP(np);
     }
 
@@ -659,4 +659,4 @@ struct PSIOPT {
     static void Build(py::module &m);
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -3,7 +3,7 @@
 #include "Segment.h"
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class OuterFunc, class InnerFunc> struct NestedFunction_Impl;
 
@@ -213,7 +213,7 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
                     } else {
                         Eigen::Matrix<Scalar, InnerFunc::IRC, InnerFunc::ORC> HTT = Ht.transpose();
                         constexpr int sds = InnerFunc::INPUT_DOMAIN::SubDomains.size();
-                        ASSET::constexpr_for_loop(
+                        Tycho::constexpr_for_loop(
                             std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                             [&](auto i) {
                                 constexpr int start =
@@ -376,4 +376,4 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
 };
 
 ////////////////////////////////////////////////////////////////////////
-} // namespace ASSET
+} // namespace Tycho

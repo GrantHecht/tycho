@@ -1,7 +1,7 @@
 #pragma once
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 void LambertSolversBuild(FunctionRegistry &reg, py::module &m);
 
@@ -459,4 +459,4 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
     return std::array<Vector3<Scalar>, 2>{V1, V2};
 }
 
-} // namespace ASSET
+} // namespace Tycho

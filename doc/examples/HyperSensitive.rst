@@ -136,9 +136,9 @@ Full Code
 .. code-block:: python
     
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
     import matplotlib.pyplot as plt
-    from asset_asrl.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+    from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
 
     vf        = ast.VectorFunctions
     oc        = ast.OptimalControl

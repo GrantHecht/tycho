@@ -2,7 +2,7 @@
 
 #include "DenseFunctionBase.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR>
 struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
@@ -117,4 +117,4 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         }
     }
 };
-} // namespace ASSET
+} // namespace Tycho

@@ -3,7 +3,7 @@
 #include "LGLCoeffs.h"
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int CSC, int USZ, int Order>
 struct LGLControlSplineSize : VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1), USZ * Order> {
@@ -309,4 +309,4 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

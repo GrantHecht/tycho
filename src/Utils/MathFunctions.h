@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 /*!
  * @brief Factorial function
  *
@@ -35,4 +35,4 @@ inline int factorialDiv(int i, int j) {
         return 0;
     }
 }
-} // namespace ASSET
+} // namespace Tycho

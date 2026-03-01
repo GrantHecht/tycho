@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 namespace doc {
 
 const char *const ODEPhaseBase_setTraj1 =
@@ -624,4 +624,4 @@ const char *const ODEPhaseBase_solve_optimize =
     ":returns: The optimizer convergence flag (bool, succeeded or failed)";
 
 } // namespace doc
-} // namespace ASSET
+} // namespace Tycho

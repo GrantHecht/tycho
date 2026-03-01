@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 void VectorFunctionBuildPart1(FunctionRegistry &reg, py::module &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -9,4 +9,4 @@ void VectorFunctionBuildPart1(FunctionRegistry &reg, py::module &m) {
     Gen::BinaryMathBuild(reg.vfuncx);
 }
 
-} // namespace ASSET
+} // namespace Tycho

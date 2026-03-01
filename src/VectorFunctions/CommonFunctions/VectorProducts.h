@@ -1,7 +1,7 @@
 #pragma once
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func1, class Func2, int Vsize> struct FunctionVectorProduct_Impl;
 
@@ -417,4 +417,4 @@ struct FunctionVectorProduct_Impl
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

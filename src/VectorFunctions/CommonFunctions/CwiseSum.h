@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class Func> struct CwiseSum_Impl;
 
@@ -80,7 +80,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
 
                     constexpr int sds = Func::INPUT_DOMAIN::SubDomains.size();
 
-                    ASSET::constexpr_for_loop(
+                    Tycho::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
                             constexpr int start = Func::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -91,7 +91,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 }
             };
 
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 this->IRows(), Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
         }
@@ -135,7 +135,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                     }
                 } else {
                     constexpr int sds = Func::INPUT_DOMAIN::SubDomains.size();
-                    ASSET::constexpr_for_loop(
+                    Tycho::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
                             constexpr int start = Func::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -146,7 +146,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 }
             };
 
-            ASSET::MemoryManager::allocate_run(
+            Tycho::MemoryManager::allocate_run(
                 this->IRows(), Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
@@ -154,4 +154,4 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

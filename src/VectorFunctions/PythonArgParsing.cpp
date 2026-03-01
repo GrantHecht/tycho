@@ -9,7 +9,7 @@
 #include "VectorFunctionTypeErasure/GenericConditional.h"
 #include "VectorFunctionTypeErasure/GenericFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 std::vector<GenericFunction<-1, -1>> ParsePythonArgs(py::args x, int irows) {
 
@@ -28,14 +28,17 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(py::args x, int irows) {
     using Rtype = Gen;
 
     py::object vftype =
-        (py::object)py::module::import("asset.VectorFunctions").attr("VectorFunction");
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("VectorFunction");
     py::object sftype =
-        (py::object)py::module::import("asset.VectorFunctions").attr("ScalarFunction");
-    py::object elemtype = (py::object)py::module::import("asset.VectorFunctions").attr("Element");
-    py::object segtype = (py::object)py::module::import("asset.VectorFunctions").attr("Segment");
-    py::object seg2type = (py::object)py::module::import("asset.VectorFunctions").attr("Segment2");
-    py::object seg3type = (py::object)py::module::import("asset.VectorFunctions").attr("Segment3");
-    py::object argtype = (py::object)py::module::import("asset.VectorFunctions").attr("Arguments");
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("ScalarFunction");
+    py::object elemtype = (py::object)py::module::import("_tycho.VectorFunctions").attr("Element");
+    py::object segtype = (py::object)py::module::import("_tycho.VectorFunctions").attr("Segment");
+    py::object seg2type =
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("Segment2");
+    py::object seg3type =
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("Segment3");
+    py::object argtype =
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("Arguments");
 
     py::module builtins = py::module::import("builtins");
     py::object py_int = builtins.attr("int");
@@ -146,8 +149,8 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(py::args x, int irows)
     using Rtype = GenS;
 
     py::object sftype =
-        (py::object)py::module::import("asset.VectorFunctions").attr("ScalarFunction");
-    py::object elemtype = (py::object)py::module::import("asset.VectorFunctions").attr("Element");
+        (py::object)py::module::import("_tycho.VectorFunctions").attr("ScalarFunction");
+    py::object elemtype = (py::object)py::module::import("_tycho.VectorFunctions").attr("Element");
 
     py::module builtins = py::module::import("builtins");
     py::object py_int = builtins.attr("int");
@@ -199,4 +202,4 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(py::args x, int irows)
 
     return funs;
 }
-} // namespace ASSET
+} // namespace Tycho

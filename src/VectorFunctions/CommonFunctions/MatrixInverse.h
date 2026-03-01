@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int Size, int Major>
 struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
@@ -166,4 +166,4 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
                                     TempSpec<Mat<Scalar>>(this->size, this->size));
     }
 };
-} // namespace ASSET
+} // namespace Tycho

@@ -8,7 +8,7 @@
 #include "VectorFunctionTypeErasure/GenericFunction.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class BaseType, int _XV, int _UV, int _PV> struct GenericODE;
 template <int OR> struct InterpFunction;
@@ -381,7 +381,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                 const int tvar = this->ode.TVar();
 
-                ASSET::constexpr_for_loop(
+                Tycho::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, Stgsm1>(),
                     [&](auto i) {
                         Scalar ti = t0 + RKData::Times[i.value] * h;
@@ -390,7 +390,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         constexpr int ip1 = i.value + 1;
                         const int js = isDiag ? i.value : 0;
 
-                        ASSET::constexpr_for_loop(
+                        Tycho::constexpr_for_loop(
                             std::integral_constant<int, 0>(), std::integral_constant<int, ip1>(),
                             [&](auto j) {
                                 if constexpr (RKData::ACoeffs[i.value][j.value] != 0.0) {
@@ -747,7 +747,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         }
 
-        using SuperScalar = ASSET::DefaultSuperScalar;
+        using SuperScalar = Tycho::DefaultSuperScalar;
 
         ODEState<double> xnext(this->ode.IRows());
         ODEState<double> xnext_est(this->ode.IRows());
@@ -2299,4 +2299,4 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

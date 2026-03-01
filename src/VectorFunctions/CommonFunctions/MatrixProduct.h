@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, class MatFunc1, class MatFunc2> struct MatrixFunctionProduct_Impl;
 
@@ -355,7 +355,7 @@ struct MatrixFunctionProduct_Impl
                 }
             } else {
                 constexpr int sds = MatFunc2::INPUT_DOMAIN::SubDomains.size();
-                ASSET::constexpr_for_loop(
+                Tycho::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
                         constexpr int Start1 = MatFunc2::INPUT_DOMAIN::SubDomains[i.value][0];
@@ -391,4 +391,4 @@ struct MatrixFunctionProduct_Impl
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -3,7 +3,7 @@
 #include "TranscriptionSizing.h"
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     static auto Definition(const Integrand &integ, int xv, int pv) {
@@ -49,4 +49,4 @@ struct TrapezoidalIntegral
     TrapezoidalIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

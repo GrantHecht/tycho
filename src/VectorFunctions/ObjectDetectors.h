@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 #define CREATE_MEMBER_DETECTOR(X)                                                                  \
     template <typename T> class Detect_##X {                                                       \
@@ -22,4 +22,4 @@ namespace ASSET {
         enum { value = sizeof(func<Derived>(0)) == 2 };                                            \
     };
 
-} // namespace ASSET
+} // namespace Tycho

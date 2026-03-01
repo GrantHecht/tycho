@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 #include "CommonFunctions/RootFinder.h"
-namespace ASSET {
+namespace Tycho {
 
 template <class T> void UnaryVectorOpBuild(py::module &m) {
 
@@ -342,9 +342,9 @@ struct QuatRotation {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho
 
-void ASSET::FreeFunctionsBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, py::module &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 

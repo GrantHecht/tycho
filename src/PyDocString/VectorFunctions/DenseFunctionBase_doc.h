@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 namespace doc {
 
 const char *const DFB_IRows = "Get the input size of this function\n\n"
@@ -189,4 +189,4 @@ const char *const GenericFunction_inverse =
     ":returns: Scalar function whose output is the inverse of the original";
 
 } // namespace doc
-} // namespace ASSET
+} // namespace Tycho

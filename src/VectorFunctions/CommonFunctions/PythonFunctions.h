@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IRR, int ORR>
 struct PyVectorFunction : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, FDiffFwd, FDiffFwd> {
@@ -133,4 +133,4 @@ struct NumbaVectorFunction
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

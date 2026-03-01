@@ -10,7 +10,7 @@ include_directories(${PROJECT_SOURCE_DIR}/extensions)
 
 
 
-set(ASSET_INCLUDES
+set(TYCHO_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
   ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
@@ -25,7 +25,7 @@ set(ASSET_INCLUDES
 ## PCH
 add_library(pch STATIC pch.h pch.cpp  )
 target_precompile_headers(pch PRIVATE pch.h 
-VectorFunctions/ASSET_VectorFunctions.h)
+VectorFunctions/Tycho_VectorFunctions.h)
 
 target_include_directories(pch PRIVATE ${INCLUDE_DIRS})
 #target_link_libraries(pch PRIVATE fmt::fmt-header-only)
@@ -35,8 +35,8 @@ target_compile_options(pch PUBLIC ${COMPILE_FLAGS})
 ## Put all ".h"/".cpp" pairs here
 # Example: add_library(myODE STATIC odes/myode.h odes/myode.cpp)
 
-add_library(vectorfunctions STATIC VectorFunctions/ASSET_VectorFunctions.h
-    VectorFunctions/ASSET_VectorFunctions.cpp
+add_library(vectorfunctions STATIC VectorFunctions/Tycho_VectorFunctions.h
+    VectorFunctions/Tycho_VectorFunctions.cpp
     VectorFunctions/VectorFunctionBuildPart1.cpp
     VectorFunctions/VectorFunctionBuildPart2.cpp
     VectorFunctions/ArgsSegBuildPart1.cpp
@@ -58,8 +58,8 @@ target_precompile_headers(vectorfunctions REUSE_FROM pch)
 
 
 
-add_library(optimalcontrol STATIC OptimalControl/ASSET_OptimalControl.h
-OptimalControl/ASSET_OptimalControl.cpp
+add_library(optimalcontrol STATIC OptimalControl/Tycho_OptimalControl.h
+OptimalControl/Tycho_OptimalControl.cpp
 OptimalControl/ODEPhaseBase.h
 OptimalControl/ODEPhaseBase.cpp
 OptimalControl/ODEPhaseBaseBind.cpp
@@ -112,8 +112,8 @@ target_link_libraries(utils PRIVATE fmt::fmt-header-only)
 
 
 add_library(astro STATIC
-  Astro/ASSET_Astro.h 
-  Astro/ASSET_Astro.cpp
+  Astro/Tycho_Astro.h 
+  Astro/Tycho_Astro.cpp
   Astro/KeplerUtils.h 
   Astro/KeplerUtils.cpp
   Astro/KeplerModel.h 
@@ -137,48 +137,48 @@ target_compile_options(astro PUBLIC ${COMPILE_FLAGS})
 
 
 #-------------------------------------------------------------------------------
-## ASSET Python Module
-pybind11_add_module(asset main.cpp)
+## Tycho Python Module
+pybind11_add_module(_tycho main.cpp)
 
 
-target_compile_options(asset PUBLIC  ${COMPILE_FLAGS})
-target_link_libraries(asset PUBLIC psiopt)
-target_link_libraries(asset PUBLIC utils)
+target_compile_options(_tycho PUBLIC  ${COMPILE_FLAGS})
+target_link_libraries(_tycho PUBLIC psiopt)
+target_link_libraries(_tycho PUBLIC utils)
 
-target_link_libraries(asset PUBLIC optimalcontrol)
-target_link_libraries(asset PUBLIC vectorfunctions)
-target_link_libraries(asset PUBLIC astro)
-target_link_libraries(asset PUBLIC asset_extensions)
+target_link_libraries(_tycho PUBLIC optimalcontrol)
+target_link_libraries(_tycho PUBLIC vectorfunctions)
+target_link_libraries(_tycho PUBLIC astro)
+target_link_libraries(_tycho PUBLIC tycho_extensions)
 
-target_include_directories(asset PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(asset PRIVATE ${LINK_LIBS})
+target_include_directories(_tycho PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(_tycho PRIVATE ${LINK_LIBS})
 #set_target_properties(asset PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 if(UNIX)
-    target_link_options(asset PRIVATE ${LINKER_FLAGS})
+    target_link_options(_tycho PRIVATE ${LINKER_FLAGS})
 endif()
 
-add_custom_target(pyassetsrc ALL DEPENDS ${CMAKE_SOURCE_DIR}/asset_asrl)
+add_custom_target(pytychosrc ALL DEPENDS ${CMAKE_SOURCE_DIR}/tycho)
 
 
 message(STATUS "CMAKE DIR LOC" ${CMAKE_CURRENT_SOURCE_DIR})
 message(STATUS "CMAKE PROJ LOC" ${CMAKE_SOURCE_DIR})
 
 if(PYTHON_LOCAL_INSTALL_DIR)
-    add_custom_command(TARGET asset POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:asset> ${PYTHON_LOCAL_INSTALL_DIR}/
-    COMMENT "Copied asset.pyd to ${PYTHON_LOCAL_INSTALL_DIR}"
+    add_custom_command(TARGET _tycho POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tycho> ${PYTHON_LOCAL_INSTALL_DIR}/
+    COMMENT "Copied _tycho extension to ${PYTHON_LOCAL_INSTALL_DIR}"
     )
-    message(STATUS "Cleaning pyasset install directory")
+    message(STATUS "Cleaning tycho install directory")
 
-    add_custom_command(TARGET pyassetsrc POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/asset_asrl
-                    COMMENT "Cleaning asset_asrl install directory")
+    add_custom_command(TARGET pytychosrc POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tycho
+                    COMMENT "Cleaning tycho install directory")
 
-    add_custom_command(TARGET pyassetsrc POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory  ${CMAKE_SOURCE_DIR}/asset_asrl
-                                                ${PYTHON_LOCAL_INSTALL_DIR}/asset_asrl
-                    DEPENDS ${CMAKE_SOURCE_DIR}/asset_asrl
-                    COMMENT "Copied asset_asrl to ${PYTHON_LOCAL_INSTALL_DIR}")
+    add_custom_command(TARGET pytychosrc POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory  ${CMAKE_SOURCE_DIR}/tycho
+                                                ${PYTHON_LOCAL_INSTALL_DIR}/tycho
+                    DEPENDS ${CMAKE_SOURCE_DIR}/tycho
+                    COMMENT "Copied tycho to ${PYTHON_LOCAL_INSTALL_DIR}")
 
 endif()

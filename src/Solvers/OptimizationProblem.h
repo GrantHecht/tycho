@@ -2,9 +2,9 @@
 #include "NonLinearProgram.h"
 #include "OptimizationProblemBase.h"
 #include "PSIOPT.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct OptimizationProblem : OptimizationProblemBase {
 
@@ -180,4 +180,4 @@ struct OptimizationProblem : OptimizationProblemBase {
     static void Build(py::module &m);
 };
 
-} // namespace ASSET
+} // namespace Tycho

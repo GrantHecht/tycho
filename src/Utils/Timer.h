@@ -19,7 +19,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-namespace ASSET {
+namespace Tycho {
 namespace Utils {
 
 class Timer {
@@ -112,4 +112,4 @@ class Timer {
 };
 
 } // namespace Utils
-} // namespace ASSET
+} // namespace Tycho

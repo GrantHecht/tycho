@@ -50,7 +50,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "FunctionTypeDefMacros.h"
 #include "PyDocString/VectorFunctions/DenseFunctionBase_doc.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR>
 struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
@@ -78,11 +78,11 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     using NAME = Derived;
 
     template <class Func>
-    using EVALOP = typename ASSET::template NestedFunctionSelector<Derived, Func>;
+    using EVALOP = typename Tycho::template NestedFunctionSelector<Derived, Func>;
     template <class Func>
-    using FWDOP = typename ASSET::template NestedFunctionSelector<Func, Derived>;
+    using FWDOP = typename Tycho::template NestedFunctionSelector<Func, Derived>;
     template <int SZ, int ST>
-    using SEGMENTOP = typename ASSET::template NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
+    using SEGMENTOP = typename Tycho::template NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
 
     void setIORows(int inputrows, int outputrows) {
         Base::setIORows(inputrows, outputrows);
@@ -537,17 +537,17 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
 
             if constexpr (Base::InputIsDynamic) {
-                ASSET::right_jacobian_product_dynamic_impl(this->SubDomains, target_, left, right,
+                Tycho::right_jacobian_product_dynamic_impl(this->SubDomains, target_, left, right,
                                                            assign, aliased);
             } else {
-                ASSET::right_jacobian_product_impl(target_, left, right, assign, aliased);
+                Tycho::right_jacobian_product_impl(target_, left, right, assign, aliased);
             }
 
         } else {
 
             // Compile Time Input Domain
             using DMN = typename Derived::INPUT_DOMAIN;
-            ASSET::right_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
+            Tycho::right_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
                                                         aliased);
         }
     }
@@ -583,15 +583,15 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::symetric_jacobian_product_dynamic_impl(this->SubDomains, target_, left,
+                Tycho::symetric_jacobian_product_dynamic_impl(this->SubDomains, target_, left,
                                                               right, assign, aliased);
             } else {
-                ASSET::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
+                Tycho::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
             }
 
         } else {
             using DMN = typename Derived::INPUT_DOMAIN;
-            ASSET::symetric_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
+            Tycho::symetric_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
                                                            aliased);
         }
     }
@@ -606,22 +606,22 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
+                Tycho::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
                                                              assign);
 
             } else {
-                ASSET::accumulate_impl(target_, right, assign);
+                Tycho::accumulate_impl(target_, right, assign);
             }
 
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    ASSET::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                    Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
                                            right_ref.template middleCols<size>(start, size),
                                            assign);
                 });
@@ -637,20 +637,20 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::accumulate_vector_dynamic_domain_impl(this->SubDomains, target_, right,
+                Tycho::accumulate_vector_dynamic_domain_impl(this->SubDomains, target_, right,
                                                              assign);
             } else {
-                ASSET::accumulate_impl(target_, right, assign);
+                Tycho::accumulate_impl(target_, right, assign);
             }
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    ASSET::accumulate_impl(target_ref.template segment<size>(start, size),
+                    Tycho::accumulate_impl(target_ref.template segment<size>(start, size),
                                            right_ref.template segment<size>(start, size), assign);
                 });
         }
@@ -668,10 +668,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::accumulate_symetric_matrix_dynamic_domain_impl(this->SubDomains, target_,
+                Tycho::accumulate_symetric_matrix_dynamic_domain_impl(this->SubDomains, target_,
                                                                       right, assign);
             } else {
-                ASSET::accumulate_impl(target_, right, assign);
+                Tycho::accumulate_impl(target_, right, assign);
             }
 
         } else {
@@ -683,7 +683,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 constexpr int start = Derived::INPUT_DOMAIN::SubDomains[0][0];
                 constexpr int size = Derived::INPUT_DOMAIN::SubDomains[0][1];
 
-                ASSET::accumulate_impl(
+                Tycho::accumulate_impl(
                     target_ref.template block<size, size>(start, start, size, size),
                     right_ref.template block<size, size>(start, start, size, size), assign);
 
@@ -694,29 +694,29 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 constexpr int Start2 = Derived::INPUT_DOMAIN::SubDomains[1][0];
                 constexpr int Size2 = Derived::INPUT_DOMAIN::SubDomains[1][1];
 
-                ASSET::accumulate_impl(
+                Tycho::accumulate_impl(
                     target_ref.template block<Size1, Size1>(Start1, Start1, Size1, Size1),
                     right_ref.template block<Size1, Size1>(Start1, Start1, Size1, Size1), assign);
 
-                ASSET::accumulate_impl(
+                Tycho::accumulate_impl(
                     target_ref.template block<Size2, Size2>(Start2, Start2, Size2, Size2),
                     right_ref.template block<Size2, Size2>(Start2, Start2, Size2, Size2), assign);
 
-                ASSET::accumulate_impl(
+                Tycho::accumulate_impl(
                     target_ref.template block<Size1, Size2>(Start1, Start2, Size1, Size2),
                     right_ref.template block<Size1, Size2>(Start1, Start2, Size1, Size2), assign);
 
-                ASSET::accumulate_impl(
+                Tycho::accumulate_impl(
                     target_ref.template block<Size2, Size1>(Start2, Start1, Size2, Size1),
                     right_ref.template block<Size2, Size1>(Start2, Start1, Size2, Size1), assign);
 
             } else {
-                ASSET::constexpr_for_loop(
+                Tycho::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
                         constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                         constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                        ASSET::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                        Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
                                                right_ref.template middleCols<size>(start, size),
                                                assign);
                     });
@@ -735,10 +735,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
+                Tycho::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
                                                              assign);
             } else {
-                ASSET::accumulate_impl(target_, right, assign);
+                Tycho::accumulate_impl(target_, right, assign);
             }
 
         } else {
@@ -746,11 +746,11 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
 
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    ASSET::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                    Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
                                            right_ref.template middleCols<size>(start, size),
                                            assign);
                 });
@@ -776,7 +776,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
@@ -799,7 +799,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
+                Tycho::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
@@ -808,7 +808,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
@@ -821,7 +821,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::scale_vector_dynamic_domain_impl(this->SubDomains, target_, s);
+                Tycho::scale_vector_dynamic_domain_impl(this->SubDomains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
@@ -829,7 +829,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
@@ -843,7 +843,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                ASSET::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
+                Tycho::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
@@ -851,7 +851,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
@@ -887,7 +887,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
         } else {
             constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
-            ASSET::constexpr_for_loop(
+            Tycho::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
                     constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
                     constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
@@ -1112,7 +1112,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         const int IRR = this->IRows();
         const int ORR = this->ORows();
         auto VectorImpl = [&]() {
-            using SuperScalar = ASSET::DefaultSuperScalar;
+            using SuperScalar = Tycho::DefaultSuperScalar;
             constexpr int vsize = SuperScalar::SizeAtCompileTime;
             int Packs = data.NumAppl() / vsize;
 
@@ -1256,7 +1256,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         const int IRR = this->IRows();
         const int ORR = this->ORows();
         auto VectorImpl = [&]() {
-            using SuperScalar = ASSET::DefaultSuperScalar;
+            using SuperScalar = Tycho::DefaultSuperScalar;
             constexpr int vsize = SuperScalar::SizeAtCompileTime;
             int Packs = data.NumAppl() / vsize;
 
@@ -2226,4 +2226,4 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

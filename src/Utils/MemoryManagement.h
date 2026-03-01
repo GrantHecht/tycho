@@ -26,7 +26,7 @@ in the LICENSE file in ASSET's top level directory.
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 namespace detail {
 /// <summary>
@@ -98,7 +98,7 @@ template <int... JS> struct NJumpTable {
     template <class Ftype> static void run(Ftype &&f, int crit_size) {
         auto seq = sequence();
         bool done = false;
-        ASSET::tuple_for_each(seq, [&](auto i) {
+        Tycho::tuple_for_each(seq, [&](auto i) {
             if (!done && crit_size <= i.value) {
                 f(i);
                 done = true;
@@ -145,7 +145,7 @@ template <int size, class... TempSpecs> struct MaxTempPack {
         auto tmpsp = std::make_tuple(tspecs...);
 
         constexpr int sds = sizeof...(tspecs);
-        ASSET::constexpr_for_loop(std::integral_constant<int, 0>(),
+        Tycho::constexpr_for_loop(std::integral_constant<int, 0>(),
                                   std::integral_constant<int, sds>(), [&](auto i) {
                                       int rows = std::get<i.value>(tmpsp).rows;
                                       int cols = std::get<i.value>(tmpsp).cols;
@@ -328,7 +328,7 @@ struct MemoryManager {
             } else if constexpr (type::IsArray) {
                 blksize += CalcSpecSize(tspec.tspec) * tspec.size;
             } else if constexpr (type::IsTuple) {
-                ASSET::tuple_for_each(tspec.tspecs,
+                Tycho::tuple_for_each(tspec.tspecs,
                                       [&](const auto &tspeci) { blksize += CalcSpecSize(tspeci); });
             } else {
                 blksize += CalcSpecSize(tspec);
@@ -448,4 +448,4 @@ struct MemoryManager {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

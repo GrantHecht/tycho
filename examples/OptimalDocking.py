@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-import asset_asrl as ast
+import tycho as ast
 
 """
 

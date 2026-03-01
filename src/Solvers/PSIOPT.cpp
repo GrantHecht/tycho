@@ -6,7 +6,7 @@
 
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
-void ASSET::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
+void Tycho::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
     this->nlp = np;
     this->PrimalVars = this->nlp->PrimalVars;
     this->EqualCons = this->nlp->EqualCons;
@@ -31,7 +31,7 @@ void ASSET::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
     this->QPanalyzed = false;
 }
 
-void ASSET::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
+void Tycho::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
                                          Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
                                          double &alphap, double &alphad) {
     double Smax = this->max_step_to_boundary(this->getSlacks(XSL), this->getSlacks(DXSL), bfrac);
@@ -68,7 +68,7 @@ void ASSET::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
     alphad = Lmax;
 }
 
-void ASSET::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
+void Tycho::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
                                    double pobj, double bobj, double mu, IterateInfo &iter) const {
 
     iter.PrimObj = pobj;
@@ -102,7 +102,7 @@ void ASSET::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<E
         iter.AllConNormErr = this->getAllCons(RHS).norm();
 }
 
-void ASSET::PSIOPT::evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
+void Tycho::PSIOPT::evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
                             EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                             Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
@@ -128,7 +128,7 @@ void ASSET::PSIOPT::evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd
     }
 }
 
-ASSET::PSIOPT::ConvergenceFlags ASSET::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
     ConvergenceFlags Flag = CONVERGED;
     IterateInfo last = iters.back();
     bool KKTFeas = (last.KKTInf < this->KKTtol);
@@ -169,7 +169,7 @@ ASSET::PSIOPT::ConvergenceFlags ASSET::PSIOPT::convergeCheck(std::vector<Iterate
     return Flag;
 }
 
-void ASSET::PSIOPT::printPSIOPT() {
+void Tycho::PSIOPT::printPSIOPT() {
 
     std::string PsioptStr = "       ____    _____    ____          ____     ____   ______\n"
                             "      / __ \\  / ___/   /  _/         / __ \\   / __ \\ /_  __/\n"
@@ -183,7 +183,7 @@ void ASSET::PSIOPT::printPSIOPT() {
     print_Header();
 }
 
-void ASSET::PSIOPT::print_settings() {
+void Tycho::PSIOPT::print_settings() {
     using std::cout;
     using std::endl;
 
@@ -204,9 +204,9 @@ void ASSET::PSIOPT::print_settings() {
                this->DivIContol);
 }
 
-void ASSET::PSIOPT::print_matrixinfo() {}
+void Tycho::PSIOPT::print_matrixinfo() {}
 
-void ASSET::PSIOPT::print_stats() {
+void Tycho::PSIOPT::print_stats() {
     printPSIOPT();
 
     auto cyan = fmt::fg(fmt::color::cyan);
@@ -232,7 +232,7 @@ void ASSET::PSIOPT::print_stats() {
     fmt::print("\n");
 }
 
-void ASSET::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
+void Tycho::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     auto last = iters.back();
     bool wide = false;
 
@@ -310,14 +310,14 @@ void ASSET::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     }
 }
 
-void ASSET::PSIOPT::print_Beginning(std::string msg) const {
+void Tycho::PSIOPT::print_Beginning(std::string msg) const {
     fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
     fmt::print(": ");
     fmt::print(fmt::fg(fmt::color::royal_blue), msg);
     fmt::print("\n");
 }
 
-void ASSET::PSIOPT::print_Finished(std::string msg) const {
+void Tycho::PSIOPT::print_Finished(std::string msg) const {
 
     fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
     fmt::print(": ");
@@ -325,7 +325,7 @@ void ASSET::PSIOPT::print_Finished(std::string msg) const {
     fmt::print("\n");
 }
 
-void ASSET::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
+void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
                                     double tottime, double nlptime, double qptime) {
     fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
     fmt::text_style Bcol = calculate_color(last.BarrInf, this->Bartol, this->AccBartol);
@@ -377,7 +377,7 @@ void ASSET::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo
     }
 }
 
-fmt::text_style ASSET::PSIOPT::calculate_color(double val, double targ, double acc) {
+fmt::text_style Tycho::PSIOPT::calculate_color(double val, double targ, double acc) {
     auto level1 = std::log(targ);
     auto level3 = std::log(acc);
     auto level5 = std::log(acc * 1000.0);
@@ -400,7 +400,7 @@ fmt::text_style ASSET::PSIOPT::calculate_color(double val, double targ, double a
     return fmt::fg(c);
 }
 
-int ASSET::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
+int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                double incpurt, double &finalpert) {
     auto Inertia = [&]() { return this->KKTSol.neigs() - (this->EqualCons + this->InequalCons); };
     auto RankDef = [&]() {
@@ -444,7 +444,7 @@ int ASSET::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
     return this->MaxRefac;
 }
 
-Eigen::VectorXd ASSET::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
+Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
                                         LineSearchModes lsmode, double ObjScale, double MuI,
                                         Eigen::Ref<Eigen::VectorXd> xsl) {
     Eigen::VectorXd XSL = xsl;
@@ -692,7 +692,7 @@ Eigen::VectorXd ASSET::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
     return XSL;
 }
 
-Eigen::VectorXd ASSET::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bool docompute) {
+Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bool docompute) {
 
     Utils::Timer kktt;
     kktt.start();
@@ -768,7 +768,7 @@ Eigen::VectorXd ASSET::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     return XSL;
 }
 
-double ASSET::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
+double Tycho::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
                               double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                               EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS,
                               EigenRef<VectorXd> RHS2, IterateInfo &Citer,
@@ -922,7 +922,7 @@ double ASSET::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu
     return alpha;
 }
 
-Eigen::VectorXd ASSET::PSIOPT::optimize(const Eigen::VectorXd &x) {
+Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
 
@@ -965,7 +965,7 @@ Eigen::VectorXd ASSET::PSIOPT::optimize(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd ASSET::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
+Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
@@ -1018,7 +1018,7 @@ Eigen::VectorXd ASSET::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd ASSET::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
         print_stats();
@@ -1087,7 +1087,7 @@ Eigen::VectorXd ASSET::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd ASSET::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
         print_stats();
@@ -1146,7 +1146,7 @@ Eigen::VectorXd ASSET::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd ASSET::PSIOPT::solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
@@ -1185,7 +1185,7 @@ Eigen::VectorXd ASSET::PSIOPT::solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-void ASSET::PSIOPT::Build(py::module &m) {
+void Tycho::PSIOPT::Build(py::module &m) {
     using namespace doc;
     auto obj = py::class_<PSIOPT, std::shared_ptr<PSIOPT>>(m, "PSIOPT");
     obj.def(py::init<std::shared_ptr<NonLinearProgram>>());

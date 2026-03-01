@@ -82,7 +82,7 @@ where :code:`XXX` is replaced by the name of the setting
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
 
     ocp = ast.OptimalControl.OptimalControlProblem()
 
@@ -354,7 +354,7 @@ attached to each problem.
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
 
     solvers = ast.Solvers
     oc = ast.OptimalControl
@@ -409,7 +409,7 @@ and expensive preprocessing that cannot be parallelized.
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
 
     solvers = ast.Solvers
     oc = ast.OptimalControl

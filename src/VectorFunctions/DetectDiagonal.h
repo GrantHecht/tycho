@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class T> struct Is_EigenDiagonalMatrix : std::false_type {};
 
@@ -13,4 +13,4 @@ template <class T> struct Is_EigenDiagonalMatrix<Eigen::DiagonalWrapper<T>> : st
 template <class T>
 struct Is_EigenDiagonalMatrix<const Eigen::DiagonalWrapper<T>> : std::true_type {};
 
-} // namespace ASSET
+} // namespace Tycho

@@ -1,16 +1,15 @@
 # Mostly copied from pybind/cmake_example
 
+import multiprocessing
 import os
-import re
-import sys
 import platform
+import re
 import subprocess
-
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
+import sys
 from distutils.version import LooseVersion
 
-import multiprocessing
+from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
 
 
 class CMakeExtension(Extension):
@@ -50,7 +49,7 @@ class CMakeBuild(build_ext):
             "-DPYTHON_EXECUTABLE=" + sys.executable,
             "-DPIP_INSTALL=True",
         ]
-        build_args = ["--target", "asset"]
+        build_args = ["--target", "_tycho"]
 
         cfg = "Debug" if self.debug else "Release"
         build_args += ["--config", cfg]
@@ -66,7 +65,7 @@ class CMakeBuild(build_ext):
             cmake_args += [
                 "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir)
             ]
-            if sys.maxsize > 2 ** 32:
+            if sys.maxsize > 2**32:
                 cmake_args += ["-A", "x64"]
             build_args += ["--", "/m"]
         else:
@@ -87,12 +86,12 @@ class CMakeBuild(build_ext):
 
 
 setup(
-    name="asset_asrl",
-    version="0.0.1",
-    author="Alabama ASRL",
+    name="tycho",
+    version="0.1.0",
+    author="Grant Hecht",
     description="High-speed, extensible, object-oriented trajectory design and optimization",
     long_description="",
-    ext_modules=[CMakeExtension("asset")],
+    ext_modules=[CMakeExtension("_tycho")],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )

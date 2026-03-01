@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
+import tycho as ast
 
 ################################################################################
 vf = ast.VectorFunctions

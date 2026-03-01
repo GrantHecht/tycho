@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 enum ParsedIOFlags {
     HiddenInput = -2,
@@ -52,4 +52,4 @@ enum VarTypes {
     Inactive = 3,
     BiLinear = 4,
 };
-} // namespace ASSET
+} // namespace Tycho

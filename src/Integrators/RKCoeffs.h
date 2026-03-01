@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 enum RKOptions { RK4Classic, RK438, DOPRI54, DOPRI87, RK54, RK78, Ralston3, Ralston2, DOPRI5 };
 
@@ -171,4 +171,4 @@ template <> struct RKCoeffs<RKOptions::DOPRI87> {
         0.0138169474640115,  -0.0276768086980947};
 };
 
-} // namespace ASSET
+} // namespace Tycho

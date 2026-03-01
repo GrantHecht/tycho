@@ -29,7 +29,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;
@@ -75,4 +75,4 @@ template <class FuncType> struct SolverFunctionBase {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

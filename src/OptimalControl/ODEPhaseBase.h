@@ -11,10 +11,10 @@
 #include "Solvers/OptimizationProblemBase.h"
 #include "Solvers/PSIOPT.h"
 #include "StateFunction.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct OptimalControlProblem;
 
@@ -1190,4 +1190,4 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     static void Build(py::module &m);
 };
 
-} // namespace ASSET
+} // namespace Tycho

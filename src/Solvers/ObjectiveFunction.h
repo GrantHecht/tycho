@@ -25,7 +25,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "SolverFunctionBase.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     ObjectiveFunction() {}
@@ -87,4 +87,4 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -3,7 +3,7 @@
 #include "LGLCoeffs.h"
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     using Base = VectorFunction<SingleMeshSpacing, 3, 1>;
@@ -165,4 +165,4 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

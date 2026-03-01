@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func>
 struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC, FDiffCentArray, FDiffFwd> {
@@ -36,4 +36,4 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC, FDiffCentArray,
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

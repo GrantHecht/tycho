@@ -2,7 +2,7 @@
 
 #include "DenseFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 enum DenseDerivativeModes {
     Analytic,
@@ -27,4 +27,4 @@ struct DenseDerivatives : DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode> 
     DENSE_FUNCTION_BASE_TYPES(Base)
 };
 
-} // namespace ASSET
+} // namespace Tycho

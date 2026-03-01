@@ -1,6 +1,6 @@
 #include "OptimizationProblem.h"
 
-void ASSET::OptimizationProblem::transcribe() {
+void Tycho::OptimizationProblem::transcribe() {
     this->nlp = std::make_shared<NonLinearProgram>(this->Threads);
 
     int numVars = this->ActiveVariables.size();
@@ -113,7 +113,7 @@ void ASSET::OptimizationProblem::transcribe() {
     ////////////////////////////////////
 }
 
-void ASSET::OptimizationProblem::Build(py::module &m) {
+void Tycho::OptimizationProblem::Build(py::module &m) {
 
     auto obj = py::class_<OptimizationProblem, std::shared_ptr<OptimizationProblem>,
                           OptimizationProblemBase>(m, "OptimizationProblem");

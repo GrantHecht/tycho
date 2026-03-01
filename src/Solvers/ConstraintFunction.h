@@ -25,7 +25,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "SolverFunctionBase.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     using Base = SolverFunctionBase<ConstraintInterface>;
@@ -127,4 +127,4 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

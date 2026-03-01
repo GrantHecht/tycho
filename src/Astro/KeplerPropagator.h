@@ -1,7 +1,7 @@
 #pragma once
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 /*
 Kepler propagator implementation is partly based on the implementation found at
@@ -252,10 +252,10 @@ struct KeperPropagator_Impl {
 };
 
 struct KeplerPropagator
-    : VectorFunction<KeplerPropagator, 7, 6, ASSET::DenseDerivativeModes::Analytic,
-                     ASSET::DenseDerivativeModes::Analytic> {
-    using Base = VectorFunction<KeplerPropagator, 7, 6, ASSET::DenseDerivativeModes::Analytic,
-                                ASSET::DenseDerivativeModes::Analytic>;
+    : VectorFunction<KeplerPropagator, 7, 6, Tycho::DenseDerivativeModes::Analytic,
+                     Tycho::DenseDerivativeModes::Analytic> {
+    using Base = VectorFunction<KeplerPropagator, 7, 6, Tycho::DenseDerivativeModes::Analytic,
+                                Tycho::DenseDerivativeModes::Analytic>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
 
@@ -546,4 +546,4 @@ struct KeplerPropagator
     }*/
 };
 
-} // namespace ASSET
+} // namespace Tycho

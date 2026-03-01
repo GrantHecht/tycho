@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class OuterFunc, class InnerFunc1, class... InnerFuncs>
 struct NestedCallAndAppendChain2
@@ -33,7 +33,7 @@ struct NestedCallAndAppendChain2
                               std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func(std::move(outer_func)) {
         this->inner_func1 = std::get<0>(inner_funct);
-        ASSET::constexpr_for_loop(
+        Tycho::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(InnerFuncs)>(),
             [&](auto i) {
                 std::get<i.value>(this->inner_funcs) = std::get<i.value + 1>(inner_funct);
@@ -51,7 +51,7 @@ struct NestedCallAndAppendChain2
             xchain.template head<Base::IRC>(this->IRows()) = x;
             this->inner_func1.compute(x, xchain.template segment<InnerFunc1::ORC>(
                                              this->IRows(), this->inner_func1.ORows()));
-            ASSET::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+            Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute(
@@ -82,7 +82,7 @@ struct NestedCallAndAppendChain2
                 xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()),
                 jx1);
 
-            ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute_jacobian(
@@ -93,7 +93,7 @@ struct NestedCallAndAppendChain2
 
             this->outer_func.compute_jacobian(xchain, fx_, jxO);
 
-            ASSET::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.right_jacobian_product(
@@ -173,7 +173,7 @@ struct NestedCallAndAppendChain2
             this->inner_func1.compute(x, xchain.template segment<InnerFunc1::ORC>(
                                              this->IRows(), this->inner_func1.ORows()));
 
-            ASSET::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+            Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute(
@@ -184,7 +184,7 @@ struct NestedCallAndAppendChain2
             this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jxO, gxO,
                                                                              hxO, adjvars);
 
-            ASSET::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -230,7 +230,7 @@ struct NestedCallAndAppendChain2
             j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.IRows(),
                                                      this->inner_func1.ORows()) = jx1;
 
-            ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -244,7 +244,7 @@ struct NestedCallAndAppendChain2
                         j0s.template middleRows<Ev>(this->IRows(), func_i.IRows() - this->IRows());
             });
 
-            ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -357,7 +357,7 @@ struct NestedCallAndAppendChain
                              std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func(std::move(outer_func)) {
         this->inner_func1 = std::get<0>(inner_funct);
-        ASSET::constexpr_for_loop(
+        Tycho::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(InnerFuncs)>(),
             [&](auto i) {
                 std::get<i.value>(this->inner_funcs) = std::get<i.value + 1>(inner_funct);
@@ -378,7 +378,7 @@ struct NestedCallAndAppendChain
         this->inner_func1.compute(
             x, xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()));
 
-        ASSET::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+        Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             func_i.compute(xchain.template head<FTtype::IRC>(func_i.IRows()),
@@ -407,7 +407,7 @@ struct NestedCallAndAppendChain
 
         std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
 
-        ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             // std::get<i.value>(jxi).setZero();
@@ -430,7 +430,7 @@ struct NestedCallAndAppendChain
 
         this->outer_func.compute_jacobian(xchain, fx_, jxO);
 
-        ASSET::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             func_i.right_jacobian_product(
@@ -469,7 +469,7 @@ struct NestedCallAndAppendChain
         this->inner_func1.compute(
             x, xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()));
 
-        ASSET::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+        Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             func_i.compute(xchain.template head<FTtype::IRC>(func_i.IRows()),
@@ -491,7 +491,7 @@ struct NestedCallAndAppendChain
         this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jxO, gxO, hxO,
                                                                          adjvars);
 
-        ASSET::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -611,7 +611,7 @@ struct NestedCallAndAppendChain
             j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.IRows(),
                                                      this->inner_func1.ORows()) = jx1;
 
-            ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -623,7 +623,7 @@ struct NestedCallAndAppendChain
                             this->IRows(), func_i.IRows() - this->IRows());
             });
 
-            ASSET::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 // if constexpr (!FTtype::IsLinearFunction) adjhess.noalias() +=
@@ -659,4 +659,4 @@ struct NestedCallAndAppendChain
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

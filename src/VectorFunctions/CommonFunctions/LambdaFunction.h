@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int IR, int OR, class Func, class Data = std::integral_constant<bool, false>>
 struct LambdaFunction
@@ -86,4 +86,4 @@ auto make_lambda_func(Data dat, InputOutputSize<IR, OR> io, Func f, JacFunc jf) 
     return LambdaFunction2{dat, io, f, jf};
 }
 
-} // namespace ASSET
+} // namespace Tycho

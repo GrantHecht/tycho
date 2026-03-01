@@ -33,7 +33,7 @@ the time derivatives of position and velocity in the same order we assumed in th
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
     import numpy as np
 
     vf        = ast.VectorFunctions

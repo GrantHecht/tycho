@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int CS> struct LGLCoeffs {
     /// implement general algorithm for deteriming coefficients
@@ -340,4 +340,4 @@ template <> struct LGLCoeffs<4> {
 
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
-} // namespace ASSET
+} // namespace Tycho

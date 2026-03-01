@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 namespace doc {
 
 const char *const OptimalControlProblem_addLinkEqualCon1 =
@@ -211,4 +211,4 @@ const char *const OptimalControlProblem_optimizer =
 const char *const OptimalControlProblem_Threads = "int: Number of threads to use for this OCP.";
 
 } // namespace doc
-} // namespace ASSET
+} // namespace Tycho

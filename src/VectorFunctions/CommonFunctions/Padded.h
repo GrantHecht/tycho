@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <int St> struct UpperPadHolder {
     static const int UPad = St;
@@ -133,4 +133,4 @@ struct PaddedOutput
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

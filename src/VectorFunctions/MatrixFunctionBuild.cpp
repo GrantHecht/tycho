@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 void MatrixFunctionBuild(py::module &m) {
 
@@ -258,4 +258,4 @@ void MatrixFunctionBuild(py::module &m) {
     });
 }
 
-} // namespace ASSET
+} // namespace Tycho

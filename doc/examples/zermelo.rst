@@ -20,7 +20,7 @@ We'll also go ahead and establish the standard shorthand conventions.
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib as mpl
@@ -289,7 +289,7 @@ How would the phase boundary conditions need to change?
 
 .. code-block:: python
 
-    import asset_asrl as ast
+    import tycho as ast
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib as mpl

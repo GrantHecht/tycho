@@ -2,9 +2,9 @@
 
 #include "ODEPhase.h"
 #include "ODESizes.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV> struct ODEBase;
 
@@ -167,4 +167,4 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
 template <int XV, int UV, int PV>
 using PythonGenericODE = GenericODE<GenericFunction<-1, -1>, XV, UV, PV>;
 
-} // namespace ASSET
+} // namespace Tycho

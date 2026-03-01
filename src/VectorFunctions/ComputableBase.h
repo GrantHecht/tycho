@@ -47,11 +47,11 @@ in the LICENSE file in ASSET's top level directory.
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-#if defined(ASSET_MEMORYMAN)
+#if defined(TYCHO_MEMORYMAN)
 #include "Utils/MemoryManagement.h"
 #endif
 
-namespace ASSET {
+namespace Tycho {
 
 /*!
  * @brief A computable is anything with a \code compute \endcode function
@@ -255,7 +255,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
         */
 
         auto VectorImpl = [&]() {
-            using SuperScalar = ASSET::DefaultSuperScalar;
+            using SuperScalar = Tycho::DefaultSuperScalar;
             constexpr int vsize = SuperScalar::SizeAtCompileTime;
             int Packs = data.NumAppl() / vsize;
             ;
@@ -360,4 +360,4 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

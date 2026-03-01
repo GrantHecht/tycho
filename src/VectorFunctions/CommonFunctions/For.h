@@ -2,7 +2,7 @@
 
 #include "NestedFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 //! Declaration of For_Impl
 template <class Derived, int N, class StartFunc, class BodyFunc> struct For_Impl;
@@ -55,4 +55,4 @@ struct For_Impl<Derived, 0, StartFunc, BodyFunc>
     For_Impl(StartFunc inner) : Base::NestedFunction_Impl(OFuncType(), inner) {};
 };
 
-} // namespace ASSET
+} // namespace Tycho

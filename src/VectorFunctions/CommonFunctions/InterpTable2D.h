@@ -2,7 +2,7 @@
 #include "Utils/Timer.h"
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct InterpTable2D {
 
@@ -554,4 +554,4 @@ static void InterpTable2DBuild(py::module &m) {
     });
 }
 
-} // namespace ASSET
+} // namespace Tycho

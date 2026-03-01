@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
-import asset_asrl as ast
-import asset_asrl.OptimalControl as oc
-import asset_asrl.VectorFunctions as vf
-from asset_asrl.VectorFunctions import Arguments as Args
+import tycho as ast
+import tycho.OptimalControl as oc
+import tycho.VectorFunctions as vf
+from tycho.VectorFunctions import Arguments as Args
 
 ############################################################################
 Lstar = 6378145  ## m   Radius of Earth

@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 //! Declaration of \struct NormalizedPower_Impl
 template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
@@ -174,8 +174,8 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
             }
         };
 
-        ASSET::MemoryManager::allocate_run(irows, Impl, TempSpec<Jacobian<Scalar>>(irows, irows));
+        Tycho::MemoryManager::allocate_run(irows, Impl, TempSpec<Jacobian<Scalar>>(irows, irows));
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

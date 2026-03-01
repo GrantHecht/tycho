@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
     using Base = VectorFunction<CrossProduct, 6, 3>;
@@ -183,7 +183,7 @@ struct FunctionCrossProduct_Impl
                                                std::bool_constant<false>());
         };
 
-#if defined(ASSET_MEMORYMAN)
+#if defined(TYCHO_MEMORYMAN)
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         const int irows = this->IRows();
         MemoryManager::allocate_run(irows, Impl, TempSpec<JType>(3, irows),
@@ -273,7 +273,7 @@ struct FunctionCrossProduct_Impl
                                                std::bool_constant<false>());
         };
 
-#if defined(ASSET_MEMORYMAN)
+#if defined(TYCHO_MEMORYMAN)
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
@@ -323,4 +323,4 @@ struct FunctionCrossProduct_Impl
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

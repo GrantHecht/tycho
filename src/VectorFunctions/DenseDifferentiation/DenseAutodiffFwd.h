@@ -6,7 +6,7 @@
 
 #include "DenseDerivatives.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::AutodiffFwd>
@@ -113,4 +113,4 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeModes::Auto
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

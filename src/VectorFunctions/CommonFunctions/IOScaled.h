@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func>
 struct IOScaled : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic> {
@@ -125,4 +125,4 @@ struct IOScaled : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic>
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

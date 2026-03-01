@@ -1,7 +1,7 @@
 #include "ODEPhaseBase.h"
 #include "PyDocString/OptimalControl/ODEPhaseBase_doc.h"
 
-void ASSET::ODEPhaseBase::Build(py::module &m) {
+void Tycho::ODEPhaseBase::Build(py::module &m) {
     using namespace pybind11::literals;
     using namespace doc;
     auto obj = py::class_<ODEPhaseBase, std::shared_ptr<ODEPhaseBase>, OptimizationProblemBase>(

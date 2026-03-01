@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 namespace doc {
 
 const char *const IntegratorBase_default =
@@ -171,4 +171,4 @@ const char *const IntegratorBase_get_stepper = "Returns stepper for Integrator o
                                                ":returns: Stepper object\n";
 
 } // namespace doc
-} // namespace ASSET
+} // namespace Tycho

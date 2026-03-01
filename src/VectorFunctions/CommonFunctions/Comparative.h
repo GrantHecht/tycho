@@ -2,7 +2,7 @@
 
 #include "Conditional.h"
 
-namespace ASSET {
+namespace Tycho {
 
 // Enum
 enum ComparativeFlags {
@@ -56,4 +56,4 @@ struct ComparativeFunction<First, Second>
                first, second) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

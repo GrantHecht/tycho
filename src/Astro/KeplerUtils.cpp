@@ -2,7 +2,7 @@
 
 #include "VectorFunctions/CommonFunctions/RootFinder.h"
 
-void ASSET::KeplerUtilsBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::KeplerUtilsBuild(FunctionRegistry &reg, py::module &m) {
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////              Conversions                  /////////////////////////

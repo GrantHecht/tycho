@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
-import asset_asrl.Astro.Constants as c
-from asset_asrl.Astro.AstroModels import MEETwoBody_CSI
-from asset_asrl.Astro.Extensions.ThrusterModels import CSIThruster
-from asset_asrl.Astro.FramePlot import TBPlot, colpal
+import tycho as ast
+import tycho.Astro.Constants as c
+from tycho.Astro.AstroModels import MEETwoBody_CSI
+from tycho.Astro.Extensions.ThrusterModels import CSIThruster
+from tycho.Astro.FramePlot import TBPlot, colpal
 
 ##############################################################################
 vf = ast.VectorFunctions

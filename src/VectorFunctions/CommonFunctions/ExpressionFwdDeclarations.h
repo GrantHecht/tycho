@@ -3,7 +3,7 @@
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Derived, int IR, int OR> struct DenseFunctionBase;
 
@@ -204,4 +204,4 @@ template <class Func1, class Func2> struct CwiseFunctionProduct;
 
 template <class Func> struct CallAndAppend;
 
-} // namespace ASSET
+} // namespace Tycho

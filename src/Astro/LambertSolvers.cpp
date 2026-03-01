@@ -1,6 +1,6 @@
 #include "LambertSolvers.h"
 
-void ASSET::LambertSolversBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::LambertSolversBuild(FunctionRegistry &reg, py::module &m) {
 
     m.def("lambert_izzo",
           [](const Vector3<double> &R1, const Vector3<double> &R2, double dt, double mu,

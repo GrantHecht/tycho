@@ -1,6 +1,6 @@
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, Analytic, Analytic> {
     using Base = VectorFunction<MEEDynamics, 9, 6, Analytic, Analytic>;
@@ -828,4 +828,4 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, Analytic, Analytic> {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -3,10 +3,10 @@
 #include "FDDerivArbitrary.h"
 #include "LGLCoeffs.h"
 #include "OptimalControlFlags.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 struct LGLInterpTable {
     using VectorFunctionalX = GenericFunction<-1, -1>;
 
@@ -898,4 +898,4 @@ struct LGLInterpTable {
     static void Build(py::module &m);
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
 template <typename T> struct return_type;
 template <typename R, typename... Args> struct return_type<R (*)(Args...)> {
@@ -21,4 +21,4 @@ struct return_type<R (C::*)(Args...) const volatile> {
 };
 template <typename T> using return_type_t = typename return_type<T>::type;
 
-} // namespace ASSET
+} // namespace Tycho

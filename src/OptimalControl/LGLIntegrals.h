@@ -2,9 +2,9 @@
 
 #include "LGLCoeffs.h"
 #include "TranscriptionSizing.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Integrand, int CS, int XV, int PV> struct LGLReducedInteg_Impl {
     template <int V> using int_const = std::integral_constant<int, V>;
@@ -63,4 +63,4 @@ struct LGLIntegral
     LGLIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 
-} // namespace ASSET
+} // namespace Tycho

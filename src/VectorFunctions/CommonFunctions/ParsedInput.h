@@ -2,7 +2,7 @@
 
 #include "VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class Func, int IRC, int ORC>
 struct ParsedInput : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analytic> {
@@ -126,4 +126,4 @@ struct ParsedInput : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analy
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace ASSET
+} // namespace Tycho

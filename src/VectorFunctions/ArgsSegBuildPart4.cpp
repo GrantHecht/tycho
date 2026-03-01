@@ -1,6 +1,6 @@
-#include "ASSET_VectorFunctions.h"
+#include "Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 void ArgsSegBuildPart4(FunctionRegistry &reg, py::module &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -12,4 +12,4 @@ void ArgsSegBuildPart4(FunctionRegistry &reg, py::module &m) {
     reg.Build_Register<SEG2>(m, "Segment2");
 }
 
-} // namespace ASSET
+} // namespace Tycho

@@ -2,7 +2,7 @@
 
 #include <type_traits>
 
-namespace ASSET {
+namespace Tycho {
 
 template <int J1, int J2, int J3> struct LambdaJumpTable {
     template <class Ftype> static void run(Ftype &f, int crit_size) {
@@ -18,4 +18,4 @@ template <int J1, int J2, int J3> struct LambdaJumpTable {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

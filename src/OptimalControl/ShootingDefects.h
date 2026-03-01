@@ -1,10 +1,10 @@
 #pragma once
 
 #include "OptimalControlFlags.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class DODE, class Integrator> struct ShootingDefect_Impl {
     static auto Definition(const DODE &ode, const Integrator &integ) {
@@ -440,4 +440,4 @@ struct CentralShootingDefect
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

@@ -25,7 +25,7 @@ in the LICENSE file in ASSET's top level directory.
 #include "FunctionalFlags.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 struct SolverIndexingData {
     using MatrixXi = Eigen::MatrixXi;
@@ -198,4 +198,4 @@ struct SolverIndexingData {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

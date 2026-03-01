@@ -8,7 +8,7 @@
 #include "TrapezoidalDefects.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class DODE> struct ODEPhase : ODEPhaseBase {
     using VectorXi = Eigen::VectorXi;
@@ -314,7 +314,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
-    virtual ASSET::ConstraintInterface make_shooter() {
+    virtual Tycho::ConstraintInterface make_shooter() {
 
         if (this->AutoScaling) {
             auto Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize};
@@ -329,12 +329,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode_scaled, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                return ASSET::ConstraintInterface(shooter);
+                return Tycho::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode_scaled, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
                 shooter.EnableVectorization = this->EnableVectorization;
-                return ASSET::ConstraintInterface(shooter);
+                return Tycho::ConstraintInterface(shooter);
             }
         }
         {
@@ -351,12 +351,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                return ASSET::ConstraintInterface(shooter);
+                return Tycho::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
                 shooter.EnableVectorization = this->EnableVectorization;
-                return ASSET::ConstraintInterface(shooter);
+                return Tycho::ConstraintInterface(shooter);
             }
         }
     }
@@ -685,4 +685,4 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

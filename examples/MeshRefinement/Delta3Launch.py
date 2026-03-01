@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
-import asset_asrl as ast
-from asset_asrl.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+import tycho as ast
+from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
 
 vf = ast.VectorFunctions
 oc = ast.OptimalControl

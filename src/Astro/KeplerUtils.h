@@ -1,7 +1,7 @@
 #pragma once
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 
-namespace ASSET {
+namespace Tycho {
 
 /// <summary>
 /// Build Function for Everything in this header
@@ -554,4 +554,4 @@ Vector6<Scalar> propagate_modified(const Vector6<Scalar> &meelems, Scalar dt, Sc
 ////////////////////              Propagators                  /////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace ASSET
+} // namespace Tycho

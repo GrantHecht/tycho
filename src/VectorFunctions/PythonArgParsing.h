@@ -3,7 +3,7 @@
 #include "CommonFunctions/ExpressionFwdDeclarations.h"
 #include "pch.h"
 
-namespace ASSET {
+namespace Tycho {
 
 /*
  * Converts list of python objects into a vector of dynamically sized GenericFunctions.
@@ -19,4 +19,4 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(py::args x, int irows = 0);
  */
 std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(py::args x, int irows = 0);
 
-} // namespace ASSET
+} // namespace Tycho

@@ -3,7 +3,7 @@
 #include "TranscriptionSizing.h"
 #include "VectorFunctions/VectorFunction.h"
 
-namespace ASSET {
+namespace Tycho {
 
 template <class DODE>
 struct TrapezoidalDefects
@@ -379,4 +379,4 @@ struct TrapezoidalDefects
     }
 };
 
-} // namespace ASSET
+} // namespace Tycho

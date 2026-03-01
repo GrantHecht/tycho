@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import asset_asrl as ast
-from asset_asrl.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+import tycho as ast
+from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
 
 vf = ast.VectorFunctions
 oc = ast.OptimalControl

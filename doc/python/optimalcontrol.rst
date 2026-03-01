@@ -1,7 +1,7 @@
 Optimal Control
 ===============
 
-.. automodule:: asset_asrl.OptimalControl.ODEBase
+.. automodule:: tycho.OptimalControl.ODEBase
     :members:
     :special-members:
 

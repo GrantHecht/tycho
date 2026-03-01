@@ -14,7 +14,7 @@ For this example, we will be working in canonical units where :math:`\mu = 1`.
 
 .. code-block:: python
 	
-	import asset_asrl as ast
+	import tycho as ast
 	import numpy as np
 	import matplotlib.pyplot as plt
 
