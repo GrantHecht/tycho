@@ -133,6 +133,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Anal
             LambdaJumpTable<4, 8, 16>::run(Impl, this->table->XtUVars);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<InterpFunction<OR>>(m, name);
         if (OR == -1) {
@@ -150,6 +151,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Anal
             return GenericFunction<-1, -1>(self.eval(t));
         });
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

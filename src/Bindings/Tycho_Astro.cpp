@@ -1,6 +1,6 @@
-#include "Tycho_Astro.h"
+#include "Astro/Tycho_Astro.h"
 
-#include "CR3BPModel.h"
+#include "Astro/CR3BPModel.h"
 void Tycho::AstroBuild(FunctionRegistry &reg, py::module &m) {
     auto mod = m.def_submodule("Astro");
 

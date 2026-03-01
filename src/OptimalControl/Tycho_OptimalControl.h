@@ -10,6 +10,7 @@
 
 namespace Tycho {
 
+#ifdef TYCHO_PYTHON_BINDINGS
 void GenericODESBuildPart1(FunctionRegistry &reg, py::module &m);
 void GenericODESBuildPart2(FunctionRegistry &reg, py::module &m);
 void GenericODESBuildPart3(FunctionRegistry &reg, py::module &m);
@@ -18,5 +19,6 @@ void GenericODESBuildPart5(FunctionRegistry &reg, py::module &m);
 void GenericODESBuildPart6(FunctionRegistry &reg, py::module &m);
 
 void OptimalControlBuild(FunctionRegistry &reg, py::module &m);
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

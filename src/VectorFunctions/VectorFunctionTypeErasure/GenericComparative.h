@@ -15,6 +15,7 @@ template <int IR> struct GenericComparative : rubber_types::TypeErasure<Conditio
         this->reset_container(obj.get_container());
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void ComparativeBuild(py::module &m) {
         using GenComp = GenericComparative<IR>;
 
@@ -108,6 +109,7 @@ template <int IR> struct GenericComparative : rubber_types::TypeErasure<Conditio
         // THREE ARG BINDINGS
         // TODO: 3-argument min-max bindings
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

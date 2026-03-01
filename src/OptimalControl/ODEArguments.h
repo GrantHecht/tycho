@@ -13,6 +13,7 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
     ODEArguments(int Xv, int Uv) : ODEArguments(Xv, Uv, 0) {}
     ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         using Derived = ODEArguments<_XV, _UV, _PV>;
         auto obj = py::class_<ODEArguments<_XV, _UV, _PV>, Base>(m, name);
@@ -34,6 +35,7 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
         obj.def("PVar",
                 [](const Derived &a, int i) { return a.segment(a.XtUVars(), a.PVars()).coeff(i); });
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

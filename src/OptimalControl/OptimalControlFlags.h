@@ -152,6 +152,7 @@ static ControlModes strto_ControlMode(const std::string &str) {
     }
 }
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void OCPFlagsBuild(py::module &m) {
     py::enum_<TranscriptionModes>(m, "TranscriptionModes")
         .value("LGL3", TranscriptionModes::LGL3)
@@ -197,5 +198,6 @@ static void OCPFlagsBuild(py::module &m) {
     m.def("strto_PhaseRegionFlag",
           py::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

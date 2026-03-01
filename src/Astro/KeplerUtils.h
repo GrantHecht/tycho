@@ -3,12 +3,14 @@
 
 namespace Tycho {
 
+#ifdef TYCHO_PYTHON_BINDINGS
 /// <summary>
 /// Build Function for Everything in this header
 /// </summary>
 /// <param name="reg"></param>
 /// <param name="m"></param>
 void KeplerUtilsBuild(FunctionRegistry &reg, py::module &m);
+#endif // TYCHO_PYTHON_BINDINGS
 
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////              Conversions                  /////////////////////////

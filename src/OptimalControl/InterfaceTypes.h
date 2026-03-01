@@ -9,7 +9,7 @@
 namespace Tycho {
 
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
-using ScaleType = std::variant<double, Eigen::VectorXd, std::string, py::none>;
+using ScaleType = std::variant<double, Eigen::VectorXd, std::string>;
 using RegionType = std::variant<PhaseRegionFlags, std::string>;
 
 static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
@@ -53,9 +53,6 @@ static std::tuple<std::string, bool, Eigen::VectorXd> get_scale_info(int orows, 
         } else {
             throw std::invalid_argument(fmt::format("Unrecognized Scale Mode:{0:}", ScaleMode));
         }
-    } else if (std::holds_alternative<py::none>(scale_t)) {
-        ScaleMode = "none";
-        ScalesSet = true;
     }
 
     return std::tuple{ScaleMode, ScalesSet, OutputScales};

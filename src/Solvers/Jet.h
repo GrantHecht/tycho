@@ -112,11 +112,15 @@ struct Jet {
 #endif
 
             int gfidx = genfidxes[i];
+#ifdef TYCHO_PYTHON_BINDINGS
             if constexpr (std::is_same_v<Args2, py::args>) {
                 optprobs[i] = genfuncs[gfidx](*args[i]);
             } else {
                 optprobs[i] = genfuncs[gfidx](args[i]);
             }
+#else
+            optprobs[i] = genfuncs[gfidx](args[i]);
+#endif
 
             return optprobs[i]->jet_run();
         };
@@ -174,6 +178,7 @@ struct Jet {
     }
     ////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m) {
 
         auto obj = py::class_<Jet>(m, "Jet");
@@ -207,6 +212,7 @@ struct Jet {
                bool v) { return Jet::map(genfun, args, nt, v); },
             py::call_guard<py::gil_scoped_release>());
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

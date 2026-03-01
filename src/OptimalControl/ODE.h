@@ -38,6 +38,7 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         this->setPVars(pv);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<Derived>(m, name).def(py::init<Ts...>());
         Base::DenseBaseBuild(obj);
@@ -46,6 +47,7 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         });
         Integrator<Derived>::BuildConstructors(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 #define BUILD_ODE_FROM_EXPRESSION(NAME, IMPL, ...)                                                 \
@@ -64,6 +66,7 @@ struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
         return Integrator<Derived>(this->derived(), dstep);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void BuildODEModule(const char *name, py::module &mod, FunctionRegistry &reg) {
         auto odemod = mod.def_submodule(name);
         reg.template Build_Register<Derived>(odemod, "ode");
@@ -74,6 +77,7 @@ struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
     static void BuildODEModule(const char *name, FunctionRegistry &reg) {
         BuildODEModule(name, reg.mod, reg);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <class BaseType, int _XV, int _UV, int _PV>
@@ -108,6 +112,7 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
     GenericODE(BaseType f, int xv) : GenericODE(f, xv, 0, 0) {}
     GenericODE(BaseType f) : GenericODE(f, _XV, _UV, _PV) {}
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void BuildGenODEModule(const char *name, py::module &mod, FunctionRegistry &reg) {
         using Derived = GenericODE<BaseType, _XV, _UV, _PV>;
         auto odemod = mod.def_submodule(name);
@@ -162,6 +167,7 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
             return GenericFunction<-1, -1>(shooter);
         });
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <int XV, int UV, int PV>

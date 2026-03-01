@@ -25,7 +25,9 @@
 #include "Norms.h"
 #include "Padded.h"
 #include "ParsedInput.h"
+#ifdef TYCHO_PYTHON_BINDINGS
 #include "PythonFunctions.h"
+#endif
 #include "RootFinder.h"
 #include "Scaled.h"
 #include "Segment.h"

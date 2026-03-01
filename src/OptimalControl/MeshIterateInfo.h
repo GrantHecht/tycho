@@ -122,6 +122,7 @@ struct MeshIterateInfo {
         fmt::print("{:<8}|\n", this->up_numsegs);
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m) {
         auto obj = py::class_<MeshIterateInfo>(m, "MeshIterateInfo");
 
@@ -134,6 +135,7 @@ struct MeshIterateInfo {
         obj.def_readonly("numsegs", &MeshIterateInfo::numsegs);
         obj.def_readonly("converged", &MeshIterateInfo::converged);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

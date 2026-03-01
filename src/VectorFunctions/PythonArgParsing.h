@@ -3,6 +3,8 @@
 #include "CommonFunctions/ExpressionFwdDeclarations.h"
 #include "pch.h"
 
+#ifdef TYCHO_PYTHON_BINDINGS
+
 namespace Tycho {
 
 /*
@@ -20,3 +22,5 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(py::args x, int irows = 0);
 std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(py::args x, int irows = 0);
 
 } // namespace Tycho
+
+#endif // TYCHO_PYTHON_BINDINGS

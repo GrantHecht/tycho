@@ -177,7 +177,9 @@ struct OptimizationProblem : OptimizationProblemBase {
         return this->optimizer->ConvergeFlag;
     }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m);
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

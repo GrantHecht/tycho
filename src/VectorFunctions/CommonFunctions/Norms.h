@@ -54,6 +54,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     IntegralNorm_Impl() {}
     IntegralNorm_Impl(int ir) { this->setIORows(ir, 1); }
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<Derived>(m, name);
         obj.def(py::init<int>());
@@ -62,6 +63,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         }
         Base::DenseBaseBuild(obj);
     }
+#endif // TYCHO_PYTHON_BINDINGS
 
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;

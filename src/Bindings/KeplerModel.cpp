@@ -1,4 +1,4 @@
-#include "KeplerModel.h"
+#include "Astro/KeplerModel.h"
 
 void Tycho::BuildKeplerMod(FunctionRegistry &reg, py::module &m) {
     auto odemod = m.def_submodule("Kepler");

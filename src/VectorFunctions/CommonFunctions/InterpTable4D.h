@@ -2976,6 +2976,7 @@ struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, Analytic, Analy
     }
 };
 
+#ifdef TYCHO_PYTHON_BINDINGS
 static void InterpTable4DBuild(py::module &m) {
 
     auto obj = py::class_<InterpTable4D, std::shared_ptr<InterpTable4D>>(m, "InterpTable4D");
@@ -3095,5 +3096,6 @@ static void InterpTable4DBuild(py::module &m) {
               return tmp;
           });
 }
+#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

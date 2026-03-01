@@ -234,6 +234,7 @@ template <class FuncType> struct LinkFunction {
 
     LinkFunction() {}
 
+#ifdef TYCHO_PYTHON_BINDINGS
     static void Build(py::module &m, const char *name) {
         auto obj = py::class_<LinkFunction<FuncType>>(m, name);
 
@@ -246,6 +247,7 @@ template <class FuncType> struct LinkFunction {
                          std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
                          std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
     }
+#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho
