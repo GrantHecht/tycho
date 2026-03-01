@@ -1,7 +1,7 @@
 #include "Tycho_VectorFunctions.h"
 
 namespace Tycho {
-void VectorFunctionBuildPart1(FunctionRegistry &reg, py::module &m) {
+void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 

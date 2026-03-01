@@ -4,7 +4,7 @@
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS
-void LambertSolversBuild(FunctionRegistry &reg, py::module &m);
+void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
 /*

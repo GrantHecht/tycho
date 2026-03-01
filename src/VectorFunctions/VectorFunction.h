@@ -26,10 +26,7 @@ struct VectorExpression
     VectorExpression() {};
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name).def(py::init<Ts...>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     /////////////////////////////////////
@@ -46,10 +43,7 @@ struct VectorExpression<Derived, ExprImpl>
     VectorExpression() : Base(ExprImpl::Definition()) {}
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name).def(py::init<>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     /////////////////////////////////////
@@ -63,3 +57,9 @@ struct VectorExpression<Derived, ExprImpl>
     };
 
 } // namespace Tycho
+
+// Out-of-class template definitions for VectorExpression::Build().
+// Must be included after the class definitions so all types are complete.
+#ifdef TYCHO_PYTHON_BINDINGS
+#include "Bindings/VectorFunctionBind.h"
+#endif

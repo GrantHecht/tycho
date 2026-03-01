@@ -26,7 +26,7 @@ struct Kepler : ODE_Expression<Kepler, Kepler_Impl, double> {
     Kepler(double mu) : Base(mu) { this->mu = mu; }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name);
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 
@@ -56,18 +56,12 @@ struct KeplerPhase : ODEPhase<Kepler> {
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m) {
-        auto phase =
-            py::class_<KeplerPhase, std::shared_ptr<KeplerPhase>, ODEPhaseBase>(m, "phase");
-        BuildImpl(phase);
-        phase.def_readwrite("integrator", &KeplerPhase::integrator);
-        phase.def_readwrite("UseKeplerPropagator", &KeplerPhase::UseKeplerPropagator);
-    }
+    static void Build(nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 
 #ifdef TYCHO_PYTHON_BINDINGS
-void BuildKeplerMod(FunctionRegistry &reg, py::module &m);
+void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

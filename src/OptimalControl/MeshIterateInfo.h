@@ -123,17 +123,17 @@ struct MeshIterateInfo {
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m) {
-        auto obj = py::class_<MeshIterateInfo>(m, "MeshIterateInfo");
+    static void Build(nb::module_ &m) {
+        auto obj = nb::class_<MeshIterateInfo>(m, "MeshIterateInfo");
 
-        obj.def_readonly("times", &MeshIterateInfo::times);
-        obj.def_readonly("error", &MeshIterateInfo::error);
-        obj.def_readonly("distribution", &MeshIterateInfo::distribution);
-        obj.def_readonly("distintegral", &MeshIterateInfo::distintegral);
-        obj.def_readonly("avg_error", &MeshIterateInfo::avg_error);
-        obj.def_readonly("max_error", &MeshIterateInfo::max_error);
-        obj.def_readonly("numsegs", &MeshIterateInfo::numsegs);
-        obj.def_readonly("converged", &MeshIterateInfo::converged);
+        obj.def_ro("times", &MeshIterateInfo::times);
+        obj.def_ro("error", &MeshIterateInfo::error);
+        obj.def_ro("distribution", &MeshIterateInfo::distribution);
+        obj.def_ro("distintegral", &MeshIterateInfo::distintegral);
+        obj.def_ro("avg_error", &MeshIterateInfo::avg_error);
+        obj.def_ro("max_error", &MeshIterateInfo::max_error);
+        obj.def_ro("numsegs", &MeshIterateInfo::numsegs);
+        obj.def_ro("converged", &MeshIterateInfo::converged);
     }
 #endif // TYCHO_PYTHON_BINDINGS
 };

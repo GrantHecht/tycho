@@ -125,7 +125,7 @@ struct OptimizationProblemBase {
     void setJetJobMode(const std::string &str) { this->setJetJobMode(strto_JetJobMode(str)); }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m);
+    static void Build(nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 

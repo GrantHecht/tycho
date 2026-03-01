@@ -15,12 +15,7 @@ struct NestedFunction
     using Base::Base;
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<NestedFunction<OuterFunc, InnerFunc>>(m, name);
-        obj.def(py::init<>());
-        obj.def(py::init<OuterFunc, InnerFunc>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 

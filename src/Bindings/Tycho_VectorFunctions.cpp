@@ -1,15 +1,33 @@
 #include "Tycho_VectorFunctions.h"
 
 #include "CommonFunctions/IOScaled.h"
+
+// Out-of-class definition for IOScaled<Func>::Build — must come after IOScaled.h
+// and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
+namespace Tycho {
+template <class Func>
+void IOScaled<Func>::Build(nb::module_ &m, const char *name) {
+    auto obj = nb::class_<IOScaled<Func>>(m, name);
+    obj.def(nb::init<Func, const Input<double> &, const Output<double> &>());
+    Base::DenseBaseBuild(obj);
+}
+} // namespace Tycho
+
 #include "CommonFunctions/InterpTable1D.h"
 #include "CommonFunctions/InterpTable2D.h"
 #include "CommonFunctions/InterpTable3D.h"
 #include "CommonFunctions/InterpTable4D.h"
 #include "Utils/fmtlib.h"
 
+// Out-of-class definitions for InterpTable binding functions.
+// Included here after all InterpTable headers so all types are complete.
+#ifdef TYCHO_PYTHON_BINDINGS
+#include "InterpTableBind.h"
+#endif
+
 namespace Tycho {} // namespace Tycho
 
-void Tycho::VectorFunctionBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &mod = reg.getVectorFunctionsModule();
 
     using Gen = GenericFunction<-1, -1>;
@@ -22,7 +40,7 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, py::module &m) {
     //////////////////////////////////
     Gen::GenericBuild(reg.vfuncx);
     GenS::GenericBuild(reg.sfuncx);
-    py::implicitly_convertible<GenS, Gen>();
+    nb::implicitly_convertible<GenS, Gen>();
     VectorFunctionBuildPart1(reg, mod);
     VectorFunctionBuildPart2(reg, mod);
     ////////////////////////////////////

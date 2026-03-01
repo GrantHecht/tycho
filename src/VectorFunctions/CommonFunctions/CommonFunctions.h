@@ -25,9 +25,6 @@
 #include "Norms.h"
 #include "Padded.h"
 #include "ParsedInput.h"
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "PythonFunctions.h"
-#endif
 #include "RootFinder.h"
 #include "Scaled.h"
 #include "Segment.h"
@@ -38,3 +35,9 @@
 #include "VectorProducts.h"
 #include "VectorScalarFunctionDivision.h"
 #include "VectorScalarFunctionProduct.h"
+
+// Out-of-class template definitions for CommonFunctions binding Build() / SegBuild() methods.
+// Must be included after all CommonFunction headers so all types are complete.
+#ifdef TYCHO_PYTHON_BINDINGS
+#include "../../Bindings/CommonFunctionsBind.h"
+#endif

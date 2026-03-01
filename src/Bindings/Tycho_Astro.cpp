@@ -1,7 +1,7 @@
 #include "Astro/Tycho_Astro.h"
 
 #include "Astro/CR3BPModel.h"
-void Tycho::AstroBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto mod = m.def_submodule("Astro");
 
     BuildKeplerMod(reg, mod);

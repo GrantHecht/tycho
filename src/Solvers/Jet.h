@@ -113,7 +113,7 @@ struct Jet {
 
             int gfidx = genfidxes[i];
 #ifdef TYCHO_PYTHON_BINDINGS
-            if constexpr (std::is_same_v<Args2, py::args>) {
+            if constexpr (std::is_same_v<Args2, nb::args>) {
                 optprobs[i] = genfuncs[gfidx](*args[i]);
             } else {
                 optprobs[i] = genfuncs[gfidx](args[i]);
@@ -179,38 +179,38 @@ struct Jet {
     ////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m) {
+    static void Build(nb::module_ &m) {
 
-        auto obj = py::class_<Jet>(m, "Jet");
+        auto obj = nb::class_<Jet>(m, "Jet");
 
         obj.def_static(
             "map",
             [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt) {
                 return Jet::map(optprobs, nt, true);
             },
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
 
         obj.def_static(
             "map",
-            [](std::function<std::shared_ptr<OptimizationProblemBase>(py::detail::args_proxy)>
+            [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)>
                    genfun,
-               const std::vector<py::args> &args,
+               const std::vector<nb::args> &args,
                int nt) { return Jet::map(genfun, args, nt, true); },
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
 
         obj.def_static(
             "map",
             [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt,
                bool v) { return Jet::map(optprobs, nt, v); },
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
 
         obj.def_static(
             "map",
-            [](std::function<std::shared_ptr<OptimizationProblemBase>(py::detail::args_proxy)>
+            [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)>
                    genfun,
-               const std::vector<py::args> &args, int nt,
+               const std::vector<nb::args> &args, int nt,
                bool v) { return Jet::map(genfun, args, nt, v); },
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
     }
 #endif // TYCHO_PYTHON_BINDINGS
 };

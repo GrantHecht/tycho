@@ -153,25 +153,25 @@ static ControlModes strto_ControlMode(const std::string &str) {
 }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-static void OCPFlagsBuild(py::module &m) {
-    py::enum_<TranscriptionModes>(m, "TranscriptionModes")
+static void OCPFlagsBuild(nb::module_ &m) {
+    nb::enum_<TranscriptionModes>(m, "TranscriptionModes")
         .value("LGL3", TranscriptionModes::LGL3)
         .value("LGL5", TranscriptionModes::LGL5)
         .value("LGL7", TranscriptionModes::LGL7)
         .value("Trapezoidal", TranscriptionModes::Trapezoidal)
         .value("CentralShooting", TranscriptionModes::CentralShooting);
 
-    py::enum_<IntegralModes>(m, "IntegralModes")
+    nb::enum_<IntegralModes>(m, "IntegralModes")
         .value("BaseIntegral", IntegralModes::BaseIntegral)
         .value("TrapIntegral", IntegralModes::TrapIntegral);
 
-    py::enum_<ControlModes>(m, "ControlModes")
+    nb::enum_<ControlModes>(m, "ControlModes")
         .value("HighestOrderSpline", ControlModes::HighestOrderSpline)
         .value("FirstOrderSpline", ControlModes::FirstOrderSpline)
         .value("NoSpline", ControlModes::NoSpline)
         .value("BlockConstant", ControlModes::BlockConstant);
 
-    py::enum_<PhaseRegionFlags>(m, "PhaseRegionFlags")
+    nb::enum_<PhaseRegionFlags>(m, "PhaseRegionFlags")
         .value("Front", PhaseRegionFlags::Front)
         .value("Back", PhaseRegionFlags::Back)
         .value("Path", PhaseRegionFlags::Path)
@@ -184,7 +184,7 @@ static void OCPFlagsBuild(py::module &m) {
         .value("StaticParams", PhaseRegionFlags::StaticParams)
         .value("PairWisePath", PhaseRegionFlags::PairWisePath);
 
-    py::enum_<LinkFlags>(m, "LinkFlags")
+    nb::enum_<LinkFlags>(m, "LinkFlags")
         .value("BackToFront", LinkFlags::BackToFront)
         .value("BackToBack", LinkFlags::BackToBack)
         .value("FrontToBack", LinkFlags::FrontToBack)
@@ -196,7 +196,7 @@ static void OCPFlagsBuild(py::module &m) {
         .value("FrontTwoToTwoBack", LinkFlags::FrontTwoToTwoBack);
 
     m.def("strto_PhaseRegionFlag",
-          py::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
+          nb::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
 }
 #endif // TYCHO_PYTHON_BINDINGS
 

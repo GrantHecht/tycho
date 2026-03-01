@@ -23,7 +23,7 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
 
 } // namespace Tycho
 
-void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using SEG = Segment<-1, -1, -1>;
@@ -34,14 +34,14 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
 
     m.def("stack", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
     m.def("stack", [](const std::vector<Gen> &elems) { return DynamicStack(elems); });
-    m.def("stack", [](const Gen &first, py::args x) {
+    m.def("stack", [](const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
         auto funcsrest = ParsePythonArgs(x, first.IRows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
     });
-    m.def("stack", [](double first, py::args x) {
+    m.def("stack", [](double first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
         Vector1<double> val;
         val[0] = first;
@@ -50,7 +50,7 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
             funcs.push_back(f);
         return DynamicStack(funcs);
     });
-    m.def("stack", [](Eigen::VectorXd first, py::args x) {
+    m.def("stack", [](Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
         auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
         for (const auto &f : funcsrest)
@@ -59,14 +59,14 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
     });
     ///////////////////////////////////////////////////////
     m.def("stack_scalar", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
-    m.def("stack_scalar", [](const GenS &first, py::args x) {
+    m.def("stack_scalar", [](const GenS &first, nb::args x) {
         auto funcs = std::vector{first};
         auto funcsrest = ParsePythonArgsScalar(x, first.IRows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
     });
-    m.def("stack_scalar", [](double first, py::args x) {
+    m.def("stack_scalar", [](double first, nb::args x) {
         auto funcsrest = ParsePythonArgsScalar(x);
         Vector1<double> val;
         val[0] = first;
@@ -80,14 +80,14 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
     m.def("sum", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
     m.def("sum", [](const std::vector<Gen> &elems) { return DynamicSum(elems); });
 
-    m.def("sum", [](const GenS &first, py::args x) {
+    m.def("sum", [](const GenS &first, nb::args x) {
         auto funcs = std::vector{first};
         auto funcsrest = ParsePythonArgsScalar(x);
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicSum(funcs);
     });
-    m.def("sum", [](double first, py::args x) {
+    m.def("sum", [](double first, nb::args x) {
         auto funcsrest = ParsePythonArgsScalar(x);
         Vector1<double> val;
         val[0] = first;
@@ -97,7 +97,7 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
         return DynamicSum(funcs);
     });
 
-    m.def("sum", [](const Gen &first, py::args x) {
+    m.def("sum", [](const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
         auto funcsrest = ParsePythonArgs(x);
         for (const auto &f : funcsrest)
@@ -105,7 +105,7 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, py::module &m) {
         return DynamicSum(funcs);
     });
 
-    m.def("sum", [](Eigen::VectorXd first, py::args x) {
+    m.def("sum", [](Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
         auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
         for (const auto &f : funcsrest)

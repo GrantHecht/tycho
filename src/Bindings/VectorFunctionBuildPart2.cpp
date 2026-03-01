@@ -2,7 +2,7 @@
 
 namespace Tycho {
 
-template <class FType> void DefineListEval(py::class_<FType> &obj) {
+template <class FType> void DefineListEval(nb::class_<FType> &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 
@@ -13,7 +13,7 @@ template <class FType> void DefineListEval(py::class_<FType> &obj) {
         return FType(fun.eval(DynamicStack(funcs)));
     });
 
-    obj.def("__call__", [](const FType &fun, const Gen &first, py::args x) {
+    obj.def("__call__", [](const FType &fun, const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
         auto funcsrest = ParsePythonArgs(x, first.IRows());
         for (const auto &f : funcsrest)
@@ -21,7 +21,7 @@ template <class FType> void DefineListEval(py::class_<FType> &obj) {
         return FType(fun.eval(DynamicStack(funcs)));
     });
 
-    obj.def("__call__", [](const FType &fun, double first, py::args x) {
+    obj.def("__call__", [](const FType &fun, double first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
         Vector1<double> val;
         val[0] = first;
@@ -31,7 +31,7 @@ template <class FType> void DefineListEval(py::class_<FType> &obj) {
         return FType(fun.eval(DynamicStack(funcs)));
     });
 
-    obj.def("__call__", [](const FType &fun, Eigen::VectorXd first, py::args x) {
+    obj.def("__call__", [](const FType &fun, Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
         auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
         for (const auto &f : funcsrest)
@@ -40,7 +40,7 @@ template <class FType> void DefineListEval(py::class_<FType> &obj) {
     });
 }
 
-void VectorFunctionBuildPart2(FunctionRegistry &reg, py::module &m) {
+void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 

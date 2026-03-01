@@ -1,37 +1,42 @@
 #include "OptimizationProblemBase.h"
 
-void Tycho::OptimizationProblemBase::Build(py::module &m) {
-    auto obj = py::class_<OptimizationProblemBase, std::shared_ptr<OptimizationProblemBase>>(
+void Tycho::OptimizationProblemBase::Build(nb::module_ &m) {
+    auto obj = nb::class_<OptimizationProblemBase>(
         m, "OptimizationProblemBase");
-    obj.def_readwrite("JetJobMode", &OptimizationProblemBase::JetJobMode);
-    obj.def_readwrite("Threads", &OptimizationProblemBase::Threads);
-    obj.def_readonly("optimizer", &OptimizationProblemBase::optimizer);
+    // JetJobMode is stored as int internally; expose it with the enum type so that
+    // Python code can assign JetJobModes values (matching pybind11 behaviour).
+    obj.def_prop_rw(
+        "JetJobMode",
+        [](const OptimizationProblemBase &self) { return (JetJobModes)self.JetJobMode; },
+        [](OptimizationProblemBase &self, JetJobModes v) { self.JetJobMode = (int)v; });
+    obj.def_rw("Threads", &OptimizationProblemBase::Threads);
+    obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
 
-    obj.def("setThreads", py::overload_cast<int, int>(&OptimizationProblemBase::setThreads),
-            py::arg("FuncThreads"), py::arg("KKTThreads"));
+    obj.def("setThreads", nb::overload_cast<int, int>(&OptimizationProblemBase::setThreads),
+            nb::arg("FuncThreads"), nb::arg("KKTThreads"));
 
-    obj.def("setThreads", py::overload_cast<int>(&OptimizationProblemBase::setThreads));
+    obj.def("setThreads", nb::overload_cast<int>(&OptimizationProblemBase::setThreads));
 
     obj.def("setJetJobMode",
-            py::overload_cast<JetJobModes>(&OptimizationProblemBase::setJetJobMode));
+            nb::overload_cast<JetJobModes>(&OptimizationProblemBase::setJetJobMode));
     obj.def("setJetJobMode",
-            py::overload_cast<const std::string &>(&OptimizationProblemBase::setJetJobMode));
+            nb::overload_cast<const std::string &>(&OptimizationProblemBase::setJetJobMode));
 
-    obj.def("solve", &OptimizationProblemBase::solve, py::call_guard<py::gil_scoped_release>());
+    obj.def("solve", &OptimizationProblemBase::solve, nb::call_guard<nb::gil_scoped_release>());
     obj.def("optimize", &OptimizationProblemBase::optimize,
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
     obj.def("solve_optimize", &OptimizationProblemBase::solve_optimize,
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
     obj.def("solve_optimize_solve", &OptimizationProblemBase::solve_optimize_solve,
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
     obj.def("optimize_solve", &OptimizationProblemBase::optimize_solve,
-            py::call_guard<py::gil_scoped_release>());
+            nb::call_guard<nb::gil_scoped_release>());
 
     /// <summary>
     /// Probably need to move these enums somewhere else
     /// </summary>
     /// <param name="m"></param>
-    py::enum_<JetJobModes>(m, "JetJobModes")
+    nb::enum_<JetJobModes>(m, "JetJobModes")
         .value("DoNothing", JetJobModes::DoNothing)
         .value("NotSet", JetJobModes::NotSet)
         .value("Solve", JetJobModes::Solve)

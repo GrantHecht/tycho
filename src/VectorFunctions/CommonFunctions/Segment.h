@@ -15,20 +15,7 @@ template <int IR_OR> struct Arguments : Segment_Impl<Arguments<IR_OR>, IR_OR, IR
     Arguments(int iror) : Base(iror, iror, 0) {}
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Arguments<IR_OR>>(m, name);
-        obj.def(py::init<int>());
-        obj.def("Constant", [](const Arguments<IR_OR> &a, Eigen::VectorXd v) {
-            return GenericFunction<-1, -1>(Constant<-1, -1>(a.IRows(), v));
-        });
-        obj.def("Constant", [](const Arguments<IR_OR> &a, double v) {
-            Eigen::Matrix<double, 1, 1> vv;
-            vv[0] = v;
-            return GenericFunction<-1, 1>(Constant<-1, 1>(a.IRows(), vv));
-        });
-        Base::DenseBaseBuild(obj);
-        Base::SegBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 template <int IR, int OR, int ST> struct Segment : Segment_Impl<Segment<IR, OR, ST>, IR, OR, ST> {
@@ -36,12 +23,7 @@ template <int IR, int OR, int ST> struct Segment : Segment_Impl<Segment<IR, OR, 
     using Base::Base;
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Segment<IR, OR, ST>>(m, name);
-        obj.def(py::init<int, int, int>());
-        Base::DenseBaseBuild(obj);
-        Base::SegBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 
@@ -303,66 +285,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    template <class PyClass> static void SegBuild(PyClass &obj) {
-        using Gen = GenericFunction<-1, -1>;
-        using GenS = GenericFunction<-1, 1>;
-
-        Base::DoubleMathBuild(obj);
-        Base::UnaryMathBuild(obj);
-        Base::BinaryMathBuild(obj);
-        Base::BinaryOperatorsBuild(obj);
-        Base::FunctionIndexingBuild(obj);
-        Base::ConditionalOperatorsBuild(obj);
-
-        obj.def("tolist", [](const Derived &func) {
-            using ELEM = Segment<-1, 1, -1>;
-            std::vector<ELEM> elems;
-            for (int i = 0; i < func.ORows(); i++) {
-                elems.push_back(func.coeff(i));
-            }
-            return elems;
-        });
-
-        obj.def("tolist", [](const Derived &func, std::vector<int> coeffs) {
-            using ELEM = Segment<-1, 1, -1>;
-            std::vector<ELEM> elems;
-            for (const auto &coeff : coeffs) {
-                elems.push_back(func.coeff(coeff));
-            }
-            return elems;
-        });
-
-        obj.def("tolist", [](const Derived &func, std::vector<std::tuple<int, int>> seglist) {
-            using ELEM = Segment<-1, 1, -1>;
-            using SEG2 = Segment<-1, 2, -1>;
-            using SEG3 = Segment<-1, 3, -1>;
-            using SEG = Segment<-1, -1, -1>;
-
-            std::vector<py::object> segs;
-            for (const auto &seg : seglist) {
-
-                int start = std::get<0>(seg);
-                int size = std::get<1>(seg);
-                py::object pyfun;
-                if (size == 1) {
-                    auto f = func.coeff(start);
-                    pyfun = py::cast(f);
-                } else if (size == 2) {
-                    auto f = func.template segment<2>(start);
-                    pyfun = py::cast(f);
-                } else if (size == 3) {
-                    auto f = func.template segment<3>(start);
-                    pyfun = py::cast(f);
-                } else {
-                    auto f = func.segment(start, size);
-                    pyfun = py::cast(f);
-                }
-
-                segs.push_back(pyfun);
-            }
-            return segs;
-        });
-    }
+    template <class PyClass> static void SegBuild(PyClass &obj);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 

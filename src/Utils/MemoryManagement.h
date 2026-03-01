@@ -289,7 +289,7 @@ struct MemoryManager {
     static int size_super_scalar() { return MemoryManager::SuperScalarStack.size(); }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m);
+    static void Build(nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
   private:

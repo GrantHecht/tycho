@@ -178,7 +178,7 @@ struct OptimizationProblem : OptimizationProblemBase {
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m);
+    static void Build(nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 };
 

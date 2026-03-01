@@ -1,7 +1,7 @@
 #include "Astro/LambertSolvers.h"
 #include "FunctionRegistry.h"
 
-void Tycho::LambertSolversBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     m.def("lambert_izzo",
           [](const Vector3<double> &R1, const Vector3<double> &R2, double dt, double mu,

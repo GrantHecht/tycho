@@ -150,11 +150,7 @@ struct TwoFunctionSum_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::I
     bool is_linear() const { return func1.is_linear() && func2.is_linear(); }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name);
-        obj.def(py::init<Func1, Func2>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     template <class InType, class OutType>

@@ -16,7 +16,7 @@
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS
-void SolversBuild(FunctionRegistry &reg, py::module &m) {
+void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
     // auto sol = m.def_submodule("Solvers","SubModule Containing PSIOPT,NLP, and Solver Flags");
 
     auto &sol = reg.getSolversModule();

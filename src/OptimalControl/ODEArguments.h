@@ -14,12 +14,12 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
     ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
+    static void Build(nb::module_ &m, const char *name) {
         using Derived = ODEArguments<_XV, _UV, _PV>;
-        auto obj = py::class_<ODEArguments<_XV, _UV, _PV>, Base>(m, name);
-        obj.def(py::init<int, int, int>());
-        obj.def(py::init<int, int>());
-        obj.def(py::init<int>());
+        auto obj = nb::class_<ODEArguments<_XV, _UV, _PV>, Base>(m, name);
+        obj.def(nb::init<int, int, int>());
+        obj.def(nb::init<int, int>());
+        obj.def(nb::init<int>());
 
         Base::DenseBaseBuild(obj);
 

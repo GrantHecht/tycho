@@ -91,9 +91,8 @@ void SoftwareInfo() {
     fmt::print(fmt::fg(fmt::color::white), "  ASSET    :Apache 2.0 | Copyright (c) 2020-present "
                                            "The University of Alabama-Astrodynamics "
                                            "and Space Research Lab\n");
-    fmt::print(fmt::fg(fmt::color::white), "  Pybind11 :Modified BSD | Copyright (c) 2016 Wenzel "
-                                           "Jakob <wenzel.jakob@epfl.ch>, All rights "
-                                           "reserved.\n");
+    fmt::print(fmt::fg(fmt::color::white),
+               "  nanobind :BSD | Copyright (c) 2022 Wenzel Jakob <wenzel.jakob@epfl.ch>\n");
     fmt::print(
         fmt::fg(fmt::color::white),
         "  Intel MKL:Intel Simplified Software License (Version October 2022) | Copyright (c) 2022 "
@@ -124,7 +123,7 @@ int main() {
     return 0;
 }
 
-PYBIND11_MODULE(_tycho, m) {
+NB_MODULE(_tycho, m) {
 
     Tycho::enable_color_console(); // This only does something on windows
 

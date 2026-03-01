@@ -9,7 +9,7 @@ namespace Tycho {
 /// </summary>
 /// <param name="reg"></param>
 /// <param name="m"></param>
-void KeplerUtilsBuild(FunctionRegistry &reg, py::module &m);
+void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
 ////////////////////////////////////////////////////////////////////////////////////////

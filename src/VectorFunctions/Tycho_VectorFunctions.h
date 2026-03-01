@@ -7,8 +7,10 @@
 #include "VectorFunctionTypeErasure/GenericConditional.h"
 #include "VectorFunctionTypeErasure/GenericFunction.h"
 #ifdef TYCHO_PYTHON_BINDINGS
-#include "PythonArgParsing.h"
+#include "Bindings/PythonArgParsing.h"
 #include "Bindings/FunctionRegistry.h"
+#include "Bindings/PythonFunctions.h"
+#include "Bindings/GenericFunctionBind.h"
 #endif
 
 namespace Tycho {
@@ -24,23 +26,23 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
 /// </summary>
 /// <param name="reg"></param>
 /// <param name="m"></param>
-void VectorFunctionBuild(FunctionRegistry &reg, py::module &m);
+void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
 
-void VectorFunctionBuildPart1(FunctionRegistry &reg, py::module &m);
-void VectorFunctionBuildPart2(FunctionRegistry &reg, py::module &m);
-void ArgsSegBuildPart1(FunctionRegistry &reg, py::module &m);
-void ArgsSegBuildPart2(FunctionRegistry &reg, py::module &m);
-void ArgsSegBuildPart3(FunctionRegistry &reg, py::module &m);
-void ArgsSegBuildPart4(FunctionRegistry &reg, py::module &m);
-void ArgsSegBuildPart5(FunctionRegistry &reg, py::module &m);
+void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m);
+void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart1(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart2(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart3(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart4(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart5(FunctionRegistry &reg, nb::module_ &m);
 
-void BulkOperationsBuild(FunctionRegistry &reg, py::module &m);
+void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
 
-// std::vector<GenericFunction<-1, -1>> ParsePythonArgs(py::args x,int irows=0);
-// std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(py::args x,int irows=0);
+// std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x,int irows=0);
+// std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x,int irows=0);
 
-void FreeFunctionsBuild(FunctionRegistry &reg, py::module &m);
-void MatrixFunctionBuild(py::module &m);
+void FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m);
+void MatrixFunctionBuild(nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

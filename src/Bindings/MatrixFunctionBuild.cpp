@@ -2,7 +2,7 @@
 
 namespace Tycho {
 
-void MatrixFunctionBuild(py::module &m) {
+void MatrixFunctionBuild(nb::module_ &m) {
 
     using Gen = GenericFunction<-1, -1>;
     using Func = GenericFunction<-1, -1>;
@@ -12,10 +12,10 @@ void MatrixFunctionBuild(py::module &m) {
     using rowmattype = MatrixFunctionView<Func, -1, -1, Eigen::RowMajor>;
     using rowvectype = MatrixFunctionView<Func, 1, -1, Eigen::RowMajor>;
 
-    auto ColMat = py::class_<colmattype>(m, "ColMatrix");
+    auto ColMat = nb::class_<colmattype>(m, "ColMatrix");
 
-    ColMat.def(py::init<Func, int, int>());
-    ColMat.def(py::init([](const std::vector<Func> &colfuns) {
+    ColMat.def(nb::init<Func, int, int>());
+    ColMat.def("__init__", [](colmattype *self, const std::vector<Func> &colfuns) {
         int cols = colfuns.size();
         if (cols == 0) {
             throw std::invalid_argument("List must contain at least one function.");
@@ -25,8 +25,8 @@ void MatrixFunctionBuild(py::module &m) {
             if (fun.ORows() != rows)
                 throw std::invalid_argument("Column Functions must have same output size");
         auto tmp = DynamicStack(colfuns);
-        return std::make_unique<colmattype>(tmp, rows, cols);
-    }));
+        new (self) colmattype(tmp, rows, cols);
+    });
 
     ColMat.def("__mul__", [](const colmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<colmattype, colmattype>(m1, m2);
@@ -59,7 +59,7 @@ void MatrixFunctionBuild(py::module &m) {
         return colmattype(m1 + v, m1.MatrixRows, m1.MatrixCols);
     });
 
-    ColMat.attr("__array_ufunc__") = py::none();
+    ColMat.attr("__array_ufunc__") = nb::none();
 
     ColMat.def("__add__", [](const colmattype &m1, const colmattype &m2) {
         if (m1.MatrixRows != m2.MatrixRows || m1.MatrixCols != m2.MatrixCols) {
@@ -98,12 +98,11 @@ void MatrixFunctionBuild(py::module &m) {
 
     //////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////
-    auto RowMat = py::class_<rowmattype>(m, "RowMatrix");
+    auto RowMat = nb::class_<rowmattype>(m, "RowMatrix");
 
-    RowMat.def(py::init<Func, int, int>());
-    RowMat.def(py::init([](const std::vector<Func> &rowfuns) {
+    RowMat.def(nb::init<Func, int, int>());
+    RowMat.def("__init__", [](rowmattype *self, const std::vector<Func> &rowfuns) {
         int rows = rowfuns.size();
-
         if (rows == 0) {
             throw std::invalid_argument("List must contain at least one function.");
         }
@@ -112,8 +111,8 @@ void MatrixFunctionBuild(py::module &m) {
             if (fun.ORows() != cols)
                 throw std::invalid_argument("Row Functions must have same output size");
         auto tmp = DynamicStack(rowfuns);
-        return std::make_unique<rowmattype>(tmp, rows, cols);
-    }));
+        new (self) rowmattype(tmp, rows, cols);
+    });
 
     RowMat.def("__mul__", [](const rowmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<rowmattype, colmattype>(m1, m2);
@@ -140,7 +139,7 @@ void MatrixFunctionBuild(py::module &m) {
         return rowmattype(m1 + m2, m1.MatrixRows, m1.MatrixCols);
     });
 
-    RowMat.attr("__array_ufunc__") = py::none();
+    RowMat.attr("__array_ufunc__") = nb::none();
 
     RowMat.def("__add__", [](const rowmattype &m1, const Eigen::MatrixXd &mshift) {
         if (m1.MatrixRows != mshift.rows() || m1.MatrixCols != mshift.cols()) {

@@ -30,11 +30,7 @@ struct ParsedInput : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analy
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<ParsedInput<Func, IRC, ORC>>(m, name);
-        obj.def(py::init<Func, const Func_Input<int> &, int>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     template <class InType, class OutType>

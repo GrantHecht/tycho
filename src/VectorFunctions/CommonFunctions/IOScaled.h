@@ -31,11 +31,7 @@ struct IOScaled : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic>
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<IOScaled<Func>>(m, name);
-        obj.def(py::init<Func, const Input<double> &, const Output<double> &>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     template <class InType, class OutType>

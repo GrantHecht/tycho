@@ -244,8 +244,6 @@ include_directories(dep/autodiff)
 
 if(ENABLE_PYTHON_BINDINGS)
     find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
-    set(PYBIND11_CPP_STANDARD -std=c++17)
-    set(PYBIND11_FINDPYTHON ON)
     add_subdirectory(dep)
 endif()
 
@@ -295,11 +293,7 @@ if(ENABLE_PYTHON_BINDINGS)
 endif()
 
 # Set dependency variables
-if(ENABLE_PYTHON_BINDINGS)
-    set(INCLUDE_DIRS ${PYBIND11_INCLUDE_DIR} ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
-else()
-    set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
-endif()
+set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
 set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS} ${AccelerateSparse_LIBRARIES})
 
 # Handle OpenMP for Apple

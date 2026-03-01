@@ -19,13 +19,24 @@ oc = ast.OptimalControl
 Args = vf.Arguments
 
 
+def _apply_mixin(cls, *mixins):
+    """Copy non-dunder methods from mixins into cls.
+    Used to work around nanobind's single-base restriction for Python subclasses
+    of C++ extension types."""
+    for mixin in mixins:
+        for name, val in vars(mixin).items():
+            if not name.startswith("__"):
+                setattr(cls, name, val)
+    return cls
+
+
 ###############################################################################
 """
 Ballistic Models
 """
 
 
-class TwoBody(oc.ode_6.ode, TwoBodyFrame):
+class TwoBody(oc.ode_6.ode):
     def __init__(self, P1mu, lstar):
         TwoBodyFrame.__init__(self, P1mu, lstar)
         args = oc.ODEArguments(6, 0)
@@ -33,6 +44,9 @@ class TwoBody(oc.ode_6.ode, TwoBodyFrame):
         v = args.segment3(3)
         odeeq = self.TwoBodyEOMs(r, v, otherAccs=[], otherEOMs=[])
         oc.ode_6.ode.__init__(self, odeeq, 6)
+
+
+_apply_mixin(TwoBody, TwoBodyFrame)
 
 
 class NBody(ODEBase, TwoBodyFrame):
@@ -60,7 +74,7 @@ class NBody(ODEBase, TwoBodyFrame):
         ODEBase.__init__(self, odeeq, 6)
 
 
-class CR3BP(oc.ode_6.ode, CR3BPFrame):
+class CR3BP(oc.ode_6.ode):
     def __init__(self, P1mu, P2mu, lstar):
         CR3BPFrame.__init__(self, P1mu, P2mu, lstar)
         ###################################
@@ -70,6 +84,9 @@ class CR3BP(oc.ode_6.ode, CR3BPFrame):
         ode = self.CR3BPEOMs(r, v, otherAccs=[], otherEOMs=[])
         oc.ode_6.ode.__init__(self, ode, 6)
         ###################################
+
+
+_apply_mixin(CR3BP, CR3BPFrame)
 
 
 class EPPR(ODEBase, CR3BPFrame):

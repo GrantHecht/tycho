@@ -15,7 +15,7 @@
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS
-void UtilsBuild(py::module &m) {
+void UtilsBuild(nb::module_ &m) {
     auto um = m.def_submodule("Utils", "Contains miscilanaeous utilities");
     um.def("get_core_count", &Tycho::get_core_count);
 }

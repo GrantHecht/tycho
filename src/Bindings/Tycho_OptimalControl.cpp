@@ -5,7 +5,7 @@
 
 namespace Tycho {
 
-void OptimalControlBuild(FunctionRegistry &reg, py::module &m) {
+void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &oc = reg.getOptimalControlModule();
     RKFlagsBuild(oc);
     OCPFlagsBuild(oc);

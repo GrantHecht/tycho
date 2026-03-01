@@ -1,7 +1,7 @@
 #include "Tycho_VectorFunctions.h"
 
 namespace Tycho {
-void ArgsSegBuildPart3(FunctionRegistry &reg, py::module &m) {
+void ArgsSegBuildPart3(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using SEG = Segment<-1, -1, -1>;

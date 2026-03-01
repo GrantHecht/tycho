@@ -12,7 +12,7 @@
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS
-void AstroBuild(FunctionRegistry &reg, py::module &m);
+void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 
 }

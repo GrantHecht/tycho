@@ -2,10 +2,10 @@
 #include "CommonFunctions/RootFinder.h"
 namespace Tycho {
 
-template <class T> void UnaryVectorOpBuild(py::module &m) {
+template <class T> void UnaryVectorOpBuild(nb::module_ &m) {
 
     auto UnaryOpLam = [](const T &cfun, const char *name) {
-        py::object fun = py::cast(cfun);
+        nb::object fun = nb::cast(cfun);
         return fun.attr(name)();
     };
     m.def("norm", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "norm"); });
@@ -32,10 +32,10 @@ template <class T> void UnaryVectorOpBuild(py::module &m) {
           [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "normalized_power5"); });
 }
 
-template <class T> void UnaryScalarOpBuild(py::module &m) {
+template <class T> void UnaryScalarOpBuild(nb::module_ &m) {
 
     auto UnaryOpLam = [](const T &cfun, const char *name) {
-        py::object fun = py::cast(cfun);
+        nb::object fun = nb::cast(cfun);
         return fun.attr(name)();
     };
     m.def("sin", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "sin"); });
@@ -65,7 +65,7 @@ template <class T> void UnaryScalarOpBuild(py::module &m) {
     m.def("abs", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "__abs__"); });
 }
 
-void ProductBuild(py::module &m) {
+void ProductBuild(nb::module_ &m) {
 
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -83,8 +83,8 @@ void ProductBuild(py::module &m) {
     /////////////////////////////////////////////////////////////////////////////////////////////////////
 
     auto CrossOpLam = [](const auto &f1, const auto &f2) {
-        py::object fun1 = py::cast(f1);
-        py::object fun2 = py::cast(f2);
+        nb::object fun1 = nb::cast(f1);
+        nb::object fun2 = nb::cast(f2);
         return fun1.attr("cross")(fun2);
     };
 
@@ -134,8 +134,8 @@ void ProductBuild(py::module &m) {
     /////////////////////////////////////////////////////////////////////////////////////////////////////
 
     auto cwiseProductOpLam = [](const auto &f1, const auto &f2) {
-        py::object fun1 = py::cast(f1);
-        py::object fun2 = py::cast(f2);
+        nb::object fun1 = nb::cast(f1);
+        nb::object fun2 = nb::cast(f2);
         return fun1.attr("cwiseProduct")(fun2);
     };
 
@@ -204,8 +204,8 @@ void ProductBuild(py::module &m) {
     /////////////////////////////////////////////////////////////////////////////////////////////////////
 
     auto cwiseQuotientOpLam = [](const auto &f1, const auto &f2) {
-        py::object fun1 = py::cast(f1);
-        py::object fun2 = py::cast(f2);
+        nb::object fun1 = nb::cast(f1);
+        nb::object fun2 = nb::cast(f2);
         return fun1.attr("cwiseQuotient")(fun2);
     };
 
@@ -291,8 +291,8 @@ void ProductBuild(py::module &m) {
     /////////////////////////////////////////////////////////////////////////////////////////////////////
 
     auto dotOpLam = [](const auto &f1, const auto &f2) {
-        py::object fun1 = py::cast(f1);
-        py::object fun2 = py::cast(f2);
+        nb::object fun1 = nb::cast(f1);
+        nb::object fun2 = nb::cast(f2);
         return fun1.attr("dot")(fun2);
     };
 
@@ -344,7 +344,7 @@ struct QuatRotation {
 
 } // namespace Tycho
 
-void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, py::module &m) {
+void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 

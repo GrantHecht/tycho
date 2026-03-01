@@ -280,9 +280,9 @@ struct KeplerPropagator
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<KeplerPropagator>(m, name);
-        obj.def(py::init<double>());
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<KeplerPropagator>(m, name);
+        obj.def(nb::init<double>());
         Base::DenseBaseBuild(obj);
     }
 #endif // TYCHO_PYTHON_BINDINGS

@@ -134,12 +134,12 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Anal
     }
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<InterpFunction<OR>>(m, name);
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<InterpFunction<OR>>(m, name);
         if (OR == -1) {
-            obj.def(py::init<std::shared_ptr<LGLInterpTable>, Eigen::VectorXi>());
+            obj.def(nb::init<std::shared_ptr<LGLInterpTable>, Eigen::VectorXi>());
         } else {
-            obj.def(py::init<std::shared_ptr<LGLInterpTable>>());
+            obj.def(nb::init<std::shared_ptr<LGLInterpTable>>());
         }
 
         Base::DenseBaseBuild(obj);

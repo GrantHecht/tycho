@@ -2,7 +2,7 @@
 
 namespace Tycho {
 
-void GenericODESBuildPart1(FunctionRegistry &reg, py::module &m) {
+void GenericODESBuildPart1(FunctionRegistry &reg, nb::module_ &m) {
 
     PythonGenericODE<-1, 0, 0>::BuildGenODEModule("ode_x", m, reg);
     PythonGenericODE<-1, -1, 0>::BuildGenODEModule("ode_x_u", m, reg);

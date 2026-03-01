@@ -26,11 +26,7 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     Constant() {}
 
 #ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Constant<IR, OR>>(m, name);
-        obj.def(py::init<int, Output<double>>());
-        Base::DenseBaseBuild(obj);
-    }
+    static void Build(nb::module_ &m, const char *name);
 #endif // TYCHO_PYTHON_BINDINGS
 
     template <class InType, class OutType>

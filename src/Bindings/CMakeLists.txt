@@ -1,7 +1,10 @@
 # Add Bindings/ itself to the include path so FunctionRegistry.h resolves bare
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-# Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that pybind11 headers
+# Ensure nanobind-static exists before pch_bindings uses it
+nanobind_build_library(nanobind-static)
+
+# Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that nanobind headers
 # are baked into the precompiled header used by _tycho and its binding sources.
 add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
@@ -11,8 +14,9 @@ target_precompile_headers(pch_bindings PRIVATE
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
 target_include_directories(pch_bindings PRIVATE ${INCLUDE_DIRS})
 target_compile_options(pch_bindings PUBLIC ${COMPILE_FLAGS})
+target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
-pybind11_add_module(_tycho
+nanobind_add_module(_tycho
     TychoModule.cpp
     # VectorFunctions bindings
     Tycho_VectorFunctions.cpp
