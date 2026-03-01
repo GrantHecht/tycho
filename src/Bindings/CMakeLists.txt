@@ -1,6 +1,17 @@
 # Add Bindings/ itself to the include path so FunctionRegistry.h resolves bare
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that pybind11 headers
+# are baked into the precompiled header used by _tycho and its binding sources.
+add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
+target_precompile_headers(pch_bindings PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/pch.h
+    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/Tycho_VectorFunctions.h
+)
+target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
+target_include_directories(pch_bindings PRIVATE ${INCLUDE_DIRS})
+target_compile_options(pch_bindings PUBLIC ${COMPILE_FLAGS})
+
 pybind11_add_module(_tycho
     TychoModule.cpp
     # VectorFunctions bindings
@@ -26,15 +37,19 @@ pybind11_add_module(_tycho
     GenericODESBuildPart6.cpp
     ODEPhaseBaseBind.cpp
     OptimalControlProblemBind.cpp
+    LGLInterpTableBind.cpp
     # Solvers bindings
     OptimizationProblemBase.cpp
+    PSIOPTBind.cpp
+    OptimizationProblemBind.cpp
     # Astro bindings
     Tycho_Astro.cpp
     KeplerUtils.cpp
     KeplerModel.cpp
+    LambertSolversBind.cpp
+    # Utils bindings
+    MemoryManagerBind.cpp
 )
-# Note: MemoryManager::Build() is defined in Utils/MemoryManagement.cpp (guarded by
-# #ifdef TYCHO_PYTHON_BINDINGS) and pulled in via the 'utils' static library link below.
 
 target_compile_options(_tycho PUBLIC ${COMPILE_FLAGS})
 target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
@@ -45,7 +60,7 @@ target_link_libraries(_tycho PUBLIC vectorfunctions)
 target_link_libraries(_tycho PUBLIC astro)
 target_link_libraries(_tycho PUBLIC tycho_extensions)
 target_include_directories(_tycho PRIVATE ${INCLUDE_DIRS})
-target_precompile_headers(_tycho REUSE_FROM pch)
+target_precompile_headers(_tycho REUSE_FROM pch_bindings)
 
 if(UNIX)
     target_link_options(_tycho PRIVATE ${LINKER_FLAGS})

@@ -161,9 +161,6 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     //////////////////////////////////////////////////
 
     virtual void setUnits(const Eigen::VectorXd &XtUPUnits_) = 0;
-#ifdef TYCHO_PYTHON_BINDINGS
-    virtual void setUnits(const py::kwargs &);
-#endif // TYCHO_PYTHON_BINDINGS
 
     virtual void setControlMode(ControlModes m) {
         this->resetTranscription();

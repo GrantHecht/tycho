@@ -38,6 +38,7 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 # When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
 option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
+option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
 
 
 ################################################################################
@@ -330,8 +331,6 @@ if(ENABLE_PYTHON_BINDINGS)
         endif()
     endif()
 
-    # Define TYCHO_PYTHON_BINDINGS globally when building Python bindings
-    add_compile_definitions(TYCHO_PYTHON_BINDINGS)
 endif()
 
 if(UNIX)
@@ -343,12 +342,6 @@ endif()
 ################################################################################
 ################ Linker Flags ##################################################
 
-# Set linker for Clang after threading detection is complete
-if(NOT WIN32)
-  if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-      set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld")
-  endif()
-endif()
 
 if(BUILD_SHARED_LIBS AND NOT APPLE AND NOT WIN32)  # Windows and Linux Dynamic Linking
   list(APPEND LINKER_FLAGS "${OpenMP_CXX_FLAGS} -Wl,--no-undefined -Wl,--start-group ${MKL_LIBRARIES_LIST} -Wl, --end-group")
@@ -415,6 +408,10 @@ endif()
 
 if(ENABLE_PYTHON_BINDINGS)
     add_subdirectory(pypiwheel)
+endif()
+
+if(BUILD_CPP_EXAMPLES)
+    add_subdirectory(examples/cpp_examples)
 endif()
 
 # Formatting

@@ -10,6 +10,7 @@
 #include <array>
 #include <functional>
 #include <iostream>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <type_traits>

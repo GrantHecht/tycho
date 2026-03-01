@@ -1,5 +1,6 @@
 #include "OptimalControlProblem.h"
 #include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
+#include "TypeCasters.h"
 
 void Tycho::OptimalControlProblem::Build(py::module &m) {
     using namespace doc;
