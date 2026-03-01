@@ -1,5 +1,7 @@
 import inspect
 
+import numpy as np
+
 import _tycho as _tycho
 from _tycho.VectorFunctions import *
 
@@ -30,7 +32,13 @@ arctan = _tycho.VectorFunctions.arctan
 arctan2 = _tycho.VectorFunctions.arctan2
 cos = _tycho.VectorFunctions.cos
 cosh = _tycho.VectorFunctions.cosh
-cross = _tycho.VectorFunctions.cross
+_cross_cpp = _tycho.VectorFunctions.cross
+
+
+def cross(a, b):
+    if isinstance(a, (list, tuple)):
+        a = np.asarray(a, dtype=np.float64)
+    return _cross_cpp(a, b)
 cwiseProduct = _tycho.VectorFunctions.cwiseProduct
 cwiseQuotient = _tycho.VectorFunctions.cwiseQuotient
 dot = _tycho.VectorFunctions.dot

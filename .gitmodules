@@ -11,3 +11,6 @@
 [submodule "dep/autodiff"]
 	path = dep/autodiff
 	url = https://github.com/autodiff/autodiff
+[submodule "dep/nanobind"]
+	path = dep/nanobind
+	url = https://github.com/wjakob/nanobind
