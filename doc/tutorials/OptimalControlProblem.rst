@@ -11,7 +11,7 @@ As we walk through the :code:`OptimalControlPoblem` API, we will make use of the
 .. code-block:: python
 
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
 
     vf        = ast.VectorFunctions
     oc        = ast.OptimalControl

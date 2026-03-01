@@ -1,10 +1,11 @@
-import asset_asrl as ast
-from asset_asrl.Astro.AstroModels import CR3BP
-import asset_asrl.Astro.Constants as c
-import numpy as np
 import copy
-import matplotlib.pyplot as plt
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tycho as ast
+import tycho.Astro.Constants as c
+from tycho.Astro.AstroModels import CR3BP
 
 ################################################################################
 # Setup
@@ -17,8 +18,8 @@ tModes = oc.TranscriptionModes
 ################################################################################
 # Constants
 muE = c.MuEarth  # Earth gravitational parameter
-muM = c.MuMoon # Moon gravitational parameter
-lstar = c.LD #Earth-Moon characteristic distance (m)
+muM = c.MuMoon  # Moon gravitational parameter
+lstar = c.LD  # Earth-Moon characteristic distance (m)
 
 dt = 3.1415 / 10000
 
@@ -35,7 +36,7 @@ odeItg = ode.integrator(dt)
 
 ################################################################################
 # Solve for periodic orbit using initial guess ig
-def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2] ):
+def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
     # 1: Integrate initial guess
     steps = 1000
     trajGuess = odeItg.integrate_dense(ig, tf, steps)
@@ -49,10 +50,14 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2] ):
     for idx in fixInit:
         odePhase.addBoundaryValue("Front", [idx], [ig[idx]])
     odePhase.addBoundaryValue(
-        "Front", [3, 6], [0.0, 0.0]  # Initial y, vx, t = 0
+        "Front",
+        [3, 6],
+        [0.0, 0.0],  # Initial y, vx, t = 0
     )
     odePhase.addBoundaryValue(
-        "Back", [1, 3, 5], [0.0, 0.0, 0.0]  # Final y, vx = 0
+        "Back",
+        [1, 3, 5],
+        [0.0, 0.0, 0.0],  # Final y, vx = 0
     )
 
     # 4: Solve
@@ -64,6 +69,7 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2] ):
     trajSol = odePhase.returnTraj()
 
     return trajSol
+
 
 ################################################################################
 # Perform basic continuation of ig along x[cIdx] with step dx up to lim
@@ -81,7 +87,7 @@ def contin(ig, tf, cIdx, dx, lim, fixInit=[0, 1, 2]):
 
         # Increment the cIdx'th term
         g[cIdx] += dx
- 
+
         # Pass to solvePeriodic
         sol = solvePeriodic(g, t, ode, odeItg, fixInit)
 
@@ -94,39 +100,38 @@ def contin(ig, tf, cIdx, dx, lim, fixInit=[0, 1, 2]):
     return trajList
 
 
-
 ################################################################################
 # Use plotly to plot a list of trajectories
-def plotTrajList(tList, proj = False):
+def plotTrajList(tList, proj=False):
     data = []
     if proj == False:
-        fig, axes = plt.subplots(figsize = (8, 8))
+        fig, axes = plt.subplots(figsize=(8, 8))
         for t in tList:
-            axes.plot([x[0] for x in t], [x[1] for x in t], color = "red")
+            axes.plot([x[0] for x in t], [x[1] for x in t], color="red")
         axes.grid(True)
         plt.tight_layout()
         axes.set_xlabel("X")
         axes.set_ylabel("Y")
         plt.tight_layout()
-        plt.savefig("Plots/OrbitContinuation/Lyapunov.svg",
-                dpi = 500)
+        plt.savefig("Plots/OrbitContinuation/Lyapunov.svg", dpi=500)
         plt.show()
     elif proj == True:
-        fig2=plt.figure(figsize=(8,8))
-        axes = fig2.add_subplot(projection='3d')
-        
+        fig2 = plt.figure(figsize=(8, 8))
+        axes = fig2.add_subplot(projection="3d")
+
         for t in tList[::5]:
-            axes.plot3D([x[0] for x in t], [x[1] for x in t], [x[2] for x in t],
-                        color = "blue")
+            axes.plot3D(
+                [x[0] for x in t], [x[1] for x in t], [x[2] for x in t], color="blue"
+            )
         axes.set_xlabel("X")
         axes.set_ylabel("Y")
         axes.set_zlabel("Z")
-        
+
         plt.tight_layout()
-        plt.savefig("Plots/OrbitContinuation/Halo.svg",
-                dpi = 500)
+        plt.savefig("Plots/OrbitContinuation/Halo.svg", dpi=500)
         plt.show()
-    
+
+
 ################################################################################
 # Continuation - L1 Lyapunov
 ig = np.zeros((7))
@@ -162,4 +167,4 @@ for t in tl:
     t2 = [[x[0], -x[1], x[2]] for x in t]
     tlp.append(tt + t2)
 
-plotTrajList(tlp, proj = True)
+plotTrajList(tlp, proj=True)

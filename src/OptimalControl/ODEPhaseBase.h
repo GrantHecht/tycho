@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CommonFunctions/IOScaled.h"
+#include "InterfaceTypes.h"
 #include "LGLInterpTable.h"
 #include "MeshIterateInfo.h"
 #include "ODESizes.h"
@@ -9,16 +11,14 @@
 #include "Solvers/OptimizationProblemBase.h"
 #include "Solvers/PSIOPT.h"
 #include "StateFunction.h"
-#include "VectorFunctions/ASSET_VectorFunctions.h"
+#include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
-#include "CommonFunctions/IOScaled.h"
-#include "InterfaceTypes.h"
 
-namespace ASSET {
+namespace Tycho {
 
-  struct OptimalControlProblem;
+struct OptimalControlProblem;
 
-  struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
+struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;
 
@@ -31,13 +31,11 @@ namespace ASSET {
     using StateConstraint = StateFunction<VectorFunctionalX>;
     using StateObjective = StateFunction<ScalarFunctionalX>;
 
-    template<int V>
-    using int_const = std::integral_constant<int, V>;
+    template <int V> using int_const = std::integral_constant<int, V>;
 
     friend OptimalControlProblem;
 
-
-   protected:
+  protected:
     PhaseIndexer indexer;
     bool doTranscription = true;
     bool EnableVectorization = true;
@@ -87,9 +85,8 @@ namespace ASSET {
 
     std::map<std::string, Eigen::VectorXi> SPidxs;
 
-
     ///////////////////////
-   public:
+  public:
     bool AutoScaling = false;
     bool SyncObjectiveScales = true;
 
@@ -98,7 +95,6 @@ namespace ASSET {
     int MaxMeshIters = 10;
     int MaxSegments = 10000;
     int MinSegments = 4;
-
 
     int NumExtraSegs = 4;
     double MeshRedFactor = .5;
@@ -115,14 +111,13 @@ namespace ASSET {
     double MeshTol = 1.0e-6;
 
     std::string MeshErrorEstimator = "deboor";
-    std::string MeshErrorCriteria = "max";     //"max,avg,geometric,endtoend"
-    std::string MeshErrorDistributor = "avg";  // "max,avg,geometric,endtoend"
+    std::string MeshErrorCriteria = "max";    //"max,avg,geometric,endtoend"
+    std::string MeshErrorDistributor = "avg"; // "max,avg,geometric,endtoend"
     PSIOPT::ConvergenceFlags MeshAbortFlag = PSIOPT::ConvergenceFlags::DIVERGING;
 
     bool MeshConverged = false;
 
     std::vector<MeshIterateInfo> MeshIters;
-
 
     void setAutoScaling(bool autoscale) {
         this->AutoScaling = autoscale;
@@ -130,117 +125,77 @@ namespace ASSET {
         this->invalidatePostOptInfo();
     }
 
+    void setAdaptiveMesh(bool amesh) { this->AdaptiveMesh = amesh; }
+    void setMeshTol(double t) { this->MeshTol = abs(t); }
+    void setMeshRedFactor(double t) { this->MeshRedFactor = abs(t); }
+    void setMeshIncFactor(double t) { this->MeshIncFactor = abs(t); }
+    void setMeshErrFactor(double t) { this->MeshErrFactor = abs(t); }
+    void setMaxMeshIters(int it) { this->MaxMeshIters = abs(it); }
+    void setMinSegments(int it) { this->MinSegments = abs(it); }
+    void setMaxSegments(int it) { this->MaxSegments = abs(it); }
+    void setMeshErrorCriteria(std::string m) { this->MeshErrorCriteria = m; }
+    void setMeshErrorEstimator(std::string m) { this->MeshErrorEstimator = m; }
 
-    void setAdaptiveMesh(bool amesh) {
-      this->AdaptiveMesh = amesh;
-    }
-    void setMeshTol(double t) {
-      this->MeshTol = abs(t);
-    }
-    void setMeshRedFactor(double t) {
-      this->MeshRedFactor = abs(t);
-    }
-    void setMeshIncFactor(double t) {
-      this->MeshIncFactor = abs(t);
-    }
-    void setMeshErrFactor(double t) {
-      this->MeshErrFactor = abs(t);
-    }
-    void setMaxMeshIters(int it) {
-      this->MaxMeshIters = abs(it);
-    }
-    void setMinSegments(int it) {
-      this->MinSegments = abs(it);
-    }
-    void setMaxSegments(int it) {
-      this->MaxSegments = abs(it);
-    }
-    void setMeshErrorCriteria(std::string m) {
-      this->MeshErrorCriteria = m;
-    }
-    void setMeshErrorEstimator(std::string m) {
-      this->MeshErrorEstimator = m;
-    }
-
-
-    std::vector<MeshIterateInfo> getMeshIters() const {
-      return this->MeshIters;
-    }
-
+    std::vector<MeshIterateInfo> getMeshIters() const { return this->MeshIters; }
 
     ///////////////////
 
-   public:
+  public:
     /////////////////////////////////////////////////////////////////////////////
 
-    void enable_vectorization(bool b) {
-      this->EnableVectorization = b;
-    }
-    void resetTranscription() {
-      this->doTranscription = true;
-    };
+    void enable_vectorization(bool b) { this->EnableVectorization = b; }
+    void resetTranscription() { this->doTranscription = true; };
 
-    void invalidatePostOptInfo() {
-      this->PostOptInfoValid = false;
-    };
+    void invalidatePostOptInfo() { this->PostOptInfoValid = false; };
 
-    ODEPhaseBase() {
-    }
+    ODEPhaseBase() {}
     ODEPhaseBase(int Xv, int Uv, int Pv) {
-      this->setXVars(Xv);
-      this->setUVars(Uv);
-      this->setPVars(Pv);
+        this->setXVars(Xv);
+        this->setUVars(Uv);
+        this->setPVars(Pv);
 
-      this->XtUPUnits = Eigen::VectorXd::Ones(this->XtUPVars());
-
+        this->XtUPUnits = Eigen::VectorXd::Ones(this->XtUPVars());
     }
     virtual ~ODEPhaseBase() = default;
 
     //////////////////////////////////////////////////
 
-    virtual void setUnits(const Eigen::VectorXd& XtUPUnits_) = 0;
-    virtual void setUnits(const py::kwargs&);
-
+    virtual void setUnits(const Eigen::VectorXd &XtUPUnits_) = 0;
+    virtual void setUnits(const py::kwargs &);
 
     virtual void setControlMode(ControlModes m) {
-      this->resetTranscription();
-      this->invalidatePostOptInfo();
-      this->ControlMode = m;
-      if (this->ControlMode == BlockConstant) {
-        this->Table.BlockedControls = true;
-      } else {
-        this->Table.BlockedControls = false;
-      }
+        this->resetTranscription();
+        this->invalidatePostOptInfo();
+        this->ControlMode = m;
+        if (this->ControlMode == BlockConstant) {
+            this->Table.BlockedControls = true;
+        } else {
+            this->Table.BlockedControls = false;
+        }
     }
 
-    void setControlMode(std::string m) {
-      this->setControlMode(strto_ControlMode(m));
-    }
+    void setControlMode(std::string m) { this->setControlMode(strto_ControlMode(m)); }
 
     virtual void setIntegralMode(IntegralModes m) {
-      this->resetTranscription();
-      this->IntegralMode = m;
+        this->resetTranscription();
+        this->IntegralMode = m;
     }
     virtual void setTranscriptionMode(TranscriptionModes m) = 0;
 
-
-
     void switchTranscriptionMode(TranscriptionModes m, VectorXd DBS, VectorXi DPB) {
-      this->setTranscriptionMode(m);
-      this->setTraj(this->ActiveTraj, DBS, DPB);
+        this->setTranscriptionMode(m);
+        this->setTraj(this->ActiveTraj, DBS, DPB);
     }
     void switchTranscriptionMode(TranscriptionModes m) {
-      this->switchTranscriptionMode(m, this->DefBinSpacing, this->DefsPerBin);
+        this->switchTranscriptionMode(m, this->DefBinSpacing, this->DefsPerBin);
     }
-
 
     void switchTranscriptionMode(std::string m, VectorXd DBS, VectorXi DPB) {
-      this->switchTranscriptionMode(strto_TranscriptionMode(m), DBS, DPB);
+        this->switchTranscriptionMode(strto_TranscriptionMode(m), DBS, DPB);
     }
     void switchTranscriptionMode(std::string m) {
-      this->switchTranscriptionMode(strto_TranscriptionMode(m));
+        this->switchTranscriptionMode(strto_TranscriptionMode(m));
     }
-
 
     ///////////////////////////////////////////////////
 
@@ -248,13 +203,11 @@ namespace ASSET {
         this->SPidxs = spidxs;
     }
     void addStaticParamVgroups(std::map<std::string, Eigen::VectorXi> spidxs) {
-      for(auto& [key, value] : spidxs) {
-		this->SPidxs[key] = value;
-	  }
+        for (auto &[key, value] : spidxs) {
+            this->SPidxs[key] = value;
+        }
     }
-    void addStaticParamVgroup(Eigen::VectorXi idx, std::string key) {
-        this->SPidxs[key] = idx;
-    }
+    void addStaticParamVgroup(Eigen::VectorXi idx, std::string key) { this->SPidxs[key] = idx; }
     void addStaticParamVgroup(int idx, std::string key) {
         VectorXi tmp(1);
         tmp << idx;
@@ -266,68 +219,61 @@ namespace ASSET {
             throw std::invalid_argument(
                 fmt::format("No StaticParam variable index group with name: {0:} exists.", key));
         }
-		return this->SPidxs.at(key);
-	}
+        return this->SPidxs.at(key);
+    }
 
     /////////////////////////////////////////////////
-    template<class FuncMap>
-    void removeFuncImpl(FuncMap& map, int index, const std::string& funcstr) {
-      this->resetTranscription();
-      this->invalidatePostOptInfo();
-      if (index == -1 && map.size() > 0) {
-        index = map.rbegin()->first;
-      }
+    template <class FuncMap>
+    void removeFuncImpl(FuncMap &map, int index, const std::string &funcstr) {
+        this->resetTranscription();
+        this->invalidatePostOptInfo();
+        if (index == -1 && map.size() > 0) {
+            index = map.rbegin()->first;
+        }
 
-      if (map.count(index) == 0) {
-        throw std::invalid_argument(fmt::format("No {0:} with index {1:} exists in phase.", funcstr, index));
-      }
-      map.erase(index);
+        if (map.count(index) == 0) {
+            throw std::invalid_argument(
+                fmt::format("No {0:} with index {1:} exists in phase.", funcstr, index));
+        }
+        map.erase(index);
     }
 
-    template<class FuncType, class FuncMap>
-    int addFuncImpl(FuncType func, FuncMap& map, const std::string& funcstr) {
-      this->resetTranscription();
-      this->invalidatePostOptInfo();
-      int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
-      map[index] = func;
-      map[index].StorageIndex = index;
-      check_function_size(map.at(index), funcstr);
-      return index;
+    template <class FuncType, class FuncMap>
+    int addFuncImpl(FuncType func, FuncMap &map, const std::string &funcstr) {
+        this->resetTranscription();
+        this->invalidatePostOptInfo();
+        int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
+        map[index] = func;
+        map[index].StorageIndex = index;
+        check_function_size(map.at(index), funcstr);
+        return index;
     }
 
-   
-
-    
-    PhaseRegionFlags getRegion(RegionType reg_t) const{
+    PhaseRegionFlags getRegion(RegionType reg_t) const {
         PhaseRegionFlags reg;
 
         if (std::holds_alternative<PhaseRegionFlags>(reg_t)) {
             reg = std::get<PhaseRegionFlags>(reg_t);
-        }
-        else if (std::holds_alternative<std::string>(reg_t)) {
+        } else if (std::holds_alternative<std::string>(reg_t)) {
             reg = strto_PhaseRegionFlag(std::get<std::string>(reg_t));
         }
         return reg;
     }
 
-
-    VectorXi getXtUPVars(PhaseRegionFlags reg,VarIndexType XtUPvars_t) const {
+    VectorXi getXtUPVars(PhaseRegionFlags reg, VarIndexType XtUPvars_t) const {
 
         VectorXi XtUPvars;
-        
+
         /////////////////////////////////////////////////
         if (std::holds_alternative<int>(XtUPvars_t)) {
             XtUPvars.resize(1);
             XtUPvars[0] = std::get<int>(XtUPvars_t);
-        }
-        else if (std::holds_alternative<VectorXi>(XtUPvars_t)) {
+        } else if (std::holds_alternative<VectorXi>(XtUPvars_t)) {
             XtUPvars = std::get<VectorXi>(XtUPvars_t);
-        }
-        else if (std::holds_alternative<std::string>(XtUPvars_t)) {
+        } else if (std::holds_alternative<std::string>(XtUPvars_t)) {
             if (reg != StaticParams) {
                 XtUPvars = this->idx(std::get<std::string>(XtUPvars_t));
-            }
-            else {
+            } else {
                 XtUPvars = this->getSPidx(std::get<std::string>(XtUPvars_t));
             }
             if (reg == ODEParams) {
@@ -336,8 +282,7 @@ namespace ASSET {
                     XtUPvars[i] -= this->XtUVars();
                 }
             }
-        }
-        else if (std::holds_alternative<std::vector<std::string>>(XtUPvars_t)) {
+        } else if (std::holds_alternative<std::vector<std::string>>(XtUPvars_t)) {
 
             std::vector<VectorXi> varvec;
             int size = 0;
@@ -347,8 +292,7 @@ namespace ASSET {
             for (auto tmpv : tmpvars) {
                 if (reg != StaticParams) {
                     varvec.push_back(this->idx(tmpv));
-                }
-                else {
+                } else {
                     varvec.push_back(this->getSPidx(tmpv));
                 }
 
@@ -370,8 +314,6 @@ namespace ASSET {
                     XtUPvars[i] -= this->XtUVars();
                 }
             }
-
-            
         }
         return XtUPvars;
     }
@@ -383,19 +325,16 @@ namespace ASSET {
         if (std::holds_alternative<int>(OPvars_t)) {
             OPvars.resize(1);
             OPvars[0] = std::get<int>(OPvars_t);
-        }
-        else if (std::holds_alternative<VectorXi>(OPvars_t)) {
+        } else if (std::holds_alternative<VectorXi>(OPvars_t)) {
             OPvars = std::get<VectorXi>(OPvars_t);
-        }
-        else if (std::holds_alternative<std::string>(OPvars_t)) {
+        } else if (std::holds_alternative<std::string>(OPvars_t)) {
             OPvars = this->idx(std::get<std::string>(OPvars_t));
 
             for (int i = 0; i < OPvars.size(); i++) {
                 // Convert to 0 based index
                 OPvars[i] -= this->XtUVars();
             }
-        }
-        else if (std::holds_alternative<std::vector<std::string>>(OPvars_t)) {
+        } else if (std::holds_alternative<std::vector<std::string>>(OPvars_t)) {
             std::vector<VectorXi> varvec;
             int size = 0;
             auto tmpvars = std::get<std::vector<std::string>>(OPvars_t);
@@ -425,14 +364,11 @@ namespace ASSET {
         if (std::holds_alternative<int>(SPvars_t)) {
             SPvars.resize(1);
             SPvars[0] = std::get<int>(SPvars_t);
-        }
-        else if (std::holds_alternative<VectorXi>(SPvars_t)) {
+        } else if (std::holds_alternative<VectorXi>(SPvars_t)) {
             SPvars = std::get<VectorXi>(SPvars_t);
-        }
-        else if (std::holds_alternative<std::string>(SPvars_t)) {
+        } else if (std::holds_alternative<std::string>(SPvars_t)) {
             SPvars = this->getSPidx(std::get<std::string>(SPvars_t));
-        }
-        else if (std::holds_alternative<std::vector<std::string>>(SPvars_t)) {
+        } else if (std::holds_alternative<std::vector<std::string>>(SPvars_t)) {
             std::vector<VectorXi> varvec;
             int size = 0;
             auto tmpvars = std::get<std::vector<std::string>>(SPvars_t);
@@ -449,28 +385,20 @@ namespace ASSET {
                 }
             }
         }
-        
 
         return SPvars;
     }
 
-
-
-    template<class FuncHolder, class FuncType>
-    FuncHolder makeFuncImpl(RegionType reg_t,
-                     FuncType fun,
-                     VarIndexType XtUPvars_t,
-                     VarIndexType OPvars_t,
-                     VarIndexType SPvars_t,
-                     ScaleType scale_t) {
-
+    template <class FuncHolder, class FuncType>
+    FuncHolder makeFuncImpl(RegionType reg_t, FuncType fun, VarIndexType XtUPvars_t,
+                            VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
         PhaseRegionFlags reg = getRegion(reg_t);
         FuncHolder func;
 
         if (std::holds_alternative<std::string>(XtUPvars_t)) {
             std::string vars = std::get<std::string>(XtUPvars_t);
-            if (vars == "All" || vars == "all" ||vars=="XtUP") {
+            if (vars == "All" || vars == "all" || vars == "XtUP") {
                 // Default case where the function has same inputs and order as ODE
                 VectorXi XtUPvars;
                 VectorXi OPvars;
@@ -484,7 +412,7 @@ namespace ASSET {
             }
         }
 
-        VectorXi XtUPvars = this->getXtUPVars(reg,XtUPvars_t);
+        VectorXi XtUPvars = this->getXtUPVars(reg, XtUPvars_t);
         VectorXi OPvars;
         VectorXi SPvars;
         /////////////////////////////////////////////////
@@ -494,375 +422,273 @@ namespace ASSET {
             SPvars = this->getSPVars(reg, SPvars_t);
             func = FuncHolder(fun, reg, XtUPvars, OPvars, SPvars, scale_t);
 
-        }
-        else {
+        } else {
             func = FuncHolder(fun, reg, XtUPvars, scale_t);
         }
-        
+
         return func;
     }
-   
 
-
-    
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int addEqualCon(StateConstraint con) {
         return addFuncImpl(con, this->userEqualities, "Equality Constraint");
     }
 
-    int addEqualCon(RegionType reg_t,
-        VectorFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        VarIndexType OPvars_t,
-        VarIndexType SPvars_t,
-        ScaleType scale_t) {
+    int addEqualCon(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+                    VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
+                                                                    OPvars_t, SPvars_t, scale_t);
         return addFuncImpl(con, this->userEqualities, "Equality Constraint");
     }
 
-    int addEqualCon(RegionType reg_t,
-        VectorFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        ScaleType scale_t) {
+    int addEqualCon(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+                    ScaleType scale_t) {
 
         VectorXi empty;
-     
-        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty, empty, scale_t);
+
+        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
+                                                                    empty, scale_t);
         return addFuncImpl(con, this->userEqualities, "Equality Constraint");
     }
 
-    int addBoundaryValue(RegionType reg, VarIndexType args, const std::variant<double,VectorXd> & value, ScaleType scale_t);
+    int addBoundaryValue(RegionType reg, VarIndexType args,
+                         const std::variant<double, VectorXd> &value, ScaleType scale_t);
     int addDeltaVarEqualCon(VarIndexType var, double value, double scale, ScaleType scale_t);
     int addDeltaTimeEqualCon(double value, double scale, ScaleType scale_t) {
         return this->addDeltaVarEqualCon(this->TVar(), value, scale, scale_t);
-
     }
     int addValueLock(RegionType reg, VarIndexType args, ScaleType scale_t);
     int addPeriodicityCon(VarIndexType args, ScaleType scale_t);
 
     /////////////////////////////////////////////////
-    
+
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int addInequalCon(StateConstraint con) {
         return addFuncImpl(con, this->userInequalities, "Inequality Constraint");
     }
-    int addInequalCon(RegionType reg_t,
-        VectorFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        VarIndexType OPvars_t,
-        VarIndexType SPvars_t,
-        ScaleType scale_t) {
+    int addInequalCon(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+                      VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
+                                                                    OPvars_t, SPvars_t, scale_t);
         return addFuncImpl(con, this->userInequalities, "Inequality Constraint");
     }
 
-    int addInequalCon(RegionType reg_t,
-        VectorFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        ScaleType scale_t) {
+    int addInequalCon(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+                      ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty, empty, scale_t);
+        auto con = makeFuncImpl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
+                                                                    empty, scale_t);
         return addFuncImpl(con, this->userInequalities, "Inequality Constraint");
     }
 
     ////////////////////////
-    int addLUVarBound(
-        RegionType reg, VarIndexType var, double lowerbound, double upperbound, double lbscale, double ubscale,
-        ScaleType scale_t);
+    int addLUVarBound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
+                      double lbscale, double ubscale, ScaleType scale_t);
 
-    int addLUVarBound(
-        RegionType reg, VarIndexType var, double lowerbound, double upperbound, double scale,
-        ScaleType scale_t) {
+    int addLUVarBound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
+                      double scale, ScaleType scale_t) {
         return this->addLUVarBound(reg, var, lowerbound, upperbound, scale, scale, scale_t);
     }
-    int addLUVarBound(
-        RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-        ScaleType scale_t) {
+    int addLUVarBound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
+                      ScaleType scale_t) {
         return this->addLUVarBound(reg, var, lowerbound, upperbound, 1.0, 1.0, scale_t);
     }
 
-    int addLowerVarBound(
-        RegionType reg, VarIndexType var, double lowerbound, double lbscale,ScaleType scale_t);
+    int addLowerVarBound(RegionType reg, VarIndexType var, double lowerbound, double lbscale,
+                         ScaleType scale_t);
 
-    int addUpperVarBound(
-        RegionType reg, VarIndexType var, double upperbound, double ubscale, ScaleType scale_t);
+    int addUpperVarBound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
+                         ScaleType scale_t);
 
-    int addLUFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        VarIndexType OPvars,
-        VarIndexType SPvars,
-        double lowerbound,
-        double upperbound,
-        double lbscale,
-        double ubscale, ScaleType scale_t);
+    int addLUFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                       VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
+                       double upperbound, double lbscale, double ubscale, ScaleType scale_t);
 
-    
-
-    int addLUFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double lbscale,
-        double ubscale, ScaleType scale_t) {
+    int addLUFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                       double lowerbound, double upperbound, double lbscale, double ubscale,
+                       ScaleType scale_t) {
 
         VectorXi empty;
 
-        return addLUFuncBound(reg, func, XtUPvars, empty, empty, lowerbound,upperbound, lbscale, ubscale, scale_t);
+        return addLUFuncBound(reg, func, XtUPvars, empty, empty, lowerbound, upperbound, lbscale,
+                              ubscale, scale_t);
     }
 
-    int addLUFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        VarIndexType OPvars,
-        VarIndexType SPvars,
-        double lowerbound,
-        double upperbound,
-        double scale,
-        ScaleType scale_t) {
-        return addLUFuncBound(reg, func, XtUPvars, OPvars, SPvars, lowerbound, upperbound, scale, scale, scale_t);
+    int addLUFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                       VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
+                       double upperbound, double scale, ScaleType scale_t) {
+        return addLUFuncBound(reg, func, XtUPvars, OPvars, SPvars, lowerbound, upperbound, scale,
+                              scale, scale_t);
     }
 
-    int addLUFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double scale,
-        ScaleType scale_t) {
+    int addLUFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                       double lowerbound, double upperbound, double scale, ScaleType scale_t) {
         VectorXi empty;
-        return addLUFuncBound(reg, func, XtUPvars, empty, empty, lowerbound, upperbound, scale, scale, scale_t);
+        return addLUFuncBound(reg, func, XtUPvars, empty, empty, lowerbound, upperbound, scale,
+                              scale, scale_t);
     }
 
-    int addLowerFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        VarIndexType OPvars,
-        VarIndexType SPvars,
-        double lowerbound,
-        double lbscale,
-        ScaleType scale_t);
+    int addLowerFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                          VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
+                          double lbscale, ScaleType scale_t);
 
-    int addLowerFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double lbscale,
-        ScaleType scale_t) {
+    int addLowerFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                          double lowerbound, double lbscale, ScaleType scale_t) {
         VectorXi empty;
 
-        return this->addLowerFuncBound(reg, func, XtUPvars, empty, empty, lowerbound, lbscale, scale_t);
+        return this->addLowerFuncBound(reg, func, XtUPvars, empty, empty, lowerbound, lbscale,
+                                       scale_t);
     }
 
+    int addUpperFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                          VarIndexType OPvars, VarIndexType SPvars, double upperbound,
+                          double ubscale, ScaleType scale_t);
 
-    int addUpperFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        VarIndexType OPvars,
-        VarIndexType SPvars,
-        double upperbound,
-        double ubscale,
-        ScaleType scale_t);
-
-    int addUpperFuncBound(RegionType reg,
-        ScalarFunctionalX func,
-        VarIndexType XtUPvars,
-        double upperbound,
-        double ubscale,
-        ScaleType scale_t) {
+    int addUpperFuncBound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+                          double upperbound, double ubscale, ScaleType scale_t) {
         VectorXi empty;
 
-        return this->addUpperFuncBound(reg, func, XtUPvars, empty, empty, upperbound, ubscale, scale_t);
+        return this->addUpperFuncBound(reg, func, XtUPvars, empty, empty, upperbound, ubscale,
+                                       scale_t);
     }
 
-    int addLUNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double lbscale,
-        double ubscale,
-        ScaleType scale_t);
+    int addLUNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound, double upperbound,
+                       double lbscale, double ubscale, ScaleType scale_t);
 
-    int addLUNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double scale,
-        ScaleType scale_t) {
+    int addLUNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound, double upperbound,
+                       double scale, ScaleType scale_t) {
         return this->addLUNormBound(reg, XtUPvars, lowerbound, upperbound, scale, scale, scale_t);
     }
 
-    int addLUSquaredNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double lbscale,
-        double ubscale,
-        ScaleType scale_t);
+    int addLUSquaredNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+                              double upperbound, double lbscale, double ubscale, ScaleType scale_t);
 
-    int addLUSquaredNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double upperbound,
-        double scale,
-        ScaleType scale_t) {
-        return this->addLUSquaredNormBound(reg, XtUPvars, lowerbound, upperbound, scale, scale, scale_t);
+    int addLUSquaredNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+                              double upperbound, double scale, ScaleType scale_t) {
+        return this->addLUSquaredNormBound(reg, XtUPvars, lowerbound, upperbound, scale, scale,
+                                           scale_t);
     }
 
+    int addLowerNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound, double lbscale,
+                          ScaleType scale_t);
 
-    int addLowerNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double lbscale,
-        ScaleType scale_t);
+    int addLowerSquaredNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+                                 double lbscale, ScaleType scale_t);
 
-    int addLowerSquaredNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double lowerbound,
-        double lbscale,
-        ScaleType scale_t);
+    int addUpperNormBound(RegionType reg, VarIndexType XtUPvars, double upperbound, double ubscale,
+                          ScaleType scale_t);
 
-    int addUpperNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double upperbound,
-        double ubscale,
-        ScaleType scale_t);
-
-    int addUpperSquaredNormBound(RegionType reg,
-        VarIndexType XtUPvars,
-        double upperbound,
-        double ubscale,
-        ScaleType scale_t);
+    int addUpperSquaredNormBound(RegionType reg, VarIndexType XtUPvars, double upperbound,
+                                 double ubscale, ScaleType scale_t);
     //
     int addLowerDeltaVarBound(RegionType reg, VarIndexType var, double lowerbound, double lbscale,
-        ScaleType scale_t);
+                              ScaleType scale_t);
     int addLowerDeltaVarBound(VarIndexType var, double lowerbound, double lbscale,
-        ScaleType scale_t) {
-        return this->addLowerDeltaVarBound(PhaseRegionFlags::FrontandBack, var, lowerbound, lbscale, scale_t);
+                              ScaleType scale_t) {
+        return this->addLowerDeltaVarBound(PhaseRegionFlags::FrontandBack, var, lowerbound, lbscale,
+                                           scale_t);
     }
-    int addLowerDeltaTimeBound(double lowerbound, double lbscale,
-        ScaleType scale_t) {
+    int addLowerDeltaTimeBound(double lowerbound, double lbscale, ScaleType scale_t) {
         return this->addLowerDeltaVarBound(this->TVar(), lowerbound, lbscale, scale_t);
     }
     ///
     int addUpperDeltaVarBound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
-        ScaleType scale_t);
+                              ScaleType scale_t);
     int addUpperDeltaVarBound(VarIndexType var, double upperbound, double ubscale,
-        ScaleType scale_t) {
-        return this->addUpperDeltaVarBound(PhaseRegionFlags::FrontandBack, var, upperbound, ubscale, scale_t);
+                              ScaleType scale_t) {
+        return this->addUpperDeltaVarBound(PhaseRegionFlags::FrontandBack, var, upperbound, ubscale,
+                                           scale_t);
     }
-    int addUpperDeltaTimeBound(double upperbound, double ubscale,
-        ScaleType scale_t) {
+    int addUpperDeltaTimeBound(double upperbound, double ubscale, ScaleType scale_t) {
         return this->addUpperDeltaVarBound(this->TVar(), upperbound, ubscale, scale_t);
     }
 
     ///////////////////////////////////////////////////////////////
-    
-    
 
     ////////////////////////////////////////////////////
-    int addLUVarBound(
-        PhaseRegionFlags reg, int var, double lowerbound, double upperbound, double lbscale, double ubscale);
+    int addLUVarBound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
+                      double lbscale, double ubscale);
 
-
-    int addLUVarBound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound, double scale) {
-      return this->addLUVarBound(reg, var, lowerbound, upperbound, scale, scale);
+    int addLUVarBound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
+                      double scale) {
+        return this->addLUVarBound(reg, var, lowerbound, upperbound, scale, scale);
     }
 
+    Eigen::VectorXi addLUVarBounds(PhaseRegionFlags reg, Eigen::VectorXi vars, double lowerbound,
+                                   double upperbound, double scale) {
+        Eigen::VectorXi cnums(vars.size());
+        for (int i = 0; i < cnums.size(); i++) {
+            cnums[i] = this->addLUVarBound(reg, vars[i], lowerbound, upperbound, scale, scale);
+        }
 
-    Eigen::VectorXi addLUVarBounds(
-        PhaseRegionFlags reg, Eigen::VectorXi vars, double lowerbound, double upperbound, double scale) {
-      Eigen::VectorXi cnums(vars.size());
-      for (int i = 0; i < cnums.size(); i++) {
-        cnums[i] = this->addLUVarBound(reg, vars[i], lowerbound, upperbound, scale, scale);
-      }
-
-      return cnums;
+        return cnums;
     }
 
-    Eigen::VectorXi addLUVarBounds(
-        std::string reg, Eigen::VectorXi vars, double lowerbound, double upperbound, double scale) {
-      return addLUVarBounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound, scale);
+    Eigen::VectorXi addLUVarBounds(std::string reg, Eigen::VectorXi vars, double lowerbound,
+                                   double upperbound, double scale) {
+        return addLUVarBounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound, scale);
     }
 
-    
     ////////////////////////////////////////////////////
 
-
-   
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int addStateObjective(StateObjective obj) {
         return addFuncImpl(obj, this->userStateObjectives, "State Objective");
     }
-    int addStateObjective(RegionType reg_t,
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        VarIndexType OPvars_t,
-        VarIndexType SPvars_t,
-        ScaleType scale_t) {
+    int addStateObjective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+                          VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, OPvars_t,
+                                                                   SPvars_t, scale_t);
         return addFuncImpl(con, this->userStateObjectives, "State Objective");
     }
 
-    int addStateObjective(RegionType reg_t,
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        ScaleType scale_t) {
+    int addStateObjective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+                          ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, empty, empty, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, empty,
+                                                                   empty, scale_t);
         return addFuncImpl(con, this->userStateObjectives, "State Objective");
     }
-    int addValueObjective(RegionType reg, VarIndexType var, double scale,ScaleType scale_t);
+    int addValueObjective(RegionType reg, VarIndexType var, double scale, ScaleType scale_t);
     int addDeltaVarObjective(VarIndexType var, double scale, ScaleType scale_t);
     int addDeltaTimeObjective(double scale, ScaleType scale_t) {
         return this->addDeltaVarObjective(this->TVar(), scale, scale_t);
     }
 
     ///////////////////////////////////////////////
-    
-    
 
-
-    
     ///////////////////////////////////////////////////
     int addIntegralObjective(StateObjective obj) {
         return addFuncImpl(obj, this->userIntegrands, "Integral Objective");
     }
 
-    int addIntegralObjective(
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        VarIndexType OPvars_t,
-        VarIndexType SPvars_t,
-        ScaleType scale_t) {
+    int addIntegralObjective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, VarIndexType OPvars_t,
+                             VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
+                                                                   SPvars_t, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
 
-    int addIntegralObjective(
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        ScaleType scale_t) {
+    int addIntegralObjective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, empty, empty, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, empty,
+                                                                   empty, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
-
 
     ///////////////////////////////////////////////////
     int addIntegralParamFunction(StateObjective con, int pv) {
@@ -873,102 +699,92 @@ namespace ASSET {
         return index;
     }
 
-    int addIntegralParamFunction(
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        VarIndexType OPvars_t,
-        VarIndexType SPvars_t,
-        int accum_parm,
-        ScaleType scale_t) {
+    int addIntegralParamFunction(ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+                                 VarIndexType OPvars_t, VarIndexType SPvars_t, int accum_parm,
+                                 ScaleType scale_t) {
 
         VectorXi epv(1);
         epv[0] = accum_parm;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
+                                                                   SPvars_t, scale_t);
         int index = addFuncImpl(con, this->userParamIntegrands, "Integral Parameter Function");
         this->userParamIntegrands[index].EXTVars = epv;
         return index;
     }
 
-    int addIntegralParamFunction(
-        ScalarFunctionalX fun,
-        VarIndexType XtUPvars_t,
-        int accum_parm,
-        ScaleType scale_t) {
+    int addIntegralParamFunction(ScalarFunctionalX fun, VarIndexType XtUPvars_t, int accum_parm,
+                                 ScaleType scale_t) {
         VectorXi empty;
         return addIntegralParamFunction(fun, XtUPvars_t, empty, empty, accum_parm, scale_t);
     }
 
     /////////////////////////////////////////////////
 
-
     void removeEqualCon(int index) {
-      this->removeFuncImpl(this->userEqualities, index, "Equality Constraint");
+        this->removeFuncImpl(this->userEqualities, index, "Equality Constraint");
     }
     void removeInequalCon(int index) {
-      this->removeFuncImpl(this->userInequalities, index, "Inequality Constraint");
+        this->removeFuncImpl(this->userInequalities, index, "Inequality Constraint");
     }
     void removeStateObjective(int index) {
-      this->removeFuncImpl(this->userStateObjectives, index, "State Objective");
+        this->removeFuncImpl(this->userStateObjectives, index, "State Objective");
     }
     void removeIntegralObjective(int index) {
-      this->removeFuncImpl(this->userIntegrands, index, "Integral Objective");
+        this->removeFuncImpl(this->userIntegrands, index, "Integral Objective");
     }
     void removeIntegralParamFunction(int index) {
-      this->removeFuncImpl(this->userParamIntegrands, index, "Integral Parameter Function");
+        this->removeFuncImpl(this->userParamIntegrands, index, "Integral Parameter Function");
     }
-
 
     /////////////////////////////////////////////////
 
-    virtual void setTraj(const std::vector<Eigen::VectorXd>& mesh,
-                         Eigen::VectorXd DBS,
-                         Eigen::VectorXi DPB,
-                         bool LerpTraj);
+    virtual void setTraj(const std::vector<Eigen::VectorXd> &mesh, Eigen::VectorXd DBS,
+                         Eigen::VectorXi DPB, bool LerpTraj);
 
-    void setTraj(const std::vector<Eigen::VectorXd>& mesh);
+    void setTraj(const std::vector<Eigen::VectorXd> &mesh);
 
-    void setTraj(const std::vector<Eigen::VectorXd>& mesh, Eigen::VectorXd DBS, Eigen::VectorXi DPB) {
-      this->setTraj(mesh, DBS, DPB, false);
+    void setTraj(const std::vector<Eigen::VectorXd> &mesh, Eigen::VectorXd DBS,
+                 Eigen::VectorXi DPB) {
+        this->setTraj(mesh, DBS, DPB, false);
     }
 
-    void setTraj(const std::vector<Eigen::VectorXd>& mesh, int ndef, bool LerpTraj) {
-      VectorXd dbs(2);
-      dbs[0] = 0.0;
-      dbs[1] = 1.0;
-      VectorXi dpb(1);
-      dpb[0] = ndef;
-      this->setTraj(mesh, dbs, dpb, LerpTraj);
+    void setTraj(const std::vector<Eigen::VectorXd> &mesh, int ndef, bool LerpTraj) {
+        VectorXd dbs(2);
+        dbs[0] = 0.0;
+        dbs[1] = 1.0;
+        VectorXi dpb(1);
+        dpb[0] = ndef;
+        this->setTraj(mesh, dbs, dpb, LerpTraj);
     }
-    void setTraj(const std::vector<Eigen::VectorXd>& mesh, int ndef) {
-      this->setTraj(mesh, ndef, false);
+    void setTraj(const std::vector<Eigen::VectorXd> &mesh, int ndef) {
+        this->setTraj(mesh, ndef, false);
     }
-
 
     void refineTrajManual(VectorXd DBS, VectorXi DPB);
 
     void refineTrajManual(int ndef) {
-      VectorXd dbs(2);
-      dbs[0] = 0.0;
-      dbs[1] = 1.0;
-      VectorXi dpb(1);
-      dpb[0] = ndef;
-      this->refineTrajManual(dbs, dpb);
+        VectorXd dbs(2);
+        dbs[0] = 0.0;
+        dbs[1] = 1.0;
+        VectorXi dpb(1);
+        dpb[0] = ndef;
+        this->refineTrajManual(dbs, dpb);
     }
     std::vector<Eigen::VectorXd> refineTrajEqual(int n);
 
     void refineTrajAuto();
 
+    void setStaticParams(VectorXd parm, VectorXd units) {
+        if (units.size() != parm.size()) {
+            throw std::invalid_argument(
+                "Size of static parameter vector and scaling units vector must match");
+        }
 
-    void setStaticParams(VectorXd parm,VectorXd units) {
-      if (units.size() != parm.size()) {
-          throw std::invalid_argument("Size of static parameter vector and scaling units vector must match");
-      }
-
-      this->ActiveStaticParams = parm;
-      this->numStatParams = parm.size();
-      this->resetTranscription();
-      this->SPUnits = units;
+        this->ActiveStaticParams = parm;
+        this->numStatParams = parm.size();
+        this->resetTranscription();
+        this->SPUnits = units;
     }
     void setStaticParams(VectorXd parm) {
         VectorXd units(parm.size());
@@ -977,134 +793,134 @@ namespace ASSET {
     }
 
     void addStaticParams(VectorXd parm, VectorXd units) {
-	  if (this->numStatParams == 0) {
-		this->setStaticParams(parm,units);
-	  } else {
-          VectorXd parmstmp(this->ActiveStaticParams.size()+ parm.size());
-          parmstmp << this->ActiveStaticParams, parm;
-          VectorXd unitstmp(this->SPUnits.size() + units.size());
-          unitstmp << this->SPUnits, units;
-          this->setStaticParams(parmstmp,unitstmp);
-	  }
-	}
-	void addStaticParams(VectorXd parm) {
-		VectorXd units(parm.size());
-		units.setOnes();
-		return this->addStaticParams(parm, units);
-	}
-
+        if (this->numStatParams == 0) {
+            this->setStaticParams(parm, units);
+        } else {
+            VectorXd parmstmp(this->ActiveStaticParams.size() + parm.size());
+            parmstmp << this->ActiveStaticParams, parm;
+            VectorXd unitstmp(this->SPUnits.size() + units.size());
+            unitstmp << this->SPUnits, units;
+            this->setStaticParams(parmstmp, unitstmp);
+        }
+    }
+    void addStaticParams(VectorXd parm) {
+        VectorXd units(parm.size());
+        units.setOnes();
+        return this->addStaticParams(parm, units);
+    }
 
     void subStaticParams(VectorXd parm) {
-      if (this->numStatParams == parm.size()) {
-          this->ActiveStaticParams = parm;
-      } else {
-          this->setStaticParams(parm);
-      }
+        if (this->numStatParams == parm.size()) {
+            this->ActiveStaticParams = parm;
+        } else {
+            this->setStaticParams(parm);
+        }
     }
 
     void subVariables(PhaseRegionFlags reg, VectorXi indices, VectorXd vals);
     void subVariable(PhaseRegionFlags reg, int var, double val) {
-      VectorXi indices(1);
-      indices[0] = var;
-      VectorXd vals(1);
-      vals[0] = val;
-      this->subVariables(reg, indices, vals);
+        VectorXi indices(1);
+        indices[0] = var;
+        VectorXd vals(1);
+        vals[0] = val;
+        this->subVariables(reg, indices, vals);
     }
 
     void subVariables(std::string reg, VectorXi indices, VectorXd vals) {
-      this->subVariables(strto_PhaseRegionFlag(reg), indices, vals);
+        this->subVariables(strto_PhaseRegionFlag(reg), indices, vals);
     }
     void subVariable(std::string reg, int var, double val) {
-      this->subVariable(strto_PhaseRegionFlag(reg), var, val);
+        this->subVariable(strto_PhaseRegionFlag(reg), var, val);
     }
 
-    std::vector<Eigen::VectorXd> returnTraj() const {
-      return this->ActiveTraj;
-    }
+    std::vector<Eigen::VectorXd> returnTraj() const { return this->ActiveTraj; }
 
     std::vector<Eigen::VectorXd> returnTrajRange(int num, double tl, double th) {
-      this->Table.loadRegularData(this->DefsPerBin.sum(), this->ActiveTraj);
-      return this->Table.InterpRange(num, tl, th);
+        this->Table.loadRegularData(this->DefsPerBin.sum(), this->ActiveTraj);
+        return this->Table.InterpRange(num, tl, th);
     }
     std::vector<Eigen::VectorXd> returnTrajRangeND(int num, double tl, double th) {
-      this->Table.loadRegularData(this->DefsPerBin.sum(), this->ActiveTraj);
-      return this->Table.NDequidist(num, tl, th);
+        this->Table.loadRegularData(this->DefsPerBin.sum(), this->ActiveTraj);
+        return this->Table.NDequidist(num, tl, th);
     }
     LGLInterpTable returnTrajTable() {
-      LGLInterpTable tabt = this->Table;
-      tabt.loadExactData(this->ActiveTraj);
-      return tabt;
+        LGLInterpTable tabt = this->Table;
+        tabt.loadExactData(this->ActiveTraj);
+        return tabt;
     }
 
-    Eigen::VectorXd returnStaticParams() const {
-      return this->ActiveStaticParams;
-    }
-
+    Eigen::VectorXd returnStaticParams() const { return this->ActiveStaticParams; }
 
     std::vector<Eigen::VectorXd> returnUSplineConLmults() const {
 
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No multipliers to return, a solve or optimize call must be made "
-                                    "before returning constraint multipliers ");
-      }
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No multipliers to return, a solve or optimize call must be made "
+                "before returning constraint multipliers ");
+        }
 
-      if (this->ControlFuncsIndex < 0) {
-        return std::vector<Eigen::VectorXd>();
-      } else {
-        return this->indexer.getFuncEqMultipliers(this->ControlFuncsIndex, this->ActiveEqLmults);
-      }
+        if (this->ControlFuncsIndex < 0) {
+            return std::vector<Eigen::VectorXd>();
+        } else {
+            return this->indexer.getFuncEqMultipliers(this->ControlFuncsIndex,
+                                                      this->ActiveEqLmults);
+        }
     }
 
     std::vector<Eigen::VectorXd> returnUSplineConVals() const {
 
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No constraints to return, a solve or optimize call must be made "
-                                    "before returning constraint values ");
-      }
-      if (this->ControlFuncsIndex < 0) {
-        return std::vector<Eigen::VectorXd>();
-      } else {
-        return this->indexer.getFuncEqMultipliers(this->ControlFuncsIndex, this->ActiveEqCons);
-      }
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No constraints to return, a solve or optimize call must be made "
+                "before returning constraint values ");
+        }
+        if (this->ControlFuncsIndex < 0) {
+            return std::vector<Eigen::VectorXd>();
+        } else {
+            return this->indexer.getFuncEqMultipliers(this->ControlFuncsIndex, this->ActiveEqCons);
+        }
     }
 
     std::vector<Eigen::VectorXd> returnEqualConLmults(int index) const {
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No multipliers to return, a solve or optimize call must be made "
-                                    "before returning constraint multipliers ");
-      }
-      int Gindex = this->userEqualities.at(index).GlobalIndex;
-      return this->indexer.getFuncEqMultipliers(Gindex, this->ActiveEqLmults);
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No multipliers to return, a solve or optimize call must be made "
+                "before returning constraint multipliers ");
+        }
+        int Gindex = this->userEqualities.at(index).GlobalIndex;
+        return this->indexer.getFuncEqMultipliers(Gindex, this->ActiveEqLmults);
     }
     std::vector<Eigen::VectorXd> returnEqualConVals(int index) const {
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No constraints to return, a solve or optimize call must be made "
-                                    "before returning constraint values ");
-      }
-      int Gindex = this->userEqualities.at(index).GlobalIndex;
-      return this->indexer.getFuncEqMultipliers(Gindex, this->ActiveEqCons);
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No constraints to return, a solve or optimize call must be made "
+                "before returning constraint values ");
+        }
+        int Gindex = this->userEqualities.at(index).GlobalIndex;
+        return this->indexer.getFuncEqMultipliers(Gindex, this->ActiveEqCons);
     }
     Eigen::VectorXd returnEqualConScales(int index) const {
-       return this->userEqualities.at(index).OutputScales;
+        return this->userEqualities.at(index).OutputScales;
     }
 
-
     std::vector<Eigen::VectorXd> returnInequalConLmults(int index) const {
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No multipliers to return, a solve or optimize call must be made "
-                                    "before returning constraint multipliers ");
-      }
-      int Gindex = this->userInequalities.at(index).GlobalIndex;
-      return this->indexer.getFuncIqMultipliers(Gindex, this->ActiveIqLmults);
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No multipliers to return, a solve or optimize call must be made "
+                "before returning constraint multipliers ");
+        }
+        int Gindex = this->userInequalities.at(index).GlobalIndex;
+        return this->indexer.getFuncIqMultipliers(Gindex, this->ActiveIqLmults);
     }
 
     std::vector<Eigen::VectorXd> returnInequalConVals(int index) const {
-      if (!this->PostOptInfoValid) {
-        throw std::invalid_argument("No constraints to return, a solve or optimize call must be made "
-                                    "before returning constraint values ");
-      }
-      int Gindex = this->userInequalities.at(index).GlobalIndex;
-      return this->indexer.getFuncIqMultipliers(Gindex, this->ActiveIqCons);
+        if (!this->PostOptInfoValid) {
+            throw std::invalid_argument(
+                "No constraints to return, a solve or optimize call must be made "
+                "before returning constraint values ");
+        }
+        int Gindex = this->userInequalities.at(index).GlobalIndex;
+        return this->indexer.getFuncIqMultipliers(Gindex, this->ActiveIqCons);
     }
     Eigen::VectorXd returnInequalConScales(int index) const {
         return this->userInequalities.at(index).OutputScales;
@@ -1123,12 +939,13 @@ namespace ASSET {
         return this->userStateObjectives.at(index).OutputScales;
     }
     Eigen::VectorXd returnODEOutputScales() const {
-        VectorXd output_scales = XtUPUnits.head(this->XVars()).cwiseInverse() * this->XtUPUnits[this->XVars()];
+        VectorXd output_scales =
+            XtUPUnits.head(this->XVars()).cwiseInverse() * this->XtUPUnits[this->XVars()];
         return output_scales;
     }
 
     /////////////////////////////////////////////////
-   protected:
+  protected:
     virtual void transcribe_dynamics() = 0;
     virtual void transcribe_axis_funcs();
     virtual void transcribe_control_funcs();
@@ -1136,16 +953,16 @@ namespace ASSET {
     virtual void transcribe_basic_funcs();
 
     void initIndexing() {
-      this->indexer = PhaseIndexer(this->XVars(), this->UVars(), this->PVars(), this->numStatParams);
-      this->indexer.set_dimensions(this->numTranCardStates, this->numDefects, 
-          this->ControlMode == ControlModes::BlockConstant);
+        this->indexer =
+            PhaseIndexer(this->XVars(), this->UVars(), this->PVars(), this->numStatParams);
+        this->indexer.set_dimensions(this->numTranCardStates, this->numDefects,
+                                     this->ControlMode == ControlModes::BlockConstant);
     }
     void check_functions(int pnum);
 
-    template<class T>
-    static void check_function_size(const T& func, std::string ftype) {
-      int irows = func.Func.IRows();
-      switch (func.RegionFlag) {
+    template <class T> static void check_function_size(const T &func, std::string ftype) {
+        int irows = func.Func.IRows();
+        switch (func.RegionFlag) {
         case Front:
         case Back:
         case Path:
@@ -1154,252 +971,223 @@ namespace ASSET {
         case StaticParams:
         case InnerPath:
         case NodalPath: {
-          int isize = func.XtUVars.size() + func.OPVars.size() + func.SPVars.size();
-          if (irows != isize) {
+            int isize = func.XtUVars.size() + func.OPVars.size() + func.SPVars.size();
+            if (irows != isize) {
 
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "Input size of {0:} (IRows = {1:}) does not match that implied by indexing parameters "
-                       "(IRows = {2:}).\n",
-                       ftype,
-                       irows,
-                       isize);
+                fmt::print(fmt::fg(fmt::color::red),
+                           "Transcription Error!!!\n"
+                           "Input size of {0:} (IRows = {1:}) does not match that implied by "
+                           "indexing parameters "
+                           "(IRows = {2:}).\n",
+                           ftype, irows, isize);
 
-            throw std::invalid_argument("");
-          }
-          break;
+                throw std::invalid_argument("");
+            }
+            break;
         }
         case FrontandBack:
         case BackandFront:
         case PairWisePath: {
-          int isize = func.XtUVars.size() * 2 + func.OPVars.size() + func.SPVars.size();
-          if (irows != isize) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "Input size of {0:} (IRows = {1:}) does not match that implied by indexing parameters "
-                       "(IRows = {2:}).\n",
-                       ftype,
-                       irows,
-                       isize);
-            throw std::invalid_argument("");
-          }
-          break;
+            int isize = func.XtUVars.size() * 2 + func.OPVars.size() + func.SPVars.size();
+            if (irows != isize) {
+                fmt::print(fmt::fg(fmt::color::red),
+                           "Transcription Error!!!\n"
+                           "Input size of {0:} (IRows = {1:}) does not match that implied by "
+                           "indexing parameters "
+                           "(IRows = {2:}).\n",
+                           ftype, irows, isize);
+                throw std::invalid_argument("");
+            }
+            break;
         }
         default: {
-          break;
+            break;
         }
-      }
+        }
     }
 
-    Eigen::VectorXd get_input_scale(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV, VectorXi SPV) const;
+    Eigen::VectorXd get_input_scale(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV,
+                                    VectorXi SPV) const;
 
-    std::vector<Eigen::VectorXd> get_test_inputs(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV, VectorXi SPV) const;
+    std::vector<Eigen::VectorXd> get_test_inputs(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV,
+                                                 VectorXi SPV) const;
 
     void calc_auto_scales();
 
     std::vector<double> get_objective_scales();
     void update_objective_scales(double scale);
-    
-
 
     static void check_lbscale(double lbscale) {
-      if (lbscale <= 0.0) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound scale ({0:.3e}) must be a strictly positive number.\n",
-                   lbscale);
-        throw std::invalid_argument("");
-      }
+        if (lbscale <= 0.0) {
+            fmt::print(fmt::fg(fmt::color::red),
+                       "Transcription Error!!!\n"
+                       "Lower-bound scale ({0:.3e}) must be a strictly positive number.\n",
+                       lbscale);
+            throw std::invalid_argument("");
+        }
     }
     static void check_ubscale(double ubscale) {
-      if (ubscale <= 0.0) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Upper-bound scale ({0:.3e}) must be a strictly positive number.\n",
-                   ubscale);
-        throw std::invalid_argument("");
-      }
+        if (ubscale <= 0.0) {
+            fmt::print(fmt::fg(fmt::color::red),
+                       "Transcription Error!!!\n"
+                       "Upper-bound scale ({0:.3e}) must be a strictly positive number.\n",
+                       ubscale);
+            throw std::invalid_argument("");
+        }
     }
 
-
     void transcribe_phase(int vo, int eqo, int iqo, std::shared_ptr<NonLinearProgram> np, int pnum);
-
 
     Eigen::VectorXd makeSolverInput() const {
 
         if (this->AutoScaling) {
             auto ActiveTrajTmp = this->ActiveTraj;
 
-            for (auto& T : ActiveTrajTmp) {
+            for (auto &T : ActiveTrajTmp) {
                 T = T.cwiseQuotient(this->XtUPUnits);
             }
 
             VectorXd StaticParamsTmp;
-            if (this->ActiveStaticParams.size() > 0 && this->SPUnits.size()>0) {
+            if (this->ActiveStaticParams.size() > 0 && this->SPUnits.size() > 0) {
                 StaticParamsTmp = this->ActiveStaticParams.cwiseQuotient(this->SPUnits);
             }
             return this->indexer.makeSolverInput(ActiveTrajTmp, StaticParamsTmp);
 
-      
         } else {
-        return this->indexer.makeSolverInput(this->ActiveTraj, this->ActiveStaticParams);
+            return this->indexer.makeSolverInput(this->ActiveTraj, this->ActiveStaticParams);
         }
     }
-    void collectSolverOutput(const VectorXd& Vars) {
-      this->indexer.collectSolverOutput(Vars, this->ActiveTraj, this->ActiveStaticParams);
+    void collectSolverOutput(const VectorXd &Vars) {
+        this->indexer.collectSolverOutput(Vars, this->ActiveTraj, this->ActiveStaticParams);
 
-      if (this->AutoScaling) {
-          for (auto& T : this->ActiveTraj) {
-              T = T.cwiseProduct(this->XtUPUnits);
-          }
-          if (this->ActiveStaticParams.size() > 0 && this->SPUnits.size() > 0) {
-              this->ActiveStaticParams = this->ActiveStaticParams.cwiseProduct(this->SPUnits);
-          }
-
-      }
-
+        if (this->AutoScaling) {
+            for (auto &T : this->ActiveTraj) {
+                T = T.cwiseProduct(this->XtUPUnits);
+            }
+            if (this->ActiveStaticParams.size() > 0 && this->SPUnits.size() > 0) {
+                this->ActiveStaticParams = this->ActiveStaticParams.cwiseProduct(this->SPUnits);
+            }
+        }
     }
-    void collectSolverMultipliers(const VectorXd& EM, const VectorXd& IM) {
-      this->MultipliersLoaded = true;
-      this->ActiveEqLmults = EM;
-      this->ActiveIqLmults = IM;
+    void collectSolverMultipliers(const VectorXd &EM, const VectorXd &IM) {
+        this->MultipliersLoaded = true;
+        this->ActiveEqLmults = EM;
+        this->ActiveIqLmults = IM;
     }
 
-    void collectPostOptInfo(const VectorXd& EC, const VectorXd& EM, const VectorXd& IC, const VectorXd& IM) {
+    void collectPostOptInfo(const VectorXd &EC, const VectorXd &EM, const VectorXd &IC,
+                            const VectorXd &IM) {
 
-    
+        this->PostOptInfoValid = true;
+        this->MultipliersLoaded = true;
 
-      this->PostOptInfoValid = true;
-      this->MultipliersLoaded = true;
-
-      this->ActiveEqCons = EC;
-      this->ActiveIqCons = IC;
-      this->ActiveEqLmults = EM;
-      this->ActiveIqLmults = IM;
+        this->ActiveEqCons = EC;
+        this->ActiveIqCons = IC;
+        this->ActiveEqLmults = EM;
+        this->ActiveIqLmults = IM;
     }
-
 
     PSIOPT::ConvergenceFlags psipot_call_impl(std::string mode);
 
     PSIOPT::ConvergenceFlags phase_call_impl(std::string mode);
 
-
-   public:
+  public:
     void transcribe(bool showstats, bool showfuns);
 
-    void transcribe() {
-      this->transcribe(false, false);
-    }
+    void transcribe() { this->transcribe(false, false); }
 
     void test_threads(int i, int j, int n);
 
     void jet_initialize() {
-      this->setThreads(1, 1);
-      this->optimizer->PrintLevel = 10;
-      this->PrintMeshInfo = false;
+        this->setThreads(1, 1);
+        this->optimizer->PrintLevel = 10;
+        this->PrintMeshInfo = false;
 
-      this->transcribe();
+        this->transcribe();
     }
     void jet_release() {
-      this->indexer = PhaseIndexer();
-      this->optimizer->release();
-      this->initThreads();
-      this->optimizer->PrintLevel = 0;
-      this->PrintMeshInfo = true;
-      this->nlp = std::shared_ptr<NonLinearProgram>();
-      this->resetTranscription();
-      this->invalidatePostOptInfo();
+        this->indexer = PhaseIndexer();
+        this->optimizer->release();
+        this->initThreads();
+        this->optimizer->PrintLevel = 0;
+        this->PrintMeshInfo = true;
+        this->nlp = std::shared_ptr<NonLinearProgram>();
+        this->resetTranscription();
+        this->invalidatePostOptInfo();
     }
 
-
-    PSIOPT::ConvergenceFlags solve() {
-      return phase_call_impl("solve");
-    }
-    PSIOPT::ConvergenceFlags optimize() {
-      return phase_call_impl("optimize");
-    }
-    PSIOPT::ConvergenceFlags solve_optimize() {
-      return phase_call_impl("solve_optimize");
-    }
+    PSIOPT::ConvergenceFlags solve() { return phase_call_impl("solve"); }
+    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl("optimize"); }
+    PSIOPT::ConvergenceFlags solve_optimize() { return phase_call_impl("solve_optimize"); }
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
-      return phase_call_impl("solve_optimize_solve");
+        return phase_call_impl("solve_optimize_solve");
     }
-    PSIOPT::ConvergenceFlags optimize_solve() {
-      return phase_call_impl("optimize_solve");
-    }
-
+    PSIOPT::ConvergenceFlags optimize_solve() { return phase_call_impl("optimize_solve"); }
 
     /////////////////////////////////////////////////////////////////
 
-    virtual void get_meshinfo_integrator(Eigen::VectorXd& tsnd,
-                                         Eigen::MatrixXd& mesh_errors,
-                                         Eigen::MatrixXd& mesh_dist) const = 0;
-    virtual void get_meshinfo_deboor(Eigen::VectorXd& tsnd,
-                                     Eigen::MatrixXd& mesh_errors,
-                                     Eigen::MatrixXd& mesh_dist) const = 0;
+    virtual void get_meshinfo_integrator(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
+                                         Eigen::MatrixXd &mesh_dist) const = 0;
+    virtual void get_meshinfo_deboor(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
+                                     Eigen::MatrixXd &mesh_dist) const = 0;
     virtual Eigen::VectorXd calc_global_error() const = 0;
 
-
     virtual void initMeshRefinement() {
-      this->MeshConverged = false;
-      this->MeshIters.resize(0);
+        this->MeshConverged = false;
+        this->MeshIters.resize(0);
     }
 
     virtual bool checkMesh();
     virtual void updateMesh();
 
-
     virtual Eigen::VectorXd calcSwitches();
-
 
     auto getMeshInfo(bool integ, int n) {
 
-      Eigen::VectorXd tsnd;
-      Eigen::MatrixXd mesh_errors;
-      Eigen::MatrixXd mesh_dist;
+        Eigen::VectorXd tsnd;
+        Eigen::MatrixXd mesh_errors;
+        Eigen::MatrixXd mesh_dist;
 
-      this->Table.loadExactData(this->ActiveTraj);
+        this->Table.loadExactData(this->ActiveTraj);
 
+        if (integ) {
+            this->get_meshinfo_integrator(tsnd, mesh_errors, mesh_dist);
+        } else {
+            this->get_meshinfo_deboor(tsnd, mesh_errors, mesh_dist);
+        }
 
-      if (integ) {
-        this->get_meshinfo_integrator(tsnd, mesh_errors, mesh_dist);
-      } else {
-        this->get_meshinfo_deboor(tsnd, mesh_errors, mesh_dist);
-      }
+        Eigen::VectorXd error = mesh_errors.colwise().lpNorm<Eigen::Infinity>();
+        Eigen::VectorXd dist = mesh_dist.colwise().lpNorm<Eigen::Infinity>();
 
-      Eigen::VectorXd error = mesh_errors.colwise().lpNorm<Eigen::Infinity>();
-      Eigen::VectorXd dist = mesh_dist.colwise().lpNorm<Eigen::Infinity>();
+        Eigen::VectorXd distint(dist.size());
+        distint[0] = 0;
 
-      Eigen::VectorXd distint(dist.size());
-      distint[0] = 0;
+        for (int i = 0; i < dist.size() - 1; i++) {
+            distint[i + 1] = distint[i] + (dist[i]) * (tsnd[i + 1] - tsnd[i]);
+        }
 
-      for (int i = 0; i < dist.size() - 1; i++) {
-        distint[i + 1] = distint[i] + (dist[i]) * (tsnd[i + 1] - tsnd[i]);
-      }
+        distint = distint / distint[distint.size() - 1];
 
-      distint = distint / distint[distint.size() - 1];
+        Eigen::VectorXd bins;
+        bins.setLinSpaced(n + 1, 0.0, 1.0);
+        int elem = 0;
+        for (int i = 1; i < n; i++) {
+            double di = double(i) / double(n);
+            auto it = std::upper_bound(distint.cbegin() + elem, distint.cend(), di);
+            elem = int(it - distint.cbegin()) - 1;
 
-      Eigen::VectorXd bins;
-      bins.setLinSpaced(n + 1, 0.0, 1.0);
-      int elem = 0;
-      for (int i = 1; i < n; i++) {
-        double di = double(i) / double(n);
-        auto it = std::upper_bound(distint.cbegin() + elem, distint.cend(), di);
-        elem = int(it - distint.cbegin()) - 1;
+            double t0 = tsnd[elem];
+            double t1 = tsnd[elem + 1];
+            double d0 = distint[elem];
+            double d1 = distint[elem + 1];
+            double slope = (d1 - d0) / (t1 - t0);
+            bins[i] = (di - d0) / slope + t0;
+        }
 
-        double t0 = tsnd[elem];
-        double t1 = tsnd[elem + 1];
-        double d0 = distint[elem];
-        double d1 = distint[elem + 1];
-        double slope = (d1 - d0) / (t1 - t0);
-        bins[i] = (di - d0) / slope + t0;
-      }
-
-      return std::tuple {tsnd, bins, error};
+        return std::tuple{tsnd, bins, error};
     }
 
+    static void Build(py::module &m);
+};
 
-    static void Build(py::module& m);
-  };
-
-}  // namespace ASSET
+} // namespace Tycho

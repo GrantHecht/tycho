@@ -1,6 +1,7 @@
 #include "FunctionDomains.h"
 
-// void ASSET::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>& sub_domains) {
+// void Tycho::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>&
+// sub_domains) {
 //     if (sub_domains.size() == 1) {
 //         this->SubDomains = sub_domains[0];
 //         return;

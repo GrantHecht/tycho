@@ -135,7 +135,7 @@ Full Code
 
     import asset as ast
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib as mpl

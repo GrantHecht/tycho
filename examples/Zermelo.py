@@ -1,12 +1,17 @@
-import asset_asrl as ast
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
 
-#Change a few of the matplotlib label sizes for ease of reading plots
-params = {'xtick.labelsize': 12, 'ytick.labelsize' : 12,
-          'axes.labelsize':15, 'legend.fontsize':11}
-mpl.rcParams.update(params) 
+import tycho as ast
+
+# Change a few of the matplotlib label sizes for ease of reading plots
+params = {
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "axes.labelsize": 15,
+    "legend.fontsize": 11,
+}
+mpl.rcParams.update(params)
 
 
 ################################################################################
@@ -32,9 +37,9 @@ class Zermelo(oc.ODEBase):
     def __init__(self, vMax, wFunc):
         Xvars = 2
         Uvars = 1
-        
-        #we use vf.Arguments as opposed to 
-        #oc.ODEArguments because of the time dependent model
+
+        # we use vf.Arguments as opposed to
+        # oc.ODEArguments because of the time dependent model
         args = vf.Arguments(Xvars + 1 + Uvars)
         xyt = args.head_3()
         th = args[3]
@@ -122,37 +127,42 @@ def navigate(A, B, vM=1, wF=uniformWind):
 ################################################################################
 ## 2D Plotting
 def colorScale(x, left=[48, 59, 194], right=[208, 35, 70]):
-    return [int(round((x * right[i]) + ((1 - x) * left[i])))/(256) for i in range(3)]
+    return [int(round((x * right[i]) + ((1 - x) * left[i]))) / (256) for i in range(3)]
+
 
 def plot2DTrajList(tList):
-    
-    fig, axes = plt.subplots(1, 2, figsize = (12, 8))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 8))
     for i, t in enumerate(tList):
         clr = colorScale(i / len(tList))
-        axes[0].plot([X[0] for X in t], [X[1] for X in t],
-                     color = [(clr[0]), (clr[1]), (clr[2])],
-                     label = "Path "+str(i))
-        
-        axes[1].plot([X[2] for X in t], [X[3] for X in t],
-                     color = [(clr[0]), (clr[1]), (clr[2])])
+        axes[0].plot(
+            [X[0] for X in t],
+            [X[1] for X in t],
+            color=[(clr[0]), (clr[1]), (clr[2])],
+            label="Path " + str(i),
+        )
+
+        axes[1].plot(
+            [X[2] for X in t], [X[3] for X in t], color=[(clr[0]), (clr[1]), (clr[2])]
+        )
     axes[0].grid(True)
     axes[0].set_xlabel("X")
     axes[0].set_ylabel("Y")
-    
+
     axes[1].grid(True)
     axes[1].set_xlabel("Time")
     axes[1].set_ylabel("$\\theta$ (rad)")
     axes[0].legend()
     plt.tight_layout()
-    plt.savefig("Plots/Zermelo/CompareWindModels.svg",
-                dpi = 500)
+    plt.savefig("Plots/Zermelo/CompareWindModels.svg", dpi=500)
     plt.show()
+
 
 # -------------------------------------
 
 
 def plot2DTrajListVF(tList, wFunc_num):
-    fig, axes = plt.subplots(1, 2, figsize = (12, 8))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 8))
 
     # Generate vector field for trajectory plot
     maxX = max([max([x[0] for x in t]) for t in tList])
@@ -170,33 +180,35 @@ def plot2DTrajListVF(tList, wFunc_num):
     for i in range(nVecPlot):
         for j in range(nVecPlot):
             u_ij, v_ij = wFunc_num([xPlot[i, j], yPlot[i, j]])
-            uPlot[i, j] = u_ij
-            vPlot[i, j] = v_ij
-            
-    QV = axes[0].quiver(xPlot, yPlot, uPlot, vPlot, label = "Wind", color = "blue")
-    
+            uPlot[i, j] = u_ij.item()
+            vPlot[i, j] = v_ij.item()
+
+    QV = axes[0].quiver(xPlot, yPlot, uPlot, vPlot, label="Wind", color="blue")
 
     # Overlay trajectories and control
     for i, t in enumerate(tList):
         clr = colorScale(i / len(tList))
-        axes[0].plot([X[0] for X in t], [X[1] for X in t],
-                     color = [(clr[0]), (clr[1]), (clr[2])],
-                     label = "Path "+str(i))
-        
-        axes[1].plot([X[2] for X in t], [X[3] for X in t],
-                     color = [(clr[0]), (clr[1]), (clr[2])])
-        
+        axes[0].plot(
+            [X[0] for X in t],
+            [X[1] for X in t],
+            color=[(clr[0]), (clr[1]), (clr[2])],
+            label="Path " + str(i),
+        )
+
+        axes[1].plot(
+            [X[2] for X in t], [X[3] for X in t], color=[(clr[0]), (clr[1]), (clr[2])]
+        )
+
     axes[0].grid(True)
     axes[0].set_xlabel("X")
     axes[0].set_ylabel("Y")
-    
+
     axes[1].grid(True)
     axes[1].set_xlabel("Time")
     axes[1].set_ylabel("$\\theta$ (rad)")
-    axes[0].legend(ncol =2)
+    axes[0].legend(ncol=2)
     plt.tight_layout()
-    plt.savefig("Plots/Zermelo/CompareBoatSpeed.svg",
-                dpi = 500)
+    plt.savefig("Plots/Zermelo/CompareBoatSpeed.svg", dpi=500)
     plt.show()
 
 

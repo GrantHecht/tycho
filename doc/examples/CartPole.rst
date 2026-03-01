@@ -161,7 +161,7 @@ Full-Code
 .. code-block:: python
 
     import numpy as np
-    import asset_asrl as ast
+    import tycho as ast
     import matplotlib.pyplot as plt
     import seaborn as sns    # pip install seaborn if you dont have it
     import matplotlib.animation as animation

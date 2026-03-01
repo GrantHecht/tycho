@@ -1,12 +1,12 @@
 
 set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
-add_custom_target(pypiwheel  ALL DEPENDS ${CMAKE_SOURCE_DIR}/asset_asrl)
-add_dependencies(pypiwheel asset)
+add_custom_target(pypiwheel  ALL DEPENDS ${CMAKE_SOURCE_DIR}/tycho)
+add_dependencies(pypiwheel _tycho)
 
-set(WHEEL_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/asset_asrl)
+set(WHEEL_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/tycho)
 
-set(ASSET_BINARY_NAME "asset${PYTHON_MODULE_EXTENSION}")
+set(TYCHO_BINARY_NAME "_tycho${PYTHON_MODULE_EXTENSION}")
 
 
 configure_file(
@@ -15,26 +15,26 @@ configure_file(
     @ONLY)
 
 
-add_custom_command(TARGET pypiwheel 
+add_custom_command(TARGET pypiwheel
                     COMMAND ${CMAKE_COMMAND} -E rm -rf ${WHEEL_BUILD_DIR}/
-                    COMMENT "Cleaning asset_asrl install directory")
+                    COMMENT "Cleaning tycho install directory")
 
 
-add_custom_command(TARGET pypiwheel 
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory  ${CMAKE_SOURCE_DIR}/asset_asrl
-                                                ${WHEEL_BUILD_DIR}/asset_asrl
-                    DEPENDS ${CMAKE_SOURCE_DIR}/asset_asrl
-                    COMMENT "Copied asset_asrl to ${WHEEL_BUILD_DIR}")
+add_custom_command(TARGET pypiwheel
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory  ${CMAKE_SOURCE_DIR}/tycho
+                                                ${WHEEL_BUILD_DIR}/tycho
+                    DEPENDS ${CMAKE_SOURCE_DIR}/tycho
+                    COMMENT "Copied tycho to ${WHEEL_BUILD_DIR}")
 
-add_custom_command(TARGET pypiwheel 
+add_custom_command(TARGET pypiwheel
                     COMMAND ${CMAKE_COMMAND} -E copy  ${CMAKE_CURRENT_BINARY_DIR}/setup.py ${WHEEL_BUILD_DIR}
-                    
+
                     COMMENT "Copied setup.py to ${WHEEL_BUILD_DIR}")
 
 
-add_custom_command(TARGET pypiwheel 
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:asset> ${WHEEL_BUILD_DIR}/
-    COMMENT "Copied asset.pyd to ${WHEEL_BUILD_DIR}"
+add_custom_command(TARGET pypiwheel
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tycho> ${WHEEL_BUILD_DIR}/
+    COMMENT "Copied _tycho extension to ${WHEEL_BUILD_DIR}"
     )
 
 
@@ -47,6 +47,6 @@ add_custom_command(TARGET pypiwheel
                    COMMENT "Generating Binary Wheel")
 
 
-message(STATUS ${ASSET_BINARY_NAME})
+message(STATUS ${TYCHO_BINARY_NAME})
 
 

@@ -108,7 +108,7 @@ Step-By-Step Guide
 
 		.. image:: _static/anacondapath.PNG
 
-#. Now, clone the `ASSET repo <https://github.com/AlabamaASRL/asset_asrl>`_  to where you want it to live.
+#. Now, clone the `ASSET repo <https://github.com/GrantHecht/tycho>`_  to where you want it to live.
 
 	  .. note::
 
@@ -142,7 +142,7 @@ Step-By-Step Guide
 
 	  .. code-block:: python
 
-		import asset_asrl
+		import tycho
 
 
 
@@ -225,7 +225,7 @@ If it is desired to use an IDE other than Visual Studio Code, it is still requir
 
 	   source /opt/intel/oneapi/setvars.sh
 
-#. Now, clone the `ASSET repo <https://github.com/AlabamaASRL/asset_asrl>`_  to where you want it to live.
+#. Now, clone the `ASSET repo <https://github.com/GrantHecht/tycho>`_  to where you want it to live.
 
 	.. note::
 
@@ -258,12 +258,12 @@ If it is desired to use an IDE other than Visual Studio Code, it is still requir
 
 	  .. code-block:: python
 
-		import asset_asrl
+		import tycho
 
 Docker
 ------
 
-The `dockerfiles <https://github.com/AlabamaASRL/asset_asrl/tree/master/dockerfiles>`_ folder in the repo contains docker files and supporting scripts for building asset_asrl .whl files for pip installation on linux systems.
+The `dockerfiles <https://github.com/GrantHecht/tycho/tree/master/dockerfiles>`_ folder in the repo contains docker files and supporting scripts for building tycho .whl files for pip installation on linux systems.
 Two images are provided based on Ubuntu 18.04 and 20.04. Build wheels on 18.04 for better compatibility with older linux distros or 20.04 for better performance.
 
 
@@ -289,7 +289,7 @@ You may also set the number of jobs used when compiling with the -j argument.
 
 	bash ~/BuildWheel.sh -b master -j 12 -p 3.10
 
-After the build has completed, the packaged wheel file will be available in ~/asset_asrl/wheelhouse. You can then copy this file out of the container
+After the build has completed, the packaged wheel file will be available in ~/tycho/wheelhouse. You can then copy this file out of the container
 for installation on other systems.
 
 

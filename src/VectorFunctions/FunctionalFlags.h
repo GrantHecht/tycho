@@ -1,15 +1,15 @@
 #pragma once
 
-namespace ASSET {
+namespace Tycho {
 
-  enum ParsedIOFlags {
+enum ParsedIOFlags {
     HiddenInput = -2,
     IngoreOutput = -1,
     NotContiguous,
     Contiguous,
-  };
+};
 
-  enum ThreadingFlags {
+enum ThreadingFlags {
     RoundRobin = -4,
     MainThread = -3,
     NeedsPool = -2,
@@ -43,13 +43,13 @@ namespace ASSET {
     Thread26 = 26,
     Thread27 = 27,
     Thread28 = 28,
-  };
+};
 
-  enum VarTypes {
+enum VarTypes {
     NonLinear = 0,
     Linear = 1,
     Quadratic = 2,
     Inactive = 3,
     BiLinear = 4,
-  };
-}  // namespace ASSET
+};
+} // namespace Tycho
