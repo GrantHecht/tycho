@@ -29,10 +29,6 @@ struct ParsedInput : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analy
         // this->set_input_domain(irr, func.input_domain());
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
-
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;

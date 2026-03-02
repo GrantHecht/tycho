@@ -7,8 +7,10 @@
 #include "VectorFunctionTypeErasure/GenericConditional.h"
 #include "VectorFunctionTypeErasure/GenericFunction.h"
 #ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/PythonArgParsing.h"
 #include "Bindings/FunctionRegistry.h"
+#include "Bindings/DenseFunctionBaseBind.h"
+#include "Bindings/CommonFunctionsBind.h"
+#include "Bindings/PythonArgParsing.h"
 #include "Bindings/PythonFunctions.h"
 #include "Bindings/GenericFunctionBind.h"
 #endif

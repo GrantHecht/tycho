@@ -371,10 +371,5 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
     }
 };
 
-#ifdef TYCHO_PYTHON_BINDINGS
-// Implementation is in src/Bindings/InterpTableBind.h,
-// included from Tycho_VectorFunctions.cpp after all InterpTable headers.
-void InterpTable1DBuild(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

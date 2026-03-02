@@ -36,10 +36,6 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     NormalizedPower_Impl() {}
     NormalizedPower_Impl(int irows) { this->setIORows(irows, irows); }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
-
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;
         if constexpr (power == 1)

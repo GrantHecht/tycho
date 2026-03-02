@@ -1,6 +1,26 @@
-#include "Astro/KeplerUtils.h"
+#include "Astro/Tycho_Astro.h"
 
 #include "VectorFunctions/CommonFunctions/RootFinder.h"
+
+namespace Tycho {
+
+template <>
+struct TychoBind<ModifiedToCartesian> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<ModifiedToCartesian>(m, name).def(nb::init<double>());
+        Bind::DenseBaseBuild<ModifiedToCartesian>(obj);
+    }
+};
+
+template <>
+struct TychoBind<CartesianToClassic> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<CartesianToClassic>(m, name).def(nb::init<double>());
+        Bind::DenseBaseBuild<CartesianToClassic>(obj);
+    }
+};
+
+} // namespace Tycho
 
 void Tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
 

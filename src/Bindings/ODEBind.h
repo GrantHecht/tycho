@@ -1,41 +1,39 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Out-of-class definitions of ODE_Expression::Build(), ODEBase::BuildODEModule(),
-// and GenericODE::BuildGenODEModule() binding methods.
-// Included from ODE.h under TYCHO_PYTHON_BINDINGS.
+// Free-function binding helpers for ODE_Expression, ODEBase, and GenericODE.
+// Replaces the out-of-class ODE_Expression::Build(), ODEBase::BuildODEModule(), and
+// GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
-namespace Tycho {
+#include "DenseFunctionBaseBind.h"
+
+namespace Tycho::Bind {
 
 template <class Derived, class ExprImpl, class... Ts>
-void ODE_Expression<Derived, ExprImpl, Ts...>::Build(nb::module_ &m, const char *name) {
-    using Base = typename ODE_Expression<Derived, ExprImpl, Ts...>::Base;
+void ODE_ExpressionBuild(nb::module_ &m, const char *name) {
     auto obj = nb::class_<Derived>(m, name).def(nb::init<Ts...>());
-    Base::DenseBaseBuild(obj);
+    DenseBaseBuild<Derived>(obj);
     obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {
         return std::make_shared<ODEPhase<Derived>>(od, Tmode);
     });
-    Integrator<Derived>::BuildConstructors(obj);
+    IntegratorBuildConstructors<Derived>(obj);
 }
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV>
-void ODEBase<BaseType, Derived, _XV, _UV, _PV>::BuildODEModule(const char *name, nb::module_ &mod,
-                                                                FunctionRegistry &reg) {
+void BuildODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg) {
     auto odemod = mod.def_submodule(name);
     reg.template Build_Register<Derived>(odemod, "ode");
     reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
-    ODEPhase<Derived>::Build(odemod);
+    TychoBind<ODEPhase<Derived>>::Build(odemod);
 }
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV>
-void ODEBase<BaseType, Derived, _XV, _UV, _PV>::BuildODEModule(const char *name,
-                                                                FunctionRegistry &reg) {
-    BuildODEModule(name, reg.mod, reg);
+void BuildODEModule(const char *name, FunctionRegistry &reg) {
+    BuildODEModule<BaseType, Derived, _XV, _UV, _PV>(name, reg.mod, reg);
 }
 
 template <class BaseType, int _XV, int _UV, int _PV>
-void GenericODE<BaseType, _XV, _UV, _PV>::BuildGenODEModule(const char *name, nb::module_ &mod,
-                                                              FunctionRegistry &reg) {
+void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg) {
     using Derived = GenericODE<BaseType, _XV, _UV, _PV>;
     auto odemod = mod.def_submodule(name);
 
@@ -44,7 +42,7 @@ void GenericODE<BaseType, _XV, _UV, _PV>::BuildGenODEModule(const char *name, nb
     obj.def(nb::init<BaseType, int, int>());
     obj.def(nb::init<BaseType, int>());
     obj.def(nb::init<BaseType>());
-    ODEPhase<Derived>::Build(odemod);
+    TychoBind<ODEPhase<Derived>>::Build(odemod);
     obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {
         return std::make_shared<ODEPhase<Derived>>(od, Tmode);
     });
@@ -78,9 +76,9 @@ void GenericODE<BaseType, _XV, _UV, _PV>::BuildGenODEModule(const char *name, nb
 
     reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
 
-    Integrator<Derived>::BuildConstructors(obj);
+    IntegratorBuildConstructors<Derived>(obj);
 
-    ODESize<_XV, _UV, _PV>::template BuildODESizeMembers<decltype(obj), Derived>(obj);
+    ODESizeBuild<_XV, _UV, _PV, Derived>(obj);
 
     obj.def("vf", [](const Derived &od) { return od.func; });
 
@@ -89,6 +87,29 @@ void GenericODE<BaseType, _XV, _UV, _PV>::BuildGenODEModule(const char *name, nb
         return GenericFunction<-1, -1>(shooter);
     });
 }
+
+} // namespace Tycho::Bind
+
+namespace Tycho {
+
+template <int OR>
+struct TychoBind<InterpFunction<OR>> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<InterpFunction<OR>>(m, name);
+        if constexpr (OR == -1) {
+            obj.def(nb::init<std::shared_ptr<LGLInterpTable>, Eigen::VectorXi>());
+        } else {
+            obj.def(nb::init<std::shared_ptr<LGLInterpTable>>());
+        }
+        Bind::DenseBaseBuild<InterpFunction<OR>>(obj);
+        obj.def("__call__", [](const InterpFunction<OR> &self, const GenericFunction<-1, 1> &t) {
+            return GenericFunction<-1, -1>(self.eval(t));
+        });
+        obj.def("__call__", [](const InterpFunction<OR> &self, const Segment<-1, 1, -1> &t) {
+            return GenericFunction<-1, -1>(self.eval(t));
+        });
+    }
+};
 
 } // namespace Tycho
 

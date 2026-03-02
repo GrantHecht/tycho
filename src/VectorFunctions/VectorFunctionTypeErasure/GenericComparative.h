@@ -15,12 +15,6 @@ template <int IR> struct GenericComparative : rubber_types::TypeErasure<Conditio
         this->reset_container(obj.get_container());
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementations are in src/Bindings/GenericFunctionBind.h,
-    // included from Tycho_VectorFunctions.h under TYCHO_PYTHON_BINDINGS.
-    static void ComparativeBuild(nb::module_ &m);
-    template <class PYCLASS> static void MinMaxBuild(PYCLASS &obj);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

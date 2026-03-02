@@ -1005,9 +1005,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         }
     }
 
+  public:
     Eigen::VectorXd get_input_scale(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV,
                                     VectorXi SPV) const;
 
+  protected:
     std::vector<Eigen::VectorXd> get_test_inputs(PhaseRegionFlags flag, VectorXi XtUV, VectorXi OPV,
                                                  VectorXi SPV) const;
 

@@ -191,17 +191,7 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     Eigen::VectorXi Uidxs(int zidxs) const { return idxs_impl(zidxs, this->Uidxs()); }
     Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementation is in src/Bindings/ODESizesBind.h,
-    // which is included below after the class definition.
-    template <class Obj, class Derived> static void BuildODESizeMembers(Obj &obj);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho
 
-// Out-of-class template definitions for the Python binding helper methods.
-// Must be included after the class definition so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/ODESizesBind.h"
-#endif

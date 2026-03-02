@@ -340,11 +340,6 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         MemoryManager::resize(64, 64);
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementation is in src/Bindings/GenericFunctionBind.h,
-    // included from Tycho_VectorFunctions.h under TYCHO_PYTHON_BINDINGS.
-    template <class PYClass> static void GenericBuild(PYClass &obj);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

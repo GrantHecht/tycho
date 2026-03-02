@@ -1,8 +1,4 @@
 #pragma once
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "TypeCasters.h"
-#endif
-
 #include <unsupported/Eigen/CXX11/Tensor>
 
 #include "VectorFunction.h"
@@ -838,10 +834,5 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, Analytic, Analy
     }
 };
 
-#ifdef TYCHO_PYTHON_BINDINGS
-// Implementation is in src/Bindings/InterpTableBind.h,
-// included from Tycho_VectorFunctions.cpp after all InterpTable headers.
-void InterpTable3DBuild(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 
 } // namespace Tycho

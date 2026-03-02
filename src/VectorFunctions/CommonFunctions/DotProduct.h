@@ -57,9 +57,6 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         this->set_input_domain(this->IRows(),
                                {this->func1.input_domain(), this->func2.input_domain()});
     }
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {

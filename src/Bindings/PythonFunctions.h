@@ -2,6 +2,7 @@
 
 #ifdef TYCHO_PYTHON_BINDINGS
 
+#include "DenseFunctionBaseBind.h"
 #include "VectorFunction.h"
 
 namespace Tycho {
@@ -53,23 +54,6 @@ struct PyVectorFunction : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, F
     }
 
     bool thread_safe() const { return threadSafe; }
-
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<PyVectorFunction>(m, name);
-
-        if constexpr (ORR != 1) {
-            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(),
-                    nb::arg("IRows"), nb::arg("ORows"), nb::arg("Func"),
-                    nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
-                    nb::arg("args") = nb::tuple());
-        } else {
-            obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
-                    nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
-                    nb::arg("args") = nb::tuple());
-        }
-
-        Base::DenseBaseBuild(obj);
-    }
 };
 
 template <int IRR, int ORR>
@@ -114,23 +98,52 @@ struct NumbaVectorFunction
     NumbaVectorFunction(int irr, const FType &f) : NumbaVectorFunction(irr, ORR, f) {}
 
     bool thread_safe() const { return threadSafe; }
+};
 
+// ── TychoBind<PyVectorFunction> ───────────────────────────────────────────────────────────────────
+template <int IRR, int ORR>
+struct TychoBind<PyVectorFunction<IRR, ORR>> {
     static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<NumbaVectorFunction>(m, name);
-        obj.def(nb::init<int, int, const FType &, double, double>());
-        obj.def(nb::init<int, int, const FType &>());
+        auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
+
+        if constexpr (ORR != 1) {
+            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(),
+                    nb::arg("IRows"), nb::arg("ORows"), nb::arg("Func"),
+                    nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
+                    nb::arg("args") = nb::tuple());
+        } else {
+            obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
+                    nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
+                    nb::arg("args") = nb::tuple());
+        }
+
+        Bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
+    }
+};
+
+// ── TychoBind<NumbaVectorFunction> ───────────────────────────────────────────────────────────────
+template <int IRR, int ORR>
+struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
+        obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
+                         double>());
+        obj.def(
+            nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
 
         if constexpr (ORR == 1) {
-            obj.def(nb::init<int, const FType &, double, double>());
-            obj.def(nb::init<int, const FType &>());
+            obj.def(nb::init<int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
+                             double>());
+            obj.def(nb::init<int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
 
         if constexpr (IRR > 0 && ORR > 0) {
-            obj.def(nb::init<const FType &, double, double>());
-            obj.def(nb::init<const FType &>());
+            obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
+                             double>());
+            obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
-        obj.def_rw("thread_safe", &NumbaVectorFunction::thread_safe);
-        Base::DenseBaseBuild(obj);
+        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe);
+        Bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
     }
 };
 

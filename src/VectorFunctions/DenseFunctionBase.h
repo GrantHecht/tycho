@@ -1458,31 +1458,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    /*
-     * Code for binding public members to python, self explanatory, hopefully....
-     * Implementations are in src/Bindings/DenseFunctionBaseBind.h.
-     */
-
-  public:
-    template <class PYClass> static void DenseBaseBuild(PYClass &obj);
-    template <class PYClass> static void DoubleMathBuild(PYClass &obj);
-    template <class PYClass> static void UnaryMathBuild(PYClass &obj);
-    template <class PYClass> static void FunctionIndexingBuild(PYClass &obj);
-    template <class PYClass> static void BinaryMathBuild(PYClass &obj);
-    template <class PYClass> static void BinaryOperatorsBuild(PYClass &obj);
-    template <class PYClass> static void ConditionalOperatorsBuild(PYClass &obj);
-
-    // Implementations are in src/Bindings/DenseFunctionBaseBind.h,
-    // which is included below after the class definition.
-#endif // TYCHO_PYTHON_BINDINGS
-
 };
 
 } // namespace Tycho
 
-// Out-of-class template definitions for the Python binding helper methods.
-// Must be included after the class definition so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/DenseFunctionBaseBind.h"
-#endif

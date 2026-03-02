@@ -25,10 +25,6 @@ struct VectorExpression
     VectorExpression(Ts... ts) : Base(ExprImpl::Definition(ts...)) {}
     VectorExpression() {};
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
-
     /////////////////////////////////////
     void InitExpression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
 };
@@ -42,10 +38,6 @@ struct VectorExpression<Derived, ExprImpl>
     using Base::Base;
     VectorExpression() : Base(ExprImpl::Definition()) {}
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
-
     /////////////////////////////////////
     void InitExpression() { *this = Base(ExprImpl::Definition()); }
 };
@@ -58,8 +50,3 @@ struct VectorExpression<Derived, ExprImpl>
 
 } // namespace Tycho
 
-// Out-of-class template definitions for VectorExpression::Build().
-// Must be included after the class definitions so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/VectorFunctionBind.h"
-#endif

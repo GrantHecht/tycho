@@ -44,17 +44,17 @@ void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 
-    GenS::DoubleMathBuild(reg.sfuncx);
-    GenS::UnaryMathBuild(reg.sfuncx);
-    GenS::BinaryMathBuild(reg.sfuncx);
-    GenS::BinaryOperatorsBuild(reg.sfuncx);
-    GenS::FunctionIndexingBuild(reg.sfuncx);
-    GenS::ConditionalOperatorsBuild(reg.sfuncx);
+    Bind::DoubleMathBuild<GenS>(reg.sfuncx);
+    Bind::UnaryMathBuild<GenS>(reg.sfuncx);
+    Bind::BinaryMathBuild<GenS>(reg.sfuncx);
+    Bind::BinaryOperatorsBuild<GenS>(reg.sfuncx);
+    Bind::FunctionIndexingBuild<GenS>(reg.sfuncx);
+    Bind::ConditionalOperatorsBuild<GenS>(reg.sfuncx);
 
     ///////////////////////////////////////
-    Gen::DoubleMathBuild(reg.vfuncx);
-    Gen::FunctionIndexingBuild(reg.vfuncx);
-    Gen::BinaryOperatorsBuild(reg.vfuncx);
+    Bind::DoubleMathBuild<Gen>(reg.vfuncx);
+    Bind::FunctionIndexingBuild<Gen>(reg.vfuncx);
+    Bind::BinaryOperatorsBuild<Gen>(reg.vfuncx);
     ///////////////////////////////////////
 
     DefineListEval(reg.vfuncx);

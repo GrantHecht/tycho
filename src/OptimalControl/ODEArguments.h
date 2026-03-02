@@ -21,7 +21,7 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
         obj.def(nb::init<int, int>());
         obj.def(nb::init<int>());
 
-        Base::DenseBaseBuild(obj);
+        Bind::DenseBaseBuild<Derived>(obj);
 
         obj.def("XVec", [](const Derived &a) { return a.segment(0, a.XVars()); });
         obj.def("XVar", [](const Derived &a, int i) { return a.segment(0, a.XVars()).coeff(i); });

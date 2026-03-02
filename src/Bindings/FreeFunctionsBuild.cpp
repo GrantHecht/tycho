@@ -417,7 +417,7 @@ void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
     UnaryScalarOpBuild<ELEM>(m);
     UnaryScalarOpBuild<GenS>(m);
 
-    GenCon::IfElseBuild(m);
+    Bind::IfElseBuild(m);
 
     m.def("arctan2", [](const GenS &y, const GenS &x) {
         return GenS(ArcTan2Op().eval(StackedOutputs{y, x}));

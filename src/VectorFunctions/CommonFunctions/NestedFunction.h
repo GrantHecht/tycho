@@ -13,10 +13,6 @@ struct NestedFunction
     using Base = NestedFunction_Impl<NestedFunction<OuterFunc, InnerFunc>, OuterFunc, InnerFunc>;
     DENSE_FUNCTION_BASE_TYPES(Base);
     using Base::Base;
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 //////////////////////////////////////////////////////////////////////

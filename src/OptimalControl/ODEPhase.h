@@ -658,18 +658,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         return func;
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementations are in src/Bindings/ODEPhaseBind.h,
-    // which is included below after the class definition.
-    template <class PyClass> static void BuildImpl(PyClass &phase);
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho
 
-// Out-of-class template definitions for the Python binding helper methods.
-// Must be included after the class definition so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/ODEPhaseBind.h"
-#endif

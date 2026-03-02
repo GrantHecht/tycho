@@ -1,19 +1,22 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Out-of-class definitions of GenericFunction, GenericComparative, and GenericConditional
-// binding methods. Included from Tycho_VectorFunctions.h under TYCHO_PYTHON_BINDINGS,
+// Free function templates in namespace Tycho::Bind for GenericFunction,
+// GenericComparative, and GenericConditional binding methods.
+// Included from Tycho_VectorFunctions.h under TYCHO_PYTHON_BINDINGS,
 // after all three type definitions are complete.
 
-namespace Tycho {
+#include "DenseFunctionBaseBind.h"
 
-// ── GenericFunction ───────────────────────────────────────────────────────────────────────────────
-template <int IR, int OR>
-template <class PYClass>
-void GenericFunction<IR, OR>::GenericBuild(PYClass &obj) {
+namespace Tycho {
+namespace Bind {
+
+// ── GenericBuild ──────────────────────────────────────────────────────────────────────────────────
+template <class Derived, class PYClass>
+void GenericBuild(PYClass &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
-    using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
+    using BinGen = typename std::conditional<Derived::ORC == 1, GenS, Gen>::type;
 
     using SEG = Segment<-1, -1, -1>;
     using SEG2 = Segment<-1, 2, -1>;
@@ -21,35 +24,22 @@ void GenericFunction<IR, OR>::GenericBuild(PYClass &obj) {
     using SEG4 = Segment<-1, 4, -1>;
     using ELEM = Segment<-1, 1, -1>;
 
-    obj.def(nb::init<const GenericFunction<IR, OR> &>());
-    if constexpr (OR == -1 && IR == -1) {
-        obj.def("__init__", [](Derived *self, const GenericFunction<IR, 1> &src) {
-            new (self) Derived(Derived::template PyCopy<GenericFunction<IR, 1>>(src));
+    obj.def(nb::init<const Derived &>());
+    if constexpr (Derived::ORC == -1 && Derived::IRC == -1) {
+        obj.def("__init__", [](Derived *self, const GenericFunction<Derived::IRC, 1> &src) {
+            new (self) Derived(Derived::template PyCopy<GenericFunction<Derived::IRC, 1>>(src));
         });
     }
 
     obj.def("SuperTest", &Derived::SuperTest);
     obj.def("SpeedTest", &Derived::SpeedTest);
 
-    Base::DenseBaseBuild(obj);
+    Bind::DenseBaseBuild<Derived>(obj);
 }
 
-// ── GenericComparative ────────────────────────────────────────────────────────────────────────────
-template <int IR>
-void GenericComparative<IR>::ComparativeBuild(nb::module_ &m) {
-    using GenComp = GenericComparative<IR>;
-
-    auto obj = nb::class_<GenComp>(m, "Comparative");
-
-    obj.def("compute",
-            [](const GenComp &a, ConstEigenRef<Eigen::VectorXd> x) { return a.compute(x); });
-
-    MinMaxBuild(obj);
-}
-
-template <int IR>
+// ── MinMaxBuild ───────────────────────────────────────────────────────────────────────────────────
 template <class PYCLASS>
-void GenericComparative<IR>::MinMaxBuild(PYCLASS &obj) {
+void MinMaxBuild(PYCLASS &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using GenComp = GenericComparative<-1>;
@@ -132,38 +122,21 @@ void GenericComparative<IR>::MinMaxBuild(PYCLASS &obj) {
     // TODO: 3-argument min-max bindings
 }
 
-// ── GenericConditional ────────────────────────────────────────────────────────────────────────────
-template <int IR>
-void GenericConditional<IR>::ConditionalBuild(nb::module_ &m) {
+// ── ComparativeBuild ──────────────────────────────────────────────────────────────────────────────
+inline void ComparativeBuild(nb::module_ &m) {
+    using GenComp = GenericComparative<-1>;
 
-    using GenCon = GenericConditional<IR>;
-
-    auto obj = nb::class_<GenCon>(m, "Conditional");
+    auto obj = nb::class_<GenComp>(m, "Comparative");
 
     obj.def("compute",
-            [](const GenCon &a, ConstEigenRef<Eigen::VectorXd> x) { return a.compute(x); });
+            [](const GenComp &a, ConstEigenRef<Eigen::VectorXd> x) { return a.compute(x); });
 
-    obj.def(
-        "__and__",
-        [](const GenCon &a, const GenCon &b) {
-            return GenCon(
-                ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ANDFlag, b));
-        },
-        nb::is_operator());
-
-    obj.def(
-        "__or__",
-        [](const GenCon &a, const GenCon &b) {
-            return GenCon(ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ORFlag, b));
-        },
-        nb::is_operator());
-
-    IfElseBuild(obj);
+    Bind::MinMaxBuild(obj);
 }
 
-template <int IR>
+// ── IfElseBuild ───────────────────────────────────────────────────────────────────────────────────
 template <class PYCLASS>
-void GenericConditional<IR>::IfElseBuild(PYCLASS &obj) {
+void IfElseBuild(PYCLASS &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using ELEM = Segment<-1, 1, -1>;
@@ -215,6 +188,34 @@ void GenericConditional<IR>::IfElseBuild(PYCLASS &obj) {
     });
 }
 
+// ── ConditionalBuild ──────────────────────────────────────────────────────────────────────────────
+inline void ConditionalBuild(nb::module_ &m) {
+    using GenCon = GenericConditional<-1>;
+
+    auto obj = nb::class_<GenCon>(m, "Conditional");
+
+    obj.def("compute",
+            [](const GenCon &a, ConstEigenRef<Eigen::VectorXd> x) { return a.compute(x); });
+
+    obj.def(
+        "__and__",
+        [](const GenCon &a, const GenCon &b) {
+            return GenCon(
+                ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ANDFlag, b));
+        },
+        nb::is_operator());
+
+    obj.def(
+        "__or__",
+        [](const GenCon &a, const GenCon &b) {
+            return GenCon(ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ORFlag, b));
+        },
+        nb::is_operator());
+
+    Bind::IfElseBuild(obj);
+}
+
+} // namespace Bind
 } // namespace Tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

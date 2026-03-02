@@ -8,6 +8,13 @@
 #include "OptimalControlProblem.h"
 #include "pch.h"
 
+#ifdef TYCHO_PYTHON_BINDINGS
+#include "Bindings/ODESizesBind.h"
+#include "Bindings/IntegratorBind.h"
+#include "Bindings/ODEPhaseBind.h"
+#include "Bindings/ODEBind.h"
+#endif
+
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS

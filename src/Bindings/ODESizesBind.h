@@ -1,14 +1,13 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Out-of-class definitions of ODESize binding helper methods.
-// Included from ODESizes.h under TYCHO_PYTHON_BINDINGS.
+// Free-function binding helper for ODESize member definitions.
+// Used by ODEBind.h and any other code that needs to expose ODE size members.
 
-namespace Tycho {
+namespace Tycho::Bind {
 
-template <int XV, int UV, int PV>
-template <class Obj, class Derived>
-void ODESize<XV, UV, PV>::BuildODESizeMembers(Obj &obj) {
+template <int XV, int UV, int PV, class Derived, class Obj>
+void ODESizeBuild(Obj &obj) {
     obj.def("XVars", &Derived::XVars);
     obj.def("UVars", &Derived::UVars);
     obj.def("PVars", &Derived::PVars);
@@ -39,6 +38,6 @@ void ODESize<XV, UV, PV>::BuildODESizeMembers(Obj &obj) {
     obj.def("idx", &Derived::idx);
 }
 
-} // namespace Tycho
+} // namespace Tycho::Bind
 
 #endif // TYCHO_PYTHON_BINDINGS

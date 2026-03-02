@@ -12,6 +12,9 @@
 namespace Tycho {
 
 #ifdef TYCHO_PYTHON_BINDINGS
+void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
+void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
+void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
 #endif // TYCHO_PYTHON_BINDINGS
 

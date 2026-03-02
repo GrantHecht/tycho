@@ -2,15 +2,17 @@
 
 #include "CommonFunctions/IOScaled.h"
 
-// Out-of-class definition for IOScaled<Func>::Build — must come after IOScaled.h
+// TychoBind<IOScaled<Func>> specialization — must come after IOScaled.h
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
 namespace Tycho {
 template <class Func>
-void IOScaled<Func>::Build(nb::module_ &m, const char *name) {
-    auto obj = nb::class_<IOScaled<Func>>(m, name);
-    obj.def(nb::init<Func, const Input<double> &, const Output<double> &>());
-    Base::DenseBaseBuild(obj);
-}
+struct TychoBind<IOScaled<Func>> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<IOScaled<Func>>(m, name);
+        obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());
+        Bind::DenseBaseBuild<IOScaled<Func>>(obj);
+    }
+};
 } // namespace Tycho
 
 #include "CommonFunctions/InterpTable1D.h"
@@ -38,8 +40,8 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     using ELEM = Segment<-1, 1, -1>;
 
     //////////////////////////////////
-    Gen::GenericBuild(reg.vfuncx);
-    GenS::GenericBuild(reg.sfuncx);
+    Bind::GenericBuild<Gen>(reg.vfuncx);
+    Bind::GenericBuild<GenS>(reg.sfuncx);
     nb::implicitly_convertible<GenS, Gen>();
     VectorFunctionBuildPart1(reg, mod);
     VectorFunctionBuildPart2(reg, mod);
@@ -54,8 +56,8 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     BulkOperationsBuild(reg, mod);
     FreeFunctionsBuild(reg, mod);
     MatrixFunctionBuild(mod);
-    GenericConditional<-1>::ConditionalBuild(mod);
-    GenericComparative<-1>::ComparativeBuild(mod);
+    Bind::ConditionalBuild(mod);
+    Bind::ComparativeBuild(mod);
 
     reg.Build_Register<PyVectorFunction<-1, -1>>(mod, "PyVectorFunction");
     reg.Build_Register<PyVectorFunction<-1, 1>>(mod, "PyScalarFunction");

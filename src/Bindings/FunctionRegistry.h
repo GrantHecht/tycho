@@ -5,6 +5,9 @@
 
 namespace Tycho {
 
+// Primary template — undefined; specializations in *Bind.h files
+template <class T> struct TychoBind;
+
 template <class T> struct FuncPack {
     using type = T;
     std::string name;
@@ -59,15 +62,15 @@ struct FunctionRegistry {
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived> void Build_Register(nb::module_ &m) {
-        Derived::Build(m);
+        TychoBind<Derived>::Build(m);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived> void Build_Register(const char *name) {
-        Derived::Build(this->mod, name);
+        TychoBind<Derived>::Build(this->mod, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived> void Build_Register(nb::module_ &m, const char *name) {
-        Derived::Build(m, name);
+        TychoBind<Derived>::Build(m, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
 };

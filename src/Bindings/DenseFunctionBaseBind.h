@@ -1,14 +1,14 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Out-of-class definitions of DenseFunctionBase binding helper methods.
-// Included from DenseFunctionBase.h under TYCHO_PYTHON_BINDINGS.
+// Free function templates implementing DenseFunctionBase binding helpers.
+// These replace the out-of-class member function definitions that previously
+// lived in DenseFunctionBase.h under TYCHO_PYTHON_BINDINGS.
 
-namespace Tycho {
+namespace Tycho::Bind {
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::DenseBaseBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void DenseBaseBuild(PYClass &obj) {
 
     using Gen = GenericFunction<-1, -1>;
 
@@ -21,52 +21,52 @@ void DenseFunctionBase<Derived, IR, OR>::DenseBaseBuild(PYClass &obj) {
 
     // Generic lambda bodies — defined once, called from both the zero-copy
     // (ConstEigenRef/numpy) and the sequence-fallback (VectorXd) overloads.
-    auto compute_body = [](const Derived &func, const auto &x) -> Output<double> {
+    auto compute_body = [](const Derived &func, const auto &x) -> Eigen::VectorXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Output<double> fx(func.ORows());
+        Eigen::VectorXd fx(func.ORows());
         fx.setZero();
         func.derived().compute(x, fx);
         return fx;
     };
-    auto jacobian_body = [](const Derived &func, const auto &x) -> Jacobian<double> {
+    auto jacobian_body = [](const Derived &func, const auto &x) -> Eigen::MatrixXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Jacobian<double> jx(func.ORows(), func.IRows());
+        Eigen::MatrixXd jx(func.ORows(), func.IRows());
         jx.setZero();
         func.derived().jacobian(x, jx);
         return jx;
     };
     auto compute_jacobian_body =
         [](const Derived &func,
-           const auto &x) -> std::tuple<Output<double>, Jacobian<double>> {
+           const auto &x) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd> {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Output<double> fx(func.ORows());
+        Eigen::VectorXd fx(func.ORows());
         fx.setZero();
-        Jacobian<double> jx(func.ORows(), func.IRows());
+        Eigen::MatrixXd jx(func.ORows(), func.IRows());
         jx.setZero();
         func.derived().compute_jacobian(x, fx, jx);
         return std::tuple{fx, jx};
     };
     auto adjointgradient_body =
-        [](const Derived &func, const auto &x, const auto &lm) -> Gradient<double> {
+        [](const Derived &func, const auto &x, const auto &lm) -> Eigen::VectorXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Gradient<double> ax(func.IRows());
+        Eigen::VectorXd ax(func.IRows());
         ax.setZero();
         func.derived().adjointgradient(x, ax, lm);
         return ax;
     };
     auto adjointhessian_body =
-        [](const Derived &func, const auto &x, const auto &lm) -> Hessian<double> {
+        [](const Derived &func, const auto &x, const auto &lm) -> Eigen::MatrixXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Hessian<double> hx(func.IRows(), func.IRows());
+        Eigen::MatrixXd hx(func.IRows(), func.IRows());
         hx.setZero();
         func.derived().adjointhessian(x, hx, lm);
         return hx;
@@ -74,16 +74,16 @@ void DenseFunctionBase<Derived, IR, OR>::DenseBaseBuild(PYClass &obj) {
     auto computeall_body =
         [](const Derived &func,
            const auto &x,
-           const auto &lm) -> std::tuple<Output<double>, Jacobian<double>, Gradient<double>,
-                                          Hessian<double>> {
+           const auto &lm) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd, Eigen::VectorXd,
+                                          Eigen::MatrixXd> {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Output<double> fx(func.ORows());
-        Jacobian<double> jx(func.ORows(), func.IRows());
-        Gradient<double> gx(func.IRows());
-        Hessian<double> hx(func.IRows(), func.IRows());
+        Eigen::VectorXd fx(func.ORows());
+        Eigen::MatrixXd jx(func.ORows(), func.IRows());
+        Eigen::VectorXd gx(func.IRows());
+        Eigen::MatrixXd hx(func.IRows(), func.IRows());
         fx.setZero();
         jx.setZero();
         gx.setZero();
@@ -95,51 +95,52 @@ void DenseFunctionBase<Derived, IR, OR>::DenseBaseBuild(PYClass &obj) {
     // Each method: primary overload (zero-copy Ref into numpy buffer) first,
     // then sequence-fallback overload (VectorXd copy — matches pybind11 behaviour).
     obj.def("compute",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x) { return compute_body(f, x); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); });
     obj.def("compute",
             [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
 
     obj.def("__call__",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x) { return compute_body(f, x); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); });
     obj.def("__call__",
             [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
 
     obj.def("jacobian",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x) { return jacobian_body(f, x); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return jacobian_body(f, x); });
     obj.def("jacobian",
             [=](const Derived &f, Eigen::VectorXd x) { return jacobian_body(f, x); });
 
     obj.def("compute_jacobian",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x) { return compute_jacobian_body(f, x); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_jacobian_body(f, x); });
     obj.def("compute_jacobian",
             [=](const Derived &f, Eigen::VectorXd x) { return compute_jacobian_body(f, x); });
 
     obj.def("adjointgradient",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x, ConstEigenRef<Output<double>> lm) { return adjointgradient_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return adjointgradient_body(f, x, lm); });
     obj.def("adjointgradient",
             [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return adjointgradient_body(f, x, lm); });
 
     obj.def("adjointhessian",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x, ConstEigenRef<Output<double>> lm) { return adjointhessian_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return adjointhessian_body(f, x, lm); });
     obj.def("adjointhessian",
             [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return adjointhessian_body(f, x, lm); });
 
     obj.def("computeall",
-            [=](const Derived &f, ConstEigenRef<Input<double>> x, ConstEigenRef<Output<double>> lm) { return computeall_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return computeall_body(f, x, lm); });
     obj.def("computeall",
             [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return computeall_body(f, x, lm); });
 
     obj.def("rpt", &Derived::rpt);
     obj.def("vf", &Derived::template MakeGeneric<GenericFunction<-1, -1>>);
 
+    constexpr int OR = Derived::ORC;
     if constexpr (OR == 1) {
         obj.def("sf", &Derived::template MakeGeneric<GenericFunction<-1, 1>>);
     }
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::DoubleMathBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void DoubleMathBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
@@ -154,16 +155,16 @@ void DenseFunctionBase<Derived, IR, OR>::DoubleMathBuild(PYClass &obj) {
     obj.attr("__array_ufunc__") = nb::none();
 
     obj.def(
-        "__add__", [](const Derived &a, Output<double> b) { return BinGen(a + b); },
+        "__add__", [](const Derived &a, Eigen::VectorXd b) { return BinGen(a + b); },
         nb::is_operator());
     obj.def(
-        "__radd__", [](const Derived &a, Output<double> b) { return BinGen(a + b); },
+        "__radd__", [](const Derived &a, Eigen::VectorXd b) { return BinGen(a + b); },
         nb::is_operator());
     obj.def(
-        "__sub__", [](const Derived &a, Output<double> b) { return BinGen(a - b); },
+        "__sub__", [](const Derived &a, Eigen::VectorXd b) { return BinGen(a - b); },
         nb::is_operator());
     obj.def(
-        "__rsub__", [](const Derived &a, Output<double> b) { return BinGen(b - a); },
+        "__rsub__", [](const Derived &a, Eigen::VectorXd b) { return BinGen(b - a); },
         nb::is_operator());
 
     obj.def(
@@ -215,9 +216,9 @@ void DenseFunctionBase<Derived, IR, OR>::DoubleMathBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::UnaryMathBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void UnaryMathBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
@@ -234,10 +235,10 @@ void DenseFunctionBase<Derived, IR, OR>::UnaryMathBuild(PYClass &obj) {
             obj.def("sum", [](const Derived &a) { return GenS(a.sum()); });
         }
 
-        obj.def("normalized_power3", [](const Derived &a, Output<double> b) {
+        obj.def("normalized_power3", [](const Derived &a, Eigen::VectorXd b) {
             return Gen((a + b).template normalized_power<3>());
         });
-        obj.def("normalized_power3", [](const Derived &a, Output<double> b, double s) {
+        obj.def("normalized_power3", [](const Derived &a, Eigen::VectorXd b, double s) {
             return Gen(((a + b).template normalized_power<3>()) * s);
         });
         ////////////////////////////////////////////////////////////////////
@@ -403,9 +404,9 @@ void DenseFunctionBase<Derived, IR, OR>::UnaryMathBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::FunctionIndexingBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void FunctionIndexingBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
@@ -512,9 +513,9 @@ void DenseFunctionBase<Derived, IR, OR>::FunctionIndexingBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::BinaryMathBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void BinaryMathBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
@@ -606,23 +607,23 @@ void DenseFunctionBase<Derived, IR, OR>::BinaryMathBuild(PYClass &obj) {
     });
 
     //////////////////////////////////////
-    obj.def("dot", [](const Derived &seg1, const Output<double> &seg2) {
-        return GenS(dotProduct(seg1, Constant<-1, Base::ORC>(seg1.IRows(), seg2)));
+    obj.def("dot", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
+        return GenS(dotProduct(seg1, Constant<-1, Derived::ORC>(seg1.IRows(), seg2)));
     });
 
-    obj.def("cwiseProduct", [](const Derived &seg1, const Output<double> &seg2) {
+    obj.def("cwiseProduct", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         return BinGen(RowScaled<Derived>(seg1, seg2));
     });
 
-    obj.def("cwiseQuotient", [](const Derived &seg1, const Output<double> &seg2) {
-        Output<double> seg2i = seg2.cwiseInverse();
+    obj.def("cwiseQuotient", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
+        Eigen::VectorXd seg2i = seg2.cwiseInverse();
         return BinGen(RowScaled<Derived>(seg1, seg2i));
     });
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::BinaryOperatorsBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void BinaryOperatorsBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
@@ -668,7 +669,7 @@ void DenseFunctionBase<Derived, IR, OR>::BinaryOperatorsBuild(PYClass &obj) {
             nb::is_operator());
         ///////////////////////////////////////////////////////////////
         obj.def("eval", [](const Derived &a, int ir, Eigen::VectorXi v) {
-            return BinGen(ParsedInput<Derived, -1, OR>(a, v, ir));
+            return BinGen(ParsedInput<Derived, -1, Derived::ORC>(a, v, ir));
         });
     }
 
@@ -738,9 +739,10 @@ void DenseFunctionBase<Derived, IR, OR>::BinaryOperatorsBuild(PYClass &obj) {
     ////////////////////////////////////////////////////////////////
 }
 
-template <class Derived, int IR, int OR>
-template <class PYClass>
-void DenseFunctionBase<Derived, IR, OR>::ConditionalOperatorsBuild(PYClass &obj) {
+template <class Derived, class PYClass>
+void ConditionalOperatorsBuild(PYClass &obj) {
+    constexpr int OR = Derived::ORC;
+    constexpr int IR = Derived::IRC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using ELEM = Segment<-1, 1, -1>;
@@ -802,6 +804,6 @@ void DenseFunctionBase<Derived, IR, OR>::ConditionalOperatorsBuild(PYClass &obj)
     }
 }
 
-} // namespace Tycho
+} // namespace Tycho::Bind
 
 #endif // TYCHO_PYTHON_BINDINGS

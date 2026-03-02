@@ -7,7 +7,7 @@ using GODE = GenericODE<GenericFunction<-1, (XV == 1) ? 1 : -1>, XV, UV, PV>;
 
 void GenericODESBuildPart5(FunctionRegistry &reg, nb::module_ &m) {
 
-    PythonGenericODE<2, 1, 0>::BuildGenODEModule("ode_2_1", m, reg);
+    Bind::BuildGenODEModule<GenericFunction<-1, -1>, 2, 1, 0>("ode_2_1", m, reg);
 }
 
 } // namespace Tycho

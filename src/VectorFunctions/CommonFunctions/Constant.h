@@ -25,10 +25,6 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
 
     Constant() {}
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
-
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;

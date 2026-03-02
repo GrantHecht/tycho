@@ -2072,18 +2072,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementations are in src/Bindings/IntegratorBind.h,
-    // which is included below after the class definition.
-    template <class PyDODE> static void BuildConstructors(PyDODE &obj);
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho
 
-// Out-of-class template definitions for the Python binding helper methods.
-// Must be included after the class definition so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/IntegratorBind.h"
-#endif

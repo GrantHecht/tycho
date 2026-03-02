@@ -38,11 +38,6 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         this->setPVars(pv);
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementation is in src/Bindings/ODEBind.h,
-    // which is included below after the class definitions.
-    static void Build(nb::module_ &m, const char *name);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 #define BUILD_ODE_FROM_EXPRESSION(NAME, IMPL, ...)                                                 \
@@ -61,12 +56,6 @@ struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
         return Integrator<Derived>(this->derived(), dstep);
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementations are in src/Bindings/ODEBind.h,
-    // which is included below after the class definitions.
-    static void BuildODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg);
-    static void BuildODEModule(const char *name, FunctionRegistry &reg);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <class BaseType, int _XV, int _UV, int _PV>
@@ -101,11 +90,6 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
     GenericODE(BaseType f, int xv) : GenericODE(f, xv, 0, 0) {}
     GenericODE(BaseType f) : GenericODE(f, _XV, _UV, _PV) {}
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    // Implementation is in src/Bindings/ODEBind.h,
-    // which is included below after the class definitions.
-    static void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <int XV, int UV, int PV>
@@ -113,8 +97,3 @@ using PythonGenericODE = GenericODE<GenericFunction<-1, -1>, XV, UV, PV>;
 
 } // namespace Tycho
 
-// Out-of-class template definitions for the Python binding helper methods.
-// Must be included after the class definitions so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "Bindings/ODEBind.h"
-#endif

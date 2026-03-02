@@ -36,8 +36,3 @@
 #include "VectorScalarFunctionDivision.h"
 #include "VectorScalarFunctionProduct.h"
 
-// Out-of-class template definitions for CommonFunctions binding Build() / SegBuild() methods.
-// Must be included after all CommonFunction headers so all types are complete.
-#ifdef TYCHO_PYTHON_BINDINGS
-#include "../../Bindings/CommonFunctionsBind.h"
-#endif
