@@ -92,8 +92,12 @@ void DenseBaseBuild(PYClass &obj) {
         return std::tuple{fx, jx, gx, hx};
     };
 
-    // Each method: primary overload (zero-copy Ref into numpy buffer) first,
-    // then sequence-fallback overload (VectorXd copy — matches pybind11 behaviour).
+    // Two overloads per method are required:
+    //   1. ConstEigenRef<VectorXd> — zero-copy reference into a numpy array buffer.
+    //      Uses nanobind's built-in Eigen caster; does NOT invoke our VectorXd type_caster.
+    //   2. VectorXd (by value)   — invokes our custom type_caster which accepts Python
+    //      lists, tuples, and other sequences via its from_python fallback path.
+    // Without overload 1, every numpy call copies. Without overload 2, lists/tuples fail.
     obj.def("compute",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); });
     obj.def("compute",
@@ -759,13 +763,7 @@ void ConditionalOperatorsBuild(PYClass &obj) {
             "__rlt__", [](const Derived &a, double b) { return GenCon(a > b); },
             nb::is_operator());
         obj.def(
-            "__rgt__",
-            [](const Derived &a, double b) {
-                Vector1<double> tmp;
-                tmp[0] = b;
-                Constant<IR, 1> bfunc(a.IRows(), tmp);
-                return GenCon(a < b);
-            },
+            "__rgt__", [](const Derived &a, double b) { return GenCon(a < b); },
             nb::is_operator());
         obj.def(
             "__le__", [](const Derived &a, double b) { return GenCon(a <= b); },

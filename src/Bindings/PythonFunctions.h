@@ -48,6 +48,7 @@ struct PyVectorFunction : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, F
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
+        nb::gil_scoped_acquire acquire; // safe no-op if GIL already held
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         auto result = pyfun(Input<double>(x), *pyargs);
         fx = nb::cast<Output<double>>(result);
@@ -77,7 +78,7 @@ struct NumbaVectorFunction
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
         Input<double> xt = x;
-        Output<double> fxt = fx;
+        Output<double> fxt; // default-constructed; Numba writes all elements
 
         this->fun(xt.data(), fxt.data(), this->IRows(), this->ORows());
         fx = fxt;
@@ -118,6 +119,7 @@ struct TychoBind<PyVectorFunction<IRR, ORR>> {
         }
 
         Bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
+        obj.def_rw("thread_safe", &PyVectorFunction<IRR, ORR>::threadSafe);
     }
 };
 
@@ -142,7 +144,7 @@ struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
                              double>());
             obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
-        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe);
+        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::threadSafe);
         Bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
     }
 };

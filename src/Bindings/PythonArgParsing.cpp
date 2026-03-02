@@ -27,26 +27,30 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
 
     using Rtype = Gen;
 
-    nb::object vftype =
+    static nb::object vftype =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("VectorFunction");
-    nb::object sftype =
+    static nb::object sftype =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
-    nb::object elemtype = (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
-    nb::object segtype = (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment");
-    nb::object seg2type =
+    static nb::object elemtype =
+        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+    static nb::object segtype =
+        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment");
+    static nb::object seg2type =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment2");
-    nb::object seg3type =
+    static nb::object seg3type =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment3");
-    nb::object argtype =
+    static nb::object argtype =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Arguments");
 
-    nb::module_ builtins = nb::module_::import_("builtins");
-    nb::object py_int = builtins.attr("int");
-    nb::object py_float = builtins.attr("float");
-    nb::object py_list = builtins.attr("list");
-    nb::object np_array = (nb::object)nb::module_::import_("numpy").attr("ndarray");
-    nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
-    nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+    static nb::object py_int =
+        (nb::object)nb::module_::import_("builtins").attr("int");
+    static nb::object py_float =
+        (nb::object)nb::module_::import_("builtins").attr("float");
+    static nb::object py_list =
+        (nb::object)nb::module_::import_("builtins").attr("list");
+    static nb::object np_array = (nb::object)nb::module_::import_("numpy").attr("ndarray");
+    static nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
+    static nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
 
     int i = 0;
     for (nb::handle xi : x) {
@@ -145,15 +149,17 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
 
     using Rtype = GenS;
 
-    nb::object sftype =
+    static nb::object sftype =
         (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
-    nb::object elemtype = (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+    static nb::object elemtype =
+        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
 
-    nb::module_ builtins = nb::module_::import_("builtins");
-    nb::object py_int = builtins.attr("int");
-    nb::object py_float = builtins.attr("float");
-    nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
-    nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+    static nb::object py_int =
+        (nb::object)nb::module_::import_("builtins").attr("int");
+    static nb::object py_float =
+        (nb::object)nb::module_::import_("builtins").attr("float");
+    static nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
+    static nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
 
     int i = 0;
     for (nb::handle xi : x) {

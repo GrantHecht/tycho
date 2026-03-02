@@ -106,8 +106,12 @@ template <> struct type_caster<Eigen::VectorXd> {
         return ok;
     }
 
-    static handle from_cpp(const Eigen::VectorXd &src, rv_policy policy,
+    static handle from_cpp(const Eigen::VectorXd &src, rv_policy /*policy*/,
                            cleanup_list *cleanup) {
+        // rv_policy is intentionally ignored: nanobind cannot safely share an
+        // Eigen::VectorXd's internal buffer with Python's GC (no owner object).
+        // We always copy. Use Eigen::Ref<> parameters on the C++ side to avoid
+        // the copy on the input path instead.
         using Array = nb::ndarray<nb::numpy, double>;
         size_t shape[1] = {(size_t)src.size()};
         double *data = new double[src.size()];
@@ -132,7 +136,8 @@ template <> struct type_caster<Eigen::VectorXi> {
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         // First: try nanobind's ndarray caster (numpy int32 arrays).
-        using Array = nb::ndarray<int32_t, nb::c_contig, nb::device::cpu>;
+        using Scalar = Eigen::VectorXi::Scalar;
+        using Array = nb::ndarray<Scalar, nb::c_contig, nb::device::cpu>;
         auto caster = make_caster<Array>();
         if (caster.from_python(src, flags & ~(uint8_t)nb::detail::cast_flags::accepts_none,
                                cleanup)) {
@@ -140,7 +145,7 @@ template <> struct type_caster<Eigen::VectorXi> {
             if (arr.ndim() != 1)
                 return false;
             value.resize((Eigen::Index)arr.shape(0));
-            std::memcpy(value.data(), arr.data(), arr.shape(0) * sizeof(int32_t));
+            std::memcpy(value.data(), arr.data(), arr.shape(0) * sizeof(Scalar));
             return true;
         }
         // Fallback: Python sequence of integers (list, tuple, range, …).
@@ -160,13 +165,18 @@ template <> struct type_caster<Eigen::VectorXi> {
         return ok;
     }
 
-    static handle from_cpp(const Eigen::VectorXi &src, rv_policy policy,
+    static handle from_cpp(const Eigen::VectorXi &src, rv_policy /*policy*/,
                            cleanup_list *cleanup) {
-        using Array = nb::ndarray<nb::numpy, int32_t>;
+        // rv_policy is intentionally ignored: nanobind cannot safely share an
+        // Eigen::VectorXi's internal buffer with Python's GC (no owner object).
+        // We always copy. Use Eigen::Ref<> parameters on the C++ side to avoid
+        // the copy on the input path instead.
+        using Scalar = Eigen::VectorXi::Scalar;
+        using Array = nb::ndarray<nb::numpy, Scalar>;
         size_t shape[1] = {(size_t)src.size()};
-        int32_t *data = new int32_t[src.size()];
-        std::memcpy(data, src.data(), src.size() * sizeof(int32_t));
-        nb::capsule deleter(data, [](void *p) noexcept { delete[](int32_t *) p; });
+        Scalar *data = new Scalar[src.size()];
+        std::memcpy(data, src.data(), src.size() * sizeof(Scalar));
+        nb::capsule deleter(data, [](void *p) noexcept { delete[](Scalar *) p; });
         Array arr(data, 1, shape, deleter);
         return make_caster<Array>::from_cpp(arr, rv_policy::take_ownership, cleanup);
     }
@@ -363,13 +373,15 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
             }
             PyErr_Clear();
         }
-        // numpy array -> VectorXd (fast path via nanobind Eigen caster)
-        try {
-            value = nb::cast<Eigen::VectorXd>(src);
-            return true;
-        } catch (...) {
+        // numpy array -> VectorXd (fast path via no-throw make_caster API)
+        {
+            auto vc = make_caster<Eigen::VectorXd>();
+            if (vc.from_python(src, flags, cleanup)) {
+                value = std::move(vc.value);
+                return true;
+            }
+            PyErr_Clear();
         }
-        PyErr_Clear(); // clear any error left by failed nb::cast above
         // Python sequence (list, tuple, range, numpy array) -> VectorXd
         {
             PyObject *seq = PySequence_Fast(src.ptr(), "");
@@ -433,10 +445,13 @@ template <> struct type_caster<Tycho::ScaleType> {
             value = nb::cast<double>(src);
             return true;
         }
-        try {
-            value = nb::cast<Eigen::VectorXd>(src);
-            return true;
-        } catch (...) {
+        {
+            auto vc = make_caster<Eigen::VectorXd>();
+            if (vc.from_python(src, flags, cleanup)) {
+                value = std::move(vc.value);
+                return true;
+            }
+            PyErr_Clear();
         }
         return false;
     }
