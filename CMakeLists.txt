@@ -36,7 +36,7 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 # Option to enable strict IEEE 754 compliance for proper NaN handling
 # When OFF (default): Uses fast-math optimizations that may ignore NaNs
 # When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
-option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
+option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" ON)
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
 
