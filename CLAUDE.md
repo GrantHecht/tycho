@@ -8,9 +8,8 @@ The core use cases are general optimal control problems (solved via direct collo
 and space trajectory optimization. The built-in optimizer is called **PSIOPT**
 (a high-performance interior-point solver).
 
-**Important:** The source code currently still builds the `asset_asrl` Python module.
-Renaming to `tycho` is an ongoing migration. Do not assume the module name matches
-the repository name yet — always check before referencing it.
+The Python-facing module is `_tycho` (nanobind extension) imported via the `tycho` package.
+The C++ namespace is `Tycho`.
 
 ## Repository Structure
 
@@ -19,13 +18,16 @@ Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CM
 
 ```
 src/                    C++ source code (core library)
-  ASSET.h               Top-level C++ include (aggregates all modules)
+  Tycho.h               Top-level C++ include (aggregates all modules)
   pch.h / pch.cpp       Precompiled header
+  Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
+                          headers, FunctionRegistry.h (TychoBind<T> trait),
+                          TypeCasters.h, TychoModule.cpp
   VectorFunctions/      Core VectorFunction DSL — autodiff, dense/sparse functions,
-                          operator overloads, type erasure, Python bindings build
+                          operator overloads, type erasure (no binding code)
   OptimalControl/       Phase/ODE transcription — LGL & trapezoidal collocation,
                           FD derivatives, mesh refinement, link functions,
-                          OptimalControlProblem, Python bindings build
+                          OptimalControlProblem (no binding code)
   Solvers/              PSIOPT interior-point optimizer, NLP layer,
                           Pardiso / MUMPS / Accelerate / MKL interfaces
   Astro/                Astrodynamics models — Kepler, CR3BP, J2, MEE dynamics,
@@ -33,10 +35,10 @@ src/                    C++ source code (core library)
   Integrators/          Runge-Kutta steppers and coefficients
   Utils/                Thread pool, timers, memory management, type erasure
                           helpers, color terminal output, STD extensions
-  TypeDefs/             Eigen type aliases (EigenTypes.h, ASSET_TypeDefs.h)
+  TypeDefs/             Eigen type aliases (EigenTypes.h, Tycho_TypeDefs.h)
   PyDocString/          C++-side Python docstring literals
 
-asset_asrl/             Python package (pybind11 bindings + pure-Python layer)
+tycho/                  Python package (pure-Python layer over _tycho extension)
   __init__.py           Package entry point
   VectorFunctions/      Python-side VectorFunction utilities
   OptimalControl/       Pure-Python ODE base class, mesh-error plotting
@@ -51,7 +53,7 @@ dep/                    Vendored submodule dependencies
   eigen/                Eigen (MPL-2.0)
   autodiff/             autodiff (MIT)
   fmt/                  {fmt} (MIT)
-  pybind11/             pybind11 (BSD)
+  nanobind/             nanobind (BSD)
 
 cmake/                  CMake helper modules
   Find*.cmake           Finders for MKL, Accelerate sparse, Python env, Sphinx
@@ -59,8 +61,10 @@ cmake/                  CMake helper modules
   cppcheck.cmake        cppcheck integration
   git-submodule-*.cmake Submodule init/update helpers
 
-extensions/             Optional extension module (ASSET_Extensions.cpp/.h)
+extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
+  cpp_examples/         C++ example programs
+    brachistochrone/    C++ Brachistochrone optimal control example
   MeshRefinement/       Mesh-refinement examples
   UpdatedInterface/     Examples for updated API
   Plots/                Shared plotting helpers
@@ -74,8 +78,8 @@ notices/                Third-party license notices — DO NOT modify or delete
 
 ## Build System
 
-This is a CMake + pybind11 project. The output is a pybind11 shared library
-(`asset.cpython-<ver>-darwin.so`) plus the pure-Python `asset_asrl/` package, both
+This is a CMake + nanobind project. The output is a nanobind shared library
+(`_tycho.cpython-<ver>-darwin.so`) plus the pure-Python `tycho/` package, both
 installed directly into the active Python environment's site-packages by the build step.
 
 ### macOS (Apple Silicon) — canonical development setup
@@ -90,7 +94,7 @@ Current versions in use: LLVM 22.1.0, Ninja 1.13+.
 ```bash
 conda create -n tycho python=3.13
 conda activate tycho
-pip install numpy scipy matplotlib spiceypy pybind11
+pip install numpy scipy matplotlib spiceypy
 ```
 
 **First-time build:**
@@ -116,15 +120,16 @@ python examples/Brachistochrone.py
 |---|---|
 | `Python_EXECUTABLE` | Path to Python interpreter to build against |
 | `PYTHON_LOCAL_INSTALL_DIR` | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
-| `STRICT_IEEE_COMPLIANCE` | `ON` to disable fast-math and enforce proper NaN handling (default `OFF`) |
+| `STRICT_IEEE_COMPLIANCE` | `ON` to disable fast-math and enforce proper NaN handling (default `ON`) |
 | `BUILD_SPHINX_DOCS` | `ON` to also build documentation (requires sphinx, breathe, furo, exhale) |
+| `BUILD_CPP_EXAMPLES` | `ON` to build C++ example programs under `examples/cpp_examples/` |
 
 `config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
 `PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
 the correct interpreter. When updating LLVM, change `LLVM_VERSION` in that script and
 the hardcoded libomp path in `CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
 
-The `dep/` submodules (eigen, autodiff, fmt, pybind11) must be initialised before the
+The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
 ## Key Concepts and Domain Language
@@ -140,6 +145,36 @@ first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automati
   but collocation is the primary implementation.
 - **Astrodynamics** — the primary application domain, though the library is general.
 
+## Binding Architecture
+
+All Python binding code lives exclusively in `src/Bindings/`. Core C++ headers (`src/VectorFunctions/`,
+`src/OptimalControl/`, `src/Integrators/`, `src/Astro/`) contain no nanobind code.
+
+**`TychoBind<T>` trait pattern** — the central dispatch mechanism:
+- Primary template declared in `src/Bindings/FunctionRegistry.h`
+- `FunctionRegistry::Build_Register<T>(m, name)` calls `TychoBind<T>::Build(m, name)`
+- Full/partial specializations defined in `*Bind.h` headers or binding `.cpp` files
+
+**`Bind::` free-function helpers** (in `src/Bindings/*Bind.h`):
+- `DenseBaseBuild<T>(obj)` — registers standard VectorFunction methods
+- `IntegratorBuildConstructors<DODE>(obj)` — registers integrator constructors
+- `ODEPhaseBuildImpl<DODE>(phase)` — registers phase constraints/objectives
+- `ODESizeBuild<XV,UV,PV,Derived>(obj)` — registers ODE size accessors
+- `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` — builds a GenericODE submodule
+
+**Key rules for binding `.cpp` files:**
+- Must include aggregate headers (`Tycho_Astro.h`, `Tycho_OptimalControl.h`) rather than
+  raw core headers — function declarations like `KeplerUtilsBuild`, `BuildKeplerMod`
+  live in aggregate headers under `#ifdef TYCHO_PYTHON_BINDINGS`
+- `TYCHO_PYTHON_BINDINGS` is defined only for `_tycho` and `tycho_extensions` targets
+  (scoped via `pch_bindings` precompiled header), not globally
+
+**`*Bind.h` files** (included from aggregate headers):
+- `DenseFunctionBaseBind.h`, `VectorFunctionBind.h`, `CommonFunctionsBind.h`
+- `InterpTableBind.h`, `GenericFunctionBind.h`
+- `IntegratorBind.h`, `ODEPhaseBind.h`, `ODEBind.h`, `ODESizesBind.h`
+- `PythonFunctions.h`, `PythonArgParsing.h` (moved from core headers)
+
 ## Third-Party Dependencies and License Obligations
 
 The project is licensed under **Apache 2.0**. The `notices/` directory contains
@@ -149,7 +184,7 @@ be aware of during development:
 - **Eigen** (MPL-2.0) — any Eigen *source files* directly modified must remain MPL-2.0
 - **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
   flag any changes touching MKL integration for manual review
-- **Pybind11** (BSD), **fmt** (MIT), **autodiff** (MIT), **boost-threads** (Boost),
+- **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT), **boost-threads** (Boost),
   **ctpl** (Apache 2.0), **rubber_types** (MIT), **kepler propagator** (MIT) — all
   permissive, just preserve notices
 
@@ -158,16 +193,16 @@ If a new dependency is added, its license notice must be added to `notices/` as 
 
 ## Naming Migration (asset_asrl → tycho)
 
-The project is in active transition from the ASSET/asset_asrl identity to Tycho.
-Current state:
+The naming migration is substantially complete:
 - Repository: `tycho` ✅
-- Python module: still `asset_asrl` ⚠️ (not yet renamed)
+- C++ namespace: `Tycho` ✅
+- Python extension module: `_tycho` ✅
+- Python package: `tycho` ✅
 - PyPI package: not yet published
 
-When making changes, prefer using `tycho` for any *new* identifiers, namespaces,
-or documentation. Do not do a bulk find-and-replace of `asset_asrl` without explicit
-instruction — this requires coordinated changes across CMake, pybind11 bindings,
-Python imports, and documentation.
+Do not do a bulk find-and-replace of any remaining `asset_asrl` or `ASSET` identifiers
+without explicit instruction — residual uses may be load-bearing (CMake targets, internal
+type names, etc.) and require coordinated changes.
 
 ## Code Style
 
@@ -226,11 +261,12 @@ Use descriptive commit messages. Prefix with type where clear:
 ## Testing
 
 Tycho does not yet have a formal unit test suite. The example scripts under
-`examples/` serve as the **integration test suite** and act as the acceptance
-gate for all changes merged into `main`.
+`examples/` and the C++ example binaries serve as the **integration test suite**
+and act as the acceptance gate for all changes merged into `main`.
 
 ### Running the tests
 
+**Python examples (38 scripts):**
 ```bash
 conda activate tycho
 python run_examples.py
@@ -246,11 +282,20 @@ Options:
 --filter SUBSTRING  Run only examples whose path contains SUBSTRING.
 ```
 
+**C++ examples:**
+```bash
+./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp
+```
+
+The C++ brachistochrone example must converge to an optimal solution (PSIOPT prints
+"Optimal Solution Found") with an objective near 1.8013 s.
+
 ### Merge policy
 
-**All 38 examples must pass before any pull request can be merged into `main`.**
-This is the project's definition of a green build.  Reviewers must verify that
-`python run_examples.py` exits 0 with no failures before approving a PR.
+**All 38 Python examples must pass and the C++ brachistochrone example must converge
+before any pull request can be merged into `main`.** This is the project's definition
+of a green build. Reviewers must verify that `python run_examples.py` exits 0 with no
+failures and that `brachistochrone_cpp` reports "Optimal Solution Found" before approving.
 
 If a change intentionally breaks an example (e.g. an API change that requires
 updating an example), the example must be fixed in the same PR.
@@ -271,7 +316,7 @@ examples to run (none will be skipped):
 
 - Any change to the PSIOPT optimizer internals
 - Any change touching Intel MKL / Apple Accelerate integration
-- Any bulk renaming of `asset_asrl` identifiers
+- Any bulk renaming of remaining `asset_asrl` / `ASSET` identifiers
 - Adding new third-party dependencies
 - Changes to the public APIs
 - Anything affecting PyPI packaging (pypiwheel/, setup.py)
