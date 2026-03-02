@@ -1,8 +1,20 @@
-License for autodiff package
+THIRD-PARTY NOTICE â€” autodiff (MIT License)
+============================================
+
+autodiff is an automatic differentiation library for C++ used by Tycho as a
+vendored dependency (dep/autodiff/). It is unmodified.
+  Package:   autodiff
+  Source:    https://github.com/autodiff/autodiff
+  Copyright: 2018â€“2024 Allan Leal
+  License:   MIT (reproduced in full below)
+
+===========================================================================
+autodiff â€” MIT License
+===========================================================================
 
 MIT License
 
-Copyright © 2018–2024 Allan Leal
+Copyright ï¿½ 2018ï¿½2024 Allan Leal
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

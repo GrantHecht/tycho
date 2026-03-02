@@ -1,5 +1,18 @@
-License for ctpl thread pool included in src/Utils/ThreadPool.h. The code has been modified from its original version by renaming the original thread_pool class to
-ThreadPool and adding the push_member function to the class.
+THIRD-PARTY NOTICE — CTPL Thread Pool Library (Apache License 2.0)
+===================================================================
+
+CTPL is a C++ thread pool library whose source has been incorporated into
+src/Utils/ThreadPool.h. The following modifications were made:
+  - Renamed the thread_pool class to ThreadPool.
+  - Added the push_member function to the class.
+  Package:   CTPL (C++ Thread Pool Library)
+  Source:    https://github.com/vit-vit/CTPL
+  Copyright: 2014 Vitaliy Vitsentiy
+  License:   Apache License 2.0 (reproduced in full below)
+
+===========================================================================
+CTPL — Apache License, Version 2.0
+===========================================================================
 
 Apache License
                            Version 2.0, January 2004

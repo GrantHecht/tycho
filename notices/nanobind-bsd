@@ -1,3 +1,18 @@
+THIRD-PARTY NOTICE — nanobind (BSD 3-Clause License)
+=====================================================
+
+nanobind is a C++/Python binding library used by Tycho as a vendored
+dependency (dep/nanobind/) to implement the _tycho Python extension module.
+It is unmodified.
+  Package:   nanobind
+  Source:    https://github.com/wjakob/nanobind
+  Copyright: 2022 Wenzel Jakob
+  License:   BSD 3-Clause (reproduced in full below)
+
+===========================================================================
+nanobind — BSD 3-Clause License
+===========================================================================
+
 Copyright (c) 2022 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

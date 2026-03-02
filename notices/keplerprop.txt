@@ -1,6 +1,17 @@
-Kepler propagator algorithm is based on the implementation found at
-https://www.mathworks.com/matlabcentral/fileexchange/35566-vectorized-analytic-two-body-propagator-kepler-universal-variables.
-License is included below.
+THIRD-PARTY NOTICE — Kepler Propagator (BSD 2-Clause License)
+==============================================================
+
+The Kepler propagator algorithm in src/Astro/ is based on a vectorised
+analytic two-body propagator originally implemented in MATLAB by Darin
+Koblick. The algorithm has been reimplemented in C++.
+  Package:   Vectorized Analytic Two-Body Propagator (Kepler, Universal Variables)
+  Source:    https://www.mathworks.com/matlabcentral/fileexchange/35566
+  Copyright: 2012 Darin Koblick
+  License:   BSD 2-Clause (reproduced in full below)
+
+===========================================================================
+Kepler Propagator — BSD 2-Clause License
+===========================================================================
 
 Copyright (c) 2012, Darin Koblick
 All rights reserved.

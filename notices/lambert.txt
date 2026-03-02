@@ -1,5 +1,17 @@
+THIRD-PARTY NOTICE — Izzo–Lambert Solver (BSD 2-Clause License)
+================================================================
 
-Izzo Lambert solver is partly based Rody Oldenhuis Matlab implementation https://github.com/rodyo/FEX-Lambert
+The Lambert solver in src/Astro/ is partly based on a MATLAB implementation
+of Izzo's algorithm by Rody Oldenhuis. The algorithm has been reimplemented
+in C++.
+  Package:   FEX-Lambert (MATLAB Lambert Solver)
+  Source:    https://github.com/rodyo/FEX-Lambert
+  Copyright: 2018 Rody Oldenhuis
+  License:   BSD 2-Clause (reproduced in full below)
+
+===========================================================================
+Izzo–Lambert Solver — BSD 2-Clause License
+===========================================================================
 
 Copyright (c) 2018, Rody Oldenhuis
 All rights reserved.
