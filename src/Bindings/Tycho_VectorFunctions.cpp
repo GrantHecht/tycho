@@ -5,8 +5,7 @@
 // TychoBind<IOScaled<Func>> specialization — must come after IOScaled.h
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
 namespace Tycho {
-template <class Func>
-struct TychoBind<IOScaled<Func>> {
+template <class Func> struct TychoBind<IOScaled<Func>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<IOScaled<Func>>(m, name);
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());
@@ -61,6 +60,8 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     reg.Build_Register<PyVectorFunction<-1, -1>>(mod, "PyVectorFunction");
     reg.Build_Register<PyVectorFunction<-1, 1>>(mod, "PyScalarFunction");
+    reg.Build_Register<NumbaVectorFunction<-1, -1>>(mod, "NumbaVectorFunction");
+    reg.Build_Register<NumbaVectorFunction<-1, 1>>(mod, "NumbaScalarFunction");
 
     reg.Build_Register<Constant<-1, -1>>(mod, "ConstantVector");
     reg.Build_Register<Constant<-1, 1>>(mod, "ConstantScalar");

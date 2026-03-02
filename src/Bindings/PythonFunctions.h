@@ -78,7 +78,8 @@ struct NumbaVectorFunction
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
         Input<double> xt = x;
-        Output<double> fxt; // default-constructed; Numba writes all elements
+        Output<double> fxt;
+        fxt.resize(this->ORows()); // allocate before passing pointer to Numba
 
         this->fun(xt.data(), fxt.data(), this->IRows(), this->ORows());
         fx = fxt;
@@ -101,17 +102,16 @@ struct NumbaVectorFunction
     bool thread_safe() const { return threadSafe; }
 };
 
-// ── TychoBind<PyVectorFunction> ───────────────────────────────────────────────────────────────────
-template <int IRR, int ORR>
-struct TychoBind<PyVectorFunction<IRR, ORR>> {
+// ── TychoBind<PyVectorFunction>
+// ───────────────────────────────────────────────────────────────────
+template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
 
         if constexpr (ORR != 1) {
-            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(),
-                    nb::arg("IRows"), nb::arg("ORows"), nb::arg("Func"),
-                    nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
-                    nb::arg("args") = nb::tuple());
+            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
+                    nb::arg("ORows"), nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6,
+                    nb::arg("Hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple());
         } else {
             obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
                     nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
@@ -119,19 +119,25 @@ struct TychoBind<PyVectorFunction<IRR, ORR>> {
         }
 
         Bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
-        obj.def_rw("thread_safe", &PyVectorFunction<IRR, ORR>::threadSafe);
+        obj.def_prop_rw(
+            "thread_safe", [](const PyVectorFunction<IRR, ORR> &self) { return self.threadSafe; },
+            [](PyVectorFunction<IRR, ORR> &, bool val) {
+                if (val)
+                    throw std::invalid_argument(
+                        "PyVectorFunction always acquires the GIL and cannot execute in "
+                        "parallel. Setting thread_safe=True provides no benefit. Use "
+                        "NumbaVectorFunction for parallel-safe functions.");
+            });
     }
 };
 
 // ── TychoBind<NumbaVectorFunction> ───────────────────────────────────────────────────────────────
-template <int IRR, int ORR>
-struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
+template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
                          double>());
-        obj.def(
-            nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
+        obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
 
         if constexpr (ORR == 1) {
             obj.def(nb::init<int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
@@ -140,8 +146,8 @@ struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
         }
 
         if constexpr (IRR > 0 && ORR > 0) {
-            obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
-                             double>());
+            obj.def(
+                nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &, double, double>());
             obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
         obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::threadSafe);

@@ -28,8 +28,7 @@ namespace detail {
 // Python numpy array (C-contiguous, CPU) <-> Eigen::Tensor.
 // Data is copied in both directions; Eigen::Tensor owns its buffer.
 // ---------------------------------------------------------------------------
-template <typename Scalar, int N>
-struct type_caster<Eigen::Tensor<Scalar, N>> {
+template <typename Scalar, int N> struct type_caster<Eigen::Tensor<Scalar, N>> {
     // NB_TYPE_CASTER cannot handle template types with commas; use alias.
     using TensorType = Eigen::Tensor<Scalar, N>;
     NB_TYPE_CASTER(TensorType, const_name("numpy.ndarray"))
@@ -51,7 +50,7 @@ struct type_caster<Eigen::Tensor<Scalar, N>> {
     }
 
     static handle from_cpp(const Eigen::Tensor<Scalar, N> &tensor, rv_policy policy,
-                            cleanup_list *cleanup) {
+                           cleanup_list *cleanup) {
         size_t shape[N];
         for (int i = 0; i < N; ++i)
             shape[i] = (size_t)tensor.dimension(i);
@@ -92,13 +91,20 @@ template <> struct type_caster<Eigen::VectorXd> {
         // Fallback: Python sequence of numeric scalars (list, tuple, …).
         PyErr_Clear();
         PyObject *seq = PySequence_Fast(src.ptr(), "");
-        if (!seq) { PyErr_Clear(); return false; }
+        if (!seq) {
+            PyErr_Clear();
+            return false;
+        }
         Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
         value.resize(n);
         bool ok = true;
         for (Py_ssize_t i = 0; i < n; ++i) {
             PyObject *f = PyNumber_Float(PySequence_Fast_GET_ITEM(seq, i));
-            if (!f) { PyErr_Clear(); ok = false; break; }
+            if (!f) {
+                PyErr_Clear();
+                ok = false;
+                break;
+            }
             value[i] = PyFloat_AS_DOUBLE(f);
             Py_DECREF(f);
         }
@@ -116,7 +122,7 @@ template <> struct type_caster<Eigen::VectorXd> {
         size_t shape[1] = {(size_t)src.size()};
         double *data = new double[src.size()];
         std::memcpy(data, src.data(), src.size() * sizeof(double));
-        nb::capsule deleter(data, [](void *p) noexcept { delete[](double *) p; });
+        nb::capsule deleter(data, [](void *p) noexcept { delete[] (double *)p; });
         Array arr(data, 1, shape, deleter);
         return make_caster<Array>::from_cpp(arr, rv_policy::take_ownership, cleanup);
     }
@@ -151,13 +157,20 @@ template <> struct type_caster<Eigen::VectorXi> {
         // Fallback: Python sequence of integers (list, tuple, range, …).
         PyErr_Clear();
         PyObject *seq = PySequence_Fast(src.ptr(), "");
-        if (!seq) { PyErr_Clear(); return false; }
+        if (!seq) {
+            PyErr_Clear();
+            return false;
+        }
         Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
         value.resize(n);
         bool ok = true;
         for (Py_ssize_t i = 0; i < n; ++i) {
             PyObject *as_long = PyNumber_Long(PySequence_Fast_GET_ITEM(seq, i));
-            if (!as_long) { PyErr_Clear(); ok = false; break; }
+            if (!as_long) {
+                PyErr_Clear();
+                ok = false;
+                break;
+            }
             value[i] = (int)PyLong_AsLong(as_long);
             Py_DECREF(as_long);
         }
@@ -172,11 +185,13 @@ template <> struct type_caster<Eigen::VectorXi> {
         // We always copy. Use Eigen::Ref<> parameters on the C++ side to avoid
         // the copy on the input path instead.
         using Scalar = Eigen::VectorXi::Scalar;
-        using Array = nb::ndarray<nb::numpy, Scalar>;
+        static_assert(sizeof(Scalar) == sizeof(int32_t),
+                      "VectorXi::Scalar must be 32-bit on this platform");
+        using Array = nb::ndarray<nb::numpy, int32_t>; // int32_t guarantees np.int32 dtype
         size_t shape[1] = {(size_t)src.size()};
-        Scalar *data = new Scalar[src.size()];
-        std::memcpy(data, src.data(), src.size() * sizeof(Scalar));
-        nb::capsule deleter(data, [](void *p) noexcept { delete[](Scalar *) p; });
+        int32_t *data = new int32_t[src.size()];
+        std::memcpy(data, src.data(), src.size() * sizeof(int32_t));
+        nb::capsule deleter(data, [](void *p) noexcept { delete[] (int32_t *)p; });
         Array arr(data, 1, shape, deleter);
         return make_caster<Array>::from_cpp(arr, rv_policy::take_ownership, cleanup);
     }
@@ -280,7 +295,7 @@ template <> struct type_caster<Tycho::VarIndexType> {
     }
 
     static handle from_cpp(const Tycho::VarIndexType &src, rv_policy policy,
-                            cleanup_list *cleanup) {
+                           cleanup_list *cleanup) {
         return std::visit(
             [&](const auto &v) -> handle {
                 return make_caster<std::decay_t<decltype(v)>>::from_cpp(v, policy, cleanup);
@@ -302,7 +317,10 @@ template <> struct type_caster<std::vector<Eigen::VectorXd>> {
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         PyObject *seq = PySequence_Fast(src.ptr(), "");
-        if (!seq) { PyErr_Clear(); return false; }
+        if (!seq) {
+            PyErr_Clear();
+            return false;
+        }
         Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
         value.resize((size_t)n);
         for (Py_ssize_t i = 0; i < n; ++i) {
@@ -316,18 +334,29 @@ template <> struct type_caster<std::vector<Eigen::VectorXd>> {
             // Fallback: treat element as a Python sequence of scalars.
             PyErr_Clear();
             PyObject *sub = PySequence_Fast(item.ptr(), "");
-            if (!sub) { PyErr_Clear(); Py_DECREF(seq); return false; }
+            if (!sub) {
+                PyErr_Clear();
+                Py_DECREF(seq);
+                return false;
+            }
             Py_ssize_t m = PySequence_Fast_GET_SIZE(sub);
             value[i].resize(m);
             bool ok = true;
             for (Py_ssize_t j = 0; j < m; ++j) {
                 PyObject *f = PyNumber_Float(PySequence_Fast_GET_ITEM(sub, j));
-                if (!f) { PyErr_Clear(); ok = false; break; }
+                if (!f) {
+                    PyErr_Clear();
+                    ok = false;
+                    break;
+                }
                 value[i][j] = PyFloat_AS_DOUBLE(f);
                 Py_DECREF(f);
             }
             Py_DECREF(sub);
-            if (!ok) { Py_DECREF(seq); return false; }
+            if (!ok) {
+                Py_DECREF(seq);
+                return false;
+            }
         }
         Py_DECREF(seq);
         return true;
@@ -336,11 +365,15 @@ template <> struct type_caster<std::vector<Eigen::VectorXd>> {
     static handle from_cpp(const T &src, rv_policy /*policy*/, cleanup_list *cleanup) {
         // Each element is an independent Python object in a new list; always copy.
         PyObject *list = PyList_New((Py_ssize_t)src.size());
-        if (!list) return handle();
+        if (!list)
+            return handle();
         for (Py_ssize_t i = 0; i < (Py_ssize_t)src.size(); ++i) {
-            handle h = make_caster<Eigen::VectorXd>::from_cpp(
-                src[i], rv_policy::take_ownership, cleanup);
-            if (!h) { Py_DECREF(list); return handle(); }
+            handle h =
+                make_caster<Eigen::VectorXd>::from_cpp(src[i], rv_policy::take_ownership, cleanup);
+            if (!h) {
+                Py_DECREF(list);
+                return handle();
+            }
             PyList_SET_ITEM(list, i, h.ptr()); // steals reference
         }
         return handle(list);
@@ -380,7 +413,6 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
                 value = std::move(vc.value);
                 return true;
             }
-            PyErr_Clear();
         }
         // Python sequence (list, tuple, range, numpy array) -> VectorXd
         {
@@ -451,7 +483,6 @@ template <> struct type_caster<Tycho::ScaleType> {
                 value = std::move(vc.value);
                 return true;
             }
-            PyErr_Clear();
         }
         return false;
     }

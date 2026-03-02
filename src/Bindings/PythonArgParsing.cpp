@@ -27,36 +27,66 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
 
     using Rtype = Gen;
 
-    static nb::object vftype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("VectorFunction");
-    static nb::object sftype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
-    static nb::object elemtype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
-    static nb::object segtype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment");
-    static nb::object seg2type =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment2");
-    static nb::object seg3type =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Segment3");
-    static nb::object argtype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Arguments");
-
-    static nb::object py_int =
-        (nb::object)nb::module_::import_("builtins").attr("int");
-    static nb::object py_float =
-        (nb::object)nb::module_::import_("builtins").attr("float");
-    static nb::object py_list =
-        (nb::object)nb::module_::import_("builtins").attr("list");
-    static nb::object np_array = (nb::object)nb::module_::import_("numpy").attr("ndarray");
-    static nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
-    static nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+    // Static PyObject* (not nb::object) so destructors never run after interpreter shutdown.
+    // The lambda trick forces assignment through nb::object to trigger accessor evaluation.
+    static PyObject *vftype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("VectorFunction");
+        return o.release().ptr();
+    }();
+    static PyObject *sftype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
+        return o.release().ptr();
+    }();
+    static PyObject *elemtype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+        return o.release().ptr();
+    }();
+    static PyObject *segtype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment");
+        return o.release().ptr();
+    }();
+    static PyObject *seg2type = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment2");
+        return o.release().ptr();
+    }();
+    static PyObject *seg3type = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment3");
+        return o.release().ptr();
+    }();
+    static PyObject *argtype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Arguments");
+        return o.release().ptr();
+    }();
+    static PyObject *py_int = [] {
+        nb::object o = nb::module_::import_("builtins").attr("int");
+        return o.release().ptr();
+    }();
+    static PyObject *py_float = [] {
+        nb::object o = nb::module_::import_("builtins").attr("float");
+        return o.release().ptr();
+    }();
+    static PyObject *py_list = [] {
+        nb::object o = nb::module_::import_("builtins").attr("list");
+        return o.release().ptr();
+    }();
+    static PyObject *np_array = [] {
+        nb::object o = nb::module_::import_("numpy").attr("ndarray");
+        return o.release().ptr();
+    }();
+    static PyObject *np_float = [] {
+        nb::object o = nb::module_::import_("numpy").attr("float64");
+        return o.release().ptr();
+    }();
+    static PyObject *np_int = [] {
+        nb::object o = nb::module_::import_("numpy").attr("int32");
+        return o.release().ptr();
+    }();
 
     int i = 0;
     for (nb::handle xi : x) {
         if (xi.type().is(vftype) || xi.type().is(sftype) || xi.type().is(elemtype) ||
-            xi.type().is(segtype) || xi.type().is(seg2type) ||
-            xi.type().is(seg3type) || xi.type().is(argtype)) {
+            xi.type().is(segtype) || xi.type().is(seg2type) || xi.type().is(seg3type) ||
+            xi.type().is(argtype)) {
             int irowstmp = nb::cast<int>(xi.attr("IRows")());
             if (irows == 0) {
                 irows = irowstmp;
@@ -64,8 +94,8 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
                 throw std::invalid_argument("Asset functions in list must have same input size");
             }
 
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) ||
-                   xi.type().is(np_int) || xi.type().is(np_float)) {
+        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
+                   xi.type().is(np_float)) {
 
             // Good to go
         } else if (xi.type().is(py_list) || xi.type().is(np_array)) {
@@ -111,8 +141,8 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
             funs.emplace_back(Rtype(nb::cast<SEG3>(xi)));
         } else if (xi.type().is(argtype)) {
             funs.emplace_back(Rtype(nb::cast<Arguments<-1>>(xi)));
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) ||
-                   xi.type().is(np_int) || xi.type().is(np_float)) {
+        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
+                   xi.type().is(np_float)) {
             Vector1<double> val;
             val[0] = nb::cast<double>(xi);
             funs.emplace_back(Constant<-1, 1>(irows, val));
@@ -149,17 +179,31 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
 
     using Rtype = GenS;
 
-    static nb::object sftype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
-    static nb::object elemtype =
-        (nb::object)nb::module_::import_("_tycho.VectorFunctions").attr("Element");
-
-    static nb::object py_int =
-        (nb::object)nb::module_::import_("builtins").attr("int");
-    static nb::object py_float =
-        (nb::object)nb::module_::import_("builtins").attr("float");
-    static nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
-    static nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+    // Static PyObject* (not nb::object) so destructors never run after interpreter shutdown.
+    static PyObject *sftype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
+        return o.release().ptr();
+    }();
+    static PyObject *elemtype = [] {
+        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+        return o.release().ptr();
+    }();
+    static PyObject *py_int = [] {
+        nb::object o = nb::module_::import_("builtins").attr("int");
+        return o.release().ptr();
+    }();
+    static PyObject *py_float = [] {
+        nb::object o = nb::module_::import_("builtins").attr("float");
+        return o.release().ptr();
+    }();
+    static PyObject *np_float = [] {
+        nb::object o = nb::module_::import_("numpy").attr("float64");
+        return o.release().ptr();
+    }();
+    static PyObject *np_int = [] {
+        nb::object o = nb::module_::import_("numpy").attr("int32");
+        return o.release().ptr();
+    }();
 
     int i = 0;
     for (nb::handle xi : x) {
@@ -171,8 +215,8 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
                 throw std::invalid_argument("Asset functions in list must have same input size");
             }
 
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) ||
-                   xi.type().is(np_int) || xi.type().is(np_float)) {
+        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
+                   xi.type().is(np_float)) {
             // Good to go
         } else {
             nb::print(nb::str(xi.type()));
@@ -191,8 +235,8 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
             funs.emplace_back(Rtype(nb::cast<GenS>(xi)));
         } else if (xi.type().is(elemtype)) {
             funs.emplace_back(Rtype(nb::cast<ELEM>(xi)));
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) ||
-                   xi.type().is(np_float) || xi.type().is(np_int)) {
+        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_float) ||
+                   xi.type().is(np_int)) {
             Vector1<double> val;
             val[0] = nb::cast<double>(xi);
             funs.emplace_back(Constant<-1, 1>(irows, val));
