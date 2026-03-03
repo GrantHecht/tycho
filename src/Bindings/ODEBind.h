@@ -6,6 +6,7 @@
 // GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
 #include "DenseFunctionBaseBind.h"
+#include "ODESizesBind.h"
 
 namespace Tycho::Bind {
 
