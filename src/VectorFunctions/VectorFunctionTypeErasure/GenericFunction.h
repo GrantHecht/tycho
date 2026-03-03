@@ -339,7 +339,6 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
         MemoryManager::resize(64, 64);
     }
-
 };
 
 } // namespace Tycho

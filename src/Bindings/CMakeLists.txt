@@ -44,16 +44,23 @@ nanobind_add_module(_tycho
     OptimalControlProblemBind.cpp
     LGLInterpTableBind.cpp
     # Solvers bindings
+    Tycho_Solvers.cpp
     OptimizationProblemBase.cpp
     PSIOPTBind.cpp
     OptimizationProblemBind.cpp
+    JetBind.cpp
     # Astro bindings
     Tycho_Astro.cpp
     KeplerUtils.cpp
     KeplerModel.cpp
     LambertSolversBind.cpp
     # Utils bindings
+    UtilsBind.cpp
     MemoryManagerBind.cpp
+    # Integrators bindings
+    RKCoeffsBind.cpp
+    # MeshIterateInfo binding
+    MeshIterateInfoBind.cpp
 )
 
 target_compile_options(_tycho PUBLIC ${COMPILE_FLAGS})

@@ -132,26 +132,6 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Anal
         else
             LambdaJumpTable<4, 8, 16>::run(Impl, this->table->XtUVars);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<InterpFunction<OR>>(m, name);
-        if (OR == -1) {
-            obj.def(nb::init<std::shared_ptr<LGLInterpTable>, Eigen::VectorXi>());
-        } else {
-            obj.def(nb::init<std::shared_ptr<LGLInterpTable>>());
-        }
-
-        Base::DenseBaseBuild(obj);
-
-        obj.def("__call__", [](const InterpFunction<OR> &self, const GenericFunction<-1, 1> &t) {
-            return GenericFunction<-1, -1>(self.eval(t));
-        });
-        obj.def("__call__", [](const InterpFunction<OR> &self, const Segment<-1, 1, -1> &t) {
-            return GenericFunction<-1, -1>(self.eval(t));
-        });
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

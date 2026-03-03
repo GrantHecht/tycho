@@ -11,9 +11,9 @@
 namespace Tycho {
 namespace Bind {
 
-// ── GenericBuild ──────────────────────────────────────────────────────────────────────────────────
-template <class Derived, class PYClass>
-void GenericBuild(PYClass &obj) {
+// ── GenericBuild
+// ──────────────────────────────────────────────────────────────────────────────────
+template <class Derived, class PYClass> void GenericBuild(PYClass &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using BinGen = typename std::conditional<Derived::ORC == 1, GenS, Gen>::type;
@@ -37,9 +37,9 @@ void GenericBuild(PYClass &obj) {
     Bind::DenseBaseBuild<Derived>(obj);
 }
 
-// ── MinMaxBuild ───────────────────────────────────────────────────────────────────────────────────
-template <class PYCLASS>
-void MinMaxBuild(PYCLASS &obj) {
+// ── MinMaxBuild
+// ───────────────────────────────────────────────────────────────────────────────────
+template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using GenComp = GenericComparative<-1>;
@@ -57,15 +57,13 @@ void MinMaxBuild(PYCLASS &obj) {
         Vector1<double> v;
         v[0] = v1;
         Constant<-1, 1> f1(f2.IRows(), v);
-        return GenS(
-            ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MaxFlag, f1, f2));
+        return GenS(ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MaxFlag, f1, f2));
     });
     obj.def("max", [](const GenS &f1, double v2) {
         Vector1<double> v;
         v[0] = v2;
         Constant<-1, 1> f2(f1.IRows(), v);
-        return GenS(
-            ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MaxFlag, f1, f2));
+        return GenS(ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MaxFlag, f1, f2));
     });
 
     // ND Output Maximization Bindings
@@ -74,13 +72,11 @@ void MinMaxBuild(PYCLASS &obj) {
     });
     obj.def("max", [](Eigen::VectorXd v1, const Gen &f2) {
         Constant<-1, -1> f1(f2.IRows(), v1);
-        return Gen(
-            ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MaxFlag, f1, f2));
+        return Gen(ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MaxFlag, f1, f2));
     });
     obj.def("max", [](const Gen &f1, Eigen::VectorXd v2) {
         Constant<-1, -1> f2(f1.IRows(), v2);
-        return Gen(
-            ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MaxFlag, f1, f2));
+        return Gen(ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MaxFlag, f1, f2));
     });
 
     // 1D Output Minimization Bindings
@@ -91,15 +87,13 @@ void MinMaxBuild(PYCLASS &obj) {
         Vector1<double> v;
         v[0] = v1;
         Constant<-1, 1> f1(f2.IRows(), v);
-        return GenS(
-            ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MinFlag, f1, f2));
+        return GenS(ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MinFlag, f1, f2));
     });
     obj.def("min", [](const GenS &f1, double v2) {
         Vector1<double> v;
         v[0] = v2;
         Constant<-1, 1> f2(f1.IRows(), v);
-        return GenS(
-            ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MinFlag, f1, f2));
+        return GenS(ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MinFlag, f1, f2));
     });
 
     // ND Output Maximization Bindings
@@ -108,13 +102,11 @@ void MinMaxBuild(PYCLASS &obj) {
     });
     obj.def("min", [](Eigen::VectorXd v1, const Gen &f2) {
         Constant<-1, -1> f1(f2.IRows(), v1);
-        return Gen(
-            ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MinFlag, f1, f2));
+        return Gen(ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MinFlag, f1, f2));
     });
     obj.def("min", [](const Gen &f1, Eigen::VectorXd v2) {
         Constant<-1, -1> f2(f1.IRows(), v2);
-        return Gen(
-            ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MinFlag, f1, f2));
+        return Gen(ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MinFlag, f1, f2));
     });
 
     // =========================================================================
@@ -122,7 +114,8 @@ void MinMaxBuild(PYCLASS &obj) {
     // TODO: 3-argument min-max bindings
 }
 
-// ── ComparativeBuild ──────────────────────────────────────────────────────────────────────────────
+// ── ComparativeBuild
+// ──────────────────────────────────────────────────────────────────────────────
 inline void ComparativeBuild(nb::module_ &m) {
     using GenComp = GenericComparative<-1>;
 
@@ -134,9 +127,9 @@ inline void ComparativeBuild(nb::module_ &m) {
     Bind::MinMaxBuild(obj);
 }
 
-// ── IfElseBuild ───────────────────────────────────────────────────────────────────────────────────
-template <class PYCLASS>
-void IfElseBuild(PYCLASS &obj) {
+// ── IfElseBuild
+// ───────────────────────────────────────────────────────────────────────────────────
+template <class PYCLASS> void IfElseBuild(PYCLASS &obj) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using ELEM = Segment<-1, 1, -1>;
@@ -188,7 +181,8 @@ void IfElseBuild(PYCLASS &obj) {
     });
 }
 
-// ── ConditionalBuild ──────────────────────────────────────────────────────────────────────────────
+// ── ConditionalBuild
+// ──────────────────────────────────────────────────────────────────────────────
 inline void ConditionalBuild(nb::module_ &m) {
     using GenCon = GenericConditional<-1>;
 
@@ -200,8 +194,7 @@ inline void ConditionalBuild(nb::module_ &m) {
     obj.def(
         "__and__",
         [](const GenCon &a, const GenCon &b) {
-            return GenCon(
-                ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ANDFlag, b));
+            return GenCon(ConditionalStatement<GenCon, GenCon>(a, ConditionalFlags::ANDFlag, b));
         },
         nb::is_operator());
 

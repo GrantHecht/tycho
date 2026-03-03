@@ -6,8 +6,7 @@
 
 namespace Tycho::Bind {
 
-template <int XV, int UV, int PV, class Derived, class Obj>
-void ODESizeBuild(Obj &obj) {
+template <int XV, int UV, int PV, class Derived, class Obj> void ODESizeBuild(Obj &obj) {
     obj.def("XVars", &Derived::XVars);
     obj.def("UVars", &Derived::UVars);
     obj.def("PVars", &Derived::PVars);
@@ -25,8 +24,7 @@ void ODESizeBuild(Obj &obj) {
     obj.def("Xtidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xtidxs, nb::const_));
 
     obj.def("XtUidxs", nb::overload_cast<>(&Derived::XtUidxs, nb::const_));
-    obj.def("XtUidxs",
-            nb::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, nb::const_));
+    obj.def("XtUidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, nb::const_));
 
     obj.def("Uidxs", nb::overload_cast<>(&Derived::Uidxs, nb::const_));
     obj.def("Uidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, nb::const_));

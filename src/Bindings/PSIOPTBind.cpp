@@ -1,10 +1,18 @@
+#include "PSIOPTBind.h"
 #include "PSIOPT.h"
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
 using namespace Tycho;
 
-void Tycho::PSIOPT::Build(nb::module_ &m) {
+void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     using namespace doc;
+    using BarrierModes = PSIOPT::BarrierModes;
+    using LineSearchModes = PSIOPT::LineSearchModes;
+    using QPPivotModes = PSIOPT::QPPivotModes;
+    using PDStepStrategies = PSIOPT::PDStepStrategies;
+    using ConvergenceFlags = PSIOPT::ConvergenceFlags;
+    using AlgorithmModes = PSIOPT::AlgorithmModes;
+    using QPOrderingModes = PSIOPT::QPOrderingModes;
     auto obj = nb::class_<PSIOPT>(m, "PSIOPT");
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());

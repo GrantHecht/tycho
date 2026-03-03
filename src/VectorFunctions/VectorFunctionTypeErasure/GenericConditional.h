@@ -55,7 +55,6 @@ template <int IR> struct GenericConditional : rubber_types::TypeErasure<Conditio
     GenericConditional(const GenericConditional<IR> &obj) {
         this->reset_container(obj.get_container());
     }
-
 };
 
 } // namespace Tycho

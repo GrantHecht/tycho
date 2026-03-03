@@ -14,7 +14,6 @@ template <int IR> struct GenericComparative : rubber_types::TypeErasure<Conditio
     GenericComparative(const GenericComparative<IR> &obj) {
         this->reset_container(obj.get_container());
     }
-
 };
 
 } // namespace Tycho

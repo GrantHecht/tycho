@@ -655,10 +655,6 @@ struct PSIOPT {
     Eigen::VectorXd optimize_solve(const Eigen::VectorXd &x);
 
     Eigen::VectorXd solve(const Eigen::VectorXd &x);
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

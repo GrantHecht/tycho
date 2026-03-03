@@ -1,8 +1,14 @@
+#include "OptimizationProblemBind.h"
 #include "OptimizationProblem.h"
 
-void Tycho::OptimizationProblem::Build(nb::module_ &m) {
+using namespace Tycho;
 
-    auto obj = nb::class_<OptimizationProblem,                           OptimizationProblemBase>(m, "OptimizationProblem");
+void TychoBind<OptimizationProblem>::Build(nb::module_ &m) {
+    using VectorFunctionalX = OptimizationProblem::VectorFunctionalX;
+    using ScalarFunctionalX = OptimizationProblem::ScalarFunctionalX;
+    using VectorXi = OptimizationProblem::VectorXi;
+
+    auto obj = nb::class_<OptimizationProblem, OptimizationProblemBase>(m, "OptimizationProblem");
 
     obj.def(nb::init<>());
 

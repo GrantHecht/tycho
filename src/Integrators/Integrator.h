@@ -2071,8 +2071,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /////////////////////////////////////////////////////////////////////////////////////
-
 };
 
 } // namespace Tycho
-

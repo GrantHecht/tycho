@@ -657,8 +657,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
         return func;
     }
-
 };
 
 } // namespace Tycho
-

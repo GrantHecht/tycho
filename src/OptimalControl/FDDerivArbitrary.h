@@ -186,15 +186,6 @@ template <class DType> struct FDDerivArbitrary {
     inline DerivType ithderiv_python(const int i, const int Order, const int Accuracy) const {
         return derivAt<DerivType>(i, Order, Accuracy);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<FDDerivArbitrary<DType>>(m, name);
-        obj.def(nb::init<int, const std::vector<DType> &>());
-        obj.def("all_derivs", &FDDerivArbitrary<DType>::allderiv_python<DType>);
-        obj.def("deriv", &FDDerivArbitrary<DType>::ithderiv_python<DType>);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

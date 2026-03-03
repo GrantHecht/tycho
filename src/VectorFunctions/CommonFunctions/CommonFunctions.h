@@ -35,4 +35,3 @@
 #include "VectorProducts.h"
 #include "VectorScalarFunctionDivision.h"
 #include "VectorScalarFunctionProduct.h"
-

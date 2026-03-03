@@ -371,5 +371,4 @@ struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic
     }
 };
 
-
 } // namespace Tycho

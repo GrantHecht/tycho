@@ -176,10 +176,6 @@ struct OptimizationProblem : OptimizationProblemBase {
         this->ActiveIqLmults = this->optimizer->LastIqLmults;
         return this->optimizer->ConvergeFlag;
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

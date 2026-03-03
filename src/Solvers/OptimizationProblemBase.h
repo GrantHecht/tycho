@@ -123,10 +123,6 @@ struct OptimizationProblemBase {
 
     void setJetJobMode(JetJobModes m) { this->JetJobMode = m; }
     void setJetJobMode(const std::string &str) { this->setJetJobMode(strto_JetJobMode(str)); }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

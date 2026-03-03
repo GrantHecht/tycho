@@ -49,4 +49,3 @@ struct VectorExpression<Derived, ExprImpl>
     };
 
 } // namespace Tycho
-

@@ -453,5 +453,4 @@ struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, Analytic, Analy
     }
 };
 
-
 } // namespace Tycho

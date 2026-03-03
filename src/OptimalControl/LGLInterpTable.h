@@ -894,10 +894,6 @@ struct LGLInterpTable {
 
         return sd;
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

@@ -26,7 +26,19 @@ template <class Func> struct TychoBind<IOScaled<Func>> {
 #include "InterpTableBind.h"
 #endif
 
-namespace Tycho {} // namespace Tycho
+namespace Tycho {
+void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
+void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m);
+void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart1(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart2(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart3(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart4(FunctionRegistry &reg, nb::module_ &m);
+void ArgsSegBuildPart5(FunctionRegistry &reg, nb::module_ &m);
+void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
+void FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m);
+void MatrixFunctionBuild(nb::module_ &m);
+} // namespace Tycho
 
 void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &mod = reg.getVectorFunctionsModule();

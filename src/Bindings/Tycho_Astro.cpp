@@ -1,6 +1,13 @@
 #include "Astro/Tycho_Astro.h"
-
 #include "Astro/CR3BPModel.h"
+
+namespace Tycho {
+void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
+void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
+void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
+} // namespace Tycho
+
 void Tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto mod = m.def_submodule("Astro");
 

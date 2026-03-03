@@ -37,7 +37,6 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         this->setUVars(uv);
         this->setPVars(pv);
     }
-
 };
 
 #define BUILD_ODE_FROM_EXPRESSION(NAME, IMPL, ...)                                                 \
@@ -55,7 +54,6 @@ struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
     Integrator<Derived> integrator(double dstep) const {
         return Integrator<Derived>(this->derived(), dstep);
     }
-
 };
 
 template <class BaseType, int _XV, int _UV, int _PV>
@@ -89,11 +87,9 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
 
     GenericODE(BaseType f, int xv) : GenericODE(f, xv, 0, 0) {}
     GenericODE(BaseType f) : GenericODE(f, _XV, _UV, _PV) {}
-
 };
 
 template <int XV, int UV, int PV>
 using PythonGenericODE = GenericODE<GenericFunction<-1, -1>, XV, UV, PV>;
 
 } // namespace Tycho
-

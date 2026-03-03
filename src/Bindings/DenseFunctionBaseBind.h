@@ -7,8 +7,7 @@
 
 namespace Tycho::Bind {
 
-template <class Derived, class PYClass>
-void DenseBaseBuild(PYClass &obj) {
+template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
 
     using Gen = GenericFunction<-1, -1>;
 
@@ -37,9 +36,8 @@ void DenseBaseBuild(PYClass &obj) {
         func.derived().jacobian(x, jx);
         return jx;
     };
-    auto compute_jacobian_body =
-        [](const Derived &func,
-           const auto &x) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd> {
+    auto compute_jacobian_body = [](const Derived &func,
+                                    const auto &x) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd> {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         Eigen::VectorXd fx(func.ORows());
@@ -49,8 +47,8 @@ void DenseBaseBuild(PYClass &obj) {
         func.derived().compute_jacobian(x, fx, jx);
         return std::tuple{fx, jx};
     };
-    auto adjointgradient_body =
-        [](const Derived &func, const auto &x, const auto &lm) -> Eigen::VectorXd {
+    auto adjointgradient_body = [](const Derived &func, const auto &x,
+                                   const auto &lm) -> Eigen::VectorXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
@@ -60,8 +58,8 @@ void DenseBaseBuild(PYClass &obj) {
         func.derived().adjointgradient(x, ax, lm);
         return ax;
     };
-    auto adjointhessian_body =
-        [](const Derived &func, const auto &x, const auto &lm) -> Eigen::MatrixXd {
+    auto adjointhessian_body = [](const Derived &func, const auto &x,
+                                  const auto &lm) -> Eigen::MatrixXd {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
@@ -71,11 +69,8 @@ void DenseBaseBuild(PYClass &obj) {
         func.derived().adjointhessian(x, hx, lm);
         return hx;
     };
-    auto computeall_body =
-        [](const Derived &func,
-           const auto &x,
-           const auto &lm) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd, Eigen::VectorXd,
-                                          Eigen::MatrixXd> {
+    auto computeall_body = [](const Derived &func, const auto &x, const auto &lm)
+        -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd, Eigen::VectorXd, Eigen::MatrixXd> {
         if ((int)x.size() != func.IRows())
             throw std::invalid_argument("Incorrectly sized input to function");
         if ((int)lm.size() != func.ORows())
@@ -100,38 +95,43 @@ void DenseBaseBuild(PYClass &obj) {
     // Without overload 1, every numpy call copies. Without overload 2, lists/tuples fail.
     obj.def("compute",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); });
-    obj.def("compute",
-            [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
+    obj.def("compute", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
 
     obj.def("__call__",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); });
-    obj.def("__call__",
-            [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
+    obj.def("__call__", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
 
-    obj.def("jacobian",
-            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return jacobian_body(f, x); });
-    obj.def("jacobian",
-            [=](const Derived &f, Eigen::VectorXd x) { return jacobian_body(f, x); });
+    obj.def("jacobian", [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) {
+        return jacobian_body(f, x);
+    });
+    obj.def("jacobian", [=](const Derived &f, Eigen::VectorXd x) { return jacobian_body(f, x); });
 
-    obj.def("compute_jacobian",
-            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_jacobian_body(f, x); });
+    obj.def("compute_jacobian", [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) {
+        return compute_jacobian_body(f, x);
+    });
     obj.def("compute_jacobian",
             [=](const Derived &f, Eigen::VectorXd x) { return compute_jacobian_body(f, x); });
 
     obj.def("adjointgradient",
-            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return adjointgradient_body(f, x, lm); });
-    obj.def("adjointgradient",
-            [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return adjointgradient_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
+                ConstEigenRef<Eigen::VectorXd> lm) { return adjointgradient_body(f, x, lm); });
+    obj.def("adjointgradient", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
+        return adjointgradient_body(f, x, lm);
+    });
 
     obj.def("adjointhessian",
-            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return adjointhessian_body(f, x, lm); });
-    obj.def("adjointhessian",
-            [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return adjointhessian_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
+                ConstEigenRef<Eigen::VectorXd> lm) { return adjointhessian_body(f, x, lm); });
+    obj.def("adjointhessian", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
+        return adjointhessian_body(f, x, lm);
+    });
 
     obj.def("computeall",
-            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x, ConstEigenRef<Eigen::VectorXd> lm) { return computeall_body(f, x, lm); });
-    obj.def("computeall",
-            [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) { return computeall_body(f, x, lm); });
+            [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
+                ConstEigenRef<Eigen::VectorXd> lm) { return computeall_body(f, x, lm); });
+    obj.def("computeall", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
+        return computeall_body(f, x, lm);
+    });
 
     obj.def("rpt", &Derived::rpt);
     obj.def("vf", &Derived::template MakeGeneric<GenericFunction<-1, -1>>);
@@ -142,8 +142,7 @@ void DenseBaseBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, class PYClass>
-void DoubleMathBuild(PYClass &obj) {
+template <class Derived, class PYClass> void DoubleMathBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -171,11 +170,9 @@ void DoubleMathBuild(PYClass &obj) {
         "__rsub__", [](const Derived &a, Eigen::VectorXd b) { return BinGen(b - a); },
         nb::is_operator());
 
+    obj.def("__mul__", [](const Derived &a, double b) { return BinGen(a * b); }, nb::is_operator());
     obj.def(
-        "__mul__", [](const Derived &a, double b) { return BinGen(a * b); }, nb::is_operator());
-    obj.def(
-        "__rmul__", [](const Derived &a, double b) { return BinGen(a * b); },
-        nb::is_operator());
+        "__rmul__", [](const Derived &a, double b) { return BinGen(a * b); }, nb::is_operator());
 
     obj.def("__neg__", [](const Derived &a) { return BinGen(a * (-1.0)); }, nb::is_operator());
 
@@ -183,20 +180,17 @@ void DoubleMathBuild(PYClass &obj) {
         "__truediv__", [](const Derived &a, double b) { return BinGen(a * (1.0 / b)); },
         nb::is_operator());
     obj.def(
-        "__truediv__",
-        [](const Derived &a, const Segment<-1, 1, -1> &b) { return BinGen(a / b); },
+        "__truediv__", [](const Derived &a, const Segment<-1, 1, -1> &b) { return BinGen(a / b); },
         nb::is_operator());
 
     if constexpr (OR == 1) { // Scalars
         obj.def(
-            "__add__", [](const Derived &a, double b) { return BinGen(a + b); },
-            nb::is_operator());
+            "__add__", [](const Derived &a, double b) { return BinGen(a + b); }, nb::is_operator());
         obj.def(
             "__radd__", [](const Derived &a, double b) { return BinGen(a + b); },
             nb::is_operator());
         obj.def(
-            "__sub__", [](const Derived &a, double b) { return BinGen(a - b); },
-            nb::is_operator());
+            "__sub__", [](const Derived &a, double b) { return BinGen(a - b); }, nb::is_operator());
         obj.def(
             "__rsub__", [](const Derived &a, double b) { return BinGen(b - a); },
             nb::is_operator());
@@ -220,8 +214,7 @@ void DoubleMathBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, class PYClass>
-void UnaryMathBuild(PYClass &obj) {
+template <class Derived, class PYClass> void UnaryMathBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -385,14 +378,12 @@ void UnaryMathBuild(PYClass &obj) {
         obj.def("__abs__", [](const Derived &e) { return GenS(CwiseAbs<Derived>(e)); });
         obj.def("sign", [](const Derived &e) { return GenS(SignFunction<Derived>(e)); });
 
-        obj.def("pow", [](const Derived &e, double power) {
-            return GenS(CwisePow<Derived>(e, power));
-        });
+        obj.def("pow",
+                [](const Derived &e, double power) { return GenS(CwisePow<Derived>(e, power)); });
 
         if constexpr (!std::is_same<PYClass, nb::module_>::value) {
             obj.def(
-                "__pow__",
-                [](const Derived &a, double b) { return GenS(CwisePow<Derived>(a, b)); },
+                "__pow__", [](const Derived &a, double b) { return GenS(CwisePow<Derived>(a, b)); },
                 nb::is_operator());
             obj.def(
                 "__pow__",
@@ -408,8 +399,7 @@ void UnaryMathBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, class PYClass>
-void FunctionIndexingBuild(PYClass &obj) {
+template <class Derived, class PYClass> void FunctionIndexingBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -421,10 +411,8 @@ void FunctionIndexingBuild(PYClass &obj) {
     using SEG4 = Segment<-1, 4, -1>;
     using ELEM = Segment<-1, 1, -1>;
 
-    obj.def("padded_lower",
-            [](const Derived &a, int lpad) { return Gen(a.padded_lower(lpad)); });
-    obj.def("padded_upper",
-            [](const Derived &a, int upad) { return Gen(a.padded_upper(upad)); });
+    obj.def("padded_lower", [](const Derived &a, int lpad) { return Gen(a.padded_lower(lpad)); });
+    obj.def("padded_upper", [](const Derived &a, int upad) { return Gen(a.padded_upper(upad)); });
     obj.def("padded",
             [](const Derived &a, int upad, int lpad) { return Gen(a.padded(upad, lpad)); });
 
@@ -480,8 +468,7 @@ void FunctionIndexingBuild(PYClass &obj) {
     // }
 
     if constexpr (OR < 0 || OR > 2) {
-        using Seg2RetType =
-            typename std::conditional<is_seg, SEG2, GenericFunction<-1, -1>>::type;
+        using Seg2RetType = typename std::conditional<is_seg, SEG2, GenericFunction<-1, -1>>::type;
 
         auto seg2 = [](const Derived &a, int start) {
             return Seg2RetType(a.template segment<2>(start));
@@ -499,8 +486,7 @@ void FunctionIndexingBuild(PYClass &obj) {
         obj.def("tail2", tail2);
     }
     if constexpr (OR < 0 || OR > 3) {
-        using Seg3RetType =
-            typename std::conditional<is_seg, SEG3, GenericFunction<-1, -1>>::type;
+        using Seg3RetType = typename std::conditional<is_seg, SEG3, GenericFunction<-1, -1>>::type;
         auto seg3 = [](const Derived &a, int start) {
             return Seg3RetType(a.template segment<3>(start));
         };
@@ -517,8 +503,7 @@ void FunctionIndexingBuild(PYClass &obj) {
     }
 }
 
-template <class Derived, class PYClass>
-void BinaryMathBuild(PYClass &obj) {
+template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -599,9 +584,8 @@ void BinaryMathBuild(PYClass &obj) {
             });
     }
 
-    obj.def("dot", [](const Derived &seg1, const Derived &seg2) {
-        return GenS(dotProduct(seg1, seg2));
-    });
+    obj.def("dot",
+            [](const Derived &seg1, const Derived &seg2) { return GenS(dotProduct(seg1, seg2)); });
     obj.def("cwiseProduct", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));
     });
@@ -625,8 +609,7 @@ void BinaryMathBuild(PYClass &obj) {
     });
 }
 
-template <class Derived, class PYClass>
-void BinaryOperatorsBuild(PYClass &obj) {
+template <class Derived, class PYClass> void BinaryOperatorsBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -743,8 +726,7 @@ void BinaryOperatorsBuild(PYClass &obj) {
     ////////////////////////////////////////////////////////////////
 }
 
-template <class Derived, class PYClass>
-void ConditionalOperatorsBuild(PYClass &obj) {
+template <class Derived, class PYClass> void ConditionalOperatorsBuild(PYClass &obj) {
     constexpr int OR = Derived::ORC;
     constexpr int IR = Derived::IRC;
     using Gen = GenericFunction<-1, -1>;
@@ -754,23 +736,17 @@ void ConditionalOperatorsBuild(PYClass &obj) {
 
     if constexpr (OR == 1) {
         obj.def(
-            "__lt__", [](const Derived &a, double b) { return GenCon(a < b); },
-            nb::is_operator());
+            "__lt__", [](const Derived &a, double b) { return GenCon(a < b); }, nb::is_operator());
         obj.def(
-            "__gt__", [](const Derived &a, double b) { return GenCon(a > b); },
-            nb::is_operator());
+            "__gt__", [](const Derived &a, double b) { return GenCon(a > b); }, nb::is_operator());
         obj.def(
-            "__rlt__", [](const Derived &a, double b) { return GenCon(a > b); },
-            nb::is_operator());
+            "__rlt__", [](const Derived &a, double b) { return GenCon(a > b); }, nb::is_operator());
         obj.def(
-            "__rgt__", [](const Derived &a, double b) { return GenCon(a < b); },
-            nb::is_operator());
+            "__rgt__", [](const Derived &a, double b) { return GenCon(a < b); }, nb::is_operator());
         obj.def(
-            "__le__", [](const Derived &a, double b) { return GenCon(a <= b); },
-            nb::is_operator());
+            "__le__", [](const Derived &a, double b) { return GenCon(a <= b); }, nb::is_operator());
         obj.def(
-            "__ge__", [](const Derived &a, double b) { return GenCon(a >= b); },
-            nb::is_operator());
+            "__ge__", [](const Derived &a, double b) { return GenCon(a >= b); }, nb::is_operator());
 
         obj.def(
             "__lt__", [](const Derived &a, const Derived &b) { return GenCon(a < b); },

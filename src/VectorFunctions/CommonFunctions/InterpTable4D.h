@@ -2974,5 +2974,4 @@ struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, Analytic, Analy
     }
 };
 
-
 } // namespace Tycho

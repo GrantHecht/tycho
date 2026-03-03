@@ -7,7 +7,8 @@
 
 namespace Tycho {
 
-// ── InterpTable1D ─────────────────────────────────────────────────────────────────────────────────
+// ── InterpTable1D
+// ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable1DBuild(nb::module_ &m) {
 
     using MatType = InterpTable1D::MatType;
@@ -76,7 +77,8 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     });
 }
 
-// ── InterpTable2D ─────────────────────────────────────────────────────────────────────────────────
+// ── InterpTable2D
+// ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable2DBuild(nb::module_ &m) {
     using MatType = InterpTable2D::MatType;
     auto obj = nb::class_<InterpTable2D>(m, "InterpTable2D");
@@ -178,7 +180,8 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     });
 }
 
-// ── InterpTable3D ─────────────────────────────────────────────────────────────────────────────────
+// ── InterpTable3D
+// ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable3DBuild(nb::module_ &m) {
 
     auto obj = nb::class_<InterpTable3D>(m, "InterpTable3D");
@@ -285,7 +288,8 @@ inline void InterpTable3DBuild(nb::module_ &m) {
           });
 }
 
-// ── InterpTable4D ─────────────────────────────────────────────────────────────────────────────────
+// ── InterpTable4D
+// ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable4DBuild(nb::module_ &m) {
 
     auto obj = nb::class_<InterpTable4D>(m, "InterpTable4D");

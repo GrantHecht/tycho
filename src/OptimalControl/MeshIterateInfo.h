@@ -121,21 +121,6 @@ struct MeshIterateInfo {
         }
         fmt::print("{:<8}|\n", this->up_numsegs);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m) {
-        auto obj = nb::class_<MeshIterateInfo>(m, "MeshIterateInfo");
-
-        obj.def_ro("times", &MeshIterateInfo::times);
-        obj.def_ro("error", &MeshIterateInfo::error);
-        obj.def_ro("distribution", &MeshIterateInfo::distribution);
-        obj.def_ro("distintegral", &MeshIterateInfo::distintegral);
-        obj.def_ro("avg_error", &MeshIterateInfo::avg_error);
-        obj.def_ro("max_error", &MeshIterateInfo::max_error);
-        obj.def_ro("numsegs", &MeshIterateInfo::numsegs);
-        obj.def_ro("converged", &MeshIterateInfo::converged);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

@@ -13,21 +13,4 @@
 #include "mkl.h"
 #endif
 
-namespace Tycho {
-
-#ifdef TYCHO_PYTHON_BINDINGS
-void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
-    // auto sol = m.def_submodule("Solvers","SubModule Containing PSIOPT,NLP, and Solver Flags");
-
-    auto &sol = reg.getSolversModule();
-#ifndef USE_ACCELERATE_SPARSE
-    int DSECOND = dsecnd();
-#endif
-    PSIOPT::Build(sol);
-    OptimizationProblemBase::Build(sol);
-    Jet::Build(sol);
-    OptimizationProblem::Build(sol);
-}
-#endif // TYCHO_PYTHON_BINDINGS
-
-} // namespace Tycho
+namespace Tycho {} // namespace Tycho

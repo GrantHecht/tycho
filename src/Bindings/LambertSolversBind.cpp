@@ -1,6 +1,10 @@
 #include "Astro/Tycho_Astro.h"
 #include "FunctionRegistry.h"
 
+namespace Tycho {
+void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
+} // namespace Tycho
+
 void Tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     m.def("lambert_izzo",

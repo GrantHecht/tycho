@@ -21,6 +21,7 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
     return make_dynamic_sum<GenS, GenS>(elems);
 }
 
+void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace Tycho
 
 void Tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {

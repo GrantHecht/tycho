@@ -1,11 +1,17 @@
-#include "ODEPhaseBase.h"
+#include "ODEPhaseBind.h"
 #include "PyDocString/OptimalControl/ODEPhaseBase_doc.h"
-#include "TypeCasters.h"
 
-void Tycho::ODEPhaseBase::Build(nb::module_ &m) {
+using namespace Tycho;
+using VectorXd = Eigen::VectorXd;
+using VectorXi = Eigen::VectorXi;
+using VectorFunctionalX = GenericFunction<-1, -1>;
+using ScalarFunctionalX = GenericFunction<-1, 1>;
+using StateConstraint = StateFunction<VectorFunctionalX>;
+using StateObjective = StateFunction<ScalarFunctionalX>;
+
+void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     using namespace doc;
-    auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(
-        m, "PhaseInterface");
+    auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
     obj.doc() = "Base Class for All Optimal Control Phases";
 
     obj.def("enable_vectorization", &ODEPhaseBase::enable_vectorization);
@@ -165,7 +171,8 @@ void Tycho::ODEPhaseBase::Build(nb::module_ &m) {
 
     obj.def("addDeltaTimeEqualCon",
             nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::addDeltaTimeEqualCon),
-            nb::arg("value"), nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("value"), nb::arg("scale") = 1.0,
+            nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("addValueLock",
             nb::overload_cast<RegionType, VarIndexType, ScaleType>(&ODEPhaseBase::addValueLock),
@@ -347,7 +354,8 @@ void Tycho::ODEPhaseBase::Build(nb::module_ &m) {
     obj.def("addIntegralObjective",
             nb::overload_cast<ScalarFunctionalX, VarIndexType, ScaleType>(
                 &ODEPhaseBase::addIntegralObjective),
-            nb::arg("Func"), nb::arg("InputIndex"), nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("Func"), nb::arg("InputIndex"),
+            nb::arg("AutoScale").none() = std::string("auto"));
     //////////////////////////////////
     /////// IntegralParamFunction /////////
     obj.def("addIntegralParamFunction",

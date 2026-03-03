@@ -8,6 +8,12 @@
 
 namespace Tycho {
 
+namespace detail {
+template <class T, class Genfunc, class Arg> struct JetInvoker {
+    static inline std::shared_ptr<T> invoke(const Genfunc &f, const Arg &a) { return f(a); }
+};
+} // namespace detail
+
 struct Jet {
 
     static void print_beginning() {
@@ -112,15 +118,9 @@ struct Jet {
 #endif
 
             int gfidx = genfidxes[i];
-#ifdef TYCHO_PYTHON_BINDINGS
-            if constexpr (std::is_same_v<Args2, nb::args>) {
-                optprobs[i] = genfuncs[gfidx](*args[i]);
-            } else {
-                optprobs[i] = genfuncs[gfidx](args[i]);
-            }
-#else
-            optprobs[i] = genfuncs[gfidx](args[i]);
-#endif
+            optprobs[i] =
+                detail::JetInvoker<T, std::decay_t<decltype(genfuncs[gfidx])>, Args2>::invoke(
+                    genfuncs[gfidx], args[i]);
 
             return optprobs[i]->jet_run();
         };
@@ -177,42 +177,6 @@ struct Jet {
         return Jet::map(genfunc, optprobs, nt, verbose);
     }
     ////////////////////////////////////////////////////////////////////////////////////
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m) {
-
-        auto obj = nb::class_<Jet>(m, "Jet");
-
-        obj.def_static(
-            "map",
-            [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt) {
-                return Jet::map(optprobs, nt, true);
-            },
-            nb::call_guard<nb::gil_scoped_release>());
-
-        obj.def_static(
-            "map",
-            [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)>
-                   genfun,
-               const std::vector<nb::args> &args,
-               int nt) { return Jet::map(genfun, args, nt, true); },
-            nb::call_guard<nb::gil_scoped_release>());
-
-        obj.def_static(
-            "map",
-            [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt,
-               bool v) { return Jet::map(optprobs, nt, v); },
-            nb::call_guard<nb::gil_scoped_release>());
-
-        obj.def_static(
-            "map",
-            [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)>
-                   genfun,
-               const std::vector<nb::args> &args, int nt,
-               bool v) { return Jet::map(genfun, args, nt, v); },
-            nb::call_guard<nb::gil_scoped_release>());
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

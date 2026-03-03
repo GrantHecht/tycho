@@ -190,8 +190,6 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     Eigen::VectorXi XtUidxs(int zidxs) const { return idxs_impl(zidxs, this->XtUidxs()); }
     Eigen::VectorXi Uidxs(int zidxs) const { return idxs_impl(zidxs, this->Uidxs()); }
     Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
-
 };
 
 } // namespace Tycho
-

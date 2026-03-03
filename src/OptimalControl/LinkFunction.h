@@ -233,21 +233,6 @@ template <class FuncType> struct LinkFunction {
     }
 
     LinkFunction() {}
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<LinkFunction<FuncType>>(m, name);
-
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>, Eigen::VectorXi>());
-        obj.def(
-            nb::init<FuncType, Eigen::Matrix<PhaseRegionFlags, -1, 1>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

@@ -50,7 +50,6 @@ struct KeplerPhase : ODEPhase<Kepler> {
             return Base::make_shooter();
         }
     }
-
 };
 
 } // namespace Tycho

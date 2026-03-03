@@ -1,10 +1,25 @@
-#include "OptimalControlProblem.h"
+#include "ODEPhaseBind.h"
 #include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
-#include "TypeCasters.h"
 
-void Tycho::OptimalControlProblem::Build(nb::module_ &m) {
+using namespace Tycho;
+using VectorXd = Eigen::VectorXd;
+using VectorXi = Eigen::VectorXi;
+using VectorFunctionalX = GenericFunction<-1, -1>;
+using ScalarFunctionalX = GenericFunction<-1, 1>;
+using PhasePtr = std::shared_ptr<ODEPhaseBase>;
+using RegVec = Eigen::Matrix<PhaseRegionFlags, -1, 1>;
+using LinkConstraint = LinkFunction<VectorFunctionalX>;
+using LinkObjective = LinkFunction<ScalarFunctionalX>;
+using PhaseRefType = std::variant<int, PhasePtr, std::string>;
+using PhasePack = std::tuple<PhaseRefType, RegionType, VarIndexType, VarIndexType, VarIndexType>;
+
+static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj);
+static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj);
+
+void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
     using namespace doc;
-    auto obj = nb::class_<OptimalControlProblem,                           OptimizationProblemBase>(m, "OptimalControlProblem");
+    auto obj =
+        nb::class_<OptimalControlProblem, OptimizationProblemBase>(m, "OptimalControlProblem");
     obj.def(nb::init<>());
 
     BuildNewLinkIterface(obj);
@@ -118,8 +133,7 @@ void Tycho::OptimalControlProblem::Build(nb::module_ &m) {
     obj.def("setMeshErrorEstimator", &OptimalControlProblem::setMeshErrorEstimator);
 }
 
-void Tycho::OptimalControlProblem::BuildNewLinkIterface(
-    nb::class_<OptimalControlProblem,                OptimizationProblemBase> &obj) {
+static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
 
     //////////// EqualCons////////////////////////////////////////
     {
@@ -147,16 +161,19 @@ void Tycho::OptimalControlProblem::BuildNewLinkIterface(
                     &OptimalControlProblem::addLinkEqualCon),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
-                nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("linkparams") = VectorXi(),
+                nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("addLinkParamEqualCon",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::addLinkParamEqualCon),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("addLinkParamEqualCon",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::addLinkParamEqualCon),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("addForwardLinkEqualCon",
                 nb::overload_cast<PhaseRefType, PhaseRefType, VarIndexType, ScaleType>(
@@ -204,16 +221,19 @@ void Tycho::OptimalControlProblem::BuildNewLinkIterface(
                     &OptimalControlProblem::addLinkInequalCon),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
-                nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("linkparams") = VectorXi(),
+                nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("addLinkParamInequalCon",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::addLinkParamInequalCon),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("addLinkParamInequalCon",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::addLinkParamInequalCon),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
     }
     //////////// Objectives ////////////////////////////////////////
     {
@@ -241,21 +261,23 @@ void Tycho::OptimalControlProblem::BuildNewLinkIterface(
                     &OptimalControlProblem::addLinkObjective),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
-                nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("linkparams") = VectorXi(),
+                nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("addLinkParamObjective",
                 nb::overload_cast<ScalarFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::addLinkParamObjective),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("addLinkParamObjective",
                 nb::overload_cast<ScalarFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::addLinkParamObjective),
-                nb::arg("func"), nb::arg("LinkParms"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("LinkParms"),
+                nb::arg("AutoScale").none() = std::string("auto"));
     }
 }
 
-void Tycho::OptimalControlProblem::BuildOldLinkIterface(
-    nb::class_<OptimalControlProblem,                OptimizationProblemBase> &obj) {
+static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
     using namespace doc;
 
     {

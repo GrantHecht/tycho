@@ -834,5 +834,4 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, Analytic, Analy
     }
 };
 
-
 } // namespace Tycho

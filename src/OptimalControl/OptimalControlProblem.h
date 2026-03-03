@@ -1631,14 +1631,6 @@ struct OptimalControlProblem : OptimizationProblemBase {
     PSIOPT::ConvergenceFlags optimize_solve() { return ocp_call_impl("optimize_solve"); }
 
     void print_stats(bool showfuns);
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-    static void
-    BuildNewLinkIterface(nb::class_<OptimalControlProblem,                                     OptimizationProblemBase> &);
-    static void
-    BuildOldLinkIterface(nb::class_<OptimalControlProblem,                                     OptimizationProblemBase> &);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

@@ -1187,10 +1187,6 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         return std::tuple{tsnd, bins, error};
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(nb::module_ &m);
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho
