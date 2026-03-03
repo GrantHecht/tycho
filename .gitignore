@@ -4,6 +4,7 @@
 
 ### Shell ###
 *.sh
+!bench/*.sh
 
 ### C++ ###
 # Prerequisites
