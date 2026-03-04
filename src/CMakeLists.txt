@@ -29,7 +29,7 @@ VectorFunctions/Tycho_VectorFunctions.h)
 
 target_include_directories(pch PRIVATE ${INCLUDE_DIRS})
 #target_link_libraries(pch PRIVATE fmt::fmt-header-only)
-target_compile_options(pch PUBLIC ${COMPILE_FLAGS})
+target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 
 
 ## Put all ".h"/".cpp" pairs here
@@ -57,7 +57,7 @@ OptimalControl/LGLInterpTable.cpp
 target_include_directories(optimalcontrol PRIVATE ${INCLUDE_DIRS})
 target_precompile_headers(optimalcontrol REUSE_FROM pch)
 
-target_compile_options(optimalcontrol PUBLIC ${COMPILE_FLAGS})
+target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 
 
 
@@ -71,7 +71,7 @@ add_library(psiopt STATIC
   Solvers/OptimizationProblem.h Solvers/OptimizationProblem.cpp
  )
 target_include_directories(psiopt PRIVATE ${INCLUDE_DIRS})
-target_compile_options(psiopt PUBLIC ${COMPILE_FLAGS})
+target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
 
 
 
@@ -81,7 +81,7 @@ add_library(utils STATIC
   Utils/MemoryManagement.h Utils/MemoryManagement.cpp
  )
 target_include_directories(utils PRIVATE ${INCLUDE_DIRS})
-target_compile_options(utils PUBLIC ${COMPILE_FLAGS})
+target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
 target_link_libraries(utils PRIVATE fmt::fmt-header-only)
 
 
@@ -95,7 +95,7 @@ add_library(astro STATIC
 
 target_precompile_headers(astro REUSE_FROM pch)
 target_include_directories(astro PRIVATE ${INCLUDE_DIRS})
-target_compile_options(astro PUBLIC ${COMPILE_FLAGS})
+target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 
 
 #-------------------------------------------------------------------------------

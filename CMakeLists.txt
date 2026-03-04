@@ -36,9 +36,18 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 # Option to enable strict IEEE 754 compliance for proper NaN handling
 # When OFF (default): Uses fast-math optimizations that may ignore NaNs
 # When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
-option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" ON)
+option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
+option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
+option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+
+# Auto-detect ccache to accelerate repeated builds (brew install ccache)
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    message(STATUS "ccache found: ${CCACHE_PROGRAM}")
+endif()
 
 
 ################################################################################
@@ -52,7 +61,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 # Release Flags
-list(APPEND RELEASE_FLAGS "-O2")
+list(APPEND RELEASE_FLAGS "-O3")
 
 
 ## Generic Binary Flags
@@ -191,9 +200,23 @@ endif()
  
 
 # Combine Flags
-set(COMPILE_FLAGS PUBLIC ${COMMON_FLAGS})
-list(APPEND COMPILE_FLAGS "$<$<OR:$<CONFIG:RELEASE>,$<CONFIG:RELWITHDEBINFO>>:${RELEASE_FLAGS}>")
-list(APPEND COMPILE_FLAGS "$<$<OR:$<CONFIG:DEBUG>,$<CONFIG:RELWITHDEBINFO>>:${DEBUG_FLAGS}>")
+set(COMPILE_FLAGS ${COMMON_FLAGS})
+# Wrap each flag individually in a genex to avoid broken genex fragments.
+# Embedding a semicolon-separated list inside a single genex breaks the
+# generator expression when CMake stores it as a list property (e.g.,
+# COMPILE_OPTIONS), because semicolons inside the genex become list separators.
+# The REUSE_FROM PCH mechanism then evaluates these fragments incorrectly.
+foreach(_flag IN LISTS RELEASE_FLAGS)
+    list(APPEND COMPILE_FLAGS "$<$<OR:$<CONFIG:RELEASE>,$<CONFIG:RELWITHDEBINFO>>:${_flag}>")
+endforeach()
+foreach(_flag IN LISTS DEBUG_FLAGS)
+    list(APPEND COMPILE_FLAGS "$<$<OR:$<CONFIG:DEBUG>,$<CONFIG:RELWITHDEBINFO>>:${_flag}>")
+endforeach()
+
+if(COMPILE_TIME_TRACE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-ftime-trace)
+    message(STATUS "Compile-time tracing enabled (-ftime-trace)")
+endif()
 
 
 
@@ -279,6 +302,17 @@ elseif(APPLE)
       list(APPEND COMPILE_FLAGS "-Wno-elaborated-enum-base")
     endif()
   endif()
+endif()
+
+# Binding-specific compile flags: -Os (nanobind best practice) instead of -O3.
+# Computed AFTER all platform flags (OpenMP etc.) are appended to COMPILE_FLAGS.
+# Core libs (psiopt, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
+# not propagate into _tycho TUs; pch_bindings and _tycho both use only
+# BINDING_COMPILE_FLAGS, keeping PCH and TU flags in sync.
+if(OPTIMIZE_BINDINGS)
+    set(BINDING_COMPILE_FLAGS ${COMPILE_FLAGS})
+else()
+    string(REPLACE "-O3" "-Os" BINDING_COMPILE_FLAGS "${COMPILE_FLAGS}")
 endif()
 
 if(APPLE)

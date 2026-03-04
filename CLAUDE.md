@@ -86,7 +86,7 @@ installed directly into the active Python environment's site-packages by the bui
 
 **System tools required (install once via Homebrew):**
 ```
-brew install llvm ninja
+brew install llvm ninja ccache
 ```
 Current versions in use: LLVM 22.1.0, Ninja 1.13+.
 

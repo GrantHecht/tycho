@@ -29,4 +29,4 @@ namespace nb = nanobind;
 
 // JetBind.h: JetInvoker partial spec for nb::args must be visible in every
 // binding TU that could instantiate Jet::map<T, Args1, nb::args>.
-#include "JetBind.h"
+#include "Solvers/JetBind.h"

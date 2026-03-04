@@ -6,10 +6,10 @@
 // GenericComparative, GenericConditional, and GenericFunction are fully
 // defined before these headers instantiate nb::class_<T>.
 
-#include "CommonFunctionsBind.h"
-#include "DenseFunctionBaseBind.h"
-#include "GenericFunctionBind.h"
-#include "PythonArgParsing.h"
-#include "PythonFunctions.h"
+#include "VectorFunctions/CommonFunctionsBind.h"
+#include "VectorFunctions/DenseFunctionBaseBind.h"
+#include "VectorFunctions/GenericFunctionBind.h"
+#include "VectorFunctions/PythonArgParsing.h"
+#include "VectorFunctions/PythonFunctions.h"
 
 #endif // TYCHO_PYTHON_BINDINGS

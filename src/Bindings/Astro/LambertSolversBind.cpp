@@ -1,4 +1,4 @@
-#include "Astro/Tycho_Astro.h"
+#include "Astro/LambertSolvers.h"
 #include "FunctionRegistry.h"
 
 namespace Tycho {
