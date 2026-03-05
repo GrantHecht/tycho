@@ -1,27 +1,25 @@
-/*
-File Name: ConstraintFunction.h
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Implements the SolverFunctionBase class which is the base class to
+// ConstraintFunction and ObjectiveFunction. Holds an Constraint/ObjectiveInterface type erasure class
+// and SolverIndexingData struct. Defines methods for the function to request and reserve KKT and RHS
+// space from the solver, and passes relevant arguments to the underlying type erased function or index
+// data structure. The two Derived classes ( Constraint/ObjectiveInterface) then define the rest of the
+// interface to the type-erased functions constraints and objective methods.
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 / pybind11 header references removed
+// =============================================================================
 
-File Description: Implements the SolverFunctionBase class which is the base class to
-ConstraintFunction and ObjectiveFunction. Holds an Constraint/ObjectiveInterface type erasure class
-and SolverIndexingData struct. Defines methods for the function to request and reserve KKT and RHS
-space from the solver, and passes relevant arguments to the underlying type erased function or index
-data structure. The two Derived classes ( Constraint/ObjectiveInterface) then define the rest of the
-interface to the type-erased functions constraints and objective methods.
-
-////////////////////////////////////////////////////////////////////////////////
-
-Original File Developer : James B. Pezent - jbpezent - jbpezent@crimson.ua.edu
-
-Current File Maintainers:
-    1. James B. Pezent - jbpezent         - jbpezent@crimson.ua.edu
-    2. Full Name       - GitHub User Name - Current Email
-    3. ....
-
-
-Usage of this source code is governed by the license found
-in the LICENSE file in ASSET's top level directory.
-
-*/
 #pragma once
 
 #include "VectorFunctions/FunctionalFlags.h"

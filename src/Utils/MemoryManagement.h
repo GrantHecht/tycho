@@ -1,23 +1,20 @@
-/*
-File Name: MemoryMangement.h
-
-File Description: Defines ASSET's memory manager for allocation of temporary matrices in
-VectorFunction expressions
-
-////////////////////////////////////////////////////////////////////////////////
-
-Original File Developer : James B. Pezent - jbpezent - jbpezent@crimson.ua.edu
-
-Current File Maintainers:
-    1. James B. Pezent - jbpezent         - jbpezent@crimson.ua.edu
-    2. Full Name       - GitHub User Name - Current Email
-    3. ....
-
-
-Usage of this source code is governed by the license found
-in the LICENSE file in ASSET's top level directory.
-
-*/
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Defines ASSET's memory manager for allocation of temporary matrices in
+// VectorFunction expressions
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 / pybind11 header references removed
+// =============================================================================
 
 #pragma once
 #include <algorithm>

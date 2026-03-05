@@ -1,42 +1,37 @@
-/*
-File Name: ComputableBase.h
-
-File Description:
-
-Implements Base class of all dense and sparse expressions with a compute method.
-Template parameters are the derived class (Derived), and the compile time value of the input (IR)
-and output (OR) rows of the vectorfunction.
-
-Inherits from CRTP to gain derived casting capabilities.
-Inherits from InputOutputSize<IR, OR> to gain fields for holding input and outsizes if necessary
-for dynamic sized functions (IR=OR=-1).
-
-Defines the default set of constexpr boolean info about functions that are used by the expression
-system, such as IsVectorizable. Derived classes are intended to overide these as neccessary.
-
-
-Adds functions for getting and setting the input and output rows.
-
-Defines the .compute fuction in terms of derived().compute_impl which must be implemented by a
-derived class.
-
-Also defines implements the constraints function in terms of the compute function. The constraints
-functions is part of a vector functions interface to the non-linear optimzier PSIOPT.
-
-////////////////////////////////////////////////////////////////////////////////
-
-Original File Developer : James B. Pezent - jbpezent - jbpezent@crimson.ua.edu
-
-Current File Maintainers:
-    1. James B. Pezent - jbpezent         - jbpezent@crimson.ua.edu
-    2. Full Name       - GitHub User Name - Current Email
-    3. ....
-
-
-Usage of this source code is governed by the license found
-in the LICENSE file in ASSET's top level directory.
-
-*/
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Implements Base class of all dense and sparse expressions with a compute method.
+// Template parameters are the derived class (Derived), and the compile time value of the input (IR)
+// and output (OR) rows of the vectorfunction.
+// 
+// Inherits from CRTP to gain derived casting capabilities.
+// Inherits from InputOutputSize<IR, OR> to gain fields for holding input and outsizes if necessary
+// for dynamic sized functions (IR=OR=-1).
+// 
+// Defines the default set of constexpr boolean info about functions that are used by the expression
+// system, such as IsVectorizable. Derived classes are intended to overide these as neccessary.
+// 
+// 
+// Adds functions for getting and setting the input and output rows.
+// 
+// Defines the .compute fuction in terms of derived().compute_impl which must be implemented by a
+// derived class.
+// 
+// Also defines implements the constraints function in terms of the compute function. The constraints
+// functions is part of a vector functions interface to the non-linear optimzier PSIOPT.
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 / pybind11 header references removed
+// =============================================================================
 
 #pragma once
 #include "DetectSuperScalar.h"
