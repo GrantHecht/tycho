@@ -1,28 +1,24 @@
-/*
-File Name: GenericFunction.h
-
-File Description: Defines the class GenericFunction which is a vector function that can be
-constructed form ANY other dense vector function with compatible input and output sizes. This is
-probably the most important class in the vector functions part of the library as it allows us to
-type erase arbitrarily compilicated compile time or run time defined vector functions. It holds type
-easure object that constructable from any compatible object and forwards its compute calls as well
-as selected product and accumulation operations to this type erased function.
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-Original File Developer : James B. Pezent - jbpezent - jbpezent@crimson.ua.edu
-
-Current File Maintainers:
-    1. James B. Pezent - jbpezent         - jbpezent@crimson.ua.edu
-    2. Full Name       - GitHub User Name - Current Email
-    3. ....
-
-
-Usage of this source code is governed by the license found
-in the LICENSE file in ASSET's top level directory.
-
-*/
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Defines the class GenericFunction which is a vector function that can be
+// constructed form ANY other dense vector function with compatible input and output sizes. This is
+// probably the most important class in the vector functions part of the library as it allows us to
+// type erase arbitrarily compilicated compile time or run time defined vector functions. It holds type
+// easure object that constructable from any compatible object and forwards its compute calls as well
+// as selected product and accumulation operations to this type erased function.
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 / pybind11 header references removed
+// =============================================================================
 
 #pragma once
 

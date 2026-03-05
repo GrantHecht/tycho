@@ -6,9 +6,9 @@
 |----|-------------|--------|
 | PR 1 | Rename ASSET/asset_asrl → Tycho/tycho | **DONE** (merged) |
 | PR 2 | Decouple C++ from Python bindings | **DONE** (merged) |
-| PR 3 | Migrate pybind11 → nanobind | Not started |
-| PR 4 | Separate extensions C++ from binding code | Not started |
-| PR 5 | Add per-file provenance headers to all ASSET-derived source files | Not started |
+| PR 3 | Migrate pybind11 → nanobind | **DONE** (merged) |
+| PR 4 | Separate extensions C++ from binding code | **SKIPPED** |
+| PR 5 | Add per-file provenance headers to all ASSET-derived source files | **DONE** |
 
 ---
 
@@ -154,7 +154,13 @@ what changes were made in the Tycho fork. This makes the boundary between
 inherited and new code explicit at the file level, consistent with the
 promise made in `notices/asset-apache2.txt`.
 
-Files that are entirely new (no ASSET origin) require no header.
+Files that are entirely new (no ASSET origin) require no header. However, we
+need to be careful, because many new files contain lots of code stripped 
+from existing asset_asrl files (i.e., all binding code, which still require
+a header).
+
+Note that some files include technical descriptions of what occurs 
+in the relevant code. We want to preserve this information.
 
 ### Header Format
 
@@ -164,13 +170,16 @@ For C++ files (`.h` / `.cpp`):
 // =============================================================================
 // Originally from ASSET (AlabamaASRL/asset_asrl)
 // Copyright 2020-present The University of Alabama-Astrodynamics and Space
-//   Research Lab. Licensed under the Apache License, Version 2.0.
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
 // Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: <insert developer> **Obtain from existing comments, git history, or assume James B. Pezent in this order**
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - <brief description of changes, e.g. "renamed namespace asset → Tycho">
 //   - <additional bullet per logical change group>
+//   - <add as many bullet points as needed based on commit history>
 // =============================================================================
 ```
 
@@ -180,8 +189,10 @@ For Python files (`.py`):
 # =============================================================================
 # Originally from ASSET (AlabamaASRL/asset_asrl)
 # Copyright 2020-present The University of Alabama-Astrodynamics and Space
-#   Research Lab. Licensed under the Apache License, Version 2.0.
+#   Research Lab. Licensed under the Apache License, Version 2.0..
+# License: notices/asset-apache2.txt.
 # Source: https://github.com/AlabamaASRL/asset_asrl
+# Original Developer: <insert developer> **Obtain from existing comments, git history, or assume James B. Pezent in this order**
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):

@@ -1,42 +1,39 @@
-/*
-File Name: DenseFunctionBase.h
-
-File Description: Implements the Base class for all dense vector functions in asset.
-Forwards the Derived class and compile time input(IR) and output(OR) rows down the CRTP inheretance
-chain. Also inherits from from domain holder so dynamic sized vector functions can hold an array
-containing their true input domain that is computed at run-time. Also defines the default compile
-time INPUT_DOMAIN of both constant and dynamic size functions. Composite derived classes will
-overide this typedef by design, in order to explicitly participate in the input domain tracking
-system. The default input domain simply says that all inputs are used. This input domain info is
-used to implement the default set of functions for manipluting the jacobian,hessian,and gradient of
-Derived function such as right_jacobian_product. Specialized derived classes should perform simple
-overloads of these methods.
-
-This class also defines most of the vector function indexing (.segment) and unary(.normalize)
-and binary(.dot) mathematical operations that are used when writing expressions.
-
-Additionally, This class also defines the .compute_jacobian etc. methods in terms of the
-compute_jacobian_impl methods implemented in derived classes. Theses methods are the used to
-implement the dense vector functions interface with psiopt throught the constraints_jacobian etc.
-methods.
-
-Finally, this class also contains methods (Postfixed Build) defining the python binding code of a
-vector functions public interface.
-
-////////////////////////////////////////////////////////////////////////////////
-
-Original File Developer : James B. Pezent - jbpezent - jbpezent@crimson.ua.edu
-
-Current File Maintainers:
-    1. James B. Pezent - jbpezent         - jbpezent@crimson.ua.edu
-    2. Full Name       - GitHub User Name - Current Email
-    3. ....
-
-
-Usage of this source code is governed by the license found
-in the LICENSE file in ASSET's top level directory.
-
-*/
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Implements the Base class for all dense vector functions in asset.
+// Forwards the Derived class and compile time input(IR) and output(OR) rows down the CRTP inheretance
+// chain. Also inherits from from domain holder so dynamic sized vector functions can hold an array
+// containing their true input domain that is computed at run-time. Also defines the default compile
+// time INPUT_DOMAIN of both constant and dynamic size functions. Composite derived classes will
+// overide this typedef by design, in order to explicitly participate in the input domain tracking
+// system. The default input domain simply says that all inputs are used. This input domain info is
+// used to implement the default set of functions for manipluting the jacobian,hessian,and gradient of
+// Derived function such as right_jacobian_product. Specialized derived classes should perform simple
+// overloads of these methods.
+// 
+// This class also defines most of the vector function indexing (.segment) and unary(.normalize)
+// and binary(.dot) mathematical operations that are used when writing expressions.
+// 
+// Additionally, This class also defines the .compute_jacobian etc. methods in terms of the
+// compute_jacobian_impl methods implemented in derived classes. Theses methods are the used to
+// implement the dense vector functions interface with psiopt throught the constraints_jacobian etc.
+// methods.
+// 
+// Finally, this class also contains methods (Postfixed Build) defining the python binding code of a
+// vector functions public interface.
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 / pybind11 header references removed
+// =============================================================================
 
 #pragma once
 #include <bench/BenchTimer.h>
