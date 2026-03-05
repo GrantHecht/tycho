@@ -1,0 +1,26 @@
+#pragma once
+
+#include "CommonFunctions/ExpressionFwdDeclarations.h"
+#include "pch.h"
+
+#ifdef TYCHO_PYTHON_BINDINGS
+
+namespace Tycho {
+
+/*
+ * Converts list of python objects into a vector of dynamically sized GenericFunctions.
+ * Can accept any of the fundamental types exposed to python as well as Python and Numpy
+ * vectors and scalars.
+ */
+std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows = 0);
+
+/*
+ * Converts list of python objects into a vector of dynamically sized scalar GenericFunctions.
+ * Can accept any of the fundamental scalar types exposed to python as well as Python and Numpy
+ * scalars.
+ */
+std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows = 0);
+
+} // namespace Tycho
+
+#endif // TYCHO_PYTHON_BINDINGS

@@ -190,39 +190,6 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     Eigen::VectorXi XtUidxs(int zidxs) const { return idxs_impl(zidxs, this->XtUidxs()); }
     Eigen::VectorXi Uidxs(int zidxs) const { return idxs_impl(zidxs, this->Uidxs()); }
     Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    template <class Obj, class Derived> static void BuildODESizeMembers(Obj &obj) {
-        obj.def("XVars", &Derived::XVars);
-        obj.def("UVars", &Derived::UVars);
-        obj.def("PVars", &Derived::PVars);
-        obj.def("TVar", &Derived::TVar);
-        obj.def("tVar", &Derived::TVar); // Capital is inconsistent in hindsight
-
-        obj.def("XtVars", &Derived::XtVars);
-        obj.def("XtUVars", &Derived::XtUVars);
-        obj.def("XtUPVars", &Derived::XtUPVars);
-
-        obj.def("Xidxs", py::overload_cast<>(&Derived::Xidxs, py::const_));
-        obj.def("Xidxs", py::overload_cast<const Eigen::VectorXi &>(&Derived::Xidxs, py::const_));
-
-        obj.def("Xtidxs", py::overload_cast<>(&Derived::Xtidxs, py::const_));
-        obj.def("Xtidxs", py::overload_cast<const Eigen::VectorXi &>(&Derived::Xtidxs, py::const_));
-
-        obj.def("XtUidxs", py::overload_cast<>(&Derived::XtUidxs, py::const_));
-        obj.def("XtUidxs",
-                py::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, py::const_));
-
-        obj.def("Uidxs", py::overload_cast<>(&Derived::Uidxs, py::const_));
-        obj.def("Uidxs", py::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, py::const_));
-
-        obj.def("add_idx",
-                py::overload_cast<const std::string &, const Eigen::VectorXi &>(&Derived::add_idx));
-        obj.def("get_idxs", &Derived::get_idxs);
-        obj.def("set_idxs", &Derived::set_idxs);
-        obj.def("idx", &Derived::idx);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

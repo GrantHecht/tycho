@@ -30,14 +30,6 @@ struct IOScaled : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic>
         this->EnableVectorization = this->func.EnableVectorization;
     }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<IOScaled<Func>>(m, name);
-        obj.def(py::init<Func, const Input<double> &, const Output<double> &>());
-        Base::DenseBaseBuild(obj);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
-
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;

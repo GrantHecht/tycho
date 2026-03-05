@@ -105,17 +105,6 @@ template <class FuncType> struct StateFunction {
         }
     }
     StateFunction() {}
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<StateFunction<FuncType>>(m, name);
-        obj.def(py::init<FuncType, PhaseRegionFlags, Eigen::VectorXi, Eigen::VectorXi,
-                         Eigen::VectorXi>());
-        obj.def(py::init<FuncType, PhaseRegionFlags, Eigen::VectorXi, PhaseRegionFlags,
-                         Eigen::VectorXi>());
-        obj.def(py::init<FuncType, PhaseRegionFlags, Eigen::VectorXi>());
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

@@ -30,18 +30,7 @@
 #include "Utils/TypeName.h"
 #include "Utils/fmtlib.h"
 
-////////////////////////////////////
-#ifdef TYCHO_PYTHON_BINDINGS
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-// #include <pybind11/iostream.h>
-#include <pybind11/operators.h>
-#include <pybind11/stl.h>
-
-namespace py = pybind11;
-#endif // TYCHO_PYTHON_BINDINGS
-
-/////////////////////////////////
+// Python binding headers live in src/Bindings/pch_nb.h and are baked into the
+// pch_bindings precompiled header used exclusively by _tycho and tycho_extensions.
 
 #endif // PCH_H

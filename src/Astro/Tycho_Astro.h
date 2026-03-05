@@ -9,10 +9,4 @@
 #include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
 
-namespace Tycho {
-
-#ifdef TYCHO_PYTHON_BINDINGS
-void AstroBuild(FunctionRegistry &reg, py::module &m);
-#endif // TYCHO_PYTHON_BINDINGS
-
-}
+namespace Tycho {}

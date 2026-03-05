@@ -657,34 +657,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
         return func;
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    template <class PyClass> static void BuildImpl(PyClass &phase) {
-        phase.def(py::init<DODE, TranscriptionModes>());
-        phase.def(py::init<DODE, TranscriptionModes, const std::vector<Eigen::VectorXd> &, int>());
-        phase.def(
-            py::init<DODE, TranscriptionModes, const std::vector<Eigen::VectorXd> &, int, bool>());
-
-        phase.def(py::init<DODE, std::string>());
-        phase.def(py::init<DODE, std::string, const std::vector<Eigen::VectorXd> &>());
-
-        phase.def(py::init<DODE, std::string, const std::vector<Eigen::VectorXd> &, int>());
-        phase.def(py::init<DODE, std::string, const std::vector<Eigen::VectorXd> &, int, bool>());
-    }
-
-    static void Build(py::module &m) {
-        auto phase =
-            py::class_<ODEPhase<DODE>, std::shared_ptr<ODEPhase<DODE>>, ODEPhaseBase>(m, "phase");
-
-        BuildImpl(phase);
-        phase.def_readwrite("integrator", &ODEPhase<DODE>::integrator);
-        phase.def_readwrite("EnableHessianSparsity", &ODEPhase<DODE>::EnableHessianSparsity);
-        phase.def_readwrite("OldShootingDefect", &ODEPhase<DODE>::OldShootingDefect);
-
-        phase.def("get_input_scale", &ODEPhase<DODE>::get_input_scale);
-        phase.def("get_defect", &ODEPhase<DODE>::get_defect);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

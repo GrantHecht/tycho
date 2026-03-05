@@ -226,4 +226,3 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
     mesh_dist.col(this->NumBlocks) = mesh_dist.col(this->NumBlocks - 1);
     mesh_errors.col(this->NumBlocks) = mesh_errors.col(this->NumBlocks - 1);
 }
-

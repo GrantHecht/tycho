@@ -20,5 +20,6 @@ target_include_directories(tycho_extensions PRIVATE ${INCLUDE_DIRS})
 message(STATUS  ${INCLUDE_DIRS})
 
 
-target_compile_options(tycho_extensions PUBLIC ${COMPILE_FLAGS})
+target_compile_options(tycho_extensions PUBLIC ${BINDING_COMPILE_FLAGS})
 target_precompile_headers(tycho_extensions REUSE_FROM pch_bindings)
+

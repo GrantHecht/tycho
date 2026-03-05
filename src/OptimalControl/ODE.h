@@ -37,17 +37,6 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         this->setUVars(uv);
         this->setPVars(pv);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name).def(py::init<Ts...>());
-        Base::DenseBaseBuild(obj);
-        obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode);
-        });
-        Integrator<Derived>::BuildConstructors(obj);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 #define BUILD_ODE_FROM_EXPRESSION(NAME, IMPL, ...)                                                 \
@@ -65,19 +54,6 @@ struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
     Integrator<Derived> integrator(double dstep) const {
         return Integrator<Derived>(this->derived(), dstep);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void BuildODEModule(const char *name, py::module &mod, FunctionRegistry &reg) {
-        auto odemod = mod.def_submodule(name);
-        reg.template Build_Register<Derived>(odemod, "ode");
-        reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
-        ODEPhase<Derived>::Build(odemod);
-    }
-
-    static void BuildODEModule(const char *name, FunctionRegistry &reg) {
-        BuildODEModule(name, reg.mod, reg);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <class BaseType, int _XV, int _UV, int _PV>
@@ -111,63 +87,6 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
 
     GenericODE(BaseType f, int xv) : GenericODE(f, xv, 0, 0) {}
     GenericODE(BaseType f) : GenericODE(f, _XV, _UV, _PV) {}
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void BuildGenODEModule(const char *name, py::module &mod, FunctionRegistry &reg) {
-        using Derived = GenericODE<BaseType, _XV, _UV, _PV>;
-        auto odemod = mod.def_submodule(name);
-
-        auto obj = py::class_<Derived>(odemod, "ode");
-        obj.def(py::init<BaseType, int, int, int>());
-        obj.def(py::init<BaseType, int, int>());
-        obj.def(py::init<BaseType, int>());
-        obj.def(py::init<BaseType>());
-        ODEPhase<Derived>::Build(odemod);
-        obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode);
-        });
-        obj.def("phase", [](const Derived &od, TranscriptionModes Tmode,
-                            const std::vector<Eigen::VectorXd> &Traj, int numdef) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode, Traj, numdef);
-        });
-
-        obj.def("phase", [](const Derived &od, std::string Tmode) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode);
-        });
-
-        obj.def("phase",
-                [](const Derived &od, std::string Tmode, const std::vector<Eigen::VectorXd> &Traj) {
-                    return std::make_shared<ODEPhase<Derived>>(od, Tmode, Traj);
-                });
-
-        obj.def("phase", [](const Derived &od, std::string Tmode,
-                            const std::vector<Eigen::VectorXd> &Traj, int numdef) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode, Traj, numdef);
-        });
-        obj.def("phase", [](const Derived &od, std::string Tmode,
-                            const std::vector<Eigen::VectorXd> &Traj, int numdef, bool LerpIG) {
-            return std::make_shared<ODEPhase<Derived>>(od, Tmode, Traj, numdef, LerpIG);
-        });
-
-        py::implicitly_convertible<Derived, GenericFunction<-1, -1>>();
-        reg.vfuncx.def(py::init([](const Derived &ode) {
-            return std::make_unique<GenericFunction<-1, -1>>(ode.func);
-        }));
-
-        reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
-
-        Integrator<Derived>::BuildConstructors(obj);
-
-        ODESize<_XV, _UV, _PV>::template BuildODESizeMembers<decltype(obj), Derived>(obj);
-
-        obj.def("vf", [](const Derived &od) { return od.func; });
-
-        obj.def("shooting_defect", [](const Derived &ode, const Integrator<Derived> &integ) {
-            auto shooter = CentralShootingDefect<Derived, Integrator<Derived>>(ode, integ);
-            return GenericFunction<-1, -1>(shooter);
-        });
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 template <int XV, int UV, int PV>

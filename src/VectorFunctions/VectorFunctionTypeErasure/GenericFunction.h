@@ -339,30 +339,6 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
         MemoryManager::resize(64, 64);
     }
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    template <class PYClass> static void GenericBuild(PYClass &obj) {
-        using Gen = GenericFunction<-1, -1>;
-        using GenS = GenericFunction<-1, 1>;
-        using BinGen = typename std::conditional<OR == 1, GenS, Gen>::type;
-
-        using SEG = Segment<-1, -1, -1>;
-        using SEG2 = Segment<-1, 2, -1>;
-        using SEG3 = Segment<-1, 3, -1>;
-        using SEG4 = Segment<-1, 4, -1>;
-        using ELEM = Segment<-1, 1, -1>;
-
-        obj.def(py::init<const GenericFunction<IR, OR> &>());
-        if constexpr (OR == -1 && IR == -1) {
-            obj.def(py::init(&Derived::PyCopy<GenericFunction<IR, 1>>));
-        }
-
-        obj.def("SuperTest", &Derived::SuperTest);
-        obj.def("SpeedTest", &Derived::SpeedTest);
-
-        Base::DenseBaseBuild(obj);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 };
 
 } // namespace Tycho

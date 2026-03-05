@@ -37,10 +37,6 @@ struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, AutodiffFwd, AutodiffFwd> {
         fx[4] += -2.0 * V[0] + X[1];
     }
 
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<CR3BPAD>(m, name).def(py::init<double>());
-        Base::DenseBaseBuild(obj);
-    }
 };
 
 struct ModifiedDynamicsAD : VectorFunction<ModifiedDynamicsAD, 9, 6, AutodiffFwd, AutodiffFwd> {
@@ -93,15 +89,25 @@ struct ModifiedDynamicsAD : VectorFunction<ModifiedDynamicsAD, 9, 6, AutodiffFwd
         fx[5] = x20 * (mu * x13 * x13 / (x0 * x0) + 1.0 * x21);
     }
 
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<ModifiedDynamicsAD>(m, name).def(py::init<double>());
-        Base::DenseBaseBuild(obj);
+};
+
+template <> struct TychoBind<CR3BPAD> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<CR3BPAD>(m, name).def(nb::init<double>());
+        Bind::DenseBaseBuild<CR3BPAD>(obj);
+    }
+};
+
+template <> struct TychoBind<ModifiedDynamicsAD> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<ModifiedDynamicsAD>(m, name).def(nb::init<double>());
+        Bind::DenseBaseBuild<ModifiedDynamicsAD>(obj);
     }
 };
 
 } // namespace Tycho
 
-void Tycho::ExtensionsBuild(FunctionRegistry &reg, py::module &extmod) {
+void Tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
 
     extmod.def("cpp_cr3bp", [](double mu) {
         // Example of how to write CR3BP dynamics as C++ vector function and bind it to python

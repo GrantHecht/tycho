@@ -288,10 +288,6 @@ struct MemoryManager {
     static int size_scalar() { return MemoryManager::ScalarStack.size(); }
     static int size_super_scalar() { return MemoryManager::SuperScalarStack.size(); }
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m);
-#endif // TYCHO_PYTHON_BINDINGS
-
   private:
     static thread_local ScalarStackType ScalarStack;
     static thread_local SuperScalarStackType SuperScalarStack;

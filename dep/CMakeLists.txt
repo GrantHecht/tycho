@@ -1,2 +1,2 @@
-add_subdirectory(pybind11)
+add_subdirectory(nanobind)
 add_subdirectory(fmt)

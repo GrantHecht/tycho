@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "label": "nanobind",
+    "python_runs": 10,
+    "cpp_runs": 5,
+    "timestamp": "2026-03-02 23:23:06"
+  },
+  "python": {
+    "benchmark_brachistochrone.py": {
+      "mean": 0.0053092418005689975,
+      "std": 0.0029110940352012776
+    },
+    "benchmark_bryson_denham.py": {
+      "mean": 0.013764141610590742,
+      "std": 0.0004309730279714961
+    },
+    "benchmark_vanderpol.py": {
+      "mean": 0.013483141604228876,
+      "std": 0.0004767280272208153
+    },
+    "benchmark_zermelo.py": {
+      "mean": 0.02163952489499934,
+      "std": 0.0001661689959607807
+    },
+    "benchmark_dionysus.py": {
+      "mean": 0.2130859332944965,
+      "std": 0.0011213144791440892
+    }
+  },
+  "cpp": {
+    "brachistochrone_bench": {
+      "mean": 0.007543882,
+      "std": 0.0003122675025294819
+    }
+  },
+  "compile": {
+    "mean_s": 737.919,
+    "std_s": 0.0,
+    "trials": [
+      737.919310999976
+    ],
+    "_note": "Cold-cache trial 1 only; full 3-trial data in bench_compile_nanobind.json"
+  },
+  "binary_sizes": {
+    "_tycho.so": 60994864,
+    "_tycho.so_path": "/Users/granthec/Source/tycho/build/src/Bindings/_tycho.cpython-313-darwin.so",
+    "brachistochrone_bench": 12182728,
+    "brachistochrone_bench_path": "/Users/granthec/Source/tycho/build/examples/cpp_examples/brachistochrone/brachistochrone_bench"
+  }
+}

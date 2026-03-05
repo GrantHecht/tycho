@@ -1,12 +1,20 @@
 #include <signal.h>
 
-#include "Tycho_Extensions.h"
 #include "Astro/Tycho_Astro.h"
 #include "OptimalControl/Tycho_OptimalControl.h"
 #include "Solvers/Tycho_Solvers.h"
+#include "Tycho_Extensions.h"
 #include "Utils/Tycho_Utils.h"
 #include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
+
+namespace Tycho {
+void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
+void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
+void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
+void UtilsBuild(nb::module_ &m);
+void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+} // namespace Tycho
 
 using namespace Tycho;
 using namespace rubber_types;
@@ -51,7 +59,8 @@ void SoftwareInfo() {
     fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
     fmt::print(fmt::fg(fmt::color::crimson), "\n{}\n", TYCHO_STR);
     fmt::print(fmt::fg(fmt::color::crimson), "{0:^{1}}\n", "Trajectory Optimization Library", 79);
-    fmt::print(fmt::fg(fmt::color::white), "{0:^{1}}\n", "Forked from ASSET (github.com/AlabamaASRL/asset_asrl)", 79);
+    fmt::print(fmt::fg(fmt::color::white), "{0:^{1}}\n",
+               "Forked from ASSET (github.com/AlabamaASRL/asset_asrl)", 79);
     fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n\n", "", 79);
     fmt::print(fmt::fg(fmt::color::royal_blue), " Software Version     : ");
     fmt::print(fmt::fg(fmt::color::white), assetversion);
@@ -91,9 +100,8 @@ void SoftwareInfo() {
     fmt::print(fmt::fg(fmt::color::white), "  ASSET    :Apache 2.0 | Copyright (c) 2020-present "
                                            "The University of Alabama-Astrodynamics "
                                            "and Space Research Lab\n");
-    fmt::print(fmt::fg(fmt::color::white), "  Pybind11 :Modified BSD | Copyright (c) 2016 Wenzel "
-                                           "Jakob <wenzel.jakob@epfl.ch>, All rights "
-                                           "reserved.\n");
+    fmt::print(fmt::fg(fmt::color::white),
+               "  nanobind :BSD | Copyright (c) 2022 Wenzel Jakob <wenzel.jakob@epfl.ch>\n");
     fmt::print(
         fmt::fg(fmt::color::white),
         "  Intel MKL:Intel Simplified Software License (Version October 2022) | Copyright (c) 2022 "
@@ -124,7 +132,7 @@ int main() {
     return 0;
 }
 
-PYBIND11_MODULE(_tycho, m) {
+NB_MODULE(_tycho, m) {
 
     Tycho::enable_color_console(); // This only does something on windows
 

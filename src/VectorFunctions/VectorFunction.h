@@ -25,13 +25,6 @@ struct VectorExpression
     VectorExpression(Ts... ts) : Base(ExprImpl::Definition(ts...)) {}
     VectorExpression() {};
 
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name).def(py::init<Ts...>());
-        Base::DenseBaseBuild(obj);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
-
     /////////////////////////////////////
     void InitExpression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
 };
@@ -44,13 +37,6 @@ struct VectorExpression<Derived, ExprImpl>
 
     using Base::Base;
     VectorExpression() : Base(ExprImpl::Definition()) {}
-
-#ifdef TYCHO_PYTHON_BINDINGS
-    static void Build(py::module &m, const char *name) {
-        auto obj = py::class_<Derived>(m, name).def(py::init<>());
-        Base::DenseBaseBuild(obj);
-    }
-#endif // TYCHO_PYTHON_BINDINGS
 
     /////////////////////////////////////
     void InitExpression() { *this = Base(ExprImpl::Definition()); }

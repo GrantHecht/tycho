@@ -1,3 +1,16 @@
+THIRD-PARTY NOTICE — Rubber-Types (MIT License)
+================================================
+
+Rubber-Types is a C++ type-erasure library whose patterns have been
+incorporated into the type-erasure utilities in src/Utils/.
+  Package:   Rubber-Types
+  Copyright: 2014 Andreas J. Herrmann
+  License:   MIT (reproduced in full below)
+
+===========================================================================
+Rubber-Types — MIT License
+===========================================================================
+
 Rubber-Types -- Type-erasure with merged concepts
 Copyright (C) 2014 Andreas J. Herrmann
 

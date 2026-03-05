@@ -1,5 +1,15 @@
-Applies to code for retrieving core count on Windows, Linux, and Mac OS X in src/Utils/GetCoreCount.cpp.
+THIRD-PARTY NOTICE — Boost Software Library (Boost Software License 1.0)
+=========================================================================
 
+Boost-licensed code for CPU core-count detection has been incorporated into
+src/Utils/GetCoreCount.cpp. The code is used unchanged.
+  Package:   Boost C++ Libraries
+  Source:    https://www.boost.org/
+  License:   Boost Software License, Version 1.0 (reproduced in full below)
+
+===========================================================================
+Boost Software Library — Boost Software License, Version 1.0
+===========================================================================
 
 Boost Software License - Version 1.0 - August 17th, 2003
 

@@ -3,10 +3,6 @@
 
 namespace Tycho {
 
-#ifdef TYCHO_PYTHON_BINDINGS
-void LambertSolversBuild(FunctionRegistry &reg, py::module &m);
-#endif // TYCHO_PYTHON_BINDINGS
-
 /*
   Dario Izzo's Lambert algorithm vectorizable with Eigen::Array types. 2x increase in throughput
   with array size of 4 or 8.

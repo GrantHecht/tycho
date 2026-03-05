@@ -4,6 +4,7 @@
 
 ### Shell ###
 *.sh
+!bench/*.sh
 
 ### C++ ###
 # Prerequisites
@@ -540,3 +541,4 @@ CMakeSettings
 out
 main6
 main8
+/references

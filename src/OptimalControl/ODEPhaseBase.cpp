@@ -7,7 +7,6 @@
 #include "PyDocString/OptimalControl/ODEPhaseBase_doc.h"
 #include "ValueLock.h"
 
-
 int Tycho::ODEPhaseBase::addBoundaryValue(RegionType reg, VarIndexType args,
                                           const std::variant<double, VectorXd> &value_t,
                                           ScaleType scale_t) {

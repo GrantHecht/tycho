@@ -112,4 +112,3 @@ void Tycho::OptimizationProblem::transcribe() {
     this->doTranscription = false;
     ////////////////////////////////////
 }
-

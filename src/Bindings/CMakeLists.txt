@@ -1,57 +1,75 @@
-# Add Bindings/ itself to the include path so FunctionRegistry.h resolves bare
+# Add Bindings/ and each subdirectory to the include path so headers resolve
+# with bare names regardless of which subdirectory the including file lives in.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Solvers)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Astro)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Integrators)
 
-# Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that pybind11 headers
+# Ensure nanobind-static exists before pch_bindings uses it
+nanobind_build_library(nanobind-static)
+
+# Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that nanobind headers
 # are baked into the precompiled header used by _tycho and its binding sources.
 add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/pch_nb.h
     ${CMAKE_SOURCE_DIR}/src/VectorFunctions/Tycho_VectorFunctions.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
 target_include_directories(pch_bindings PRIVATE ${INCLUDE_DIRS})
-target_compile_options(pch_bindings PUBLIC ${COMPILE_FLAGS})
+target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
+target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
-pybind11_add_module(_tycho
+nanobind_add_module(_tycho
     TychoModule.cpp
-    # VectorFunctions bindings
-    Tycho_VectorFunctions.cpp
-    VectorFunctionBuildPart1.cpp
-    VectorFunctionBuildPart2.cpp
-    ArgsSegBuildPart1.cpp
-    ArgsSegBuildPart2.cpp
-    ArgsSegBuildPart3.cpp
-    ArgsSegBuildPart4.cpp
-    ArgsSegBuildPart5.cpp
-    BulkOperationsBuild.cpp
-    FreeFunctionsBuild.cpp
-    MatrixFunctionBuild.cpp
-    PythonArgParsing.cpp
-    # OptimalControl bindings
-    Tycho_OptimalControl.cpp
-    GenericODESBuildPart1.cpp
-    GenericODESBuildPart2.cpp
-    GenericODESBuildPart3.cpp
-    GenericODESBuildPart4.cpp
-    GenericODESBuildPart5.cpp
-    GenericODESBuildPart6.cpp
-    ODEPhaseBaseBind.cpp
-    OptimalControlProblemBind.cpp
-    LGLInterpTableBind.cpp
-    # Solvers bindings
-    OptimizationProblemBase.cpp
-    PSIOPTBind.cpp
-    OptimizationProblemBind.cpp
-    # Astro bindings
-    Tycho_Astro.cpp
-    KeplerUtils.cpp
-    KeplerModel.cpp
-    LambertSolversBind.cpp
     # Utils bindings
+    UtilsBind.cpp
     MemoryManagerBind.cpp
+    # VectorFunctions bindings
+    VectorFunctions/Tycho_VectorFunctions.cpp
+    VectorFunctions/VectorFunctionBuildPart1.cpp
+    VectorFunctions/VectorFunctionBuildPart2.cpp
+    VectorFunctions/ArgsSegBuildPart1.cpp
+    VectorFunctions/ArgsSegBuildPart2.cpp
+    VectorFunctions/ArgsSegBuildPart3.cpp
+    VectorFunctions/ArgsSegBuildPart4.cpp
+    VectorFunctions/ArgsSegBuildPart5.cpp
+    VectorFunctions/BulkOperationsBuild.cpp
+    VectorFunctions/FreeFunctionsBuild.cpp
+    VectorFunctions/MatrixFunctionBuild.cpp
+    VectorFunctions/PythonArgParsing.cpp
+    # OptimalControl bindings
+    OptimalControl/Tycho_OptimalControl.cpp
+    OptimalControl/GenericODESBuildPart1.cpp
+    OptimalControl/GenericODESBuildPart2.cpp
+    OptimalControl/GenericODESBuildPart3.cpp
+    OptimalControl/GenericODESBuildPart4.cpp
+    OptimalControl/GenericODESBuildPart5.cpp
+    OptimalControl/GenericODESBuildPart6.cpp
+    OptimalControl/ODEPhaseBaseBind.cpp
+    OptimalControl/OptimalControlProblemBind.cpp
+    OptimalControl/LGLInterpTableBind.cpp
+    OptimalControl/MeshIterateInfoBind.cpp
+    # Solvers bindings
+    Solvers/Tycho_Solvers.cpp
+    Solvers/OptimizationProblemBase.cpp
+    Solvers/PSIOPTBind.cpp
+    Solvers/OptimizationProblemBind.cpp
+    Solvers/JetBind.cpp
+    # Astro bindings
+    Astro/Tycho_Astro.cpp
+    Astro/KeplerUtils.cpp
+    Astro/KeplerModel.cpp
+    Astro/LambertSolversBind.cpp
+    # Integrators bindings
+    Integrators/RKCoeffsBind.cpp
 )
 
-target_compile_options(_tycho PUBLIC ${COMPILE_FLAGS})
+target_compile_options(_tycho PRIVATE ${BINDING_COMPILE_FLAGS})
 target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
 target_link_libraries(_tycho PUBLIC psiopt)
 target_link_libraries(_tycho PUBLIC utils)

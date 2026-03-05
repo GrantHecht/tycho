@@ -8,17 +8,9 @@
 #include "OptimalControlProblem.h"
 #include "pch.h"
 
-namespace Tycho {
+#include "Bindings/Integrators/IntegratorBind.h"
+#include "Bindings/OptimalControl/ODEBind.h"
+#include "Bindings/OptimalControl/ODEPhaseBind.h"
+#include "Bindings/OptimalControl/ODESizesBind.h"
 
-#ifdef TYCHO_PYTHON_BINDINGS
-void GenericODESBuildPart1(FunctionRegistry &reg, py::module &m);
-void GenericODESBuildPart2(FunctionRegistry &reg, py::module &m);
-void GenericODESBuildPart3(FunctionRegistry &reg, py::module &m);
-void GenericODESBuildPart4(FunctionRegistry &reg, py::module &m);
-void GenericODESBuildPart5(FunctionRegistry &reg, py::module &m);
-void GenericODESBuildPart6(FunctionRegistry &reg, py::module &m);
-
-void OptimalControlBuild(FunctionRegistry &reg, py::module &m);
-#endif // TYCHO_PYTHON_BINDINGS
-
-} // namespace Tycho
+namespace Tycho {} // namespace Tycho

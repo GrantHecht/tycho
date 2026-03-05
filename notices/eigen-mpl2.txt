@@ -1,7 +1,31 @@
-The file src/Solvers/PardisioInterface.h is based on the PardisoInterface.h file from the Eigen library (https://eigen.tuxfamily.org/). 
-The Eigen library is licensed under the Mozilla Public License Version 2.0 (https://www.mozilla.org/en-US/MPL/2.0/). The text of the Mozilla Public License Version 2.0 is included below.
-Note that the MPL2 license is only applied to src/Solvers/PardisioInterface.h and not the rest of the project. Changes include the addition of several member functions to access  internal PARDISO parameters, and additional
-methods to perform phases of the factorization without making unnecessary copies of the input matrix.
+THIRD-PARTY NOTICE — Eigen (Mozilla Public License 2.0)
+========================================================
+
+The following files are derived from the Eigen linear algebra library. The
+MPL-2.0 license applies only to these files; the remainder of the Tycho
+project is Apache 2.0.
+
+  src/Solvers/PardisioInterface.h — derived from Eigen's PardisoInterface.h
+    Modifications:
+      - Added member functions to access internal PARDISO solver parameters.
+      - Added methods to perform factorization phases without unnecessary
+        matrix copies.
+
+  src/Solvers/AccelerateInterface.h — derived from Eigen's AccelerateSupport module (3.4)
+    Modifications:
+      - Added member variables and functions for fine-grained control of
+        Apple Accelerate sparse solvers.
+      - Avoided unnecessary copies and allocations.
+      - Added an iterative refinement implementation to improve solution
+        accuracy relative to the stock Accelerate backend.
+      - Aligned interface more closely with PardisoInterface.h.
+  Package:   Eigen
+  Source:    https://eigen.tuxfamily.org/
+  License:   Mozilla Public License, Version 2.0 (reproduced in full below)
+
+===========================================================================
+Eigen — Mozilla Public License, Version 2.0
+===========================================================================
 
 Mozilla Public License Version 2.0
 ==================================
