@@ -18,7 +18,6 @@
 #include "Astro/Tycho_Astro.h"
 #include "OptimalControl/Tycho_OptimalControl.h"
 #include "Solvers/Tycho_Solvers.h"
-#include "Tycho_Extensions.h"
 #include "Utils/Tycho_Utils.h"
 #include "VectorFunctions/Tycho_VectorFunctions.h"
 #include "pch.h"
@@ -29,6 +28,7 @@ void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
 void UtilsBuild(nb::module_ &m);
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace Tycho
 
 using namespace Tycho;
