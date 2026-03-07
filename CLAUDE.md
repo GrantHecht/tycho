@@ -76,6 +76,12 @@ doc/                    Sphinx + Doxygen documentation source
 notices/                Third-party license notices — DO NOT modify or delete
 ```
 
+## Technical Details
+**Vector Function Implementation**
+- `doc/VectorFunction.md`
+**Python Bindings Implementation (nanobind)**
+- `doc/Bindings.md`
+
 ## Build System
 
 This is a CMake + nanobind project. The output is a nanobind shared library
@@ -116,13 +122,13 @@ python examples/Brachistochrone.py
 
 ### Key CMake variables
 
-| Variable | Purpose |
-|---|---|
-| `Python_EXECUTABLE` | Path to Python interpreter to build against |
+| Variable                   | Purpose                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `Python_EXECUTABLE`        | Path to Python interpreter to build against                                                  |
 | `PYTHON_LOCAL_INSTALL_DIR` | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
-| `STRICT_IEEE_COMPLIANCE` | `ON` to disable fast-math and enforce proper NaN handling (default `ON`) |
-| `BUILD_SPHINX_DOCS` | `ON` to also build documentation (requires sphinx, breathe, furo, exhale) |
-| `BUILD_CPP_EXAMPLES` | `ON` to build C++ example programs under `examples/cpp_examples/` |
+| `STRICT_IEEE_COMPLIANCE`   | `ON` to disable fast-math and enforce proper NaN handling (default `ON`)                     |
+| `BUILD_SPHINX_DOCS`        | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
+| `BUILD_CPP_EXAMPLES`       | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
 
 `config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
 `PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
@@ -305,18 +311,17 @@ updating an example), the example must be fixed in the same PR.
 The following packages must be present in the `tycho` conda environment for all
 examples to run (none will be skipped):
 
-| Package | Install |
-|---|---|
-| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib` |
-| seaborn | `pip install seaborn` |
-| spiceypy | `pip install spiceypy` |
-| basemap | `conda install -c conda-forge basemap` |
+| Package                  | Install                                |
+| ------------------------ | -------------------------------------- |
+| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib`   |
+| seaborn                  | `pip install seaborn`                  |
+| spiceypy                 | `pip install spiceypy`                 |
+| basemap                  | `conda install -c conda-forge basemap` |
 
 ## Things to Flag for Human Review
 
 - Any change to the PSIOPT optimizer internals
 - Any change touching Intel MKL / Apple Accelerate integration
-- Any bulk renaming of remaining `asset_asrl` / `ASSET` identifiers
 - Adding new third-party dependencies
 - Changes to the public APIs
 - Anything affecting PyPI packaging (pypiwheel/, setup.py)
