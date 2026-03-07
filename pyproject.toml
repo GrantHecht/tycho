@@ -1,3 +1,34 @@
+[build-system]
+requires = ["scikit-build-core>=0.9"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "tycho"
+version = "0.1.0"
+description = "High-speed, extensible, object-oriented trajectory design and optimization"
+authors = [{name = "Grant Hecht"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "spiceypy",
+    "seaborn",
+    "intel-openmp; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+basemap = ["basemap"]
+docs = ["sphinx", "furo", "breathe", "exhale"]
+
+[project.urls]
+Homepage = "https://github.com/GrantHecht/tycho"
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+# Pure-Python package collected from source tree; _tycho extension installed via CMake install()
+wheel.packages = ["tycho"]
+
 [tool.ruff]
 line-length = 88
 exclude = [

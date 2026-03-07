@@ -432,9 +432,6 @@ if(BUILD_SPHINX_DOCS)
   add_subdirectory(doc)
 endif()
 
-if(ENABLE_PYTHON_BINDINGS)
-    add_subdirectory(pypiwheel)
-endif()
 
 if(BUILD_CPP_EXAMPLES)
     add_subdirectory(examples/cpp_examples)

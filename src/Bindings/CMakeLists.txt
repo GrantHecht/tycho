@@ -86,22 +86,17 @@ elseif(WIN32)
     target_link_libraries(_tycho PUBLIC ${LINK_LIBS})
 endif()
 
-add_custom_target(pytychosrc ALL DEPENDS ${CMAKE_SOURCE_DIR}/tycho)
+# Install rule for scikit-build-core: places _tycho alongside the tycho package in the wheel.
+install(TARGETS _tycho LIBRARY DESTINATION .)
 
+# Dev-install shortcut: when PYTHON_LOCAL_INSTALL_DIR is set (e.g. by config_and_build.sh),
+# copy _tycho and the Python package directly to site-packages after every build so that
+# changes are immediately usable without a separate pip install step.
 if(PYTHON_LOCAL_INSTALL_DIR)
     add_custom_command(TARGET _tycho POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tycho> ${PYTHON_LOCAL_INSTALL_DIR}/
-        COMMENT "Copied _tycho extension to ${PYTHON_LOCAL_INSTALL_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tycho
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tycho ${PYTHON_LOCAL_INSTALL_DIR}/tycho
+        COMMENT "Installed _tycho and tycho package to ${PYTHON_LOCAL_INSTALL_DIR}"
     )
-    message(STATUS "Cleaning tycho install directory")
-
-    add_custom_command(TARGET pytychosrc POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tycho
-                    COMMENT "Cleaning tycho install directory")
-
-    add_custom_command(TARGET pytychosrc POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory  ${CMAKE_SOURCE_DIR}/tycho
-                                                ${PYTHON_LOCAL_INSTALL_DIR}/tycho
-                    DEPENDS ${CMAKE_SOURCE_DIR}/tycho
-                    COMMENT "Copied tycho to ${PYTHON_LOCAL_INSTALL_DIR}")
 endif()
