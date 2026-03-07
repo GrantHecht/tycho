@@ -76,7 +76,7 @@ target_link_libraries(_tycho PUBLIC utils)
 target_link_libraries(_tycho PUBLIC optimalcontrol)
 target_link_libraries(_tycho PUBLIC vectorfunctions)
 target_link_libraries(_tycho PUBLIC astro)
-target_link_libraries(_tycho PUBLIC tycho_extensions)
+target_link_libraries(_tycho PUBLIC tycho_extensions_bindings)
 target_include_directories(_tycho PRIVATE ${INCLUDE_DIRS})
 target_precompile_headers(_tycho REUSE_FROM pch_bindings)
 

@@ -7,7 +7,7 @@
 | PR 1 | Rename ASSET/asset_asrl → Tycho/tycho | **DONE** (merged) |
 | PR 2 | Decouple C++ from Python bindings | **DONE** (merged) |
 | PR 3 | Migrate pybind11 → nanobind | **DONE** (merged) |
-| PR 4 | Separate extensions C++ from binding code | **SKIPPED** |
+| PR 4 | Separate extensions C++ from binding code | **DONE** |
 | PR 5 | Add per-file provenance headers to all ASSET-derived source files | **DONE** |
 
 ---

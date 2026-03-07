@@ -422,9 +422,7 @@ endif()
 # Code Directories
 add_subdirectory(src)
 
-if(ENABLE_PYTHON_BINDINGS)
-    add_subdirectory(extensions)
-endif()
+add_subdirectory(extensions)
 
 
 # Documentation
