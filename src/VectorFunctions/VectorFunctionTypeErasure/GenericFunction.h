@@ -59,7 +59,11 @@ using GenTE =
  */
 template <int IR, int OR> struct GFTE : GenTE<IR, OR> {
     using Base = GenTE<IR, OR>;
-    template <class T> GFTE(const T &t) : Base(t) {}
+    template <class T,
+              std::enable_if_t<
+                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
+                  true>
+    GFTE(const T &t) : Base(t) {}
     GFTE() {}
 };
 
@@ -84,7 +88,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
     GenericFunction() {}
 
-    template <class T> GenericFunction(const T &t) : func(t) { this->cachedata(); }
+    template <class T,
+              std::enable_if_t<
+                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
+                  true>
+    GenericFunction(const T &t) : func(t) { this->cachedata(); }
     GenericFunction(const GenericFunction<IR, OR> &obj) {
         if (obj.func.get_container()) {
             this->func.reset_container(obj.func.get_container());

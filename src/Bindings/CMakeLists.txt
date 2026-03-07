@@ -82,6 +82,8 @@ target_precompile_headers(_tycho REUSE_FROM pch_bindings)
 
 if(UNIX)
     target_link_options(_tycho PRIVATE ${LINKER_FLAGS})
+elseif(WIN32)
+    target_link_libraries(_tycho PUBLIC ${LINK_LIBS})
 endif()
 
 add_custom_target(pytychosrc ALL DEPENDS ${CMAKE_SOURCE_DIR}/tycho)

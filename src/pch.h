@@ -30,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <typeinfo>
+#include <variant>
 #include <vector>
 
 #include "TypeDefs/EigenTypes.h"
