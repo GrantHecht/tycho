@@ -246,6 +246,7 @@ add_definitions(-DTYCHO_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
 add_definitions(-DTYCHO_OS="${CMAKE_SYSTEM_NAME}")
 add_definitions(-DTYCHO_OSVERSION="${CMAKE_SYSTEM_VERSION}")
 add_definitions(-DFMT_HEADER_ONLY)
+add_definitions(-DFMT_USE_LOCALE=0)
 
 if(WIN32)
 ## See : https://developercommunity.visualstudio.com/t/Access-violation-in-_Thrd_yield-after-up/10664660#T-N10669129-N10678728
