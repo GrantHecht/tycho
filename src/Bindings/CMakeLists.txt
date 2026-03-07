@@ -71,6 +71,9 @@ nanobind_add_module(_tycho
 
 target_compile_options(_tycho PRIVATE ${BINDING_COMPILE_FLAGS})
 target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
+# Prevent CMake from auto-defining _tycho_EXPORTS on the module target; the macro
+# is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
+set_target_properties(_tycho PROPERTIES DEFINE_SYMBOL "")
 target_link_libraries(_tycho PUBLIC psiopt)
 target_link_libraries(_tycho PUBLIC utils)
 target_link_libraries(_tycho PUBLIC optimalcontrol)

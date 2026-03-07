@@ -30,6 +30,8 @@ $python = 'C:\Users\grant\miniconda3\envs\tycho\python.exe'
 # Compiler and generator are passed via --config-setting so scikit-build-core
 # passes them directly to cmake, matching the x64-Clang-Release preset.
 # Paths use the 8.3 short form (PROGRA~1) to avoid cmake argument-splitting on spaces.
+$env:CMAKE_BUILD_PARALLEL_LEVEL = '8'
+
 Write-Host "Building wheel..."
 & $python -m build --wheel --no-isolation `
     -C "cmake.args=-GNinja" `

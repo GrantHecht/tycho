@@ -78,20 +78,20 @@ void SoftwareInfo() {
                "Forked from ASSET (github.com/AlabamaASRL/asset_asrl)", 79);
     fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n\n", "", 79);
     fmt::print(fmt::fg(fmt::color::royal_blue), " Software Version     : ");
-    fmt::print(fmt::fg(fmt::color::white), assetversion);
+    fmt::print(fmt::fg(fmt::color::white), "{}", assetversion);
     fmt::print("\n");
     fmt::print(fmt::fg(fmt::color::royal_blue), " Python   Version     : ");
-    fmt::print(fmt::fg(fmt::color::white), pythonv);
+    fmt::print(fmt::fg(fmt::color::white), "{}", pythonv);
     fmt::print("\n");
 
     fmt::print(fmt::fg(fmt::color::royal_blue), " System Core Count    : ");
-    fmt::print(fmt::fg(fmt::color::white), syscorecount);
+    fmt::print(fmt::fg(fmt::color::white), "{}", syscorecount);
     fmt::print("\n");
     fmt::print(fmt::fg(fmt::color::royal_blue), " System Thread Count  : ");
-    fmt::print(fmt::fg(fmt::color::white), systhreadcount);
+    fmt::print(fmt::fg(fmt::color::white), "{}", systhreadcount);
     fmt::print("\n");
     fmt::print(fmt::fg(fmt::color::royal_blue), " Vectorization Mode   : ");
-    fmt::print(fmt::fg(fmt::color::white), vecversion);
+    fmt::print(fmt::fg(fmt::color::white), "{}", vecversion);
     fmt::print("\n");
     fmt::print(fmt::fg(fmt::color::royal_blue), " Linear Solver        : ");
 #ifndef USE_ACCELERATE_SPARSE
@@ -102,10 +102,10 @@ void SoftwareInfo() {
     fmt::print("\n");
 
     fmt::print(fmt::fg(fmt::color::royal_blue), " Compiled With        : ");
-    fmt::print(fmt::fg(fmt::color::white), compiler);
+    fmt::print(fmt::fg(fmt::color::white), "{}", compiler);
     fmt::print("\n");
     fmt::print(fmt::fg(fmt::color::royal_blue), " Compiled On          : ");
-    fmt::print(fmt::fg(fmt::color::white), osversion);
+    fmt::print(fmt::fg(fmt::color::white), "{}", osversion);
     fmt::print("\n");
 
     fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n\n", "", 79);
