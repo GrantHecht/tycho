@@ -61,7 +61,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 # Release Flags
-list(APPEND RELEASE_FLAGS "-O3")
+if(NOT WIN32)
+    list(APPEND RELEASE_FLAGS "-O3")
+endif()
 
 
 ## Generic Binary Flags
@@ -313,6 +315,9 @@ if(OPTIMIZE_BINDINGS)
     set(BINDING_COMPILE_FLAGS ${COMPILE_FLAGS})
 else()
     string(REPLACE "-O3" "-Os" BINDING_COMPILE_FLAGS "${COMPILE_FLAGS}")
+    if(WIN32)
+        string(REPLACE "/O2" "/Os" BINDING_COMPILE_FLAGS "${BINDING_COMPILE_FLAGS}")
+    endif()
 endif()
 
 if(APPLE)
