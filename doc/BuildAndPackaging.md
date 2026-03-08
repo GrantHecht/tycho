@@ -3,8 +3,8 @@
 ## Development builds
 
 The primary development workflow uses CMake and ninja directly.
-`config_and_build.sh` (macOS/Linux) or `build.ps1` (Windows) handle environment
-setup and invoke the build:
+`config_and_build.sh` (macOS/Linux) or `config_and_build.ps1` (Windows) handle
+environment setup, CMake configuration, and the initial build:
 
 ```bash
 # macOS / Linux — first time
@@ -15,8 +15,8 @@ cd build && ninja -j8 all
 ```
 
 ```powershell
-# Windows — every build
-powershell -File build.ps1
+# Windows — first time and subsequent builds
+powershell -File config_and_build.ps1
 ```
 
 When `PYTHON_LOCAL_INSTALL_DIR` is set (resolved automatically by the build
@@ -30,12 +30,28 @@ Wheel building uses **scikit-build-core** as the PEP 517 build backend, declared
 in `pyproject.toml`. It drives the CMake build internally and collects the
 compiled extension and the pure-Python package into a platform-tagged wheel.
 
+### macOS / Linux: `build_wheel.sh`
+
+`build_wheel.sh` at the repo root handles compiler discovery and passes the
+correct CMake flags for a distribution wheel build:
+
 ```bash
 pip install scikit-build-core build
-python -m build --wheel
+bash build_wheel.sh [OPTIONS]
 ```
 
-The resulting wheel is written to `dist/`.
+Options:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--python PATH` | `python` from PATH | Python interpreter to build against |
+| `--llvm-prefix PATH` | macOS: `brew --prefix llvm`; Linux: parent of `which clang` | LLVM installation prefix |
+| `--jobs N` | auto-detected | Parallel build jobs |
+| `--repair` | off | Run `auditwheel repair` after build (Linux only) |
+
+The resulting wheel is written to `dist/`. On Linux, passing `--repair` bundles
+shared-library dependencies into the wheel and writes the repaired wheel to
+`dist/repaired/`.
 
 ### Windows: bundling DLLs with delvewheel
 
@@ -66,7 +82,9 @@ The conventional separation used by the scientific Python ecosystem is:
 |---|---|---|
 | C++ + dev install | `cmake --build` / `ninja` | Daily development |
 | Source distribution | `python -m build --sdist` | Release |
-| Binary wheel | `python -m build --wheel` | CI / release |
+| Binary wheel (Unix) | `bash build_wheel.sh` | CI / release |
+| Binary wheel (Windows) | `build_wheel.ps1` | CI / release |
+| Bundle shared libs (Linux) | `build_wheel.sh --repair` | CI / release, after wheel |
 | Bundle DLLs (Windows) | `delvewheel repair dist/*.whl` | CI / release, after wheel |
 | Publish | `twine upload dist/repaired/*.whl` | Release |
 
