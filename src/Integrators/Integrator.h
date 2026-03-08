@@ -91,9 +91,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
-        Eigen::VectorXi empty;
-
-        this->setMethod(meth, dode, defstep, false, ControllerType(), empty);
+        // Use in_place_type to sidestep MSVC variant overload-resolution
+        // ambiguity between the int and Eigen::VectorXi alternatives.
+        ControlIndexType empty_ci{std::in_place_type<Eigen::VectorXi>};
+        this->setMethod(meth, dode, defstep, false, ControllerType{}, empty_ci);
         this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
         this->setRelTol(0);       // Must Be called after setMethod!!!
     }
@@ -106,9 +107,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
         this->setRelTol(0);       // Must Be called after setMethod!!!
     }
+    // VectorXi overloads: explicitly wrap into ControlIndexType to avoid MSVC
+    // variant implicit-conversion ambiguity (int vs VectorXi alternatives).
+    Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
+               const Eigen::VectorXi &varlocs)
+        : Integrator(dode, meth, defstep, ucon,
+                     ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
     Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
         : Integrator(dode, "DOPRI87", defstep, ucon, varlocs_t) {}
+    Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
+               const Eigen::VectorXi &varlocs)
+        : Integrator(dode, "DOPRI87", defstep, ucon,
+                     ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
     Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v) : Integrator() {
 
         Eigen::VectorXi tloc(1);

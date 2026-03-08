@@ -61,7 +61,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 # Release Flags
-list(APPEND RELEASE_FLAGS "-O3")
+if(NOT WIN32)
+    list(APPEND RELEASE_FLAGS "-O3")
+endif()
 
 
 ## Generic Binary Flags
@@ -244,6 +246,7 @@ add_definitions(-DTYCHO_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
 add_definitions(-DTYCHO_OS="${CMAKE_SYSTEM_NAME}")
 add_definitions(-DTYCHO_OSVERSION="${CMAKE_SYSTEM_VERSION}")
 add_definitions(-DFMT_HEADER_ONLY)
+add_definitions(-DFMT_USE_LOCALE=0)
 
 if(WIN32)
 ## See : https://developercommunity.visualstudio.com/t/Access-violation-in-_Thrd_yield-after-up/10664660#T-N10669129-N10678728
@@ -313,6 +316,9 @@ if(OPTIMIZE_BINDINGS)
     set(BINDING_COMPILE_FLAGS ${COMPILE_FLAGS})
 else()
     string(REPLACE "-O3" "-Os" BINDING_COMPILE_FLAGS "${COMPILE_FLAGS}")
+    if(WIN32)
+        string(REPLACE "/O2" "/Os" BINDING_COMPILE_FLAGS "${BINDING_COMPILE_FLAGS}")
+    endif()
 endif()
 
 if(APPLE)
@@ -432,9 +438,6 @@ if(BUILD_SPHINX_DOCS)
   add_subdirectory(doc)
 endif()
 
-if(ENABLE_PYTHON_BINDINGS)
-    add_subdirectory(pypiwheel)
-endif()
 
 if(BUILD_CPP_EXAMPLES)
     add_subdirectory(examples/cpp_examples)

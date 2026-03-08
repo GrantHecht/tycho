@@ -316,7 +316,11 @@ struct ConstraintInterface : rubber_types::TypeErasure<SolverConstraintSpec, Siz
                                                        DeepCopySpecs<ConstraintInterface>> {
     using Base = rubber_types::TypeErasure<SolverConstraintSpec, SizableSpec,
                                            DeepCopySpecs<ConstraintInterface>>;
-    template <class T> ConstraintInterface(const T &t) : Base(t) {}
+    template <class T,
+              std::enable_if_t<
+                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
+                  true>
+    ConstraintInterface(const T &t) : Base(t) {}
     template <int IR, int OR>
     ConstraintInterface(const GenericFunction<IR, OR> &t) : Base(t.func) {}
     ConstraintInterface() {}
@@ -336,7 +340,11 @@ struct ObjectiveInterface
     using Base = rubber_types::TypeErasure<SolverConstraintSpec, SolverObjectiveSpec, SizableSpec,
                                            DeepCopySpecs<ObjectiveInterface, ConstraintInterface>>;
 
-    template <class T> ObjectiveInterface(const T &t) : Base(t) {}
+    template <class T,
+              std::enable_if_t<
+                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
+                  true>
+    ObjectiveInterface(const T &t) : Base(t) {}
     template <int IR> ObjectiveInterface(const GenericFunction<IR, 1> &t) : Base(t.func) {}
     ObjectiveInterface() {}
 };
