@@ -1,7 +1,7 @@
 """
 Brachistochrone — Python Benchmark
 
-Minimal benchmark script for timing the solve.
+Classic minimum-time bead-on-wire problem.
 All plotting code removed. Output suppressed via PrintLevel.
 """
 
@@ -17,17 +17,13 @@ class Brachistochrone(oc.ODEBase):
     def __init__(self, g):
         XVars = 3
         UVars = 1
-
         XtU = oc.ODEArguments(XVars, UVars)
-
         x, y, v = XtU.XVec().tolist()
         theta = XtU.UVar(0)
-
         xdot = vf.sin(theta) * v
         ydot = -1.0 * vf.cos(theta) * v
         zdot = g * vf.cos(theta)
         ode = vf.stack([xdot, ydot, zdot])
-
         super().__init__(ode, XVars, UVars)
 
 
@@ -35,21 +31,15 @@ if __name__ == "__main__":
     g = 9.81
     ode = Brachistochrone(g)
 
-    x0 = 0
-    y0 = 10
-    v0 = 0
+    x0, y0, v0 = 0, 10, 0
+    xf, yf = 10, 5
     theta0 = 1.0
-
-    xf = 10
-    yf = 5
-
-    tf = 1
+    tf = 1.0
 
     ts = np.linspace(0, tf, 100)
-
     Xs = []
     for t in ts:
-        X = np.zeros((5))
+        X = np.zeros(5)
         X[0] = x0 + (xf - x0) * t / tf
         X[1] = y0 + (yf - y0) * t / tf
         X[2] = g * t * np.cos(theta0)
@@ -62,7 +52,7 @@ if __name__ == "__main__":
     phase.addLUVarBound("Path", 4, -0.1, 2.00)
     phase.addBoundaryValue("Back", [0, 1], [xf, yf])
     phase.addDeltaTimeObjective(1.0)
-    phase.optimizer.PrintLevel = 3
+    phase.optimizer.PrintLevel = 4
 
     start = time.perf_counter()
     phase.optimize()

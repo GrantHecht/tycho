@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Benchmark runner for pybind11 vs nanobind comparison.
+Benchmark runner for Tycho.
 
 Usage:
     python run_benchmarks.py [options]
@@ -16,6 +16,8 @@ Options:
     --binary-sizes      Measure sizes of _tycho extension and bench binary
     --skip-python       Skip Python benchmarks
     --skip-cpp          Skip C++ benchmarks
+    --suite SUITE       Run only benchmarks in the given subdirectory (e.g. basic,
+                        control, astrodynamics, low_thrust, multi_phase, aircraft)
     --from-json FILE    Load existing results JSON instead of running benchmarks
                         (skips all measurements; useful for re-generating reports)
 """
@@ -23,11 +25,32 @@ Options:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# Matches a standalone floating-point number (e.g. "0.1234", "1.2e-3").
+# Requires a decimal point so integer diagnostic counts don't match.
+_FLOAT_LINE_RE = re.compile(r"^-?[0-9]+\.[0-9]+(?:[eE][+-]?[0-9]+)?$")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _parse_timing(stdout: str) -> float:
+    """Extract the timing float from benchmark stdout.
+
+    Benchmark scripts print a single float to stdout, but PSIOPT may emit
+    occasional diagnostic lines (e.g. 'Potential Rank Deficiency Detected!!!')
+    that slip through even with PrintLevel=4.  This function scans from the
+    end and returns the last line that is purely a floating-point number.
+    """
+    for line in reversed(stdout.strip().split("\n")):
+        clean = _ANSI_RE.sub("", line).strip()
+        if _FLOAT_LINE_RE.match(clean):
+            return float(clean)
+    raise ValueError(f"No timing value found in stdout:\n{stdout!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +58,7 @@ from typing import Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 
 
-def run_python_benchmark(script: str, runs: int = 10) -> Tuple[float, float]:
+def run_python_benchmark(script: str, runs: int = 10, timeout: int = 600) -> Tuple[float, float]:
     """Run a Python benchmark script *runs* times; return (mean, std) of solver times."""
     times = []
     for _ in range(runs):
@@ -43,11 +66,11 @@ def run_python_benchmark(script: str, runs: int = 10) -> Tuple[float, float]:
             [sys.executable, script],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=timeout,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Benchmark failed:\n{result.stderr}")
-        times.append(float(result.stdout.strip()))
+        times.append(_parse_timing(result.stdout))
 
     mean = sum(times) / len(times)
     variance = sum((t - mean) ** 2 for t in times) / len(times)
@@ -343,6 +366,8 @@ def main() -> None:
         description="Run pybind11 vs nanobind benchmarks and generate reports.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--timeout", type=int, default=600,
+                        help="Timeout per benchmark run in seconds (default: 600)")
     parser.add_argument("--runs", type=int, default=10,
                         help="Number of runs per Python benchmark (default: 10)")
     parser.add_argument("--cpp-runs", type=int, default=5,
@@ -365,6 +390,9 @@ def main() -> None:
                         help="Skip Python benchmarks")
     parser.add_argument("--skip-cpp", action="store_true",
                         help="Skip C++ benchmarks")
+    parser.add_argument("--suite", type=str, default=None,
+                        help="Run only benchmarks in this subdirectory (e.g. basic, control, "
+                             "astrodynamics, low_thrust, multi_phase, aircraft)")
     parser.add_argument("--from-json", type=str,
                         help="Load existing results JSON instead of running benchmarks")
     args = parser.parse_args()
@@ -397,46 +425,58 @@ def main() -> None:
             "cpp": {},
         }
 
-    examples_dir = Path(__file__).parent           # benchmark_*.py live alongside this script
-    build_dir = Path(__file__).parent.parent / "build"  # repo-root build dir
+    bench_dir = Path(__file__).parent              # bench/ directory
+    build_dir = bench_dir.parent / "build"         # repo-root build dir
 
     # ------------------------------------------------------------------
-    # Python benchmarks (skipped when --from-json is used)
+    # Auto-discover Python benchmarks under bench/python/*/bench_*.py
+    # Key format: "{suite}/{script_stem}"  e.g. "basic/bench_brachistochrone"
     # ------------------------------------------------------------------
-    python_benchmarks = [
-        "benchmark_brachistochrone.py",
-        "benchmark_bryson_denham.py",
-        "benchmark_vanderpol.py",
-        "benchmark_zermelo.py",
-        "benchmark_dionysus.py",
-    ]
+    def discover_python_benchmarks(suite_filter: Optional[str]) -> List[Tuple[str, Path]]:
+        """Return [(key, path)] sorted by suite then name."""
+        python_dir = bench_dir / "python"
+        found: List[Tuple[str, Path]] = []
+        if not python_dir.exists():
+            return found
+        for suite_dir in sorted(python_dir.iterdir()):
+            if not suite_dir.is_dir():
+                continue
+            if suite_filter and suite_dir.name != suite_filter:
+                continue
+            for script in sorted(suite_dir.glob("bench_*.py")):
+                key = f"{suite_dir.name}/{script.stem}"
+                found.append((key, script))
+        return found
 
     if not args.from_json and not args.skip_python:
-        print(f"Running Python benchmarks ({args.runs} runs each)...")
-        for benchmark in python_benchmarks:
-            script = examples_dir / benchmark
-            if not script.exists():
-                print(f"  Skipping {benchmark} (not found)")
-                continue
-            print(f"  {benchmark}...", end=" ", flush=True)
-            try:
-                mean, std = run_python_benchmark(str(script), args.runs)
-                results["python"][benchmark] = {"mean": mean, "std": std}
-                print(f"{mean:.4f}s ± {std:.4f}s")
-            except Exception as exc:
-                print(f"FAILED — {exc}")
+        python_benchmarks = discover_python_benchmarks(args.suite)
+        if not python_benchmarks:
+            filter_msg = f" (suite={args.suite})" if args.suite else ""
+            print(f"No Python benchmarks found{filter_msg}.")
+        else:
+            suite_note = f" [suite={args.suite}]" if args.suite else ""
+            print(f"Running Python benchmarks ({args.runs} runs each){suite_note}...")
+            for key, script in python_benchmarks:
+                print(f"  {key}...", end=" ", flush=True)
+                try:
+                    mean, std = run_python_benchmark(str(script), args.runs, args.timeout)
+                    results["python"][key] = {"mean": mean, "std": std}
+                    print(f"{mean:.4f}s ± {std:.4f}s")
+                except Exception as exc:
+                    print(f"FAILED — {exc}")
 
     # ------------------------------------------------------------------
     # C++ benchmarks
     # ------------------------------------------------------------------
     cpp_benchmarks = [
         ("brachistochrone_bench", "brachistochrone/brachistochrone_bench"),
+        ("gf_eval_bench",         "gf_eval/gf_eval_bench"),
     ]
 
-    if not args.from_json and not args.skip_cpp:
+    if not args.from_json and not args.skip_cpp and not args.suite:
         print(f"\nRunning C++ benchmarks ({args.cpp_runs} runs each)...")
         for name, relative_path in cpp_benchmarks:
-            binary = build_dir / "examples" / "cpp_examples" / relative_path
+            binary = build_dir / "bench" / "cpp" / relative_path
             if not binary.exists():
                 print(f"  Skipping {name} (not found: {binary})")
                 continue

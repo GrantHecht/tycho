@@ -11,6 +11,17 @@ and space trajectory optimization. The built-in optimizer is called **PSIOPT**
 The Python-facing module is `_tycho` (nanobind extension) imported via the `tycho` package.
 The C++ namespace is `Tycho`.
 
+## A Word of Caution for Multi-Agent Workloads
+Compiling tycho is very computationally expensive, and you MUST therefore be careful about 
+how many parallel jobs are being used in any given build, and how many agents are building
+simultaneously. 
+
+As a rule of thumb:
+- 1 build system wide : -j6
+- 2 simultaneous builds system wide: -j3
+- 3 simultaneous builds system wide: -j2
+- NO NOT PERFORM MORE THAN 3 SIMULTANEOUS BUILDS AT ONCE
+
 ## Repository Structure
 
 Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CMakeSettings.json` (MSVC),

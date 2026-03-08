@@ -1,7 +1,7 @@
 """
 Bryson Denham — Python Benchmark
 
-Classic Bryson Denham problem with integral objective.
+Classic integral-objective optimal control problem.
 All plotting code removed. Output suppressed via PrintLevel.
 """
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     phase.addBoundaryValue("Back", range(0, 3), [0, -1, 1])
     phase.optimizer.set_OptLSMode("L1")
     phase.optimizer.set_KKTtol(1.0e-10)
-    phase.optimizer.PrintLevel = 3
+    phase.optimizer.PrintLevel = 4
     phase.setThreads(1, 1)
 
     start = time.perf_counter()

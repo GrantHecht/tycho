@@ -1,13 +1,13 @@
 [build-system]
-requires = ["scikit-build-core>=0.9"]
+requires = ["scikit-build-core>=0.9", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "tycho"
 version = "0.1.0"
 description = "High-speed, extensible, object-oriented trajectory design and optimization"
-authors = [{name = "Grant Hecht"}]
-license = {text = "Apache-2.0"}
+authors = [{ name = "Grant Hecht" }]
+license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
@@ -31,14 +31,10 @@ wheel.packages = ["tycho"]
 
 [tool.ruff]
 line-length = 88
-exclude = [
-    "dep/",
-    "build/",
-    "*.egg-info",
-]
+exclude = ["dep/", "build/", "*.egg-info"]
 
 [tool.ruff.lint]
-select = ["I"]  # isort only; formatting is handled by ruff format
+select = ["I"] # isort only; formatting is handled by ruff format
 
 [tool.ruff.format]
 # Black-compatible formatting

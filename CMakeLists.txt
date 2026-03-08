@@ -39,6 +39,7 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
+option(BUILD_CPP_BENCHMARKS "Build standalone C++ benchmark executables" ON)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
 
@@ -441,6 +442,10 @@ endif()
 
 if(BUILD_CPP_EXAMPLES)
     add_subdirectory(examples/cpp_examples)
+endif()
+
+if(BUILD_CPP_BENCHMARKS)
+    add_subdirectory(bench/cpp)
 endif()
 
 # Formatting
