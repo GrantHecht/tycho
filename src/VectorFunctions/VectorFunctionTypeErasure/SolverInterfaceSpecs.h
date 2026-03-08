@@ -321,8 +321,13 @@ struct ConstraintInterface : rubber_types::TypeErasure<SolverConstraintSpec, Siz
                   !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
                   true>
     ConstraintInterface(const T &t) : Base(t) {}
+    // Stores T directly (one virtual dispatch per solver call) instead of GFTE
+    // (which would cause two dispatches). t.func.get() returns GFConcept<IR,OR>&;
+    // pack_into calls ConstraintInterface(this->data_) which uses Base(T).
     template <int IR, int OR>
-    ConstraintInterface(const GenericFunction<IR, OR> &t) : Base(t.func) {}
+    ConstraintInterface(const GenericFunction<IR, OR> &t) {
+        t.func.get().pack_into_constraint_interface(*this);
+    }
     ConstraintInterface() {}
 };
 
@@ -345,7 +350,11 @@ struct ObjectiveInterface
                   !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
                   true>
     ObjectiveInterface(const T &t) : Base(t) {}
-    template <int IR> ObjectiveInterface(const GenericFunction<IR, 1> &t) : Base(t.func) {}
+    // Stores T directly (one virtual dispatch per solver call); see ConstraintInterface above.
+    template <int IR>
+    ObjectiveInterface(const GenericFunction<IR, 1> &t) {
+        t.func.get().pack_into_objective_interface(*this);
+    }
     ObjectiveInterface() {}
 };
 

@@ -39,7 +39,7 @@ struct Jet {
                           "   \\____/ /_____/   /_/     \n\n");
 
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
-        fmt::print(fmt::fg(fmt::color::crimson), jestr);
+        fmt::print(fmt::fg(fmt::color::crimson), fmt::runtime(jestr));
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");

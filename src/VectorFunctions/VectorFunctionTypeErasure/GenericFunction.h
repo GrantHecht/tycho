@@ -9,65 +9,25 @@
 // Defines the class GenericFunction which is a vector function that can be
 // constructed form ANY other dense vector function with compatible input and output sizes. This is
 // probably the most important class in the vector functions part of the library as it allows us to
-// type erase arbitrarily compilicated compile time or run time defined vector functions. It holds type
-// easure object that constructable from any compatible object and forwards its compute calls as well
-// as selected product and accumulation operations to this type erased function.
+// type erase arbitrarily compilicated compile time or run time defined vector functions. It holds
+// type easure object that constructable from any compatible object and forwards its compute calls
+// as well as selected product and accumulation operations to this type erased function.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - PR 6: replaced rubber_types GFTE with flat GFStorage (SBO + value semantics)
 // =============================================================================
 
 #pragma once
 
-#include "DeepCopySpecs.h"
 #include "DenseFunctionBase.h"
-#include "DenseFunctionSpecs.h"
-#include "SizingSpecs.h"
-#include "SolverInterfaceSpecs.h"
+#include "GFTypeErasure.h"
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 
 namespace Tycho {
-
-namespace detail {
-
-/*
-Defining the internal type erasure function held by GenericFunction (GFTE)
-*/
-
-template <int IR, int OR> struct GFTE;
-
-template <int IR, int OR> struct GFDeepCopySelector {
-    using type = DeepCopySpecs<GFTE<IR, OR>, GFTE<-1, -1>, ConstraintInterface>;
-};
-template <int IR> struct GFDeepCopySelector<IR, 1> {
-    using type = DeepCopySpecs<GFTE<IR, 1>, GFTE<-1, -1>, ConstraintInterface, ObjectiveInterface>;
-};
-template <> struct GFDeepCopySelector<-1, -1> {
-    using type = DeepCopySpecs<GFTE<-1, -1>, ConstraintInterface>;
-};
-
-template <int IR, int OR>
-using GenTE =
-    rubber_types::TypeErasure<typename GFDeepCopySelector<IR, OR>::type, DenseFunctionSpec<IR, OR>,
-                              SizableSpec, typename SolverInterfaceSelector<IR, OR>::type>;
-
-/*
- * Final Type
- */
-template <int IR, int OR> struct GFTE : GenTE<IR, OR> {
-    using Base = GenTE<IR, OR>;
-    template <class T,
-              std::enable_if_t<
-                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
-                  true>
-    GFTE(const T &t) : Base(t) {}
-    GFTE() {}
-};
-
-} // namespace detail
 
 template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunction<IR, OR>, IR, OR> {
     using Base = VectorFunction<GenericFunction<IR, OR>, IR, OR>;
@@ -76,71 +36,123 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     static const bool IsGenericFunction = true;
     static const bool IsVectorizable = true;
 
-    using TE = detail::GFTE<IR, OR>;
+    using Dspec = DenseFunctionSpec<IR, OR>;
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
     using Derived = GenericFunction<IR, OR>;
+    using Concept = GFConcept<IR, OR>;
 
-    using Concept = typename TE::Concept;
-    using Dspec = DenseFunctionSpec<IR, OR>;
-
-    TE func;
+    GFStorage<IR, OR> func;
     bool islinear = false;
 
     GenericFunction() {}
 
-    template <class T,
-              std::enable_if_t<
-                  !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>, bool> =
-                  true>
-    GenericFunction(const T &t) : func(t) { this->cachedata(); }
+    template <class T, std::enable_if_t<
+                           !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
+                           bool> = true>
+    GenericFunction(const T &t) {
+        func.emplace(t);
+        this->cachedata();
+    }
+
+    // Same-type copy: deep-clone via GFStorage copy semantics
     GenericFunction(const GenericFunction<IR, OR> &obj) {
-        if (obj.func.get_container()) {
-            this->func.reset_container(obj.func.get_container());
+        if (!obj.func.empty()) {
+            this->func = obj.func;
             this->cachedata();
         } else {
             throw std::invalid_argument("Attempting to copy null function");
         }
     }
-    template <int IR1, int OR1> GenericFunction(const GenericFunction<IR1, OR1> &obj) {
-        if (obj.func.get_container()) {
-            obj.func.deep_copy_into(this->func);
+
+    // Cross-type copy: only supported when the target is dynamic (IR==-1, OR==-1)
+    template <int IR1, int OR1>
+        requires(IR == -1 && OR == -1)
+    GenericFunction(const GenericFunction<IR1, OR1> &obj) {
+        if (!obj.func.empty()) {
+            obj.func.get().clone_into_dynamic(this->func);
             cachedata();
         } else {
             throw std::invalid_argument("Attempting to copy null function");
         }
     }
+
     void cachedata() {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {this->func.input_domain()});
-        this->islinear = this->func.is_linear();
+        this->setIORows(this->func.get().IRows(), this->func.get().ORows());
+        this->set_input_domain(this->IRows(), {this->func.get().input_domain()});
+        this->islinear = this->func.get().is_linear();
     }
 
-    std::string name() const { return this->func.name(); }
+    std::string name() const { return this->func.get().name(); }
     inline bool is_linear() const { return this->islinear; }
     void enable_vectorization(bool b) const {
-        this->func.enable_vectorization(b);
+        this->func.get().enable_vectorization(b);
         this->EnableVectorization = b;
     }
 
-    template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
-        this->func.compute(x, fx_);
+    // The virtual dispatch on GFConcept requires explicit Eigen::Ref arguments.
+    // The _impl methods convert from the caller's Eigen expression type to the
+    // concrete Ref type expected by the virtual signature before dispatching.
+
+    template <class InTypeTT, class OutTypeTT>
+    inline void compute_impl(ConstVectorBaseRef<InTypeTT> x,
+                             ConstVectorBaseRef<OutTypeTT> fx_) const {
+        using Scalar = typename InTypeTT::Scalar;
+        if constexpr (std::is_same_v<Scalar, double>) {
+            typename Dspec::InType xt(x.derived());
+            typename Dspec::OutType fxt(fx_.const_cast_derived());
+            this->func.get().compute(xt, fxt);
+        } else {
+            typename Dspec::SuperInType xt(x.derived());
+            typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
+            this->func.get().compute(xt, fxt);
+        }
     }
 
-    template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
-        this->func.compute_jacobian(x, fx_, jx_);
+    template <class InTypeTT, class OutTypeTT, class JacTypeTT>
+    inline void compute_jacobian_impl(ConstVectorBaseRef<InTypeTT> x,
+                                      ConstVectorBaseRef<OutTypeTT> fx_,
+                                      ConstMatrixBaseRef<JacTypeTT> jx_) const {
+        using Scalar = typename InTypeTT::Scalar;
+        if constexpr (std::is_same_v<Scalar, double>) {
+            typename Dspec::InType xt(x.derived());
+            typename Dspec::OutType fxt(fx_.const_cast_derived());
+            typename Dspec::JacType jxt(jx_.const_cast_derived());
+            this->func.get().compute_jacobian(xt, fxt, jxt);
+        } else {
+            typename Dspec::SuperInType xt(x.derived());
+            typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
+            typename Dspec::SuperJacType jxt(jx_.const_cast_derived());
+            this->func.get().compute_jacobian(xt, fxt, jxt);
+        }
     }
 
-    template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
-              class AdjVarType>
+    template <class InTypeTT, class OutTypeTT, class JacTypeTT, class AdjGradTypeTT,
+              class AdjHessTypeTT, class AdjVarTypeTT>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
-        this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_, adjhess_,
-                                                                   adjvars);
+        ConstVectorBaseRef<InTypeTT> x, ConstVectorBaseRef<OutTypeTT> fx_,
+        ConstMatrixBaseRef<JacTypeTT> jx_, ConstVectorBaseRef<AdjGradTypeTT> adjgrad_,
+        ConstMatrixBaseRef<AdjHessTypeTT> adjhess_,
+        ConstVectorBaseRef<AdjVarTypeTT> adjvars) const {
+        using Scalar = typename InTypeTT::Scalar;
+        if constexpr (std::is_same_v<Scalar, double>) {
+            typename Dspec::InType xt(x.derived());
+            typename Dspec::OutType fxt(fx_.const_cast_derived());
+            typename Dspec::JacType jxt(jx_.const_cast_derived());
+            typename Dspec::AdjGradType adjgradt(adjgrad_.const_cast_derived());
+            typename Dspec::AdjHessType adjhesst(adjhess_.const_cast_derived());
+            typename Dspec::AdjVarType adjvarst(adjvars.derived());
+            this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
+                                                                             adjhesst, adjvarst);
+        } else {
+            typename Dspec::SuperInType xt(x.derived());
+            typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
+            typename Dspec::SuperJacType jxt(jx_.const_cast_derived());
+            typename Dspec::SuperAdjGradType adjgradt(adjgrad_.const_cast_derived());
+            typename Dspec::SuperAdjHessType adjhesst(adjhess_.const_cast_derived());
+            typename Dspec::SuperAdjVarType adjvarst(adjvars.derived());
+            this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
+                                                                             adjhesst, adjvarst);
+        }
     }
 
     /////////////////////////////////////////////////////////////////////////////////
@@ -152,20 +164,19 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
                                        std::bool_constant<Aliased> aliased) const {
         typedef typename Target::Scalar Scalar;
 
-        if constexpr (std::is_same<Scalar, double>::value) {
+        if constexpr (std::is_same_v<Scalar, double>) {
             constexpr bool TargConv =
-                std::is_convertible<decltype(target_.const_cast_derived()), RightJacTarget>::value;
+                std::is_convertible_v<decltype(target_.const_cast_derived()), RightJacTarget>;
             if constexpr (TargConv) {
                 ConstMatrixBaseRef<Right> right_ref = right.derived();
                 if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
-                    // ConstDiagonalBaseRef<Left> left_ref = left.derived();
-                    // this->func.right_jacobian_product(target_, left_ref, right_ref, assign,
-                    // aliased);
                     Base::right_jacobian_product(target_, left, right, assign, aliased);
                 } else {
                     ConstMatrixBaseRef<Left> left_ref = left.derived();
-                    this->func.right_jacobian_product(target_, left_ref, right_ref, assign,
-                                                      aliased);
+                    typename Dspec::RightJacTarget tgt(target_.const_cast_derived());
+                    typename Dspec::LeftJacMatrix lft(left_ref.derived());
+                    typename Dspec::JacType rht(right_ref.const_cast_derived());
+                    this->func.get().right_jacobian_product(tgt, lft, rht, assign, aliased);
                 }
             } else {
                 Base::right_jacobian_product(target_, left, right, assign, aliased);
@@ -175,21 +186,23 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         }
     }
 
-    template <class Target, class AdjHessType, class Assignment>
+    template <class Target, class AdjHessTypeTT, class Assignment>
     void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                            ConstMatrixBaseRef<AdjHessType> right, Assignment assign) const {
-        typedef typename Target::Scalar Scalar;
+                            ConstMatrixBaseRef<AdjHessTypeTT> right, Assignment assign) const {
         if (!this->is_linear())
             Base::accumulate_hessian(target_, right, assign);
     }
-    template <class Target, class JacType, class Assignment>
-    void accumulate_jacobian(ConstMatrixBaseRef<Target> target_, ConstMatrixBaseRef<JacType> right,
-                             Assignment assign) const {
+
+    template <class Target, class JacTypeTT, class Assignment>
+    void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
+                             ConstMatrixBaseRef<JacTypeTT> right, Assignment assign) const {
         typedef typename Target::Scalar Scalar;
 
-        if constexpr (std::is_same<Scalar, double>::value) {
+        if constexpr (std::is_same_v<Scalar, double>) {
             if (this->is_linear()) {
-                this->func.accumulate_jacobian(target_, right, assign);
+                typename Dspec::JacType jtarg(target_.const_cast_derived());
+                typename Dspec::JacType jright(right.const_cast_derived());
+                this->func.get().accumulate_jacobian(jtarg, jright, assign);
             } else {
                 Base::accumulate_jacobian(target_, right, assign);
             }
@@ -199,17 +212,18 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     ////////////////////////////////////////////////////////////////////////////////
-    template <class JacType, class Scalar>
-    void scale_jacobian(ConstMatrixBaseRef<JacType> target_, Scalar s) const {
-        if constexpr (std::is_same<Scalar, Tycho::DefaultSuperScalar>::value) {
+    template <class JacTypeTT, class Scalar>
+    void scale_jacobian(ConstMatrixBaseRef<JacTypeTT> target_, Scalar s) const {
+        if constexpr (std::is_same_v<Scalar, Tycho::DefaultSuperScalar>) {
             Base::scale_jacobian(target_, s);
         } else {
-            this->func.scale_jacobian(target_, s);
+            typename Dspec::JacType jxt(target_.const_cast_derived());
+            this->func.get().scale_jacobian(jxt, s);
         }
     }
 
-    template <class AdjHessType, class Scalar>
-    void scale_hessian(ConstMatrixBaseRef<AdjHessType> target_, Scalar s) const {
+    template <class AdjHessTypeTT, class Scalar>
+    void scale_hessian(ConstMatrixBaseRef<AdjHessTypeTT> target_, Scalar s) const {
         if (!this->is_linear())
             Base::scale_hessian(target_, s);
     }
@@ -247,7 +261,16 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         t1.start();
         for (int i = 0; i < n; i++) {
             x[0] += 1.0 / double(n + 1);
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, l);
+            {
+                typename Dspec::InType xt2(x);
+                typename Dspec::OutType fxt(fx);
+                typename Dspec::JacType jxt(jx);
+                typename Dspec::AdjGradType gxt(gx);
+                typename Dspec::AdjHessType hxt(hx);
+                typename Dspec::AdjVarType lxt(l);
+                this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt2, fxt, jxt, gxt,
+                                                                                 hxt, lxt);
+            }
             dummy += fx[0] + jx(0, 0) + hx(0, 0);
         }
         t1.stop();
@@ -259,7 +282,16 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         int n2 = n / Tycho::DefaultSuperScalar::SizeAtCompileTime;
         for (int i = 0; i < n2; i++) {
             X[0] += Tycho::DefaultSuperScalar((1.0 / double(n + 1)));
-            this->func.compute_jacobian_adjointgradient_adjointhessian(X, FX, JX, GX, HX, L);
+            {
+                typename Dspec::SuperInType Xt(X);
+                typename Dspec::SuperOutType FXt(FX);
+                typename Dspec::SuperJacType JXt(JX);
+                typename Dspec::SuperAdjGradType GXt(GX);
+                typename Dspec::SuperAdjHessType HXt(HX);
+                typename Dspec::SuperAdjVarType Lt(L);
+                this->func.get().compute_jacobian_adjointgradient_adjointhessian(Xt, FXt, JXt, GXt,
+                                                                                 HXt, Lt);
+            }
             dummy2 += FX[0] + JX(0, 0) + HX(0, 0);
         }
         t2.stop();
@@ -298,13 +330,19 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         double dummy = 0;
         t1.start();
         for (int i = 0; i < n; i++) {
-            // x[0] += 1.0 / double(n*10 + 1);
-
             fx.setZero();
             jx.setZero();
             hx.setZero();
-
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, l);
+            {
+                typename Dspec::InType xt2(x);
+                typename Dspec::OutType fxt(fx);
+                typename Dspec::JacType jxt(jx);
+                typename Dspec::AdjGradType gxt(gx);
+                typename Dspec::AdjHessType hxt(hx);
+                typename Dspec::AdjVarType lxt(l);
+                this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt2, fxt, jxt, gxt,
+                                                                                 hxt, lxt);
+            }
             dummy += fx[0] + jx(0, 0) + hx(0, 0);
         }
         t1.stop();
@@ -315,13 +353,19 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         t2.start();
         int n2 = n / Tycho::DefaultSuperScalar::SizeAtCompileTime;
         for (int i = 0; i < n2; i++) {
-            // X[0] += Tycho::DefaultSuperScalar((1.0 / double(n + 1)));
-
             FX.setZero();
             JX.setZero();
             HX.setZero();
-
-            this->func.compute_jacobian_adjointgradient_adjointhessian(X, FX, JX, GX, HX, L);
+            {
+                typename Dspec::SuperInType Xt(X);
+                typename Dspec::SuperOutType FXt(FX);
+                typename Dspec::SuperJacType JXt(JX);
+                typename Dspec::SuperAdjGradType GXt(GX);
+                typename Dspec::SuperAdjHessType HXt(HX);
+                typename Dspec::SuperAdjVarType Lt(L);
+                this->func.get().compute_jacobian_adjointgradient_adjointhessian(Xt, FXt, JXt, GXt,
+                                                                                 HXt, Lt);
+            }
             dummy2 += FX[0] + JX(0, 0) + HX(0, 0);
         }
         t2.stop();
