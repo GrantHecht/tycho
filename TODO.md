@@ -588,3 +588,86 @@ static void Build_Register(nb::module_& m, const std::string& name) {
 - `./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp` -- reports "Optimal Solution Found"
 - Intentionally trigger a dimension mismatch in a test expression (e.g., compose two functions
   with mismatched IR/OR) and confirm the compiler error names the `Composable` constraint
+
+---
+
+## PR 8 — Full rubber_types Elimination
+
+**Design doc:** `doc/plans/2026-03-08-rubber-types-elimination-design.md`
+
+### Goal
+
+Remove all remaining `rubber_types::TypeErasure` usage, generalize the SBO type-erasure pattern
+from `GFStorage` into a reusable `TypeStorage<C, SBO_CAP>` utility, and delete `TypeErasure.h`
+along with its MIT license notice.
+
+PR 6 replaced rubber_types for `GenericFunction<IR,OR>`. Three uses remain:
+
+| Remaining usage | What it provides |
+|---|---|
+| `GenericConditional<IR>`, `GenericComparative<IR>` | Type-erased boolean predicates (stop functions for integrators) |
+| `ConstraintInterface` | Type-erased solver constraint (what PSIOPT calls at solve time) |
+| `ObjectiveInterface` | Type-erased solver objective |
+
+### Target Architecture
+
+```
+New: src/Utils/TypeStorage.h
+  TypeStorageBase<C,N> concept — constrains C (must have clone_into)
+  TypeStorage<C, SBO_CAP=128> — SBO container, value semantics, clone via C::clone_into virtual
+
+GenericConditional<IR>, GenericComparative<IR>:
+  New ConditionalBase<IR> (flat abstract) + ConditionalModel<IR,T>
+  Both wrap TypeStorage<ConditionalBase<IR>>
+  New file: ConditionalTypeErasure.h
+
+ConstraintInterface, ObjectiveInterface:
+  New ConstraintBase (non-virtual MI of SolverConstraintSpec::Concept + SizableSpec::Concept)
+  New ConstraintModel<T> delegates all virtuals to data_
+  ConstraintInterface wraps TypeStorage<ConstraintBase>
+  ObjectiveInterface wraps TypeStorage<ObjectiveBase> (adds SolverObjectiveSpec::Concept)
+
+GFStorage<IR,OR>:
+  Refactored to hold TypeStorage<GFConcept<IR,OR>> internally
+  GFConcept gains clone_into(TypeStorage<GFConcept<IR,OR>>&) pure virtual
+  cross-IR clone_into_dynamic unchanged
+
+Deleted: TypeErasure.h, DeepCopySpecs.h, notices/rubber_types-mit.txt
+Stripped: dead Model<>/ExternalInterface<> rubber_types boilerplate from DenseFunctionSpecs.h,
+          SizingSpecs.h, SolverInterfaceSpecs.h
+```
+
+### Files Changed
+
+| File | Action |
+|---|---|
+| `src/Utils/TypeStorage.h` | **new** |
+| `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h` | **new** |
+| `src/Utils/TypeErasure.h` | **deleted** |
+| `src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h` | **deleted** |
+| `notices/rubber_types-mit.txt` | **deleted** |
+| `src/pch.h` | Swap TypeErasure.h → TypeStorage.h |
+| `src/Utils/Tycho_Utils.h` | Remove TypeErasure.h include |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GFTypeErasure.h` | GFStorage wraps TypeStorage; GFConcept gains clone_into |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GenericFunction.h` | pack_into_* bodies updated |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GenericConditional.h` | Migrated to ConditionalTypeErasure.h |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GenericComparative.h` | Becomes alias for GenericConditional |
+| `src/VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h` | ConstraintInterface + ObjectiveInterface migrated; dead boilerplate stripped |
+| `src/VectorFunctions/VectorFunctionTypeErasure/DenseFunctionSpecs.h` | Strip dead Model<>/ExternalInterface<> |
+| `src/VectorFunctions/VectorFunctionTypeErasure/SizingSpecs.h` | Strip dead Model<>/ExternalInterface<> |
+
+### Implementation Order
+
+1. Write `TypeStorage.h`; verify compiles in isolation with a trivial Concept stub
+2. Write `ConditionalTypeErasure.h`; migrate `GenericConditional.h` and `GenericComparative.h`; run all 38 examples
+3. Migrate `ConstraintInterface` + `ObjectiveInterface`; update `GFModel::pack_into_*`; run all 38 examples
+4. Refactor `GFStorage` to wrap `TypeStorage<GFConcept<IR,OR>>`; run all 38 examples
+5. Strip dead boilerplate; delete `DeepCopySpecs.h`, `TypeErasure.h`, `notices/rubber_types-mit.txt`; run all 38 examples
+
+### Verification
+
+- `ninja -j6 all` -- clean build, no new warnings
+- `python run_examples.py` -- all 38 examples pass
+- `./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp` -- "Optimal Solution Found"
+- `grep -r "rubber_types" src/` -- zero matches
+- `grep -r "TypeErasure.h" src/` -- zero matches
