@@ -32,14 +32,14 @@ template <class T, class Genfunc, class Arg> struct JetInvoker {
 struct Jet {
 
     static void print_beginning() {
-        std::string jestr("          __  ______  ______\n"
-                          "         / / / ____/ /_  __/\n"
-                          "    __  / / / __/     / /   \n"
-                          "   / /_/ / / /___    / /    \n"
-                          "   \\____/ /_____/   /_/     \n\n");
+        constexpr const char *jestr = "          __  ______  ______\n"
+                                      "         / / / ____/ /_  __/\n"
+                                      "    __  / / / __/     / /   \n"
+                                      "   / /_/ / / /___    / /    \n"
+                                      "   \\____/ /_____/   /_/     \n\n";
 
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
-        fmt::print(fmt::fg(fmt::color::crimson), fmt::runtime(jestr));
+        fmt::print(fmt::fg(fmt::color::crimson), jestr);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");

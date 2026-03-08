@@ -186,13 +186,14 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::PSIOPT::convergeCheck(std::vector<Iterate
 
 void Tycho::PSIOPT::printPSIOPT() {
 
-    std::string PsioptStr = "       ____    _____    ____          ____     ____   ______\n"
-                            "      / __ \\  / ___/   /  _/         / __ \\   / __ \\ /_  __/\n"
-                            "     / /_/ /  \\__ \\    / /   ______ / / / /  / /_/ /  / /   \n"
-                            "    / ____/  ___/ /  _/ /   /_____// /_/ /  / ____/  / /    \n"
-                            "   /_/      /____/  /___/          \\____/  /_/      /_/    \n";
+    constexpr const char *PsioptStr =
+        "       ____    _____    ____          ____     ____   ______\n"
+        "      / __ \\  / ___/   /  _/         / __ \\   / __ \\ /_  __/\n"
+        "     / /_/ /  \\__ \\    / /   ______ / / / /  / /_/ /  / /   \n"
+        "    / ____/  ___/ /  _/ /   /_____// /_/ /  / ____/  / /    \n"
+        "   /_/      /____/  /___/          \\____/  /_/      /_/    \n";
     print_Header();
-    fmt::print(fmt::fg(fmt::color::crimson), fmt::runtime(PsioptStr));
+    fmt::print(fmt::fg(fmt::color::crimson), PsioptStr);
     fmt::print(fmt::fg(fmt::color::crimson),
                " \n       Parallel Sparse Interior-point Optimizer\n");
     print_Header();
@@ -328,7 +329,7 @@ void Tycho::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
 void Tycho::PSIOPT::print_Beginning(std::string msg) const {
     fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
     fmt::print(": ");
-    fmt::print(fmt::fg(fmt::color::royal_blue), fmt::runtime(msg));
+    fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
     fmt::print("\n");
 }
 
@@ -336,7 +337,7 @@ void Tycho::PSIOPT::print_Finished(std::string msg) const {
 
     fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
     fmt::print(": ");
-    fmt::print(fmt::fg(fmt::color::royal_blue), fmt::runtime(msg));
+    fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
     fmt::print("\n");
 }
 
@@ -350,7 +351,7 @@ void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo
     double printtime = tottime - nlptime - qptime;
     auto TColor = fmt::fg(fmt::color::cyan);
     auto Printtime = [&](const char *msg, double t1) {
-        fmt::print(fmt::runtime(msg));
+        fmt::print("{}", msg);
         fmt::print(TColor, "{0:>10.3f} ms {1:>10.3f} ms/iter\n", t1, double(t1 / iternum));
     };
 
