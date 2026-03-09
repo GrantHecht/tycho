@@ -8,11 +8,9 @@
 // Design goals:
 //   1. Flat vtable — GFConcept inherits Spec::Concepts non-virtually, so there
 //      are no vbase offset tables or extra indirection per vtable lookup.
-//   2. Small-buffer optimisation (SBO) — GFStorage holds objects up to
-//      SBO_CAP bytes inline (no heap allocation for common built-in types).
-//   3. Value semantics — GFStorage has deep-copy semantics (clone-on-copy),
-//      replacing the shared_ptr shared-ownership model.
-//   4. Single virtual dispatch for solver calls — ConstraintInterface and
+//   2. Shared ownership — GFStorage uses shared_ptr for O(1) copy (reference
+//      count increment), matching the old rubber_types performance model.
+//   3. Single virtual dispatch for solver calls — ConstraintInterface and
 //      ObjectiveInterface store T directly via pack_into, not the GFTE wrapper.
 // =============================================================================
 
@@ -23,10 +21,7 @@
 #include "SolverInterfaceSpecs.h"
 
 #include <concepts>
-#include <cstddef>
-#include <cstring>
 #include <memory>
-#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -337,49 +332,17 @@ template <int IR, GFStorable<IR, 1> T> struct GFModel<IR, 1, T> final : GFModelC
 };
 
 // ==========================================================================
-// Section 5: GFStorage<IR, OR> — SBO container, value semantics
+// Section 5: GFStorage<IR, OR> — shared-ownership container
 //
-// Value type with deep-copy semantics (clone-on-copy via GFConcept::clone_into).
-// For SBO-eligible types, clone is a placement-new into the inline buffer —
-// no heap allocation.
-//
-// Assumptions on trivial relocatability:
-//   Inline-stored objects are moved via std::memcpy. This is valid for all
-//   Tycho built-in VF types (plain data + vptr, no internal self-pointers).
-//   Large or exotic types fall through to the heap path and are moved by
-//   pointer swap (always correct).
+// Shared ownership via std::shared_ptr. Copy is O(1) (atomic refcount
+// increment), matching the original rubber_types performance model.
+// The flat vtable (GFConcept) and concept-constrained emplace() are
+// preserved — only the ownership model changes.
 // ==========================================================================
 
 template <int IR, int OR> class GFStorage {
-    // SBO_CAP sized to cover common built-in VF types without heap fallback.
-    // sizeof(GFModel<IR,OR,T>) = sizeof(vptr) + sizeof(T). Most built-ins
-    // are 8–72 bytes. 128 bytes gives comfortable headroom.
-    static constexpr std::size_t SBO_CAP = 128;
-    static constexpr std::size_t SBO_ALIGN = alignof(std::max_align_t);
-
     using Concept = GFConcept<IR, OR>;
-
-    enum class Kind : uint8_t { Empty, Inline, Heap };
-
-    Kind kind_ = Kind::Empty;
-    union {
-        alignas(SBO_ALIGN) std::byte buf_[SBO_CAP];
-        Concept *ptr_;
-    };
-
-    Concept *concept_ptr() const noexcept {
-        return kind_ == Kind::Inline
-                   ? std::launder(reinterpret_cast<Concept *>(const_cast<std::byte *>(buf_)))
-                   : ptr_;
-    }
-
-    void destroy() noexcept {
-        if (kind_ == Kind::Inline)
-            concept_ptr()->~Concept();
-        else if (kind_ == Kind::Heap)
-            delete ptr_;
-        kind_ = Kind::Empty;
-    }
+    std::shared_ptr<Concept> ptr_;
 
   public:
     GFStorage() noexcept = default;
@@ -387,69 +350,20 @@ template <int IR, int OR> class GFStorage {
     // C++20 concept constraint: "T does not satisfy GFStorable<IR,OR>" on bad types
     template <GFStorable<IR, OR> T> void emplace(T obj) {
         using Model = GFModel<IR, OR, std::decay_t<T>>;
-        destroy();
-        if constexpr (sizeof(Model) <= SBO_CAP && alignof(Model) <= SBO_ALIGN) {
-            std::construct_at(reinterpret_cast<Model *>(buf_), std::move(obj));
-            kind_ = Kind::Inline;
-        } else {
-            ptr_ = new Model(std::move(obj));
-            kind_ = Kind::Heap;
-        }
+        ptr_ = std::make_shared<Model>(std::move(obj));
     }
 
-    // Deep-copy (clone_into calls emplace on the destination)
-    GFStorage(const GFStorage &o) {
-        if (!o.empty())
-            o.concept_ptr()->clone_into(*this);
-    }
+    // Shared-ownership copy/move — O(1) refcount increment / pointer swap
+    GFStorage(const GFStorage &) = default;
+    GFStorage(GFStorage &&) noexcept = default;
+    GFStorage &operator=(const GFStorage &) = default;
+    GFStorage &operator=(GFStorage &&) noexcept = default;
+    ~GFStorage() = default;
 
-    // Move: pointer swap for heap, memcpy for inline (trivially relocatable
-    // for all Tycho built-in VF types), no-op for empty.
-    GFStorage(GFStorage &&o) noexcept {
-        switch (o.kind_) {
-        case Kind::Inline:
-            std::memcpy(buf_, o.buf_, SBO_CAP);
-            kind_ = Kind::Inline;
-            o.kind_ = Kind::Empty;
-            break;
-        case Kind::Heap:
-            ptr_ = o.ptr_;
-            kind_ = Kind::Heap;
-            o.ptr_ = nullptr;
-            o.kind_ = Kind::Empty;
-            break;
-        case Kind::Empty:
-            kind_ = Kind::Empty;
-            break;
-        }
-    }
+    [[nodiscard]] bool empty() const noexcept { return !ptr_; }
 
-    GFStorage &operator=(const GFStorage &o) {
-        if (this != &o) {
-            destroy();
-            if (!o.empty())
-                o.concept_ptr()->clone_into(*this);
-        }
-        return *this;
-    }
-
-    GFStorage &operator=(GFStorage &&o) noexcept {
-        if (this != &o) {
-            destroy();
-            new (this) GFStorage(std::move(o));
-        }
-        return *this;
-    }
-
-    ~GFStorage() { destroy(); }
-
-    [[nodiscard("Check empty() before calling get()")]]
-    bool empty() const noexcept {
-        return kind_ == Kind::Empty;
-    }
-
-    Concept &get() const noexcept { return *concept_ptr(); }
-    Concept *get_ptr() const noexcept { return concept_ptr(); }
+    Concept &get() const noexcept { return *ptr_; }
+    Concept *get_ptr() const noexcept { return ptr_.get(); }
 };
 
 // ==========================================================================
