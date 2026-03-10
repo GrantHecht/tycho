@@ -19,24 +19,24 @@
 
 namespace Tycho {
 
-enum DenseDerivativeModes {
+enum class DenseDerivativeMode {
     Analytic,
     FDiffFwd,
     FDiffCentArray,
     AutodiffFwd,
 };
 
-template <class Derived, int IR, int OR, int Jmode>
+template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseFirstDerivatives : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
 };
 
-template <class Derived, int IR, int OR, int Jmode, int Hmode>
+template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
 struct DenseSecondDerivatives : DenseFirstDerivatives<Derived, IR, OR, Jmode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, Jmode>;
 };
 
-template <class Derived, int IR, int OR, int Jmode, int Hmode>
+template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
 struct DenseDerivatives : DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode> {
     using Base = DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode>;
     DENSE_FUNCTION_BASE_TYPES(Base)

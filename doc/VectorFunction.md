@@ -206,14 +206,14 @@ Concrete types would simplify from `VectorFunction<Norm<IR>, IR, 1>` to `VectorF
 
 **Summary of pros and cons:**
 
-| | Pros | Cons |
-|---|---|---|
-| **Readability** | Simpler class declarations; no `CRTPBase`/`derived()` boilerplate | Class-scope type aliases must become local computations |
-| **Compilation** | Marginally fewer template parameters per class | Expression type nesting still dominates compile time |
-| **Refactor scope** | N/A | Massive refactor touching every file in `src/VectorFunctions/` and `src/Bindings/` |
-| **Compatibility** | N/A | Requires C++23; must verify Clang/LLVM, GCC, and MSVC support |
-| **Performance** | Identical runtime performance (same inlining guarantees) | N/A |
-| **Correctness risk** | N/A | Subtle behavioral differences in overload resolution between CRTP hiding and deducing this dispatch |
+|                      | Pros                                                              | Cons                                                                                                |
+| -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Readability**      | Simpler class declarations; no `CRTPBase`/`derived()` boilerplate | Class-scope type aliases must become local computations                                             |
+| **Compilation**      | Marginally fewer template parameters per class                    | Expression type nesting still dominates compile time                                                |
+| **Refactor scope**   | N/A                                                               | Massive refactor touching every file in `src/VectorFunctions/` and `src/Bindings/`                  |
+| **Compatibility**    | N/A                                                               | Requires C++23; must verify Clang/LLVM, GCC, and MSVC support                                       |
+| **Performance**      | Identical runtime performance (same inlining guarantees)          | N/A                                                                                                 |
+| **Correctness risk** | N/A                                                               | Subtle behavioral differences in overload resolution between CRTP hiding and deducing this dispatch |
 
 **Recommendation:** This is a worthwhile experiment for a future modernization pass, but not a high-priority change. The readability improvement is real but the refactor scope is large, and the hardest parts of the codebase (expression type nesting, type erasure, SuperScalar dispatch, KKT filling) are all orthogonal to CRTP. A proof-of-concept branch converting one base class (e.g., `ComputableBase`) would clarify the practical impact before committing to a full migration.
 
@@ -225,18 +225,18 @@ Every VectorFunction carries five compile-time template parameters:
 
 ```cpp
 template <class Derived, int IR, int OR,
-          DenseDerivativeModes Jm = Analytic,
-          DenseDerivativeModes Hm = Analytic>
+          DenseDerivativeMode Jm = Analytic,
+          DenseDerivativeMode Hm = Analytic>
 struct VectorFunction;
 ```
 
-| Parameter | Meaning | Values |
-|-----------|---------|--------|
-| `Derived` | The concrete derived class (CRTP) | Any class inheriting VectorFunction |
-| `IR` | Input dimension | Positive integer, or `-1` for dynamic |
-| `OR` | Output dimension | Positive integer, or `-1` for dynamic |
-| `Jm` | Jacobian computation mode | `Analytic`, `FDiffFwd`, `FDiffCentArray`, `AutodiffFwd` |
-| `Hm` | Hessian computation mode | Same as Jm |
+| Parameter | Meaning                           | Values                                                  |
+| --------- | --------------------------------- | ------------------------------------------------------- |
+| `Derived` | The concrete derived class (CRTP) | Any class inheriting VectorFunction                     |
+| `IR`      | Input dimension                   | Positive integer, or `-1` for dynamic                   |
+| `OR`      | Output dimension                  | Positive integer, or `-1` for dynamic                   |
+| `Jm`      | Jacobian computation mode         | `Analytic`, `FDiffFwd`, `FDiffCentArray`, `AutodiffFwd` |
+| `Hm`      | Hessian computation mode          | Same as Jm                                              |
 
 ### Static vs. Dynamic Sizing
 
@@ -266,15 +266,15 @@ To implement a new VectorFunction, you inherit from `VectorFunction<Derived, IR,
 
 ### Required Methods
 
-| Method | Signature | Purpose |
-|--------|-----------|---------|
+| Method         | Signature  | Purpose                                 |
+| -------------- | ---------- | --------------------------------------- |
 | `compute_impl` | `(x, fx_)` | Compute `f(x)`, storing result in `fx_` |
 
 ### Optional Methods (for Analytic Derivatives)
 
-| Method | Signature | Purpose |
-|--------|-----------|---------|
-| `compute_jacobian_impl` | `(x, fx_, jx_)` | Compute `f(x)` and Jacobian `J(x)` simultaneously |
+| Method                                                 | Signature                                    | Purpose                                                                 |
+| ------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------- |
+| `compute_jacobian_impl`                                | `(x, fx_, jx_)`                              | Compute `f(x)` and Jacobian `J(x)` simultaneously                       |
 | `compute_jacobian_adjointgradient_adjointhessian_impl` | `(x, fx_, jx_, adjgrad_, adjhess_, adjvars)` | Compute `f(x)`, `J(x)`, `g = J^T * adjvars`, `H = sum(adjvars_i * H_i)` |
 
 If you set `Jm = AutodiffFwd`, you only need `compute_impl` -- the base class generates Jacobians by running your compute with dual numbers. If you set `Jm = Analytic`, you must provide `compute_jacobian_impl` yourself (the default implementation would call the compute dispatch which may not give correct Jacobians). Similarly for `Hm`.
@@ -283,12 +283,12 @@ If you set `Jm = AutodiffFwd`, you only need `compute_impl` -- the base class ge
 
 You can override these `static const bool` flags to enable optimizations:
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `IsVectorizable` | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
-| `IsLinearFunction` | `false` | Jacobian is constant (independent of x). Hessian is identically zero. |
-| `HasDiagonalJacobian` | `false` | Jacobian is diagonal (enables optimized products) |
-| `IsGenericFunction` | `false` | Set only by `GenericFunction` |
+| Flag                  | Default | Meaning                                                                                                     |
+| --------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `IsVectorizable`      | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
+| `IsLinearFunction`    | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
+| `HasDiagonalJacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
+| `IsGenericFunction`   | `false` | Set only by `GenericFunction`                                                                               |
 
 ### Minimal Example: A Power Function
 
@@ -736,14 +736,14 @@ All sub-functions must share the same input dimension `IR`.
 
 Each wraps a function and applies an element-wise operation. All provide analytic derivatives.
 
-| Type | Operation | Jacobian Diagonal |
-|------|-----------|-------------------|
-| `CwiseSin<F>` | `sin(f(x))` | `cos(f(x)) * J_f` |
-| `CwiseCos<F>` | `cos(f(x))` | `-sin(f(x)) * J_f` |
-| `CwiseTan<F>` | `tan(f(x))` | `sec^2(f(x)) * J_f` |
-| `CwiseExp<F>` | `exp(f(x))` | `exp(f(x)) * J_f` |
-| `CwiseSqrt<F>` | `sqrt(f(x))` | `1/(2*sqrt(f(x))) * J_f` |
-| `CwiseSquare<F>` | `f(x)^2` | `2*f(x) * J_f` |
+| Type             | Operation    | Jacobian Diagonal        |
+| ---------------- | ------------ | ------------------------ |
+| `CwiseSin<F>`    | `sin(f(x))`  | `cos(f(x)) * J_f`        |
+| `CwiseCos<F>`    | `cos(f(x))`  | `-sin(f(x)) * J_f`       |
+| `CwiseTan<F>`    | `tan(f(x))`  | `sec^2(f(x)) * J_f`      |
+| `CwiseExp<F>`    | `exp(f(x))`  | `exp(f(x)) * J_f`        |
+| `CwiseSqrt<F>`   | `sqrt(f(x))` | `1/(2*sqrt(f(x))) * J_f` |
+| `CwiseSquare<F>` | `f(x)^2`     | `2*f(x) * J_f`           |
 | `CwiseArcSin<F>` | `asin(f(x))` | `1/sqrt(1-f(x)^2) * J_f` |
 
 These are all implemented via the `CwiseFunctionOperator<Derived, Func>` base, which chains derivatives using the inner function's Jacobian:
@@ -788,12 +788,12 @@ NormalizedPower<IR,P>: f(x) = x / ||x||^P        (OR = IR)
 
 ### Binary Operations
 
-| Type | Operation | Notes |
-|------|-----------|-------|
-| `FunctionDotProduct<F1, F2>` | `f1(x) . f2(x)` | Scalar output |
-| `FunctionCrossProduct<F1, F2>` | `f1(x) x f2(x)` | 3D vectors only |
-| `CwiseFunctionProduct<F1, F2>` | `f1(x) .* f2(x)` | Element-wise multiplication |
-| `VectorScalarFunctionProduct<VF, SF>` | `vf(x) * sf(x)` | Vector scaled by scalar function |
+| Type                                  | Operation        | Notes                            |
+| ------------------------------------- | ---------------- | -------------------------------- |
+| `FunctionDotProduct<F1, F2>`          | `f1(x) . f2(x)`  | Scalar output                    |
+| `FunctionCrossProduct<F1, F2>`        | `f1(x) x f2(x)`  | 3D vectors only                  |
+| `CwiseFunctionProduct<F1, F2>`        | `f1(x) .* f2(x)` | Element-wise multiplication      |
+| `VectorScalarFunctionProduct<VF, SF>` | `vf(x) * sf(x)`  | Vector scaled by scalar function |
 
 ---
 
@@ -899,11 +899,11 @@ struct GenericFunction : VectorFunction<GenericFunction<IR, OR>, IR, OR> {
 
 ### Key GenericFunction Aliases
 
-| Type | Meaning |
-|------|---------|
-| `GenericFunction<-1, -1>` | Fully dynamic vector function |
-| `GenericFunction<-1, 1>` | Dynamic-input scalar function |
-| `GenericFunction<6, 3>` | Fixed 6-input, 3-output function |
+| Type                      | Meaning                          |
+| ------------------------- | -------------------------------- |
+| `GenericFunction<-1, -1>` | Fully dynamic vector function    |
+| `GenericFunction<-1, 1>`  | Dynamic-input scalar function    |
+| `GenericFunction<6, 3>`   | Fixed 6-input, 3-output function |
 
 ### Deep Copy Between GenericFunction Variants
 
@@ -1414,7 +1414,7 @@ src/VectorFunctions/
     DenseFunctionBase.h           ~1200 lines: Jacobian ops, indexing, math, KKT fill
     DenseScalarFunctionBase.h     objective/gradient/hessian interface (OR=1)
     DenseFunction.h               DenseFunction -> DenseScalarFunctionBase routing
-    DenseDerivatives.h            DenseDerivativeModes enum, derivative layer structs
+    DenseDerivatives.h            DenseDerivativeMode enum, derivative layer structs
     InputOuputSize.h              Static/dynamic size storage
     FunctionDomains.h             SingleDomain, CompositeDomain, DomainHolder
     IndexingData.h                SolverIndexingData (Vindex, Cindex, KKT locations)

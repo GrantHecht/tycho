@@ -18,9 +18,11 @@
 
 namespace Tycho {
 
-struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, Analytic, Analytic> {
+struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic,
+                                  DenseDerivativeMode::Analytic> {
 
-    using Base = VectorFunction<ArcTan2Op, 2, 1, Analytic, Analytic>;
+    using Base = VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
     static const bool IsVectorizable = true;
 

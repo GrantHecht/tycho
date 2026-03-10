@@ -1,5 +1,42 @@
-﻿{
+{
   "configurations": [
+    {
+      "name": "macOS-LLVM-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}/build",
+      "installRoot": "${projectDir}/build/install/${name}",
+      "cmakeCommandArgs": "--no-warn-unused-cli",
+      "buildCommandArgs": "-j6 -v",
+      "ctestCommandArgs": "",
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "TRUE",
+          "type": "BOOL"
+        },
+        {
+          "name": "CMAKE_C_COMPILER",
+          "value": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang",
+          "type": "FILEPATH"
+        },
+        {
+          "name": "CMAKE_CXX_COMPILER",
+          "value": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang++",
+          "type": "FILEPATH"
+        },
+        {
+          "name": "Python_EXECUTABLE",
+          "value": "/opt/miniconda3/envs/tycho/bin/python",
+          "type": "FILEPATH"
+        },
+        {
+          "name": "PYTHON_LOCAL_INSTALL_DIR",
+          "value": "/opt/miniconda3/envs/tycho/lib/python3.13/site-packages",
+          "type": "PATH"
+        }
+      ]
+    },
     {
       "name": "x64-Clang-Release",
       "generator": "Ninja",

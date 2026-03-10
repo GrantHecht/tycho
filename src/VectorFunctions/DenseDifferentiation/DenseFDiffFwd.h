@@ -19,15 +19,13 @@
 
 namespace Tycho {
 
-using enum DenseDerivativeModes;
-
 //! First derivatives using forward finite difference
 /*!
   \tparam IR Input Rows
   \tparam OR Output Rows
 */
 template <class Derived, int IR, int OR>
-struct DenseFirstDerivatives<Derived, IR, OR, FDiffFwd>
+struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
@@ -87,8 +85,8 @@ struct DenseFirstDerivatives<Derived, IR, OR, FDiffFwd>
   \tparam OR Output Rows
   \tparam JMode Jacobian Mode (enumerator)
 */
-template <class Derived, int IR, int OR, int JMode>
-struct DenseSecondDerivatives<Derived, IR, OR, JMode, FDiffFwd>
+template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
+struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiffFwd>
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     DENSE_FUNCTION_BASE_TYPES(Base)

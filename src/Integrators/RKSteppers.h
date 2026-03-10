@@ -752,9 +752,9 @@ struct RKStepper_NEW
 
 template <class DODE, RKOptions RKOp>
 struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC,
-                                   FDiffFwd, FDiffFwd> {
+                                   DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC,
-                                FDiffFwd, FDiffFwd>;
+                                DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;

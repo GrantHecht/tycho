@@ -20,8 +20,10 @@
 namespace Tycho {
 
 template <class Func, int IRC, int ORC>
-struct ParsedInput : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analytic> {
-    using Base = VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, Analytic>;
+struct ParsedInput
+    : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, DenseDerivativeMode::Analytic> {
+    using Base =
+        VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
 

@@ -109,8 +109,6 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
 namespace Tycho {
 
 template <int OR> struct TychoBind<InterpFunction<OR>> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<InterpFunction<OR>>(m, name);
         if constexpr (OR == -1) {

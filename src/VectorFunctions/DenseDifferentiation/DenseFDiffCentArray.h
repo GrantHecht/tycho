@@ -19,15 +19,13 @@
 
 namespace Tycho {
 
-using enum DenseDerivativeModes;
-
 //! First derivatives using forward finite difference
 /*!
   \tparam IR Input Rows
   \tparam OR Output Rows
 */
 template <class Derived, int IR, int OR>
-struct DenseFirstDerivatives<Derived, IR, OR, FDiffCentArray>
+struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArray>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)

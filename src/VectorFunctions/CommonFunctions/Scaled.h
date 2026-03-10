@@ -59,8 +59,9 @@ struct MatrixScaled : MatrixScaled_Impl<MatrixScaled<Func, MRows>, Func, MRows> 
 ////////////////////////////////////////////////////////////////////////
 
 template <class Derived, class Func, class Value>
-struct StaticScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> {
-    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, Analytic>;
+struct StaticScaled_Impl
+    : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
@@ -156,8 +157,8 @@ struct StaticScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analyti
 };
 
 template <class Derived, class Func>
-struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> {
-    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, Analytic>;
+struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
@@ -268,8 +269,9 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> {
 };
 
 template <class Derived, class Func>
-struct RowScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> {
-    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, Analytic>;
+struct RowScaled_Impl
+    : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
@@ -405,8 +407,9 @@ struct RowScaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> 
 };
 
 template <class Derived, class Func, int MRows>
-struct MatrixScaled_Impl : VectorFunction<Derived, Func::IRC, MRows, Analytic> {
-    using Base = VectorFunction<Derived, Func::IRC, MRows, Analytic>;
+struct MatrixScaled_Impl
+    : VectorFunction<Derived, Func::IRC, MRows, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, Func::IRC, MRows, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);

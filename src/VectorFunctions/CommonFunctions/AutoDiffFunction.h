@@ -20,8 +20,10 @@
 namespace Tycho {
 
 template <class Func>
-struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC, FDiffCentArray, FDiffFwd> {
-    using Base = VectorFunction<ADFun<Func>, Func::IRC, Func::ORC, FDiffCentArray, FDiffFwd>;
+struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
+                              DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd> {
+    using Base = VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
+                                DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     Func func;

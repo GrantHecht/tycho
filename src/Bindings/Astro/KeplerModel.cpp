@@ -19,8 +19,6 @@
 // TychoBind<KeplerPropagator> — defined here since KeplerPropagator.h's inline Build was removed.
 namespace Tycho {
 template <> struct TychoBind<KeplerPropagator> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<KeplerPropagator>(m, name);
         obj.def(nb::init<double>());
@@ -44,8 +42,6 @@ template <> struct TychoBind<KeplerPhase> {
 // TychoBind<Kepler> — the Kepler ODE type.
 namespace Tycho {
 template <> struct TychoBind<Kepler> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Kepler>(m, name).def(nb::init<double>());
         Bind::DenseBaseBuild<Kepler>(obj);

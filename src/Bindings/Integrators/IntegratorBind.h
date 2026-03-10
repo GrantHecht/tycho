@@ -65,8 +65,6 @@ template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj
 } // namespace Bind
 
 template <class DODE> struct TychoBind<Integrator<DODE>> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Integrator<DODE>>(m, name);
 

@@ -2,15 +2,15 @@
 
 ## Completed PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
-| PR 1 | Rename ASSET/asset_asrl → Tycho/tycho | **DONE** (merged) |
-| PR 2 | Decouple C++ from Python bindings | **DONE** (merged) |
-| PR 3 | Migrate pybind11 → nanobind | **DONE** (merged) |
-| PR 4 | Separate extensions C++ from binding code | **DONE** (merged) |
+| PR   | Description                                                       | Status            |
+| ---- | ----------------------------------------------------------------- | ----------------- |
+| PR 1 | Rename ASSET/asset_asrl → Tycho/tycho                             | **DONE** (merged) |
+| PR 2 | Decouple C++ from Python bindings                                 | **DONE** (merged) |
+| PR 3 | Migrate pybind11 → nanobind                                       | **DONE** (merged) |
+| PR 4 | Separate extensions C++ from binding code                         | **DONE** (merged) |
 | PR 5 | Add per-file provenance headers to all ASSET-derived source files | **DONE** (merged) |
-| PR 6 | Type erasure refactor (flat vtable + C++20 bump) | **DONE** (merged) |
-| PR 7 | Fix GFStorage performance regression (shared_ptr) | **DONE** (merged) |
+| PR 6 | Type erasure refactor (flat vtable + C++20 bump)                  | **DONE** (merged) |
+| PR 7 | Fix GFStorage performance regression (shared_ptr)                 | **DONE** (merged) |
 
 ### PR 6+7 Summary
 
@@ -94,7 +94,7 @@ concept Stackable = VFSized<F1> && VFSized<F2> && requires {
   `thread_safe()` in `InputOutputSize`, `DomainHolder`, `DenseFunctionBase`
 - **`OperatorOverloads.h`**: Add `requires Composable<Inner, Outer>` on `operator()`;
   add `requires Stackable<F1, F2>` on `stack(...)` and `StackedOutputs`
-- **`using enum DenseDerivativeModes`** at local scope in derivative strategy headers
+- **`using enum DenseDerivativeMode`** at local scope in derivative strategy headers
 - **`FunctionRegistry.h`**: `HasTychoBind<T>` concept on `Build_Register<T>` (requires
   `typename TychoBind<T>::BuildTag`)
 
@@ -316,21 +316,21 @@ git rm notices/rubber_types-mit.txt
 
 ### Files Changed Summary
 
-| File | Action |
-|---|---|
-| `src/Utils/TypeStorage.h` | **new** — SBO container with value semantics |
-| `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h` | **new** |
-| `src/Utils/TypeErasure.h` | **deleted** |
-| `src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h` | **deleted** |
-| `notices/rubber_types-mit.txt` | **deleted** |
-| `src/pch.h` | Swap TypeErasure.h → TypeStorage.h |
-| `src/Utils/Tycho_Utils.h` | Remove TypeErasure.h include |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GFTypeErasure.h` | Update pack_into_* bodies |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GenericConditional.h` | Use ConditionalTypeErasure |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GenericComparative.h` | Becomes alias |
-| `src/VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h` | Full migration + cleanup |
-| `src/VectorFunctions/VectorFunctionTypeErasure/DenseFunctionSpecs.h` | Strip dead Model/ExternalInterface |
-| `src/VectorFunctions/VectorFunctionTypeErasure/SizingSpecs.h` | Strip dead Model/ExternalInterface |
+| File                                                                     | Action                                       |
+| ------------------------------------------------------------------------ | -------------------------------------------- |
+| `src/Utils/TypeStorage.h`                                                | **new** — SBO container with value semantics |
+| `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h` | **new**                                      |
+| `src/Utils/TypeErasure.h`                                                | **deleted**                                  |
+| `src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h`          | **deleted**                                  |
+| `notices/rubber_types-mit.txt`                                           | **deleted**                                  |
+| `src/pch.h`                                                              | Swap TypeErasure.h → TypeStorage.h           |
+| `src/Utils/Tycho_Utils.h`                                                | Remove TypeErasure.h include                 |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GFTypeErasure.h`          | Update pack_into_* bodies                    |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GenericConditional.h`     | Use ConditionalTypeErasure                   |
+| `src/VectorFunctions/VectorFunctionTypeErasure/GenericComparative.h`     | Becomes alias                                |
+| `src/VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h`   | Full migration + cleanup                     |
+| `src/VectorFunctions/VectorFunctionTypeErasure/DenseFunctionSpecs.h`     | Strip dead Model/ExternalInterface           |
+| `src/VectorFunctions/VectorFunctionTypeErasure/SizingSpecs.h`            | Strip dead Model/ExternalInterface           |
 
 ### Verification
 

@@ -23,8 +23,11 @@
 namespace Tycho {
 
 template <int IRR, int ORR>
-struct PyVectorFunction : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, FDiffFwd, FDiffFwd> {
-    using Base = VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, FDiffFwd, FDiffFwd>;
+struct PyVectorFunction
+    : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, DenseDerivativeMode::FDiffFwd,
+                     DenseDerivativeMode::FDiffFwd> {
+    using Base = VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, DenseDerivativeMode::FDiffFwd,
+                                DenseDerivativeMode::FDiffFwd>;
 
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
@@ -74,8 +77,10 @@ struct PyVectorFunction : VectorFunction<PyVectorFunction<IRR, ORR>, IRR, ORR, F
 
 template <int IRR, int ORR>
 struct NumbaVectorFunction
-    : VectorFunction<NumbaVectorFunction<IRR, ORR>, IRR, ORR, FDiffFwd, FDiffFwd> {
-    using Base = VectorFunction<NumbaVectorFunction<IRR, ORR>, IRR, ORR, FDiffFwd, FDiffFwd>;
+    : VectorFunction<NumbaVectorFunction<IRR, ORR>, IRR, ORR, DenseDerivativeMode::FDiffFwd,
+                     DenseDerivativeMode::FDiffFwd> {
+    using Base = VectorFunction<NumbaVectorFunction<IRR, ORR>, IRR, ORR,
+                                DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd>;
 
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
@@ -120,8 +125,6 @@ struct NumbaVectorFunction
 // ── TychoBind<PyVectorFunction>
 // ───────────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
 
@@ -150,8 +153,6 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
 
 // ── TychoBind<NumbaVectorFunction> ───────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,

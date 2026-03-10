@@ -109,10 +109,12 @@ RetType make_dynamic_sum(const std::vector<FuncType> &funcs) {
 //////////////////////////////////////////////////////
 
 template <class Derived, class Func1, class Func2, bool DoDifference>
-struct TwoFunctionSum_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
-                                            SZ_MAX<Func1::ORC, Func2::ORC>::value, Analytic> {
-    using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
-                                SZ_MAX<Func1::ORC, Func2::ORC>::value, Analytic>;
+struct TwoFunctionSum_Impl
+    : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
+                     SZ_MAX<Func1::ORC, Func2::ORC>::value, DenseDerivativeMode::Analytic> {
+    using Base =
+        VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
+                       SZ_MAX<Func1::ORC, Func2::ORC>::value, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func1);

@@ -25,7 +25,7 @@ template <class Derived, class Func1, class Func2>
 struct StackTwoOutputs_Impl;
 
 template <class Func1, class Func2, class... Funcs>
-    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
+    requires MutuallyStackable<Func1, Func2, Funcs...>
 struct StackedOutputs
     : StackTwoOutputs_Impl<StackedOutputs<Func1, Func2, Funcs...>, StackedOutputs<Func1, Func2>,
                            StackedOutputs<Funcs...>> {
@@ -38,7 +38,7 @@ struct StackedOutputs
 };
 
 template <class Func1, class Func2, class Func3>
-    requires Stackable<Func1, Func2> && Stackable<Func1, Func3>
+    requires MutuallyStackable<Func1, Func2, Func3>
 struct StackedOutputs<Func1, Func2, Func3>
     : StackTwoOutputs_Impl<StackedOutputs<Func1, Func2, Func3>, StackedOutputs<Func1, Func2>,
                            Func3> {
@@ -59,7 +59,7 @@ struct StackedOutputs<Func1, Func2>
 };
 
 template <class Func1, class Func2, class... Funcs>
-    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
+    requires MutuallyStackable<Func1, Func2, Funcs...>
 StackedOutputs<Func1, Func2, Funcs...> stack(Func1 f1, Func2 f2, Funcs... fs) {
     return StackedOutputs<Func1, Func2, Funcs...>(f1, f2, fs...);
 }

@@ -94,7 +94,7 @@ struct NestedFunctionSelector<Elements<OR, EL1, ELS...>, Segment<IR, OR, ST>> {
 
 template <class Func1, class Func2, class... Funcs> struct StackedOutputsSelector;
 template <class Func1, class Func2, class... Funcs>
-    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
+    requires MutuallyStackable<Func1, Func2, Funcs...>
 struct StackedOutputs;
 
 template <class Func> struct DynamicStackedOutputs;

@@ -23,8 +23,8 @@
 
 namespace Tycho {
 
-template <class Derived, int IR, int OR, DenseDerivativeModes Jm = DenseDerivativeModes::Analytic,
-          DenseDerivativeModes Hm = DenseDerivativeModes::Analytic>
+template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
+          DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct VectorFunction : DenseDerivatives<Derived, IR, OR, Jm, Hm> {
     using Base = DenseDerivatives<Derived, IR, OR, Jm, Hm>;
     DENSE_FUNCTION_BASE_TYPES(Base)

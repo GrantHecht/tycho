@@ -20,8 +20,6 @@
 namespace Tycho {
 
 template <> struct TychoBind<ModifiedToCartesian> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ModifiedToCartesian>(m, name).def(nb::init<double>());
         Bind::DenseBaseBuild<ModifiedToCartesian>(obj);
@@ -29,8 +27,6 @@ template <> struct TychoBind<ModifiedToCartesian> {
 };
 
 template <> struct TychoBind<CartesianToClassic> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CartesianToClassic>(m, name).def(nb::init<double>());
         Bind::DenseBaseBuild<CartesianToClassic>(obj);

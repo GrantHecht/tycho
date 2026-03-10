@@ -803,8 +803,10 @@ struct InterpTable3D {
     }
 };
 
-struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, Analytic, Analytic> {
-    using Base = VectorFunction<InterpFunction3D, 3, 1, Analytic, Analytic>;
+struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivativeMode::Analytic,
+                                         DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<InterpFunction3D, 3, 1, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     std::shared_ptr<InterpTable3D> tab;

@@ -21,8 +21,6 @@
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
 namespace Tycho {
 template <class Func> struct TychoBind<IOScaled<Func>> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<IOScaled<Func>>(m, name);
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());

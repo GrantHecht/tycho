@@ -319,8 +319,11 @@ struct InterpTable1D {
 };
 
 template <int ORR>
-struct InterpFunction1D : VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic, Analytic> {
-    using Base = VectorFunction<InterpFunction1D<ORR>, 1, ORR, Analytic, Analytic>;
+struct InterpFunction1D
+    : VectorFunction<InterpFunction1D<ORR>, 1, ORR, DenseDerivativeMode::Analytic,
+                     DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<InterpFunction1D<ORR>, 1, ORR, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     std::shared_ptr<InterpTable1D> tab;

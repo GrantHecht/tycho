@@ -22,8 +22,6 @@ namespace Tycho {
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod);
 
 template <> struct TychoBind<CR3BPAD> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CR3BPAD>(m, name).def(nb::init<double>());
         Bind::DenseBaseBuild<CR3BPAD>(obj);
@@ -31,8 +29,6 @@ template <> struct TychoBind<CR3BPAD> {
 };
 
 template <> struct TychoBind<ModifiedDynamicsAD> {
-    using BuildTag = void;
-
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ModifiedDynamicsAD>(m, name).def(nb::init<double>());
         Bind::DenseBaseBuild<ModifiedDynamicsAD>(obj);

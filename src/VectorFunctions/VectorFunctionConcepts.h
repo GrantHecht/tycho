@@ -77,4 +77,28 @@ concept Stackable = VFSized<F1> && VFSized<F2> && requires {
              detail::VectorFunctionType<F1>::IRC == detail::VectorFunctionType<F2>::IRC);
 };
 
+namespace detail {
+
+// Checks that Head is Stackable with every type in Tail.
+template <class Head, class... Tail>
+concept StackableWithAll = (Stackable<Head, Tail> && ...);
+
+// Recursive helper: checks all N*(N-1)/2 upper-triangle pairs.
+template <class...>
+struct AllPairsStackableHelper : std::true_type {};
+
+template <class Head, class... Tail>
+struct AllPairsStackableHelper<Head, Tail...>
+    : std::bool_constant<StackableWithAll<Head, Tail...> &&
+                         AllPairsStackableHelper<Tail...>::value> {};
+
+} // namespace detail
+
+// Satisfied iff every pair of types in Fs... satisfies Stackable.
+// Uses the transitivity of IRC equality for the static-size case, but
+// explicitly checks all pairs to close the dynamic-IRC edge case where
+// F1::IRC==-1 could mask an incompatible static F2::IRC vs F3::IRC.
+template <class... Fs>
+concept MutuallyStackable = detail::AllPairsStackableHelper<Fs...>::value;
+
 } // namespace Tycho
