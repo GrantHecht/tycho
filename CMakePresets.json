@@ -7,6 +7,22 @@
   },
   "configurePresets": [
     {
+      "name": "macos-llvm-release",
+      "displayName": "macOS LLVM Release",
+      "description": "Release build using Homebrew LLVM on this Mac, matching config_and_build.sh",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "installDir": "${sourceDir}/build/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+        "CMAKE_C_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang",
+        "CMAKE_CXX_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang++",
+        "Python_EXECUTABLE": "/opt/miniconda3/envs/tycho/bin/python",
+        "PYTHON_LOCAL_INSTALL_DIR": "/opt/miniconda3/envs/tycho/lib/python3.13/site-packages"
+      }
+    },
+    {
       "name": "x64-Clang-Release",
       "displayName": "x64 Clang Release",
       "description": "Release build using Clang compiler on Windows x64",
@@ -36,6 +52,15 @@
   ],
   "buildPresets": [
     {
+      "name": "macos-llvm-release",
+      "displayName": "macOS LLVM Release Build",
+      "configurePreset": "macos-llvm-release",
+      "nativeToolOptions": [
+        "-j6",
+        "-v"
+      ]
+    },
+    {
       "name": "x64-Clang-Release",
       "displayName": "x64 Clang Release Build",
       "configurePreset": "x64-Clang-Release",
@@ -46,6 +71,14 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "macos-llvm-release",
+      "displayName": "macOS LLVM Release Test",
+      "configurePreset": "macos-llvm-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
     {
       "name": "x64-Clang-Release",
       "displayName": "x64 Clang Release Test",

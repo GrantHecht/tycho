@@ -251,11 +251,10 @@ struct KeperPropagator_Impl {
     }
 };
 
-struct KeplerPropagator
-    : VectorFunction<KeplerPropagator, 7, 6, Tycho::DenseDerivativeModes::Analytic,
-                     Tycho::DenseDerivativeModes::Analytic> {
-    using Base = VectorFunction<KeplerPropagator, 7, 6, Tycho::DenseDerivativeModes::Analytic,
-                                Tycho::DenseDerivativeModes::Analytic>;
+struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
+                                         DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
 

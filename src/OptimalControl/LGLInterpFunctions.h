@@ -20,8 +20,10 @@
 namespace Tycho {
 
 template <int OR>
-struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Analytic> {
-    using Base = VectorFunction<InterpFunction<OR>, 1, OR, Analytic, Analytic>;
+struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
+                                       DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     static constexpr int TempSize = SZ_SUM<OR, 1>::value;

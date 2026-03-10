@@ -24,8 +24,8 @@ namespace Tycho {
 template <class BaseType, class Derived, int _XV, int _UV, int _PV> struct ODEBase;
 
 template <class Derived, int _XV, int _UV, int _PV,
-          DenseDerivativeModes Jm = DenseDerivativeModes::Analytic,
-          DenseDerivativeModes Hm = DenseDerivativeModes::Analytic>
+          DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
+          DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct ODE : ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _XV, Jm, Hm>, Derived,
                      _XV, _UV, _PV> {
     using Base = ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _XV, Jm, Hm>,

@@ -119,7 +119,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         }
     }
 
-    //! Analytic second derivative
+    //! DenseDerivativeMode::Analytic second derivative
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

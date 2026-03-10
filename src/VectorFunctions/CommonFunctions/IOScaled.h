@@ -20,8 +20,10 @@
 namespace Tycho {
 
 template <class Func>
-struct IOScaled : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic> {
-    using Base = VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, Analytic>;
+struct IOScaled
+    : VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
+    using Base =
+        VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;

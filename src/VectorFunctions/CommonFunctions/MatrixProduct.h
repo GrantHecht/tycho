@@ -32,10 +32,11 @@ struct MatrixFunctionProduct
 template <class Derived, class MatFunc1, class MatFunc2>
 struct MatrixFunctionProduct_Impl
     : VectorFunction<Derived, SZ_MAX<MatFunc1::IRC, MatFunc2::IRC>::value,
-                     SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value, Analytic, Analytic> {
-    using Base =
-        VectorFunction<Derived, SZ_MAX<MatFunc1::IRC, MatFunc2::IRC>::value,
-                       SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value, Analytic, Analytic>;
+                     SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
+                     DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, SZ_MAX<MatFunc1::IRC, MatFunc2::IRC>::value,
+                                SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
+                                DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
 
     static const int M1Rows = MatFunc1::MROWS;
     static const int M1Cols_M2Rows = MatFunc2::MROWS;

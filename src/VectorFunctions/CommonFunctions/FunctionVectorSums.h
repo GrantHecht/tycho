@@ -34,8 +34,9 @@ struct VectorMinusFunction : FunctionVectorSum_Impl<VectorMinusFunction<Func>, F
 };
 
 template <class Derived, class Func, bool NegateFunction>
-struct FunctionVectorSum_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, Analytic> {
-    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, Analytic>;
+struct FunctionVectorSum_Impl
+    : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;

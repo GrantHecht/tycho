@@ -21,10 +21,12 @@ namespace Tycho {
 
 template <int Size, int Major>
 struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
-                                      SZ_PROD<Size, Size>::value, Analytic, Analytic> {
+                                      SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
+                                      DenseDerivativeMode::Analytic> {
 
     using Base = VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
-                                SZ_PROD<Size, Size>::value, Analytic, Analytic>;
+                                SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
     static const bool IsVectorizable = false;
     template <class Scalar> using Mat = Eigen::Matrix<Scalar, Size, Size>;

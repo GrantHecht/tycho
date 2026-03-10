@@ -21,10 +21,11 @@ namespace Tycho {
 
 template <int IR, int OR, class Func, class Data = std::integral_constant<bool, false>>
 struct LambdaFunction
-    : VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR, AutodiffFwd, AutodiffFwd>,
+    : VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR, DenseDerivativeMode::AutodiffFwd,
+                     DenseDerivativeMode::AutodiffFwd>,
       Data {
-    using Base =
-        VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR, AutodiffFwd, AutodiffFwd>;
+    using Base = VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR,
+                                DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base);
     using Base::compute;
 
@@ -48,10 +49,11 @@ struct LambdaFunction
 template <int IR, int OR, class Func, class JacFunc,
           class Data = std::integral_constant<bool, false>>
 struct LambdaFunction2
-    : VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR, Analytic, AutodiffFwd>,
+    : VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR,
+                     DenseDerivativeMode::Analytic, DenseDerivativeMode::AutodiffFwd>,
       Data {
-    using Base =
-        VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR, Analytic, AutodiffFwd>;
+    using Base = VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR,
+                                DenseDerivativeMode::Analytic, DenseDerivativeMode::AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base);
     using Base::compute;
 

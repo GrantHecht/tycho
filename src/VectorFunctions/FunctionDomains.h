@@ -108,7 +108,7 @@ template <class T, class... Ts> struct CompositeDomain<-1, T, Ts...> {
 };
 
 template <int IR> struct DomainHolder {
-    DomainMatrix input_domain() const {
+    [[nodiscard]] DomainMatrix input_domain() const {
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = IR;
@@ -120,7 +120,7 @@ template <int IR> struct DomainHolder {
 template <> struct DomainHolder<-1> {
     DomainMatrix SubDomains;
 
-    DomainMatrix input_domain() const { return SubDomains; }
+    [[nodiscard]] DomainMatrix input_domain() const { return SubDomains; }
     void set_input_domain(int irr, const std::vector<DomainMatrix> &sub_domains) {
         if (sub_domains.size() == 1) {
             this->SubDomains = sub_domains[0];

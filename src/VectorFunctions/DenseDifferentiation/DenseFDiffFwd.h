@@ -25,7 +25,7 @@ namespace Tycho {
   \tparam OR Output Rows
 */
 template <class Derived, int IR, int OR>
-struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::FDiffFwd>
+struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
@@ -85,8 +85,8 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::FDiffFwd>
   \tparam OR Output Rows
   \tparam JMode Jacobian Mode (enumerator)
 */
-template <class Derived, int IR, int OR, int JMode>
-struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeModes::FDiffFwd>
+template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
+struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiffFwd>
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     DENSE_FUNCTION_BASE_TYPES(Base)

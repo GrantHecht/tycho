@@ -2943,8 +2943,10 @@ struct InterpTable4D {
     }
 };
 
-struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, Analytic, Analytic> {
-    using Base = VectorFunction<InterpFunction4D, 4, 1, Analytic, Analytic>;
+struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, DenseDerivativeMode::Analytic,
+                                         DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<InterpFunction4D, 4, 1, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     std::shared_ptr<InterpTable4D> tab;

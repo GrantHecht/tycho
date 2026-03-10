@@ -20,8 +20,8 @@
 namespace Tycho {
 
 template <class Derived, class Func, int IR, int OR>
-struct FunctionHolder : VectorFunction<Derived, IR, OR, Analytic> {
-    using Base = VectorFunction<Derived, IR, OR, Analytic>;
+struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<Derived, IR, OR, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;

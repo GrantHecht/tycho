@@ -23,8 +23,10 @@
 
 namespace Tycho {
 
-struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, AutodiffFwd, AutodiffFwd> {
-    using Base = VectorFunction<CR3BPAD, 7, 6, AutodiffFwd, AutodiffFwd>;
+struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
+                                DenseDerivativeMode::AutodiffFwd> {
+    using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
+                                DenseDerivativeMode::AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     double mu = 0.0123;
@@ -59,8 +61,11 @@ struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, AutodiffFwd, AutodiffFwd> {
     }
 };
 
-struct ModifiedDynamicsAD : VectorFunction<ModifiedDynamicsAD, 9, 6, AutodiffFwd, AutodiffFwd> {
-    using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, AutodiffFwd, AutodiffFwd>;
+struct ModifiedDynamicsAD
+    : VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
+                     DenseDerivativeMode::AutodiffFwd> {
+    using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
+                                DenseDerivativeMode::AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     double mu = 1.00;

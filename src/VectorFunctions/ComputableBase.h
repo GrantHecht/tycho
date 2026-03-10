@@ -87,7 +87,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
 
     void enable_vectorization(bool b) const { this->EnableVectorization = b; }
 
-    constexpr bool is_linear() const { return Derived::IsLinearFunction; }
+    [[nodiscard]] constexpr bool is_linear() const { return Derived::IsLinearFunction; }
 
     void setInputRows(int inputrows) {
         if constexpr (IR < 0) {
@@ -103,14 +103,14 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
         this->setInputRows(inputrows);
         this->setOutputRows(outputrows);
     }
-    inline int IRows() const {
+    [[nodiscard]] inline int IRows() const {
         if constexpr (IR < 0) {
             return this->InputRows;
         } else {
             return IR;
         }
     }
-    inline int ORows() const {
+    [[nodiscard]] inline int ORows() const {
         if constexpr (OR < 0) {
             return this->OutputRows;
         } else {
@@ -118,7 +118,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
         }
     }
 
-    bool thread_safe() const { return true; }
+    [[nodiscard]] bool thread_safe() const { return true; }
     //////////////////////////////////////////////////////////////////////////////
     ComputableBase() {}
     ComputableBase(int inputrows, int outputrows) { this->setIORows(inputrows, outputrows); }
@@ -134,8 +134,8 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     template <class InType, class OutType>
     inline void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        if constexpr (!Derived::IsVectorizable) {
-            if constexpr (Is_SuperScalar<Scalar>::value) {
+        if constexpr (!Vectorizable<Derived>) {
+            if constexpr (IsSuperScalar<Scalar>) {
                 VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
                 typedef typename Scalar::Scalar RealScalar;
@@ -281,7 +281,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
         };
 
         // Only try vectorized impl if Derived allows and it is enabled
-        if constexpr (Derived::IsVectorizable) {
+        if constexpr (Vectorizable<Derived>) {
             if (this->derived().EnableVectorization) {
                 VectorImpl();
             } else {

@@ -422,8 +422,10 @@ struct InterpTable2D {
     }
 };
 
-struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, Analytic, Analytic> {
-    using Base = VectorFunction<InterpFunction2D, 2, 1, Analytic, Analytic>;
+struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, DenseDerivativeMode::Analytic,
+                                         DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<InterpFunction2D, 2, 1, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     std::shared_ptr<InterpTable2D> tab;

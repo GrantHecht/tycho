@@ -25,7 +25,7 @@ namespace Tycho {
   \tparam OR Output Rows
 */
 template <class Derived, int IR, int OR>
-struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::FDiffCentArray>
+struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArray>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)

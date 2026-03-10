@@ -78,15 +78,21 @@ struct FunctionRegistry {
     template <class Derived> void Register() {
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
-    template <class Derived> void Build_Register(nb::module_ &m) {
+    template <class Derived>
+        requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
+    void Build_Register(nb::module_ &m) {
         TychoBind<Derived>::Build(m);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
-    template <class Derived> void Build_Register(const char *name) {
+    template <class Derived>
+        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+    void Build_Register(const char *name) {
         TychoBind<Derived>::Build(this->mod, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
-    template <class Derived> void Build_Register(nb::module_ &m, const char *name) {
+    template <class Derived>
+        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+    void Build_Register(nb::module_ &m, const char *name) {
         TychoBind<Derived>::Build(m, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
