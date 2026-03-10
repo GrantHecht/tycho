@@ -15,13 +15,17 @@
 
 #pragma once
 
+#include "VectorFunctionConcepts.h"
 #include "VectorFunction.h"
 
 namespace Tycho {
 
-template <class Derived, class Func1, class Func2> struct StackTwoOutputs_Impl;
+template <class Derived, class Func1, class Func2>
+    requires Stackable<Func1, Func2>
+struct StackTwoOutputs_Impl;
 
 template <class Func1, class Func2, class... Funcs>
+    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
 struct StackedOutputs
     : StackTwoOutputs_Impl<StackedOutputs<Func1, Func2, Funcs...>, StackedOutputs<Func1, Func2>,
                            StackedOutputs<Funcs...>> {
@@ -34,6 +38,7 @@ struct StackedOutputs
 };
 
 template <class Func1, class Func2, class Func3>
+    requires Stackable<Func1, Func2> && Stackable<Func1, Func3>
 struct StackedOutputs<Func1, Func2, Func3>
     : StackTwoOutputs_Impl<StackedOutputs<Func1, Func2, Func3>, StackedOutputs<Func1, Func2>,
                            Func3> {
@@ -46,6 +51,7 @@ struct StackedOutputs<Func1, Func2, Func3>
 };
 
 template <class Func1, class Func2>
+    requires Stackable<Func1, Func2>
 struct StackedOutputs<Func1, Func2>
     : StackTwoOutputs_Impl<StackedOutputs<Func1, Func2>, Func1, Func2> {
     using Base = StackTwoOutputs_Impl<StackedOutputs<Func1, Func2>, Func1, Func2>;
@@ -53,6 +59,7 @@ struct StackedOutputs<Func1, Func2>
 };
 
 template <class Func1, class Func2, class... Funcs>
+    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
 StackedOutputs<Func1, Func2, Funcs...> stack(Func1 f1, Func2 f2, Funcs... fs) {
     return StackedOutputs<Func1, Func2, Funcs...>(f1, f2, fs...);
 }
@@ -85,6 +92,7 @@ RetType make_dynamic_stack(const std::vector<FuncType> &funcs) {
 }
 
 template <class Derived, class Func1, class Func2>
+    requires Stackable<Func1, Func2>
 struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
                                              SZ_SUM<Func1::ORC, Func2::ORC>::value> {
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,

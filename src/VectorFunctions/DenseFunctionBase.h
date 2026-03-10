@@ -93,10 +93,12 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <class Func, int FuncIRC>
+        requires Composable<Func, Derived>
     auto operator()(const DenseFunctionBase<Func, FuncIRC, IR> &f) const {
         return EVALOP<Func>::make_nested(this->derived(), f.derived());
     }
     template <class Func, int FuncIRC, int FuncORC>
+        requires Composable<Func, Derived>
     auto eval(const DenseFunctionBase<Func, FuncIRC, FuncORC> &f) const {
         return EVALOP<Func>::make_nested(this->derived(), f.derived());
     }

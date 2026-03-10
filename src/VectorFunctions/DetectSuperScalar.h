@@ -14,12 +14,11 @@
 // =============================================================================
 
 #pragma once
-#include "pch.h"
+
+#include "VectorFunctionConcepts.h"
+
 namespace Tycho {
 
-template <class T> struct Is_SuperScalar : std::false_type {};
-
-template <class Scalar, int Sz>
-struct Is_SuperScalar<SuperScalarType<Scalar, Sz>> : std::true_type {};
+template <class T> struct Is_SuperScalar : std::bool_constant<IsSuperScalar<T>> {};
 
 } // namespace Tycho

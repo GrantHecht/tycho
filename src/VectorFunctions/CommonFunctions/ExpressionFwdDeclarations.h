@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "../VectorFunctionConcepts.h"
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
@@ -92,7 +93,9 @@ struct NestedFunctionSelector<Elements<OR, EL1, ELS...>, Segment<IR, OR, ST>> {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 template <class Func1, class Func2, class... Funcs> struct StackedOutputsSelector;
-template <class Func1, class Func2, class... Funcs> struct StackedOutputs;
+template <class Func1, class Func2, class... Funcs>
+    requires(Stackable<Func1, Func2> && ... && Stackable<Func1, Funcs>)
+struct StackedOutputs;
 
 template <class Func> struct DynamicStackedOutputs;
 

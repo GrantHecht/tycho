@@ -91,6 +91,8 @@ template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
 // ── Constant
 // ──────────────────────────────────────────────────────────────────────────────────────
 template <int IR, int OR> struct TychoBind<Constant<IR, OR>> {
+    using BuildTag = void;
+
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Constant<IR, OR>>(m, name);
         obj.def(nb::init<int, Eigen::VectorXd>());
@@ -160,6 +162,8 @@ template <class Func, int IRC, int ORC> struct TychoBind<ParsedInput<Func, IRC, 
 // ── Arguments
 // ─────────────────────────────────────────────────────────────────────────────────────
 template <int IR_OR> struct TychoBind<Arguments<IR_OR>> {
+    using BuildTag = void;
+
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Arguments<IR_OR>>(m, name);
         obj.def(nb::init<int>());
@@ -179,6 +183,8 @@ template <int IR_OR> struct TychoBind<Arguments<IR_OR>> {
 // ── Segment
 // ───────────────────────────────────────────────────────────────────────────────────────
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
+    using BuildTag = void;
+
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
         obj.def(nb::init<int, int, int>());

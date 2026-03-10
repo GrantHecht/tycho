@@ -23,8 +23,10 @@
 
 namespace Tycho {
 
+using enum DenseDerivativeModes;
+
 template <class Derived, int IR, int OR>
-struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::AutodiffFwd>
+struct DenseFirstDerivatives<Derived, IR, OR, AutodiffFwd>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base);
@@ -65,7 +67,7 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeModes::AutodiffFwd>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Derived, int IR, int OR, int JMode>
-struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeModes::AutodiffFwd>
+struct DenseSecondDerivatives<Derived, IR, OR, JMode, AutodiffFwd>
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     DENSE_FUNCTION_BASE_TYPES(Base);
