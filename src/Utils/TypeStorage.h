@@ -51,6 +51,11 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
     template <typename Model, typename T> void emplace(T obj) {
         destroy();
         if constexpr (sizeof(Model) <= SBO_CAP && alignof(Model) <= SBO_ALIGN) {
+            // Inline Models are memcpy-moved (see move ctor below), so they must
+            // be trivially relocatable (no self-referential pointers). All current
+            // Models wrap value-semantic VectorFunction types (Eigen matrices +
+            // primitives) and satisfy this. If a non-relocatable Model is ever
+            // stored here, the move path must be changed to virtual dispatch.
             ::new (static_cast<void *>(buf_)) Model(std::move(obj));
             kind_ = Kind::Inline;
         } else {
@@ -66,7 +71,11 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         }
     }
 
-    // Move: memcpy for inline (vtable is stable), pointer steal for heap
+    // Move: memcpy for inline, pointer steal for heap.
+    // SAFETY: memcpy-move is valid because all stored Models are trivially
+    // relocatable (no self-referential pointers). See the comment in
+    // emplace(). If a non-relocatable Model is ever needed, replace this
+    // path with virtual move_into() dispatch.
     TypeStorage(TypeStorage &&o) noexcept : kind_(Kind::Empty) {
         if (o.kind_ == Kind::Inline) {
             std::memcpy(buf_, o.buf_, SBO_CAP);
@@ -111,16 +120,30 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
 
     [[nodiscard]] bool empty() const noexcept { return kind_ == Kind::Empty; }
 
-    C &get() const noexcept {
+    const C &get() const noexcept {
         if (kind_ == Kind::Inline) {
-            return *const_cast<C *>(inline_ptr());
+            return *inline_ptr();
         }
         return *ptr_;
     }
 
-    C *get_ptr() const noexcept {
+    C &get() noexcept {
         if (kind_ == Kind::Inline) {
-            return const_cast<C *>(inline_ptr());
+            return *inline_ptr();
+        }
+        return *ptr_;
+    }
+
+    const C *get_ptr() const noexcept {
+        if (kind_ == Kind::Inline) {
+            return inline_ptr();
+        }
+        return ptr_;
+    }
+
+    C *get_ptr() noexcept {
+        if (kind_ == Kind::Inline) {
+            return inline_ptr();
         }
         return ptr_;
     }

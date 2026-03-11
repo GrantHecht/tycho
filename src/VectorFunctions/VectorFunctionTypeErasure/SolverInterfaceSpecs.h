@@ -102,7 +102,6 @@ struct SolverObjectiveSpec {
 // ==========================================================================
 
 struct ConstraintBase : SolverConstraintSpec::Concept, SizableSpec::Concept {
-    virtual ~ConstraintBase() = default;
     virtual void clone_into(TypeStorage<ConstraintBase> &) const = 0;
 };
 
@@ -250,7 +249,6 @@ struct ConstraintInterface {
 struct ObjectiveBase : SolverConstraintSpec::Concept,
                        SolverObjectiveSpec::Concept,
                        SizableSpec::Concept {
-    virtual ~ObjectiveBase() = default;
     virtual void clone_into(TypeStorage<ObjectiveBase> &) const = 0;
 };
 
