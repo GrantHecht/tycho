@@ -11,64 +11,41 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - PR 9: Replaced rubber_types with TypeStorage<ConditionalBase<IR>>
 // =============================================================================
 
 #pragma once
+#include "ConditionalTypeErasure.h"
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 #include "pch.h"
 
 namespace Tycho {
 
-template <int IR> struct ConditionalSpec {
+template <int IR> struct GenericConditional {
+    using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    template <class Scalar> using Input = Eigen::Matrix<Scalar, IR, 1>;
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
-    using InType = Eigen::Ref<const Input<double>>;
+    static const bool IsConditional = true;
+    static const int IRC = IR;
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    struct Concept { // abstract base class for model.
-        virtual ~Concept() = default;
-        // Your (internal) interface goes here.
-        virtual std::string name() const = 0;
-        virtual int IRows() const = 0;
-        virtual bool compute(ConstVectorBaseRef<InType> x) const = 0;
-    };
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    template <class Holder> struct Model : public Holder, public virtual Concept {
-        using Holder::Holder;
-        // Pass through to encapsulated value.
-        virtual std::string name() const override { return rubber_types::model_get(this).name(); }
-        virtual int IRows() const override { return rubber_types::model_get(*this).IRows(); }
+    TypeStorage<ConditionalBase<IR>> storage;
 
-        virtual bool compute(ConstVectorBaseRef<InType> x) const override {
-            return rubber_types::model_get(this).compute(x);
-        }
-    };
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    template <class Container> struct ExternalInterface : public Container {
-        using Container::Container;
-        static const bool IsConditional = true;
-        static const bool IRC = IR;
+    GenericConditional() = default;
 
-        // Define the external interface. Should match encapsulated type.
-        std::string name() const { return rubber_types::interface_get(this).name(); }
-        int IRows() const { return rubber_types::interface_get(*this).IRows(); }
+    template <class T> GenericConditional(const T &t) {
+        storage.template emplace<ConditionalModel<IR, std::decay_t<T>>>(t);
+    }
 
-        template <class InTypeT> bool compute(ConstVectorBaseRef<InTypeT> x) const {
-            InType xt(x.derived());
-            return rubber_types::interface_get(this).compute(xt);
-        }
-    };
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-};
+    GenericConditional(const GenericConditional &) = default;
+    GenericConditional(GenericConditional &&) noexcept = default;
+    GenericConditional &operator=(const GenericConditional &) = default;
+    GenericConditional &operator=(GenericConditional &&) noexcept = default;
 
-template <int IR> struct GenericConditional : rubber_types::TypeErasure<ConditionalSpec<IR>> {
-    using Base = rubber_types::TypeErasure<ConditionalSpec<IR>>;
+    std::string name() const { return storage.get().name(); }
+    int IRows() const { return storage.get().IRows(); }
 
-    GenericConditional() {}
-    template <class T> GenericConditional(const T &t) : Base(t) {}
-    GenericConditional(const GenericConditional<IR> &obj) {
-        this->reset_container(obj.get_container());
+    template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
+        InType xt(x.derived());
+        return storage.get().compute(xt);
     }
 };
 

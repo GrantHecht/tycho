@@ -84,8 +84,7 @@ template <class Head, class... Tail>
 concept StackableWithAll = (Stackable<Head, Tail> && ...);
 
 // Recursive helper: checks all N*(N-1)/2 upper-triangle pairs.
-template <class...>
-struct AllPairsStackableHelper : std::true_type {};
+template <class...> struct AllPairsStackableHelper : std::true_type {};
 
 template <class Head, class... Tail>
 struct AllPairsStackableHelper<Head, Tail...>

@@ -42,8 +42,8 @@
 #include "Utils/ThreadPool.h"
 #include "Utils/Timer.h"
 #include "Utils/TupleIterator.h"
-#include "Utils/TypeErasure.h"
 #include "Utils/TypeName.h"
+#include "Utils/TypeStorage.h"
 #include "Utils/fmtlib.h"
 
 // Python binding headers live in src/Bindings/pch_nb.h and are baked into the

@@ -24,7 +24,6 @@
 #include "SizingHelpers.h"
 #include "ThreadPool.h"
 #include "TupleIterator.h"
-#include "TypeErasure.h"
 #include "TypeName.h"
 
 namespace Tycho {} // namespace Tycho

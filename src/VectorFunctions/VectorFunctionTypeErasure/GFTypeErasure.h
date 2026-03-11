@@ -12,6 +12,9 @@
 //      count increment), matching the old rubber_types performance model.
 //   3. Single virtual dispatch for solver calls — ConstraintInterface and
 //      ObjectiveInterface store T directly via pack_into, not the GFTE wrapper.
+//      PR 9: pack_into methods now call ci.storage.emplace / oi.storage.emplace
+//      directly, bypassing any ConstraintInterface/ObjectiveInterface constructor
+//      overhead.
 // =============================================================================
 
 #pragma once
@@ -280,7 +283,7 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
     void clone_into(GFStorage<IR, OR> &s) const override;
     void clone_into_dynamic(GFStorage<-1, -1> &s) const override;
     void pack_into_constraint_interface(ConstraintInterface &ci) const override {
-        ci = ConstraintInterface(this->data_);
+        ci.storage.emplace<ConstraintModel<T>>(this->data_);
     }
 };
 
@@ -327,7 +330,7 @@ template <int IR, GFStorable<IR, 1> T> struct GFModel<IR, 1, T> final : GFModelC
     // ---- GFConcept<IR,1>: objective pack operation ----
 
     void pack_into_objective_interface(ObjectiveInterface &oi) const override {
-        oi = ObjectiveInterface(this->data_);
+        oi.storage.emplace<ObjectiveModel<T>>(this->data_);
     }
 };
 
