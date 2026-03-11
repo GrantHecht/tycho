@@ -7,11 +7,11 @@
 // Original Developer: James B. Pezent
 //
 // Implements the SolverFunctionBase class which is the base class to
-// ConstraintFunction and ObjectiveFunction. Holds an Constraint/ObjectiveInterface type erasure class
-// and SolverIndexingData struct. Defines methods for the function to request and reserve KKT and RHS
-// space from the solver, and passes relevant arguments to the underlying type erased function or index
-// data structure. The two Derived classes ( Constraint/ObjectiveInterface) then define the rest of the
-// interface to the type-erased functions constraints and objective methods.
+// ConstraintFunction and ObjectiveFunction. Holds an Constraint/ObjectiveInterface type erasure
+// class and SolverIndexingData struct. Defines methods for the function to request and reserve KKT
+// and RHS space from the solver, and passes relevant arguments to the underlying type erased
+// function or index data structure. The two Derived classes ( Constraint/ObjectiveInterface) then
+// define the rest of the interface to the type-erased functions constraints and objective methods.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):

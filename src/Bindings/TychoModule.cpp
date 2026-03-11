@@ -32,7 +32,6 @@ void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace Tycho
 
 using namespace Tycho;
-using namespace rubber_types;
 
 ////////////////////////////////////////////////////////////////////////////
 

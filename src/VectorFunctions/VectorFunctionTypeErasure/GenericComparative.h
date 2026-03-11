@@ -11,23 +11,46 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - PR 9: Replaced rubber_types with TypeStorage<ConditionalBase<IR>>
 // =============================================================================
 
 #pragma once
 
+#include "ConditionalTypeErasure.h"
 #include "GenericConditional.h"
 #include "VectorFunctions/CommonFunctions/CommonFunctions.h"
 #include "pch.h"
 
 namespace Tycho {
 
-template <int IR> struct GenericComparative : rubber_types::TypeErasure<ConditionalSpec<IR>> {
-    using Base = rubber_types::TypeErasure<ConditionalSpec<IR>>;
+// GenericComparative<IR> has the same interface as GenericConditional<IR>
+// but is a distinct type so that Python bindings register "Comparative"
+// and "Conditional" as separate nanobind classes.
+template <int IR> struct GenericComparative {
+    using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    GenericComparative() {}
-    template <class T> GenericComparative(const T &t) : Base(t) {}
-    GenericComparative(const GenericComparative<IR> &obj) {
-        this->reset_container(obj.get_container());
+    static const bool IsConditional = true;
+    static const int IRC = IR;
+
+    TypeStorage<ConditionalBase<IR>> storage;
+
+    GenericComparative() = default;
+
+    template <class T> GenericComparative(const T &t) {
+        storage.template emplace<ConditionalModel<IR, std::decay_t<T>>>(t);
+    }
+
+    GenericComparative(const GenericComparative &) = default;
+    GenericComparative(GenericComparative &&) noexcept = default;
+    GenericComparative &operator=(const GenericComparative &) = default;
+    GenericComparative &operator=(GenericComparative &&) noexcept = default;
+
+    std::string name() const { return storage.get().name(); }
+    int IRows() const { return storage.get().IRows(); }
+
+    template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
+        InType xt(x.derived());
+        return storage.get().compute(xt);
     }
 };
 

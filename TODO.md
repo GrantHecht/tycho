@@ -11,6 +11,8 @@
 | PR 5 | Add per-file provenance headers to all ASSET-derived source files | **DONE** (merged) |
 | PR 6 | Type erasure refactor (flat vtable + C++20 bump)                  | **DONE** (merged) |
 | PR 7 | Fix GFStorage performance regression (shared_ptr)                 | **DONE** (merged) |
+| PR 8 | C++20 concept adoption in the CRTP hierarchy                      | **DONE** (implemented) |
+| PR 9 | Full rubber_types elimination                                      | **DONE** (implemented) |
 
 ### PR 6+7 Summary
 
@@ -36,11 +38,12 @@ GFStorage<IR,OR>
 
 ---
 
-> **PR 8 and PR 9 are independent** — they can be implemented in either order or in parallel.
-> PR 9 (rubber_types elimination) has a clearer definition of done and removes a dependency.
-> PR 8 (concepts) is a quality-of-life improvement with no runtime behavior change.
+> **PR 8 is complete** — implemented as specified below with no runtime behavior change.
+> **PR 9 is complete** — rubber_types fully eliminated; `TypeErasure.h` and `DeepCopySpecs.h` deleted.
 
 ## PR 8 — C++20 Concept Adoption in the CRTP Hierarchy
+
+**Status:** **DONE** (implemented)
 
 ### Goal
 
@@ -142,6 +145,10 @@ solver interfaces are constructed once per solve setup and stored in vectors.
 
 General-purpose SBO container with value semantics. Replaces `rubber_types::TypeErasure` for
 all remaining use sites. GFStorage does NOT use this (it keeps shared_ptr).
+
+`TypeStorage` is the canonical value-semantic type erasure container going forward — any future
+use site that needs polymorphism without heap-allocation overhead should reach for this rather than
+re-implementing the pattern.
 
 **Convention:** The base class `C` must declare
 `virtual void clone_into(TypeStorage<C, SBO_CAP>&) const = 0`. Each use site defines its own
@@ -309,8 +316,10 @@ only `SizableSpec` struct and `Concept`.
 ```bash
 git rm src/Utils/TypeErasure.h
 git rm src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h
-git rm notices/rubber_types-mit.txt
 ```
+
+> **Note:** `notices/rubber_types-mit.txt` is **not** deleted. CLAUDE.md prohibits deleting files
+> under `notices/`. The notice stays even after the dependency is removed.
 
 ---
 
@@ -322,7 +331,6 @@ git rm notices/rubber_types-mit.txt
 | `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h` | **new**                                      |
 | `src/Utils/TypeErasure.h`                                                | **deleted**                                  |
 | `src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h`          | **deleted**                                  |
-| `notices/rubber_types-mit.txt`                                           | **deleted**                                  |
 | `src/pch.h`                                                              | Swap TypeErasure.h → TypeStorage.h           |
 | `src/Utils/Tycho_Utils.h`                                                | Remove TypeErasure.h include                 |
 | `src/VectorFunctions/VectorFunctionTypeErasure/GFTypeErasure.h`          | Update pack_into_* bodies                    |
@@ -331,12 +339,13 @@ git rm notices/rubber_types-mit.txt
 | `src/VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h`   | Full migration + cleanup                     |
 | `src/VectorFunctions/VectorFunctionTypeErasure/DenseFunctionSpecs.h`     | Strip dead Model/ExternalInterface           |
 | `src/VectorFunctions/VectorFunctionTypeErasure/SizingSpecs.h`            | Strip dead Model/ExternalInterface           |
+| `src/Bindings/TychoModule.cpp`                                           | Remove `using namespace rubber_types;`       |
 
 ### Verification
 
 - `ninja -j6 all` — clean build, no new warnings
 - `python run_examples.py` — 38/38 pass
 - `brachistochrone_cpp` — "Optimal Solution Found"
-- `grep -r "rubber_types" src/` — zero matches
+- `grep -r "rubber_types" src/` — zero matches (only `notices/rubber_types-mit.txt` remains)
 - `grep -r "TypeErasure.h" src/` — zero matches
 - `grep -r "DeepCopySpecs" src/` — zero matches

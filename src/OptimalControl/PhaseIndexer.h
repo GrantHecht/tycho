@@ -13,7 +13,6 @@
 //   - pybind11 / pybind11 header references removed
 // =============================================================================
 
-
 #pragma once
 
 #include "ODESizes.h"
