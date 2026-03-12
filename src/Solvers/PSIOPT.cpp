@@ -619,18 +619,19 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
 
         if (this->ReturnBest) {
             double critval;
-            if (this->BestCriteria == "ECons" || this->BestCriteria == "ECon") {
+            switch (this->BestCriteria) {
+            case BestCriteriaModes::ECONS:
                 critval = iters.back().EConInf;
-            } else if (this->BestCriteria == "ICons" || this->BestCriteria == "ICon") {
+                break;
+            case BestCriteriaModes::ICONS:
                 critval = iters.back().IConInf;
-            } else if (this->BestCriteria == "KKT") {
+                break;
+            case BestCriteriaModes::KKT:
                 critval = iters.back().KKTInf;
-            } else if (this->BestCriteria == "Obj" || this->BestCriteria == "Prim Obj") {
+                break;
+            case BestCriteriaModes::OBJ:
                 critval = iters.back().PrimObj;
-            } else {
-                throw std::invalid_argument(fmt::format(
-                    "Unrecognized criteria, {0:}, for selecting best solution to return.",
-                    this->BestCriteria));
+                break;
             }
             if (critval <= BestCriteriaVal || i == 0) {
                 BestCriteriaVal = critval;

@@ -259,11 +259,11 @@ if __name__ == "__main__":
     phase.optimizer.EContol = 1.0e-8  # Set EContol at least as tight as MeshTol
 
     # The phase's default stepsizes work well for this problem, but you might need to modify for another!!
-    phase.setMeshErrorEstimator("integrator")
+    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     ## If all you care about is how close the resintegrated solution is the the final state you can use this
     ## Recomended using LGL5 or LGL7 for endtoend tolerances tighter than 1.0e-6,
-    phase.setMeshErrorCriteria("endtoend")
+    phase.setMeshErrorCriteria(oc.MeshErrorAggregation.ENDTOEND)
 
     ## When using endtoend, you might need to up the MeshErrFactor, esp for low order methods
     phase.setMeshErrFactor(100.0)  # defaults to 10

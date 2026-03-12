@@ -48,6 +48,7 @@ struct PSIOPT {
     };
 
     enum QPOrderingModes { MINDEG = 0, METIS = 2, PARMETIS = 3 };
+    enum BestCriteriaModes { ECONS, ICONS, KKT, OBJ };
 
     enum QPPivotModes {
         OneByOne = 0,
@@ -105,6 +106,21 @@ struct PSIOPT {
                                    str);
             throw std::invalid_argument(msg);
             return LOQO;
+        }
+    }
+    static BestCriteriaModes strto_BestCriteriaMode(const std::string &str) {
+
+        if (str == "ECons" || str == "ECon")
+            return ECONS;
+        else if (str == "ICons" || str == "ICon")
+            return ICONS;
+        else if (str == "KKT")
+            return KKT;
+        else if (str == "Obj" || str == "Prim Obj")
+            return OBJ;
+        else {
+            throw std::invalid_argument(fmt::format("Unrecognized BestCriteria: {0}", str));
+            return ECONS;
         }
     }
 
@@ -362,7 +378,12 @@ struct PSIOPT {
     Eigen::VectorXd LastIqCons;
 
     bool ReturnBest = false;
-    std::string BestCriteria = "ECons"; // "ICons,Obj,KKT"
+    BestCriteriaModes BestCriteria = BestCriteriaModes::ECONS;
+
+    void set_BestCriteria(BestCriteriaModes mode) { this->BestCriteria = mode; }
+    void set_BestCriteria(const std::string &str) {
+        this->BestCriteria = strto_BestCriteriaMode(str);
+    }
 
     /////////////////////////////////////////////////////////////////////
 

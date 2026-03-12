@@ -437,8 +437,8 @@ if __name__ == "__main__":
 
     for phase in ocp.Phases:
         phase.setMeshTol(1.0e-7)
-        phase.setMeshErrorCriteria("max")
-        phase.setMeshErrorEstimator("integrator")
+        phase.setMeshErrorCriteria(oc.MeshErrorAggregation.MAX)
+        phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     # Not every phase has to be adaptive
     # phase2.setAdaptiveMesh(False)

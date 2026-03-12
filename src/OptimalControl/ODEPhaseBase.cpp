@@ -1217,13 +1217,13 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::get_test_inputs(PhaseRegionFla
 void Tycho::ODEPhaseBase::calc_auto_scales() {
     auto calc_impl = [&](auto &funcmap) {
         for (auto &[key, func] : funcmap) {
-            if (func.ScaleMode == "auto") {
+            if (func.ScaleMode == ScaleModes::AUTO) {
                 VectorXd input_scales =
                     this->get_input_scale(func.RegionFlag, func.XtUVars, func.OPVars, func.SPVars);
                 std::vector<VectorXd> test_inputs =
                     this->get_test_inputs(func.RegionFlag, func.XtUVars, func.OPVars, func.SPVars);
                 VectorXd output_scales =
-                    calc_jacobian_row_scales(func.Func, input_scales, test_inputs, "norm", "mean");
+                    calc_jacobian_row_scales(func.Func, input_scales, test_inputs);
                 func.OutputScales = output_scales;
             } else {
             }
@@ -1244,13 +1244,13 @@ std::vector<double> Tycho::ODEPhaseBase::get_objective_scales() {
 
     std::vector<double> scales;
     for (auto &[key, obj] : this->userStateObjectives) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             // OutputScales units 1/obj
             scales.push_back(obj.OutputScales[0]);
         }
     }
     for (auto &[key, obj] : this->userIntegrands) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             // OutputScales units tstar/obj
             // Divide by tstar, since this function is the integrand not the total integral
             scales.push_back(obj.OutputScales[0] / this->XtUPUnits[this->TVar()]);
@@ -1262,12 +1262,12 @@ std::vector<double> Tycho::ODEPhaseBase::get_objective_scales() {
 
 void Tycho::ODEPhaseBase::update_objective_scales(double scale) {
     for (auto &[key, obj] : this->userStateObjectives) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             obj.OutputScales[0] = scale;
         }
     }
     for (auto &[key, obj] : this->userIntegrands) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             // Multiply by tstar, since this function is the integrand not the total integral
             obj.OutputScales[0] = scale * this->XtUPUnits[this->TVar()];
         }
@@ -1363,9 +1363,10 @@ bool Tycho::ODEPhaseBase::checkMesh() {
 
     this->Table.loadExactData(this->ActiveTraj);
 
-    if (this->MeshErrorEstimator == "integrator" || this->TranscriptionMode == CentralShooting) {
+    if (this->MeshErrorEstimator == MeshErrorEstimators::INTEGRATOR ||
+        this->TranscriptionMode == CentralShooting) {
         this->get_meshinfo_integrator(tsnd, mesh_errors, mesh_dist);
-    } else if (this->MeshErrorEstimator == "deboor") {
+    } else if (this->MeshErrorEstimator == MeshErrorEstimators::DEBOOR) {
         this->get_meshinfo_deboor(tsnd, mesh_errors, mesh_dist);
     } else {
         throw std::invalid_argument("Unknown mesh error estimator");
@@ -1376,23 +1377,27 @@ bool Tycho::ODEPhaseBase::checkMesh() {
 
     this->MeshIters.emplace_back(this->numDefects, this->MeshTol, tsnd, error, dist);
 
-    if (this->MeshErrorCriteria == "endtoend" || this->MeshErrorDistributor == "endtoend") {
+    if (this->MeshErrorCriteria == MeshErrorAggregation::ENDTOEND ||
+        this->MeshErrorDistributor == MeshErrorAggregation::ENDTOEND) {
         Eigen::VectorXd error_vec = this->calc_global_error();
         this->MeshIters.back().global_error = error_vec.lpNorm<Eigen::Infinity>();
     }
 
     double error_crit;
 
-    if (this->MeshErrorCriteria == "max") {
+    switch (this->MeshErrorCriteria) {
+    case MeshErrorAggregation::MAX:
         error_crit = this->MeshIters.back().max_error;
-    } else if (this->MeshErrorCriteria == "avg") {
+        break;
+    case MeshErrorAggregation::AVG:
         error_crit = this->MeshIters.back().avg_error;
-    } else if (this->MeshErrorCriteria == "geometric") {
+        break;
+    case MeshErrorAggregation::GEOMETRIC:
         error_crit = this->MeshIters.back().gmean_error;
-    } else if (this->MeshErrorCriteria == "endtoend") {
+        break;
+    case MeshErrorAggregation::ENDTOEND:
         error_crit = this->MeshIters.back().global_error;
-    } else {
-        throw std::invalid_argument("Unknown mesh error criteria");
+        break;
     }
 
     this->MeshConverged = (error_crit < this->MeshTol);
@@ -1492,23 +1497,29 @@ Eigen::VectorXd Tycho::ODEPhaseBase::calcSwitches() {
     return stdvector_to_eigenvector(switches);
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::psipot_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
     if (this->doTranscription)
         this->transcribe();
     VectorXd Input = this->makeSolverInput();
     VectorXd Output;
 
-    if (mode == "solve") {
+    switch (mode) {
+    case JetJobModes::Solve:
         Output = this->optimizer->solve(Input);
-    } else if (mode == "optimize") {
+        break;
+    case JetJobModes::Optimize:
         Output = this->optimizer->optimize(Input);
-    } else if (mode == "solve_optimize") {
+        break;
+    case JetJobModes::SolveOptimize:
         Output = this->optimizer->solve_optimize(Input);
-    } else if (mode == "solve_optimize_solve") {
+        break;
+    case JetJobModes::SolveOptimizeSolve:
         Output = this->optimizer->solve_optimize_solve(Input);
-    } else if (mode == "optimize_solve") {
+        break;
+    case JetJobModes::OptimizeSolve:
         Output = this->optimizer->optimize_solve(Input);
-    } else {
+        break;
+    default:
         throw std::invalid_argument("Unrecognized PSIOPT mode");
     }
 
@@ -1520,7 +1531,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::psipot_call_impl(std::strin
     return this->optimizer->ConvergeFlag;
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
 
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
@@ -1536,10 +1547,17 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(std::string
 
     PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
-    std::string nextmode = mode;
+    JetJobModes nextmode = mode;
     if (this->SolveOnlyFirst) {
-        if (nextmode.find(std::string("solve_")) != std::string::npos) {
-            nextmode.erase(0, 6);
+        switch (mode) {
+        case JetJobModes::SolveOptimize:
+            nextmode = JetJobModes::Optimize;
+            break;
+        case JetJobModes::SolveOptimizeSolve:
+            nextmode = JetJobModes::OptimizeSolve;
+            break;
+        default:
+            break;
         }
     }
 

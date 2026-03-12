@@ -223,7 +223,7 @@ if __name__ == "__main__":
     help it converge but it doesnt eliminate the noise, which effects the placement of points.
     LGL5 and LGL7 however, work well with both estimators.
     """
-    phase.setMeshErrorEstimator("integrator")
+    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.setMeshTol(1.0e-7)
     phase.setMeshErrFactor(10)
     phase.optimize()

@@ -537,7 +537,7 @@ if __name__ == "__main__":
     phase.optimizer.set_EContol(1.0e-9)
 
     phase.setAdaptiveMesh(True)
-    phase.setMeshErrorEstimator("integrator")
+    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.setMeshTol(1.0e-7)
 
     phase.optimize_solve()

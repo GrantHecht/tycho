@@ -302,9 +302,19 @@ class test_Delta3Launch(unittest.TestCase):
         for tmode, nseg in zip(tmodes, nsegs):
             with self.subTest(TranscriptionMode=tmode):
                 with self.subTest(errorest="deboor"):
-                    self.problem_impl(tmode, "HighestOrderSpline", nseg, "deboor")
+                    self.problem_impl(
+                        tmode,
+                        "HighestOrderSpline",
+                        nseg,
+                        oc.MeshErrorEstimators.DEBOOR,
+                    )
                 with self.subTest(errorest="integrator"):
-                    self.problem_impl(tmode, "HighestOrderSpline", nseg, "integrator")
+                    self.problem_impl(
+                        tmode,
+                        "HighestOrderSpline",
+                        nseg,
+                        oc.MeshErrorEstimators.INTEGRATOR,
+                    )
 
 
 ###############################################################################

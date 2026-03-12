@@ -454,19 +454,20 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 };
 
 // ---------------------------------------------------------------------------
-// ScaleType  =  std::variant<double, Eigen::VectorXd, std::string>
+// ScaleType  =  std::variant<double, Eigen::VectorXd, Tycho::ScaleModes, std::string>
 //
-// Python  None   -> std::string("none")   (disables auto-scaling)
+// Python  None   -> Tycho::ScaleModes::NONE
 // Python  str    -> std::string
 // Python  float  -> double
 // Python  array  -> Eigen::VectorXd
 // ---------------------------------------------------------------------------
 template <> struct type_caster<Tycho::ScaleType> {
-    NB_TYPE_CASTER(Tycho::ScaleType, const_name("Union[float, numpy.ndarray, str, None]"))
+    NB_TYPE_CASTER(Tycho::ScaleType,
+                   const_name("Union[float, numpy.ndarray, OptimalControl.ScaleModes, str, None]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {
-            value = std::string("none");
+            value = Tycho::ScaleModes::NONE;
             return true;
         }
         if (PyUnicode_Check(src.ptr())) {

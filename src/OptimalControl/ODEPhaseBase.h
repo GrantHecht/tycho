@@ -125,9 +125,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     double MeshTol = 1.0e-6;
 
-    std::string MeshErrorEstimator = "deboor";
-    std::string MeshErrorCriteria = "max";    //"max,avg,geometric,endtoend"
-    std::string MeshErrorDistributor = "avg"; // "max,avg,geometric,endtoend"
+    MeshErrorEstimators MeshErrorEstimator = MeshErrorEstimators::DEBOOR;
+    MeshErrorAggregation MeshErrorCriteria = MeshErrorAggregation::MAX;
+    MeshErrorAggregation MeshErrorDistributor = MeshErrorAggregation::AVG;
     PSIOPT::ConvergenceFlags MeshAbortFlag = PSIOPT::ConvergenceFlags::DIVERGING;
 
     bool MeshConverged = false;
@@ -148,8 +148,18 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void setMaxMeshIters(int it) { this->MaxMeshIters = abs(it); }
     void setMinSegments(int it) { this->MinSegments = abs(it); }
     void setMaxSegments(int it) { this->MaxSegments = abs(it); }
-    void setMeshErrorCriteria(std::string m) { this->MeshErrorCriteria = m; }
-    void setMeshErrorEstimator(std::string m) { this->MeshErrorEstimator = m; }
+    void setMeshErrorCriteria(MeshErrorAggregation m) { this->MeshErrorCriteria = m; }
+    void setMeshErrorCriteria(const std::string &m) {
+        this->MeshErrorCriteria = strto_MeshErrorAggregation(m);
+    }
+    void setMeshErrorEstimator(MeshErrorEstimators m) { this->MeshErrorEstimator = m; }
+    void setMeshErrorEstimator(const std::string &m) {
+        this->MeshErrorEstimator = strto_MeshErrorEstimator(m);
+    }
+    void setMeshErrorDistributor(MeshErrorAggregation m) { this->MeshErrorDistributor = m; }
+    void setMeshErrorDistributor(const std::string &m) {
+        this->MeshErrorDistributor = strto_MeshErrorAggregation(m);
+    }
 
     std::vector<MeshIterateInfo> getMeshIters() const { return this->MeshIters; }
 
@@ -1103,9 +1113,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->ActiveIqLmults = IM;
     }
 
-    PSIOPT::ConvergenceFlags psipot_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags psipot_call_impl(JetJobModes mode);
 
-    PSIOPT::ConvergenceFlags phase_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags phase_call_impl(JetJobModes mode);
 
   public:
     void transcribe(bool showstats, bool showfuns);
@@ -1132,13 +1142,17 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->invalidatePostOptInfo();
     }
 
-    PSIOPT::ConvergenceFlags solve() { return phase_call_impl("solve"); }
-    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl("optimize"); }
-    PSIOPT::ConvergenceFlags solve_optimize() { return phase_call_impl("solve_optimize"); }
-    PSIOPT::ConvergenceFlags solve_optimize_solve() {
-        return phase_call_impl("solve_optimize_solve");
+    PSIOPT::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
+    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
+    PSIOPT::ConvergenceFlags solve_optimize() {
+        return phase_call_impl(JetJobModes::SolveOptimize);
     }
-    PSIOPT::ConvergenceFlags optimize_solve() { return phase_call_impl("optimize_solve"); }
+    PSIOPT::ConvergenceFlags solve_optimize_solve() {
+        return phase_call_impl(JetJobModes::SolveOptimizeSolve);
+    }
+    PSIOPT::ConvergenceFlags optimize_solve() {
+        return phase_call_impl(JetJobModes::OptimizeSolve);
+    }
 
     /////////////////////////////////////////////////////////////////
 

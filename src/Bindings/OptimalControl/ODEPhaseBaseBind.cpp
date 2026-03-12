@@ -29,6 +29,28 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
     obj.doc() = "Base Class for All Optimal Control Phases";
 
+    auto set_mesh_error_estimator = [](ODEPhaseBase &self, nb::object val) {
+        if (nb::isinstance<MeshErrorEstimators>(val))
+            self.MeshErrorEstimator = nb::cast<MeshErrorEstimators>(val);
+        else if (nb::isinstance<nb::str>(val))
+            self.MeshErrorEstimator = strto_MeshErrorEstimator(nb::cast<std::string>(val));
+        else
+            throw nb::type_error("expected MeshErrorEstimators enum or str");
+    };
+    auto set_mesh_error_aggregation = [](MeshErrorAggregation &target, nb::object val,
+                                         const char *name) {
+        if (nb::isinstance<MeshErrorAggregation>(val))
+            target = nb::cast<MeshErrorAggregation>(val);
+        else if (nb::isinstance<nb::str>(val))
+            target = strto_MeshErrorAggregation(nb::cast<std::string>(val));
+        else if (std::string(name) == "MeshErrorCriteria")
+            throw nb::type_error("expected MeshErrorAggregation enum or str for "
+                                 "MeshErrorCriteria");
+        else
+            throw nb::type_error("expected MeshErrorAggregation enum or str for "
+                                 "MeshErrorDistributor");
+    };
+
     obj.def("enable_vectorization", &ODEPhaseBase::enable_vectorization);
 
     obj.def(
@@ -491,14 +513,37 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("setMaxMeshIters", &ODEPhaseBase::setMaxMeshIters);
     obj.def("setMinSegments", &ODEPhaseBase::setMinSegments);
     obj.def("setMaxSegments", &ODEPhaseBase::setMaxSegments);
-    obj.def("setMeshErrorCriteria", &ODEPhaseBase::setMeshErrorCriteria);
-    obj.def("setMeshErrorEstimator", &ODEPhaseBase::setMeshErrorEstimator);
+    obj.def("setMeshErrorCriteria",
+            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::setMeshErrorCriteria));
+    obj.def("setMeshErrorCriteria",
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorCriteria));
+    obj.def("setMeshErrorEstimator",
+            nb::overload_cast<MeshErrorEstimators>(&ODEPhaseBase::setMeshErrorEstimator));
+    obj.def("setMeshErrorEstimator",
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorEstimator));
+    obj.def("setMeshErrorDistributor",
+            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::setMeshErrorDistributor));
+    obj.def("setMeshErrorDistributor",
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorDistributor));
 
     obj.def_rw("PrintMeshInfo", &ODEPhaseBase::PrintMeshInfo);
     obj.def_rw("MaxMeshIters", &ODEPhaseBase::MaxMeshIters);
     obj.def_rw("MeshTol", &ODEPhaseBase::MeshTol);
-    obj.def_rw("MeshErrorEstimator", &ODEPhaseBase::MeshErrorEstimator);
-    obj.def_rw("MeshErrorCriteria", &ODEPhaseBase::MeshErrorCriteria);
+    obj.def_prop_rw(
+        "MeshErrorEstimator", [](const ODEPhaseBase &self) { return self.MeshErrorEstimator; },
+        [set_mesh_error_estimator](ODEPhaseBase &self, nb::object val) {
+            set_mesh_error_estimator(self, val);
+        });
+    obj.def_prop_rw(
+        "MeshErrorCriteria", [](const ODEPhaseBase &self) { return self.MeshErrorCriteria; },
+        [set_mesh_error_aggregation](ODEPhaseBase &self, nb::object val) {
+            set_mesh_error_aggregation(self.MeshErrorCriteria, val, "MeshErrorCriteria");
+        });
+    obj.def_prop_rw(
+        "MeshErrorDistributor", [](const ODEPhaseBase &self) { return self.MeshErrorDistributor; },
+        [set_mesh_error_aggregation](ODEPhaseBase &self, nb::object val) {
+            set_mesh_error_aggregation(self.MeshErrorDistributor, val, "MeshErrorDistributor");
+        });
 
     obj.def_rw("SolveOnlyFirst", &ODEPhaseBase::SolveOnlyFirst);
     obj.def_rw("ForceOneMeshIter", &ODEPhaseBase::ForceOneMeshIter);

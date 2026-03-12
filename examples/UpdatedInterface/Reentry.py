@@ -253,7 +253,7 @@ if __name__ == "__main__":
     ## All error estimates and tolerances are in reference to the scaled ODE system
     phase.setAdaptiveMesh(True)
     phase.setMeshTol(1.0e-7)
-    phase.setMeshErrorEstimator("integrator")
+    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     phase.solve_optimize()
 

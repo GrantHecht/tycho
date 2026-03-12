@@ -28,6 +28,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     using ConvergenceFlags = PSIOPT::ConvergenceFlags;
     using AlgorithmModes = PSIOPT::AlgorithmModes;
     using QPOrderingModes = PSIOPT::QPOrderingModes;
+    using BestCriteriaModes = PSIOPT::BestCriteriaModes;
     auto obj = nb::class_<PSIOPT>(m, "PSIOPT");
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());
@@ -179,7 +180,18 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def_rw("Diagnostic", &PSIOPT::Diagnostic);
 
     obj.def_rw("ReturnBest", &PSIOPT::ReturnBest);
-    obj.def_rw("BestCriteria", &PSIOPT::BestCriteria);
+    obj.def_prop_rw(
+        "BestCriteria", [](const PSIOPT &self) { return self.BestCriteria; },
+        [](PSIOPT &self, nb::object val) {
+            if (nb::isinstance<BestCriteriaModes>(val))
+                self.BestCriteria = nb::cast<BestCriteriaModes>(val);
+            else if (nb::isinstance<nb::str>(val))
+                self.BestCriteria = PSIOPT::strto_BestCriteriaMode(nb::cast<std::string>(val));
+            else
+                throw nb::type_error("expected BestCriteriaModes enum or str");
+        });
+    obj.def("set_BestCriteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_BestCriteria));
+    obj.def("set_BestCriteria", nb::overload_cast<const std::string &>(&PSIOPT::set_BestCriteria));
 
     obj.def_rw("storespmat", &PSIOPT::storespmat, PSIOPT_storespmat);
     obj.def("getSPmat", &PSIOPT::getSPmat, PSIOPT_getSPmat);
@@ -218,4 +230,9 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
         .value("MINDEG", QPOrderingModes::MINDEG)
         .value("METIS", QPOrderingModes::METIS)
         .value("PARMETIS", QPOrderingModes::PARMETIS);
+    nb::enum_<BestCriteriaModes>(m, "BestCriteriaModes")
+        .value("ECONS", BestCriteriaModes::ECONS)
+        .value("ICONS", BestCriteriaModes::ICONS)
+        .value("KKT", BestCriteriaModes::KKT)
+        .value("OBJ", BestCriteriaModes::OBJ);
 }

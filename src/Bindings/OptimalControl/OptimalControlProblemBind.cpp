@@ -144,8 +144,14 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
     obj.def("setMaxMeshIters", &OptimalControlProblem::setMaxMeshIters);
     obj.def("setMinSegments", &OptimalControlProblem::setMinSegments);
     obj.def("setMaxSegments", &OptimalControlProblem::setMaxSegments);
-    obj.def("setMeshErrorCriteria", &OptimalControlProblem::setMeshErrorCriteria);
-    obj.def("setMeshErrorEstimator", &OptimalControlProblem::setMeshErrorEstimator);
+    obj.def("setMeshErrorCriteria",
+            nb::overload_cast<MeshErrorAggregation>(&OptimalControlProblem::setMeshErrorCriteria));
+    obj.def("setMeshErrorCriteria",
+            nb::overload_cast<const std::string &>(&OptimalControlProblem::setMeshErrorCriteria));
+    obj.def("setMeshErrorEstimator",
+            nb::overload_cast<MeshErrorEstimators>(&OptimalControlProblem::setMeshErrorEstimator));
+    obj.def("setMeshErrorEstimator",
+            nb::overload_cast<const std::string &>(&OptimalControlProblem::setMeshErrorEstimator));
 }
 
 static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {

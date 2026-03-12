@@ -202,12 +202,22 @@ struct OptimalControlProblem : OptimizationProblemBase {
             phase->setMaxSegments(it);
         }
     }
-    void setMeshErrorCriteria(std::string m) {
+    void setMeshErrorCriteria(MeshErrorAggregation m) {
         for (auto phase : this->phases) {
             phase->setMeshErrorCriteria(m);
         }
     }
-    void setMeshErrorEstimator(std::string m) {
+    void setMeshErrorCriteria(const std::string &m) {
+        for (auto phase : this->phases) {
+            phase->setMeshErrorCriteria(m);
+        }
+    }
+    void setMeshErrorEstimator(MeshErrorEstimators m) {
+        for (auto phase : this->phases) {
+            phase->setMeshErrorEstimator(m);
+        }
+    }
+    void setMeshErrorEstimator(const std::string &m) {
         for (auto phase : this->phases) {
             phase->setMeshErrorEstimator(m);
         }
@@ -1562,9 +1572,9 @@ struct OptimalControlProblem : OptimizationProblemBase {
         const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,
         const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const;
 
-    PSIOPT::ConvergenceFlags psipot_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags psipot_call_impl(JetJobModes mode);
 
-    PSIOPT::ConvergenceFlags ocp_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
     VectorXd makeSolverInput() const {
         VectorXd Vars(this->numProbVars);
@@ -1637,13 +1647,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
   public:
-    PSIOPT::ConvergenceFlags solve() { return ocp_call_impl("solve"); }
-    PSIOPT::ConvergenceFlags optimize() { return ocp_call_impl("optimize"); }
-    PSIOPT::ConvergenceFlags solve_optimize() { return ocp_call_impl("solve_optimize"); }
+    PSIOPT::ConvergenceFlags solve() { return ocp_call_impl(JetJobModes::Solve); }
+    PSIOPT::ConvergenceFlags optimize() { return ocp_call_impl(JetJobModes::Optimize); }
+    PSIOPT::ConvergenceFlags solve_optimize() { return ocp_call_impl(JetJobModes::SolveOptimize); }
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
-        return ocp_call_impl("solve_optimize_solve");
+        return ocp_call_impl(JetJobModes::SolveOptimizeSolve);
     }
-    PSIOPT::ConvergenceFlags optimize_solve() { return ocp_call_impl("optimize_solve"); }
+    PSIOPT::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
 
     void print_stats(bool showfuns);
 };

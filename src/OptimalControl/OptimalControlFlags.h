@@ -73,6 +73,63 @@ enum IntegralModes {
     TrapIntegral,
 };
 
+enum ScaleModes {
+    AUTO,
+    CUSTOM,
+    NONE,
+};
+
+enum MeshErrorEstimators {
+    DEBOOR,
+    INTEGRATOR,
+};
+
+enum MeshErrorAggregation {
+    MAX,
+    AVG,
+    GEOMETRIC,
+    ENDTOEND,
+};
+
+static ScaleModes strto_ScaleMode(const std::string &str) {
+    if (str == "auto")
+        return ScaleModes::AUTO;
+    else if (str == "custom")
+        return ScaleModes::CUSTOM;
+    else if (str == "none")
+        return ScaleModes::NONE;
+    else {
+        throw std::invalid_argument(fmt::format("Unrecognized ScaleMode: {0}", str));
+        return ScaleModes::AUTO;
+    }
+}
+
+static MeshErrorEstimators strto_MeshErrorEstimator(const std::string &str) {
+    if (str == "deboor")
+        return MeshErrorEstimators::DEBOOR;
+    else if (str == "integrator")
+        return MeshErrorEstimators::INTEGRATOR;
+    else {
+        throw std::invalid_argument(fmt::format("Unrecognized MeshErrorEstimator: {0}", str));
+        return MeshErrorEstimators::DEBOOR;
+    }
+}
+
+static MeshErrorAggregation strto_MeshErrorAggregation(const std::string &str) {
+    if (str == "max")
+        return MeshErrorAggregation::MAX;
+    else if (str == "avg")
+        return MeshErrorAggregation::AVG;
+    else if (str == "geometric")
+        return MeshErrorAggregation::GEOMETRIC;
+    else if (str == "endtoend")
+        return MeshErrorAggregation::ENDTOEND;
+    else {
+        throw std::invalid_argument(fmt::format("Unrecognized MeshErrorAggregation: {0}", str));
+        return MeshErrorAggregation::MAX;
+    }
+}
+
 static PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
 
     if (str == "Front" || str == "First")

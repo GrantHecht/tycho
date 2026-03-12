@@ -24,7 +24,7 @@
 namespace Tycho {
 
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
-using ScaleType = std::variant<double, Eigen::VectorXd, std::string>;
+using ScaleType = std::variant<double, Eigen::VectorXd, ScaleModes, std::string>;
 using RegionType = std::variant<PhaseRegionFlags, std::string>;
 
 static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
@@ -38,36 +38,32 @@ static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
     return reg;
 }
 
-static std::tuple<std::string, bool, Eigen::VectorXd> get_scale_info(int orows, ScaleType scale_t) {
+static std::tuple<ScaleModes, bool, Eigen::VectorXd> get_scale_info(int orows, ScaleType scale_t) {
 
     Eigen::VectorXd OutputScales(orows);
     OutputScales.setOnes();
-    std::string ScaleMode = "auto";
+    ScaleModes ScaleMode = ScaleModes::AUTO;
     bool ScalesSet = false;
     if (std::holds_alternative<double>(scale_t)) {
         OutputScales *= std::get<double>(scale_t);
-        ScaleMode = "custom";
+        ScaleMode = ScaleModes::CUSTOM;
         ScalesSet = true;
 
     } else if (std::holds_alternative<Eigen::VectorXd>(scale_t)) {
         OutputScales = std::get<Eigen::VectorXd>(scale_t);
-        ScaleMode = "custom";
+        ScaleMode = ScaleModes::CUSTOM;
         ScalesSet = true;
 
         if (OutputScales.size() != orows) {
             throw std::invalid_argument(
                 "Scaling vector size does not match output size of function");
         }
+    } else if (std::holds_alternative<ScaleModes>(scale_t)) {
+        ScaleMode = std::get<ScaleModes>(scale_t);
+        ScalesSet = (ScaleMode != ScaleModes::AUTO);
     } else if (std::holds_alternative<std::string>(scale_t)) {
-        ScaleMode = std::get<std::string>(scale_t);
-
-        if (ScaleMode == "auto") {
-            ScalesSet = false;
-        } else if (ScaleMode == "none") {
-            ScalesSet = true;
-        } else {
-            throw std::invalid_argument(fmt::format("Unrecognized Scale Mode:{0:}", ScaleMode));
-        }
+        ScaleMode = strto_ScaleMode(std::get<std::string>(scale_t));
+        ScalesSet = (ScaleMode != ScaleModes::AUTO);
     }
 
     return std::tuple{ScaleMode, ScalesSet, OutputScales};

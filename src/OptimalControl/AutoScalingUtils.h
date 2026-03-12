@@ -22,8 +22,7 @@ namespace Tycho {
 
 template <class Func>
 Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd &input_scales,
-                                         std::vector<Eigen::VectorXd> &test_inputs,
-                                         std::string normtype, std::string avgtype) {
+                                         std::vector<Eigen::VectorXd> &test_inputs) {
 
     Eigen::MatrixXd rownorms(func.ORows(), test_inputs.size());
     Eigen::VectorXd output_scales(func.ORows());
@@ -38,13 +37,7 @@ Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd
         jx.setZero();
         scaled_func.compute_jacobian(test_inputs[i], fx, jx);
         for (int j = 0; j < func.ORows(); j++) {
-            if (normtype == "norm") {
-                rownorms(j, i) = jx.row(j).norm();
-            } else if (normtype == "infnorm") {
-                rownorms(j, i) = jx.row(j).lpNorm<Eigen::Infinity>();
-            } else {
-                throw std::invalid_argument("Unknown row norm type");
-            }
+            rownorms(j, i) = jx.row(j).norm();
         }
     }
 
@@ -54,12 +47,8 @@ Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd
 
         } else if (!std::isfinite(rownorms.row(j).mean())) {
 
-        } else if (avgtype == "mean") {
-            avg = rownorms.row(j).mean();
-        } else if (avgtype == "geomean") {
-            avg = std::exp(rownorms.row(j).array().log().sum() / double(rownorms.cols()));
         } else {
-            throw std::invalid_argument("Unknown row average type");
+            avg = rownorms.row(j).mean();
         }
 
         output_scales[j] = 1.0 / avg;

@@ -73,6 +73,21 @@ static void OCPFlagsBuild(nb::module_ &m) {
         .value("BackTwoToTwoFront", LinkFlags::BackTwoToTwoFront)
         .value("FrontTwoToTwoBack", LinkFlags::FrontTwoToTwoBack);
 
+    nb::enum_<ScaleModes>(m, "ScaleModes")
+        .value("AUTO", ScaleModes::AUTO)
+        .value("CUSTOM", ScaleModes::CUSTOM)
+        .value("NONE", ScaleModes::NONE);
+
+    nb::enum_<MeshErrorEstimators>(m, "MeshErrorEstimators")
+        .value("DEBOOR", MeshErrorEstimators::DEBOOR)
+        .value("INTEGRATOR", MeshErrorEstimators::INTEGRATOR);
+
+    nb::enum_<MeshErrorAggregation>(m, "MeshErrorAggregation")
+        .value("MAX", MeshErrorAggregation::MAX)
+        .value("AVG", MeshErrorAggregation::AVG)
+        .value("GEOMETRIC", MeshErrorAggregation::GEOMETRIC)
+        .value("ENDTOEND", MeshErrorAggregation::ENDTOEND);
+
     m.def("strto_PhaseRegionFlag",
           nb::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
 }
