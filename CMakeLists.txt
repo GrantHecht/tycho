@@ -59,6 +59,13 @@ if(_TYCHO_FP_MODE_INDEX EQUAL -1)
     )
 endif()
 
+set(_TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG "-fno-finite-math-only")
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+   AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    # clang-cl ignores raw GNU-style frontend flags; forward them explicitly.
+    set(_TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG "/clang:-fno-finite-math-only")
+endif()
+
 if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         message(FATAL_ERROR
@@ -66,12 +73,15 @@ if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
         )
     endif()
 
-    # clang-cl ignores raw GNU-style frontend flags; forward them explicitly.
-    check_cxx_compiler_flag("/clang:-fno-finite-math-only" TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG)
+    check_cxx_compiler_flag(
+        "${_TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG}"
+        TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG
+    )
     if(NOT TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG)
         message(FATAL_ERROR
-            "The active Windows Clang toolchain does not support /clang:-fno-finite-math-only, "
-            "so TYCHO_FP_MODE=SAFER_FAST is unavailable."
+            "The active Windows Clang frontend does not support "
+            "${_TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG}, so "
+            "TYCHO_FP_MODE=SAFER_FAST is unavailable."
         )
     endif()
 endif()
@@ -232,8 +242,7 @@ if(TYCHO_FP_MODE STREQUAL "STRICT")
 elseif(TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     if(WIN32)
         list(APPEND FP_FLAGS "/fp:fast")
-        # clang-cl must forward frontend-only flags with /clang: to avoid ignoring them.
-        list(APPEND FP_FLAGS "/clang:-fno-finite-math-only")
+        list(APPEND FP_FLAGS "${_TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG}")
     else()
         list(APPEND FP_FLAGS "-ffast-math")
         list(APPEND FP_FLAGS "-fno-finite-math-only")
