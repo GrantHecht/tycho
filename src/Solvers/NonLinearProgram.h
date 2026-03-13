@@ -22,7 +22,6 @@
 #pragma once
 #include "ConstraintFunction.h"
 #include "ObjectiveFunction.h"
-#include "Utils/BenchUtils.h"
 #include "pch.h"
 
 namespace Tycho {

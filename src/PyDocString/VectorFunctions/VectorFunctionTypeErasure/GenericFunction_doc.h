@@ -60,13 +60,6 @@ const char *const GenericFunction_is_linear =
     "arguments.\n\n"
     ":returns: True if linear, False otherwise";
 
-const char *const GenericFunction_SuperTest =
-    "Perform timing tests using vectorized scalars.\n\n"
-    ":param arg0: Input variables at which the function is evaluated\n"
-    ":param arg1: Integer number of times to run test\n"
-    ":type arg1: int\n"
-    ":returns: void";
-
 const char *const GenericFunction_eval1 =
     "Create nested function from Generic Function. arg0's outputs are passed "
     "to this function's inputs.\n\n"
@@ -113,12 +106,6 @@ const char *const GenericFunction_padded_upper =
     ":param arg0: Number of zeros to append\n"
     ":returns: Function with higher output dimension and original output at "
     "the bottom";
-
-const char *const GenericFunction_rpt =
-    "Run, Print, Time. Run the function, print the output, show how long it "
-    "took.\n\n"
-    ":param arg0: Vector of inputs at which to evaluate the function\n"
-    ":param arg1: Number of times to run the evaluation";
 
 const char *const GenericFunction_norm =
     "Takes the L2 norm (Euclidean distance) of the function output.\n\n"
