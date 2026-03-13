@@ -11,6 +11,11 @@
       "ctestCommandArgs": "",
       "variables": [
         {
+          "name": "TYCHO_FP_MODE",
+          "value": "SAFE_FAST",
+          "type": "STRING"
+        },
+        {
           "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
           "value": "TRUE",
           "type": "BOOL"
@@ -50,8 +55,8 @@
       "inheritEnvironments": [ "clang_cl_x64" ],
       "variables": [
         {
-          "name": "CMAKE_CXX_FLAGS_RELEASE",
-          "value": "/MD  /O2 /Ob2 /DNDEBUG /arch:AVX2 /fp:fast /GS- /Gw ",
+          "name": "TYCHO_FP_MODE",
+          "value": "SAFE_FAST",
           "type": "STRING"
         },
         {

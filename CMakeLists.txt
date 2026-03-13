@@ -9,6 +9,7 @@ set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 
 include(cmake/git-submodule-init.cmake)
 include(cmake/git-submodule-update.cmake)
+include(CheckCXXCompilerFlag)
 
 
 ################################################################################
@@ -33,10 +34,62 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 #set(BUILD_TYCHO_WHEEL TRUE)      ### CI Build for generic wheels
 #set(BUILD_SPHINX_DOCS TRUE)
 
-# Option to enable strict IEEE 754 compliance for proper NaN handling
-# When OFF (default): Uses fast-math optimizations that may ignore NaNs
-# When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
-option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" ON)
+# Floating-point optimization policy.
+# STRICT: no fast-math relaxations
+# SAFE_FAST: all fast-math optimizations except finite-math-only
+# FAST: full fast-math
+set(_TYCHO_FP_MODE_DEFAULT "SAFE_FAST")
+if(DEFINED STRICT_IEEE_COMPLIANCE)
+    if(NOT DEFINED TYCHO_FP_MODE)
+        if(STRICT_IEEE_COMPLIANCE)
+            set(_TYCHO_FP_MODE_DEFAULT "STRICT")
+        else()
+            set(_TYCHO_FP_MODE_DEFAULT "FAST")
+        endif()
+        message(WARNING "STRICT_IEEE_COMPLIANCE is deprecated; use TYCHO_FP_MODE instead.")
+    else()
+        message(WARNING
+            "STRICT_IEEE_COMPLIANCE is deprecated and ignored because TYCHO_FP_MODE is set "
+            "to '${TYCHO_FP_MODE}'."
+        )
+    endif()
+endif()
+
+set(TYCHO_FP_MODE "${_TYCHO_FP_MODE_DEFAULT}" CACHE STRING
+    "Floating-point optimization mode. Valid values: STRICT, SAFE_FAST, FAST."
+)
+set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFE_FAST FAST)
+
+string(TOUPPER "${TYCHO_FP_MODE}" TYCHO_FP_MODE)
+set(TYCHO_FP_MODE "${TYCHO_FP_MODE}" CACHE STRING
+    "Floating-point optimization mode. Valid values: STRICT, SAFE_FAST, FAST." FORCE
+)
+set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFE_FAST FAST)
+
+set(_TYCHO_VALID_FP_MODES STRICT SAFE_FAST FAST)
+list(FIND _TYCHO_VALID_FP_MODES "${TYCHO_FP_MODE}" _TYCHO_FP_MODE_INDEX)
+if(_TYCHO_FP_MODE_INDEX EQUAL -1)
+    message(FATAL_ERROR
+        "Invalid TYCHO_FP_MODE='${TYCHO_FP_MODE}'. Valid values: STRICT, SAFE_FAST, FAST."
+    )
+endif()
+
+if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFE_FAST")
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR
+            "TYCHO_FP_MODE=SAFE_FAST requires Clang on Windows to disable finite-math-only."
+        )
+    endif()
+
+    check_cxx_compiler_flag("-fno-finite-math-only" TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG)
+    if(NOT TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG)
+        message(FATAL_ERROR
+            "The active Windows Clang toolchain does not support -fno-finite-math-only, "
+            "so TYCHO_FP_MODE=SAFE_FAST is unavailable."
+        )
+    endif()
+endif()
+
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
 option(BUILD_CPP_BENCHMARKS "Build standalone C++ benchmark executables" ON)
@@ -59,6 +112,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(SIMD_FLAGS)
+set(FP_FLAGS)
 
 
 # Release Flags
@@ -72,45 +127,45 @@ if(BUILD_TYCHO_WHEEL)
     # Detect architecture for wheel builds
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
         # ARM64 (Apple Silicon, ARM servers) - use NEON
-        list(APPEND RELEASE_FLAGS "-march=armv8-a+simd")
+        list(APPEND SIMD_FLAGS "-march=armv8-a+simd")
         message(STATUS "Building ARM64 wheel with NEON support")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
         # x86-64 (Intel/AMD) - use AVX2 (x86-64-v3 flags written out for older compilers)
-        list(APPEND RELEASE_FLAGS "-mcx16")
-        list(APPEND RELEASE_FLAGS "-mpopcnt")
-        list(APPEND RELEASE_FLAGS "-msse3")
-        list(APPEND RELEASE_FLAGS "-msse4.1")
-        list(APPEND RELEASE_FLAGS "-msse4.2")
-        list(APPEND RELEASE_FLAGS "-mssse3")
-        list(APPEND RELEASE_FLAGS "-mavx")
-        list(APPEND RELEASE_FLAGS "-mavx2")
-        list(APPEND RELEASE_FLAGS "-mbmi")
-        list(APPEND RELEASE_FLAGS "-mbmi2")
-        list(APPEND RELEASE_FLAGS "-mf16c")
-        list(APPEND RELEASE_FLAGS "-mfma")
-        list(APPEND RELEASE_FLAGS "-mlzcnt")
-        list(APPEND RELEASE_FLAGS "-mmovbe")
-        list(APPEND RELEASE_FLAGS "-mxsave")
+        list(APPEND SIMD_FLAGS "-mcx16")
+        list(APPEND SIMD_FLAGS "-mpopcnt")
+        list(APPEND SIMD_FLAGS "-msse3")
+        list(APPEND SIMD_FLAGS "-msse4.1")
+        list(APPEND SIMD_FLAGS "-msse4.2")
+        list(APPEND SIMD_FLAGS "-mssse3")
+        list(APPEND SIMD_FLAGS "-mavx")
+        list(APPEND SIMD_FLAGS "-mavx2")
+        list(APPEND SIMD_FLAGS "-mbmi")
+        list(APPEND SIMD_FLAGS "-mbmi2")
+        list(APPEND SIMD_FLAGS "-mf16c")
+        list(APPEND SIMD_FLAGS "-mfma")
+        list(APPEND SIMD_FLAGS "-mlzcnt")
+        list(APPEND SIMD_FLAGS "-mmovbe")
+        list(APPEND SIMD_FLAGS "-mxsave")
         message(STATUS "Building x86-64 wheel with AVX2 support")
     else()
         # Fallback for other architectures
-        list(APPEND RELEASE_FLAGS "-march=native")
+        list(APPEND SIMD_FLAGS "-march=native")
         message(WARNING "Unknown architecture ${CMAKE_SYSTEM_PROCESSOR}, using -march=native")
     endif()
 
     # Windows runs out of ram with LINK_TIME_OPT on gh-actions
     if(NOT WIN32)
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-            list(APPEND RELEASE_FLAGS "-mtune=skylake")
+            list(APPEND SIMD_FLAGS "-mtune=skylake")
         endif()
     endif()
     set(LINK_TIME_OPT TRUE)   ### DO LTO - Recommended for full release
     set(CLANG_MAX_INLINE_DEPTH 400)
     
 else()
-    list(APPEND RELEASE_FLAGS "-march=native")
+    list(APPEND SIMD_FLAGS "-march=native")
     if(NOT WIN32)
-        list(APPEND RELEASE_FLAGS "-mtune=native")
+        list(APPEND SIMD_FLAGS "-mtune=native")
     endif()
 endif()
 
@@ -120,13 +175,7 @@ if(WIN32)
      list(APPEND RELEASE_FLAGS "/DNDEBUG")
      list(APPEND RELEASE_FLAGS "/O2")
      list(APPEND RELEASE_FLAGS "/Ob2")
-     list(APPEND RELEASE_FLAGS "/arch:AVX2")
-     # Floating-point handling: strict IEEE 754 compliance or fast-math
-     if(STRICT_IEEE_COMPLIANCE)
-         list(APPEND RELEASE_FLAGS "/fp:strict")
-     else()
-         list(APPEND RELEASE_FLAGS "/fp:fast")
-     endif()
+     list(APPEND SIMD_FLAGS "/arch:AVX2")
      list(APPEND RELEASE_FLAGS "/GS-")
      list(APPEND RELEASE_FLAGS "/Gw")
 endif()
@@ -186,18 +235,32 @@ if(NOT WIN32)
   list(APPEND RELEASE_FLAGS "-fno-stack-protector")
   #list(APPEND RELEASE_FLAGS "-fcf-protection=none")
   list(APPEND RELEASE_FLAGS "-fno-asynchronous-unwind-tables")
-  
-  # Floating-point handling: strict IEEE 754 compliance or fast-math
-  if(STRICT_IEEE_COMPLIANCE)
-      # Enforce proper NaN handling with selective optimizations
-      list(APPEND RELEASE_FLAGS "-fno-math-errno")
-      # Ensure NaN handling is correct (no finite-math-only)
-      list(APPEND RELEASE_FLAGS "-fno-finite-math-only")
-  else()
-      # Use fast-math for performance (may not handle NaNs properly)
-      list(APPEND RELEASE_FLAGS "-ffast-math")
-  endif()
 endif()
+
+if(TYCHO_FP_MODE STREQUAL "STRICT")
+    if(WIN32)
+        list(APPEND FP_FLAGS "/fp:strict")
+    else()
+        list(APPEND FP_FLAGS "-fno-fast-math")
+    endif()
+elseif(TYCHO_FP_MODE STREQUAL "SAFE_FAST")
+    if(WIN32)
+        list(APPEND FP_FLAGS "/fp:fast")
+        list(APPEND FP_FLAGS "-fno-finite-math-only")
+    else()
+        list(APPEND FP_FLAGS "-ffast-math")
+        list(APPEND FP_FLAGS "-fno-finite-math-only")
+    endif()
+elseif(TYCHO_FP_MODE STREQUAL "FAST")
+    if(WIN32)
+        list(APPEND FP_FLAGS "/fp:fast")
+    else()
+        list(APPEND FP_FLAGS "-ffast-math")
+    endif()
+endif()
+
+list(APPEND RELEASE_FLAGS ${SIMD_FLAGS})
+list(APPEND RELEASE_FLAGS ${FP_FLAGS})
  
 
 # Combine Flags
@@ -413,11 +476,13 @@ message(STATUS ${OpenMP_CXX_FLAGS})
 message(STATUS ${OpenMP_CXX_LIBRARIES})
 message(STATUS ${PYTHON_EXECUTABLE})
 
-# Display IEEE compliance setting
-if(STRICT_IEEE_COMPLIANCE)
-    message(STATUS "IEEE 754 Compliance: STRICT (NaNs will be properly handled)")
+message(STATUS "Floating-point mode: ${TYCHO_FP_MODE}")
+if(TYCHO_FP_MODE STREQUAL "STRICT")
+    message(STATUS "IEEE 754 compliance: STRICT (no fast-math relaxations)")
+elseif(TYCHO_FP_MODE STREQUAL "SAFE_FAST")
+    message(STATUS "IEEE 754 compliance: SAFE_FAST (fast-math except finite-math-only)")
 else()
-    message(STATUS "IEEE 754 Compliance: FAST-MATH (NaNs may not be properly handled)")
+    message(STATUS "IEEE 754 compliance: FAST (full fast-math)")
 endif()
 
 ################################################################################
