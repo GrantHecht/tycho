@@ -432,18 +432,7 @@ class AccelerateImpl
         SparseMatrixStructure structure{};
         structure.blockSize = 1;
 
-        if ((MatrixType::Flags & Eigen::ColMajor)) { // CSC format
-            const Index nColumnsStarts = m_matrix.cols() + 1;
-            m_columnStarts.resize(nColumnsStarts);
-            std::copy_n(m_matrix.outerIndexPtr(), nColumnsStarts, m_columnStarts.data());
-
-            structure.rowCount = static_cast<int>(m_matrix.rows());
-            structure.columnCount = static_cast<int>(m_matrix.cols());
-            structure.columnStarts = m_columnStarts.data();
-            structure.rowIndices = const_cast<int *>(m_matrix.innerIndexPtr());
-            attributes.transpose = false;
-            attributes.triangle = m_triType;
-        } else { // RowMajor (CSR) format
+        if constexpr (MatrixType::IsRowMajor) { // RowMajor (CSR) format
             // For CSR, Accelerate expects CSC. We use the 'transpose' attribute
             // to tell Accelerate to interpret the CSR matrix as a transposed CSC matrix.
             const Index nRowStarts = m_matrix.rows() + 1;
@@ -464,6 +453,17 @@ class AccelerateImpl
             } else {
                 attributes.triangle = m_triType;
             }
+        } else { // CSC format
+            const Index nColumnsStarts = m_matrix.cols() + 1;
+            m_columnStarts.resize(nColumnsStarts);
+            std::copy_n(m_matrix.outerIndexPtr(), nColumnsStarts, m_columnStarts.data());
+
+            structure.rowCount = static_cast<int>(m_matrix.rows());
+            structure.columnCount = static_cast<int>(m_matrix.cols());
+            structure.columnStarts = m_columnStarts.data();
+            structure.rowIndices = const_cast<int *>(m_matrix.innerIndexPtr());
+            attributes.transpose = false;
+            attributes.triangle = m_triType;
         }
 
         structure.attributes = attributes;

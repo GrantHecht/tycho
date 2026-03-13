@@ -36,7 +36,7 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 # Option to enable strict IEEE 754 compliance for proper NaN handling
 # When OFF (default): Uses fast-math optimizations that may ignore NaNs
 # When ON: Enforces strict IEEE 754 compliance, treating NaNs properly
-option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" OFF)
+option(STRICT_IEEE_COMPLIANCE "Enable strict IEEE 754 compliance for proper NaN handling" ON)
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
 option(BUILD_CPP_BENCHMARKS "Build standalone C++ benchmark executables" ON)
@@ -191,8 +191,6 @@ if(NOT WIN32)
   if(STRICT_IEEE_COMPLIANCE)
       # Enforce proper NaN handling with selective optimizations
       list(APPEND RELEASE_FLAGS "-fno-math-errno")
-      list(APPEND RELEASE_FLAGS "-fno-trapping-math")
-      list(APPEND RELEASE_FLAGS "-fno-signaling-nans")
       # Ensure NaN handling is correct (no finite-math-only)
       list(APPEND RELEASE_FLAGS "-fno-finite-math-only")
   else()
@@ -301,9 +299,6 @@ elseif(APPLE)
 
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
-      
-      # Add flags to make LLVM Clang more compatible with Apple SDK headers
-      list(APPEND COMPILE_FLAGS "-Wno-elaborated-enum-base")
     endif()
   endif()
 endif()
@@ -334,8 +329,8 @@ if(ENABLE_PYTHON_BINDINGS)
 endif()
 
 # Set dependency variables
-set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS} ${AccelerateSparse_INCLUDE_DIRS})
-set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS} ${AccelerateSparse_LIBRARIES})
+set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS})
+set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS})
 
 # Handle OpenMP for Apple
 if (APPLE)

@@ -148,7 +148,6 @@ template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
         return computeall_body(f, x, lm);
     });
 
-    obj.def("rpt", &Derived::rpt);
     obj.def("vf", &Derived::template MakeGeneric<GenericFunction<-1, -1>>);
 
     constexpr int OR = Derived::ORC;

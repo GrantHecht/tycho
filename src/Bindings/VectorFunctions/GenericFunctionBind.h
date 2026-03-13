@@ -46,9 +46,6 @@ template <class Derived, class PYClass> void GenericBuild(PYClass &obj) {
         });
     }
 
-    obj.def("SuperTest", &Derived::SuperTest);
-    obj.def("SpeedTest", &Derived::SpeedTest);
-
     Bind::DenseBaseBuild<Derived>(obj);
 }
 

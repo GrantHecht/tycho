@@ -14,7 +14,6 @@
 // =============================================================================
 
 #pragma once
-#include "BenchUtils.h"
 #include "CRTPBase.h"
 #include "FunctionReturnType.h"
 #include "GetCoreCount.h"

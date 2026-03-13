@@ -145,54 +145,6 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     obj.def("vf", [](std::shared_ptr<InterpTable2D> &self) {
         return GenericFunction<-1, -1>(InterpFunction2D(self));
     });
-
-    m.def("InterpTable2DSpeedTest", [](const GenericFunction<-1, 1> &tabf, double xl, double xu,
-                                       double yl, double yu, int nsamps, bool lin) {
-        Eigen::ArrayXd xsamps;
-        xsamps.setRandom(nsamps);
-        xsamps += 1;
-        xsamps /= 2;
-        xsamps *= (xu - xl);
-        xsamps += xl;
-
-        Eigen::ArrayXd ysamps;
-        ysamps.setRandom(nsamps);
-        ysamps += 1;
-        ysamps /= 2;
-        ysamps *= (yu - yl);
-        ysamps += yl;
-
-        if (lin) {
-            xsamps.setLinSpaced(xl, xu);
-            ysamps.setLinSpaced(yl, yu);
-        }
-
-        Eigen::VectorXd xy(2);
-        Vector1<double> f;
-        f.setZero();
-
-        Utils::Timer Runtimer;
-        Runtimer.start();
-
-        double tmp = 0;
-        for (int i = 0; i < nsamps; i++) {
-
-            xy[0] = xsamps[i];
-            xy[1] = ysamps[i];
-
-            tabf.compute(xy, f);
-            tmp += f[0] / double(i + 3);
-
-            // fmt::print("{0:} \n",f[0]);
-
-            f.setZero();
-        }
-        Runtimer.stop();
-        double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-        fmt::print("Total Time: {0:} ms \n", tseconds * 1000);
-
-        return tmp;
-    });
 }
 
 // ── InterpTable3D
@@ -245,62 +197,6 @@ inline void InterpTable3DBuild(nb::module_ &m) {
     obj.def("vf", [](std::shared_ptr<InterpTable3D> &self) {
         return GenericFunction<-1, -1>(InterpFunction3D(self));
     });
-
-    m.def("InterpTable3DSpeedTest",
-          [](const GenericFunction<-1, 1> &tabf, double xl, double xu, double yl, double yu,
-             double zl, double zu, int nsamps, bool lin) {
-              Eigen::ArrayXd xsamps;
-              xsamps.setRandom(nsamps);
-              xsamps += 1;
-              xsamps /= 2;
-              xsamps *= (xu - xl);
-              xsamps += xl;
-
-              Eigen::ArrayXd ysamps;
-              ysamps.setRandom(nsamps);
-              ysamps += 1;
-              ysamps /= 2;
-              ysamps *= (yu - yl);
-              ysamps += yl;
-
-              Eigen::ArrayXd zsamps;
-              zsamps.setRandom(nsamps);
-              zsamps += 1;
-              zsamps /= 2;
-              zsamps *= (zu - zl);
-              zsamps += zl;
-
-              if (lin) {
-                  xsamps.setLinSpaced(xl, xu);
-                  ysamps.setLinSpaced(yl, yu);
-                  zsamps.setLinSpaced(zl, zu);
-              }
-
-              Eigen::VectorXd xyz(3);
-              Vector1<double> f;
-              f.setZero();
-
-              Utils::Timer Runtimer;
-              Runtimer.start();
-
-              double tmp = 0;
-              for (int i = 0; i < nsamps; i++) {
-
-                  xyz[0] = xsamps[i];
-                  xyz[1] = ysamps[i];
-                  xyz[2] = zsamps[i];
-
-                  tabf.compute(xyz, f);
-                  tmp += f[0] / double(i + 3);
-
-                  f.setZero();
-              }
-              Runtimer.stop();
-              double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-              fmt::print("Total Time: {0:} ms \n", tseconds * 1000);
-
-              return tmp;
-          });
 }
 
 // ── InterpTable4D
@@ -356,73 +252,6 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     obj.def("vf", [](std::shared_ptr<InterpTable4D> &self) {
         return GenericFunction<-1, -1>(InterpFunction4D(self));
     });
-
-    m.def("InterpTable4DSpeedTest",
-          [](const GenericFunction<-1, 1> &tabf, double xl, double xu, double yl, double yu,
-             double zl, double zu, double wl, double wu,
-
-             int nsamps, bool lin) {
-              Eigen::ArrayXd xsamps;
-              xsamps.setRandom(nsamps);
-              xsamps += 1;
-              xsamps /= 2;
-              xsamps *= (xu - xl);
-              xsamps += xl;
-
-              Eigen::ArrayXd ysamps;
-              ysamps.setRandom(nsamps);
-              ysamps += 1;
-              ysamps /= 2;
-              ysamps *= (yu - yl);
-              ysamps += yl;
-
-              Eigen::ArrayXd zsamps;
-              zsamps.setRandom(nsamps);
-              zsamps += 1;
-              zsamps /= 2;
-              zsamps *= (zu - zl);
-              zsamps += zl;
-
-              Eigen::ArrayXd wsamps;
-              wsamps.setRandom(nsamps);
-              wsamps += 1;
-              wsamps /= 2;
-              wsamps *= (wu - wl);
-              wsamps += wl;
-
-              if (lin) {
-                  xsamps.setLinSpaced(xl, xu);
-                  ysamps.setLinSpaced(yl, yu);
-                  zsamps.setLinSpaced(zl, zu);
-                  wsamps.setLinSpaced(wl, wu);
-              }
-
-              Eigen::VectorXd xyzw(4);
-              Vector1<double> f;
-              f.setZero();
-
-              Utils::Timer Runtimer;
-              Runtimer.start();
-
-              double tmp = 0;
-              for (int i = 0; i < nsamps; i++) {
-
-                  xyzw[0] = xsamps[i];
-                  xyzw[1] = ysamps[i];
-                  xyzw[2] = zsamps[i];
-                  xyzw[3] = wsamps[i];
-
-                  tabf.compute(xyzw, f);
-                  tmp += f[0] / double(i + 3);
-
-                  f.setZero();
-              }
-              Runtimer.stop();
-              double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-              fmt::print("Total Time: {0:} ms \n", tseconds * 1000);
-
-              return tmp;
-          });
 }
 
 } // namespace Tycho
