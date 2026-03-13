@@ -45,11 +45,9 @@ set(TYCHO_FP_MODE "${_TYCHO_FP_MODE_DEFAULT}" CACHE STRING
 )
 set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFER_FAST FAST)
 
+# Normalize to uppercase for comparison without FORCE-writing back to the cache,
+# so that ccmake / cmake-gui edits are not silently overwritten on re-configure.
 string(TOUPPER "${TYCHO_FP_MODE}" TYCHO_FP_MODE)
-set(TYCHO_FP_MODE "${TYCHO_FP_MODE}" CACHE STRING
-    "Floating-point optimization mode. Valid values: STRICT, SAFER_FAST, FAST." FORCE
-)
-set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFER_FAST FAST)
 
 set(_TYCHO_VALID_FP_MODES STRICT SAFER_FAST FAST)
 list(FIND _TYCHO_VALID_FP_MODES "${TYCHO_FP_MODE}" _TYCHO_FP_MODE_INDEX)
@@ -122,9 +120,9 @@ endif()
 if(BUILD_TYCHO_WHEEL)
     # Detect architecture for wheel builds
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
-        # ARM64 (Apple Silicon, ARM servers) - use NEON
-        list(APPEND SIMD_FLAGS "-march=armv8-a+simd")
-        message(STATUS "Building ARM64 wheel with NEON support")
+        # ARM64 wheels are macOS-only (Apple Silicon); target M1 baseline
+        list(APPEND SIMD_FLAGS "-mcpu=apple-m1")
+        message(STATUS "Building ARM64 wheel targeting Apple M1+")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
         # x86-64 (Intel/AMD) - use AVX2 (x86-64-v3 flags written out for older compilers)
         list(APPEND SIMD_FLAGS "-mcx16")
@@ -234,10 +232,10 @@ if(NOT WIN32)
 endif()
 
 if(TYCHO_FP_MODE STREQUAL "STRICT")
+    # On non-Windows, the compiler already defaults to strict FP semantics,
+    # so no flags are needed.  On Windows, /fp:strict must be set explicitly.
     if(WIN32)
         list(APPEND FP_FLAGS "/fp:strict")
-    else()
-        list(APPEND FP_FLAGS "-fno-fast-math")
     endif()
 elseif(TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     if(WIN32)
