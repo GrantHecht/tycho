@@ -16,7 +16,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
-        "TYCHO_FP_MODE": "SAFE_FAST",
+        "TYCHO_FP_MODE": "SAFER_FAST",
         "CMAKE_C_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang",
         "CMAKE_CXX_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang++",
         "Python_EXECUTABLE": "/opt/miniconda3/envs/tycho/bin/python",
@@ -32,7 +32,7 @@
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "TYCHO_FP_MODE": "SAFE_FAST",
+        "TYCHO_FP_MODE": "SAFER_FAST",
         "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
         "CMAKE_C_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
         "CMAKE_C_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",

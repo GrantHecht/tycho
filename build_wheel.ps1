@@ -35,7 +35,7 @@ $env:CMAKE_BUILD_PARALLEL_LEVEL = '8'
 Write-Host "Building wheel..."
 & $python -m build --wheel --no-isolation `
     -C "cmake.args=-GNinja" `
-    -C "cmake.args=-DTYCHO_FP_MODE=SAFE_FAST" `
+    -C "cmake.args=-DTYCHO_FP_MODE=SAFER_FAST" `
     -C "cmake.args=-DCMAKE_CXX_COMPILER=C:/PROGRA~1/LLVM/bin/clang-cl.exe" `
     -C "cmake.args=-DCMAKE_C_COMPILER=C:/PROGRA~1/LLVM/bin/clang-cl.exe" `
     -C "cmake.args=-DCMAKE_LINKER=C:/PROGRA~1/LLVM/bin/lld-link.exe" `

@@ -36,48 +36,33 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 
 # Floating-point optimization policy.
 # STRICT: no fast-math relaxations
-# SAFE_FAST: all fast-math optimizations except finite-math-only
+# SAFER_FAST: all fast-math optimizations except finite-math-only
 # FAST: full fast-math
-set(_TYCHO_FP_MODE_DEFAULT "SAFE_FAST")
-if(DEFINED STRICT_IEEE_COMPLIANCE)
-    if(NOT DEFINED TYCHO_FP_MODE)
-        if(STRICT_IEEE_COMPLIANCE)
-            set(_TYCHO_FP_MODE_DEFAULT "STRICT")
-        else()
-            set(_TYCHO_FP_MODE_DEFAULT "FAST")
-        endif()
-        message(WARNING "STRICT_IEEE_COMPLIANCE is deprecated; use TYCHO_FP_MODE instead.")
-    else()
-        message(WARNING
-            "STRICT_IEEE_COMPLIANCE is deprecated and ignored because TYCHO_FP_MODE is set "
-            "to '${TYCHO_FP_MODE}'."
-        )
-    endif()
-endif()
+set(_TYCHO_FP_MODE_DEFAULT "SAFER_FAST")
 
 set(TYCHO_FP_MODE "${_TYCHO_FP_MODE_DEFAULT}" CACHE STRING
-    "Floating-point optimization mode. Valid values: STRICT, SAFE_FAST, FAST."
+    "Floating-point optimization mode. Valid values: STRICT, SAFER_FAST, FAST."
 )
-set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFE_FAST FAST)
+set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFER_FAST FAST)
 
 string(TOUPPER "${TYCHO_FP_MODE}" TYCHO_FP_MODE)
 set(TYCHO_FP_MODE "${TYCHO_FP_MODE}" CACHE STRING
-    "Floating-point optimization mode. Valid values: STRICT, SAFE_FAST, FAST." FORCE
+    "Floating-point optimization mode. Valid values: STRICT, SAFER_FAST, FAST." FORCE
 )
-set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFE_FAST FAST)
+set_property(CACHE TYCHO_FP_MODE PROPERTY STRINGS STRICT SAFER_FAST FAST)
 
-set(_TYCHO_VALID_FP_MODES STRICT SAFE_FAST FAST)
+set(_TYCHO_VALID_FP_MODES STRICT SAFER_FAST FAST)
 list(FIND _TYCHO_VALID_FP_MODES "${TYCHO_FP_MODE}" _TYCHO_FP_MODE_INDEX)
 if(_TYCHO_FP_MODE_INDEX EQUAL -1)
     message(FATAL_ERROR
-        "Invalid TYCHO_FP_MODE='${TYCHO_FP_MODE}'. Valid values: STRICT, SAFE_FAST, FAST."
+        "Invalid TYCHO_FP_MODE='${TYCHO_FP_MODE}'. Valid values: STRICT, SAFER_FAST, FAST."
     )
 endif()
 
-if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFE_FAST")
+if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         message(FATAL_ERROR
-            "TYCHO_FP_MODE=SAFE_FAST requires Clang on Windows to disable finite-math-only."
+            "TYCHO_FP_MODE=SAFER_FAST requires Clang on Windows to disable finite-math-only."
         )
     endif()
 
@@ -85,7 +70,7 @@ if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFE_FAST")
     if(NOT TYCHO_HAS_NO_FINITE_MATH_ONLY_FLAG)
         message(FATAL_ERROR
             "The active Windows Clang toolchain does not support -fno-finite-math-only, "
-            "so TYCHO_FP_MODE=SAFE_FAST is unavailable."
+            "so TYCHO_FP_MODE=SAFER_FAST is unavailable."
         )
     endif()
 endif()
@@ -243,7 +228,7 @@ if(TYCHO_FP_MODE STREQUAL "STRICT")
     else()
         list(APPEND FP_FLAGS "-fno-fast-math")
     endif()
-elseif(TYCHO_FP_MODE STREQUAL "SAFE_FAST")
+elseif(TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     if(WIN32)
         list(APPEND FP_FLAGS "/fp:fast")
         list(APPEND FP_FLAGS "-fno-finite-math-only")
@@ -479,8 +464,8 @@ message(STATUS ${PYTHON_EXECUTABLE})
 message(STATUS "Floating-point mode: ${TYCHO_FP_MODE}")
 if(TYCHO_FP_MODE STREQUAL "STRICT")
     message(STATUS "IEEE 754 compliance: STRICT (no fast-math relaxations)")
-elseif(TYCHO_FP_MODE STREQUAL "SAFE_FAST")
-    message(STATUS "IEEE 754 compliance: SAFE_FAST (fast-math except finite-math-only)")
+elseif(TYCHO_FP_MODE STREQUAL "SAFER_FAST")
+    message(STATUS "IEEE 754 compliance: SAFER_FAST (fast-math except finite-math-only)")
 else()
     message(STATUS "IEEE 754 compliance: FAST (full fast-math)")
 endif()
