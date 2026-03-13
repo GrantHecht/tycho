@@ -36,8 +36,6 @@
 // =============================================================================
 
 #pragma once
-#include <bench/BenchTimer.h>
-
 #include "AssigmentTypes.h"
 #include "BinaryMath.h"
 #include "CommonFunctions/ExpressionFwdDeclarations.h"
@@ -893,113 +891,6 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 });
         }
     }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    template <bool DoHessian, class Scalar>
-    void RunPrintTime(ConstEigenRef<Input<double>> xt, volatile int n,
-                      std::bool_constant<DoHessian> dh, Scalar s) const {
-        Input<Scalar> x = xt.template cast<Scalar>();
-        Output<Scalar> fx(this->ORows());
-        fx.setZero();
-        Jacobian<Scalar> jx(this->ORows(), this->IRows());
-
-        jx.setZero();
-
-        this->derived().compute_jacobian(x, fx, jx);
-
-        std::cout << "f(x):" << std::endl << fx.transpose() << std::endl << std::endl;
-        std::cout << "j(x):" << std::endl << jx << std::endl << std::endl;
-        Eigen::BenchTimer tfun;
-        tfun.start();
-        // x.setRandom();
-        Output<Scalar> fxsum = fx;
-        Jacobian<Scalar> jxsum = jx;
-
-        Scalar t = Scalar(0.0);
-        for (int i = 0; i < n; i++) {
-            // if (i % 2000 == 0) x.setRandom();
-            x[0] += 1.0 / double(n + 1);
-            this->derived().compute(x, fx);
-            fxsum += fx;
-            t += fx[0];
-        }
-        tfun.stop();
-        t += fxsum.norm();
-        std::cout << "Dummy Value: " << t << std::endl;
-
-        std::cout << "Compute Time:" << tfun.total() * 1000.0 << " ms" << std::endl;
-
-        // x.setRandom();
-
-        Eigen::BenchTimer tfun2;
-        tfun2.start();
-        for (int i = 0; i < n; i++) {
-            // if (i % 2000 == 0) x.setRandom();
-            x[0] += 1.0 / double(n + 1);
-            this->derived().compute_jacobian(x, fx, jx);
-            fxsum += fx;
-            t += jx(0, 0) + jx(this->ORows() - 1, this->IRows() - 1);
-        }
-        tfun2.stop();
-        t += jx.norm() + fxsum.norm();
-
-        std::cout << "Compute_jacobian Time:" << tfun2.total() * 1000.0 << " ms" << std::endl;
-        std::cout << "Dummy Value: " << t << std::endl;
-
-        if constexpr (DoHessian) {
-            t = 0;
-            // x.setRandom();
-            fx.setZero();
-            Output<Scalar> l(this->ORows());
-            l.setOnes();
-            Input<Scalar> gx(this->IRows());
-            gx.setZero();
-            Hessian<Scalar> hx(this->IRows(), this->IRows());
-            hx.setZero();
-
-            Eigen::BenchTimer tfun3;
-            tfun3.start();
-            for (int i = 0; i < n; i++) {
-                // if (i % 2000 == 0) x.setRandom();
-                x[0] += 1.0 / double(n + 1);
-                this->derived().compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx,
-                                                                                l);
-                fxsum += fx;
-                t += jx(0, 0) + jx(this->ORows() - 1, this->IRows() - 1) + hx(0, 0) +
-                     hx(this->IRows() - 1, this->IRows() - 1) + gx[0];
-            }
-            tfun3.stop();
-            t += jx.norm() + fxsum.norm() + hx.sum();
-
-            std::cout << "Compute_jacobian_hessian Time:" << tfun3.total() * 1000.0 << " ms"
-                      << std::endl;
-            std::cout << "Dummy Value: " << t << std::endl;
-        }
-    }
-
-    void rpt(Eigen::VectorXd x, int n) const {
-        double s = 1;
-        this->RunPrintTime(x, n, std::bool_constant<true>(), s);
-    }
-
-    void ArrayTest(Eigen::VectorXd x, int n) {
-        double s = 1;
-        this->RunPrintTime(x, n, std::bool_constant<true>(), s);
-
-        Eigen::Array<double, 2, 1> s2;
-        this->RunPrintTime(x, n / 2, std::bool_constant<true>(), s2);
-
-        Eigen::Array<double, 4, 1> s4;
-        this->RunPrintTime(x, n / 4, std::bool_constant<true>(), s4);
-    }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /*
      * Counts the number of non-zero elements in the lower triangle of the hessian and

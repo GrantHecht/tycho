@@ -146,14 +146,12 @@ int Tycho::get_core_count() {
 
 #elif defined(__APPLE__)
     auto Run = [tcount]() {
-        try {
-            int count;
-            size_t size = sizeof(count);
-            sysctlbyname("hw.physicalcpu", &count, &size, NULL, 0) ? 0 : count;
+        int count;
+        size_t size = sizeof(count);
+        int result = sysctlbyname("hw.physicalcpu", &count, &size, NULL, 0);
+        if (result == 0)
             return count;
-        } catch (...) {
-            return tcount;
-        }
+        return tcount;
     };
 
 #else

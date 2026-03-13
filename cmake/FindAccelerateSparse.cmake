@@ -39,9 +39,16 @@
 #
 # AccelerateSparse_FOUND: TRUE iff an Accelerate framework including the sparse
 #                         solvers, and all dependencies, has been found.
-# AccelerateSparse_INCLUDE_DIRS: Include directories for Accelerate framework.
-# AccelerateSparse_LIBRARIES: Libraries for Accelerate framework and all
-#                             dependencies.
+# AccelerateSparse_INCLUDE_DIRS: Additional include directories for Accelerate.
+#                                This is intentionally empty; headers are
+#                                consumed via the compiler's default Apple SDK
+#                                search path.
+# AccelerateSparse_LIBRARIES: Libraries/targets for Accelerate framework and
+#                             all dependencies.
+# AccelerateSparse::AccelerateSparse: Imported interface target for linking
+#                                     against the Accelerate framework without
+#                                     injecting explicit framework paths into
+#                                     compile commands.
 #
 # The following variables are also defined by this module, but in line with
 # CMake recommended FindPackage() module style should NOT be referenced directly
@@ -130,13 +137,18 @@ else()
   endif()
 endif()
 if (AccelerateSparse_FOUND)
-  set(AccelerateSparse_INCLUDE_DIRS ${AccelerateSparse_INCLUDE_DIR})
-  set(AccelerateSparse_LIBRARIES ${AccelerateSparse_LIBRARY})
+  if (NOT TARGET AccelerateSparse::AccelerateSparse)
+    add_library(AccelerateSparse::AccelerateSparse INTERFACE IMPORTED)
+    set_property(TARGET AccelerateSparse::AccelerateSparse PROPERTY
+      INTERFACE_LINK_OPTIONS "-framework" "Accelerate")
+  endif()
+  set(AccelerateSparse_INCLUDE_DIRS "")
+  set(AccelerateSparse_LIBRARIES AccelerateSparse::AccelerateSparse)
 endif()
 # Handle REQUIRED / QUIET optional arguments and version.
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(AccelerateSparse
-  REQUIRED_VARS AccelerateSparse_INCLUDE_DIRS AccelerateSparse_LIBRARIES)
+  REQUIRED_VARS AccelerateSparse_LIBRARY)
 if (AccelerateSparse_FOUND)
   mark_as_advanced(FORCE AccelerateSparse_INCLUDE_DIR
                          AccelerateSparse_LIBRARY)

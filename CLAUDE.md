@@ -137,7 +137,7 @@ python examples/Brachistochrone.py
 | -------------------------- | -------------------------------------------------------------------------------------------- |
 | `Python_EXECUTABLE`        | Path to Python interpreter to build against                                                  |
 | `PYTHON_LOCAL_INSTALL_DIR` | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
-| `STRICT_IEEE_COMPLIANCE`   | `ON` to disable fast-math and enforce proper NaN handling (default `ON`)                     |
+| `TYCHO_FP_MODE`            | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
 | `BUILD_SPHINX_DOCS`        | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
 | `BUILD_CPP_EXAMPLES`       | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
 

@@ -72,6 +72,9 @@ add_library(psiopt STATIC
  )
 target_include_directories(psiopt PRIVATE ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
+if(APPLE)
+    target_link_libraries(psiopt PUBLIC AccelerateSparse::AccelerateSparse)
+endif()
 
 
 

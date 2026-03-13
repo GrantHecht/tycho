@@ -76,7 +76,6 @@ template <int IR, int OR> struct DenseFunctionSpec {
         virtual ~Concept() = default;
         // Your (internal) interface goes here.
 
-        // virtual void rpt(Eigen::VectorXd x, int n) const = 0;
         virtual DomainMatrix input_domain() const = 0;
         virtual bool is_linear() const = 0;
         virtual void enable_vectorization(bool b) const = 0;
