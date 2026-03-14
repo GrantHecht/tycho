@@ -2,9 +2,11 @@
 // Utils benchmarks — TypeStorage SBO, MemoryManager, ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/TypeStorage.h"
 #include "Tycho.h"
+#include "Utils/TypeStorage.h"
 #include <benchmark/benchmark.h>
+#include <future>
+#include <vector>
 
 using namespace Tycho;
 
@@ -59,12 +61,13 @@ static void BM_TypeStorage_MoveSmall(benchmark::State &state) {
 BENCHMARK(BM_TypeStorage_MoveSmall);
 
 ///////////////////////////////////////////////////////////////////////////////
-// MemoryManager
+// MemoryManager — alternate sizes to force actual reallocation
 ///////////////////////////////////////////////////////////////////////////////
 
 static void BM_MemoryManager_Resize(benchmark::State &state) {
     for (auto _ : state) {
         MemoryManager::resize(256, 256);
+        MemoryManager::resize(1, 1);
     }
 }
 BENCHMARK(BM_MemoryManager_Resize);
@@ -82,3 +85,21 @@ static void BM_ThreadPool_Dispatch(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_ThreadPool_Dispatch);
+
+static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
+    int N = static_cast<int>(state.range(0));
+    ctpl::ThreadPool pool(4);
+    for (auto _ : state) {
+        std::vector<std::future<int>> futures;
+        futures.reserve(N);
+        for (int i = 0; i < N; ++i) {
+            futures.push_back(pool.push([](int) { return 42; }));
+        }
+        int sum = 0;
+        for (auto &f : futures) {
+            sum += f.get();
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_ThreadPool_BatchDispatch)->Arg(10)->Arg(100);
