@@ -45,6 +45,8 @@ tycho_add_test(test_vector_function_composition test_vector_function_composition
 # Phase 3: Integrators
 tycho_add_test(test_integrators test_integrators.cpp)
 
+# Phase 4: Astro (pre-existing test_astro, test_type_storage, test_vector_functions)
+
 # Phase 5: OptimalControl
 tycho_add_test(test_optimal_control test_optimal_control.cpp)
 

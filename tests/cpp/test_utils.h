@@ -91,8 +91,7 @@ void verify_adjoint_consistency(Func &func, const Eigen::VectorXd &x, const Eige
     Eigen::VectorXd gx_expected = jx.transpose() * lm;
 
     for (int j = 0; j < ir; ++j) {
-        EXPECT_NEAR(gx[j], gx_expected[j], tol)
-            << "Adjoint gradient mismatch at element " << j;
+        EXPECT_NEAR(gx[j], gx_expected[j], tol) << "Adjoint gradient mismatch at element " << j;
     }
 }
 
@@ -132,5 +131,22 @@ void verify_hessian_consistency(Func &func, const Eigen::VectorXd &x, const Eige
             << "Hessian adjoint gradient mismatch at element " << j;
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Shared Brachistochrone ODE — used across multiple test files
+///////////////////////////////////////////////////////////////////////////////
+
+struct BrachODE_Impl : ODESize<3, 1, 0> {
+    static auto Definition(double g) {
+        auto args = Arguments<5>(); // [x, y, v, t, theta]
+        auto v = args.coeff<2>();
+        auto theta = args.coeff<4>();
+        auto xdot = sin(theta) * v;
+        auto ydot = cos(theta) * v * (-1.0);
+        auto vdot = g * cos(theta);
+        return StackedOutputs{xdot, ydot, vdot};
+    }
+};
+BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
 
 } // namespace TychoTest

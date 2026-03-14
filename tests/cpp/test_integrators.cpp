@@ -9,11 +9,11 @@
 // convergence order via h-refinement. NOT conservation checks.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
 #include "Astro/KeplerModel.h"
+#include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
@@ -96,24 +96,11 @@ TEST_F(IntegratorTest, ForwardBackwardReversibility) {
 }
 
 TEST_F(IntegratorTest, BrachistochroneSmokeTest) {
-    struct Brach_Impl : ODESize<3, 1, 0> {
-        static auto Definition(double g) {
-            auto args = Arguments<5>();
-            auto v = args.coeff<2>();
-            auto theta = args.coeff<4>();
-            auto xdot = sin(theta) * v;
-            auto ydot = cos(theta) * v * (-1.0);
-            auto vdot = g * cos(theta);
-            return StackedOutputs{xdot, ydot, vdot};
-        }
-    };
-    BUILD_ODE_FROM_EXPRESSION(BrachInteg, Brach_Impl, double);
-
-    BrachInteg ode(9.81);
+    BrachODE ode(9.81);
     // Need to set control for integration
     Eigen::VectorXd u(1);
     u << M_PI / 4.0; // constant control
-    Integrator<BrachInteg> integ(ode, 0.01, u);
+    Integrator<BrachODE> integ(ode, 0.01, u);
     integ.setAbsTol(1e-12);
 
     Eigen::VectorXd x0(5);
@@ -142,8 +129,7 @@ static double sho_error(const std::string &method, double h) {
 
     double x_exact = std::cos(tf);
     double v_exact = -std::sin(tf);
-    return std::sqrt((xf[0] - x_exact) * (xf[0] - x_exact) +
-                     (xf[1] - v_exact) * (xf[1] - v_exact));
+    return std::sqrt((xf[0] - x_exact) * (xf[0] - x_exact) + (xf[1] - v_exact) * (xf[1] - v_exact));
 }
 
 TEST_F(IntegratorTest, DOPRI54ConvergenceOrder) {
@@ -284,8 +270,8 @@ TEST_F(IntegratorTest, AdaptiveToleranceAdherence) {
 
     double x_exact = std::cos(5.0);
     double v_exact = -std::sin(5.0);
-    double err = std::sqrt((xf[0] - x_exact) * (xf[0] - x_exact) +
-                           (xf[1] - v_exact) * (xf[1] - v_exact));
+    double err =
+        std::sqrt((xf[0] - x_exact) * (xf[0] - x_exact) + (xf[1] - v_exact) * (xf[1] - v_exact));
     // Error should be within a reasonable multiple of tolerance
     EXPECT_LT(err, tol * 1000);
 }
@@ -379,9 +365,7 @@ TEST_F(IntegratorTest, DenseOutputVsAnalytical) {
         double t = state[2]; // time component
         double x_exact = std::cos(t);
         double v_exact = -std::sin(t);
-        EXPECT_NEAR(state[0], x_exact, 1e-8)
-            << "x mismatch at t=" << t;
-        EXPECT_NEAR(state[1], v_exact, 1e-8)
-            << "v mismatch at t=" << t;
+        EXPECT_NEAR(state[0], x_exact, 1e-8) << "x mismatch at t=" << t;
+        EXPECT_NEAR(state[1], v_exact, 1e-8) << "v mismatch at t=" << t;
     }
 }

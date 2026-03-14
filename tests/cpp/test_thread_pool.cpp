@@ -6,8 +6,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Utils/ThreadPool.h"
-#include <gtest/gtest.h>
 #include <atomic>
+#include <gtest/gtest.h>
 #include <vector>
 
 TEST(ThreadPoolTest, DefaultConstruct) {
@@ -55,6 +55,7 @@ TEST(ThreadPoolTest, IdleCount) {
     ctpl::ThreadPool pool(4);
     // After construction with no tasks, all threads should become idle
     // Give threads time to start and enter idle state
+    // 50ms is generous; may need increase under heavy CI load
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(pool.n_idle(), 4);
 }

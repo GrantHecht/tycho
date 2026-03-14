@@ -4,33 +4,16 @@
 // Tests PSIOPT convergence, Jet batch runner, and NLP structure.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
 #include "Solvers/Jet.h"
+#include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
-#include <memory>
 #include <functional>
+#include <gtest/gtest.h>
+#include <memory>
 
 using namespace Tycho;
 using namespace TychoTest;
-
-///////////////////////////////////////////////////////////////////////////////
-// Brachistochrone ODE (reused for solver tests)
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachSolv_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>();
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachSolv, BrachSolv_Impl, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture
@@ -61,9 +44,8 @@ TEST_F(SolverTest, BrachistochroneEndToEnd) {
         traj.push_back(pt);
     }
 
-    BrachSolv ode(g);
-    auto phase =
-        std::make_shared<ODEPhase<BrachSolv>>(ode, TranscriptionModes::LGL3, traj, 32);
+    BrachODE ode(g);
+    auto phase = std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3, traj, 32);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
@@ -106,8 +88,8 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
         traj.push_back(pt);
     }
 
-    BrachSolv ode(g);
-    auto phase = std::make_shared<ODEPhase<BrachSolv>>(ode, TranscriptionModes::LGL3, traj, 16);
+    BrachODE ode(g);
+    auto phase = std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3, traj, 16);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
@@ -126,8 +108,8 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
 
     // solve() only finds feasibility
     auto status = phase->solve();
-    // Should converge (feasible) or at least not diverge
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::NOTCONVERGED);
+    // Should converge (feasible) — Brachistochrone is well-posed
+    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, ConvergenceFlagOrdering) {
@@ -173,7 +155,7 @@ TEST_F(SolverTest, ConstraintInterfaceCopy) {
 // Helper: build a Brachistochrone phase for solver/Jet tests
 ///////////////////////////////////////////////////////////////////////////////
 
-static std::shared_ptr<ODEPhase<BrachSolv>> make_brach_solver_phase(int n_segs = 16) {
+static std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 16) {
     constexpr double g = 9.81;
     int n_pts = n_segs * 3 + 1;
     std::vector<Eigen::VectorXd> traj;
@@ -189,9 +171,8 @@ static std::shared_ptr<ODEPhase<BrachSolv>> make_brach_solver_phase(int n_segs =
         traj.push_back(pt);
     }
 
-    BrachSolv ode(g);
-    auto phase =
-        std::make_shared<ODEPhase<BrachSolv>>(ode, TranscriptionModes::LGL3, traj, n_segs);
+    BrachODE ode(g);
+    auto phase = std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3, traj, n_segs);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
@@ -217,7 +198,7 @@ static std::shared_ptr<ODEPhase<BrachSolv>> make_brach_solver_phase(int n_segs =
 
 TEST_F(SolverTest, JetMapPrebuiltProblems) {
     // Create 3 identical Brachistochrone phases, solve via Jet::map
-    std::vector<std::shared_ptr<ODEPhase<BrachSolv>>> phases;
+    std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < 3; ++i) {
         auto p = make_brach_solver_phase(16);
         p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
@@ -236,7 +217,7 @@ TEST_F(SolverTest, JetMapPrebuiltProblems) {
 
 TEST_F(SolverTest, JetMapSingleGenerator) {
     // Single generator function that builds a Brach phase from a segment count
-    std::function<std::shared_ptr<ODEPhase<BrachSolv>>(int)> gen = [](int n_segs) {
+    std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen = [](int n_segs) {
         auto p = make_brach_solver_phase(n_segs);
         p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
@@ -248,25 +229,24 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     for (int i = 0; i < 2; ++i) {
         auto traj = results[i]->returnTraj();
         double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02)
-            << "Jet single-gen problem " << i << " did not converge";
+        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet single-gen problem " << i << " did not converge";
     }
 }
 
 TEST_F(SolverTest, JetMapMultiGenerator) {
     // Two generators: different segment counts
-    std::function<std::shared_ptr<ODEPhase<BrachSolv>>(int)> gen16 = [](int) {
+    std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen16 = [](int) {
         auto p = make_brach_solver_phase(16);
         p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
-    std::function<std::shared_ptr<ODEPhase<BrachSolv>>(int)> gen32 = [](int) {
+    std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen32 = [](int) {
         auto p = make_brach_solver_phase(32);
         p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
 
-    std::vector<std::function<std::shared_ptr<ODEPhase<BrachSolv>>(int)>> genfuncs = {gen16, gen32};
+    std::vector<std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)>> genfuncs = {gen16, gen32};
     std::vector<int> args = {0, 0, 0}; // dummy args
     Eigen::VectorXi genfidxes(3);
     genfidxes << 0, 1, 0; // gen16, gen32, gen16
@@ -276,8 +256,7 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     for (int i = 0; i < 3; ++i) {
         auto traj = results[i]->returnTraj();
         double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02)
-            << "Jet multi-gen problem " << i << " did not converge";
+        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet multi-gen problem " << i << " did not converge";
     }
 }
 

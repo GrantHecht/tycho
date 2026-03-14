@@ -5,33 +5,16 @@
 // refinement, and end-to-end solver convergence using Brachistochrone.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
 #include "Astro/KeplerModel.h"
+#include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 #include <memory>
 #include <vector>
 
 using namespace Tycho;
 using namespace TychoTest;
-
-///////////////////////////////////////////////////////////////////////////////
-// Brachistochrone ODE
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachOC_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>();
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachOC, BrachOC_Impl, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture
@@ -43,8 +26,7 @@ class OptimalControlTest : public VectorFunctionFixture {};
 // Helper: build a standard Brachistochrone phase
 ///////////////////////////////////////////////////////////////////////////////
 
-static std::shared_ptr<ODEPhase<BrachOC>> make_brach_phase(int n_pts = 100,
-                                                            int n_defects = 32) {
+static std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_pts = 100, int n_defects = 32) {
     constexpr double g = 9.81;
     constexpr double x0 = 0.0, y0 = 10.0, v0 = 0.0, t0 = 0.0;
     constexpr double xf = 10.0, yf = 5.0;
@@ -63,8 +45,9 @@ static std::shared_ptr<ODEPhase<BrachOC>> make_brach_phase(int n_pts = 100,
         traj.push_back(pt);
     }
 
-    BrachOC ode(g);
-    auto phase = std::make_shared<ODEPhase<BrachOC>>(ode, TranscriptionModes::LGL3, traj, n_defects);
+    BrachODE ode(g);
+    auto phase =
+        std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3, traj, n_defects);
 
     // Front boundary
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
@@ -134,7 +117,7 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
 // Solver integration — Brachistochrone end-to-end
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST_F(OptimalControlTest, BrachistochoneSolveOptimize) {
+TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     auto phase = make_brach_phase(100, 32);
     phase->optimizer->PrintLevel = 0;
 
@@ -145,8 +128,7 @@ TEST_F(OptimalControlTest, BrachistochoneSolveOptimize) {
     auto result = phase->returnTraj();
     double tf = result.back()[3];
     // Known optimal time ~1.8013 s
-    EXPECT_NEAR(tf, 1.8013, 0.01)
-        << "Optimal time should be near 1.8013 s, got " << tf;
+    EXPECT_NEAR(tf, 1.8013, 0.01) << "Optimal time should be near 1.8013 s, got " << tf;
 }
 
 TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
@@ -188,8 +170,8 @@ TEST_F(OptimalControlTest, KeplerPhaseConstruct) {
         double t = s * T / 4.0;
         double angle = s * M_PI / 2.0;
         Eigen::VectorXd pt(7);
-        pt << r0 * std::cos(angle), r0 * std::sin(angle), 0.0,
-            -v_circ * std::sin(angle), v_circ * std::cos(angle), 0.0, t;
+        pt << r0 * std::cos(angle), r0 * std::sin(angle), 0.0, -v_circ * std::sin(angle),
+            v_circ * std::cos(angle), 0.0, t;
         traj.push_back(pt);
     }
 
@@ -215,34 +197,33 @@ TEST_F(OptimalControlTest, LGLCoeffsIntegralWeights) {
     EXPECT_DOUBLE_EQ(Coeffs::InteriorSpacings[0], 0.5);
 
     // Integral weights: Simpson's 1/3 rule gives 1/3 + 4/3 + 1/3 = 2
-    double sum = Coeffs::Cardinal_Integral_Weights[0] +
-                 Coeffs::Interior_Integral_Weights[0] + Coeffs::Cardinal_Integral_Weights[1];
+    double sum = Coeffs::Cardinal_Integral_Weights[0] + Coeffs::Interior_Integral_Weights[0] +
+                 Coeffs::Cardinal_Integral_Weights[1];
     EXPECT_NEAR(sum, 2.0, 1e-14);
 
     // Cardinal weights are symmetric
-    EXPECT_DOUBLE_EQ(Coeffs::Cardinal_Integral_Weights[0],
-                     Coeffs::Cardinal_Integral_Weights[1]);
+    EXPECT_DOUBLE_EQ(Coeffs::Cardinal_Integral_Weights[0], Coeffs::Cardinal_Integral_Weights[1]);
 }
 
 TEST_F(OptimalControlTest, LGLDefectsDimensions) {
-    // BrachOC: XV=3, UV=1, PV=0
+    // BrachODE: XV=3, UV=1, PV=0
     // For CS=2: input = 2 * XtUVars + PVars = 2 * 5 + 0 = 10
     //           output = ORows * (CS-1) = 3 * 1 = 3
-    BrachOC ode(9.81);
-    LGLDefects<BrachOC, 2> defects(ode);
+    BrachODE ode(9.81);
+    LGLDefects<BrachODE, 2> defects(ode);
     EXPECT_EQ(defects.IRows(), 10);
     EXPECT_EQ(defects.ORows(), 3);
 }
 
 TEST_F(OptimalControlTest, LGLDefectsAdjointConsistency) {
-    BrachOC ode(9.81);
-    LGLDefects<BrachOC, 2> defects(ode);
+    BrachODE ode(9.81);
+    LGLDefects<BrachODE, 2> defects(ode);
 
     // Random input: 2 cardinal states of [x, y, v, t, theta], no params
     Eigen::VectorXd x = deterministic_random_vector(10, 300, 0.1, 5.0);
     // Ensure time is increasing: t0 < t1
-    x[3] = 0.0;  // t0
-    x[8] = 1.0;  // t1
+    x[3] = 0.0; // t0
+    x[8] = 1.0; // t1
 
     Eigen::VectorXd lm = deterministic_random_vector(3, 301, -1.0, 1.0);
     verify_adjoint_consistency(defects, x, lm, 1e-10);

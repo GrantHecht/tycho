@@ -7,29 +7,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Tycho.h"
+#include "test_utils.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;
-
-///////////////////////////////////////////////////////////////////////////////
-// Brachistochrone ODE — same as examples/cpp_examples/brachistochrone
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-
-BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
+using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture — initialise MemoryManager once for the suite

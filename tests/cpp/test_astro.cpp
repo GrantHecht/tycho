@@ -4,15 +4,15 @@
 // Tests Kepler conversions, propagation, Lambert solver, and CR3BP model.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
-#include "Astro/KeplerUtils.h"
-#include "Astro/KeplerPropagator.h"
-#include "Astro/KeplerModel.h"
 #include "Astro/CR3BPModel.h"
+#include "Astro/KeplerModel.h"
+#include "Astro/KeplerPropagator.h"
+#include "Astro/KeplerUtils.h"
 #include "Astro/LambertSolvers.h"
+#include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace Tycho;
 
@@ -175,8 +175,7 @@ TEST(KeplerPropagation, MultiPeriodReturn) {
     // Propagate 5 full periods
     auto rv5 = propagate_cartesian<double>(rv0, 5.0 * T, MU_EARTH);
     for (int i = 0; i < 6; ++i) {
-        EXPECT_NEAR(rv0[i], rv5[i], 1e-4)
-            << "Component " << i << " mismatch after 5 periods";
+        EXPECT_NEAR(rv0[i], rv5[i], 1e-4) << "Component " << i << " mismatch after 5 periods";
     }
 }
 
@@ -290,6 +289,7 @@ TEST(LambertSolver, SelfConsistency) {
     Vector6<double> rv_final = propagate_cartesian<double>(rv0, dt, MU_EARTH);
 
     // Final position should match R2
+    // 1.0 km tolerance: Kepler propagation accumulates error over this dt/orbit
     for (int i = 0; i < 3; ++i) {
         EXPECT_NEAR(rv_final[i], R2[i], 1.0)
             << "Position " << i << " mismatch in Lambert self-consistency";

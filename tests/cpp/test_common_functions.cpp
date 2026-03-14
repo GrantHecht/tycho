@@ -12,8 +12,8 @@
 
 #include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
@@ -487,11 +487,6 @@ TEST_F(CommonFunctionsTest, NestedAdjointConsistency) {
 
 TEST_F(CommonFunctionsTest, TripleCompositionAdjoint) {
     auto args = Arguments<3>();
-    auto a = args.template head<2>();
-    auto b = args.template tail<2>();
-    auto dp = a.dot(b); // scalar
-    // Now compose: norm(args) composed with scale — well, let's do a real triple
-    // dot(head(args), tail(args)) is already a composition; now scale it
     auto result = 5.0 * args;
     auto final_expr = result.norm();
     Eigen::VectorXd x = deterministic_random_vector(3, 71, 1.0, 5.0);

@@ -5,12 +5,12 @@
 // composing functions, and verifying adjoint/hessian correctness.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
-#include "Astro/KeplerModel.h"
 #include "Astro/CR3BPModel.h"
+#include "Astro/KeplerModel.h"
+#include "Tycho.h"
 #include "test_utils.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
@@ -22,35 +22,18 @@ using namespace TychoTest;
 class VFCompositionTest : public VectorFunctionFixture {};
 
 ///////////////////////////////////////////////////////////////////////////////
-// Brachistochrone ODE
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachComp_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>();
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachCompODE, BrachComp_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
 // ODE expression tests
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFCompositionTest, BrachistochroneAdjointConsistency) {
-    BrachCompODE ode(9.81);
+    BrachODE ode(9.81);
     Eigen::VectorXd x = deterministic_random_vector(5, 200, 0.1, 5.0);
     Eigen::VectorXd lm = deterministic_random_vector(3, 201, -1.0, 1.0);
     verify_adjoint_consistency(ode, x, lm, 1e-11);
 }
 
 TEST_F(VFCompositionTest, BrachistochroneGenericODEErasure) {
-    BrachCompODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
     EXPECT_EQ(gf.IRows(), 5);
     EXPECT_EQ(gf.ORows(), 3);
@@ -119,9 +102,9 @@ TEST_F(VFCompositionTest, MixedArithmeticComposition) {
     auto args = Arguments<6>();
     auto a = args.template head<3>();
     auto b = args.template tail<3>();
-    auto cw = a.cwiseProduct(b);  // element-wise
-    auto n = cw.norm();           // scalar
-    auto dp = a.dot(b);           // scalar
+    auto cw = a.cwiseProduct(b); // element-wise
+    auto n = cw.norm();          // scalar
+    auto dp = a.dot(b);          // scalar
 
     Eigen::VectorXd x = deterministic_random_vector(6, 220, 0.5, 5.0);
     Eigen::VectorXd lm(1);
@@ -219,7 +202,7 @@ TEST_F(VFCompositionTest, DotProductHessian) {
     // Check structure: top-left 3x3 = 0, top-right 3x3 = I, etc.
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            EXPECT_NEAR(hx(i, j), 0.0, 1e-12);     // top-left
+            EXPECT_NEAR(hx(i, j), 0.0, 1e-12);         // top-left
             EXPECT_NEAR(hx(i + 3, j + 3), 0.0, 1e-12); // bottom-right
             double expected_cross = (i == j) ? 1.0 : 0.0;
             EXPECT_NEAR(hx(i, j + 3), expected_cross, 1e-12); // top-right
@@ -229,7 +212,7 @@ TEST_F(VFCompositionTest, DotProductHessian) {
 }
 
 TEST_F(VFCompositionTest, BrachistochroneHessianSymmetry) {
-    BrachCompODE ode(9.81);
+    BrachODE ode(9.81);
     // Need a scalar function for hessian — use squared norm of ODE output
     auto sq = ode.squared_norm();
     Eigen::VectorXd x = deterministic_random_vector(5, 233, 0.1, 5.0);
