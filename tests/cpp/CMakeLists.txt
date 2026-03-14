@@ -12,43 +12,95 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
-# Helper — mirrors the pattern from examples/cpp_examples/brachistochrone/CMakeLists.txt
-function(tycho_add_test test_name test_source)
-    add_executable(${test_name} ${test_source})
-    target_compile_options(${test_name} PRIVATE ${COMPILE_FLAGS})
-    target_include_directories(${test_name} PRIVATE
-        ${TYCHO_INCLUDES} ${INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(${test_name} PRIVATE tycho_core ${LINK_LIBS} GTest::gtest_main)
-    target_precompile_headers(${test_name} REUSE_FROM pch)
-    if(UNIX)
-        target_link_options(${test_name} PRIVATE ${LINKER_FLAGS})
-    endif()
-    gtest_discover_tests(${test_name})
-endfunction()
+#-------------------------------------------------------------------------------
+# Test PCH: pre-parse Tycho.h (the full aggregate header) so that each test TU
+# doesn't independently re-instantiate the entire template library.  Without
+# this, every test that includes Tycho.h re-parses ODEPhase.h,
+# DenseFunctionBase.h, all solvers, integrators, etc. — the dominant build cost.
+#
+# Uses the same COMPILE_FLAGS as production code so tests are compiled under
+# identical optimizations.
+#-------------------------------------------------------------------------------
+add_library(pch_tests STATIC ${PROJECT_SOURCE_DIR}/src/pch.cpp)
+target_include_directories(pch_tests PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
+target_compile_options(pch_tests PRIVATE ${COMPILE_FLAGS})
+target_precompile_headers(pch_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/pch.h
+    ${PROJECT_SOURCE_DIR}/src/Tycho.h
+)
 
-# Existing tests
-tycho_add_test(test_astro test_astro.cpp)
-tycho_add_test(test_type_storage test_type_storage.cpp)
-tycho_add_test(test_vector_functions test_vector_functions.cpp)
+#-------------------------------------------------------------------------------
+# Single test executable with all TUs — 42 small source files compile in
+# parallel with low per-TU RAM, but only one link step (linking is ~5GB).
+#-------------------------------------------------------------------------------
+set(TYCHO_TEST_SOURCES
+    # Utils
+    utils/test_timer.cpp
+    utils/test_math_functions.cpp
+    utils/test_sizing_helpers.cpp
+    utils/test_eigen_stl.cpp
+    utils/test_lambda_jump_table.cpp
+    utils/test_misc_utils.cpp
+    utils/test_type_storage.cpp
+    utils/test_thread_pool.cpp
+    utils/test_tuple_iterator.cpp
+    utils/test_memory_management.cpp
 
-# Phase 1: Utils
-tycho_add_test(test_utils test_utils.cpp)
-tycho_add_test(test_thread_pool test_thread_pool.cpp)
-tycho_add_test(test_memory_management test_memory_management.cpp)
-tycho_add_test(test_tuple_iterator test_tuple_iterator.cpp)
+    # VectorFunctions
+    vector_functions/test_args_segment.cpp
+    vector_functions/test_constant_scaled.cpp
+    vector_functions/test_sum_dot_cross.cpp
+    vector_functions/test_norms.cpp
+    vector_functions/test_normalized_stacked_padded.cpp
+    vector_functions/test_composition_trig.cpp
+    vector_functions/test_elements_cwiseops.cpp
+    vector_functions/test_generic_function_basic.cpp
+    vector_functions/test_generic_function_copy_move.cpp
+    vector_functions/test_generic_function_interfaces.cpp
+    vector_functions/test_vf_ode_expressions.cpp
+    vector_functions/test_vf_composition_chains.cpp
+    vector_functions/test_vf_hessian.cpp
+    vector_functions/test_vector_functions.cpp
 
-# Phase 2: VectorFunctions
-tycho_add_test(test_common_functions test_common_functions.cpp)
-tycho_add_test(test_generic_function test_generic_function.cpp)
-tycho_add_test(test_vector_function_composition test_vector_function_composition.cpp)
+    # Astro
+    astro/test_kepler_conversions.cpp
+    astro/test_kepler_edge_cases.cpp
+    astro/test_kepler_propagation.cpp
+    astro/test_lambert_solver.cpp
+    astro/test_cr3bp.cpp
 
-# Phase 3: Integrators
-tycho_add_test(test_integrators test_integrators.cpp)
+    # Integrators
+    integrators/test_integration_basic.cpp
+    integrators/test_integration_convergence.cpp
+    integrators/test_integration_stm.cpp
+    integrators/test_integration_adaptive.cpp
+    integrators/test_integration_dense.cpp
 
-# Phase 4: Astro (pre-existing test_astro, test_type_storage, test_vector_functions)
+    # OptimalControl
+    optimal_control/test_phase_construction.cpp
+    optimal_control/test_ocp_multiphase.cpp
+    optimal_control/test_lgl_collocation.cpp
+    optimal_control/test_mesh_refinement.cpp
 
-# Phase 5: OptimalControl
-tycho_add_test(test_optimal_control test_optimal_control.cpp)
+    # Solvers
+    solvers/test_psiopt_convergence.cpp
+    solvers/test_solver_interfaces.cpp
+    solvers/test_jet_batch.cpp
+    solvers/test_nlp_structure.cpp
+)
 
-# Phase 6: Solvers
-tycho_add_test(test_solvers test_solvers.cpp)
+add_executable(tycho_tests ${TYCHO_TEST_SOURCES})
+target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
+target_include_directories(tycho_tests PRIVATE
+    ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators     # for integrator_test_utils.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control # for oc_test_utils.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/solvers         # for solver_test_utils.h
+)
+target_link_libraries(tycho_tests PRIVATE tycho_core ${LINK_LIBS} GTest::gtest_main)
+target_precompile_headers(tycho_tests REUSE_FROM pch_tests)
+if(UNIX)
+    target_link_options(tycho_tests PRIVATE ${LINKER_FLAGS})
+endif()
+gtest_discover_tests(tycho_tests)

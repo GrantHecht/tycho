@@ -1,0 +1,16 @@
+tycho_add_test(test_vector_functions
+    test_args_segment.cpp
+    test_constant_scaled.cpp
+    test_sum_dot_cross.cpp
+    test_norms.cpp
+    test_normalized_stacked_padded.cpp
+    test_composition_trig.cpp
+    test_elements_cwiseops.cpp
+    test_generic_function_basic.cpp
+    test_generic_function_copy_move.cpp
+    test_generic_function_interfaces.cpp
+    test_vf_ode_expressions.cpp
+    test_vf_composition_chains.cpp
+    test_vf_hessian.cpp
+    test_vector_functions.cpp
+)
