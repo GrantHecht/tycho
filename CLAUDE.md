@@ -140,6 +140,9 @@ python examples/Brachistochrone.py
 | `TYCHO_FP_MODE`            | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
 | `BUILD_SPHINX_DOCS`        | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
 | `BUILD_CPP_EXAMPLES`       | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
+| `BUILD_CPP_TESTS`          | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
+| `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
+| `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
 
 `config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
 `PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
@@ -277,13 +280,47 @@ Use descriptive commit messages. Prefix with type where clear:
 
 ## Testing
 
-Tycho does not yet have a formal unit test suite. The example scripts under
-`examples/` and the C++ example binaries serve as the **integration test suite**
-and act as the acceptance gate for all changes merged into `main`.
+### C++ unit tests (Google Test)
 
-### Running the tests
+The project has a C++ unit test suite under `tests/cpp/` using Google Test
+(fetched automatically via FetchContent). Currently 19 tests across 3 files:
+`test_astro.cpp` (Kepler conversions), `test_type_storage.cpp` (TypeStorage SBO),
+`test_vector_functions.cpp` (VectorFunction DSL).
 
-**Python examples (38 scripts):**
+**Build and run:**
+```bash
+# Reconfigure with tests enabled (one-time)
+cmake --preset default -DBUILD_CPP_TESTS=ON
+
+# Build test executables
+cd build && ninja -j6 test_astro test_type_storage test_vector_functions
+
+# Run all tests via CTest
+ctest --output-on-failure
+```
+
+### C++ benchmarks (Google Benchmark)
+
+Micro-benchmarks live under `bench/cpp/` using Google Benchmark
+(fetched automatically via FetchContent).
+
+**Build and run:**
+```bash
+# Reconfigure with benchmarks enabled (one-time)
+cmake --preset default -DBUILD_CPP_BENCHMARKS=ON
+
+# Build benchmark executables
+cd build && ninja -j6 bench_kepler
+
+# Run
+./bench/cpp/kepler/bench_kepler
+```
+
+### Python examples (integration tests)
+
+The 38 Python example scripts under `examples/` serve as the **integration test
+suite** and act as the acceptance gate for all changes merged into `main`.
+
 ```bash
 conda activate tycho
 python run_examples.py
@@ -299,7 +336,8 @@ Options:
 --filter SUBSTRING  Run only examples whose path contains SUBSTRING.
 ```
 
-**C++ examples:**
+### C++ examples
+
 ```bash
 ./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp
 ```
@@ -309,10 +347,11 @@ The C++ brachistochrone example must converge to an optimal solution (PSIOPT pri
 
 ### Merge policy
 
-**All 38 Python examples must pass and the C++ brachistochrone example must converge
-before any pull request can be merged into `main`.** This is the project's definition
-of a green build. Reviewers must verify that `python run_examples.py` exits 0 with no
-failures and that `brachistochrone_cpp` reports "Optimal Solution Found" before approving.
+**All C++ unit tests must pass, all 38 Python examples must pass, and the C++
+brachistochrone example must converge before any pull request can be merged into
+`main`.** This is the project's definition of a green build. Reviewers must verify
+that `ctest` reports no failures, `python run_examples.py` exits 0, and
+`brachistochrone_cpp` reports "Optimal Solution Found" before approving.
 
 If a change intentionally breaks an example (e.g. an API change that requires
 updating an example), the example must be fixed in the same PR.
