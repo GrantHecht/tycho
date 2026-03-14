@@ -86,7 +86,9 @@ endif()
 
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
-option(BUILD_CPP_BENCHMARKS "Build standalone C++ benchmark executables" ON)
+option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
+option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
+option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
 
@@ -500,6 +502,15 @@ endif()
 
 if(BUILD_CPP_BENCHMARKS)
     add_subdirectory(bench/cpp)
+endif()
+
+if(BUILD_CPP_BENCHMARKS_LEGACY)
+    add_subdirectory(bench/legacy)
+endif()
+
+if(BUILD_CPP_TESTS)
+    enable_testing()
+    add_subdirectory(tests/cpp)
 endif()
 
 # Formatting

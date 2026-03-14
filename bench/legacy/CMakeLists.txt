@@ -1,0 +1,2 @@
+add_subdirectory(brachistochrone)
+add_subdirectory(gf_eval)
