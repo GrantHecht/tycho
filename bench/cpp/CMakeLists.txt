@@ -12,3 +12,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(benchmark)
 
 add_subdirectory(kepler)
+add_subdirectory(vector_functions)
+add_subdirectory(type_erasure)
+add_subdirectory(integrators)
+add_subdirectory(optimal_control)
+add_subdirectory(solvers)
+add_subdirectory(utils)
