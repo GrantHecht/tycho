@@ -6,6 +6,7 @@
 
 #include "Tycho.h"
 #include "Astro/KeplerUtils.h"
+#include "Astro/KeplerPropagator.h"
 #include "Astro/KeplerModel.h"
 #include "Astro/CR3BPModel.h"
 #include "Astro/LambertSolvers.h"
@@ -331,4 +332,61 @@ TEST_F(CR3BPTest, L1ApproximateLocation) {
     // deriv[0:3] = velocity (0), deriv[3:6] = acceleration
     double acc_mag = deriv.tail<3>().norm();
     EXPECT_LT(acc_mag, 0.1) << "Acceleration at approximate L1 should be small";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Kepler edge cases (additional)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(KeplerEdgeCases, NearParabolic) {
+    // Near-parabolic orbit: e = 0.9999
+    Vector6<double> oe;
+    oe << 50000.0, 0.9999, 10.0 * M_PI / 180.0, 0.0, 0.0, 0.1;
+    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_TRUE(std::isfinite(rv[i]))
+            << "Component " << i << " not finite for near-parabolic orbit";
+    }
+    // Round-trip through Cartesian
+    auto oe2 = cartesian_to_classic<double>(rv, MU_EARTH);
+    auto rv2 = classic_to_cartesian<double>(oe2, MU_EARTH);
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_NEAR(rv[i], rv2[i], 1e-4)
+            << "Component " << i << " mismatch in near-parabolic round trip";
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Kepler propagation (additional)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CR3BPTest, KeplerPropagatorAdjointConsistency) {
+    // KeplerPropagator is a VectorFunction<7, 6>: input [r, v, dt], output [r', v']
+    KeplerPropagator prop(MU_EARTH);
+    Eigen::VectorXd x(7);
+    // Circular orbit state + propagation time
+    double r0 = 7000.0;
+    double v0 = std::sqrt(MU_EARTH / r0);
+    x << r0, 0.0, 0.0, 0.0, v0, 0.0, 100.0; // dt = 100 s
+    Eigen::VectorXd lm = TychoTest::deterministic_random_vector(6, 400, -1.0, 1.0);
+    TychoTest::verify_adjoint_consistency(prop, x, lm, 1e-6);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Lambert solver (additional)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(LambertSolver, NearAntipodalTransfer) {
+    // Near-180 degree transfer (slightly off to avoid exact degeneracy)
+    Vector3<double> R1, R2;
+    R1 << 7000.0, 0.0, 0.0;
+    R2 << -6999.0, 100.0, 0.0; // ~179 degrees
+    double dt = 4000.0;
+    auto result = lambert_izzo<double>(R1, R2, dt, MU_EARTH, false);
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_TRUE(std::isfinite(result[0][i]))
+            << "V1[" << i << "] not finite for near-antipodal transfer";
+        EXPECT_TRUE(std::isfinite(result[1][i]))
+            << "V2[" << i << "] not finite for near-antipodal transfer";
+    }
 }
