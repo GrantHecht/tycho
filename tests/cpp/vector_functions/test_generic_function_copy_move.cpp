@@ -7,40 +7,18 @@
 
 #include "Tycho.h"
 #include "test_utils.h"
+#include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Test fixture
-///////////////////////////////////////////////////////////////////////////////
-
-class GenericFunctionTest : public VectorFunctionFixture {};
-
-///////////////////////////////////////////////////////////////////////////////
-// Helper ODE for testing
-///////////////////////////////////////////////////////////////////////////////
-
-struct TestODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>();
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(TestODE, TestODE_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
 // Copy / Move
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(GenericFunctionTest, CopyConstruct) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf1(ode);
     GenericFunction<-1, -1> gf2(gf1);
 
@@ -58,7 +36,7 @@ TEST_F(GenericFunctionTest, CopyConstruct) {
 }
 
 TEST_F(GenericFunctionTest, MoveConstruct) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf1(ode);
     GenericFunction<-1, -1> gf2(std::move(gf1));
     EXPECT_EQ(gf2.IRows(), 5);
@@ -76,7 +54,7 @@ TEST_F(GenericFunctionTest, MoveConstruct) {
 }
 
 TEST_F(GenericFunctionTest, CopyAssign) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf1(ode);
     auto args = Arguments<3>();
     GenericFunction<-1, -1> gf2(args);
@@ -88,7 +66,7 @@ TEST_F(GenericFunctionTest, CopyAssign) {
 }
 
 TEST_F(GenericFunctionTest, MoveAssign) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf1(ode);
     auto args = Arguments<3>();
     GenericFunction<-1, -1> gf2(args);

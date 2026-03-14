@@ -88,7 +88,9 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
 
     // solve() only finds feasibility
     auto status = phase->solve();
-    // Should converge (feasible) -- Brachistochrone is well-posed
+    // Should converge (feasible) -- Brachistochrone is well-posed.
+    // ConvergenceFlags enum is ordered by severity: CONVERGED < ACCEPTABLE < NOTCONVERGED <
+    // DIVERGING, so <= ACCEPTABLE accepts either CONVERGED or ACCEPTABLE.
     EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
 }
 

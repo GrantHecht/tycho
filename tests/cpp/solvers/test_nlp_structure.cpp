@@ -13,6 +13,7 @@ TEST_F(SolverTest, NLPDimensionsConsistency) {
     ASSERT_NE(nlp, nullptr);
     EXPECT_GT(nlp->PrimalVars, 0);
     EXPECT_GT(nlp->EqualCons, 0);
+    // KKT dimension = primal vars + equality multipliers + 2*inequality (slack + dual)
     EXPECT_EQ(nlp->KKTdim, nlp->PrimalVars + nlp->EqualCons + 2 * nlp->InequalCons);
 }
 

@@ -4,13 +4,12 @@
 
 #include "Tycho.h"
 #include "test_utils.h"
+#include "vf_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
-
-class CommonFunctionsTest : public VectorFunctionFixture {};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Constant

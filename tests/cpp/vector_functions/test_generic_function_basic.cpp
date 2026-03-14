@@ -1,39 +1,17 @@
 ///////////////////////////////////////////////////////////////////////////////
 // GenericFunction basic erasure tests
 //
-// Extracted from test_generic_function.cpp — TestODE struct,
+// Extracted from test_generic_function.cpp — BrachODE struct,
 // BUILD_ODE_FROM_EXPRESSION macro, and Basic erasure section.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Tycho.h"
 #include "test_utils.h"
+#include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
-
-///////////////////////////////////////////////////////////////////////////////
-// Test fixture
-///////////////////////////////////////////////////////////////////////////////
-
-class GenericFunctionTest : public VectorFunctionFixture {};
-
-///////////////////////////////////////////////////////////////////////////////
-// Helper ODE for testing
-///////////////////////////////////////////////////////////////////////////////
-
-struct TestODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>();
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(TestODE, TestODE_Impl, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Basic erasure
@@ -57,14 +35,14 @@ TEST_F(GenericFunctionTest, FixedSizeErase) {
 }
 
 TEST_F(GenericFunctionTest, DynamicErase) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
     EXPECT_EQ(gf.IRows(), 5);
     EXPECT_EQ(gf.ORows(), 3);
 }
 
 TEST_F(GenericFunctionTest, ComputeMatchesOriginal) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
     Eigen::VectorXd x(5);
     x << 1.0, 8.0, 3.0, 0.5, 0.7;
@@ -81,7 +59,7 @@ TEST_F(GenericFunctionTest, ComputeMatchesOriginal) {
 }
 
 TEST_F(GenericFunctionTest, JacobianMatchesOriginal) {
-    TestODE ode(9.81);
+    BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
     Eigen::VectorXd x(5);
     x << 1.0, 8.0, 3.0, 0.5, 0.7;

@@ -25,23 +25,40 @@ TEST_F(CR3BPTest, ODEAdjointConsistency) {
 
 TEST_F(CR3BPTest, L1ApproximateLocation) {
     // Earth-Moon system: mu ~ 0.012150585
-    // L1 is between the two bodies, at approximately x ~ 0.8369 (normalized)
+    // L1 is between the two bodies, on the x-axis between them.
     double mu = 0.012150585;
     CR3BP cr3bp(mu);
 
-    // L1 approximate location (on x-axis, between bodies)
-    // Use Newton iteration to find exact location is overkill for a test;
-    // instead verify that acceleration is small near L1
-    double x_L1 = 0.8369;
+    // Bisection to find L1: bracket the x-axis zero of the x-acceleration.
+    // At L1, velocity = 0 and all accelerations vanish. We search for the
+    // zero of a_x (deriv[3]) since a_y and a_z are identically zero on-axis.
+    double lo = 0.5, hi = 1.0 - mu; // L1 lies between the two primaries
     Eigen::VectorXd state(7);
-    state << x_L1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-
     Eigen::VectorXd deriv(6);
+
+    auto ax_at = [&](double x) {
+        state << x, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+        deriv.setZero();
+        cr3bp.compute(state, deriv);
+        return deriv[3]; // x-acceleration
+    };
+
+    double ax_lo = ax_at(lo);
+    for (int i = 0; i < 200; ++i) {
+        double mid = 0.5 * (lo + hi);
+        double ax_mid = ax_at(mid);
+        if ((ax_lo > 0) == (ax_mid > 0)) {
+            lo = mid;
+            ax_lo = ax_mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    double x_L1 = 0.5 * (lo + hi);
+    state << x_L1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     deriv.setZero();
     cr3bp.compute(state, deriv);
-
-    // At L1: velocity = 0, so dx/dt = 0. Acceleration should be small.
-    // deriv[0:3] = velocity (0), deriv[3:6] = acceleration
     double acc_mag = deriv.tail<3>().norm();
-    EXPECT_LT(acc_mag, 0.1) << "Acceleration at approximate L1 should be small";
+    EXPECT_LT(acc_mag, 1e-12) << "Acceleration at L1 should vanish";
 }

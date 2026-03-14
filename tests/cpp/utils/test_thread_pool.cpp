@@ -53,10 +53,11 @@ TEST(ThreadPoolTest, ResizeDown) {
 
 TEST(ThreadPoolTest, IdleCount) {
     ctpl::ThreadPool pool(4);
-    // After construction with no tasks, all threads should become idle
-    // Give threads time to start and enter idle state
-    // 50ms is generous; may need increase under heavy CI load
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // Poll until all threads are idle (with a generous deadline for CI load)
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (pool.n_idle() < 4 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
     EXPECT_EQ(pool.n_idle(), 4);
 }
 
