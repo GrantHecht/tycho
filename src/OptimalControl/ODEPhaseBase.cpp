@@ -746,17 +746,19 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         }
 
         if (this->IntegralMode == IntegralModes::BaseIntegral &&
-            ((this->TranscriptionMode == LGL5) || (this->TranscriptionMode == LGL7))) {
-            if (this->TranscriptionMode == LGL5) {
+            ((this->TranscriptionMode == TranscriptionModes::LGL5) ||
+             (this->TranscriptionMode == TranscriptionModes::LGL7))) {
+            if (this->TranscriptionMode == TranscriptionModes::LGL5) {
                 obj = SwitchC(3, xp, sop, Func, xp, sop);
-            } else if (this->TranscriptionMode == LGL7) {
+            } else if (this->TranscriptionMode == TranscriptionModes::LGL7) {
                 obj = SwitchC(4, xp, sop, Func, xp, sop);
             }
             PhaseReg = PhaseRegionFlags::DefectPath;
         } else {
             obj = SwitchC(2, xp, sop, Func, xp, sop);
-            if (this->TranscriptionMode == LGL3 || this->TranscriptionMode == Trapezoidal ||
-                this->TranscriptionMode == CentralShooting) {
+            if (this->TranscriptionMode == TranscriptionModes::LGL3 ||
+                this->TranscriptionMode == TranscriptionModes::Trapezoidal ||
+                this->TranscriptionMode == TranscriptionModes::CentralShooting) {
                 PhaseReg = PhaseRegionFlags::DefectPath;
 
             } else {
@@ -803,10 +805,11 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         }
 
         if (this->IntegralMode == IntegralModes::BaseIntegral &&
-            ((this->TranscriptionMode == LGL5) || (this->TranscriptionMode == LGL7))) {
-            if (this->TranscriptionMode == LGL5) {
+            ((this->TranscriptionMode == TranscriptionModes::LGL5) ||
+             (this->TranscriptionMode == TranscriptionModes::LGL7))) {
+            if (this->TranscriptionMode == TranscriptionModes::LGL5) {
                 obj = SwitchC(3, xp, sop, Func, xp, sop);
-            } else if (this->TranscriptionMode == LGL7) {
+            } else if (this->TranscriptionMode == TranscriptionModes::LGL7) {
                 obj = SwitchC(4, xp, sop, Func, xp, sop);
             }
             PhaseReg = PhaseRegionFlags::DefectPath;
@@ -914,16 +917,16 @@ void Tycho::ODEPhaseBase::transcribe_axis_funcs() {
     }
 
     std::vector<ConstraintInterface> AxisFuncs;
-    std::vector<int> Tmodes;
+    std::vector<ThreadingFlags> Tmodes;
     Eigen::VectorXi bins(this->Threads + 1);
     bins.setLinSpaced(0, this->indexer.numNodalStates);
 
     for (int i = 0; i < this->indexer.numNodalStates - 2; i++) {
         AxisFuncs.emplace_back(SingleMeshSpacing(cspace[i + 1]));
-        int thrt = Thread0;
+        ThreadingFlags thrt = ThreadingFlags::Thread0;
         for (int j = 0; j < this->Threads; j++) {
             if (i >= bins(j) && i < bins(j + 1)) {
-                thrt = j;
+                thrt = static_cast<ThreadingFlags>(j);
             }
         }
         Tmodes.push_back(thrt);
@@ -1079,19 +1082,19 @@ Eigen::VectorXd Tycho::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, Vect
 
     int nloops;
     switch (flag) {
-    case Front:
-    case Back:
-    case Path:
-    case Params:
-    case ODEParams:
-    case StaticParams:
-    case InnerPath: {
+    case PhaseRegionFlags::Front:
+    case PhaseRegionFlags::Back:
+    case PhaseRegionFlags::Path:
+    case PhaseRegionFlags::Params:
+    case PhaseRegionFlags::ODEParams:
+    case PhaseRegionFlags::StaticParams:
+    case PhaseRegionFlags::InnerPath: {
         nloops = 1;
         break;
     }
-    case FrontandBack:
-    case BackandFront:
-    case PairWisePath: {
+    case PhaseRegionFlags::FrontandBack:
+    case PhaseRegionFlags::BackandFront:
+    case PhaseRegionFlags::PairWisePath: {
         nloops = 2;
         break;
     }
@@ -1131,45 +1134,45 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::get_test_inputs(PhaseRegionFla
 
     int nloops = 0;
     switch (flag) {
-    case Front: {
+    case PhaseRegionFlags::Front: {
         test_states.push_back({0});
         break;
     }
-    case Back: {
+    case PhaseRegionFlags::Back: {
         test_states.push_back({int(this->ActiveTraj.size() - 1)});
         break;
     }
-    case Params: {
+    case PhaseRegionFlags::Params: {
         test_states.push_back({0});
         break;
     }
-    case ODEParams: {
+    case PhaseRegionFlags::ODEParams: {
         test_states.push_back({0});
         break;
     }
-    case StaticParams: {
+    case PhaseRegionFlags::StaticParams: {
         test_states.push_back({0});
         break;
     }
-    case Path: {
+    case PhaseRegionFlags::Path: {
         for (int i = 0; i < this->ActiveTraj.size(); i++)
             test_states.push_back({i});
         break;
     }
-    case InnerPath: {
+    case PhaseRegionFlags::InnerPath: {
         for (int i = 1; i < this->ActiveTraj.size() - 1; i++)
             test_states.push_back({i});
         break;
     }
-    case FrontandBack: {
+    case PhaseRegionFlags::FrontandBack: {
         test_states.push_back({0, int(this->ActiveTraj.size() - 1)});
         break;
     }
-    case BackandFront: {
+    case PhaseRegionFlags::BackandFront: {
         test_states.push_back({int(this->ActiveTraj.size() - 1), 0});
         break;
     }
-    case PairWisePath: {
+    case PhaseRegionFlags::PairWisePath: {
         for (int i = 0; i < this->ActiveTraj.size() - 1; i++)
             test_states.push_back({i, i + 1});
         break;
@@ -1364,7 +1367,7 @@ bool Tycho::ODEPhaseBase::checkMesh() {
     this->Table.loadExactData(this->ActiveTraj);
 
     if (this->MeshErrorEstimator == MeshErrorEstimators::INTEGRATOR ||
-        this->TranscriptionMode == CentralShooting) {
+        this->TranscriptionMode == TranscriptionModes::CentralShooting) {
         this->get_meshinfo_integrator(tsnd, mesh_errors, mesh_dist);
     } else if (this->MeshErrorEstimator == MeshErrorEstimators::DEBOOR) {
         this->get_meshinfo_deboor(tsnd, mesh_errors, mesh_dist);
@@ -1398,6 +1401,8 @@ bool Tycho::ODEPhaseBase::checkMesh() {
     case MeshErrorAggregation::ENDTOEND:
         error_crit = this->MeshIters.back().global_error;
         break;
+    default:
+        throw std::invalid_argument("Unknown MeshErrorAggregation");
     }
 
     this->MeshConverged = (error_crit < this->MeshTol);
@@ -1562,7 +1567,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
     }
 
     if (this->AdaptiveMesh) {
-        if (flag >= this->MeshAbortFlag) {
+        if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
             if (this->PrintMeshInfo) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Mesh Iteration 0 Failed to Solve: Aborting\n");
@@ -1592,7 +1597,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
                     }
                 }
                 flag = this->psipot_call_impl(nextmode);
-                if (flag >= this->MeshAbortFlag) {
+                if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
                     if (this->PrintMeshInfo) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);

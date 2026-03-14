@@ -191,7 +191,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->resetTranscription();
         this->invalidatePostOptInfo();
         this->ControlMode = m;
-        if (this->ControlMode == BlockConstant) {
+        if (this->ControlMode == ControlModes::BlockConstant) {
             this->Table.BlockedControls = true;
         } else {
             this->Table.BlockedControls = false;
@@ -295,12 +295,12 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         } else if (std::holds_alternative<VectorXi>(XtUPvars_t)) {
             XtUPvars = std::get<VectorXi>(XtUPvars_t);
         } else if (std::holds_alternative<std::string>(XtUPvars_t)) {
-            if (reg != StaticParams) {
+            if (reg != PhaseRegionFlags::StaticParams) {
                 XtUPvars = this->idx(std::get<std::string>(XtUPvars_t));
             } else {
                 XtUPvars = this->getSPidx(std::get<std::string>(XtUPvars_t));
             }
-            if (reg == ODEParams) {
+            if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
                 for (int i = 0; i < XtUPvars.size(); i++) {
                     XtUPvars[i] -= this->XtUVars();
@@ -314,7 +314,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             auto tmpvars = std::get<std::vector<std::string>>(XtUPvars_t);
 
             for (auto tmpv : tmpvars) {
-                if (reg != StaticParams) {
+                if (reg != PhaseRegionFlags::StaticParams) {
                     varvec.push_back(this->idx(tmpv));
                 } else {
                     varvec.push_back(this->getSPidx(tmpv));
@@ -332,7 +332,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 }
             }
 
-            if (reg == ODEParams) {
+            if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
                 for (int i = 0; i < XtUPvars.size(); i++) {
                     XtUPvars[i] -= this->XtUVars();
@@ -440,7 +440,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         VectorXi OPvars;
         VectorXi SPvars;
         /////////////////////////////////////////////////
-        if (reg != ODEParams && reg != StaticParams) {
+        if (reg != PhaseRegionFlags::ODEParams && reg != PhaseRegionFlags::StaticParams) {
             // If region is Params then the indices are held in XtUPvars_t and the others are emtpy
             OPvars = this->getOPVars(reg, OPvars_t);
             SPvars = this->getSPVars(reg, SPvars_t);
@@ -700,8 +700,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     int addIntegralObjective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, VarIndexType OPvars_t,
                              VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
-                                                                   SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
 
@@ -709,8 +709,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         VectorXi empty;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, empty,
-                                                                   empty, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, empty, empty, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
 
@@ -730,8 +730,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         VectorXi epv(1);
         epv[0] = accum_parm;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
-                                                                   SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
         int index = addFuncImpl(con, this->userParamIntegrands, "Integral Parameter Function");
         this->userParamIntegrands[index].EXTVars = epv;
         return index;
@@ -987,14 +987,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     template <class T> static void check_function_size(const T &func, std::string ftype) {
         int irows = func.Func.IRows();
         switch (func.RegionFlag) {
-        case Front:
-        case Back:
-        case Path:
-        case Params:
-        case ODEParams:
-        case StaticParams:
-        case InnerPath:
-        case NodalPath: {
+        case PhaseRegionFlags::Front:
+        case PhaseRegionFlags::Back:
+        case PhaseRegionFlags::Path:
+        case PhaseRegionFlags::Params:
+        case PhaseRegionFlags::ODEParams:
+        case PhaseRegionFlags::StaticParams:
+        case PhaseRegionFlags::InnerPath:
+        case PhaseRegionFlags::NodalPath: {
             int isize = func.XtUVars.size() + func.OPVars.size() + func.SPVars.size();
             if (irows != isize) {
 
@@ -1009,9 +1009,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             }
             break;
         }
-        case FrontandBack:
-        case BackandFront:
-        case PairWisePath: {
+        case PhaseRegionFlags::FrontandBack:
+        case PhaseRegionFlags::BackandFront:
+        case PhaseRegionFlags::PairWisePath: {
             int isize = func.XtUVars.size() * 2 + func.OPVars.size() + func.SPVars.size();
             if (irows != isize) {
                 fmt::print(fmt::fg(fmt::color::red),

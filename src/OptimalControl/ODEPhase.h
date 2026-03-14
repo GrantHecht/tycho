@@ -109,7 +109,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     virtual Integrator<ScaledODE> make_scaled_reintegrator() const {
         Integrator<ScaledODE> Integ;
-        if (this->UVars() == 0 || this->ControlMode == BlockConstant) {
+        if (this->UVars() == 0 || this->ControlMode == ControlModes::BlockConstant) {
             Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize};
         } else {
             Eigen::VectorXi ulocs;
@@ -142,7 +142,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     virtual Integrator<DODE> make_reintegrator() const {
         Integrator<DODE> Integ;
 
-        if (this->UVars() == 0 || this->ControlMode == BlockConstant) {
+        if (this->UVars() == 0 || this->ControlMode == ControlModes::BlockConstant) {
             Integ = Integrator<DODE>{this->ode, this->integrator.DefStepSize};
         } else {
             Integ = Integrator<DODE>{this->ode, this->integrator.DefStepSize,
@@ -203,7 +203,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             this->Order = 7.0;
             this->numTranCardStates = 2;
             // Default Central Shooting to BlockConstant!!!
-            this->setControlMode(BlockConstant);
+            this->setControlMode(ControlModes::BlockConstant);
 
             break;
         default: {
@@ -224,7 +224,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         empty.resize(0);
 
         auto lgldef = [&](auto cs, auto ode_t) {
-            if (this->ControlMode == BlockConstant) {
+            if (this->ControlMode == ControlModes::BlockConstant) {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     LGLType<decltype(ode_t), cs.value> lgl(ode_t);
@@ -252,7 +252,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         };
 
         auto trapdef = [&](auto ode_t) {
-            if (this->ControlMode == BlockConstant) {
+            if (this->ControlMode == ControlModes::BlockConstant) {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
@@ -502,7 +502,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
             ODEDeriv<double> dtemp(this->XVars());
 
-            if (this->UVars() != 0 && this->ControlMode == BlockConstant) {
+            if (this->UVars() != 0 && this->ControlMode == ControlModes::BlockConstant) {
                 ODEState<double> tmp = this->ActiveTraj[start + BlockSize - 1];
                 tmp.segment(this->XtVars(), this->UVars()) =
                     this->ActiveTraj[start].segment(this->XtVars(), this->UVars());
@@ -517,7 +517,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 yvec += Derivs[start + j].head(this->XVars()) * DXerrWeights[j] * hs[i] / powh;
             }
 
-            if (this->UVars() != 0 && this->ControlMode == BlockConstant) {
+            if (this->UVars() != 0 && this->ControlMode == ControlModes::BlockConstant) {
                 Derivs[start + BlockSize - 1] = dtemp;
             }
 

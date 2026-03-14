@@ -222,6 +222,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
             phase->setMeshErrorEstimator(m);
         }
     }
+    void setMeshErrorDistributor(MeshErrorAggregation m) {
+        for (auto phase : this->phases) {
+            phase->setMeshErrorDistributor(m);
+        }
+    }
+    void setMeshErrorDistributor(const std::string &m) {
+        for (auto phase : this->phases) {
+            phase->setMeshErrorDistributor(m);
+        }
+    }
 
     ///////////////////////////////
     OptimalControlProblem() {}
@@ -439,16 +449,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
             reg1 = strto_PhaseRegionFlag(std::get<std::string>(reg1_t));
         }
 
-        if (reg0 == ODEParams)
+        if (reg0 == PhaseRegionFlags::ODEParams)
             opv0 = v0;
-        else if (reg0 == StaticParams)
+        else if (reg0 == PhaseRegionFlags::StaticParams)
             spv0 = v0;
         else
             xtv0 = v0;
 
-        if (reg1 == ODEParams)
+        if (reg1 == PhaseRegionFlags::ODEParams)
             opv1 = v1;
-        else if (reg1 == StaticParams)
+        else if (reg1 == PhaseRegionFlags::StaticParams)
             spv1 = v1;
         else
             xtv1 = v1;
@@ -556,7 +566,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 "Link Equality constraint references non-existent phase:{0:}\n", iphase));
         }
 
-        int vsize = this->phases[iphase]->getXtUPVars(Front, vars).size();
+        int vsize = this->phases[iphase]->getXtUPVars(PhaseRegionFlags::Front, vars).size();
 
         auto args = Arguments<-1>(2 * vsize);
         auto func = args.head<-1>(vsize) - args.tail<-1>(vsize);
@@ -600,7 +610,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         PhaseRegionFlags reg0 = get_PhaseRegion(reg0_t);
 
-        if (reg0 != ODEParams && reg0 != StaticParams) {
+        if (reg0 != PhaseRegionFlags::ODEParams && reg0 != PhaseRegionFlags::StaticParams) {
             throw std::invalid_argument("Phase Region must be ODEParams or StaticParams");
         }
 
@@ -822,16 +832,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
         std::vector<Eigen::VectorXi> opv(2);
         std::vector<Eigen::VectorXi> spv(2);
 
-        if (f1 == ODEParams)
+        if (f1 == PhaseRegionFlags::ODEParams)
             opv[0] = v1;
-        else if (f1 == StaticParams)
+        else if (f1 == PhaseRegionFlags::StaticParams)
             spv[0] = v1;
         else
             xtv[0] = v1;
 
-        if (f2 == ODEParams)
+        if (f2 == PhaseRegionFlags::ODEParams)
             opv[1] = v2;
-        else if (f2 == StaticParams)
+        else if (f2 == PhaseRegionFlags::StaticParams)
             spv[1] = v2;
         else
             xtv[1] = v2;
@@ -1381,14 +1391,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
     template <class T> void check_function_size(const T &func, std::string ftype) {
         int irows = func.Func.IRows();
         switch (func.LinkFlag) {
-        case BackToFront:
-        case FrontToBack:
-        case FrontToFront:
-        case BackToBack:
-        case ParamsToParams:
-        case LinkParams:
-        case PathToPath:
-        case ReadRegions: {
+        case LinkFlags::BackToFront:
+        case LinkFlags::FrontToBack:
+        case LinkFlags::FrontToFront:
+        case LinkFlags::BackToBack:
+        case LinkFlags::ParamsToParams:
+        case LinkFlags::LinkParams:
+        case LinkFlags::PathToPath:
+        case LinkFlags::ReadRegions: {
 
             if (func.LinkParams.size() != func.PhasesTolink.size() &&
                 func.PhasesTolink.size() > 0) {

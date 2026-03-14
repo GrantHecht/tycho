@@ -118,7 +118,7 @@ struct LGLInterpTable {
         this->UVars = 0;
         this->axis = xv;
         this->XtUVars = xv + 0 + 1;
-        this->setMethod(LGL3);
+        this->setMethod(TranscriptionModes::LGL3);
         this->loadUnevenData(dnum, xtudat);
     }
     LGLInterpTable(const std::vector<Eigen::VectorXd> &xtudat) {
@@ -126,7 +126,7 @@ struct LGLInterpTable {
         this->UVars = 0;
         this->axis = xtudat[0].size() - 1;
         this->XtUVars = xtudat[0].size();
-        this->setMethod(LGL3);
+        this->setMethod(TranscriptionModes::LGL3);
         this->loadUnevenData(xtudat.size() - 1, xtudat);
     }
     LGLInterpTable(int xv, int uv, TranscriptionModes m) {

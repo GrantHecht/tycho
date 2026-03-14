@@ -19,11 +19,11 @@
 
 namespace Tycho {
 
-enum FDCoeffType { Backwards, Central, Forwards };
+enum class FDCoeffType { Backwards, Central, Forwards };
 
 template <int SZ> using arr = std::array<double, SZ>;
 
-template <int Order, int Accuracy, int Dir, int Shift> struct FDCoeffs;
+template <int Order, int Accuracy, FDCoeffType Dir, int Shift> struct FDCoeffs;
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Forward Coefficients

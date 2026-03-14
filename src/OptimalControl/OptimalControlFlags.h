@@ -19,7 +19,7 @@
 
 namespace Tycho {
 
-enum PhaseRegionFlags {
+enum class PhaseRegionFlags {
     NotSet,
     Front,
     Back,
@@ -39,7 +39,7 @@ enum PhaseRegionFlags {
     BlockDefectPath,
 };
 
-enum LinkFlags {
+enum class LinkFlags {
     BackToFront,
     FrontToBack,
     FrontToFront,
@@ -52,14 +52,14 @@ enum LinkFlags {
     ReadRegions,
 };
 
-enum ControlModes {
+enum class ControlModes {
     HighestOrderSpline,
     FirstOrderSpline,
     NoSpline,
     BlockConstant,
 };
 
-enum TranscriptionModes {
+enum class TranscriptionModes {
     LGL3,
     LGL5,
     LGL7,
@@ -67,31 +67,31 @@ enum TranscriptionModes {
     CentralShooting,
 };
 
-enum IntegralModes {
+enum class IntegralModes {
     BaseIntegral,
     SimpsonIntegral,
     TrapIntegral,
 };
 
-enum ScaleModes {
+enum class ScaleModes {
     AUTO,
     CUSTOM,
     NONE,
 };
 
-enum MeshErrorEstimators {
+enum class MeshErrorEstimators {
     DEBOOR,
     INTEGRATOR,
 };
 
-enum MeshErrorAggregation {
+enum class MeshErrorAggregation {
     MAX,
     AVG,
     GEOMETRIC,
     ENDTOEND,
 };
 
-static ScaleModes strto_ScaleMode(const std::string &str) {
+inline ScaleModes strto_ScaleMode(const std::string &str) {
     if (str == "auto")
         return ScaleModes::AUTO;
     else if (str == "custom")
@@ -100,22 +100,20 @@ static ScaleModes strto_ScaleMode(const std::string &str) {
         return ScaleModes::NONE;
     else {
         throw std::invalid_argument(fmt::format("Unrecognized ScaleMode: {0}", str));
-        return ScaleModes::AUTO;
     }
 }
 
-static MeshErrorEstimators strto_MeshErrorEstimator(const std::string &str) {
+inline MeshErrorEstimators strto_MeshErrorEstimator(const std::string &str) {
     if (str == "deboor")
         return MeshErrorEstimators::DEBOOR;
     else if (str == "integrator")
         return MeshErrorEstimators::INTEGRATOR;
     else {
         throw std::invalid_argument(fmt::format("Unrecognized MeshErrorEstimator: {0}", str));
-        return MeshErrorEstimators::DEBOOR;
     }
 }
 
-static MeshErrorAggregation strto_MeshErrorAggregation(const std::string &str) {
+inline MeshErrorAggregation strto_MeshErrorAggregation(const std::string &str) {
     if (str == "max")
         return MeshErrorAggregation::MAX;
     else if (str == "avg")
@@ -126,11 +124,10 @@ static MeshErrorAggregation strto_MeshErrorAggregation(const std::string &str) {
         return MeshErrorAggregation::ENDTOEND;
     else {
         throw std::invalid_argument(fmt::format("Unrecognized MeshErrorAggregation: {0}", str));
-        return MeshErrorAggregation::MAX;
     }
 }
 
-static PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
+inline PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
 
     if (str == "Front" || str == "First")
         return PhaseRegionFlags::Front;
@@ -153,11 +150,10 @@ static PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
     else {
         auto msg = fmt::format("Unrecognized PhaseRegionFlag: {0}\n", str);
         throw std::invalid_argument(msg);
-        return PhaseRegionFlags::NotSet;
     }
 }
 
-static Eigen::Matrix<PhaseRegionFlags, -1, 1>
+inline Eigen::Matrix<PhaseRegionFlags, -1, 1>
 strto_PhaseRegionFlag(const std::vector<std::string> &strs) {
     Eigen::Matrix<PhaseRegionFlags, -1, 1> regvec(strs.size());
 
@@ -167,7 +163,7 @@ strto_PhaseRegionFlag(const std::vector<std::string> &strs) {
     return regvec;
 }
 
-static TranscriptionModes strto_TranscriptionMode(const std::string &str) {
+inline TranscriptionModes strto_TranscriptionMode(const std::string &str) {
 
     if (str == "LGL3")
         return TranscriptionModes::LGL3;
@@ -182,11 +178,10 @@ static TranscriptionModes strto_TranscriptionMode(const std::string &str) {
     else {
         auto msg = fmt::format("Unrecognized TranscriptionModes: {0}\n", str);
         throw std::invalid_argument(msg);
-        return TranscriptionModes::LGL3;
     }
 }
 
-static LinkFlags strto_LinkFlag(const std::string &str) {
+inline LinkFlags strto_LinkFlag(const std::string &str) {
 
     if (str == "BackToBack" || str == "LastToLast")
         return LinkFlags::BackToBack;
@@ -203,11 +198,10 @@ static LinkFlags strto_LinkFlag(const std::string &str) {
     else {
         auto msg = fmt::format("Unrecognized LinkFlag: {0}\n", str);
         throw std::invalid_argument(msg);
-        return LinkFlags::ReadRegions;
     }
 }
 
-static ControlModes strto_ControlMode(const std::string &str) {
+inline ControlModes strto_ControlMode(const std::string &str) {
 
     if (str == "FirstOrderSpline")
         return ControlModes::FirstOrderSpline;
@@ -220,7 +214,6 @@ static ControlModes strto_ControlMode(const std::string &str) {
     else {
         auto msg = fmt::format("Unrecognized ControlMode: {0}\n", str);
         throw std::invalid_argument(msg);
-        return ControlModes::NoSpline;
     }
 }
 

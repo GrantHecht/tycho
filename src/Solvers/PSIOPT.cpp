@@ -117,8 +117,8 @@ void Tycho::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<E
         iter.AllConNormErr = this->getAllCons(RHS).norm();
 }
 
-void Tycho::PSIOPT::evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
-                            EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+void Tycho::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL,
+                            double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                             Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
@@ -140,11 +140,13 @@ void Tycho::PSIOPT::evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd
         this->getPrimGrad(GX).setZero();
         this->getPrimGrad(AGXS_FX).setZero();
         break;
+    default:
+        throw std::invalid_argument("Unknown AlgorithmMode");
     }
 }
 
 Tycho::PSIOPT::ConvergenceFlags Tycho::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
-    ConvergenceFlags Flag = CONVERGED;
+    ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
     IterateInfo last = iters.back();
     bool KKTFeas = (last.KKTInf < this->KKTtol);
     bool EConFeas = (last.EConInf < this->EContol);
@@ -599,7 +601,8 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
         //////////////////////////////////////////////////////////////////////
 
         if (GoodStep) {
-            double lsobjscale = algmode == SOE || algmode == OPTNO ? 0.0 : 1.0;
+            double lsobjscale =
+                algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
             alpha = ls_impl(lsmode, ObjScale * lsobjscale, Mu, PrimObj, BarrObj, XSL, DXSL, Temp,
                             RHS, RHS2, Citer, iters);
 
@@ -632,6 +635,8 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
             case BestCriteriaModes::OBJ:
                 critval = iters.back().PrimObj;
                 break;
+            default:
+                throw std::invalid_argument("Unknown BestCriteriaModes");
             }
             if (critval <= BestCriteriaVal || i == 0) {
                 BestCriteriaVal = critval;
@@ -961,8 +966,8 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
     if (this->PrintLevel < 2) {
         print_Beginning("Optimization Algorithm ");
     }
-    XSLans =
-        this->alg_impl(OPT, this->OptBarMode, this->OptLSMode, this->ObjScale, this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
+                            this->initMu, XSL);
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");
     }
@@ -1015,8 +1020,8 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
     if (this->PrintLevel < 2) {
         print_Beginning("Optimization Algorithm ");
     }
-    XSLans =
-        this->alg_impl(OPT, this->OptBarMode, this->OptLSMode, this->ObjScale, this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
+                            this->initMu, XSL);
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
@@ -1067,8 +1072,8 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     if (this->PrintLevel < 2) {
         print_Beginning("Optimization Algorithm ");
     }
-    XSLans =
-        this->alg_impl(OPT, this->OptBarMode, this->OptLSMode, this->ObjScale, this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
+                            this->initMu, XSL);
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");
     }
@@ -1124,8 +1129,8 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
         print_Beginning("Optimization Algorithm ");
     }
 
-    XSLans =
-        this->alg_impl(OPT, this->OptBarMode, this->OptLSMode, this->ObjScale, this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
+                            this->initMu, XSL);
 
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");

@@ -22,7 +22,7 @@ namespace Tycho {
 
 struct OptimizationProblemBase {
 
-    enum JetJobModes {
+    enum class JetJobModes {
         NotSet,
         DoNothing,
         Solve,
@@ -33,7 +33,7 @@ struct OptimizationProblemBase {
     };
 
     int Threads = TYCHO_DEFAULT_FUNC_THREADS;
-    int JetJobMode = JetJobModes::NotSet;
+    JetJobModes JetJobMode = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
     std::shared_ptr<PSIOPT> optimizer;
@@ -101,13 +101,11 @@ struct OptimizationProblemBase {
             flag = this->optimize_solve();
             break;
         }
-        case NotSet: {
+        case JetJobModes::NotSet: {
             throw ::std::invalid_argument("JetJobMode not set");
-            break;
         }
         default:
-            break;
-            flag = PSIOPT::ConvergenceFlags::CONVERGED;
+            throw std::invalid_argument("Unrecognized JetJobMode");
         }
 
         this->jet_release();
@@ -132,7 +130,6 @@ struct OptimizationProblemBase {
         else {
             auto msg = fmt::format("Unrecognized JetJobMode: {0}\n", str);
             throw std::invalid_argument(msg);
-            return JetJobModes::NotSet;
         }
     }
 

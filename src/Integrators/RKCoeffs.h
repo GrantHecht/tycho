@@ -19,7 +19,17 @@
 
 namespace Tycho {
 
-enum RKOptions { RK4Classic, RK438, DOPRI54, DOPRI87, RK54, RK78, Ralston3, Ralston2, DOPRI5 };
+enum class RKOptions {
+    RK4Classic,
+    RK438,
+    DOPRI54,
+    DOPRI87,
+    RK54,
+    RK78,
+    Ralston3,
+    Ralston2,
+    DOPRI5
+};
 
 template <RKOptions opt> struct RKCoeffs {};
 

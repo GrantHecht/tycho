@@ -19,7 +19,7 @@
 
 namespace Tycho {
 
-enum ConditionalFlags {
+enum class ConditionalFlags {
     LessThanFlag,
     GreaterThanFlag,
     LessThanEqualToFlag,

@@ -32,25 +32,25 @@ struct IterateInfo;
 
 struct PSIOPT {
 
-    enum BarrierModes { PROBE, LOQO, FIACCO, BARDISABLED };
-    enum LineSearchModes { AUGLANG, LANG, L1, L2, NOLS };
-    enum AlgorithmModes { OPT, OPTNO, SOE, INIT };
-    enum ConvergenceFlags {
+    enum class BarrierModes { PROBE, LOQO, FIACCO, BARDISABLED };
+    enum class LineSearchModes { AUGLANG, LANG, L1, L2, NOLS };
+    enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
+    enum class ConvergenceFlags {
         CONVERGED,
         ACCEPTABLE,
         NOTCONVERGED,
         DIVERGING,
     };
 
-    enum QPAlgModes {
+    enum class QPAlgModes {
         Classic = 0,
         TwoLevel = 1,
     };
 
-    enum QPOrderingModes { MINDEG = 0, METIS = 2, PARMETIS = 3 };
-    enum BestCriteriaModes { ECONS, ICONS, KKT, OBJ };
+    enum class QPOrderingModes { MINDEG = 0, METIS = 2, PARMETIS = 3 };
+    enum class BestCriteriaModes { ECONS, ICONS, KKT, OBJ };
 
-    enum QPPivotModes {
+    enum class QPPivotModes {
         OneByOne = 0,
         TwoByTwo = 1,
         E4 = 4,
@@ -58,69 +58,65 @@ struct PSIOPT {
         E8 = 8,
         E13 = 13,
     };
-    enum PDStepStrategies { PrimSlackEq_Iq, AllMinimum, PrimSlack_EqIq, MaxEq };
+    enum class PDStepStrategies { PrimSlackEq_Iq, AllMinimum, PrimSlack_EqIq, MaxEq };
 
     static QPOrderingModes strto_OrderingMode(const std::string &str) {
 
         if (str.compare("MINDEG") == 0)
-            return MINDEG;
+            return QPOrderingModes::MINDEG;
         else if (str.compare("METIS") == 0)
-            return METIS;
+            return QPOrderingModes::METIS;
         else if (str.compare("PARMETIS") == 0)
-            return PARMETIS;
+            return QPOrderingModes::PARMETIS;
         else {
             auto msg = fmt::format("Unrecognized QPOrderingMode: {0}\n"
                                    "Valid Options Are: MINDEG , METIS, PARMETIS ",
                                    str);
             throw std::invalid_argument(msg);
-            return MINDEG;
         }
     }
     static LineSearchModes strto_LineSearchMode(const std::string &str) {
 
         if (str.compare("L1") == 0)
-            return L1;
+            return LineSearchModes::L1;
         else if (str.compare("NOLS") == 0)
-            return NOLS;
+            return LineSearchModes::NOLS;
         else if (str.compare("LANG") == 0)
-            return LANG;
+            return LineSearchModes::LANG;
         else if (str.compare("AUGLANG") == 0)
-            return AUGLANG;
+            return LineSearchModes::AUGLANG;
         else {
             auto msg = fmt::format("Unrecognized LineSearchMode: {0}\n"
                                    "Valid Options Are: AUGLANG, LANG, L1, NOLS ",
                                    str);
             throw std::invalid_argument(msg);
-            return L1;
         }
     }
     static BarrierModes strto_BarrierMode(const std::string &str) {
 
         if (str.compare("PROBE") == 0)
-            return PROBE;
+            return BarrierModes::PROBE;
         else if (str.compare("LOQO") == 0)
-            return LOQO;
+            return BarrierModes::LOQO;
         else {
             auto msg = fmt::format("Unrecognized BarrierMode: {0}\n"
                                    "Valid Options Are: LOQO, PROBE ",
                                    str);
             throw std::invalid_argument(msg);
-            return LOQO;
         }
     }
     static BestCriteriaModes strto_BestCriteriaMode(const std::string &str) {
 
         if (str == "ECons" || str == "ECon")
-            return ECONS;
+            return BestCriteriaModes::ECONS;
         else if (str == "ICons" || str == "ICon")
-            return ICONS;
+            return BestCriteriaModes::ICONS;
         else if (str == "KKT")
-            return KKT;
+            return BestCriteriaModes::KKT;
         else if (str == "Obj" || str == "Prim Obj")
-            return OBJ;
+            return BestCriteriaModes::OBJ;
         else {
             throw std::invalid_argument(fmt::format("Unrecognized BestCriteria: {0}", str));
-            return ECONS;
         }
     }
 
@@ -346,7 +342,7 @@ struct PSIOPT {
     int PrintLevel = 0;
     void set_PrintLevel(int plevel) { this->PrintLevel = plevel; }
 
-    PDStepStrategies PDStepStrategy = PrimSlackEq_Iq;
+    PDStepStrategies PDStepStrategy = PDStepStrategies::PrimSlackEq_Iq;
     bool storespmat = false;
     Eigen::SparseMatrix<double, Eigen::RowMajor> spmat;
     double LastObjVal = 0.0;
@@ -425,11 +421,11 @@ struct PSIOPT {
 #ifdef USE_ACCELERATE_SPARSE
         // Accelerate interface uses different configuration methods
         switch (QPOrd) {
-        case MINDEG:
+        case QPOrderingModes::MINDEG:
             this->KKTSol.setOrder(SparseOrderAMD);
             break;
-        case METIS:
-        case PARMETIS:
+        case QPOrderingModes::METIS:
+        case QPOrderingModes::PARMETIS:
             // Note next version of Apple Accelerate will be providing a parallel Metis
             // factorization
             this->KKTSol.setOrder(SparseOrderMetis);
@@ -438,13 +434,13 @@ struct PSIOPT {
         this->KKTSol.setIterativeRefinement(QPRefSteps > 0);
         this->KKTSol.setIterativeRefinementIterations(QPRefSteps);
 #else
-        this->KKTSol.m_ord = QPOrd;
-        this->KKTSol.m_pivotstrat = QPPivotStrategy;
+        this->KKTSol.m_ord = static_cast<int>(QPOrd);
+        this->KKTSol.m_pivotstrat = static_cast<int>(QPPivotStrategy);
         this->KKTSol.m_pivotpert = QPPivotPerturb;
         this->KKTSol.m_matching = QPMatching;
         this->KKTSol.m_scaling = QPScaling;
         this->KKTSol.m_iterref = QPRefSteps;
-        this->KKTSol.m_alg = QPAlg;
+        this->KKTSol.m_alg = static_cast<int>(QPAlg);
         this->KKTSol.m_msglvl = QPPrint;
 
         if (this->CNRMode)
@@ -636,7 +632,7 @@ struct PSIOPT {
     void fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
                         double pobj, double bobj, double mu, IterateInfo &iter) const;
 
-    void evalNLP(int algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
+    void evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
                  EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 

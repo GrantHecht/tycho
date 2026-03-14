@@ -1106,7 +1106,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } else {
             odetemp = this->ode;
         }
-        TranscriptionModes m = fifthorder ? LGL5 : LGL3;
+        TranscriptionModes m = fifthorder ? TranscriptionModes::LGL5 : TranscriptionModes::LGL3;
         std::shared_ptr<LGLInterpTable> tab = std::make_shared<LGLInterpTable>(
             odetemp, this->ode.XVars(), this->ode.UVars() + this->ode.PVars(), m);
 
@@ -1125,7 +1125,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } else {
             odetemp = this->ode;
         }
-        TranscriptionModes m = fifthorder ? LGL5 : LGL3;
+        TranscriptionModes m = fifthorder ? TranscriptionModes::LGL5 : TranscriptionModes::LGL3;
         std::shared_ptr<LGLInterpTable> tab = std::make_shared<LGLInterpTable>(
             odetemp, this->ode.XVars(), this->ode.UVars() + this->ode.PVars(), m);
 

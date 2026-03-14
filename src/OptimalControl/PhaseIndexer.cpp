@@ -34,7 +34,7 @@ void Tycho::PhaseIndexer::addPartitionedEquality(const std::vector<ConstraintInt
                                                  const Eigen::VectorXi &rxtuv,
                                                  const Eigen::VectorXi &rodepv,
                                                  const Eigen::VectorXi &rstatpv,
-                                                 const std::vector<int> &Tmodes) {
+                                                 const std::vector<ThreadingFlags> &Tmodes) {
     int index = this->nlp->EqualityConstraints.size();
     int temp = this->nextPhaseEqCon;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, eqfuns[0].ORows(),
@@ -105,7 +105,7 @@ void Tycho::PhaseIndexer::addPartitionedInequality(const std::vector<ConstraintI
                                                    const Eigen::VectorXi &rxtuv,
                                                    const Eigen::VectorXi &rodepv,
                                                    const Eigen::VectorXi &rstatpv,
-                                                   const std::vector<int> &Tmodes) {
+                                                   const std::vector<ThreadingFlags> &Tmodes) {
     int index = this->nlp->InequalityConstraints.size();
     int temp = this->nextPhaseIqCon;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, iqfuns[0].ORows(),

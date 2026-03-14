@@ -152,6 +152,10 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
             nb::overload_cast<MeshErrorEstimators>(&OptimalControlProblem::setMeshErrorEstimator));
     obj.def("setMeshErrorEstimator",
             nb::overload_cast<const std::string &>(&OptimalControlProblem::setMeshErrorEstimator));
+    obj.def("setMeshErrorDistributor", nb::overload_cast<MeshErrorAggregation>(
+                                           &OptimalControlProblem::setMeshErrorDistributor));
+    obj.def("setMeshErrorDistributor", nb::overload_cast<const std::string &>(
+                                           &OptimalControlProblem::setMeshErrorDistributor));
 }
 
 static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {

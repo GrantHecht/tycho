@@ -43,12 +43,9 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
             target = nb::cast<MeshErrorAggregation>(val);
         else if (nb::isinstance<nb::str>(val))
             target = strto_MeshErrorAggregation(nb::cast<std::string>(val));
-        else if (std::string(name) == "MeshErrorCriteria")
-            throw nb::type_error("expected MeshErrorAggregation enum or str for "
-                                 "MeshErrorCriteria");
         else
-            throw nb::type_error("expected MeshErrorAggregation enum or str for "
-                                 "MeshErrorDistributor");
+            throw nb::type_error(
+                fmt::format("expected MeshErrorAggregation enum or str for {}", name).c_str());
     };
 
     obj.def("enable_vectorization", &ODEPhaseBase::enable_vectorization);

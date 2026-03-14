@@ -51,13 +51,13 @@ struct SolverIndexingData {
     /// Each element indicates whether the corresponding indices in Vindex are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    Eigen::Matrix<ParsedIOFlags, -1, 1> VindexContinuity;
+    std::vector<ParsedIOFlags> VindexContinuity;
 
     /// <summary>
     /// Each element indicates whether the corresponding indices in Cindex are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    Eigen::Matrix<ParsedIOFlags, -1, 1> CindexContinuity;
+    std::vector<ParsedIOFlags> CindexContinuity;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to sum the
