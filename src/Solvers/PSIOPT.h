@@ -14,6 +14,8 @@
 // =============================================================================
 
 #pragma once
+#include <compare>
+
 #include "IterateInfo.h"
 #include "NonLinearProgram.h"
 
@@ -41,6 +43,11 @@ struct PSIOPT {
         NOTCONVERGED,
         DIVERGING,
     };
+
+    // Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
+    friend constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
+        return static_cast<int>(a) <=> static_cast<int>(b);
+    }
 
     enum class QPAlgModes {
         Classic = 0,

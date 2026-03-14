@@ -1567,7 +1567,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
     }
 
     if (this->AdaptiveMesh) {
-        if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
+        if (flag >= this->MeshAbortFlag) {
             if (this->PrintMeshInfo) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Mesh Iteration 0 Failed to Solve: Aborting\n");
@@ -1597,7 +1597,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
                     }
                 }
                 flag = this->psipot_call_impl(nextmode);
-                if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
+                if (flag >= this->MeshAbortFlag) {
                     if (this->PrintMeshInfo) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);

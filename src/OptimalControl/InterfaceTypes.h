@@ -60,9 +60,17 @@ static std::tuple<ScaleModes, bool, Eigen::VectorXd> get_scale_info(int orows, S
         }
     } else if (std::holds_alternative<ScaleModes>(scale_t)) {
         ScaleMode = std::get<ScaleModes>(scale_t);
+        if (ScaleMode == ScaleModes::CUSTOM) {
+            throw std::invalid_argument("ScaleModes::CUSTOM requires explicit scale values (pass a "
+                                        "double or VectorXd instead)");
+        }
         ScalesSet = (ScaleMode != ScaleModes::AUTO);
     } else if (std::holds_alternative<std::string>(scale_t)) {
         ScaleMode = strto_ScaleMode(std::get<std::string>(scale_t));
+        if (ScaleMode == ScaleModes::CUSTOM) {
+            throw std::invalid_argument("ScaleModes::CUSTOM requires explicit scale values (pass a "
+                                        "double or VectorXd instead)");
+        }
         ScalesSet = (ScaleMode != ScaleModes::AUTO);
     }
 

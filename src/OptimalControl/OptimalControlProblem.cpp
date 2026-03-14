@@ -493,7 +493,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(JetJ
 
     if (this->AdaptiveMesh) {
 
-        if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
+        if (flag >= this->MeshAbortFlag) {
             if (this->PrintMeshInfo) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Mesh Iteration 0 Failed to Solve: Aborting\n");
@@ -520,7 +520,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(JetJ
                         this->printMeshs(i);
                 }
                 flag = this->psipot_call_impl(nextmode);
-                if (static_cast<int>(flag) >= static_cast<int>(this->MeshAbortFlag)) {
+                if (flag >= this->MeshAbortFlag) {
                     if (this->PrintMeshInfo) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
