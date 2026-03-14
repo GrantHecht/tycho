@@ -21,7 +21,7 @@ TEST(KeplerPropagation, MultiPeriodReturn) {
     auto oe = leoClassic();
     double a = oe[0];
     auto rv0 = classic_to_cartesian<double>(oe, MU_EARTH);
-    double T = 2.0 * M_PI * std::sqrt(a * a * a / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(a * a * a / MU_EARTH);
 
     // Propagate 5 full periods
     auto rv5 = propagate_cartesian<double>(rv0, 5.0 * T, MU_EARTH);
@@ -32,7 +32,7 @@ TEST(KeplerPropagation, MultiPeriodReturn) {
 
 TEST(KeplerPropagation, HyperbolicTrajectory) {
     Vector6<double> oe;
-    oe << -10000.0, 1.5, 10.0 * M_PI / 180.0, 0.0, 0.0, 0.0;
+    oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
     Vector6<double> rv0 = classic_to_cartesian<double>(oe, MU_EARTH);
 
     // Verify positive specific energy (v^2/2 - mu/r > 0)

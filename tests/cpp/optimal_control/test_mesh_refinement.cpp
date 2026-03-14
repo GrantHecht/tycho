@@ -5,6 +5,9 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(OptimalControlTest, MeshRefinementConvergence) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
     phase->optimizer->PrintLevel = 0;

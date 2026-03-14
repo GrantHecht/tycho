@@ -34,7 +34,7 @@ TEST_F(VFCompositionTest, BrachistochroneGenericODEErasure) {
     EXPECT_EQ(gf.ORows(), 3);
 
     Eigen::VectorXd x(5);
-    x << 0, 10, 5, 0, M_PI / 4.0;
+    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
     Eigen::VectorXd fx_orig(3), fx_gf(3);
     fx_orig.setZero();
     fx_gf.setZero();

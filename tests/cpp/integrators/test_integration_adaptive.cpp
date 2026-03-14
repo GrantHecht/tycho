@@ -8,6 +8,9 @@
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(IntegratorTest, AdaptiveToleranceAdherence) {
     SHO ode(0.0);
     double tol = 1e-10;

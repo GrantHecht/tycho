@@ -5,6 +5,9 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(SolverTest, ConstraintInterfaceFromScalar) {
     auto args = Arguments<3>();
     auto n = args.norm();

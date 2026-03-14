@@ -38,7 +38,7 @@ TEST_F(VectorFunctionTest, BrachistochroneComputeKnownValues) {
 
     // Input: [x=0, y=10, v=5, t=0, theta=pi/4]
     Eigen::VectorXd x(5);
-    x << 0.0, 10.0, 5.0, 0.0, M_PI / 4.0;
+    x << 0.0, 10.0, 5.0, 0.0, std::numbers::pi / 4.0;
 
     Eigen::VectorXd fx(3);
     fx.setZero();
@@ -48,11 +48,11 @@ TEST_F(VectorFunctionTest, BrachistochroneComputeKnownValues) {
     ode.compute_jacobian(x, fx, jx);
 
     // xdot = sin(pi/4) * 5 = 5/sqrt(2) ≈ 3.5355
-    EXPECT_NEAR(fx[0], 5.0 * std::sin(M_PI / 4.0), 1e-12);
+    EXPECT_NEAR(fx[0], 5.0 * std::sin(std::numbers::pi / 4.0), 1e-12);
     // ydot = -cos(pi/4) * 5 = -5/sqrt(2) ≈ -3.5355
-    EXPECT_NEAR(fx[1], -5.0 * std::cos(M_PI / 4.0), 1e-12);
+    EXPECT_NEAR(fx[1], -5.0 * std::cos(std::numbers::pi / 4.0), 1e-12);
     // vdot = g * cos(pi/4) ≈ 6.937
-    EXPECT_NEAR(fx[2], g * std::cos(M_PI / 4.0), 1e-12);
+    EXPECT_NEAR(fx[2], g * std::cos(std::numbers::pi / 4.0), 1e-12);
 }
 
 TEST_F(VectorFunctionTest, JacobianVsFiniteDifference) {

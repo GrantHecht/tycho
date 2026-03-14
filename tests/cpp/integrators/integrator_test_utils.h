@@ -10,11 +10,12 @@
 #include "Tycho.h"
 #include "test_utils.h"
 #include <cmath>
-#include <string>
 #include <gtest/gtest.h>
+#include <string>
+
+namespace TychoTest {
 
 using namespace Tycho;
-using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Simple Harmonic Oscillator ODE: x'' = -x
@@ -59,3 +60,5 @@ inline double sho_error(const std::string &method, double h) {
 ///////////////////////////////////////////////////////////////////////////////
 
 class IntegratorTest : public VectorFunctionFixture {};
+
+} // namespace TychoTest

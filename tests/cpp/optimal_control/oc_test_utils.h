@@ -1,3 +1,10 @@
+///////////////////////////////////////////////////////////////////////////////
+// Shared utilities for optimal control tests
+//
+// Provides the OptimalControlTest fixture and a standard Brachistochrone
+// phase builder for reuse across OC and solver test files.
+///////////////////////////////////////////////////////////////////////////////
+
 #pragma once
 
 #include "Astro/KeplerModel.h"
@@ -8,8 +15,9 @@
 #include <memory>
 #include <vector>
 
+namespace TychoTest {
+
 using namespace Tycho;
-using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture
@@ -65,3 +73,5 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_pts = 100, int
 
     return phase;
 }
+
+} // namespace TychoTest

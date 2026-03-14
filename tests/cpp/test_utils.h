@@ -10,6 +10,7 @@
 
 #include "Tycho.h"
 #include <gtest/gtest.h>
+#include <numbers>
 #include <random>
 
 namespace TychoTest {

@@ -22,10 +22,10 @@ TEST(LambertSolver, SimpleTransfer) {
     Vector3<double> R1, R2;
     R1 << a, 0.0, 0.0;
     // 60 degree transfer
-    R2 << a * std::cos(M_PI / 3.0), a * std::sin(M_PI / 3.0), 0.0;
+    R2 << a * std::cos(std::numbers::pi / 3.0), a * std::sin(std::numbers::pi / 3.0), 0.0;
 
     // Flight time for 60 degree transfer on circular orbit
-    double T = 2.0 * M_PI * std::sqrt(a * a * a / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(a * a * a / MU_EARTH);
     double dt = T / 6.0; // 60 degrees = 1/6 of period
 
     auto result = lambert_izzo<double>(R1, R2, dt, MU_EARTH, false);
@@ -72,7 +72,7 @@ TEST(LambertSolver, MultiRevolution) {
     R2 << 0.0, 7000.0, 0.0;
 
     // Long enough flight time for multi-rev
-    double T = 2.0 * M_PI * std::sqrt(7000.0 * 7000.0 * 7000.0 / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(7000.0 * 7000.0 * 7000.0 / MU_EARTH);
     double dt = T + T / 4.0; // 1.25 periods
 
     auto result = lambert_izzo<double>(R1, R2, dt, MU_EARTH, false, 1, false);
@@ -89,9 +89,9 @@ TEST(LambertSolver, SelfConsistency) {
     double a = 7000.0;
     Vector3<double> R1, R2;
     R1 << a, 0.0, 0.0;
-    R2 << a * std::cos(M_PI / 3.0), a * std::sin(M_PI / 3.0), 0.0;
+    R2 << a * std::cos(std::numbers::pi / 3.0), a * std::sin(std::numbers::pi / 3.0), 0.0;
 
-    double T = 2.0 * M_PI * std::sqrt(a * a * a / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(a * a * a / MU_EARTH);
     double dt = T / 6.0; // 60 degrees = 1/6 of period
     auto result = lambert_izzo<double>(R1, R2, dt, MU_EARTH, false);
     auto &V1 = result[0];

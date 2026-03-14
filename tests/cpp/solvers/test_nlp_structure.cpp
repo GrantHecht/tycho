@@ -5,6 +5,9 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(SolverTest, NLPDimensionsConsistency) {
     auto phase = make_brach_solver_phase(16);
     phase->transcribe(false, false);

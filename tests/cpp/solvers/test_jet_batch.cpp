@@ -5,6 +5,9 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(SolverTest, JetMapPrebuiltProblems) {
     // Create 3 identical Brachistochrone phases, solve via Jet::map
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;

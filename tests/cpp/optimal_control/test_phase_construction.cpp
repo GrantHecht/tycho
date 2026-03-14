@@ -5,6 +5,9 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(OptimalControlTest, BrachPhaseConstruct) {
     auto phase = make_brach_phase();
     // Phase should be constructable without error

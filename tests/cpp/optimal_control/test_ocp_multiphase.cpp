@@ -5,6 +5,9 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
     auto phase1 = make_brach_phase(50, 16);
     auto phase2 = make_brach_phase(50, 16);
@@ -55,7 +58,7 @@ TEST_F(OptimalControlTest, KeplerPhaseConstruct) {
     // Circular orbit initial state
     double r0 = 7000.0;
     double v_circ = std::sqrt(mu / r0);
-    double T = 2.0 * M_PI * std::sqrt(r0 * r0 * r0 / mu);
+    double T = 2.0 * std::numbers::pi * std::sqrt(r0 * r0 * r0 / mu);
 
     int n_pts = 50;
     std::vector<Eigen::VectorXd> traj;
@@ -63,7 +66,7 @@ TEST_F(OptimalControlTest, KeplerPhaseConstruct) {
     for (int i = 0; i < n_pts; ++i) {
         double s = static_cast<double>(i) / (n_pts - 1);
         double t = s * T / 4.0;
-        double angle = s * M_PI / 2.0;
+        double angle = s * std::numbers::pi / 2.0;
         Eigen::VectorXd pt(7);
         pt << r0 * std::cos(angle), r0 * std::sin(angle), 0.0, -v_circ * std::sin(angle),
             v_circ * std::cos(angle), 0.0, t;

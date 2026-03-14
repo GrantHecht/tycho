@@ -6,8 +6,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Utils/Timer.h"
-#include <gtest/gtest.h>
 #include <chrono>
+#include <gtest/gtest.h>
 #include <thread>
 
 using namespace Tycho;

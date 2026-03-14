@@ -5,6 +5,9 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(OptimalControlTest, LGLCoeffsIntegralWeights) {
     // LGL3 (CS=2): Cardinal integral weights + interior integral weights should
     // sum to 2.0 (the Simpson's 1/3 rule weights on [0,1] with midpoint)

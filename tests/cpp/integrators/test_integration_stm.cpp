@@ -10,6 +10,9 @@
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(IntegratorTest, SHOSTMVsAnalytical) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, "DOPRI87", 0.01);
@@ -94,7 +97,7 @@ TEST_F(IntegratorTest, KeplerSTMDeterminant) {
     x0 << r0, 0, 0, 0, v0, 0, 0;
 
     // Quarter period
-    double T = 2.0 * M_PI * std::sqrt(r0 * r0 * r0 / 398600.4418);
+    double T = 2.0 * std::numbers::pi * std::sqrt(r0 * r0 * r0 / 398600.4418);
     auto [xf, stm] = integ.integrate_stm(x0, T / 4.0);
 
     // State block of STM (6x6) should have determinant = 1 (symplecticity)

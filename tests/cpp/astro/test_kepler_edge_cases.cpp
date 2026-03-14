@@ -35,8 +35,8 @@ TEST(KeplerEdgeCases, NearCircularEquatorial) {
 TEST(KeplerEdgeCases, RetrogradeOrbit) {
     // Retrograde orbit: i = 150 degrees
     Vector6<double> oe;
-    oe << 8000.0, 0.1, 150.0 * M_PI / 180.0, 30.0 * M_PI / 180.0, 45.0 * M_PI / 180.0,
-        20.0 * M_PI / 180.0;
+    oe << 8000.0, 0.1, 150.0 * std::numbers::pi / 180.0, 30.0 * std::numbers::pi / 180.0,
+        45.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     auto oe2 = cartesian_to_classic<double>(rv, MU_EARTH);
     auto rv2 = classic_to_cartesian<double>(oe2, MU_EARTH);
@@ -60,7 +60,7 @@ TEST(KeplerEdgeCases, FullRoundTripClassicMEECartClassic) {
 TEST(KeplerEdgeCases, NearParabolic) {
     // Near-parabolic orbit: e = 0.9999
     Vector6<double> oe;
-    oe << 50000.0, 0.9999, 10.0 * M_PI / 180.0, 0.0, 0.0, 0.1;
+    oe << 50000.0, 0.9999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.1;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i) {
         EXPECT_TRUE(std::isfinite(rv[i]))

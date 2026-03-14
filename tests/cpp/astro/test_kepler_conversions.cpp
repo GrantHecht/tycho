@@ -68,7 +68,7 @@ TEST(KeplerConversions, CircularOrbitPeriod) {
     auto rv0 = classic_to_cartesian<double>(oe, MU_EARTH);
 
     // Orbital period: T = 2*pi*sqrt(a^3/mu)
-    double T = 2.0 * M_PI * std::sqrt(a * a * a / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(a * a * a / MU_EARTH);
 
     auto rv1 = propagate_cartesian<double>(rv0, T, MU_EARTH);
 
@@ -81,7 +81,7 @@ TEST(KeplerConversions, CircularOrbitPeriod) {
 TEST(KeplerConversions, HyperbolicClassicToCartesian) {
     // Hyperbolic orbit: e=1.5, a<0 (by convention, a is negative for hyperbolic)
     Vector6<double> oe;
-    oe << -10000.0, 1.5, 10.0 * M_PI / 180.0, 0.0, 0.0, 0.3;
+    oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.3;
 
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
 

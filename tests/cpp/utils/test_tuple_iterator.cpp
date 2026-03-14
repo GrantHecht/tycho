@@ -46,9 +46,8 @@ TEST(TupleIteratorTest, ReverseForEach) {
 TEST(TupleIteratorTest, ForLoopWithIndex) {
     auto t = std::make_tuple(10, 20, 30);
     std::vector<std::pair<int, size_t>> visited;
-    tuple_for_loop(t, [&](const auto &elem, auto idx) {
-        visited.push_back({elem, decltype(idx)::value});
-    });
+    tuple_for_loop(
+        t, [&](const auto &elem, auto idx) { visited.push_back({elem, decltype(idx)::value}); });
     ASSERT_EQ(visited.size(), 3u);
     EXPECT_EQ(visited[0].first, 10);
     EXPECT_EQ(visited[0].second, 0u);
@@ -59,7 +58,8 @@ TEST(TupleIteratorTest, ForLoopWithIndex) {
 TEST(TupleIteratorTest, ReverseForLoop) {
     auto t = std::make_tuple(10, 20, 30);
     std::vector<size_t> indices;
-    reverse_tuple_for_loop(t, [&](const auto &, auto idx) { indices.push_back(decltype(idx)::value); });
+    reverse_tuple_for_loop(
+        t, [&](const auto &, auto idx) { indices.push_back(decltype(idx)::value); });
     ASSERT_EQ(indices.size(), 3u);
     EXPECT_EQ(indices[0], 2u);
     EXPECT_EQ(indices[1], 1u);
@@ -76,9 +76,9 @@ TEST(TupleIteratorTest, ConstexprForLoop) {
 
 TEST(TupleIteratorTest, ConstexprForwardingLoop) {
     // Accumulate sum: 0 + 0 + 1 + 2 + 3 = 6
-    auto result =
-        constexpr_forwarding_loop(std::integral_constant<int, 0>(), std::integral_constant<int, 4>(),
-                                  [](auto ic, auto input) { return input + decltype(ic)::value; }, 0);
+    auto result = constexpr_forwarding_loop(
+        std::integral_constant<int, 0>(), std::integral_constant<int, 4>(),
+        [](auto ic, auto input) { return input + decltype(ic)::value; }, 0);
     EXPECT_EQ(result, 6);
 }
 

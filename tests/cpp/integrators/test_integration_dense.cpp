@@ -9,6 +9,9 @@
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
+using namespace Tycho;
+using namespace TychoTest;
+
 TEST_F(IntegratorTest, DenseOutputBoundaryConsistency) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, "DOPRI87", 0.01);
@@ -41,7 +44,7 @@ TEST_F(IntegratorTest, DenseOutputVsAnalytical) {
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0;
 
-    auto dense = integ.integrate_dense(x0, M_PI);
+    auto dense = integ.integrate_dense(x0, std::numbers::pi);
 
     // Check several interior points against analytical solution
     for (const auto &state : dense) {
