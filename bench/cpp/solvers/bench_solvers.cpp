@@ -79,7 +79,7 @@ static std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs) {
 
     phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
     phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer->PrintLevel = 3; // suppress all solver output
 
     return phase;
 }
