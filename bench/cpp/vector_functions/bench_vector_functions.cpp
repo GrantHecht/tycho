@@ -2,57 +2,9 @@
 // VectorFunction DSL evaluation benchmarks
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include "../bench_common.h"
+#include "Astro/CR3BPModel.h"
 #include <benchmark/benchmark.h>
-
-using namespace Tycho;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definitions
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
-
-struct PolarLT_Impl : ODESize<4, 2, 0> {
-    static auto Definition(double amax) {
-        auto args = Arguments<7>(); // [r, theta, vr, vt, t, u, alpha]
-        auto r = args.coeff<0>();
-        auto vr = args.coeff<2>();
-        auto vt = args.coeff<3>();
-        auto u = args.coeff<5>();
-        auto alpha = args.coeff<6>();
-        auto rdot = vr;
-        auto tdot = vt / r;
-        auto vrdot = (vt * vt) / r + ((-1.0) / (r * r)) + amax * u * sin(alpha);
-        auto vtdot = (vt * vr) / r * (-1.0) + amax * u * cos(alpha);
-        return StackedOutputs{rdot, tdot, vrdot, vtdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(PolarLTODE, PolarLT_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
-// Global init — MemoryManager must be sized before VF evaluation
-///////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-struct GlobalInit {
-    GlobalInit() { MemoryManager::resize(256, 256); }
-};
-GlobalInit g_init;
-
-} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrachODE benchmarks (5->3)
@@ -128,18 +80,20 @@ static void BM_VF_ComputeFullVJP(benchmark::State &state) {
 BENCHMARK(BM_VF_ComputeFullVJP);
 
 ///////////////////////////////////////////////////////////////////////////////
-// Composition benchmark — stacked segments
+// Composition benchmark — nested math operations
 ///////////////////////////////////////////////////////////////////////////////
 
 static void BM_VF_Composition(benchmark::State &state) {
     auto args = Arguments<7>();
     auto a = args.head<3>();
-    auto b = args.segment<4, 3>();
-    auto stacked = StackedOutputs{a, b};
+    auto b = args.segment<3, 3>(); // <Size, Start>
+    auto cross_ab = a.cross(b);
+    auto norm_a = a.norm();
+    auto stacked = StackedOutputs{cross_ab, norm_a};
     Eigen::VectorXd x(7);
     x << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0;
-    Eigen::VectorXd fx(7);
-    Eigen::MatrixXd jx(7, 7);
+    Eigen::VectorXd fx(4);
+    Eigen::MatrixXd jx(4, 7);
     for (auto _ : state) {
         fx.setZero();
         jx.setZero();
@@ -156,7 +110,7 @@ BENCHMARK(BM_VF_Composition);
 
 static void BM_VF_ArgsSegment(benchmark::State &state) {
     auto args = Arguments<7>();
-    auto seg = args.segment<3, 4>();
+    auto seg = args.segment<3, 4>(); // <Size, Start>
     Eigen::VectorXd x(7);
     x << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0;
     Eigen::VectorXd fx(3);
@@ -170,3 +124,36 @@ static void BM_VF_ArgsSegment(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_VF_ArgsSegment);
+
+///////////////////////////////////////////////////////////////////////////////
+// CR3BP benchmarks
+///////////////////////////////////////////////////////////////////////////////
+
+static void BM_VF_CR3BP_Compute(benchmark::State &state) {
+    CR3BP ode(0.01215); // Earth-Moon mass ratio
+    Eigen::VectorXd x(7);
+    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0; // near L1
+    Eigen::VectorXd fx(6);
+    for (auto _ : state) {
+        fx.setZero();
+        ode.compute(x, fx);
+        benchmark::DoNotOptimize(fx);
+    }
+}
+BENCHMARK(BM_VF_CR3BP_Compute);
+
+static void BM_VF_CR3BP_ComputeJacobian(benchmark::State &state) {
+    CR3BP ode(0.01215);
+    Eigen::VectorXd x(7);
+    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0;
+    Eigen::VectorXd fx(6);
+    Eigen::MatrixXd jx(6, 7);
+    for (auto _ : state) {
+        fx.setZero();
+        jx.setZero();
+        ode.compute_jacobian(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+    }
+}
+BENCHMARK(BM_VF_CR3BP_ComputeJacobian);

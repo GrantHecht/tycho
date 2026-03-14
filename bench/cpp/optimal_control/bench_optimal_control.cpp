@@ -2,43 +2,11 @@
 // Optimal control benchmarks — OCP phase construction + transcription
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include "../bench_common.h"
 #include <benchmark/benchmark.h>
 #include <cmath>
 #include <memory>
 #include <vector>
-
-using namespace Tycho;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definition
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
-// Global init
-///////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-struct GlobalInit {
-    GlobalInit() { MemoryManager::resize(256, 256); }
-};
-GlobalInit g_init;
-
-} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helper: build a Brachistochrone phase
@@ -105,3 +73,29 @@ static void BM_Phase_Construct_64seg(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_Phase_Construct_64seg);
+
+///////////////////////////////////////////////////////////////////////////////
+// Transcription-only benchmarks (exclude phase construction)
+///////////////////////////////////////////////////////////////////////////////
+
+static void BM_Phase_Transcribe_16seg(benchmark::State &state) {
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto phase = make_brach_phase(16);
+        state.ResumeTiming();
+        phase->transcribe(false, false);
+        benchmark::DoNotOptimize(phase);
+    }
+}
+BENCHMARK(BM_Phase_Transcribe_16seg);
+
+static void BM_Phase_Transcribe_64seg(benchmark::State &state) {
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto phase = make_brach_phase(64);
+        state.ResumeTiming();
+        phase->transcribe(false, false);
+        benchmark::DoNotOptimize(phase);
+    }
+}
+BENCHMARK(BM_Phase_Transcribe_64seg);

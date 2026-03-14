@@ -2,53 +2,9 @@
 // Integrator benchmarks — RK stepper pipeline throughput
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include "../bench_common.h"
 #include <benchmark/benchmark.h>
 #include <cmath>
-
-using namespace Tycho;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definitions
-///////////////////////////////////////////////////////////////////////////////
-
-struct SHO_Impl : ODESize<2, 0, 0> {
-    static auto Definition(double /*unused*/) {
-        auto args = Arguments<3>(); // [x, v, t]
-        auto x = args.coeff<0>();
-        auto v = args.coeff<1>();
-        auto xdot = v;
-        auto vdot = (-1.0) * x;
-        return StackedOutputs{xdot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(SHO, SHO_Impl, double);
-
-struct BrachODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
-// Global init
-///////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-struct GlobalInit {
-    GlobalInit() { MemoryManager::resize(256, 256); }
-};
-GlobalInit g_init;
-
-} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // SHO integration benchmarks — one full period (2*pi)
@@ -109,3 +65,48 @@ static void BM_Integrate_Brach_DOPRI87(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_Integrate_Brach_DOPRI87);
+
+static void BM_Integrate_Brach_DOPRI54(benchmark::State &state) {
+    BrachODE ode(9.81);
+    for (auto _ : state) {
+        Integrator<BrachODE> integ(ode, "DOPRI54", 0.05);
+        Eigen::VectorXd x0(5);
+        x0 << 0.0, 10.0, 0.01, 0.0, 1.0;
+        auto xf = integ.integrate(x0, 1.0);
+        benchmark::DoNotOptimize(xf);
+    }
+}
+BENCHMARK(BM_Integrate_Brach_DOPRI54);
+
+///////////////////////////////////////////////////////////////////////////////
+// PolarLT integration — higher-dimensional ODE (7-element state)
+///////////////////////////////////////////////////////////////////////////////
+
+static void BM_Integrate_PolarLT_DOPRI87(benchmark::State &state) {
+    PolarLTODE ode(0.01);
+    for (auto _ : state) {
+        Integrator<PolarLTODE> integ(ode, "DOPRI87", 0.05);
+        Eigen::VectorXd x0(7);
+        x0 << 1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.3; // [r, theta, vr, vt, t, u, alpha]
+        auto xf = integ.integrate(x0, 2.0);
+        benchmark::DoNotOptimize(xf);
+    }
+}
+BENCHMARK(BM_Integrate_PolarLT_DOPRI87);
+
+///////////////////////////////////////////////////////////////////////////////
+// Dense output benchmark — 100 interpolated points
+///////////////////////////////////////////////////////////////////////////////
+
+static void BM_Integrate_SHO_Dense_100(benchmark::State &state) {
+    SHO ode(0.0);
+    double tf = 2.0 * M_PI;
+    for (auto _ : state) {
+        Integrator<SHO> integ(ode, "DOPRI87", 0.1);
+        Eigen::Vector3d x0;
+        x0 << 1.0, 0.0, 0.0;
+        auto traj = integ.integrate_dense(x0, tf, 100);
+        benchmark::DoNotOptimize(traj);
+    }
+}
+BENCHMARK(BM_Integrate_SHO_Dense_100);

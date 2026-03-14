@@ -2,43 +2,11 @@
 // PSIOPT solver benchmarks — end-to-end convergence
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include "../bench_common.h"
 #include <benchmark/benchmark.h>
 #include <cmath>
 #include <memory>
 #include <vector>
-
-using namespace Tycho;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definition
-///////////////////////////////////////////////////////////////////////////////
-
-struct BrachODE_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(BrachODE, BrachODE_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
-// Global init
-///////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-struct GlobalInit {
-    GlobalInit() { MemoryManager::resize(256, 256); }
-};
-GlobalInit g_init;
-
-} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helper: build a fresh Brachistochrone phase for solving
@@ -90,19 +58,33 @@ static std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static void BM_PSIOPT_Brach_16seg(benchmark::State &state) {
+    bool first = true;
     for (auto _ : state) {
         auto phase = make_brach_solver_phase(16);
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
+        if (first) {
+            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+                state.SkipWithError("PSIOPT did not converge (16seg)");
+            }
+            first = false;
+        }
     }
 }
 BENCHMARK(BM_PSIOPT_Brach_16seg)->Unit(benchmark::kMillisecond);
 
 static void BM_PSIOPT_Brach_32seg(benchmark::State &state) {
+    bool first = true;
     for (auto _ : state) {
         auto phase = make_brach_solver_phase(32);
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
+        if (first) {
+            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+                state.SkipWithError("PSIOPT did not converge (32seg)");
+            }
+            first = false;
+        }
     }
 }
 BENCHMARK(BM_PSIOPT_Brach_32seg)->Unit(benchmark::kMillisecond);
