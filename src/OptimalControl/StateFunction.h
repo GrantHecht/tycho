@@ -30,7 +30,7 @@ template <class FuncType> struct StateFunction {
 
     Eigen::VectorXi EXTVars; // dirty i know
 
-    std::string ScaleMode = "auto"; // auto,custom,none
+    ScaleModes ScaleMode = ScaleModes::AUTO;
     bool ScalesSet = false;
     Eigen::VectorXd OutputScales;
 

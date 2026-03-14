@@ -345,7 +345,7 @@ void Tycho::OptimalControlProblem::calc_auto_scales() {
 
     auto calc_impl = [&](auto &funcmap) {
         for (auto &[key, func] : funcmap) {
-            if (func.ScaleMode == "auto") {
+            if (func.ScaleMode == ScaleModes::AUTO) {
                 VectorXd input_scales =
                     this->get_input_scale(func.LinkFlag, func.PhaseRegFlags, func.PhasesTolink,
                                           func.XtUVars, func.OPVars, func.SPVars, func.LinkParams);
@@ -353,7 +353,7 @@ void Tycho::OptimalControlProblem::calc_auto_scales() {
                     this->get_test_inputs(func.LinkFlag, func.PhaseRegFlags, func.PhasesTolink,
                                           func.XtUVars, func.OPVars, func.SPVars, func.LinkParams);
                 VectorXd output_scales =
-                    calc_jacobian_row_scales(func.Func, input_scales, test_inputs, "norm", "mean");
+                    calc_jacobian_row_scales(func.Func, input_scales, test_inputs);
                 func.OutputScales = output_scales;
             } else {
             }
@@ -368,7 +368,7 @@ void Tycho::OptimalControlProblem::calc_auto_scales() {
 std::vector<double> Tycho::OptimalControlProblem::get_objective_scales() {
     std::vector<double> scales;
     for (auto &[key, obj] : this->LinkObjectives) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             scales.push_back(obj.OutputScales[0]);
         }
     }
@@ -384,7 +384,7 @@ std::vector<double> Tycho::OptimalControlProblem::get_objective_scales() {
 
 void Tycho::OptimalControlProblem::update_objective_scales(double scale) {
     for (auto &[key, obj] : this->LinkObjectives) {
-        if (obj.ScaleMode == "auto") {
+        if (obj.ScaleMode == ScaleModes::AUTO) {
             obj.OutputScales[0] = scale;
         }
     }
@@ -427,7 +427,7 @@ void Tycho::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
     this->doTranscription = false;
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::psipot_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::psipot_call_impl(JetJobModes mode) {
 
     this->checkTranscriptions();
     if (this->doTranscription)
@@ -435,17 +435,23 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::psipot_call_impl(s
     VectorXd Input = this->makeSolverInput();
     VectorXd Output;
 
-    if (mode == "solve") {
+    switch (mode) {
+    case JetJobModes::Solve:
         Output = this->optimizer->solve(Input);
-    } else if (mode == "optimize") {
+        break;
+    case JetJobModes::Optimize:
         Output = this->optimizer->optimize(Input);
-    } else if (mode == "solve_optimize") {
+        break;
+    case JetJobModes::SolveOptimize:
         Output = this->optimizer->solve_optimize(Input);
-    } else if (mode == "solve_optimize_solve") {
+        break;
+    case JetJobModes::SolveOptimizeSolve:
         Output = this->optimizer->solve_optimize_solve(Input);
-    } else if (mode == "optimize_solve") {
+        break;
+    case JetJobModes::OptimizeSolve:
         Output = this->optimizer->optimize_solve(Input);
-    } else {
+        break;
+    default:
         throw std::invalid_argument("Unrecognized PSIOPT mode");
     }
 
@@ -457,7 +463,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::psipot_call_impl(s
     return this->optimizer->ConvergeFlag;
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(std::string mode) {
+Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
@@ -471,10 +477,17 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::OptimalControlProblem::ocp_call_impl(std:
 
     PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
-    std::string nextmode = mode;
+    JetJobModes nextmode = mode;
     if (this->SolveOnlyFirst) {
-        if (nextmode.find(std::string("solve_")) != std::string::npos) {
-            nextmode.erase(0, 6);
+        switch (mode) {
+        case JetJobModes::SolveOptimize:
+            nextmode = JetJobModes::Optimize;
+            break;
+        case JetJobModes::SolveOptimizeSolve:
+            nextmode = JetJobModes::OptimizeSolve;
+            break;
+        default:
+            break;
         }
     }
 

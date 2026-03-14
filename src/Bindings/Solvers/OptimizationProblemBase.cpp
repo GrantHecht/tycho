@@ -21,12 +21,7 @@ using namespace Tycho;
 void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
-    // JetJobMode is stored as int internally; expose it with the enum type so that
-    // Python code can assign JetJobModes values (matching pybind11 behaviour).
-    obj.def_prop_rw(
-        "JetJobMode",
-        [](const OptimizationProblemBase &self) { return (JetJobModes)self.JetJobMode; },
-        [](OptimizationProblemBase &self, JetJobModes v) { self.JetJobMode = (int)v; });
+    obj.def_rw("JetJobMode", &OptimizationProblemBase::JetJobMode);
     obj.def_rw("Threads", &OptimizationProblemBase::Threads);
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
 

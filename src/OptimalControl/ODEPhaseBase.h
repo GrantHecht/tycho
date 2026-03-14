@@ -125,9 +125,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     double MeshTol = 1.0e-6;
 
-    std::string MeshErrorEstimator = "deboor";
-    std::string MeshErrorCriteria = "max";    //"max,avg,geometric,endtoend"
-    std::string MeshErrorDistributor = "avg"; // "max,avg,geometric,endtoend"
+    MeshErrorEstimators MeshErrorEstimator = MeshErrorEstimators::DEBOOR;
+    MeshErrorAggregation MeshErrorCriteria = MeshErrorAggregation::MAX;
+    MeshErrorAggregation MeshErrorDistributor = MeshErrorAggregation::AVG;
     PSIOPT::ConvergenceFlags MeshAbortFlag = PSIOPT::ConvergenceFlags::DIVERGING;
 
     bool MeshConverged = false;
@@ -148,8 +148,18 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void setMaxMeshIters(int it) { this->MaxMeshIters = abs(it); }
     void setMinSegments(int it) { this->MinSegments = abs(it); }
     void setMaxSegments(int it) { this->MaxSegments = abs(it); }
-    void setMeshErrorCriteria(std::string m) { this->MeshErrorCriteria = m; }
-    void setMeshErrorEstimator(std::string m) { this->MeshErrorEstimator = m; }
+    void setMeshErrorCriteria(MeshErrorAggregation m) { this->MeshErrorCriteria = m; }
+    void setMeshErrorCriteria(const std::string &m) {
+        this->MeshErrorCriteria = strto_MeshErrorAggregation(m);
+    }
+    void setMeshErrorEstimator(MeshErrorEstimators m) { this->MeshErrorEstimator = m; }
+    void setMeshErrorEstimator(const std::string &m) {
+        this->MeshErrorEstimator = strto_MeshErrorEstimator(m);
+    }
+    void setMeshErrorDistributor(MeshErrorAggregation m) { this->MeshErrorDistributor = m; }
+    void setMeshErrorDistributor(const std::string &m) {
+        this->MeshErrorDistributor = strto_MeshErrorAggregation(m);
+    }
 
     std::vector<MeshIterateInfo> getMeshIters() const { return this->MeshIters; }
 
@@ -181,7 +191,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->resetTranscription();
         this->invalidatePostOptInfo();
         this->ControlMode = m;
-        if (this->ControlMode == BlockConstant) {
+        if (this->ControlMode == ControlModes::BlockConstant) {
             this->Table.BlockedControls = true;
         } else {
             this->Table.BlockedControls = false;
@@ -285,12 +295,12 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         } else if (std::holds_alternative<VectorXi>(XtUPvars_t)) {
             XtUPvars = std::get<VectorXi>(XtUPvars_t);
         } else if (std::holds_alternative<std::string>(XtUPvars_t)) {
-            if (reg != StaticParams) {
+            if (reg != PhaseRegionFlags::StaticParams) {
                 XtUPvars = this->idx(std::get<std::string>(XtUPvars_t));
             } else {
                 XtUPvars = this->getSPidx(std::get<std::string>(XtUPvars_t));
             }
-            if (reg == ODEParams) {
+            if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
                 for (int i = 0; i < XtUPvars.size(); i++) {
                     XtUPvars[i] -= this->XtUVars();
@@ -304,7 +314,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             auto tmpvars = std::get<std::vector<std::string>>(XtUPvars_t);
 
             for (auto tmpv : tmpvars) {
-                if (reg != StaticParams) {
+                if (reg != PhaseRegionFlags::StaticParams) {
                     varvec.push_back(this->idx(tmpv));
                 } else {
                     varvec.push_back(this->getSPidx(tmpv));
@@ -322,7 +332,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 }
             }
 
-            if (reg == ODEParams) {
+            if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
                 for (int i = 0; i < XtUPvars.size(); i++) {
                     XtUPvars[i] -= this->XtUVars();
@@ -430,7 +440,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         VectorXi OPvars;
         VectorXi SPvars;
         /////////////////////////////////////////////////
-        if (reg != ODEParams && reg != StaticParams) {
+        if (reg != PhaseRegionFlags::ODEParams && reg != PhaseRegionFlags::StaticParams) {
             // If region is Params then the indices are held in XtUPvars_t and the others are emtpy
             OPvars = this->getOPVars(reg, OPvars_t);
             SPvars = this->getSPVars(reg, SPvars_t);
@@ -690,8 +700,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     int addIntegralObjective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, VarIndexType OPvars_t,
                              VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
-                                                                   SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
 
@@ -699,8 +709,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         VectorXi empty;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, empty,
-                                                                   empty, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, empty, empty, scale_t);
         return addFuncImpl(con, this->userIntegrands, "Integral Objective");
     }
 
@@ -720,8 +730,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         VectorXi epv(1);
         epv[0] = accum_parm;
 
-        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(Path, fun, XtUPvars_t, OPvars_t,
-                                                                   SPvars_t, scale_t);
+        auto con = makeFuncImpl<StateObjective, ScalarFunctionalX>(
+            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
         int index = addFuncImpl(con, this->userParamIntegrands, "Integral Parameter Function");
         this->userParamIntegrands[index].EXTVars = epv;
         return index;
@@ -977,14 +987,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     template <class T> static void check_function_size(const T &func, std::string ftype) {
         int irows = func.Func.IRows();
         switch (func.RegionFlag) {
-        case Front:
-        case Back:
-        case Path:
-        case Params:
-        case ODEParams:
-        case StaticParams:
-        case InnerPath:
-        case NodalPath: {
+        case PhaseRegionFlags::Front:
+        case PhaseRegionFlags::Back:
+        case PhaseRegionFlags::Path:
+        case PhaseRegionFlags::Params:
+        case PhaseRegionFlags::ODEParams:
+        case PhaseRegionFlags::StaticParams:
+        case PhaseRegionFlags::InnerPath:
+        case PhaseRegionFlags::NodalPath: {
             int isize = func.XtUVars.size() + func.OPVars.size() + func.SPVars.size();
             if (irows != isize) {
 
@@ -999,9 +1009,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             }
             break;
         }
-        case FrontandBack:
-        case BackandFront:
-        case PairWisePath: {
+        case PhaseRegionFlags::FrontandBack:
+        case PhaseRegionFlags::BackandFront:
+        case PhaseRegionFlags::PairWisePath: {
             int isize = func.XtUVars.size() * 2 + func.OPVars.size() + func.SPVars.size();
             if (irows != isize) {
                 fmt::print(fmt::fg(fmt::color::red),
@@ -1103,9 +1113,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->ActiveIqLmults = IM;
     }
 
-    PSIOPT::ConvergenceFlags psipot_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags psipot_call_impl(JetJobModes mode);
 
-    PSIOPT::ConvergenceFlags phase_call_impl(std::string mode);
+    PSIOPT::ConvergenceFlags phase_call_impl(JetJobModes mode);
 
   public:
     void transcribe(bool showstats, bool showfuns);
@@ -1132,13 +1142,17 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->invalidatePostOptInfo();
     }
 
-    PSIOPT::ConvergenceFlags solve() { return phase_call_impl("solve"); }
-    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl("optimize"); }
-    PSIOPT::ConvergenceFlags solve_optimize() { return phase_call_impl("solve_optimize"); }
-    PSIOPT::ConvergenceFlags solve_optimize_solve() {
-        return phase_call_impl("solve_optimize_solve");
+    PSIOPT::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
+    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
+    PSIOPT::ConvergenceFlags solve_optimize() {
+        return phase_call_impl(JetJobModes::SolveOptimize);
     }
-    PSIOPT::ConvergenceFlags optimize_solve() { return phase_call_impl("optimize_solve"); }
+    PSIOPT::ConvergenceFlags solve_optimize_solve() {
+        return phase_call_impl(JetJobModes::SolveOptimizeSolve);
+    }
+    PSIOPT::ConvergenceFlags optimize_solve() {
+        return phase_call_impl(JetJobModes::OptimizeSolve);
+    }
 
     /////////////////////////////////////////////////////////////////
 

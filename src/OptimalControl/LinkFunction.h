@@ -32,7 +32,7 @@ template <class FuncType> struct LinkFunction {
     std::vector<Eigen::VectorXi> SPVars;
     std::vector<Eigen::VectorXi> LinkParams;
 
-    std::string ScaleMode = "auto"; // auto,custom
+    ScaleModes ScaleMode = ScaleModes::AUTO;
     bool ScalesSet = false;
     Eigen::VectorXd OutputScales;
 

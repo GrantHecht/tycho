@@ -144,7 +144,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     void addPartitionedEquality(const std::vector<ConstraintInterface> &eqfuns,
                                 PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                                 const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
-                                const std::vector<int> &Tmodes);
+                                const std::vector<ThreadingFlags> &Tmodes);
 
     int addAccumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
                         const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
@@ -158,7 +158,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     void addPartitionedInequality(const std::vector<ConstraintInterface> &iqfuns,
                                   PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                                   const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
-                                  const std::vector<int> &Tmodes);
+                                  const std::vector<ThreadingFlags> &Tmodes);
 
     int addObjective(ObjectiveInterface objfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                      const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,

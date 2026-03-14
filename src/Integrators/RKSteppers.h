@@ -469,7 +469,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
 
     template <int Elem, class Args, class KF>
     static auto FinalStateSum(const DODE &ode, const Args &args, const KF &kf) {
-        if constexpr (RKOp == RK4Classic) {
+        if constexpr (RKOp == RKOptions::RK4Classic) {
             return make_sum(kf * BCoeff<3>().value, args.template head<DODE::XV>(),
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 0>() *
@@ -480,7 +480,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 2>() *
                                 BCoeff<2>().value);
-        } else if constexpr (RKOp == DOPRI5) {
+        } else if constexpr (RKOp == RKOptions::DOPRI5) {
             return make_sum(kf * BCoeff<5>(), args.template head<DODE::XV>(),
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 0>() *
@@ -600,7 +600,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
     template <int Elem, class Args, class KF>
     static auto FinalStateSum(const DODE &ode, const Args &args, const KF &kf) {
         //// Finish this
-        if constexpr (RKOp == RK4Classic) {
+        if constexpr (RKOp == RKOptions::RK4Classic) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;
@@ -620,7 +620,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                 args.template tail<TAILSIZE>(tailsize)
                         .template segment<DODE::XV, SZ_PROD<DODE::XV, 2>::value>(2 * xv, xv) *
                     BCoeff<2>().value);
-        } else if constexpr (RKOp == DOPRI5) {
+        } else if constexpr (RKOp == RKOptions::DOPRI5) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;
@@ -648,7 +648,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                 args.template tail<TAILSIZE>(tailsize)
                         .template segment<DODE::XV, SZ_PROD<DODE::XV, 4>::value>(4 * xv, xv) *
                     BCoeff<4>().value);
-        } else if constexpr (RKOp == DOPRI87) {
+        } else if constexpr (RKOp == RKOptions::DOPRI87) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;

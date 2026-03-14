@@ -20,7 +20,7 @@
 namespace Tycho {
 
 // Enum
-enum ComparativeFlags {
+enum class ComparativeFlags {
     MinFlag,
     MaxFlag,
 };

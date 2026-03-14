@@ -127,7 +127,7 @@ if __name__ == "__main__":
     Specify the method used to estimate the error in each segment of the current trajectory
     """
     ##Use the polynomial differencing scheme of deboor
-    phase.setMeshErrorEstimator("deboor")  # default
+    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.DEBOOR)  # default
 
     ##Use the phase's explicit integrator, set the phases integrator tolerances and step sizes appropraitely for good performance
     # phase.setMeshErrorEstimator('integrator')
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     # Specify which type of error must be less than MeshTol for the problem to be converged
     """
     ##'max' will make sure that the max error in any of the segments is less than MeshTol
-    phase.setMeshErrorCriteria("max")  # default
+    phase.setMeshErrorCriteria(oc.MeshErrorAggregation.MAX)  # default
 
     ##'avg' will make sure the average error accross all segments is less than MeshTol
     # phase.setMeshErrorCriteria('avg')

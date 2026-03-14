@@ -17,14 +17,14 @@
 
 namespace Tycho {
 
-enum ParsedIOFlags {
+enum class ParsedIOFlags {
     HiddenInput = -2,
     IngoreOutput = -1,
     NotContiguous,
     Contiguous,
 };
 
-enum ThreadingFlags {
+enum class ThreadingFlags : int {
     RoundRobin = -4,
     MainThread = -3,
     NeedsPool = -2,
@@ -60,7 +60,7 @@ enum ThreadingFlags {
     Thread28 = 28,
 };
 
-enum VarTypes {
+enum class VarTypes {
     NonLinear = 0,
     Linear = 1,
     Quadratic = 2,

@@ -31,7 +31,7 @@ namespace Tycho {
  */
 template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
   public:
-    template <int Dir, int Shift> using Coeffs = FDCoeffs<Order, Accuracy, Dir, Shift>;
+    template <FDCoeffType Dir, int Shift> using Coeffs = FDCoeffs<Order, Accuracy, Dir, Shift>;
     using Scalar = typename DType::Scalar;
 
     int axis;
@@ -67,7 +67,7 @@ template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
         }
 
         // Calc shift
-        int dir;
+        FDCoeffType dir;
         int shift;
         std::vector<int> stencil;
         if (i < fbStenSize / 2) { // Forward / semi-forward

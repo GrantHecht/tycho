@@ -84,8 +84,8 @@ void Tycho::NonLinearProgram::analyzeThreading() {
                 TargetThrFuncs[RRThr].push_back(func);
                 if (RRThr > (this->Threads - 1))
                     RRThr = 0;
-            } else if (func.getThreadMode() >= 0) { // Specific Thread Assignment
-                int thr = std::min(func.getThreadMode(), this->Threads - 1);
+            } else if (static_cast<int>(func.getThreadMode()) >= 0) { // Specific Thread Assignment
+                int thr = std::min(static_cast<int>(func.getThreadMode()), this->Threads - 1);
                 TargetThrFuncs[thr].push_back(func);
             } else { // By application
                 auto TempThrFuncs = func.thread_split(this->Threads);

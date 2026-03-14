@@ -434,8 +434,8 @@ if __name__ == "__main__":
     for phase in ocp.Phases:
         phase.setUnits(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
         phase.setMeshTol(1.0e-6)
-        phase.setMeshErrorCriteria("max")
-        phase.setMeshErrorEstimator("integrator")
+        phase.setMeshErrorCriteria(oc.MeshErrorAggregation.MAX)
+        phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     ## Each Phase does not have to have the same AutoScale units even if its the same ODE
     phase4.setUnits(R=2 * Lstar, V=Vstar, t=0.8 * Tstar, m=Mstar)

@@ -454,20 +454,30 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 };
 
 // ---------------------------------------------------------------------------
-// ScaleType  =  std::variant<double, Eigen::VectorXd, std::string>
+// ScaleType  =  std::variant<double, Eigen::VectorXd, Tycho::ScaleModes, std::string>
 //
-// Python  None   -> std::string("none")   (disables auto-scaling)
-// Python  str    -> std::string
-// Python  float  -> double
-// Python  array  -> Eigen::VectorXd
+// Python  None         -> Tycho::ScaleModes::NONE
+// Python  ScaleModes   -> Tycho::ScaleModes (enum value)
+// Python  str          -> std::string
+// Python  float        -> double
+// Python  array        -> Eigen::VectorXd
 // ---------------------------------------------------------------------------
 template <> struct type_caster<Tycho::ScaleType> {
-    NB_TYPE_CASTER(Tycho::ScaleType, const_name("Union[float, numpy.ndarray, str, None]"))
+    NB_TYPE_CASTER(Tycho::ScaleType,
+                   const_name("Union[float, numpy.ndarray, OptimalControl.ScaleModes, str, None]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {
-            value = std::string("none");
+            value = Tycho::ScaleModes::NONE;
             return true;
+        }
+        // ScaleModes enum (nb::enum_<ScaleModes>)
+        {
+            auto sc = make_caster<Tycho::ScaleModes>();
+            if (sc.from_python(src, flags, cleanup)) {
+                value = sc.value;
+                return true;
+            }
         }
         if (PyUnicode_Check(src.ptr())) {
             value = nb::cast<std::string>(src);

@@ -35,7 +35,7 @@ template <class FuncType> struct SolverFunctionBase {
 
     FuncType function;
     SolverIndexingData index_data;
-    int ThreadMode = ThreadingFlags::ByApplication;
+    ThreadingFlags ThreadMode = ThreadingFlags::ByApplication;
 
     SolverFunctionBase() {}
 
@@ -46,7 +46,7 @@ template <class FuncType> struct SolverFunctionBase {
         cout << "Name: " << this->function.name() << endl << endl;
         cout << "Input  Rows:" << this->function.IRows() << endl << endl;
         cout << "Output Rows:" << this->function.ORows() << endl << endl;
-        cout << "Thread Policy:" << ThreadMode << endl << endl;
+        cout << "Thread Policy:" << static_cast<int>(ThreadMode) << endl << endl;
 
         cout << "Vindex: " << endl << this->index_data.getVindex() << endl << endl;
         if (this->index_data.cindex_init) {
@@ -59,7 +59,7 @@ template <class FuncType> struct SolverFunctionBase {
     }
     int numConEles() const { return this->function.ORows() * this->index_data.NumAppl(); }
     int numGradEles() const { return this->function.IRows() * this->index_data.NumAppl(); }
-    int getThreadMode() const { return this->ThreadMode; }
+    ThreadingFlags getThreadMode() const { return this->ThreadMode; }
     void getKKTSpace(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
                      int conoffset, bool dojac, bool dohess) {
         this->function.getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
