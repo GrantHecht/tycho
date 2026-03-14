@@ -14,6 +14,7 @@
 // =============================================================================
 
 #pragma once
+#include "CR3BPModel.h"
 #include "J2.h"
 #include "KeplerModel.h"
 #include "KeplerPropagator.h"
