@@ -1,0 +1,100 @@
+{
+  "metadata": {
+    "label": "main",
+    "python_runs": 3,
+    "cpp_runs": 3,
+    "timestamp": "2026-03-07 23:29:03"
+  },
+  "python": {
+    "basic/bench_brachistochrone": {
+      "mean": 0.005863443987133603,
+      "std": 0.0023673766970339284
+    },
+    "basic/bench_bryson_denham": {
+      "mean": 0.014036819668641934,
+      "std": 0.0006313629011686019
+    },
+    "basic/bench_cartpole": {
+      "mean": 0.029892097343690693,
+      "std": 0.00039677428325038855
+    },
+    "basic/bench_dionysus": {
+      "mean": 0.21824701400085664,
+      "std": 0.0003831600538516418
+    },
+    "basic/bench_free_flying_robot": {
+      "mean": 0.2595864450170969,
+      "std": 0.002036319231490626
+    },
+    "basic/bench_hanging_chain": {
+      "mean": 0.19150123603564376,
+      "std": 9.487750678300717e-05
+    },
+    "basic/bench_mountain_car": {
+      "mean": 0.10726856933130573,
+      "std": 0.003761413162957566
+    },
+    "basic/bench_optimal_docking": {
+      "mean": 1.151445333341447,
+      "std": 0.004067033082249608
+    },
+    "basic/bench_orbit_continuation": {
+      "mean": 0.2334669999933491,
+      "std": 0.002832782644192453
+    },
+    "basic/bench_simple_lowthrust": {
+      "mean": 0.06368712500746672,
+      "std": 0.00014547464741843024
+    },
+    "basic/bench_topputto_lowthrust": {
+      "mean": 0.08922602765960619,
+      "std": 0.0003755578427569474
+    },
+    "basic/bench_vanderpol": {
+      "mean": 0.013833791327973207,
+      "std": 0.0005053106124906636
+    },
+    "basic/bench_zermelo": {
+      "mean": 0.033697930669101574,
+      "std": 0.0018326868540539116
+    },
+    "mesh_refinement/bench_hypersens": {
+      "mean": 0.030219680649073172,
+      "std": 0.0005694590483289715
+    },
+    "mesh_refinement/bench_minimum_time_climb": {
+      "mean": 7.103061346996886,
+      "std": 0.5867812726269855
+    },
+    "mesh_refinement/bench_reentry": {
+      "mean": 1.758977889335559,
+      "std": 0.015351160377214703
+    },
+    "multi_phase/bench_cannon": {
+      "mean": 0.2198758336987036,
+      "std": 0.000303487564228093
+    },
+    "multi_phase/bench_delta3": {
+      "mean": 1.1889844303174566,
+      "std": 0.002712617176611508
+    },
+    "multi_phase/bench_goddard_rocket": {
+      "mean": 0.046244583694109075,
+      "std": 0.002497561959911217
+    },
+    "multi_phase/bench_multi_phase_zermelo": {
+      "mean": 0.21739674966859943,
+      "std": 0.006133155313852073
+    }
+  },
+  "cpp": {
+    "brachistochrone_bench": {
+      "mean": 0.0077216666666666675,
+      "std": 0.0006590561178601478
+    },
+    "gf_eval_bench": {
+      "mean": 0.13853400000000002,
+      "std": 0.00033489998507016166
+    }
+  }
+}
