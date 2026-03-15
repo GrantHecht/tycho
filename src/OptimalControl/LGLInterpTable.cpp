@@ -144,10 +144,9 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
 
         double err;
         if (i > 0 && i < (this->NumBlocks - 1)) {
-            err = (yvecs.col(i) - yvecs.col(i - 1)).lpNorm<Eigen::Infinity>() /
-                      (hs[i] + hs[i - 1]) +
-                  (yvecs.col(i) - yvecs.col(i + 1)).lpNorm<Eigen::Infinity>() /
-                      (hs[i] + hs[i + 1]);
+            err =
+                (yvecs.col(i) - yvecs.col(i - 1)).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i - 1]) +
+                (yvecs.col(i) - yvecs.col(i + 1)).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i + 1]);
 
             err = ((yvecs.col(i) - yvecs.col(i - 1)) / (hs[i] + hs[i - 1]) +
                    (yvecs.col(i) - yvecs.col(i + 1)) / (hs[i] + hs[i + 1]))

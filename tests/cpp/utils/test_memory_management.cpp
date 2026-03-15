@@ -111,9 +111,8 @@ TEST(BumpAllocatorTest, NestedAllocations) {
                 [&](auto &inner) {
                     EXPECT_EQ(inner.rows(), 8);
                     // Inner must not overlap outer
-                    bool overlap =
-                        (inner.data() >= outer_ptr && inner.data() < outer_ptr + 10) ||
-                        (outer_ptr >= inner.data() && outer_ptr < inner.data() + 8);
+                    bool overlap = (inner.data() >= outer_ptr && inner.data() < outer_ptr + 10) ||
+                                   (outer_ptr >= inner.data() && outer_ptr < inner.data() + 8);
                     EXPECT_FALSE(overlap) << "Inner and outer temporaries overlap";
                     // Inner must be zero
                     for (int i = 0; i < inner.size(); ++i) {
@@ -169,13 +168,11 @@ TEST(BumpAllocatorTest, SaveRestoreExactState) {
 
     // Run once to get baseline
     double *first_ptr = nullptr;
-    BumpAllocator::allocate_run(
-        [&](auto &v) { first_ptr = v.data(); }, TempSpec<VType>(10, 1));
+    BumpAllocator::allocate_run([&](auto &v) { first_ptr = v.data(); }, TempSpec<VType>(10, 1));
 
     // Run again — should get same pointer (arena restored)
     double *second_ptr = nullptr;
-    BumpAllocator::allocate_run(
-        [&](auto &v) { second_ptr = v.data(); }, TempSpec<VType>(10, 1));
+    BumpAllocator::allocate_run([&](auto &v) { second_ptr = v.data(); }, TempSpec<VType>(10, 1));
 
     EXPECT_EQ(first_ptr, second_ptr) << "Arena did not restore to prior state";
 }

@@ -236,8 +236,8 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
-                    new (&fx) Eigen::Map<Output<double>>(
-                        FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                         this->ORows());
                     fx.setZero();
                     this->derived().compute(x, fx);
                 }
@@ -306,10 +306,10 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             for (int V = 0; V < data.NumAppl(); V++) {
                 this->gatherInput(X, x, V, data);
                 this->gatherMult(L, l, V, data);
-                new (&fx) Eigen::Map<Output<double>>(
-                    FX.data() + data.InnerConstraintStarts[V], this->ORows());
-                new (&agx) Eigen::Map<Input<double>>(
-                    AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                     this->ORows());
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                     this->IRows());
                 fx.setZero();
                 agx.setZero();
                 this->derived().compute_adjointgradient(x, fx, agx, l);

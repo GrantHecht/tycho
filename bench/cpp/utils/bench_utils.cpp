@@ -72,8 +72,8 @@ static void BM_AllocateRun_SmallVec(benchmark::State &state) {
     BumpAllocator::resize(256);
     using VType = Eigen::VectorXd;
     for (auto _ : state) {
-        BumpAllocator::allocate_run(
-            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(6, 1));
+        BumpAllocator::allocate_run([](auto &v) { benchmark::DoNotOptimize(v.data()); },
+                                    TempSpec<VType>(6, 1));
     }
 }
 BENCHMARK(BM_AllocateRun_SmallVec);
@@ -82,8 +82,8 @@ static void BM_AllocateRun_JacobianBlock(benchmark::State &state) {
     BumpAllocator::resize(256);
     using MType = Eigen::MatrixXd;
     for (auto _ : state) {
-        BumpAllocator::allocate_run(
-            [](auto &m) { benchmark::DoNotOptimize(m.data()); }, TempSpec<MType>(6, 7));
+        BumpAllocator::allocate_run([](auto &m) { benchmark::DoNotOptimize(m.data()); },
+                                    TempSpec<MType>(6, 7));
     }
 }
 BENCHMARK(BM_AllocateRun_JacobianBlock);
@@ -109,8 +109,8 @@ static void BM_AllocateRun_Scaled(benchmark::State &state) {
     BumpAllocator::resize(sz * 2);
     using VType = Eigen::VectorXd;
     for (auto _ : state) {
-        BumpAllocator::allocate_run(
-            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(sz, 1));
+        BumpAllocator::allocate_run([](auto &v) { benchmark::DoNotOptimize(v.data()); },
+                                    TempSpec<VType>(sz, 1));
     }
 }
 BENCHMARK(BM_AllocateRun_Scaled)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
@@ -119,8 +119,8 @@ static void BM_AllocateRun_Overflow(benchmark::State &state) {
     BumpAllocator::resize(16);
     using VType = Eigen::VectorXd;
     for (auto _ : state) {
-        BumpAllocator::allocate_run(
-            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(256, 1));
+        BumpAllocator::allocate_run([](auto &v) { benchmark::DoNotOptimize(v.data()); },
+                                    TempSpec<VType>(256, 1));
     }
     BumpAllocator::resize(256);
 }

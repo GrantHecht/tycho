@@ -988,8 +988,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
 
-                    new (&fx) Eigen::Map<Output<double>>(
-                        FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                         this->ORows());
                     fx.setZero();
                     jx.setZero();
                     this->derived().compute_jacobian(x, fx, jx);
@@ -1074,10 +1074,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 this->gatherInput(X, x, V, data);
                 this->gatherMult(L, l, V, data);
 
-                new (&fx) Eigen::Map<Output<double>>(
-                    FX.data() + data.InnerConstraintStarts[V], this->ORows());
-                new (&agx) Eigen::Map<Input<double>>(
-                    AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                     this->ORows());
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                     this->IRows());
 
                 fx.setZero();
                 agx.setZero();
@@ -1085,8 +1085,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
                 this->derived().compute_jacobian_adjointgradient(x, fx, jx, agx, l);
 
-                this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks,
-                                           data);
+                this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
             }
         };
 
@@ -1127,10 +1126,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     this->gatherInput(X, x, V, data);
                     this->gatherMult(L, l, V, data);
 
-                    new (&fx) Eigen::Map<Output<double>>(
-                        FX.data() + data.InnerConstraintStarts[V], this->ORows());
-                    new (&agx) Eigen::Map<Input<double>>(
-                        AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                         this->ORows());
+                    new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                         this->IRows());
 
                     fx.setZero();
                     agx.setZero();
