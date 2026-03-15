@@ -111,12 +111,13 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
     Eigen::VectorXd XerrWeights = this->Xweights.bottomRows(1).transpose() * PolyFact;
     Eigen::VectorXd DXerrWeights = this->DXweights.bottomRows(1).transpose() * PolyFact;
 
-    std::vector<Eigen::VectorXd> yvecs(this->NumBlocks);
+    Eigen::MatrixXd yvecs(this->XVars, this->NumBlocks);
     Eigen::VectorXd hs(this->NumBlocks);
     Eigen::VectorXd tsnd(this->NumBlocks + 1);
     Eigen::VectorXd errs(this->NumBlocks + 1);
     Eigen::VectorXd errs2(this->NumBlocks + 1);
 
+    Eigen::VectorXd yvec(this->XVars);
     for (int i = 0; i < this->NumBlocks; i++) {
         int start = (this->BlockSize - 1) * i;
 
@@ -125,7 +126,6 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
 
         tsnd[i] = (this->XtUData.col(start)[this->XVars] - this->T0) / this->TotalT;
 
-        Eigen::VectorXd yvec(this->XVars);
         yvec.setZero();
         double powh = std::pow(hs[i], this->Order);
 
@@ -135,7 +135,7 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
                 this->XdotData.col(start + j).head(this->XVars) * DXerrWeights[j] * hs[i] / powh;
         }
 
-        yvecs[i] = yvec;
+        yvecs.col(i) = yvec;
     }
 
     tsnd[this->NumBlocks] = 1.0;
@@ -144,16 +144,20 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
 
         double err;
         if (i > 0 && i < (this->NumBlocks - 1)) {
-            err = (yvecs[i] - yvecs[i - 1]).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i - 1]) +
-                  (yvecs[i] - yvecs[i + 1]).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i + 1]);
+            err = (yvecs.col(i) - yvecs.col(i - 1)).lpNorm<Eigen::Infinity>() /
+                      (hs[i] + hs[i - 1]) +
+                  (yvecs.col(i) - yvecs.col(i + 1)).lpNorm<Eigen::Infinity>() /
+                      (hs[i] + hs[i + 1]);
 
-            err = ((yvecs[i] - yvecs[i - 1]) / (hs[i] + hs[i - 1]) +
-                   (yvecs[i] - yvecs[i + 1]) / (hs[i] + hs[i + 1]))
+            err = ((yvecs.col(i) - yvecs.col(i - 1)) / (hs[i] + hs[i - 1]) +
+                   (yvecs.col(i) - yvecs.col(i + 1)) / (hs[i] + hs[i + 1]))
                       .lpNorm<Eigen::Infinity>();
         } else if (i == 0) {
-            err = 2 * (yvecs[i] - yvecs[i + 1]).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i + 1]);
+            err = 2 * (yvecs.col(i) - yvecs.col(i + 1)).lpNorm<Eigen::Infinity>() /
+                  (hs[i] + hs[i + 1]);
         } else {
-            err = 2 * (yvecs[i] - yvecs[i - 1]).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i - 1]);
+            err = 2 * (yvecs.col(i) - yvecs.col(i - 1)).lpNorm<Eigen::Infinity>() /
+                  (hs[i] + hs[i - 1]);
         }
 
         errs[i] = std::pow(std::abs(err), 1 / (this->Order + 1));
@@ -186,11 +190,12 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
     Eigen::VectorXd XerrWeights = this->Xweights.bottomRows(1).transpose() * PolyFact;
     Eigen::VectorXd DXerrWeights = this->DXweights.bottomRows(1).transpose() * PolyFact;
 
-    std::vector<Eigen::VectorXd> yvecs(this->NumBlocks);
+    Eigen::MatrixXd yvecs(this->XVars, this->NumBlocks);
     Eigen::VectorXd hs(this->NumBlocks);
 
     tsnd.resize(this->NumBlocks + 1);
 
+    Eigen::VectorXd yvec(this->XVars);
     for (int i = 0; i < this->NumBlocks; i++) {
         int start = (this->BlockSize - 1) * i;
 
@@ -199,7 +204,6 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
 
         tsnd[i] = (this->XtUData.col(start)[this->XVars] - this->T0) / this->TotalT;
 
-        Eigen::VectorXd yvec(this->XVars);
         yvec.setZero();
         double powh = std::pow(hs[i], this->Order);
 
@@ -209,7 +213,7 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
                 this->XdotData.col(start + j).head(this->XVars) * DXerrWeights[j] * hs[i] / powh;
         }
 
-        yvecs[i] = yvec;
+        yvecs.col(i) = yvec;
     }
 
     tsnd[this->NumBlocks] = 1.0;
@@ -217,20 +221,19 @@ void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::Matrix
     mesh_errors.resize(this->XVars, this->NumBlocks + 1);
     mesh_dist.resize(this->XVars, this->NumBlocks + 1);
 
+    Eigen::VectorXd err_tmp(this->XVars);
     for (int i = 0; i < this->NumBlocks; i++) {
-
-        Eigen::VectorXd err_tmp(this->XVars);
 
         double err;
         if (i > 0 && i < (this->NumBlocks - 1)) {
 
-            err_tmp = ((yvecs[i] - yvecs[i - 1]) / (hs[i] + hs[i - 1]) +
-                       (yvecs[i] - yvecs[i + 1]) / (hs[i] + hs[i + 1]))
+            err_tmp = ((yvecs.col(i) - yvecs.col(i - 1)) / (hs[i] + hs[i - 1]) +
+                       (yvecs.col(i) - yvecs.col(i + 1)) / (hs[i] + hs[i + 1]))
                           .cwiseAbs();
         } else if (i == 0) {
-            err_tmp = 2 * (yvecs[i] - yvecs[i + 1]).cwiseAbs() / (hs[i] + hs[i + 1]);
+            err_tmp = 2 * (yvecs.col(i) - yvecs.col(i + 1)).cwiseAbs() / (hs[i] + hs[i + 1]);
         } else {
-            err_tmp = 2 * (yvecs[i] - yvecs[i - 1]).cwiseAbs() / (hs[i] + hs[i - 1]);
+            err_tmp = 2 * (yvecs.col(i) - yvecs.col(i - 1)).cwiseAbs() / (hs[i] + hs[i - 1]);
         }
 
         mesh_dist.col(i) = err_tmp.array().pow(1 / (this->Order + 1));
