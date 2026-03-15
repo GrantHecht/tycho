@@ -686,7 +686,6 @@ struct PSIOPT {
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
-    static bool MKLInitialized;
     void ensure_mkl_initialized();
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);

@@ -21,11 +21,10 @@
 
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
-bool Tycho::PSIOPT::MKLInitialized = false;
-
 void Tycho::PSIOPT::ensure_mkl_initialized() {
 #ifndef USE_ACCELERATE_SPARSE
-    if (!MKLInitialized) {
+    static std::once_flag mkl_init_flag;
+    std::call_once(mkl_init_flag, [this]() {
         Utils::Timer initTimer;
         initTimer.start();
         dsecnd(); // Force MKL runtime initialization
@@ -36,8 +35,7 @@ void Tycho::PSIOPT::ensure_mkl_initialized() {
             fmt::print(" MKL Initialization    : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
-        MKLInitialized = true;
-    }
+    });
 #endif
 }
 
