@@ -1,8 +1,0 @@
-add_executable(bench_integrators bench_integrators.cpp)
-target_compile_options(bench_integrators PRIVATE ${COMPILE_FLAGS})
-target_include_directories(bench_integrators PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_link_libraries(bench_integrators PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
-target_precompile_headers(bench_integrators REUSE_FROM pch)
-if(UNIX)
-    target_link_options(bench_integrators PRIVATE ${LINKER_FLAGS})
-endif()

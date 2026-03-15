@@ -1,8 +1,0 @@
-add_executable(bench_solvers bench_solvers.cpp)
-target_compile_options(bench_solvers PRIVATE ${COMPILE_FLAGS})
-target_include_directories(bench_solvers PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_link_libraries(bench_solvers PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
-target_precompile_headers(bench_solvers REUSE_FROM pch)
-if(UNIX)
-    target_link_options(bench_solvers PRIVATE ${LINKER_FLAGS})
-endif()

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "Astro/Tycho_Astro.h"
 #include "Integrators/Tycho_Integrators.h"
 #include "OptimalControl/Tycho_OptimalControl.h"
 #include "Solvers/Tycho_Solvers.h"

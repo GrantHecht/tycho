@@ -2,19 +2,15 @@
 // Kepler conversion and astrodynamics throughput benchmarks (Google Benchmark)
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerUtils.h"
-#include "Astro/LambertSolvers.h"
+#include "../bench_common.h"
 #include <benchmark/benchmark.h>
-
-using namespace Tycho;
-
-static constexpr double MU_EARTH = 398600.4418;
+#include <numbers>
 
 // LEO classical elements
 static Vector6<double> leoClassic() {
     Vector6<double> oe;
-    oe << 7000.0, 0.01, 28.5 * M_PI / 180.0, 45.0 * M_PI / 180.0, 30.0 * M_PI / 180.0,
-        60.0 * M_PI / 180.0;
+    oe << 7000.0, 0.01, 28.5 * std::numbers::pi / 180.0, 45.0 * std::numbers::pi / 180.0,
+        30.0 * std::numbers::pi / 180.0, 60.0 * std::numbers::pi / 180.0;
     return oe;
 }
 
@@ -102,7 +98,7 @@ BENCHMARK(BM_PropagateCartesian);
 static void BM_Propagate_Moderate(benchmark::State &state) {
     // Moderate eccentricity orbit: e=0.5, a=12000
     Vector6<double> oe;
-    oe << 12000.0, 0.5, 28.5 * M_PI / 180.0, 0.0, 0.0, 0.0;
+    oe << 12000.0, 0.5, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (auto _ : state) {
         auto rv2 = propagate_cartesian<double>(rv, 300.0, MU_EARTH);
@@ -114,7 +110,7 @@ BENCHMARK(BM_Propagate_Moderate);
 static void BM_Propagate_Hyperbolic(benchmark::State &state) {
     // Hyperbolic orbit: e=1.5, a=-10000 (negative for hyperbolic)
     Vector6<double> oe;
-    oe << -10000.0, 1.5, 10.0 * M_PI / 180.0, 0.0, 0.0, 0.1;
+    oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.1;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (auto _ : state) {
         auto rv2 = propagate_cartesian<double>(rv, 100.0, MU_EARTH);
@@ -156,7 +152,7 @@ static void BM_Lambert_MultiRev(benchmark::State &state) {
     R1 << 7000.0, 0.0, 0.0;
     R2 << 0.0, 7000.0, 0.0;
     // Period of circular orbit at r=7000
-    double T = 2.0 * M_PI * std::sqrt(7000.0 * 7000.0 * 7000.0 / MU_EARTH);
+    double T = 2.0 * std::numbers::pi * std::sqrt(7000.0 * 7000.0 * 7000.0 / MU_EARTH);
     double dt = 1.25 * T; // 1.25 revolutions
     for (auto _ : state) {
         auto result = lambert_izzo<double>(R1, R2, dt, MU_EARTH, false, 1, false);

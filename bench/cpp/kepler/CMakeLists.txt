@@ -1,8 +1,0 @@
-add_executable(bench_kepler bench_kepler.cpp)
-target_compile_options(bench_kepler PRIVATE ${COMPILE_FLAGS})
-target_include_directories(bench_kepler PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_link_libraries(bench_kepler PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
-target_precompile_headers(bench_kepler REUSE_FROM pch)
-if(UNIX)
-    target_link_options(bench_kepler PRIVATE ${LINKER_FLAGS})
-endif()

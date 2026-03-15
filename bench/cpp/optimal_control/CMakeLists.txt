@@ -1,8 +1,0 @@
-add_executable(bench_optimal_control bench_optimal_control.cpp)
-target_compile_options(bench_optimal_control PRIVATE ${COMPILE_FLAGS})
-target_include_directories(bench_optimal_control PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_link_libraries(bench_optimal_control PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
-target_precompile_headers(bench_optimal_control REUSE_FROM pch)
-if(UNIX)
-    target_link_options(bench_optimal_control PRIVATE ${LINKER_FLAGS})
-endif()

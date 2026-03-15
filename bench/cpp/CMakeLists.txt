@@ -11,10 +11,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(benchmark)
 
-add_subdirectory(kepler)
-add_subdirectory(vector_functions)
-add_subdirectory(type_erasure)
-add_subdirectory(integrators)
-add_subdirectory(optimal_control)
-add_subdirectory(solvers)
-add_subdirectory(utils)
+add_executable(bench_all
+    kepler/bench_kepler.cpp
+    vector_functions/bench_vector_functions.cpp
+    type_erasure/bench_type_erasure.cpp
+    integrators/bench_integrators.cpp
+    optimal_control/bench_optimal_control.cpp
+    solvers/bench_solvers.cpp
+    utils/bench_utils.cpp
+)
+target_compile_options(bench_all PRIVATE ${COMPILE_FLAGS})
+target_include_directories(bench_all PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
+target_link_libraries(bench_all PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
+target_precompile_headers(bench_all REUSE_FROM pch)
+if(UNIX)
+    target_link_options(bench_all PRIVATE ${LINKER_FLAGS})
+endif()

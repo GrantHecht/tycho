@@ -6,7 +6,6 @@
 // of the Kepler STM determinant.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerModel.h"
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 

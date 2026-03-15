@@ -5,9 +5,6 @@
 // consistency.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerModel.h"
-#include "Astro/KeplerPropagator.h"
-#include "Astro/KeplerUtils.h"
 #include "Tycho.h"
 #include "astro_test_utils.h"
 #include "test_utils.h"

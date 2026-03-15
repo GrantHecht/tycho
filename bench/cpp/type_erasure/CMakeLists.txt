@@ -1,8 +1,0 @@
-add_executable(bench_type_erasure bench_type_erasure.cpp)
-target_compile_options(bench_type_erasure PRIVATE ${COMPILE_FLAGS})
-target_include_directories(bench_type_erasure PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_link_libraries(bench_type_erasure PRIVATE tycho_core ${LINK_LIBS} benchmark::benchmark_main)
-target_precompile_headers(bench_type_erasure REUSE_FROM pch)
-if(UNIX)
-    target_link_options(bench_type_erasure PRIVATE ${LINKER_FLAGS})
-endif()

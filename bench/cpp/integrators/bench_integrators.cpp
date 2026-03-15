@@ -4,7 +4,6 @@
 
 #include "../bench_common.h"
 #include <benchmark/benchmark.h>
-#include <cmath>
 
 ///////////////////////////////////////////////////////////////////////////////
 // SHO integration benchmarks — one full period (2*pi)
@@ -12,7 +11,7 @@
 
 static void BM_Integrate_SHO_DOPRI54(benchmark::State &state) {
     SHO ode(0.0);
-    double tf = 2.0 * M_PI;
+    double tf = 2.0 * std::numbers::pi;
     for (auto _ : state) {
         Integrator<SHO> integ(ode, "DOPRI54", 0.1);
         Eigen::Vector3d x0;
@@ -25,7 +24,7 @@ BENCHMARK(BM_Integrate_SHO_DOPRI54);
 
 static void BM_Integrate_SHO_DOPRI87(benchmark::State &state) {
     SHO ode(0.0);
-    double tf = 2.0 * M_PI;
+    double tf = 2.0 * std::numbers::pi;
     for (auto _ : state) {
         Integrator<SHO> integ(ode, "DOPRI87", 0.1);
         Eigen::Vector3d x0;
@@ -38,7 +37,7 @@ BENCHMARK(BM_Integrate_SHO_DOPRI87);
 
 static void BM_Integrate_SHO_FixedStep(benchmark::State &state) {
     SHO ode(0.0);
-    double tf = 2.0 * M_PI;
+    double tf = 2.0 * std::numbers::pi;
     for (auto _ : state) {
         Integrator<SHO> integ(ode, "DOPRI87", 0.01);
         integ.Adaptive = false;
@@ -100,7 +99,7 @@ BENCHMARK(BM_Integrate_PolarLT_DOPRI87);
 
 static void BM_Integrate_SHO_Dense_100(benchmark::State &state) {
     SHO ode(0.0);
-    double tf = 2.0 * M_PI;
+    double tf = 2.0 * std::numbers::pi;
     for (auto _ : state) {
         Integrator<SHO> integ(ode, "DOPRI87", 0.1);
         Eigen::Vector3d x0;

@@ -2,13 +2,9 @@
 // Utils benchmarks — TypeStorage SBO, MemoryManager, ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
-#include "Utils/TypeStorage.h"
+#include "../bench_common.h"
 #include <benchmark/benchmark.h>
 #include <future>
-#include <vector>
-
-using namespace Tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // TypeStorage SBO benchmarks

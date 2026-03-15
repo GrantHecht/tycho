@@ -532,6 +532,7 @@ MigrationBackup/
 
 ##########################################################################
 # Manual
+bench/results/
 /doc/html
 build
 .vscode
