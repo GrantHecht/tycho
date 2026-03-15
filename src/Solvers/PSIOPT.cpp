@@ -15,6 +15,8 @@
 
 #include "PSIOPT.h"
 
+#include "MKLInit.h"
+
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
 #endif
@@ -22,21 +24,28 @@
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
 void Tycho::PSIOPT::ensure_mkl_initialized() {
-#ifndef USE_ACCELERATE_SPARSE
-    static std::once_flag mkl_init_flag;
-    std::call_once(mkl_init_flag, [this]() {
-        Utils::Timer initTimer;
-        initTimer.start();
-        dsecnd(); // Force MKL runtime initialization
-        initTimer.stop();
-        double initMs = double(initTimer.count<std::chrono::microseconds>()) / 1000.0;
+    double initMs = ::Tycho::ensure_mkl_initialized();
+    if (initMs > 0.0) {
         this->LastMKLInitTime = initMs;
         if (initMs > 0.5 && this->PrintLevel < 2) {
             fmt::print(" MKL Initialization    : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
-    });
-#endif
+    }
+}
+
+void Tycho::PSIOPT::print_timing_summary(double tottime_ms) {
+    auto cyan = fmt::fg(fmt::color::cyan);
+    fmt::print(" KKT Analysis/Init Time       : ");
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPreTime * 1000.0);
+    fmt::print(" NLP Function Evaluation Time : ");
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastFuncTime * 1000.0);
+    fmt::print(" KKT Factor/Solve Time        : ");
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastKKTTime * 1000.0);
+    fmt::print(" Console Print Time           : ");
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPrintTime * 1000.0);
+    fmt::print(" Misc Time                    : ");
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastMiscTime * 1000.0);
 }
 
 void Tycho::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
@@ -721,6 +730,7 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
 
     this->LastFuncTime += nlptime;
     this->LastKKTTime += qptime;
+    this->LastPrintTime += tottime - nlptime - qptime;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -995,11 +1005,13 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
     this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime;
+        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
+        this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        fmt::print(" PSIOPT Total Time : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", tottime);
+        print_timing_summary(tottime);
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
         print_Header();
     }
@@ -1047,12 +1059,14 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
     this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime;
+        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
+        this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");
-        fmt::print(" PSIOPT Total Time : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", tottime);
+        print_timing_summary(tottime);
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
         print_Header();
     }
@@ -1118,11 +1132,13 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
     this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime;
+        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
+        this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        fmt::print(" PSIOPT Total Time : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", tottime);
+        print_timing_summary(tottime);
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
         print_Header();
     }
@@ -1178,11 +1194,13 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
     this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime;
+        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
+        this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        fmt::print(" PSIOPT Total Time : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", tottime);
+        print_timing_summary(tottime);
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
         print_Header();
     }
@@ -1217,12 +1235,14 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
     this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime;
+        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
+        this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_Finished("Solve Algorithm ");
-        fmt::print(" PSIOPT Total Time : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", tottime);
+        print_timing_summary(tottime);
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
         print_Header();
     }

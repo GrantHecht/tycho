@@ -17,6 +17,7 @@
 
 #include "ConstraintFunction.h"
 #include "Jet.h"
+#include "MKLInit.h"
 #include "NonLinearProgram.h"
 #include "ObjectiveFunction.h"
 #include "OptimizationProblem.h"

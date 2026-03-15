@@ -360,6 +360,7 @@ struct PSIOPT {
     double LastMiscTime = 0;
     double LastFuncTime = 0;
     double LastKKTTime = 0;
+    double LastPrintTime = 0;
     double LastMKLInitTime = 0;
     int LastIterNum = 0;
 
@@ -369,6 +370,7 @@ struct PSIOPT {
         this->LastMiscTime = 0;
         this->LastFuncTime = 0;
         this->LastKKTTime = 0;
+        this->LastPrintTime = 0;
         this->LastMKLInitTime = 0;
         this->LastIterNum = 0;
     }
@@ -687,6 +689,7 @@ struct PSIOPT {
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
     void ensure_mkl_initialized();
+    void print_timing_summary(double tottime_ms);
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);
 

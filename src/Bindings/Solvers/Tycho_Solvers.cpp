@@ -22,9 +22,7 @@ namespace Tycho {
 
 void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
-#ifndef USE_ACCELERATE_SPARSE
-    int DSECOND = dsecnd();
-#endif
+    Tycho::ensure_mkl_initialized();
     TychoBind<PSIOPT>::Build(sol);
     TychoBind<OptimizationProblemBase>::Build(sol);
     TychoBind<Jet>::Build(sol);
