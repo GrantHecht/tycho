@@ -34,6 +34,8 @@
 // =============================================================================
 
 #pragma once
+#include <concepts>
+
 #include "DetectSuperScalar.h"
 #include "FunctionalFlags.h"
 #include "IndexingData.h"
@@ -333,6 +335,8 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
      * improvement.
      */
     template <class XtType>
+        requires std::derived_from<std::remove_cvref_t<XtType>,
+                                   Eigen::EigenBase<std::remove_cvref_t<XtType>>>
     inline void gatherInput(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
                             const SolverIndexingData &data) const {
         if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
@@ -349,6 +353,8 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
      * See above for justification.
      */
     template <class LType>
+        requires std::derived_from<std::remove_cvref_t<LType>,
+                                   Eigen::EigenBase<std::remove_cvref_t<LType>>>
     inline void gatherMult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
                            const SolverIndexingData &data) const {
         if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {

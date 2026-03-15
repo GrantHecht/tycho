@@ -19,6 +19,7 @@
 
 #pragma once
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <new>
 #include <tuple>
@@ -57,13 +58,15 @@ template <class Scalar> struct BumpStack {
     struct SavePoint {
         size_t offset;
         size_t overflow_count;
+        size_t cumulative_overflow;
     };
 
-    SavePoint save() const { return {offset_, overflow_.size()}; }
+    SavePoint save() const { return {offset_, overflow_.size(), cumulative_overflow_}; }
 
     void restore(SavePoint sp) {
         offset_ = sp.offset;
         overflow_.resize(sp.overflow_count);
+        cumulative_overflow_ = sp.cumulative_overflow;
         if (offset_ == 0 && overflow_.empty() && high_water_ > capacity_) {
             resize(high_water_);
         }
@@ -79,21 +82,26 @@ template <class Scalar> struct BumpStack {
                 high_water_ = offset_;
             return data_ + aligned;
         }
-        // Overflow path
+        // Overflow: allocation spills to a separate heap block. Track cumulative
+        // overflow size so high_water_ reflects the true peak and the arena
+        // converges to the right capacity in one warm-up cycle.
         overflow_.emplace_back(n);
         auto &blk = overflow_.back();
         blk.setZero();
-        size_t total = offset_ + n;
+        cumulative_overflow_ += n;
+        size_t total = offset_ + cumulative_overflow_;
         if (total > high_water_)
             high_water_ = total;
         return blk.data();
     }
 
     void resize(size_t new_cap) {
+        assert(offset_ == 0 && overflow_.empty() && "resize() while allocations active");
         free_buffer();
         capacity_ = new_cap;
         offset_ = 0;
         high_water_ = 0;
+        cumulative_overflow_ = 0;
         overflow_.clear();
         if (capacity_ > 0) {
             constexpr size_t align = EIGEN_MAX_ALIGN_BYTES;
@@ -111,6 +119,7 @@ template <class Scalar> struct BumpStack {
     size_t capacity_ = 0;
     size_t offset_ = 0;
     size_t high_water_ = 0;
+    size_t cumulative_overflow_ = 0;
     std::vector<VectorX<Scalar>> overflow_;
 
     void free_buffer() {
