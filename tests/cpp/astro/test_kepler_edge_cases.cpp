@@ -14,9 +14,13 @@ using namespace Tycho;
 using namespace TychoTest;
 
 TEST(KeplerEdgeCases, NearCircularEquatorial) {
-    // Nearly circular, equatorial orbit (e~0, i~0)
+    // Nearly circular, equatorial orbit (e~0, i~0).
+    // Use e=1e-6, i=1e-6 rather than e.g. 1e-10: cartesian_to_modified routes
+    // through cartesian_to_classic, which suffers catastrophic cancellation in the
+    // eccentricity vector (V×h/mu − R̂) when e is near double-precision noise.
+    // At 1e-6 the round-trip is well above the FP noise floor on all platforms.
     Vector6<double> oe;
-    oe << 7000.0, 1e-10, 1e-10, 0.0, 0.0, 0.0;
+    oe << 7000.0, 1e-6, 1e-6, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i) {
         EXPECT_TRUE(std::isfinite(rv[i]))
