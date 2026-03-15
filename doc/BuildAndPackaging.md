@@ -3,15 +3,16 @@
 ## Development builds
 
 The primary development workflow uses CMake and ninja directly.
-`config_and_build.sh` (macOS/Linux) or `scripts/config_and_build.ps1` (Windows) handle
-environment setup, CMake configuration, and the initial build:
+`scripts/config_and_build.ps1` (Windows) handles environment setup, CMake
+configuration, and the initial build. On macOS/Linux, use CMake presets directly:
 
 ```bash
 # macOS / Linux — first time
-bash config_and_build.sh
+cmake --preset macos-llvm-release
+cd build && ninja -j4 all
 
 # Subsequent C++ rebuilds
-cd build && ninja -j8 all
+cd build && ninja -j4 all
 ```
 
 ```powershell
