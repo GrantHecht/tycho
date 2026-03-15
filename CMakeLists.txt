@@ -91,6 +91,7 @@ option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executabl
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+option(VECTORIZATION_REPORT "Enable compiler vectorization diagnostics (Clang -Rpass / GCC -fopt-info)" OFF)
 
 # Auto-detect ccache to accelerate repeated builds (brew install ccache)
 find_program(CCACHE_PROGRAM ccache)
@@ -276,6 +277,18 @@ endforeach()
 if(COMPILE_TIME_TRACE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-ftime-trace)
     message(STATUS "Compile-time tracing enabled (-ftime-trace)")
+endif()
+
+if(VECTORIZATION_REPORT)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        add_compile_options(-Rpass=loop-vectorize -Rpass-missed=loop-vectorize -Rpass-analysis=loop-vectorize)
+        message(STATUS "Vectorization reporting enabled (Clang -Rpass)")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-fopt-info-vec-optimized -fopt-info-vec-missed)
+        message(STATUS "Vectorization reporting enabled (GCC -fopt-info-vec)")
+    else()
+        message(WARNING "VECTORIZATION_REPORT is ON but compiler '${CMAKE_CXX_COMPILER_ID}' is not supported for this feature")
+    endif()
 endif()
 
 
