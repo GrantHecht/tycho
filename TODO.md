@@ -110,7 +110,7 @@ concept Stackable = VFSized<F1> && VFSized<F2> && requires {
 ### Verification
 
 - `ninja -j6 all` — clean build, no new warnings
-- `python run_examples.py` — 38/38 pass
+- `python scripts/run_examples.py` — 38/38 pass
 - `brachistochrone_cpp` — "Optimal Solution Found"
 - Trigger dimension mismatch → compiler names `Composable` constraint
 
@@ -344,7 +344,7 @@ git rm src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h
 ### Verification
 
 - `ninja -j6 all` — clean build, no new warnings
-- `python run_examples.py` — 38/38 pass
+- `python scripts/run_examples.py` — 38/38 pass
 - `brachistochrone_cpp` — "Optimal Solution Found"
 - `grep -r "rubber_types" src/` — zero matches (only `notices/rubber_types-mit.txt` remains)
 - `grep -r "TypeErasure.h" src/` — zero matches
