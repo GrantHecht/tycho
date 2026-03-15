@@ -87,6 +87,9 @@ int main() {
     // Suppress optimizer output
     phase->optimizer->PrintLevel = 3;
 
+    // Warm up MKL runtime before timing
+    Tycho::ensure_mkl_initialized();
+
     // ---- Solve (timed) -----------------------------------------------------
     auto start = std::chrono::high_resolution_clock::now();
     const auto status = phase->solve_optimize();

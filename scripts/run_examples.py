@@ -30,7 +30,7 @@ from pathlib import Path
 # Configuration
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES_DIR = REPO_ROOT / "examples"
 
 DEFAULT_TIMEOUT = 300  # seconds
@@ -227,6 +227,8 @@ def main() -> None:
                 env=env,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
             )
             elapsed = time.monotonic() - t0
