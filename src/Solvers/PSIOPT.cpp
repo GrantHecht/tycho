@@ -27,7 +27,10 @@ void Tycho::PSIOPT::ensure_mkl_initialized() {
     double initMs = ::Tycho::ensure_mkl_initialized();
     if (initMs > 0.0) {
         this->LastMKLInitTime = initMs / 1000.0;
-        if (initMs > 0.5 && this->PrintLevel < 2) {
+        // Suppress the MKL init line when init was trivially fast (< 0.5 ms),
+        // which also covers subsequent calls (return 0.0) and Accelerate (0.0).
+        constexpr double kMKLInitPrintThresholdMs = 0.5;
+        if (initMs > kMKLInitPrintThresholdMs && this->PrintLevel < 2) {
             fmt::print(" MKL Initialization    : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
