@@ -10,6 +10,17 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# Clang 22.1.0 with MSVC headers: suppress char8_t->char32_t implicit conversion
+# warning in gtest-printers.h.  gtest compiles with -WX so this becomes an error
+# without the suppression.
+if(WIN32)
+    foreach(_t gtest gtest_main)
+        if(TARGET ${_t})
+            target_compile_options(${_t} PRIVATE -Wno-character-conversion)
+        endif()
+    endforeach()
+endif()
+
 include(GoogleTest)
 
 #-------------------------------------------------------------------------------
