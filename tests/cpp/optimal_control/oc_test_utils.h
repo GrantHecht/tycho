@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include "Astro/KeplerModel.h"
 #include "Tycho.h"
 #include "test_utils.h"
 #include <cmath>

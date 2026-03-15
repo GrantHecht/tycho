@@ -5,8 +5,6 @@
 // section.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/CR3BPModel.h"
-#include "Astro/KeplerModel.h"
 #include "Tycho.h"
 #include "test_utils.h"
 #include "vf_test_utils.h"

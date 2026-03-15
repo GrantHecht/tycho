@@ -5,8 +5,6 @@
 // near-antipodal transfer tests.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerUtils.h"
-#include "Astro/LambertSolvers.h"
 #include "Tycho.h"
 #include "astro_test_utils.h"
 #include <cmath>

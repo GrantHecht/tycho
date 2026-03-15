@@ -5,7 +5,6 @@
 // and near-parabolic orbits.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerUtils.h"
 #include "Tycho.h"
 #include "astro_test_utils.h"
 #include <cmath>

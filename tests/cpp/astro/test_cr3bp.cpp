@@ -4,7 +4,6 @@
 // ODE adjoint consistency and L1 approximate location verification.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/CR3BPModel.h"
 #include "Tycho.h"
 #include "test_utils.h"
 #include <cmath>

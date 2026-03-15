@@ -4,7 +4,6 @@
 // Round-trip checks for classic, modified (MEE), and Cartesian element sets.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Astro/KeplerUtils.h"
 #include "Tycho.h"
 #include "astro_test_utils.h"
 #include <cmath>
