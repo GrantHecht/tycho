@@ -42,9 +42,7 @@
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-#if defined(TYCHO_MEMORYMAN)
 #include "Utils/MemoryManagement.h"
-#endif
 
 namespace Tycho {
 

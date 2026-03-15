@@ -222,7 +222,7 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         };
 
         const int irows = this->func2.IRows();
-        MemoryManager::allocate_run(irows, Impl, TempSpec<Func2_gradient<Scalar>>(irows, 1),
+        MemoryManager::allocate_run(Impl, TempSpec<Func2_gradient<Scalar>>(irows, 1),
                                     TempSpec<Func2_hessian<Scalar>>(irows, irows));
     }
 
@@ -407,7 +407,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
         };
 
         const int irows = this->IRows();
-        MemoryManager::allocate_run(irows, Impl, TempSpec<Func_gradient<Scalar>>(irows, 1),
+        MemoryManager::allocate_run(Impl, TempSpec<Func_gradient<Scalar>>(irows, 1),
                                     TempSpec<Func_hessian<Scalar>>(irows, irows));
     }
 

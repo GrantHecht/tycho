@@ -66,10 +66,12 @@ using DomainMatrix = Eigen::Matrix<IOint, 2, -1>;
 
 template <class Scalar, int Sz> using SuperScalarType = Eigen::Array<Scalar, Sz, 1>;
 
-#ifdef __ARM_NEON
-using DefaultSuperScalar = SuperScalarType<double, 2>;
+#if defined(__AVX512F__)
+using DefaultSuperScalar = SuperScalarType<double, 8>; // 512-bit = 8 doubles
+#elif defined(__AVX__) || defined(__AVX2__)
+using DefaultSuperScalar = SuperScalarType<double, 4>; // 256-bit = 4 doubles
 #else
-using DefaultSuperScalar = SuperScalarType<double, 4>;
+using DefaultSuperScalar = SuperScalarType<double, 2>; // 128-bit = 2 doubles (SSE2/NEON)
 #endif
 
 } // namespace Tycho

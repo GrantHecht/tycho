@@ -18,8 +18,10 @@
 
 using namespace Tycho;
 
-void TychoBind<MemoryManager>::Build(nb::module_ &m) {
-    auto obj = nb::class_<MemoryManager>(m, "MemoryManager");
-    obj.def_static("enable_arena_memory", []() { MemoryManager::enable_arena_memory(); });
-    obj.def_static("disable_arena_memory", []() { MemoryManager::disable_arena_memory(); });
+void TychoBind<BumpAllocator>::Build(nb::module_ &m) {
+    auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator");
+    obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize));
+    obj.def_static("resize", nb::overload_cast<int, int>(&BumpAllocator::resize));
+    obj.def_static("size_scalar", &BumpAllocator::size_scalar);
+    obj.def_static("size_super_scalar", &BumpAllocator::size_super_scalar);
 }

@@ -107,7 +107,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             Tycho::MemoryManager::allocate_run(
-                this->IRows(), Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
+                Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
         }
     }
@@ -162,7 +162,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             Tycho::MemoryManager::allocate_run(
-                this->IRows(), Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
+                Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
         }

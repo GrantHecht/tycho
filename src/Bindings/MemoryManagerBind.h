@@ -21,7 +21,7 @@
 
 namespace Tycho {
 
-template <> struct TychoBind<MemoryManager> {
+template <> struct TychoBind<BumpAllocator> {
     static void Build(nb::module_ &m);
 };
 

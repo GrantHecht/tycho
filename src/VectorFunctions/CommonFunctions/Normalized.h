@@ -180,7 +180,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
             }
         };
 
-        Tycho::MemoryManager::allocate_run(irows, Impl, TempSpec<Jacobian<Scalar>>(irows, irows));
+        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Jacobian<Scalar>>(irows, irows));
     }
 };
 

@@ -342,7 +342,7 @@ struct FunctionVectorProduct_Impl
 
             using JType = Eigen::Matrix<Scalar, Vsize, Base::IRC>;
             const int irows = this->IRows();
-            MemoryManager::allocate_run(irows, Impl, TempSpec<JType>(Vsize, irows),
+            MemoryManager::allocate_run(Impl, TempSpec<JType>(Vsize, irows),
                                         TempSpec<JType>(Vsize, irows));
         }
     }
@@ -424,7 +424,7 @@ struct FunctionVectorProduct_Impl
         using HType = Func2_hessian<Scalar>;
         const int irows = this->IRows();
 
-        MemoryManager::allocate_run(irows, Impl, TempSpec<JType>(Vsize, irows),
+        MemoryManager::allocate_run(Impl, TempSpec<JType>(Vsize, irows),
                                     TempSpec<JType>(Vsize, irows), TempSpec<JType>(Vsize, irows),
                                     TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
     }

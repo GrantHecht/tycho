@@ -187,7 +187,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         };
 
         const int orows = this->ORows();
-        MemoryManager::allocate_run(orows, Impl, TempSpec<Output<Scalar>>(orows, 1));
+        MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>

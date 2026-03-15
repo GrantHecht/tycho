@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Utils benchmarks — TypeStorage SBO, MemoryManager, ThreadPool
+// Utils benchmarks — TypeStorage SBO, BumpAllocator, ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "../bench_common.h"
@@ -57,16 +57,90 @@ static void BM_TypeStorage_MoveSmall(benchmark::State &state) {
 BENCHMARK(BM_TypeStorage_MoveSmall);
 
 ///////////////////////////////////////////////////////////////////////////////
-// MemoryManager — alternate sizes to force actual reallocation
+// BumpAllocator benchmarks
 ///////////////////////////////////////////////////////////////////////////////
 
-static void BM_MemoryManager_Resize(benchmark::State &state) {
+static void BM_BumpAllocator_Resize(benchmark::State &state) {
     for (auto _ : state) {
-        MemoryManager::resize(256, 256);
-        MemoryManager::resize(1, 1);
+        BumpAllocator::resize(256, 256);
+        BumpAllocator::resize(1, 1);
     }
 }
-BENCHMARK(BM_MemoryManager_Resize);
+BENCHMARK(BM_BumpAllocator_Resize);
+
+static void BM_AllocateRun_SmallVec(benchmark::State &state) {
+    BumpAllocator::resize(256);
+    using VType = Eigen::VectorXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(6, 1));
+    }
+}
+BENCHMARK(BM_AllocateRun_SmallVec);
+
+static void BM_AllocateRun_JacobianBlock(benchmark::State &state) {
+    BumpAllocator::resize(256);
+    using MType = Eigen::MatrixXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &m) { benchmark::DoNotOptimize(m.data()); }, TempSpec<MType>(6, 7));
+    }
+}
+BENCHMARK(BM_AllocateRun_JacobianBlock);
+
+static void BM_AllocateRun_MultiTemp(benchmark::State &state) {
+    BumpAllocator::resize(512);
+    using VType = Eigen::VectorXd;
+    using MType = Eigen::MatrixXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &v, auto &j, auto &h) {
+                benchmark::DoNotOptimize(v.data());
+                benchmark::DoNotOptimize(j.data());
+                benchmark::DoNotOptimize(h.data());
+            },
+            TempSpec<VType>(6, 1), TempSpec<MType>(6, 7), TempSpec<MType>(7, 7));
+    }
+}
+BENCHMARK(BM_AllocateRun_MultiTemp);
+
+static void BM_AllocateRun_Scaled(benchmark::State &state) {
+    int sz = static_cast<int>(state.range(0));
+    BumpAllocator::resize(sz * 2);
+    using VType = Eigen::VectorXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(sz, 1));
+    }
+}
+BENCHMARK(BM_AllocateRun_Scaled)->Arg(64)->Arg(256)->Arg(1024)->Arg(4096);
+
+static void BM_AllocateRun_Overflow(benchmark::State &state) {
+    BumpAllocator::resize(16);
+    using VType = Eigen::VectorXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &v) { benchmark::DoNotOptimize(v.data()); }, TempSpec<VType>(256, 1));
+    }
+    BumpAllocator::resize(256);
+}
+BENCHMARK(BM_AllocateRun_Overflow);
+
+static void BM_AllocateRun_Nested(benchmark::State &state) {
+    BumpAllocator::resize(512);
+    using VType = Eigen::VectorXd;
+    for (auto _ : state) {
+        BumpAllocator::allocate_run(
+            [](auto &outer) {
+                benchmark::DoNotOptimize(outer.data());
+                BumpAllocator::allocate_run(
+                    [](auto &inner) { benchmark::DoNotOptimize(inner.data()); },
+                    TempSpec<VType>(8, 1));
+            },
+            TempSpec<VType>(10, 1));
+    }
+}
+BENCHMARK(BM_AllocateRun_Nested);
 
 ///////////////////////////////////////////////////////////////////////////////
 // ThreadPool

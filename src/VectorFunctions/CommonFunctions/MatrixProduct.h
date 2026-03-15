@@ -107,9 +107,7 @@ struct MatrixFunctionProduct_Impl
         const int o2 = this->matrix_func2.ORows();
         const int orows = this->ORows();
 
-        const int crit_size = std::max({o1, o2, orows});
-
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+        MemoryManager::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
                                     TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
                                     TempSpec<Output<Scalar>>(orows, 1));
     }
@@ -174,9 +172,7 @@ struct MatrixFunctionProduct_Impl
         const int irows = this->IRows();
         const int orows = this->ORows();
 
-        const int crit_size = std::max({o1, o2, orows, irows, m1rows});
-
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+        MemoryManager::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
                                     TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
                                     TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
                                     TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
@@ -389,9 +385,7 @@ struct MatrixFunctionProduct_Impl
         const int irows = this->IRows();
         const int orows = this->ORows();
 
-        const int crit_size = std::max({o1, o2, orows, irows, m1rows});
-
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+        MemoryManager::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
                                     TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
                                     TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
 

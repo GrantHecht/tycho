@@ -109,16 +109,13 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             }
         };
 
-        const int crit_size = this->IRows();
-
         using XType = ODEInput<Scalar>;
         using FXType = ODEOutput<Scalar>;
 
         const int irowsode = this->ode.IRows();
         const int orowsode = this->ode.ORows();
 
-        MemoryManager::allocate_run(crit_size, Impl,
-                                    ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        MemoryManager::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1));
@@ -265,8 +262,6 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         };
 
-        const int crit_size = this->IRows();
-
         using XType = ODEInput<Scalar>;
         using FXType = ODEOutput<Scalar>;
         using JXType = ODEJacobian<Scalar>;
@@ -276,8 +271,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         const int irowsode = this->ode.IRows();
         const int orowsode = this->ode.ORows();
 
-        MemoryManager::allocate_run(crit_size, Impl,
-                                    ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        MemoryManager::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
@@ -508,8 +502,6 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             // QED
         };
 
-        const int crit_size = this->IRows();
-
         using XType = ODEInput<Scalar>;
         using FXType = ODEOutput<Scalar>;
         using JXType = ODEJacobian<Scalar>;
@@ -524,7 +516,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         const int orowsode = this->ode.ORows();
 
         MemoryManager::allocate_run(
-            crit_size, Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+            Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
             ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
             ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode), TempSpec<AGXType>(irowsode, 1),
             ArrayOfTempSpecs<AVType, Cardinals>(orowsode, 1), TempSpec<HType>(irowsode, irowsode),

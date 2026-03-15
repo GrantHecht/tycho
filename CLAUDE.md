@@ -17,8 +17,7 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously. 
 
 As a rule of thumb:
-- 1 build system wide: -j4 (library only), -j2 (with tests/benchmarks)
-- 2 simultaneous builds system wide: -j2
+- ALWAYS use -j2 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -144,10 +143,6 @@ bash config_and_build.sh
 
 **Subsequent builds** (after C++ source changes):
 ```bash
-# Library only (no tests/benchmarks)
-cd build && ninja -j4 all
-
-# When also building tests and/or benchmarks
 cd build && ninja -j2 all
 ```
 

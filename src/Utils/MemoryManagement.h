@@ -14,100 +14,113 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - Full rewrite: BumpStack with save/restore, SIMD alignment, learning
 // =============================================================================
 
 #pragma once
 #include <algorithm>
+#include <cstring>
+#include <new>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "pch.h"
 
 namespace Tycho {
 
 namespace detail {
-/// <summary>
-/// Bump Stack Allocator for data type Scalar.
-/// Attempts to fill allocations out of a single contigous Eigen vector.
-/// Whenever allocation requests exceed size of this vector, blocks are allocated from a
-/// new vector appended to a link list. Once all blocks are freed, resizes the main vector to the
-/// maximum size seen since last time. That way if the allocation pattern repeats no data will be
-/// pushed to the linked list.
-/// </summary>
-/// <typeparam name="Scalar"></typeparam>
-template <class Scalar> struct TempStack {
 
-    TempStack(int InitSize) { resize(InitSize); }
-    TempStack() : TempStack(64) {}
-    void resize(int size) {
-        this->Data.resize(size);
-        DataSize = size;
-        NextDataSize = size;
-        NextStart = 0;
-        OverFlowSize = 0;
+/// Number of Scalar elements needed to reach EIGEN_MAX_ALIGN_BYTES alignment.
+template <class Scalar>
+inline constexpr size_t AlignElems = std::max<size_t>(1, EIGEN_MAX_ALIGN_BYTES / sizeof(Scalar));
+
+/// Round `offset` up to the next aligned position for Scalar.
+template <class Scalar> inline constexpr size_t align_up(size_t offset) {
+    constexpr size_t A = AlignElems<Scalar>;
+    return (offset + A - 1) & ~(A - 1);
+}
+
+/// Bump stack allocator with SIMD-aligned buffer, save/restore semantics,
+/// and high-water learning.
+template <class Scalar> struct BumpStack {
+
+    BumpStack() : BumpStack(64) {}
+
+    explicit BumpStack(size_t init_size) { resize(init_size); }
+
+    ~BumpStack() { free_buffer(); }
+
+    BumpStack(const BumpStack &) = delete;
+    BumpStack &operator=(const BumpStack &) = delete;
+
+    struct SavePoint {
+        size_t offset;
+        size_t overflow_count;
+    };
+
+    SavePoint save() const { return {offset_, overflow_.size()}; }
+
+    void restore(SavePoint sp) {
+        offset_ = sp.offset;
+        overflow_.resize(sp.overflow_count);
+        if (offset_ == 0 && overflow_.empty() && high_water_ > capacity_) {
+            resize(high_water_);
+        }
     }
 
-    inline Scalar *getBlock(int blocksize) {
-        Scalar *dat;
-        if (OverFlowSize == 0 && ((NextStart + blocksize) <= DataSize)) {
-            // If blocksize can be fit into Data, give ptr to next free location
+    Scalar *allocate(size_t n) {
+        size_t aligned = align_up<Scalar>(offset_);
+        size_t end = aligned + n;
+        if (overflow_.empty() && end <= capacity_) {
+            std::memset(data_ + aligned, 0, n * sizeof(Scalar));
+            offset_ = end;
+            if (offset_ > high_water_)
+                high_water_ = offset_;
+            return data_ + aligned;
+        }
+        // Overflow path
+        overflow_.emplace_back(n);
+        auto &blk = overflow_.back();
+        blk.setZero();
+        size_t total = offset_ + n;
+        if (total > high_water_)
+            high_water_ = total;
+        return blk.data();
+    }
 
-            this->Data.segment(NextStart, blocksize).setZero();
-            dat = this->Data.data() + NextStart;
-            NextStart += blocksize;
+    void resize(size_t new_cap) {
+        free_buffer();
+        capacity_ = new_cap;
+        offset_ = 0;
+        high_water_ = 0;
+        overflow_.clear();
+        if (capacity_ > 0) {
+            constexpr size_t align = EIGEN_MAX_ALIGN_BYTES;
+            data_ = static_cast<Scalar *>(
+                ::operator new(capacity_ * sizeof(Scalar), std::align_val_t(align)));
         } else {
-            // If blocksize too large to fit in Data, allocate new vector in OverflowData
-
-            this->OverFlowData.emplace_back(VectorX<Scalar>());
-            this->OverFlowData.back().resize(blocksize);
-            OverFlowSize += blocksize;
-            NextDataSize = DataSize + OverFlowSize;
-            dat = this->OverFlowData.back().data();
-        }
-        return dat;
-    }
-
-    inline void freeBlock(int blocksize) {
-        if (OverFlowSize == 0)
-            NextStart -= blocksize;
-        else
-            OverFlowSize -= blocksize;
-        if (NextStart == 0 && OverFlowSize == 0 && (NextDataSize != DataSize)) {
-            DataSize = NextDataSize;
-            this->Data.resize(DataSize);
-            if (OverFlowData.size() > 1)
-                OverFlowData.clear();
+            data_ = nullptr;
         }
     }
-    inline int size() { return Data.size(); }
+
+    size_t size() const { return capacity_; }
 
   private:
-    VectorX<Scalar> Data;                    // Persistent Data Stack
-    std::list<VectorX<Scalar>> OverFlowData; // Temporary Overlow Data stacks
-    int NextStart;                           // Next free index in Data where block can be allocated
-    int DataSize;                            // Size of Data
-    int OverFlowSize = 0; // Size of all blocks that have been spilled to OverFlowData
-    int NextDataSize = 0; // What size to resize Data too whenever we return top of stack
-};
+    Scalar *data_ = nullptr;
+    size_t capacity_ = 0;
+    size_t offset_ = 0;
+    size_t high_water_ = 0;
+    std::vector<VectorX<Scalar>> overflow_;
 
-template <int... JS> struct NJumpTable {
-    using sequence = std::tuple<std::integral_constant<int, JS>...>;
-    template <class Ftype> static void run(Ftype &&f, int crit_size) {
-        auto seq = sequence();
-        bool done = false;
-        Tycho::tuple_for_each(seq, [&](auto i) {
-            if (!done && crit_size <= i.value) {
-                f(i);
-                done = true;
-            }
-        });
-        if (!done)
-            f(std::integral_constant<int, -1>());
+    void free_buffer() {
+        if (data_) {
+            constexpr size_t align = EIGEN_MAX_ALIGN_BYTES;
+            ::operator delete(data_, std::align_val_t(align));
+            data_ = nullptr;
+        }
     }
 };
-
-using OldDefaultJumpTable = NJumpTable<4, 8, 16>;
-using NewDefaultJumpTable = NJumpTable<8, 16, 64, 256, 384, 512, 1024, 2048>;
 
 template <int R, int C> struct RCBase {
     static const int rows = R;
@@ -130,39 +143,15 @@ template <> struct RCBase<-1, -1> {
     RCBase(int r, int c) : rows(r), cols(c) {}
 };
 
-/// <summary>
-/// This holder type was neccessary to stop a slow constructor in std::tuple
-/// I dont know why it was slow  or why this class stops it since they are doing the same thing
-/// </summary>
-/// <typeparam name="...TempSpecs"></typeparam>
-template <int size, class... TempSpecs> struct MaxTempPack {
-    std::tuple<typename std::remove_const_reference<TempSpecs>::type::template MaxMatType2<size>...>
-        data;
-    MaxTempPack(TempSpecs... tspecs) {
-        auto tmpsp = std::make_tuple(tspecs...);
-
-        constexpr int sds = sizeof...(tspecs);
-        Tycho::constexpr_for_loop(std::integral_constant<int, 0>(),
-                                  std::integral_constant<int, sds>(), [&](auto i) {
-                                      int rows = std::get<i.value>(tmpsp).rows;
-                                      int cols = std::get<i.value>(tmpsp).cols;
-                                      std::get<i.value>(data).resize(rows, cols);
-                                  });
-    }
-};
-
 template <class... TempSpecs> struct ExactTempPack {
-    std::tuple<typename std::remove_const_reference<TempSpecs>::type::ExactTempType...> data;
+    std::tuple<typename std::remove_cvref_t<TempSpecs>::ExactTempType...> data;
     ExactTempPack() {}
 };
 
 } // namespace detail
 
-/// <summary>
-///  Template type for specifying the type and size of temporary matrix that must be created by the
-///  allocator.
-/// </summary>
-/// <typeparam name="T"></typeparam>
+/// Template type for specifying the type and size of temporary matrix that
+/// must be created by the allocator.
 template <class T> struct TempSpec : detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime> {
     using Base = detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime>;
     using ExactTempType = T;
@@ -172,24 +161,13 @@ template <class T> struct TempSpec : detail::RCBase<T::RowsAtCompileTime, T::Col
     static constexpr int ColsAtCompileTime = T::ColsAtCompileTime;
     static constexpr bool IsConstantSize = (RowsAtCompileTime >= 0) && (ColsAtCompileTime >= 0);
     static constexpr bool IsArray = false;
-    static constexpr bool IsVector = false;
     static constexpr bool IsTuple = false;
-
-    template <int MR, int MC>
-    using MaxMatType = Eigen::Matrix<Scalar, RowsAtCompileTime, ColsAtCompileTime, 0, MR, MC>;
-    template <int value>
-    using MaxMatType2 = Eigen::Matrix<Scalar, RowsAtCompileTime, ColsAtCompileTime, 0,
-                                      (RowsAtCompileTime == -1) ? value : RowsAtCompileTime,
-                                      (ColsAtCompileTime == -1) ? value : ColsAtCompileTime>;
 
     TempSpec(int rows, int cols) : Base(rows, cols) {}
 };
 
-/// <summary>
-///  Template type for specifying a constant size array of TempSpecs that must be allocated.
-/// </summary>
-/// <typeparam name="T"></typeparam>
-
+/// Template type for specifying a constant size array of TempSpecs that must
+/// be allocated.
 template <class T, int Size> struct ArrayOfTempSpecs {
     using Scalar = typename T::Scalar;
     using ExactTempType = std::array<T, Size>;
@@ -197,135 +175,89 @@ template <class T, int Size> struct ArrayOfTempSpecs {
     static constexpr int size = Size;
     static constexpr bool IsConstantSize = TempSpec<T>::IsConstantSize;
     static constexpr bool IsArray = true;
-    static constexpr bool IsVector = false;
     static constexpr bool IsTuple = false;
     TempSpec<T> tspec;
     ArrayOfTempSpecs(int rows, int cols) : tspec(rows, cols) {}
 };
 
-/// <summary>
-///  Template type for specifying a heterogenous tuple of TempSpecs that must be allocated.
-/// </summary>
-/// <typeparam name="T"></typeparam>
+/// Template type for specifying a heterogeneous tuple of TempSpecs that must
+/// be allocated.
 template <class... T> struct TupleOfTempSpecs {
-
-    using Scalar = typename std::remove_const_reference<decltype(std::get<0>(
-        std::tuple<T...>()))>::type::Scalar;
-
+    using Scalar = typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar;
     using ExactTempType = std::tuple<T...>;
 
     static constexpr bool IsConstantSize = (... && TempSpec<T>::IsConstantSize);
     static constexpr bool IsArray = false;
-    static constexpr bool IsVector = false;
     static constexpr bool IsTuple = true;
     static constexpr int size = sizeof...(T);
 
     std::tuple<TempSpec<T>...> tspecs;
-
-    // TupleOfTempSpecs(TempSpec<T>... ts) :tspecs(ts...) {}
-
     TupleOfTempSpecs(std::tuple<TempSpec<T>...> tsp) : tspecs(tsp) {}
 };
 
-struct MemoryManager {
-    using ScalarStackType = detail::TempStack<double>;
-    using SuperScalarStackType = detail::TempStack<DefaultSuperScalar>;
+struct BumpAllocator {
+    using ScalarStackType = detail::BumpStack<double>;
+    using SuperScalarStackType = detail::BumpStack<DefaultSuperScalar>;
 
-    template <class JTable, class Func, class... TempSpecs>
-    static void allocate_run_impl(const JTable &jt, int critical_size, Func &&f,
-                                  const TempSpecs &...tspecs) {
+    template <class Func, class... TempSpecs>
+    static void allocate_run(Func &&f, const TempSpecs &...tspecs) {
         if constexpr ((... && TempSpecs::IsConstantSize)) {
-            auto Temps =
-                detail::ExactTempPack<typename std::remove_const_reference<TempSpecs>::type...>();
+            auto Temps = detail::ExactTempPack<std::remove_cvref_t<TempSpecs>...>();
             std::apply(f, Temps.data);
         } else {
-            if constexpr (OnlyOldTables)
-                MemoryManager::run_old_table_impl(jt, critical_size, tspecs...);
-            else if constexpr (OnlyNewTables)
-                MemoryManager::run_new_table_impl(jt, f, tspecs...);
-            else if constexpr (OnlyArena)
-                MemoryManager::run_arena_impl(f, tspecs...);
-            else {
-                if (MemoryManager::UseArena)
-                    MemoryManager::run_arena_impl(f, tspecs...);
-                else
-                    MemoryManager::run_new_table_impl(jt, f, tspecs...);
-            }
+            BumpAllocator::run_arena_impl(f, tspecs...);
         }
     }
 
-    template <class Func, class... TempSpecs>
-    static void allocate_run(int critical_size, Func &&f, const TempSpecs &...tspecs) {
-        MemoryManager::allocate_run_impl(DefaultJumpTable(), critical_size, f, tspecs...);
-    }
-
-    /*These are safe to be called anywhere except inside an allocating function*/
     static void resize(int sizeScalar, int sizeSuper) {
-        MemoryManager::ScalarStack.resize(sizeScalar);
-        MemoryManager::SuperScalarStack.resize(sizeSuper);
+        BumpAllocator::ScalarStack.resize(sizeScalar);
+        BumpAllocator::SuperScalarStack.resize(sizeSuper);
     }
-    static void resize(int size) { MemoryManager::resize(size, size); }
-    static void enable_arena_memory(int sizeScalar, int sizeSuper) {
-        MemoryManager::UseArena = true;
-        MemoryManager::resize(sizeScalar, sizeSuper);
+    static void resize(int size) { BumpAllocator::resize(size, size); }
+    static int size_scalar() { return static_cast<int>(BumpAllocator::ScalarStack.size()); }
+    static int size_super_scalar() {
+        return static_cast<int>(BumpAllocator::SuperScalarStack.size());
     }
-    static void enable_arena_memory(int size) {
-        MemoryManager::UseArena = true;
-        MemoryManager::resize(size);
-    }
-    static void enable_arena_memory() {
-        MemoryManager::UseArena = true;
-        MemoryManager::resize(64);
-    }
-    static void disable_arena_memory() {
-        MemoryManager::UseArena = false;
-        MemoryManager::resize(64);
-    }
-    static bool arena_memory_enabled() { return MemoryManager::UseArena; }
-    static int size_scalar() { return MemoryManager::ScalarStack.size(); }
-    static int size_super_scalar() { return MemoryManager::SuperScalarStack.size(); }
 
   private:
     static thread_local ScalarStackType ScalarStack;
     static thread_local SuperScalarStackType SuperScalarStack;
-    static bool UseArena;
 
-    static const bool OnlyOldTables = false;
-    static const bool OnlyNewTables = false;
-    static const bool OnlyArena = true;
-
-    using DefaultJumpTable = typename std::conditional<OnlyOldTables, detail::OldDefaultJumpTable,
-                                                       detail::NewDefaultJumpTable>::type;
-
-    template <class Scalar> static Scalar *getBlock(int blocksize) {
-        if constexpr (std::is_same<Scalar, double>::value) {
-            return MemoryManager::ScalarStack.getBlock(blocksize);
+    template <class Scalar> static detail::BumpStack<Scalar> &get_stack() {
+        if constexpr (std::is_same_v<Scalar, double>) {
+            return BumpAllocator::ScalarStack;
         } else {
-            return MemoryManager::SuperScalarStack.getBlock(blocksize);
-        }
-    }
-    template <class Scalar> static void freeBlock(int blocksize) {
-        if constexpr (std::is_same<Scalar, double>::value) {
-            return MemoryManager::ScalarStack.freeBlock(blocksize);
-        } else {
-            return MemoryManager::SuperScalarStack.freeBlock(blocksize);
+            return BumpAllocator::SuperScalarStack;
         }
     }
 
-    template <class... TempSpecs> inline static int count_blocksize(const TempSpecs &...tspecs) {
-        int blksize = 0;
-        auto CalcSpecSize = [](const auto &tspec) { return (tspec.rows * tspec.cols); };
+    template <class... TempSpecs>
+    inline static size_t count_blocksize_aligned(const TempSpecs &...tspecs) {
+        size_t blksize = 0;
+
+        auto CalcSpecSize = [](const auto &tspec) -> size_t {
+            return static_cast<size_t>(tspec.rows) * static_cast<size_t>(tspec.cols);
+        };
+
         auto CountSpace = [&](const auto &tspec) {
-            using type = typename std::remove_const_reference<decltype(tspec)>::type;
+            using type = std::remove_cvref_t<decltype(tspec)>;
+            using Scalar = typename type::Scalar;
 
             if constexpr (type::IsConstantSize) {
-                // Do nothing, allocate as constant size Eigen matrix on Stack
+                // Constant-size: allocated on the stack, no arena space needed
             } else if constexpr (type::IsArray) {
-                blksize += CalcSpecSize(tspec.tspec) * tspec.size;
+                for (int i = 0; i < type::size; ++i) {
+                    blksize = detail::align_up<Scalar>(blksize);
+                    blksize += CalcSpecSize(tspec.tspec);
+                }
             } else if constexpr (type::IsTuple) {
-                Tycho::tuple_for_each(tspec.tspecs,
-                                      [&](const auto &tspeci) { blksize += CalcSpecSize(tspeci); });
+                Tycho::tuple_for_each(tspec.tspecs, [&](const auto &tspeci) {
+                    using S = typename std::remove_cvref_t<decltype(tspeci)>::Scalar;
+                    blksize = detail::align_up<S>(blksize);
+                    blksize += CalcSpecSize(tspeci);
+                });
             } else {
+                blksize = detail::align_up<Scalar>(blksize);
                 blksize += CalcSpecSize(tspec);
             }
         };
@@ -335,26 +267,24 @@ struct MemoryManager {
 
     template <class Scalar, class... TempSpecs>
     inline static auto make_temps(Scalar *data, const TempSpecs &...tspecs) {
-
-        int start = 0;
+        size_t start = 0;
 
         auto make_map = [&](const auto &tspec) {
-            using type = typename std::remove_const_reference<decltype(tspec)>::type;
-            using MAP = typename Eigen::Map<typename type::MatType>;
-            int start_t = start;
-            start += (tspec.rows * tspec.cols);
+            using type = std::remove_cvref_t<decltype(tspec)>;
+            using MAP = Eigen::Map<typename type::MatType, Eigen::AlignedMax>;
+            start = detail::align_up<Scalar>(start);
+            size_t start_t = start;
+            start += static_cast<size_t>(tspec.rows) * static_cast<size_t>(tspec.cols);
             return MAP(data + start_t, tspec.rows, tspec.cols);
         };
 
         auto make_temp = [&](const auto &tspec) {
-            using type = typename std::remove_const_reference<decltype(tspec)>::type;
+            using type = std::remove_cvref_t<decltype(tspec)>;
             if constexpr (type::IsConstantSize) {
-                // Do nothing, allocate as constant size Eigen matrix on Stack
-
                 return typename type::ExactTempType();
             } else if constexpr (type::IsArray) {
                 auto array_temp = [&](auto i) { return make_map(tspec.tspec); };
-                return MemoryManager::make_map_array(array_temp,
+                return BumpAllocator::make_map_array(array_temp,
                                                      std::integral_constant<int, type::size>());
             } else if constexpr (type::IsTuple) {
                 auto tuple_temp = [&](const auto &...tspeci) {
@@ -371,62 +301,19 @@ struct MemoryManager {
 
     template <class Func, class... TempSpecs>
     inline static void run_arena_impl(Func &&f, const TempSpecs &...tspecs) {
-        using Scalar = typename std::remove_const_reference<decltype(std::get<0>(
-            std::tuple{tspecs...}))>::type::Scalar;
+        using Scalar =
+            typename std::remove_cvref_t<decltype(std::get<0>(std::tuple{tspecs...}))>::Scalar;
 
-        int blksize = MemoryManager::count_blocksize(tspecs...);
+        auto &stack = BumpAllocator::get_stack<Scalar>();
+        size_t blksize = BumpAllocator::count_blocksize_aligned(tspecs...);
 
-        /////////////////////////////////////////////////////////
-        Scalar *data = MemoryManager::getBlock<Scalar>(blksize);
-        //////////////////////////////////////////////////////////
+        auto sp = stack.save();
+        Scalar *data = stack.allocate(blksize);
 
-        auto Temps = MemoryManager::make_temps(data, tspecs...);
+        auto Temps = BumpAllocator::make_temps(data, tspecs...);
         std::apply(f, Temps);
 
-        //////////////////////////////////////////////////////////
-        data = nullptr;
-        MemoryManager::freeBlock<Scalar>(blksize);
-        //////////////////////////////////////////////////////////
-    }
-
-    template <class JTable, class Func, class... TempSpecs>
-    inline static void run_old_table_impl(const JTable &jt, int critical_size, Func &&f,
-                                          const TempSpecs &...tspecs) {
-        auto MaxImpl = [&](auto maxsize) {
-            auto Temps = detail::MaxTempPack<
-                maxsize.value, typename std::remove_const_reference<TempSpecs>::type...>(tspecs...);
-            std::apply(f, Temps.data);
-        };
-        JTable::run(MaxImpl, critical_size);
-    }
-
-    template <class JTable, class Func, class... TempSpecs>
-    inline static void run_new_table_impl(const JTable &jt, Func &&f, const TempSpecs &...tspecs) {
-        using Scalar = typename std::remove_const_reference<decltype(std::get<0>(
-            std::tuple{tspecs...}))>::type::Scalar;
-
-        int blksize = MemoryManager::count_blocksize(tspecs...);
-
-        auto MaxImpl = [&](auto maxsize) {
-            Eigen::Matrix<Scalar, maxsize.value, 1> Data;
-            Scalar *data = Data.data();
-            int start = 0;
-            auto MakeTemps = [&](auto tspec) {
-                using type = typename std::remove_const_reference<decltype(tspec)>::type;
-                if constexpr (tspec.IsConstantSize)
-                    return typename type::MatType();
-                else {
-                    int start_t = start;
-                    start += (tspec.rows * tspec.cols);
-                    using MAP = typename Eigen::Map<typename type::MatType>;
-                    return MAP(data + start_t, tspec.rows, tspec.cols);
-                }
-            };
-            auto Temps = std::tuple{MakeTemps(tspecs)...};
-            std::apply(f, Temps);
-        };
-
-        JTable::run(MaxImpl, blksize);
+        stack.restore(sp);
     }
 
     template <class Function, std::size_t... Indices>
@@ -442,5 +329,8 @@ struct MemoryManager {
         return make_map_array_helper(f, std::make_index_sequence<N>{});
     }
 };
+
+// Backwards-compatible alias
+using MemoryManager = BumpAllocator;
 
 } // namespace Tycho
