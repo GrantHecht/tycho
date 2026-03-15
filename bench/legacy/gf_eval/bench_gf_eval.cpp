@@ -33,10 +33,10 @@ using Clock = std::chrono::high_resolution_clock;
 // --- F1: Zermelo ship routing (4→2, tiny expression) -----------------------
 struct Zermelo_Impl : ODESize<2, 1, 0> {
     static auto Definition(double vMax) {
-        auto args  = Arguments<4>();  // [x, y, t, theta]
+        auto args = Arguments<4>(); // [x, y, t, theta]
         auto theta = args.coeff<3>();
-        auto xdot  = vMax * sin(theta) + 0.5;
-        auto ydot  = vMax * cos(theta) + (-0.3);
+        auto xdot = vMax * sin(theta) + 0.5;
+        auto ydot = vMax * cos(theta) + (-0.3);
         return StackedOutputs{xdot, ydot};
     }
 };
@@ -45,12 +45,12 @@ BUILD_ODE_FROM_EXPRESSION(ZermeloODE, Zermelo_Impl, double);
 // --- F2: Brachistochrone (5→3, slightly more complex) ----------------------
 struct Brach_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args  = Arguments<5>();  // [x, y, v, t, theta]
-        auto v     = args.coeff<2>();
+        auto args = Arguments<5>(); // [x, y, v, t, theta]
+        auto v = args.coeff<2>();
         auto theta = args.coeff<4>();
-        auto xdot  = sin(theta) * v;
-        auto ydot  = cos(theta) * v * (-1.0);
-        auto vdot  = g * cos(theta);
+        auto xdot = sin(theta) * v;
+        auto ydot = cos(theta) * v * (-1.0);
+        auto vdot = g * cos(theta);
         return StackedOutputs{xdot, ydot, vdot};
     }
 };
@@ -60,14 +60,14 @@ BUILD_ODE_FROM_EXPRESSION(BrachODE, Brach_Impl, double);
 // Matches bench_topputto_lowthrust.py dynamics.
 struct PolarLT_Impl : ODESize<4, 2, 0> {
     static auto Definition(double amax) {
-        auto args  = Arguments<7>();  // [r, theta, vr, vt, t, u, alpha]
-        auto r     = args.coeff<0>();
-        auto vr    = args.coeff<2>();
-        auto vt    = args.coeff<3>();
-        auto u     = args.coeff<5>();
+        auto args = Arguments<7>(); // [r, theta, vr, vt, t, u, alpha]
+        auto r = args.coeff<0>();
+        auto vr = args.coeff<2>();
+        auto vt = args.coeff<3>();
+        auto u = args.coeff<5>();
         auto alpha = args.coeff<6>();
-        auto rdot  = vr;
-        auto tdot  = vt / r;
+        auto rdot = vr;
+        auto tdot = vt / r;
         auto vrdot = (vt * vt) / r + ((-1.0) / (r * r)) + amax * u * sin(alpha);
         auto vtdot = (vt * vr) / r * (-1.0) + amax * u * cos(alpha);
         return StackedOutputs{rdot, tdot, vrdot, vtdot};
@@ -91,35 +91,39 @@ BUILD_ODE_FROM_EXPRESSION(PolarLTODE, PolarLT_Impl, double);
 //   InType      = Ref<const VectorXd>   AdjGradType = Ref<VectorXd>
 //   OutType     = Ref<VectorXd>          AdjHessType = Ref<MatrixXd>
 //   JacType     = Ref<MatrixXd>          AdjVarType  = Ref<const VectorXd>
-double time_vjp(GenericFunction<-1, -1>& gf, int N) {
+double time_vjp(GenericFunction<-1, -1> &gf, int N) {
     using Dspec = DenseFunctionSpec<-1, -1>;
 
-    Eigen::VectorXd x_s(gf.IRows());              x_s.setRandom();
-    Eigen::VectorXd fx_s(gf.ORows());             fx_s.setZero();
-    Eigen::MatrixXd jx_s(gf.ORows(), gf.IRows()); jx_s.setZero();
-    Eigen::VectorXd gx_s(gf.IRows());             gx_s.setZero();
-    Eigen::MatrixXd hx_s(gf.IRows(), gf.IRows()); hx_s.setZero();
-    Eigen::VectorXd l_s(gf.ORows());              l_s.setOnes();
+    Eigen::VectorXd x_s(gf.IRows());
+    x_s.setRandom();
+    Eigen::VectorXd fx_s(gf.ORows());
+    fx_s.setZero();
+    Eigen::MatrixXd jx_s(gf.ORows(), gf.IRows());
+    jx_s.setZero();
+    Eigen::VectorXd gx_s(gf.IRows());
+    gx_s.setZero();
+    Eigen::MatrixXd hx_s(gf.IRows(), gf.IRows());
+    hx_s.setZero();
+    Eigen::VectorXd l_s(gf.ORows());
+    l_s.setOnes();
 
-    MemoryManager::resize(64, 64);
+    BumpAllocator::resize(64, 64);
 
     volatile double dummy = 0.0;
     auto t0 = Clock::now();
     for (int i = 0; i < N; ++i) {
-        Dspec::InType      xt(x_s);
-        Dspec::OutType     fxt(fx_s);
-        Dspec::JacType     jxt(jx_s);
+        Dspec::InType xt(x_s);
+        Dspec::OutType fxt(fx_s);
+        Dspec::JacType jxt(jx_s);
         Dspec::AdjGradType gxt(gx_s);
         Dspec::AdjHessType hxt(hx_s);
-        Dspec::AdjVarType  lxt(l_s);
+        Dspec::AdjVarType lxt(l_s);
 #if __cplusplus >= 202002L
         // PR6: dispatch through GFConcept flat vtable (GFStorage)
-        gf.func.get().compute_jacobian_adjointgradient_adjointhessian(
-            xt, fxt, jxt, gxt, hxt, lxt);
+        gf.func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, gxt, hxt, lxt);
 #else
         // Pre-PR6: dispatch through rubber_types virtual interface
-        gf.compute_jacobian_adjointgradient_adjointhessian(
-            xt, fxt, jxt, gxt, hxt, lxt);
+        gf.compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, gxt, hxt, lxt);
 #endif
         dummy += fx_s[0];
     }
@@ -131,11 +135,11 @@ double time_vjp(GenericFunction<-1, -1>& gf, int N) {
 // Time N deep copies of a GenericFunction<-1,-1>.
 // Tests the GFStorage::clone_into SBO path: types <= 128 bytes are copied
 // via placement-new into the inline buffer with no heap allocation.
-double time_clone(GenericFunction<-1, -1>& src, int N) {
+double time_clone(GenericFunction<-1, -1> &src, int N) {
     volatile double dummy = 0.0;
     auto t0 = Clock::now();
     for (int i = 0; i < N; ++i) {
-        GenericFunction<-1, -1> copy(src);   // deep clone via GFStorage
+        GenericFunction<-1, -1> copy(src); // deep clone via GFStorage
         dummy += static_cast<double>(copy.IRows());
     }
     auto t1 = Clock::now();
@@ -156,7 +160,7 @@ int main() {
     constexpr int N_VJP = 500'000;
 
     ZermeloODE f1(1.5);
-    BrachODE   f2(9.81);
+    BrachODE f2(9.81);
     PolarLTODE f3(0.01);
 
     GenericFunction<-1, -1> gf1(f1);
@@ -164,9 +168,9 @@ int main() {
     GenericFunction<-1, -1> gf3(f3);
 
     double elapsed = 0.0;
-    elapsed += time_vjp(gf1, N_VJP);   // F1: Zermelo  4→2
-    elapsed += time_vjp(gf2, N_VJP);   // F2: Brach    5→3
-    elapsed += time_vjp(gf3, N_VJP);   // F3: PolarLT  7→4
+    elapsed += time_vjp(gf1, N_VJP); // F1: Zermelo  4→2
+    elapsed += time_vjp(gf2, N_VJP); // F2: Brach    5→3
+    elapsed += time_vjp(gf3, N_VJP); // F3: PolarLT  7→4
 
     // ------------------------------------------------------------------
     // Section 2: Clone throughput — N=50,000 GFStorage deep-copies each.

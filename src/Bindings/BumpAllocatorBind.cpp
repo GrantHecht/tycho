@@ -13,18 +13,15 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#pragma once
-#ifdef TYCHO_PYTHON_BINDINGS
+#include "BumpAllocatorBind.h"
+#include "MemoryManagement.h"
 
-#include "FunctionRegistry.h"
-#include "Utils/MemoryManagement.h"
+using namespace Tycho;
 
-namespace Tycho {
-
-template <> struct TychoBind<MemoryManager> {
-    static void Build(nb::module_ &m);
-};
-
-} // namespace Tycho
-
-#endif // TYCHO_PYTHON_BINDINGS
+void TychoBind<BumpAllocator>::Build(nb::module_ &m) {
+    auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator");
+    obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize));
+    obj.def_static("resize", nb::overload_cast<int, int>(&BumpAllocator::resize));
+    obj.def_static("size_scalar", &BumpAllocator::size_scalar);
+    obj.def_static("size_super_scalar", &BumpAllocator::size_super_scalar);
+}

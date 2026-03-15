@@ -482,9 +482,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        MemoryManager::allocate_run(
-            this->ode.IRows(), Impl,
-            ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
+        BumpAllocator::allocate_run(
+            Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
             TempSpec<ODEState<Scalar>>(this->ode.IRows(), 1));
     }
 

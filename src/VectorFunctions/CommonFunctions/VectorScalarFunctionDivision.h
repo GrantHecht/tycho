@@ -118,8 +118,7 @@ struct VectorScalarFunctionDivision_Impl
 
         using FType = Output<Scalar>;
         using JType = ScalFunc_jacobian<Scalar>;
-        MemoryManager::allocate_run(irows, Impl, TempSpec<FType>(orows, 1),
-                                    TempSpec<JType>(1, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -227,16 +226,15 @@ struct VectorScalarFunctionDivision_Impl
 
         const int irows = this->scalarfunc.IRows();
         const int orows = this->ORows();
-        const int crit_size = std::max(irows, orows);
 
         using FType = Output<Scalar>;
         using JType = ScalFunc_jacobian<Scalar>;
         using GType = ScalFunc_gradient<Scalar>;
         using HType = ScalFunc_hessian<Scalar>;
 
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<FType>(orows, 1),
-                                    TempSpec<JType>(1, irows), TempSpec<GType>(irows, 1),
-                                    TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows),
+                                    TempSpec<GType>(irows, 1), TempSpec<GType>(irows, 1),
+                                    TempSpec<HType>(irows, irows));
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };

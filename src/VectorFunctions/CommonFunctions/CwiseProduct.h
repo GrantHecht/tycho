@@ -86,7 +86,7 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
 
         using FType = Func2_Output<Scalar>;
         const int orows = this->ORows();
-        MemoryManager::allocate_run(orows, Impl, TempSpec<FType>(orows, 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -109,10 +109,8 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         using JType = Func2_jacobian<Scalar>;
         const int irows = this->IRows();
         const int orows = this->ORows();
-        const int crit_size = std::max(irows, orows);
 
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<FType>(orows, 1),
-                                    TempSpec<JType>(orows, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -162,7 +160,6 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
 
         const int orows = this->func1.ORows();
         const int irows = this->func1.IRows();
-        const int crit_size = std::max({irows, orows});
 
         using FType1 = Func1_Output<Scalar>;
         using JType1 = Func1_jacobian<Scalar>;
@@ -172,7 +169,7 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         using GType2 = Func2_gradient<Scalar>;
         using HType2 = Func2_hessian<Scalar>;
 
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<FType2>(orows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<FType2>(orows, 1),
                                     TempSpec<JType2>(orows, irows), TempSpec<GType2>(irows, 1),
                                     TempSpec<HType2>(irows, irows), TempSpec<FType1>(orows, 1),
                                     TempSpec<JType2>(orows, irows));

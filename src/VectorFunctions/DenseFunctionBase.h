@@ -980,79 +980,83 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
                               const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
 
-        Jacobian<double> jx(this->ORows(), this->IRows());
+        auto Impl = [&](auto &x, auto &jx) {
+            Eigen::Map<Output<double>> fx(NULL, this->ORows());
 
-        auto ScalarImpl = [&](int start, int stop) {
-            for (int V = start; V < stop; V++) {
-                this->gatherInput(X, x, V, data);
-
-                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                     this->ORows());
-                fx.setZero();
-                jx.setZero();
-                this->derived().compute_jacobian(x, fx, jx);
-
-                this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
-            }
-        };
-        const int IRR = this->IRows();
-        const int ORR = this->ORows();
-        auto VectorImpl = [&]() {
-            using SuperScalar = Tycho::DefaultSuperScalar;
-            constexpr int vsize = SuperScalar::SizeAtCompileTime;
-            int Packs = data.NumAppl() / vsize;
-
-            Input<SuperScalar> x_vect(this->IRows());
-            Output<SuperScalar> fx_vect(this->ORows());
-            Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
-
-            for (int i = 0; i < Packs; i++) {
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
+            auto ScalarImpl = [&](int start, int stop) {
+                for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
-                    for (int k = 0; k < IRR; k++) {
-                        x_vect[k][j] = x[k];
-                    }
-                }
-                fx_vect.setZero();
-                jx_vect.setZero();
-                this->derived().compute_jacobian(x_vect, fx_vect, jx_vect);
 
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
-                    for (int k = 0; k < IRR; k++) {
-                        for (int l = 0; l < ORR; l++) {
-                            jx(l, k) = jx_vect(l, k)[j];
-                        }
-                    }
+                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                         this->ORows());
+                    fx.setZero();
+                    jx.setZero();
+                    this->derived().compute_jacobian(x, fx, jx);
+
                     this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks,
                                                data);
                 }
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
-                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->ORows());
-                    for (int l = 0; l < ORR; l++) {
-                        fx[l] = fx_vect[l][j];
+            };
+            const int IRR = this->IRows();
+            const int ORR = this->ORows();
+            auto VectorImpl = [&]() {
+                using SuperScalar = Tycho::DefaultSuperScalar;
+                constexpr int vsize = SuperScalar::SizeAtCompileTime;
+                int Packs = data.NumAppl() / vsize;
+
+                Input<SuperScalar> x_vect(this->IRows());
+                Output<SuperScalar> fx_vect(this->ORows());
+                Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
+
+                for (int i = 0; i < Packs; i++) {
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        this->gatherInput(X, x, V, data);
+                        for (int k = 0; k < IRR; k++) {
+                            x_vect[k][j] = x[k];
+                        }
+                    }
+                    fx_vect.setZero();
+                    jx_vect.setZero();
+                    this->derived().compute_jacobian(x_vect, fx_vect, jx_vect);
+
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        for (int k = 0; k < IRR; k++) {
+                            for (int l = 0; l < ORR; l++) {
+                                jx(l, k) = jx_vect(l, k)[j];
+                            }
+                        }
+                        this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes,
+                                                   KKTLocks, data);
+                    }
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        new (&fx) Eigen::Map<Output<double>>(
+                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                        for (int l = 0; l < ORR; l++) {
+                            fx[l] = fx_vect[l][j];
+                        }
                     }
                 }
-            }
 
-            ScalarImpl(Packs * vsize, data.NumAppl());
-        };
+                ScalarImpl(Packs * vsize, data.NumAppl());
+            };
 
-        if constexpr (Derived::IsVectorizable) {
-            if (this->derived().EnableVectorization) {
-                VectorImpl();
+            if constexpr (Derived::IsVectorizable) {
+                if (this->derived().EnableVectorization) {
+                    VectorImpl();
+                } else {
+                    ScalarImpl(0, data.NumAppl());
+                }
             } else {
                 ScalarImpl(0, data.NumAppl());
             }
-        } else {
-            ScalarImpl(0, data.NumAppl());
-        }
+        };
+
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
     }
 
     void constraints_jacobian_adjointgradient(
@@ -1061,31 +1065,33 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
-        Output<double> l(this->ORows());
 
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
-        Eigen::Map<Input<double>> agx(NULL, this->IRows());
+        auto Impl = [&](auto &x, auto &l, auto &jx) {
+            Eigen::Map<Output<double>> fx(NULL, this->ORows());
+            Eigen::Map<Input<double>> agx(NULL, this->IRows());
 
-        Jacobian<double> jx(this->ORows(), this->IRows());
+            for (int V = 0; V < data.NumAppl(); V++) {
+                this->gatherInput(X, x, V, data);
+                this->gatherMult(L, l, V, data);
 
-        for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
-            this->gatherMult(L, l, V, data);
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                     this->ORows());
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                     this->IRows());
 
-            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                 this->ORows());
-            new (&agx)
-                Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                fx.setZero();
+                agx.setZero();
+                jx.setZero();
 
-            fx.setZero();
-            agx.setZero();
-            jx.setZero();
+                this->derived().compute_jacobian_adjointgradient(x, fx, jx, agx, l);
 
-            this->derived().compute_jacobian_adjointgradient(x, fx, jx, agx, l);
+                this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
+            }
+        };
 
-            this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
-        }
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+                                    TempSpec<Output<double>>(this->ORows(), 1),
+                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
     }
 
     /*
@@ -1110,115 +1116,117 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
-        Output<double> l(this->ORows());
 
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
-        Eigen::Map<Input<double>> agx(NULL, this->IRows());
+        auto Impl = [&](auto &x, auto &l, auto &jx, auto &hx) {
+            Eigen::Map<Output<double>> fx(NULL, this->ORows());
+            Eigen::Map<Input<double>> agx(NULL, this->IRows());
 
-        Jacobian<double> jx(this->ORows(), this->IRows());
-        Hessian<double> hx(this->IRows(), this->IRows());
-
-        auto ScalarImpl = [&](int start, int stop) {
-            for (int V = start; V < stop; V++) {
-                this->gatherInput(X, x, V, data);
-                this->gatherMult(L, l, V, data);
-
-                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                     this->ORows());
-                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                     this->IRows());
-
-                fx.setZero();
-                agx.setZero();
-                jx.setZero();
-                hx.setZero();
-
-                this->derived().compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, agx, hx,
-                                                                                l);
-
-                this->derived().KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks,
-                                           data);
-            }
-        };
-
-        const int IRR = this->IRows();
-        const int ORR = this->ORows();
-        auto VectorImpl = [&]() {
-            using SuperScalar = Tycho::DefaultSuperScalar;
-            constexpr int vsize = SuperScalar::SizeAtCompileTime;
-            int Packs = data.NumAppl() / vsize;
-
-            Input<SuperScalar> x_vect(this->IRows());
-            Output<SuperScalar> fx_vect(this->ORows());
-            Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
-            Gradient<SuperScalar> agx_vect(this->IRows());
-            Hessian<SuperScalar> hx_vect(this->IRows(), this->IRows());
-            Output<SuperScalar> l_vect(this->ORows());
-
-            for (int i = 0; i < Packs; i++) {
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
+            auto ScalarImpl = [&](int start, int stop) {
+                for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
                     this->gatherMult(L, l, V, data);
 
-                    for (int k = 0; k < IRR; k++) {
-                        x_vect[k][j] = x[k];
-                    }
-                    for (int k = 0; k < ORR; k++) {
-                        l_vect[k][j] = l[k];
-                    }
-                }
-                fx_vect.setZero();
-                jx_vect.setZero();
-                hx_vect.setZero();
-                agx_vect.setZero();
+                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                         this->ORows());
+                    new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                         this->IRows());
 
-                this->derived().compute_jacobian_adjointgradient_adjointhessian(
-                    x_vect, fx_vect, jx_vect, agx_vect, hx_vect, l_vect);
+                    fx.setZero();
+                    agx.setZero();
+                    jx.setZero();
+                    hx.setZero();
 
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
-                    for (int k = 0; k < IRR; k++) {
-                        for (int l = 0; l < ORR; l++) {
-                            jx(l, k) = jx_vect(l, k)[j];
-                        }
-                    }
-                    for (int k = 0; k < IRR; k++) {
-                        for (int l = k; l < IRR; l++) {
-                            hx(l, k) = hx_vect(l, k)[j];
-                        }
-                    }
+                    this->derived().compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, agx,
+                                                                                    hx, l);
+
                     this->derived().KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
                                                KKTLocks, data);
                 }
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
-                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->ORows());
-                    for (int l = 0; l < ORR; l++) {
-                        fx[l] = fx_vect[l][j];
+            };
+
+            const int IRR = this->IRows();
+            const int ORR = this->ORows();
+            auto VectorImpl = [&]() {
+                using SuperScalar = Tycho::DefaultSuperScalar;
+                constexpr int vsize = SuperScalar::SizeAtCompileTime;
+                int Packs = data.NumAppl() / vsize;
+
+                Input<SuperScalar> x_vect(this->IRows());
+                Output<SuperScalar> fx_vect(this->ORows());
+                Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
+                Gradient<SuperScalar> agx_vect(this->IRows());
+                Hessian<SuperScalar> hx_vect(this->IRows(), this->IRows());
+                Output<SuperScalar> l_vect(this->ORows());
+
+                for (int i = 0; i < Packs; i++) {
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        this->gatherInput(X, x, V, data);
+                        this->gatherMult(L, l, V, data);
+
+                        for (int k = 0; k < IRR; k++) {
+                            x_vect[k][j] = x[k];
+                        }
+                        for (int k = 0; k < ORR; k++) {
+                            l_vect[k][j] = l[k];
+                        }
                     }
-                    new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                         this->IRows());
-                    for (int l = 0; l < IRR; l++) {
-                        agx[l] = agx_vect[l][j];
+                    fx_vect.setZero();
+                    jx_vect.setZero();
+                    hx_vect.setZero();
+                    agx_vect.setZero();
+
+                    this->derived().compute_jacobian_adjointgradient_adjointhessian(
+                        x_vect, fx_vect, jx_vect, agx_vect, hx_vect, l_vect);
+
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        for (int k = 0; k < IRR; k++) {
+                            for (int l = 0; l < ORR; l++) {
+                                jx(l, k) = jx_vect(l, k)[j];
+                            }
+                        }
+                        for (int k = 0; k < IRR; k++) {
+                            for (int l = k; l < IRR; l++) {
+                                hx(l, k) = hx_vect(l, k)[j];
+                            }
+                        }
+                        this->derived().KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
+                                                   KKTLocks, data);
+                    }
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        new (&fx) Eigen::Map<Output<double>>(
+                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                        for (int l = 0; l < ORR; l++) {
+                            fx[l] = fx_vect[l][j];
+                        }
+                        new (&agx) Eigen::Map<Input<double>>(
+                            AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                        for (int l = 0; l < IRR; l++) {
+                            agx[l] = agx_vect[l][j];
+                        }
                     }
                 }
-            }
 
-            ScalarImpl(Packs * vsize, data.NumAppl());
-        };
+                ScalarImpl(Packs * vsize, data.NumAppl());
+            };
 
-        if constexpr (Derived::IsVectorizable) {
-            if (this->derived().EnableVectorization) {
-                VectorImpl();
+            if constexpr (Derived::IsVectorizable) {
+                if (this->derived().EnableVectorization) {
+                    VectorImpl();
+                } else {
+                    ScalarImpl(0, data.NumAppl());
+                }
             } else {
                 ScalarImpl(0, data.NumAppl());
             }
-        } else {
-            ScalarImpl(0, data.NumAppl());
-        }
+        };
+
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+                                    TempSpec<Output<double>>(this->ORows(), 1),
+                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()),
+                                    TempSpec<Hessian<double>>(this->IRows(), this->IRows()));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1241,7 +1249,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         freeloc++;
     }
 
-    void KKTFillAll(int Apl, const Jacobian<double> &jx, const Hessian<double> &hx,
+    template <class JacType, class HessType>
+    void KKTFillAll(int Apl, const JacType &jx, const HessType &hx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
                     std::vector<std::mutex> &ClashLocks, const SolverIndexingData &data) const {
@@ -1291,7 +1300,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         }
     }
 
-    void KKTFillJac(int Apl, const Jacobian<double> &jx,
+    template <class JacType>
+    void KKTFillJac(int Apl, const JacType &jx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     Eigen::Ref<Eigen::VectorXi> KKTLocs, Eigen::Ref<Eigen::VectorXi> VarClashes,
                     std::vector<std::mutex> &ClashLocks, const SolverIndexingData &data) const {

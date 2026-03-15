@@ -294,8 +294,7 @@ add_definitions(-DTYCHO_DEFAULT_FUNC_THREADS=16) ## no spaces between = !!!! oth
 ###  initial size of asset arena memory allocator in number of doubles/superscalars
 add_definitions(-DTYCHO_DEFAULT_ARENA_SIZE=256) ## no spaces between = !!!! otherwise it is set to one
 
-### Comment out to roll back to old memory allocator. We will get rid of this once confident in arena
-add_definitions(-DTYCHO_MEMORYMAN)
+### Arena memory allocator is always on (TYCHO_MEMORYMAN removed — BumpAllocator rewrite)
 
 add_definitions(-DTYCHO_COMPILERVERSION="${CMAKE_CXX_COMPILER_VERSION}")
 add_definitions(-DTYCHO_VERSIONSTRING="${CMAKE_PROJECT_VERSION}")

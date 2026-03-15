@@ -83,9 +83,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         };
 
         const int orows = this->inner_func.ORows();
-        const int crit_size = orows;
         using FType = InnerFunc_Output<Scalar>;
-        MemoryManager::allocate_run(crit_size, Impl, TempSpec<FType>(orows, 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -109,14 +108,10 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
             const int inner_OR = this->inner_func.ORows();
             const int inner_IR = this->inner_func.IRows();
-            const int outer_OR = this->outer_func.ORows();
-            const int outer_IR = this->outer_func.IRows();
-            const int crit_size = std::max({inner_OR, inner_IR, outer_OR, outer_IR});
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
-            using OJXType = OuterFunc_jacobian<Scalar>;
-            MemoryManager::allocate_run(crit_size, Impl, TempSpec<IFXType>(inner_OR, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<IFXType>(inner_OR, 1),
                                         TempSpec<IJXType>(inner_OR, inner_IR));
 
         } else {
@@ -131,12 +126,11 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int inner_IR = this->inner_func.IRows();
             const int outer_OR = this->outer_func.ORows();
             const int outer_IR = this->outer_func.IRows();
-            const int crit_size = std::max({inner_OR, inner_IR, outer_OR, outer_IR});
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
             using OJXType = OuterFunc_jacobian<Scalar>;
-            MemoryManager::allocate_run(crit_size, Impl, TempSpec<IFXType>(inner_OR, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<IFXType>(inner_OR, 1),
                                         TempSpec<IJXType>(inner_OR, inner_IR),
                                         TempSpec<OJXType>(outer_OR, outer_IR));
         }
@@ -171,17 +165,13 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
             const int inner_OR = this->inner_func.ORows();
             const int inner_IR = this->inner_func.IRows();
-            const int outer_OR = this->outer_func.ORows();
             const int outer_IR = this->outer_func.IRows();
-            const int crit_size = std::max({inner_OR, inner_IR, outer_OR, outer_IR});
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
-            using OJXType = OuterFunc_jacobian<Scalar>;
             using OGXType = OuterFunc_gradient<Scalar>;
-            using OHXType = OuterFunc_hessian<Scalar>;
 
-            MemoryManager::allocate_run(crit_size, Impl, TempSpec<IFXType>(inner_OR, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<IFXType>(inner_OR, 1),
                                         TempSpec<IJXType>(inner_OR, inner_IR),
                                         TempSpec<OGXType>(outer_IR, 1));
         } else {
@@ -242,7 +232,6 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int inner_IR = this->inner_func.IRows();
             const int outer_OR = this->outer_func.ORows();
             const int outer_IR = this->outer_func.IRows();
-            const int crit_size = std::max({inner_OR, inner_IR, outer_OR, outer_IR});
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
@@ -250,11 +239,10 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             using OGXType = OuterFunc_gradient<Scalar>;
             using OHXType = OuterFunc_hessian<Scalar>;
 
-            MemoryManager::allocate_run(
-                crit_size, Impl, TempSpec<IFXType>(inner_OR, 1),
-                TempSpec<IJXType>(inner_OR, inner_IR), TempSpec<OJXType>(outer_OR, outer_IR),
-                TempSpec<OGXType>(outer_IR, 1), TempSpec<OHXType>(outer_IR, outer_IR),
-                TempSpec<IJXType>(inner_OR, inner_IR));
+            BumpAllocator::allocate_run(
+                Impl, TempSpec<IFXType>(inner_OR, 1), TempSpec<IJXType>(inner_OR, inner_IR),
+                TempSpec<OJXType>(outer_OR, outer_IR), TempSpec<OGXType>(outer_IR, 1),
+                TempSpec<OHXType>(outer_IR, outer_IR), TempSpec<IJXType>(inner_OR, inner_IR));
         }
     }
 

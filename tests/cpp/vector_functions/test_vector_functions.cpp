@@ -2,7 +2,7 @@
 // VectorFunction DSL tests
 //
 // Tests the core VF expression system, autodiff jacobians, and type erasure
-// via GenericFunction. Requires MemoryManager initialization before compute
+// via GenericFunction. Requires BumpAllocator initialization before compute
 // calls.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -14,12 +14,12 @@ using namespace Tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Test fixture — initialise MemoryManager once for the suite
+// Test fixture — initialise BumpAllocator once for the suite
 ///////////////////////////////////////////////////////////////////////////////
 
 class VectorFunctionTest : public ::testing::Test {
   protected:
-    static void SetUpTestSuite() { MemoryManager::resize(64, 64); }
+    static void SetUpTestSuite() { BumpAllocator::resize(64, 64); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////

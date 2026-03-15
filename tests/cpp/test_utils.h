@@ -32,12 +32,12 @@ inline Eigen::VectorXd deterministic_random_vector(int n, unsigned seed = 42, do
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// VectorFunction test fixture — initialises MemoryManager once
+// VectorFunction test fixture — initialises BumpAllocator once
 ///////////////////////////////////////////////////////////////////////////////
 
 class VectorFunctionFixture : public ::testing::Test {
   protected:
-    static void SetUpTestSuite() { MemoryManager::resize(256, 256); }
+    static void SetUpTestSuite() { BumpAllocator::resize(256, 256); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////

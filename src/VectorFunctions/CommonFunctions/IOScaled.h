@@ -64,7 +64,7 @@ struct IOScaled
             }
         };
 
-        MemoryManager::allocate_run(this->IRows(), Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -90,7 +90,7 @@ struct IOScaled
             }
         };
 
-        MemoryManager::allocate_run(this->IRows(), Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -131,7 +131,7 @@ struct IOScaled
             }
         };
 
-        MemoryManager::allocate_run(this->IRows(), Impl, TempSpec<Input<Scalar>>(this->IRows(), 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1),
                                     TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
 };

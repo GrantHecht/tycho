@@ -59,7 +59,7 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        MemoryManager::allocate_run(this->size, Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
+        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
                                     TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType>
@@ -102,7 +102,7 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        MemoryManager::allocate_run(this->size, Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
+        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
                                     TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -178,7 +178,7 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             adjgrad.noalias() = (adjvars.transpose() * jx_).transpose();
         };
 
-        MemoryManager::allocate_run(this->size, Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
+        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
                                     TempSpec<Mat<Scalar>>(this->size, this->size),
                                     TempSpec<Mat<Scalar>>(this->size, this->size));
     }

@@ -34,6 +34,8 @@
 // =============================================================================
 
 #pragma once
+#include <concepts>
+
 #include "DetectSuperScalar.h"
 #include "FunctionalFlags.h"
 #include "IndexingData.h"
@@ -42,9 +44,7 @@
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
-#if defined(TYCHO_MEMORYMAN)
 #include "Utils/MemoryManagement.h"
-#endif
 
 namespace Tycho {
 
@@ -226,93 +226,98 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {
 
-        Input<double> x(this->IRows());
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
+        auto Impl = [&](auto &x) {
+            Eigen::Map<Output<double>> fx(NULL, this->ORows());
 
-        const int IRR = this->IRows();
-        const int ORR = this->ORows();
+            const int IRR = this->IRows();
+            const int ORR = this->ORows();
 
-        // Scalar non-vectorized call to the funtion
-        auto ScalarImpl = [&](int start, int stop) {
-            for (int V = start; V < stop; V++) {
-                this->gatherInput(X, x, V, data);
-                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                     this->ORows());
-                fx.setZero();
-                this->derived().compute(x, fx);
-            }
-        };
-
-        /*
-        Super Scalar vectorized call to the function.
-        Does as many fully packed vectorized calls as possible
-        then reverts to the scalar implementation.
-        */
-
-        auto VectorImpl = [&]() {
-            using SuperScalar = Tycho::DefaultSuperScalar;
-            constexpr int vsize = SuperScalar::SizeAtCompileTime;
-            int Packs = data.NumAppl() / vsize;
-            ;
-
-            Input<SuperScalar> x_vect(this->IRows());
-            Output<SuperScalar> fx_vect(this->ORows());
-
-            for (int i = 0; i < Packs; i++) {
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
+            // Scalar non-vectorized call to the funtion
+            auto ScalarImpl = [&](int start, int stop) {
+                for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
-                    for (int k = 0; k < IRR; k++) {
-                        x_vect[k][j] = x[k];
-                    }
-                }
-                fx_vect.setZero();
-                this->derived().compute(x_vect, fx_vect);
-                for (int j = 0; j < vsize; j++) {
-                    int V = i * vsize + j;
                     new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
                                                          this->ORows());
-                    for (int l = 0; l < ORR; l++) {
-                        fx[l] = fx_vect[l][j];
+                    fx.setZero();
+                    this->derived().compute(x, fx);
+                }
+            };
+
+            /*
+            Super Scalar vectorized call to the function.
+            Does as many fully packed vectorized calls as possible
+            then reverts to the scalar implementation.
+            */
+
+            auto VectorImpl = [&]() {
+                using SuperScalar = Tycho::DefaultSuperScalar;
+                constexpr int vsize = SuperScalar::SizeAtCompileTime;
+                int Packs = data.NumAppl() / vsize;
+
+                Input<SuperScalar> x_vect(this->IRows());
+                Output<SuperScalar> fx_vect(this->ORows());
+
+                for (int i = 0; i < Packs; i++) {
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        this->gatherInput(X, x, V, data);
+                        for (int k = 0; k < IRR; k++) {
+                            x_vect[k][j] = x[k];
+                        }
+                    }
+                    fx_vect.setZero();
+                    this->derived().compute(x_vect, fx_vect);
+                    for (int j = 0; j < vsize; j++) {
+                        int V = i * vsize + j;
+                        new (&fx) Eigen::Map<Output<double>>(
+                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                        for (int l = 0; l < ORR; l++) {
+                            fx[l] = fx_vect[l][j];
+                        }
                     }
                 }
-            }
-            ScalarImpl(Packs * vsize, data.NumAppl());
-        };
+                ScalarImpl(Packs * vsize, data.NumAppl());
+            };
 
-        // Only try vectorized impl if Derived allows and it is enabled
-        if constexpr (Vectorizable<Derived>) {
-            if (this->derived().EnableVectorization) {
-                VectorImpl();
+            // Only try vectorized impl if Derived allows and it is enabled
+            if constexpr (Vectorizable<Derived>) {
+                if (this->derived().EnableVectorization) {
+                    VectorImpl();
+                } else {
+                    ScalarImpl(0, data.NumAppl());
+                }
             } else {
                 ScalarImpl(0, data.NumAppl());
             }
-        } else {
-            ScalarImpl(0, data.NumAppl());
-        }
+        };
+
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1));
     }
 
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
                                      ConstEigenRef<Eigen::VectorXd> L, EigenRef<Eigen::VectorXd> FX,
                                      EigenRef<Eigen::VectorXd> AGX,
                                      const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
-        Output<double> l(this->ORows());
 
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
-        Eigen::Map<Input<double>> agx(NULL, this->IRows());
+        auto Impl = [&](auto &x, auto &l) {
+            Eigen::Map<Output<double>> fx(NULL, this->ORows());
+            Eigen::Map<Input<double>> agx(NULL, this->IRows());
 
-        for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
-            this->gatherMult(L, l, V, data);
-            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                 this->ORows());
-            new (&agx)
-                Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V], this->IRows());
-            fx.setZero();
-            agx.setZero();
-            this->derived().compute_adjointgradient(x, fx, agx, l);
-        }
+            for (int V = 0; V < data.NumAppl(); V++) {
+                this->gatherInput(X, x, V, data);
+                this->gatherMult(L, l, V, data);
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                                                     this->ORows());
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                                                     this->IRows());
+                fx.setZero();
+                agx.setZero();
+                this->derived().compute_adjointgradient(x, fx, agx, l);
+            }
+        };
+
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+                                    TempSpec<Output<double>>(this->ORows(), 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -329,7 +334,10 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
      * known compile time constant. This was observed to provide a modest but measurable perf
      * improvement.
      */
-    inline void gatherInput(ConstEigenRef<Eigen::VectorXd> X, Input<double> &xt, int V,
+    template <class XtType>
+        requires std::derived_from<std::remove_cvref_t<XtType>,
+                                   Eigen::EigenBase<std::remove_cvref_t<XtType>>>
+    inline void gatherInput(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
                             const SolverIndexingData &data) const {
         if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
             xt = X.template segment<IR>(data.VLoc(0, V), this->IRows());
@@ -344,7 +352,10 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
      * from the optimizer multipler vector, L, into the local multiplier vector of the function, lt.
      * See above for justification.
      */
-    inline void gatherMult(ConstEigenRef<Eigen::VectorXd> L, Output<double> &l, int V,
+    template <class LType>
+        requires std::derived_from<std::remove_cvref_t<LType>,
+                                   Eigen::EigenBase<std::remove_cvref_t<LType>>>
+    inline void gatherMult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
                            const SolverIndexingData &data) const {
         if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {
             l = L.template segment<OR>(data.CLoc(0, V), this->ORows());

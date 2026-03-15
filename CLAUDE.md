@@ -17,8 +17,7 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously. 
 
 As a rule of thumb:
-- 1 build system wide: -j4 (library only), -j2 (with tests/benchmarks)
-- 2 simultaneous builds system wide: -j2
+- ALWAYS use -j2 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -77,7 +76,7 @@ tests/                  C++ test suite (Google Test)
     integrators/        RK stepper, STM, dense output tests
     optimal_control/    Phase construction, collocation, mesh refinement tests
     solvers/            PSIOPT convergence, NLP structure, Jet tests
-    utils/              TypeStorage, ThreadPool, MemoryManager tests
+    utils/              TypeStorage, ThreadPool, BumpAllocator tests
     vector_functions/   VF DSL, composition, Hessian, generic function tests
 
 bench/                  Benchmark suite and tracking
@@ -92,7 +91,7 @@ bench/                  Benchmark suite and tracking
     integrators/        RK stepper throughput benchmarks
     optimal_control/    Phase construction + transcription benchmarks
     solvers/            PSIOPT end-to-end convergence benchmarks
-    utils/              TypeStorage, MemoryManager, ThreadPool benchmarks
+    utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
 
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
@@ -145,10 +144,6 @@ cd build && ninja -j4 all
 
 **Subsequent builds** (after C++ source changes):
 ```bash
-# Library only (no tests/benchmarks)
-cd build && ninja -j4 all
-
-# When also building tests and/or benchmarks
 cd build && ninja -j2 all
 ```
 

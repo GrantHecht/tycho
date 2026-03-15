@@ -105,7 +105,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             fx[0] = xtmp[0];
         };
 
-        MemoryManager::allocate_run(irows, Impl, TempSpec<Input<Scalar>>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
                                     TempSpec<Jacobian<Scalar>>(1, irows));
     }
 
@@ -129,7 +129,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             jx(0, 0) = 0;
         };
 
-        MemoryManager::allocate_run(irows, Impl, TempSpec<Input<Scalar>>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
                                     TempSpec<Jacobian<Scalar>>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -167,7 +167,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             adjhess.col(0).setZero();
         };
 
-        MemoryManager::allocate_run(irows, Impl, TempSpec<Input<Scalar>>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
                                     TempSpec<Jacobian<Scalar>>(1, irows),
                                     TempSpec<Hessian<Scalar>>(irows, irows));
     }

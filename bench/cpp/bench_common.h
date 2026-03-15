@@ -15,7 +15,7 @@ using namespace Tycho;
 namespace TychoBench {
 inline void ensure_runtime_initialized() {
     static bool done = [] {
-        MemoryManager::resize(256, 256);
+        BumpAllocator::resize(256, 256);
         Tycho::ensure_mkl_initialized();
         return true;
     }();

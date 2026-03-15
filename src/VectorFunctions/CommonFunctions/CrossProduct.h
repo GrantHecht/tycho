@@ -198,31 +198,9 @@ struct FunctionCrossProduct_Impl
                                                std::bool_constant<false>());
         };
 
-#if defined(TYCHO_MEMORYMAN)
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         const int irows = this->IRows();
-        MemoryManager::allocate_run(irows, Impl, TempSpec<JType>(3, irows),
-                                    TempSpec<JType>(3, irows));
-#else
-        if constexpr (Base::InputIsDynamic) {
-            const int irows = this->IRows();
-            auto DynImpl = [&](auto maxsize) {
-                Eigen::Matrix<Scalar, 3, -1, 0, 3, maxsize.value> jx1(3, this->IRows());
-                Eigen::Matrix<Scalar, 3, -1, 0, 3, maxsize.value> jx2(3, this->IRows());
-                jx1.setZero();
-                jx2.setZero();
-
-                Impl(jx1, jx2);
-            };
-            LambdaJumpTable<6, 8, 16>::run(DynImpl, irows);
-        } else {
-            Eigen::Matrix<Scalar, 3, Base::IRC> jx1(3, this->IRows());
-            Eigen::Matrix<Scalar, 3, Base::IRC> jx2(3, this->IRows());
-            jx1.setZero();
-            jx2.setZero();
-            Impl(jx1, jx2);
-        }
-#endif
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -288,50 +266,14 @@ struct FunctionCrossProduct_Impl
                                                std::bool_constant<false>());
         };
 
-#if defined(TYCHO_MEMORYMAN)
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
         const int irows = this->IRows();
 
-        MemoryManager::allocate_run(irows, Impl, TempSpec<JType>(3, irows),
-                                    TempSpec<JType>(3, irows), TempSpec<JType>(3, irows),
-                                    TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
-#else
-        if constexpr (Base::InputIsDynamic) {
-            const int irows = this->IRows();
-            auto DynImpl = [&](auto maxsize) {
-                MaxVector<Scalar, maxsize.value> gx2;
-                MaxMatrix<Scalar, maxsize.value> hx2;
-                Eigen::Matrix<Scalar, 3, -1, 0, 3, maxsize.value> jx1;
-                Eigen::Matrix<Scalar, 3, -1, 0, 3, maxsize.value> jx2;
-                Eigen::Matrix<Scalar, 3, -1, 0, 3, maxsize.value> jtemp;
-                gx2.resize(this->IRows());
-                hx2.resize(this->IRows(), this->IRows());
-                jx1.resize(3, this->IRows());
-                jx2.resize(3, this->IRows());
-                jtemp.resize(3, this->IRows());
-                Impl(jx1, jx2, jtemp, gx2, hx2);
-            };
-            LambdaJumpTable<6, 8, 16>::run(DynImpl, irows);
-        } else {
-
-            Func2_gradient<Scalar> gx2(this->func2.IRows());
-            gx2.setZero();
-            Func2_hessian<Scalar> hx2(this->func2.IRows(), this->func2.IRows());
-            hx2.setZero();
-
-            Eigen::Matrix<Scalar, 3, Base::IRC> jtemp(3, this->IRows());
-            Eigen::Matrix<Scalar, 3, Base::IRC> jx1(3, this->IRows());
-            Eigen::Matrix<Scalar, 3, Base::IRC> jx2(3, this->IRows());
-            jx1.setZero();
-            jx2.setZero();
-
-            jtemp.setZero();
-
-            Impl(jx1, jx2, jtemp, gx2, hx2);
-        }
-#endif
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows),
+                                    TempSpec<JType>(3, irows), TempSpec<GType>(irows, 1),
+                                    TempSpec<HType>(irows, irows));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -11,16 +11,16 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - Full rewrite: BumpStack with save/restore, SIMD alignment, learning
 // =============================================================================
 
 #include "MemoryManagement.h"
 
 namespace Tycho {
 
-thread_local MemoryManager::SuperScalarStackType MemoryManager::SuperScalarStack =
-    detail::TempStack<DefaultSuperScalar>(TYCHO_DEFAULT_ARENA_SIZE);
-thread_local MemoryManager::ScalarStackType MemoryManager::ScalarStack =
-    detail::TempStack<double>(TYCHO_DEFAULT_ARENA_SIZE);
-bool MemoryManager::UseArena = true;
+thread_local BumpAllocator::SuperScalarStackType BumpAllocator::SuperScalarStack =
+    detail::BumpStack<DefaultSuperScalar>(TYCHO_DEFAULT_ARENA_SIZE);
+thread_local BumpAllocator::ScalarStackType BumpAllocator::ScalarStack =
+    detail::BumpStack<double>(TYCHO_DEFAULT_ARENA_SIZE);
 
 } // namespace Tycho

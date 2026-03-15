@@ -13,13 +13,18 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "MemoryManagerBind.h"
-#include "MemoryManagement.h"
+#pragma once
+#ifdef TYCHO_PYTHON_BINDINGS
 
-using namespace Tycho;
+#include "FunctionRegistry.h"
+#include "Utils/MemoryManagement.h"
 
-void TychoBind<MemoryManager>::Build(nb::module_ &m) {
-    auto obj = nb::class_<MemoryManager>(m, "MemoryManager");
-    obj.def_static("enable_arena_memory", []() { MemoryManager::enable_arena_memory(); });
-    obj.def_static("disable_arena_memory", []() { MemoryManager::disable_arena_memory(); });
-}
+namespace Tycho {
+
+template <> struct TychoBind<BumpAllocator> {
+    static void Build(nb::module_ &m);
+};
+
+} // namespace Tycho
+
+#endif // TYCHO_PYTHON_BINDINGS
