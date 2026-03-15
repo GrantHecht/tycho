@@ -1,7 +1,12 @@
 ---
 name: pre-merge
-description: Run the full pre-merge validation procedure — build, tests, benchmarks, format check — and post results as a PR comment.
-allowed-tools: Bash, Read, Grep, Glob, Agent
+description: "Run the full pre-merge validation procedure: build, tests, benchmarks, format check, and post results as a PR comment."
+allowed-tools:
+  - Bash
+  - Read
+  - Grep
+  - Glob
+  - Agent
 ---
 
 # Pre-Merge Validation
