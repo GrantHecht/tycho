@@ -76,7 +76,7 @@ tests/                  C++ test suite (Google Test)
     integrators/        RK stepper, STM, dense output tests
     optimal_control/    Phase construction, collocation, mesh refinement tests
     solvers/            PSIOPT convergence, NLP structure, Jet tests
-    utils/              TypeStorage, ThreadPool, MemoryManager tests
+    utils/              TypeStorage, ThreadPool, BumpAllocator tests
     vector_functions/   VF DSL, composition, Hessian, generic function tests
 
 bench/                  Benchmark suite and tracking
@@ -91,7 +91,7 @@ bench/                  Benchmark suite and tracking
     integrators/        RK stepper throughput benchmarks
     optimal_control/    Phase construction + transcription benchmarks
     solvers/            PSIOPT end-to-end convergence benchmarks
-    utils/              TypeStorage, MemoryManager, ThreadPool benchmarks
+    utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
 
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)

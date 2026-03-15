@@ -192,9 +192,3 @@ TEST(BumpAllocatorTest, VFComputeAfterResize) {
     n.compute(x, fx);
     EXPECT_NEAR(fx[0], 5.0, 1e-12);
 }
-
-TEST(BumpAllocatorTest, MemoryManagerAliasWorks) {
-    // MemoryManager is an alias for BumpAllocator
-    MemoryManager::resize(128);
-    EXPECT_EQ(MemoryManager::size_scalar(), 128);
-}

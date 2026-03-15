@@ -212,7 +212,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         };
 
         const int orows = this->func.ORows();
-        MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -302,7 +302,7 @@ struct RowScaled_Impl
         };
 
         const int orows = this->ORows();
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -321,7 +321,7 @@ struct RowScaled_Impl
         };
 
         const int orows = this->ORows();
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -347,7 +347,7 @@ struct RowScaled_Impl
         };
 
         const int orows = this->ORows();
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1),
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1),
                                            TempSpec<Output<Scalar>>(orows, 1));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -455,7 +455,7 @@ struct MatrixScaled_Impl
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fx).eval();
             };
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
         } else {
 
@@ -465,7 +465,7 @@ struct MatrixScaled_Impl
                 fx = (mattmp * fxtmp);
             };
 
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
         }
@@ -485,7 +485,7 @@ struct MatrixScaled_Impl
                 this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
         } else {
 
@@ -497,7 +497,7 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<false>());
             };
 
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
@@ -526,7 +526,7 @@ struct MatrixScaled_Impl
                 this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1)
 
@@ -543,7 +543,7 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<false>());
             };
 
-            Tycho::MemoryManager::allocate_run(
+            Tycho::BumpAllocator::allocate_run(
                 Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
                 TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
                 TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),

@@ -330,7 +330,4 @@ struct BumpAllocator {
     }
 };
 
-// Backwards-compatible alias
-using MemoryManager = BumpAllocator;
-
 } // namespace Tycho

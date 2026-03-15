@@ -1055,7 +1055,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        MemoryManager::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
                                     TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
     }
 
@@ -1090,7 +1090,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        MemoryManager::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
                                     TempSpec<Output<double>>(this->ORows(), 1),
                                     TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
     }
@@ -1224,7 +1224,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        MemoryManager::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
                                     TempSpec<Output<double>>(this->ORows(), 1),
                                     TempSpec<Jacobian<double>>(this->ORows(), this->IRows()),
                                     TempSpec<Hessian<double>>(this->IRows(), this->IRows()));

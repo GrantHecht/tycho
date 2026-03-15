@@ -103,7 +103,7 @@ struct VectorScalarFunctionProduct_Impl
 
         const int irows = this->scalarfunc.IRows();
         using JType = ScalFunc_jacobian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<JType>(1, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -221,7 +221,7 @@ struct VectorScalarFunctionProduct_Impl
         using HType = ScalFunc_hessian<Scalar>;
         using AType = Output<Scalar>;
 
-        MemoryManager::allocate_run(Impl, TempSpec<JType>(1, irows), TempSpec<GType>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(1, irows), TempSpec<GType>(irows, 1),
                                     TempSpec<HType>(irows, irows), TempSpec<AType>(orows, 1));
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -81,7 +81,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             fx = xtup; // Next State
         };
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
             TempSpec<ODEState<Scalar>>(this->ode.IRows(), 1));
     }
@@ -164,7 +164,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 
         using KXjacType = Eigen::Matrix<Scalar, DODE::XV, Base::IRC>;
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
             TempSpec<ODEState<Scalar>>(this->ode.IRows(), 1),
             TempSpec<ODEJacobian<Scalar>>(this->ode.ORows(), this->ode.IRows()),
@@ -311,7 +311,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 
         using KXjacType = Eigen::Matrix<Scalar, DODE::XV, Base::IRC>;
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
             TempSpec<ODEState<Scalar>>(this->ode.IRows(), 1),
             ArrayOfTempSpecs<ODEJacobian<Scalar>, Stages>(this->ode.ORows(), this->ode.IRows()),

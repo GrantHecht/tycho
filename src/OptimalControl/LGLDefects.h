@@ -115,7 +115,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         const int irowsode = this->ode.IRows();
         const int orowsode = this->ode.ORows();
 
-        MemoryManager::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1));
@@ -271,7 +271,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         const int irowsode = this->ode.IRows();
         const int orowsode = this->ode.ORows();
 
-        MemoryManager::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
@@ -515,7 +515,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         const int irowsode = this->ode.IRows();
         const int orowsode = this->ode.ORows();
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
             ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
             ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode), TempSpec<AGXType>(irowsode, 1),

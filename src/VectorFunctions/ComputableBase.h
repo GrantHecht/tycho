@@ -289,7 +289,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             }
         };
 
-        MemoryManager::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1));
     }
 
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
@@ -314,7 +314,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             }
         };
 
-        MemoryManager::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
                                     TempSpec<Output<double>>(this->ORows(), 1));
     }
 

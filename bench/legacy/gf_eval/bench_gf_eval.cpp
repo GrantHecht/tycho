@@ -101,7 +101,7 @@ double time_vjp(GenericFunction<-1, -1>& gf, int N) {
     Eigen::MatrixXd hx_s(gf.IRows(), gf.IRows()); hx_s.setZero();
     Eigen::VectorXd l_s(gf.ORows());              l_s.setOnes();
 
-    MemoryManager::resize(64, 64);
+    BumpAllocator::resize(64, 64);
 
     volatile double dummy = 0.0;
     auto t0 = Clock::now();

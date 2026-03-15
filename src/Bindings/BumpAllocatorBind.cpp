@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "MemoryManagerBind.h"
+#include "BumpAllocatorBind.h"
 #include "MemoryManagement.h"
 
 using namespace Tycho;

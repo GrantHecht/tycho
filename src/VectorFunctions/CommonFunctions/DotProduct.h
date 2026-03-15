@@ -96,7 +96,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using FType1 = Func1_Output<Scalar>;
             using FType2 = Func2_Output<Scalar>;
 
-            MemoryManager::allocate_run(Impl, TempSpec<FType1>(orows, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
                                         TempSpec<FType2>(orows, 1));
         }
     }
@@ -143,7 +143,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using FType2 = Func2_Output<Scalar>;
             using JType2 = Func2_jacobian<Scalar>;
 
-            MemoryManager::allocate_run(Impl, TempSpec<FType1>(orows, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
                                         TempSpec<FType2>(orows, 1), TempSpec<JType1>(orows, irows),
                                         TempSpec<JType2>(orows, irows));
         }
@@ -259,7 +259,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using GType2 = Func2_gradient<Scalar>;
             using HType2 = Func2_hessian<Scalar>;
 
-            MemoryManager::allocate_run(Impl, TempSpec<FType1>(orows, 1),
+            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
                                         TempSpec<FType2>(orows, 1), TempSpec<JType1>(orows, irows),
                                         TempSpec<JType2>(orows, irows), TempSpec<GType2>(irows, 1),
                                         TempSpec<HType2>(irows, irows), TempSpec<FType1>(orows, 1));

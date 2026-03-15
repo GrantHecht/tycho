@@ -28,7 +28,7 @@ nanobind_add_module(_tycho
     TychoModule.cpp
     # Utils bindings
     UtilsBind.cpp
-    MemoryManagerBind.cpp
+    BumpAllocatorBind.cpp
     # VectorFunctions bindings
     VectorFunctions/Tycho_VectorFunctions.cpp
     VectorFunctions/VectorFunctionBuildPart1.cpp

@@ -200,7 +200,7 @@ struct FunctionCrossProduct_Impl
 
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         const int irows = this->IRows();
-        MemoryManager::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -271,7 +271,7 @@ struct FunctionCrossProduct_Impl
         using HType = Func2_hessian<Scalar>;
         const int irows = this->IRows();
 
-        MemoryManager::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows),
+        BumpAllocator::allocate_run(Impl, TempSpec<JType>(3, irows), TempSpec<JType>(3, irows),
                                     TempSpec<JType>(3, irows), TempSpec<GType>(irows, 1),
                                     TempSpec<HType>(irows, irows));
     }

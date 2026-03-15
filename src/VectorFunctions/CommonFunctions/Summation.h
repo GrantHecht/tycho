@@ -183,7 +183,7 @@ struct TwoFunctionSum_Impl
 
         const int orows = this->func2.ORows();
         using FType = Func2_Output<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -208,7 +208,7 @@ struct TwoFunctionSum_Impl
         const int irows = this->func2.IRows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -253,7 +253,7 @@ struct TwoFunctionSum_Impl
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
                                     TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
     }
 
@@ -438,7 +438,7 @@ struct MultiFunctionSum_Impl
 
         const int orows = this->func2.ORows();
         using FType = Func2_Output<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -480,7 +480,7 @@ struct MultiFunctionSum_Impl
         const int irows = this->func2.IRows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -538,7 +538,7 @@ struct MultiFunctionSum_Impl
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
                                     TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
     }
 

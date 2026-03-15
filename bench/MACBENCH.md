@@ -2,7 +2,7 @@
 
 ### Overview
 
-The C++ benchmark suite uses [Google Benchmark](https://github.com/google/benchmark) (v1.9.5, fetched automatically via CMake FetchContent). All 46 benchmarks compile into a single executable (`bench_all`) covering every major subsystem: Kepler/Lambert astrodynamics, VectorFunction DSL evaluation, type erasure dispatch, RK integrators, optimal control transcription, PSIOPT solver convergence, and utility primitives (TypeStorage, MemoryManager, ThreadPool).
+The C++ benchmark suite uses [Google Benchmark](https://github.com/google/benchmark) (v1.9.5, fetched automatically via CMake FetchContent). All 46 benchmarks compile into a single executable (`bench_all`) covering every major subsystem: Kepler/Lambert astrodynamics, VectorFunction DSL evaluation, type erasure dispatch, RK integrators, optimal control transcription, PSIOPT solver convergence, and utility primitives (TypeStorage, BumpAllocator, ThreadPool).
 
 A local tracking script (`bench/bench_track.sh`) records results keyed by git commit hash and compares runs to detect performance regressions.
 
@@ -105,6 +105,6 @@ bench/bench_track.sh compare
 | `integrators/bench_integrators.cpp` | 7 | RK stepper throughput (DOPRI54/87, fixed-step, dense output) |
 | `optimal_control/bench_optimal_control.cpp` | 4 | Phase construction + LGL3 transcription |
 | `solvers/bench_solvers.cpp` | 2 | End-to-end PSIOPT convergence |
-| `utils/bench_utils.cpp` | 7 | TypeStorage SBO, MemoryManager, ThreadPool dispatch |
+| `utils/bench_utils.cpp` | 7 | TypeStorage SBO, BumpAllocator, ThreadPool dispatch |
 
 Shared ODE definitions and the `make_brach_phase` helper live in `bench/cpp/bench_common.h`.

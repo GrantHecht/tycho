@@ -75,7 +75,7 @@ struct NestedCallAndAppendChain2
             });
             this->outer_func.compute(xchain, fx_);
         };
-        MemoryManager::allocate_run(Impl,
+        BumpAllocator::allocate_run(Impl,
                                     TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1));
     }
     template <class InType, class OutType, class JacType>
@@ -140,7 +140,7 @@ struct NestedCallAndAppendChain2
         auto JITemps = TupleOfTempSpecs<typename InnerFuncs::template Jacobian<Scalar>...>{
             make_temp_tuple(jis)};
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1),
             TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.ORows(),
                                                   this->inner_func1.IRows()),
@@ -317,7 +317,7 @@ struct NestedCallAndAppendChain2
         auto HITemps = TupleOfTempSpecs<typename InnerFuncs::template Hessian<Scalar>...>{
             make_temp_tuple(his)};
 
-        MemoryManager::allocate_run(
+        BumpAllocator::allocate_run(
             Impl, TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1),
             TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.ORows(),
                                                   this->inner_func1.IRows()),

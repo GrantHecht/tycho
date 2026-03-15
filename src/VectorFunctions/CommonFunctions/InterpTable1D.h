@@ -343,7 +343,7 @@ struct InterpFunction1D
             fx = v;
         };
 
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1));
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -358,7 +358,7 @@ struct InterpFunction1D
             jx = dv_dt;
         };
 
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
                                            TempSpec<Output<Scalar>>(this->ORows(), 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -381,7 +381,7 @@ struct InterpFunction1D
             adjhess(0, 0) = dv2_dt2.dot(adjvars);
         };
 
-        Tycho::MemoryManager::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
+        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
                                            TempSpec<Output<Scalar>>(this->ORows(), 1),
                                            TempSpec<Output<Scalar>>(this->ORows(), 1));
     }

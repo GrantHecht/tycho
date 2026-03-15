@@ -166,7 +166,7 @@ struct TrapezoidalDefects
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
 
-        MemoryManager::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1));
         fx *= Scalar(-1.0);
     }
@@ -234,7 +234,7 @@ struct TrapezoidalDefects
         using OType = ODEOutput<Scalar>;
         using JType = ODEJacobian<Scalar>;
 
-        MemoryManager::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1),
                                     TempSpec<JType>(orows, irows), TempSpec<JType>(orows, irows));
 
@@ -374,7 +374,7 @@ struct TrapezoidalDefects
         using GType = ODEGrad<Scalar>;
         using HType = ODEHessian<Scalar>;
 
-        MemoryManager::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
 
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1),
 

@@ -118,7 +118,7 @@ struct VectorScalarFunctionDivision_Impl
 
         using FType = Output<Scalar>;
         using JType = ScalFunc_jacobian<Scalar>;
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows));
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -232,7 +232,7 @@ struct VectorScalarFunctionDivision_Impl
         using GType = ScalFunc_gradient<Scalar>;
         using HType = ScalFunc_hessian<Scalar>;
 
-        MemoryManager::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows),
+        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(1, irows),
                                     TempSpec<GType>(irows, 1), TempSpec<GType>(irows, 1),
                                     TempSpec<HType>(irows, irows));
     }
