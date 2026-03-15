@@ -878,7 +878,7 @@ template <> struct type_caster<MyType> {
 - [ ] `nb::is_operator()` used for all dunder methods
 - [ ] `nb::call_guard<nb::gil_scoped_release>()` used for parallel methods
 - [ ] Re-exported in the corresponding `tycho/` Python subpackage
-- [ ] Build and test: `cd build && ninja -j6 all && python run_examples.py`
+- [ ] Build and test: `cd build && ninja -j6 all && python scripts/run_examples.py`
 
 ---
 

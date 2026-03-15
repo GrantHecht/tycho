@@ -23,7 +23,7 @@ As a rule of thumb:
 ## Repository Structure
 
 Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CMakeSettings.json` (MSVC),
-`setup.py`, `requirements.txt`, `config_and_build.sh`, `Dockerfile`, `Dockerfile-dev`.
+`setup.py`, `requirements.txt`, `Dockerfile`, `Dockerfile-dev`.
 
 ```
 src/                    C++ source code (core library)
@@ -100,7 +100,7 @@ examples/               Python example scripts (Brachistochrone, Zermelo, low-th
   MeshRefinement/       Mesh-refinement examples
   UpdatedInterface/     Examples for updated API
   Plots/                Shared plotting helpers
-scripts/                Build helper scripts (Windows + OneAPI installers)
+scripts/                Build, test, and packaging helper scripts
 dockerfiles/            Dockerfiles for Ubuntu 18.04 / 20.04 CI images
 misc/                   Code generation utilities (CodeGen.py, CodeGenExample.py)
 pypiwheel/              PyPI wheel packaging (CMakeLists.txt, setup.py.in)
@@ -138,7 +138,8 @@ pip install numpy scipy matplotlib spiceypy
 **First-time build:**
 ```bash
 mkdir build
-bash config_and_build.sh
+cmake --preset macos-llvm-release
+cd build && ninja -j4 all
 ```
 
 **Subsequent builds** (after C++ source changes):
@@ -165,10 +166,10 @@ python examples/Brachistochrone.py
 | `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
 
-`config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
-`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
-the correct interpreter. When updating LLVM, change `LLVM_VERSION` in that script and
-the hardcoded libomp path in `CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
+The CMake presets dynamically resolve `Python_EXECUTABLE` and
+`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so they always target
+the correct interpreter. When updating LLVM, change the hardcoded libomp path in
+`CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
@@ -352,10 +353,10 @@ suite** and act as the acceptance gate for all changes merged into `main`.
 
 ```bash
 conda activate tycho
-python run_examples.py
+python scripts/run_examples.py
 ```
 
-The runner (`run_examples.py` at the repo root) executes all 38 example scripts
+The runner (`scripts/run_examples.py`) executes all 38 example scripts
 non-interactively (using the `Agg` matplotlib backend), enforces per-example
 timeouts, and exits with code 0 only if every example passes.
 
@@ -380,7 +381,7 @@ The C++ brachistochrone example must converge to an optimal solution (PSIOPT pri
 brachistochrone example must converge, and benchmarks must show no unexplained
 regressions before any pull request can be merged into `main`.** This is the
 project's definition of a green build. Reviewers must verify that `ctest`
-reports no failures, `python run_examples.py` exits 0,
+reports no failures, `python scripts/run_examples.py` exits 0,
 `brachistochrone_cpp` reports "Optimal Solution Found", and
 `bench/bench_track.sh compare` reports no regressions before approving.
 
@@ -419,7 +420,7 @@ Before implementing a change in Tycho, follow this procedure:
 4. **Before merging a PR into `main`, you MUST:**
    - Run benchmarks and compare against baseline (see `bench/<SYS>BENCH.md`).
    - Run all C++ unit tests (`ctest --output-on-failure`).
-   - Run all 38 Python examples (`python run_examples.py`).
+   - Run all 38 Python examples (`python scripts/run_examples.py`).
    - Verify the C++ brachistochrone example converges.
    - Ensure no performance regressions are introduced (or that any regressions
      are explicitly justified and acknowledged in the PR).

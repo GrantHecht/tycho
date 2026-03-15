@@ -360,6 +360,8 @@ struct PSIOPT {
     double LastMiscTime = 0;
     double LastFuncTime = 0;
     double LastKKTTime = 0;
+    double LastPrintTime = 0;
+    double LastMKLInitTime = 0;
     int LastIterNum = 0;
 
     void zero_timing_stats() {
@@ -368,6 +370,8 @@ struct PSIOPT {
         this->LastMiscTime = 0;
         this->LastFuncTime = 0;
         this->LastKKTTime = 0;
+        this->LastPrintTime = 0;
+        this->LastMKLInitTime = 0;
         this->LastIterNum = 0;
     }
 
@@ -656,7 +660,7 @@ struct PSIOPT {
     void print_Beginning(std::string msg) const;
     void print_Finished(std::string msg) const;
     void print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                         double tottime, double nlptime, double qptime);
+                         double tottime, double nlptime, double qptime, double printtime);
 
     fmt::text_style calculate_color(double val, double targ, double acc);
 
@@ -683,6 +687,9 @@ struct PSIOPT {
                    double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
+
+    void ensure_mkl_initialized();
+    void print_timing_summary();
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);
 

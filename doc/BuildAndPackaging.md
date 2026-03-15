@@ -3,20 +3,21 @@
 ## Development builds
 
 The primary development workflow uses CMake and ninja directly.
-`config_and_build.sh` (macOS/Linux) or `config_and_build.ps1` (Windows) handle
-environment setup, CMake configuration, and the initial build:
+`scripts/config_and_build.ps1` (Windows) handles environment setup, CMake
+configuration, and the initial build. On macOS/Linux, use CMake presets directly:
 
 ```bash
 # macOS / Linux — first time
-bash config_and_build.sh
+cmake --preset macos-llvm-release
+cd build && ninja -j4 all
 
 # Subsequent C++ rebuilds
-cd build && ninja -j8 all
+cd build && ninja -j4 all
 ```
 
 ```powershell
 # Windows — first time and subsequent builds
-powershell -File config_and_build.ps1
+powershell -File scripts/config_and_build.ps1
 ```
 
 When `PYTHON_LOCAL_INSTALL_DIR` is set (resolved automatically by the build
@@ -83,7 +84,7 @@ The conventional separation used by the scientific Python ecosystem is:
 | C++ + dev install | `cmake --build` / `ninja` | Daily development |
 | Source distribution | `python -m build --sdist` | Release |
 | Binary wheel (Unix) | `bash build_wheel.sh` | CI / release |
-| Binary wheel (Windows) | `build_wheel.ps1` | CI / release |
+| Binary wheel (Windows) | `scripts/build_wheel.ps1` | CI / release |
 | Bundle shared libs (Linux) | `build_wheel.sh --repair` | CI / release, after wheel |
 | Bundle DLLs (Windows) | `delvewheel repair dist/*.whl` | CI / release, after wheel |
 | Publish | `twine upload dist/repaired/*.whl` | Release |
