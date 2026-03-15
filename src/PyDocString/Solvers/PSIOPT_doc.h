@@ -59,8 +59,11 @@ const char *const PSIOPT_LastQPTime =
     "double: How long optimization functions (Pardiso) took on the previous "
     "iteration.";
 
+const char *const PSIOPT_LastPrintTime =
+    "double: Time in seconds spent on console output during the solve.";
+
 const char *const PSIOPT_LastMKLInitTime =
-    "double: Time in milliseconds for one-time MKL runtime initialization. "
+    "double: Time in seconds for one-time MKL runtime initialization. "
     "Zero on subsequent calls or when using Apple Accelerate.";
 
 const char *const PSIOPT_LastIterNum = "int: The iteration counter of the previous iteration.";

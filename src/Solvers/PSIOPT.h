@@ -660,7 +660,7 @@ struct PSIOPT {
     void print_Beginning(std::string msg) const;
     void print_Finished(std::string msg) const;
     void print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                         double tottime, double nlptime, double qptime);
+                         double tottime, double nlptime, double qptime, double printtime);
 
     fmt::text_style calculate_color(double val, double targ, double acc);
 
@@ -689,7 +689,7 @@ struct PSIOPT {
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
     void ensure_mkl_initialized();
-    void print_timing_summary(double tottime_ms);
+    void print_timing_summary();
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);
 

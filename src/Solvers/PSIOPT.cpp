@@ -26,7 +26,7 @@
 void Tycho::PSIOPT::ensure_mkl_initialized() {
     double initMs = ::Tycho::ensure_mkl_initialized();
     if (initMs > 0.0) {
-        this->LastMKLInitTime = initMs;
+        this->LastMKLInitTime = initMs / 1000.0;
         if (initMs > 0.5 && this->PrintLevel < 2) {
             fmt::print(" MKL Initialization    : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
@@ -34,7 +34,7 @@ void Tycho::PSIOPT::ensure_mkl_initialized() {
     }
 }
 
-void Tycho::PSIOPT::print_timing_summary(double tottime_ms) {
+void Tycho::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");
     fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPreTime * 1000.0);
@@ -371,13 +371,13 @@ void Tycho::PSIOPT::print_Finished(std::string msg) const {
 }
 
 void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                                    double tottime, double nlptime, double qptime) {
+                                    double tottime, double nlptime, double qptime,
+                                    double printtime) {
     fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
     fmt::text_style Bcol = calculate_color(last.BarrInf, this->Bartol, this->AccBartol);
     fmt::text_style Ecol = calculate_color(last.EConInf, this->EContol, this->AccEContol);
     fmt::text_style Icol = calculate_color(last.IConInf, this->IContol, this->AccIContol);
 
-    double printtime = tottime - nlptime - qptime;
     auto TColor = fmt::fg(fmt::color::cyan);
     auto Printtime = [&](const char *msg, double t1) {
         fmt::print("{}", msg);
@@ -416,7 +416,7 @@ void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo
         Printtime(" NLP Function Evaluation Time : ", nlptime);
         Printtime(" KKT Matrix Factor/Solve Time : ", qptime);
         Printtime(" Console Print Time           : ", printtime);
-        Printtime(" Total Time (NLP+KKT+Print)   : ", tottime);
+        Printtime(" Total Time                   : ", tottime);
 
         fmt::print("\n");
     }
@@ -512,7 +512,8 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
     Utils::Timer Funtimer;
     Utils::Timer LStimer;
     Utils::Timer QPtimer;
-    Utils::Timer CBtimer;
+    Utils::Timer CBtimer;  // Callback time is included in LastMiscTime (not separately reported)
+    Utils::Timer Printtimer;
 
     double Hpert0 = this->deltaH;
     std::vector<IterateInfo> iters;
@@ -684,7 +685,9 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
             ExitCode = ConvergenceFlags::DIVERGING;
 
         if (this->PrintLevel == 0) {
+            Printtimer.start();
             this->print_last_iterate(iters);
+            Printtimer.stop();
         }
 
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
@@ -730,13 +733,14 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
 
     this->LastFuncTime += nlptime;
     this->LastKKTTime += qptime;
-    this->LastPrintTime += tottime - nlptime - qptime;
+    double printtime = double(Printtimer.count<std::chrono::microseconds>()) / 1000000.0;
+    this->LastPrintTime += printtime;
 
     ///////////////////////////////////////////////////////////////////////////
 
     int retiter = (this->ReturnBest ? BestIter : iters.size() - 1);
     print_ExitStats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
-                    qptime * 1000);
+                    qptime * 1000, printtime * 1000);
     ////////////////////////////////////////////////////////////////////////////
 
     return XSL;
@@ -1009,7 +1013,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
         this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        print_timing_summary(tottime);
+        print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
@@ -1064,7 +1068,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
 
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");
-        print_timing_summary(tottime);
+        print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
@@ -1136,7 +1140,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
         this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        print_timing_summary(tottime);
+        print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
@@ -1198,7 +1202,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
         this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
-        print_timing_summary(tottime);
+        print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
@@ -1240,7 +1244,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
 
     if (this->PrintLevel < 2) {
         print_Finished("Solve Algorithm ");
-        print_timing_summary(tottime);
+        print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_Finished("PSIOPT ");
