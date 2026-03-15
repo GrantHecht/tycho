@@ -21,6 +21,26 @@
 
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
+bool Tycho::PSIOPT::MKLInitialized = false;
+
+void Tycho::PSIOPT::ensure_mkl_initialized() {
+#ifndef USE_ACCELERATE_SPARSE
+    if (!MKLInitialized) {
+        Utils::Timer initTimer;
+        initTimer.start();
+        dsecnd(); // Force MKL runtime initialization
+        initTimer.stop();
+        double initMs = double(initTimer.count<std::chrono::microseconds>()) / 1000.0;
+        this->LastMKLInitTime = initMs;
+        if (initMs > 0.5 && this->PrintLevel < 2) {
+            fmt::print(" MKL Initialization    : ");
+            fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
+        }
+        MKLInitialized = true;
+    }
+#endif
+}
+
 void Tycho::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
     this->nlp = np;
     this->PrimalVars = this->nlp->PrimalVars;
@@ -954,6 +974,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
+    this->ensure_mkl_initialized();
     Utils::Timer t;
     t.start();
 
@@ -996,6 +1017,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
+    this->ensure_mkl_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1048,6 +1070,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
+    this->ensure_mkl_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1117,6 +1140,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
+    this->ensure_mkl_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1177,6 +1201,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
+    this->ensure_mkl_initialized();
     Utils::Timer t;
     t.start();
     bool docompute = analyze_KKT_Matrix();

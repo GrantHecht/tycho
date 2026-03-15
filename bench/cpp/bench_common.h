@@ -6,22 +6,32 @@
 #include "Tycho.h"
 #include <numbers>
 
+#ifndef USE_ACCELERATE_SPARSE
+#include <mkl.h>
+#endif
+
 using namespace Tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Memory initialization (called once per executable via inline variable)
+// Runtime initialization (called once per executable via inline variable)
 ///////////////////////////////////////////////////////////////////////////////
 
 namespace TychoBench {
-inline void ensure_memory_initialized() {
+inline void ensure_runtime_initialized() {
     static bool done = [] {
         MemoryManager::resize(256, 256);
+#ifndef USE_ACCELERATE_SPARSE
+        // Force MKL runtime initialization (thread pool, CPU dispatch, memory
+        // allocators) before any benchmark runs.  Without this, the first
+        // PSIOPT iteration pays a ~100 ms one-time penalty that skews results.
+        dsecnd();
+#endif
         return true;
     }();
     (void)done;
 }
 namespace detail {
-inline const bool g_init = (ensure_memory_initialized(), true);
+inline const bool g_init = (ensure_runtime_initialized(), true);
 } // namespace detail
 } // namespace TychoBench
 
