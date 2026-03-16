@@ -59,7 +59,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def_rw("LastKKTTime", &PSIOPT::LastKKTTime, PSIOPT_LastQPTime);
     obj.def_rw("LastMiscTime", &PSIOPT::LastMiscTime, PSIOPT_LastQPTime);
     obj.def_rw("LastPrintTime", &PSIOPT::LastPrintTime, PSIOPT_LastPrintTime);
-    obj.def_rw("LastMKLInitTime", &PSIOPT::LastMKLInitTime, PSIOPT_LastMKLInitTime);
+    obj.def_rw("LastSolverInitTime", &PSIOPT::LastSolverInitTime, PSIOPT_LastSolverInitTime);
     obj.def_rw("LastIterNum", &PSIOPT::LastIterNum, PSIOPT_LastIterNum);
     obj.def_rw("LastObjVal", &PSIOPT::LastObjVal);
 

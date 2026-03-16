@@ -22,7 +22,7 @@ namespace Tycho {
 
 void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
-    Tycho::ensure_mkl_initialized();
+    Tycho::ensure_solver_initialized();
     TychoBind<PSIOPT>::Build(sol);
     TychoBind<OptimizationProblemBase>::Build(sol);
     TychoBind<Jet>::Build(sol);

@@ -36,7 +36,7 @@ const char *const PSIOPT_solve =
     ":returns: Valid design variables (trajectory)";
 
 const char *const PSIOPT_setQPParams =
-    "Apply Pardiso parameters (QPPivotPerturb, QPThreads, QPPivotStrategy, "
+    "Apply sparse solver parameters (QPPivotPerturb, QPThreads, QPPivotStrategy, "
     "QPOrd) which were directly assigned.\n\n";
 
 const char *const PSIOPT_MaxIters =
@@ -62,9 +62,9 @@ const char *const PSIOPT_LastQPTime =
 const char *const PSIOPT_LastPrintTime =
     "double: Time in seconds spent on console output during the solve.";
 
-const char *const PSIOPT_LastMKLInitTime =
-    "double: Time in seconds for one-time MKL runtime initialization. "
-    "Zero on subsequent calls or when using Apple Accelerate.";
+const char *const PSIOPT_LastSolverInitTime =
+    "double: Time in seconds for one-time solver runtime initialization. "
+    "Zero on subsequent calls.";
 
 const char *const PSIOPT_LastIterNum = "int: The iteration counter of the previous iteration.";
 

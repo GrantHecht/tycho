@@ -69,7 +69,7 @@ add_library(psiopt STATIC
   Solvers/Jet.h Solvers/Jet.cpp
   Solvers/OptimizationProblemBase.h
   Solvers/OptimizationProblem.h Solvers/OptimizationProblem.cpp
-  Solvers/MKLInit.h Solvers/MKLInit.cpp
+  Solvers/SolverInit.h Solvers/SolverInit.cpp
  )
 target_include_directories(psiopt PRIVATE ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})

@@ -1,4 +1,4 @@
-#include "MKLInit.h"
+#include "SolverInit.h"
 
 #include <mutex>
 
@@ -12,7 +12,7 @@
 
 namespace Tycho {
 
-double ensure_mkl_initialized() {
+double ensure_solver_initialized() {
     static std::once_flag flag;
     static double time_ms = 0.0;
     std::call_once(flag, []() {

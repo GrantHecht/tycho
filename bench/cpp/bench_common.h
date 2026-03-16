@@ -17,7 +17,7 @@ namespace TychoBench {
 inline void ensure_runtime_initialized() {
     static bool done = [] {
         BumpAllocator::resize(256, 256);
-        double init_ms = Tycho::ensure_mkl_initialized();
+        double init_ms = Tycho::ensure_solver_initialized();
 #ifdef USE_ACCELERATE_SPARSE
         fmt::print("Accelerate init: {:.3f} ms (VECLIB_MAXIMUM_THREADS={})\n", init_ms,
                    TYCHO_DEFAULT_QP_THREADS);
@@ -178,7 +178,8 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs, int
     }
 
     PolarLTODE ode(amax);
-    auto phase = std::make_shared<ODEPhase<PolarLTODE>>(ode, TranscriptionModes::LGL3, traj, n_segs);
+    auto phase =
+        std::make_shared<ODEPhase<PolarLTODE>>(ode, TranscriptionModes::LGL3, traj, n_segs);
 
     // Front boundary: r, theta, vr, vt, t
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(5, 0, 4);

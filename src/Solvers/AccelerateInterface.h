@@ -413,6 +413,10 @@ class AccelerateImpl
                     m_peigs = np;
                     m_neigs = nn;
                     m_zeigs = nz;
+                } else {
+                    m_peigs = 0;
+                    m_neigs = 0;
+                    m_zeigs = 0;
                 }
             }
         }
@@ -420,9 +424,8 @@ class AccelerateImpl
 
     void updatePerformanceMetrics() {
         if (m_symbolicFactorization) {
-            m_mem = std::is_same<Scalar, double>::value
-                        ? m_symbolicFactorization->factorSize_Double
-                        : m_symbolicFactorization->factorSize_Float;
+            m_mem = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
+                                                        : m_symbolicFactorization->factorSize_Float;
         }
         m_flops = 0;
     }

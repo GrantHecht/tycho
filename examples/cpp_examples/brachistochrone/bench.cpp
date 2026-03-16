@@ -18,8 +18,8 @@ using namespace Tycho;
 
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args  = Arguments<5>();  // [x, y, v, t, theta]
-        auto v     = args.coeff<2>();
+        auto args = Arguments<5>(); // [x, y, v, t, theta]
+        auto v = args.coeff<2>();
         auto theta = args.coeff<4>();
 
         auto xdot = sin(theta) * v;
@@ -37,17 +37,17 @@ BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 ///////////////////////////////////////////////////////////////////////////////
 
 int main() {
-    constexpr double g   = 9.81;
+    constexpr double g = 9.81;
 
     // Boundary conditions
     constexpr double x0 = 0.0, y0 = 10.0, v0 = 0.0, t0 = 0.0;
     constexpr double xf = 10.0, yf = 5.0;
 
     // Initial-guess parameters
-    constexpr double tf_guess    = 1.0;
+    constexpr double tf_guess = 1.0;
     constexpr double theta_guess = 1.0;
-    constexpr int    n_pts       = 100;
-    constexpr int    n_defects   = 32;
+    constexpr int n_pts = 100;
+    constexpr int n_defects = 32;
 
     // Build a linearly-interpolated initial trajectory
     std::vector<Eigen::VectorXd> traj;
@@ -87,8 +87,8 @@ int main() {
     // Suppress optimizer output
     phase->optimizer->PrintLevel = 3;
 
-    // Warm up MKL runtime before timing
-    Tycho::ensure_mkl_initialized();
+    // Warm up solver runtime before timing
+    Tycho::ensure_solver_initialized();
 
     // ---- Solve (timed) -----------------------------------------------------
     auto start = std::chrono::high_resolution_clock::now();

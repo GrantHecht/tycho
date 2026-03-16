@@ -76,10 +76,10 @@ struct PSIOPT {
         else if (str.compare("PARMETIS") == 0 || str.compare("MTMETIS") == 0)
             return QPOrderingModes::PARMETIS;
         else {
-            auto msg = fmt::format(
-                "Unrecognized QPOrderingMode: {0}\n"
-                "Valid Options Are: MINDEG, METIS, PARMETIS (or MTMETIS on Accelerate)",
-                str);
+            auto msg =
+                fmt::format("Unrecognized QPOrderingMode: {0}\n"
+                            "Valid Options Are: MINDEG, METIS, PARMETIS (or MTMETIS on Accelerate)",
+                            str);
             throw std::invalid_argument(msg);
         }
     }
@@ -157,7 +157,7 @@ struct PSIOPT {
     int QPRefSteps = 0;
 #ifdef USE_ACCELERATE_SPARSE
     double AccelPivotTolerance = 0.01;
-    double AccelZeroTolerance = 1e-4 * __DBL_EPSILON__;
+    double AccelZeroTolerance = 1e-4 * std::numeric_limits<double>::epsilon();
 
     void set_AccelPivotTolerance(double tol) { this->AccelPivotTolerance = tol; }
     void set_AccelZeroTolerance(double tol) { this->AccelZeroTolerance = tol; }
@@ -369,7 +369,7 @@ struct PSIOPT {
     double LastFuncTime = 0;
     double LastKKTTime = 0;
     double LastPrintTime = 0;
-    double LastMKLInitTime = 0;
+    double LastSolverInitTime = 0;
     int LastIterNum = 0;
 
     void zero_timing_stats() {
@@ -379,7 +379,7 @@ struct PSIOPT {
         this->LastFuncTime = 0;
         this->LastKKTTime = 0;
         this->LastPrintTime = 0;
-        this->LastMKLInitTime = 0;
+        this->LastSolverInitTime = 0;
         this->LastIterNum = 0;
     }
 
@@ -444,12 +444,13 @@ struct PSIOPT {
             this->KKTSol.setOrder(SparseOrderAMD);
             break;
         case QPOrderingModes::METIS:
-            // Serial METIS: faster than MT-METIS at all tested scales due to
-            // per-call thread coordination overhead (~5ms on small graphs).
+            // Serial METIS: faster than MT-METIS at all tested scales (up to
+            // ~5400 primal variables) due to per-call thread coordination overhead.
             this->KKTSol.setOrder(SparseOrderMetis);
             break;
         case QPOrderingModes::PARMETIS:
-            // MT-METIS when available; may benefit very large problems.
+            // MT-METIS (macOS 26+): currently slower than serial METIS at tested
+            // scales. Retained for tracking Apple's improvements across releases.
 #ifdef TYCHO_HAS_MTMETIS
             this->KKTSol.setOrder(SparseOrderMTMetis);
 #else
@@ -706,7 +707,7 @@ struct PSIOPT {
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
-    void ensure_mkl_initialized();
+    void ensure_solver_initialized();
     void print_timing_summary();
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);
