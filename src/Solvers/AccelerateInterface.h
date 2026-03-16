@@ -550,6 +550,8 @@ class AccelerateImpl
     void doRefactorization() {
         if (!m_numericFactorization || !m_symbolicFactorization) {
             doFactorization();
+            if (m_numericFactorization)
+                updatePerformanceMetrics();
             return;
         }
 

@@ -131,7 +131,7 @@ static void BM_PSIOPT_BettsLT_32seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
         auto phase = make_betts_lt_phase(32, TranscriptionModes::LGL3, false, 3);
-        auto status = phase->optimize_solve();
+        auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
@@ -147,7 +147,7 @@ static void BM_PSIOPT_BettsLT_64seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
         auto phase = make_betts_lt_phase(64, TranscriptionModes::LGL3, false, 3);
-        auto status = phase->optimize_solve();
+        auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
@@ -163,7 +163,7 @@ static void BM_PSIOPT_BettsLT_MeshRefine(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
         auto phase = make_betts_lt_phase(16, TranscriptionModes::LGL5, true, 3);
-        auto status = phase->optimize_solve();
+        auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
