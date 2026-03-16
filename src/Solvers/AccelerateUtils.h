@@ -15,12 +15,24 @@
 
 #pragma once
 
+#include <Accelerate/Accelerate.h>
 #include <cstdlib>
 #include <string>
 
-// Sets the number of threads for Accelerate via the environment variable VECLIB_MAXIMUM_THREADS.
-// Currently, the VECLIB_MAXIMUM_THREADS is the only way to specify the number of threads
-// Accelerate will use. This should be swapped to an Accelerate API call if Apple ever adds one.
+// BLASSetThreading (macOS 15+) provides per-thread control via thread-local
+// storage. On older systems, fall back to the global VECLIB_MAXIMUM_THREADS
+// environment variable.
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
+#define TYCHO_HAS_BLAS_SET_THREADING 1
+#endif
+
 inline void accelerate_set_num_threads(int num_threads) {
+#ifdef TYCHO_HAS_BLAS_SET_THREADING
+    if (num_threads <= 1)
+        BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
+    else
+        BLASSetThreading(BLAS_THREADING_MULTI_THREADED);
+#else
     setenv("VECLIB_MAXIMUM_THREADS", std::to_string(num_threads).c_str(), 1);
+#endif
 }

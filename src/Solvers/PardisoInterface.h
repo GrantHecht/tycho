@@ -166,6 +166,7 @@ template <class Derived> class PardisoImpl : public SparseSolverBase<Derived> {
     Derived &compute(const MatrixType &matrix);
 
     Derived &factorize_internal();
+    Derived &refactorize_internal() { return factorize_internal(); }
     Derived &compute_internal();
     Derived &analyzePattern_internal();
 

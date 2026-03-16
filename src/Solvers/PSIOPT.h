@@ -154,6 +154,13 @@ struct PSIOPT {
     int QPScaling = 0;
     int QPPivotPerturb = 8;
     int QPRefSteps = 0;
+#ifdef USE_ACCELERATE_SPARSE
+    double AccelPivotTolerance = 0.01;
+    double AccelZeroTolerance = 1e-4 * __DBL_EPSILON__;
+
+    void set_AccelPivotTolerance(double tol) { this->AccelPivotTolerance = tol; }
+    void set_AccelZeroTolerance(double tol) { this->AccelZeroTolerance = tol; }
+#endif
     bool QPPrint = false;
     bool QPanalyzed = false;
     bool ForceQPanalysis = false;
@@ -437,13 +444,26 @@ struct PSIOPT {
             break;
         case QPOrderingModes::METIS:
         case QPOrderingModes::PARMETIS:
-            // Note next version of Apple Accelerate will be providing a parallel Metis
-            // factorization
+#ifdef TYCHO_HAS_MTMETIS
+            // MT-METIS is not thread-safe for concurrent use from multiple
+            // caller threads (its internal threading races with itself).
+            // Use serial METIS when QPThreads == 1 (Jet sets this via
+            // setThreads(1,1) in jet_initialize before transcription).
+            if (QPThreads > 1)
+                this->KKTSol.setOrder(SparseOrderMTMetis);
+            else
+                this->KKTSol.setOrder(SparseOrderMetis);
+#else
             this->KKTSol.setOrder(SparseOrderMetis);
+#endif
+            break;
+            break;
         }
         this->KKTSol.setNumThreads(QPThreads);
         this->KKTSol.setIterativeRefinement(QPRefSteps > 0);
         this->KKTSol.setIterativeRefinementIterations(QPRefSteps);
+        this->KKTSol.setPivotTolerance(AccelPivotTolerance);
+        this->KKTSol.setZeroTolerance(AccelZeroTolerance);
 #else
         this->KKTSol.m_ord = static_cast<int>(QPOrd);
         this->KKTSol.m_pivotstrat = static_cast<int>(QPPivotStrategy);

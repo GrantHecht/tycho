@@ -112,7 +112,8 @@ struct Jet {
     map(const std::vector<std::function<std::shared_ptr<T>(Args1)>> &genfuncs,
         const std::vector<Args2> &args, const Eigen::VectorXi &genfidxes, int nt, bool verbose) {
 
-#ifdef USE_ACCELERATE_SPARSE
+#if defined(USE_ACCELERATE_SPARSE) && !defined(TYCHO_HAS_BLAS_SET_THREADING)
+        // Fallback for macOS < 15: global env var (not per-thread)
         accelerate_set_num_threads(1);
 #endif
 
@@ -128,7 +129,12 @@ struct Jet {
         Utils::Timer t;
 
         auto Job = [&](int threadid, int i) {
-#ifndef USE_ACCELERATE_SPARSE
+#ifdef USE_ACCELERATE_SPARSE
+#ifdef TYCHO_HAS_BLAS_SET_THREADING
+            // Per-thread BLAS control (macOS 15+, thread-local storage)
+            accelerate_set_num_threads(1);
+#endif
+#else
             mkl_set_num_threads_local(1);
 #endif
 

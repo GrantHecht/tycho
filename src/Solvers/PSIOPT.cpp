@@ -457,13 +457,13 @@ int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
         }
     };
     auto Perturb = [&](double p) { this->nlp->perturbKKTPDiags(p, this->KKTSol.getMatrix()); };
-    auto Factor = [&]() { this->KKTSol.factorize_internal(); };
+    auto Refactor = [&]() { this->KKTSol.refactorize_internal(); };
     auto Compute = [&]() { this->KKTSol.compute_internal(); };
     int IncEigs;
 
     if (Zfac || docompute) {
         if (!docompute)
-            Factor();
+            Refactor();
         else
             Compute();
         RankDef();
@@ -476,7 +476,7 @@ int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
 
     for (int i = 0; i < this->MaxRefac; i++) {
         Perturb(p);
-        Factor();
+        Refactor();
         RankDef();
         IncEigs = Inertia();
         finalpert = p;
@@ -792,7 +792,7 @@ Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     if (docompute)
         this->KKTSol.compute_internal();
     else
-        this->KKTSol.factorize_internal();
+        this->KKTSol.refactorize_internal();
     kktt.stop();
 
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
@@ -804,10 +804,12 @@ Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     if (this->PrintLevel < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);
         if (docompute) {
-            fmt::print(" LDLT Factor NNZs      : ");
+            fmt::print(" LDLT Factor Size      : ");
             fmt::print(cyan, "{0:<10}\n", this->FactorMem);
-            fmt::print(" LDLT Factor FLOPs     : ");
-            fmt::print(cyan, "{0} MFLOPs\n", this->FactorFlops);
+            if (this->FactorFlops > 0) {
+                fmt::print(" LDLT Factor FLOPs     : ");
+                fmt::print(cyan, "{0} MFLOPs\n", this->FactorFlops);
+            }
         }
         fmt::print(" Analysis/Reorder Time : ");
         fmt::print(cyan, "{0:.3f} ms\n", pretime * 1000);

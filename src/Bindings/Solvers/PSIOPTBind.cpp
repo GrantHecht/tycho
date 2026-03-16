@@ -176,6 +176,13 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_QPOrderingMode",
             nb::overload_cast<const std::string &>(&PSIOPT::set_QPOrderingMode));
 
+#ifdef USE_ACCELERATE_SPARSE
+    obj.def_rw("AccelPivotTolerance", &PSIOPT::AccelPivotTolerance);
+    obj.def_rw("AccelZeroTolerance", &PSIOPT::AccelZeroTolerance);
+    obj.def("set_AccelPivotTolerance", &PSIOPT::set_AccelPivotTolerance);
+    obj.def("set_AccelZeroTolerance", &PSIOPT::set_AccelZeroTolerance);
+#endif
+
     //////////////////////////////////////////////////////////////////////////////////////////////////
     obj.def_rw("QPPrint", &PSIOPT::QPPrint);
 
