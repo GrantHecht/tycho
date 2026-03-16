@@ -73,12 +73,13 @@ struct PSIOPT {
             return QPOrderingModes::MINDEG;
         else if (str.compare("METIS") == 0)
             return QPOrderingModes::METIS;
-        else if (str.compare("PARMETIS") == 0)
+        else if (str.compare("PARMETIS") == 0 || str.compare("MTMETIS") == 0)
             return QPOrderingModes::PARMETIS;
         else {
-            auto msg = fmt::format("Unrecognized QPOrderingMode: {0}\n"
-                                   "Valid Options Are: MINDEG , METIS, PARMETIS ",
-                                   str);
+            auto msg = fmt::format(
+                "Unrecognized QPOrderingMode: {0}\n"
+                "Valid Options Are: MINDEG, METIS, PARMETIS (or MTMETIS on Accelerate)",
+                str);
             throw std::invalid_argument(msg);
         }
     }
@@ -443,20 +444,17 @@ struct PSIOPT {
             this->KKTSol.setOrder(SparseOrderAMD);
             break;
         case QPOrderingModes::METIS:
+            // Serial METIS: faster than MT-METIS at all tested scales due to
+            // per-call thread coordination overhead (~5ms on small graphs).
+            this->KKTSol.setOrder(SparseOrderMetis);
+            break;
         case QPOrderingModes::PARMETIS:
+            // MT-METIS when available; may benefit very large problems.
 #ifdef TYCHO_HAS_MTMETIS
-            // MT-METIS is not thread-safe for concurrent use from multiple
-            // caller threads (its internal threading races with itself).
-            // Use serial METIS when QPThreads == 1 (Jet sets this via
-            // setThreads(1,1) in jet_initialize before transcription).
-            if (QPThreads > 1)
-                this->KKTSol.setOrder(SparseOrderMTMetis);
-            else
-                this->KKTSol.setOrder(SparseOrderMetis);
+            this->KKTSol.setOrder(SparseOrderMTMetis);
 #else
             this->KKTSol.setOrder(SparseOrderMetis);
 #endif
-            break;
             break;
         }
         this->KKTSol.setNumThreads(QPThreads);

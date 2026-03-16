@@ -27,11 +27,6 @@
 
 #include <limits>
 
-#if defined(__APPLE__) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED) &&                               \
-    __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
-#define TYCHO_HAS_MTMETIS 1
-#endif
-
 /*
 The classes in this file are directly based on the AccelerateSupport module from Eigen 3.4 and
 are subject to Eigen's MPL2 license, which can be found in the notices folder of the GitHub
@@ -271,11 +266,7 @@ class AccelerateImpl
             m_triType = (UpLo_ & Lower) ? SparseLowerTriangle : SparseUpperTriangle;
         }
 
-#ifdef TYCHO_HAS_MTMETIS
-        m_order = SparseOrderMTMetis;
-#else
         m_order = SparseOrderMetis;
-#endif
         m_doIterativeRefinement = false;
         m_iterativeRefinementIterations = 2;
     }
