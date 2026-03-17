@@ -15,9 +15,8 @@
 
 import inspect
 
-import numpy as np
-
 import _tycho as _tycho
+import numpy as np
 from _tycho.Astro import *
 
 

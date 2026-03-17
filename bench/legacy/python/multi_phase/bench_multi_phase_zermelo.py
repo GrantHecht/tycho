@@ -7,7 +7,9 @@ All plotting code removed. Output suppressed via PrintLevel.
 """
 
 import time
+
 import numpy as np
+
 import tycho as ast
 
 oc = ast.OptimalControl
@@ -60,10 +62,12 @@ def navigate(Points, vM=1, wF=uniformWind):
         t0 = dist / vM
         d = (B - A) / dist
         ang = np.arctan2(d[1], d[0])
-        trajG.append([
-            np.array(list(A + d * x) + [t0 * x, ang])
-            for x in np.linspace(0, 1, num=nSeg)
-        ])
+        trajG.append(
+            [
+                np.array(list(A + d * x) + [t0 * x, ang])
+                for x in np.linspace(0, 1, num=nSeg)
+            ]
+        )
 
     ocp = oc.OptimalControlProblem()
     for i in range(numphase):

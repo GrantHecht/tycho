@@ -58,7 +58,9 @@ def _parse_timing(stdout: str) -> float:
 # ---------------------------------------------------------------------------
 
 
-def run_python_benchmark(script: str, runs: int = 10, timeout: int = 600) -> Tuple[float, float]:
+def run_python_benchmark(
+    script: str, runs: int = 10, timeout: int = 600
+) -> Tuple[float, float]:
     """Run a Python benchmark script *runs* times; return (mean, std) of solver times."""
     times = []
     for _ in range(runs):
@@ -74,7 +76,7 @@ def run_python_benchmark(script: str, runs: int = 10, timeout: int = 600) -> Tup
 
     mean = sum(times) / len(times)
     variance = sum((t - mean) ** 2 for t in times) / len(times)
-    return mean, variance ** 0.5
+    return mean, variance**0.5
 
 
 def run_cpp_benchmark(binary: str, runs: int = 5) -> Tuple[float, float]:
@@ -93,7 +95,7 @@ def run_cpp_benchmark(binary: str, runs: int = 5) -> Tuple[float, float]:
 
     mean = sum(times) / len(times)
     variance = sum((t - mean) ** 2 for t in times) / len(times)
-    return mean, variance ** 0.5
+    return mean, variance**0.5
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +134,13 @@ def measure_binary_sizes(build_dir: Path) -> Dict[str, object]:
     else:
         print("  Warning: _tycho extension not found — skipping .so size")
 
-    bench = build_dir / "examples" / "cpp_examples" / "brachistochrone" / "brachistochrone_bench"
+    bench = (
+        build_dir
+        / "examples"
+        / "cpp_examples"
+        / "brachistochrone"
+        / "brachistochrone_bench"
+    )
     if bench.exists():
         sizes["brachistochrone_bench"] = bench.stat().st_size
         sizes["brachistochrone_bench_path"] = str(bench)
@@ -158,7 +166,8 @@ def format_bytes(n: int) -> str:
 def _current_branch() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
@@ -270,8 +279,8 @@ def compare_reports(
         ]
         a_mean = compile_a["mean_s"] if compile_a else None
         b_mean = compile_b["mean_s"] if compile_b else None
-        a_std  = compile_a["std_s"]  if compile_a else None
-        b_std  = compile_b["std_s"]  if compile_b else None
+        a_std = compile_a["std_s"] if compile_a else None
+        b_std = compile_b["std_s"] if compile_b else None
 
         a_str = f"{a_mean:.1f} ± {a_std:.1f}s" if a_mean is not None else "—"
         b_str = f"{b_mean:.1f} ± {b_std:.1f}s" if b_mean is not None else "—"
@@ -366,35 +375,69 @@ def main() -> None:
         description="Run pybind11 vs nanobind benchmarks and generate reports.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--timeout", type=int, default=600,
-                        help="Timeout per benchmark run in seconds (default: 600)")
-    parser.add_argument("--runs", type=int, default=10,
-                        help="Number of runs per Python benchmark (default: 10)")
-    parser.add_argument("--cpp-runs", type=int, default=5,
-                        help="Number of runs per C++ benchmark (default: 5)")
-    parser.add_argument("--output", type=str,
-                        help="Save results as JSON")
-    parser.add_argument("--report", type=str,
-                        help="Write a Markdown summary report")
-    parser.add_argument("--compare", type=str,
-                        help="Path to a previous JSON results file to compare against")
-    parser.add_argument("--label", type=str, default=None,
-                        help="Label for this run (default: current git branch)")
-    parser.add_argument("--compare-label", type=str, default="baseline",
-                        help="Label for the comparison run (default: baseline)")
-    parser.add_argument("--binary-sizes", action="store_true",
-                        help="Measure sizes of _tycho extension and bench binary")
-    parser.add_argument("--compile-json", type=str,
-                        help="Path to compile timing JSON from bench_compile.sh")
-    parser.add_argument("--skip-python", action="store_true",
-                        help="Skip Python benchmarks")
-    parser.add_argument("--skip-cpp", action="store_true",
-                        help="Skip C++ benchmarks")
-    parser.add_argument("--suite", type=str, default=None,
-                        help="Run only benchmarks in this subdirectory (e.g. basic, control, "
-                             "astrodynamics, low_thrust, multi_phase, aircraft)")
-    parser.add_argument("--from-json", type=str,
-                        help="Load existing results JSON instead of running benchmarks")
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Timeout per benchmark run in seconds (default: 600)",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=10,
+        help="Number of runs per Python benchmark (default: 10)",
+    )
+    parser.add_argument(
+        "--cpp-runs",
+        type=int,
+        default=5,
+        help="Number of runs per C++ benchmark (default: 5)",
+    )
+    parser.add_argument("--output", type=str, help="Save results as JSON")
+    parser.add_argument("--report", type=str, help="Write a Markdown summary report")
+    parser.add_argument(
+        "--compare",
+        type=str,
+        help="Path to a previous JSON results file to compare against",
+    )
+    parser.add_argument(
+        "--label",
+        type=str,
+        default=None,
+        help="Label for this run (default: current git branch)",
+    )
+    parser.add_argument(
+        "--compare-label",
+        type=str,
+        default="baseline",
+        help="Label for the comparison run (default: baseline)",
+    )
+    parser.add_argument(
+        "--binary-sizes",
+        action="store_true",
+        help="Measure sizes of _tycho extension and bench binary",
+    )
+    parser.add_argument(
+        "--compile-json",
+        type=str,
+        help="Path to compile timing JSON from bench_compile.sh",
+    )
+    parser.add_argument(
+        "--skip-python", action="store_true", help="Skip Python benchmarks"
+    )
+    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ benchmarks")
+    parser.add_argument(
+        "--suite",
+        type=str,
+        default=None,
+        help="Run only benchmarks in this subdirectory (e.g. basic, control, "
+        "astrodynamics, low_thrust, multi_phase, aircraft)",
+    )
+    parser.add_argument(
+        "--from-json",
+        type=str,
+        help="Load existing results JSON instead of running benchmarks",
+    )
     args = parser.parse_args()
 
     label = args.label or _current_branch()
@@ -425,14 +468,16 @@ def main() -> None:
             "cpp": {},
         }
 
-    bench_dir = Path(__file__).parent              # bench/ directory
-    build_dir = bench_dir.parent / "build"         # repo-root build dir
+    bench_dir = Path(__file__).parent  # bench/ directory
+    build_dir = bench_dir.parent / "build"  # repo-root build dir
 
     # ------------------------------------------------------------------
     # Auto-discover Python benchmarks under bench/python/*/bench_*.py
     # Key format: "{suite}/{script_stem}"  e.g. "basic/bench_brachistochrone"
     # ------------------------------------------------------------------
-    def discover_python_benchmarks(suite_filter: Optional[str]) -> List[Tuple[str, Path]]:
+    def discover_python_benchmarks(
+        suite_filter: Optional[str],
+    ) -> List[Tuple[str, Path]]:
         """Return [(key, path)] sorted by suite then name."""
         python_dir = bench_dir / "python"
         found: List[Tuple[str, Path]] = []
@@ -459,7 +504,9 @@ def main() -> None:
             for key, script in python_benchmarks:
                 print(f"  {key}...", end=" ", flush=True)
                 try:
-                    mean, std = run_python_benchmark(str(script), args.runs, args.timeout)
+                    mean, std = run_python_benchmark(
+                        str(script), args.runs, args.timeout
+                    )
                     results["python"][key] = {"mean": mean, "std": std}
                     print(f"{mean:.4f}s ± {std:.4f}s")
                 except Exception as exc:
@@ -470,7 +517,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     cpp_benchmarks = [
         ("brachistochrone_bench", "brachistochrone/brachistochrone_bench"),
-        ("gf_eval_bench",         "gf_eval/gf_eval_bench"),
+        ("gf_eval_bench", "gf_eval/gf_eval_bench"),
     ]
 
     if not args.from_json and not args.skip_cpp and not args.suite:
@@ -499,12 +546,14 @@ def main() -> None:
             with open(compile_path) as f:
                 compile_data = json.load(f)
             results["compile"] = {
-                "mean_s":  compile_data["mean_s"],
-                "std_s":   compile_data["std_s"],
-                "trials":  compile_data.get("trials", []),
+                "mean_s": compile_data["mean_s"],
+                "std_s": compile_data["std_s"],
+                "trials": compile_data.get("trials", []),
             }
-            print(f"\nCompile timing loaded: {compile_data['mean_s']:.1f}s ± {compile_data['std_s']:.1f}s "
-                  f"({len(compile_data.get('trials', []))} trial(s))")
+            print(
+                f"\nCompile timing loaded: {compile_data['mean_s']:.1f}s ± {compile_data['std_s']:.1f}s "
+                f"({len(compile_data.get('trials', []))} trial(s))"
+            )
 
     # ------------------------------------------------------------------
     # Binary sizes
@@ -535,12 +584,18 @@ def main() -> None:
     if args.compare:
         compare_path = Path(args.compare)
         if not compare_path.exists():
-            print(f"Warning: comparison file not found: {compare_path}", file=sys.stderr)
+            print(
+                f"Warning: comparison file not found: {compare_path}", file=sys.stderr
+            )
         else:
             with open(compare_path) as f:
                 compare_results = json.load(f)
-            compare_label = args.compare_label or compare_results.get("metadata", {}).get("label", "baseline")
-            report_text = compare_reports(compare_results, compare_label, results, label)
+            compare_label = args.compare_label or compare_results.get(
+                "metadata", {}
+            ).get("label", "baseline")
+            report_text = compare_reports(
+                compare_results, compare_label, results, label
+            )
 
     if report_text is None and args.report:
         report_text = generate_report(results, label)

@@ -7,7 +7,9 @@ All plotting code removed. Output suppressed via PrintLevel.
 """
 
 import time
+
 import numpy as np
+
 import tycho as ast
 
 vf = ast.VectorFunctions
@@ -58,6 +60,7 @@ def PathCon(sigma, c, h_ref, Tmag, g):
 
 
 if __name__ == "__main__":
+
     def Ulaw():
         m = Args(1)[0]
         return vf.ifelse(m > mf, 1, 0)
@@ -68,14 +71,17 @@ if __name__ == "__main__":
     ode = GoddardRocket(sigma, c, h_ref, Tmag, g)
     integ = ode.integrator(0.01, Ulaw(), [2])
     X0 = np.zeros(5)
-    X0[0] = 0; X0[1] = 0; X0[2] = m0; X0[4] = 1
+    X0[0] = 0
+    X0[1] = 0
+    X0[2] = m0
+    X0[4] = 1
     TrajIG = integ.integrate_dense(X0, 60 / Tstar, 1000, StopFunc)
 
     # Multi-phase formulation
     n = int(len(TrajIG) / 3)
     TrajIG1 = TrajIG[0:n]
-    TrajIG2 = TrajIG[n: 2 * n]
-    TrajIG3 = TrajIG[2 * n:-1]
+    TrajIG2 = TrajIG[n : 2 * n]
+    TrajIG3 = TrajIG[2 * n : -1]
 
     phase1 = ode.phase("LGL3", TrajIG1, 32)
     phase1.addBoundaryValue("Front", range(0, 4), TrajIG[0][0:4])

@@ -12,7 +12,6 @@
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
-import tycho as ast
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np

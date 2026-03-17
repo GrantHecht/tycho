@@ -15,9 +15,8 @@
 
 import inspect
 
-import numpy as np
-
 import _tycho as _tycho
+import numpy as np
 from _tycho.VectorFunctions import *
 
 Arguments = _tycho.VectorFunctions.Arguments
@@ -54,6 +53,8 @@ def cross(a, b):
     if isinstance(a, (list, tuple)):
         a = np.asarray(a, dtype=np.float64)
     return _cross_cpp(a, b)
+
+
 cwiseProduct = _tycho.VectorFunctions.cwiseProduct
 cwiseQuotient = _tycho.VectorFunctions.cwiseQuotient
 dot = _tycho.VectorFunctions.dot

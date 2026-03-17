@@ -16,6 +16,7 @@ import json
 import time
 
 import numpy as np
+
 import tycho as ast
 
 vf = ast.VectorFunctions
@@ -29,7 +30,9 @@ def build_brachistochrone():
             xtu = oc.ODEArguments(3, 1)
             _, _, v = xtu.XVec().tolist()
             theta = xtu.UVar(0)
-            ode = vf.stack([vf.sin(theta) * v, -1.0 * vf.cos(theta) * v, g * vf.cos(theta)])
+            ode = vf.stack(
+                [vf.sin(theta) * v, -1.0 * vf.cos(theta) * v, g * vf.cos(theta)]
+            )
             super().__init__(ode, 3, 1)
 
     g = 9.81
@@ -164,7 +167,9 @@ def build_delta3():
         raan = vf.ifelse(nvec[1] > 0, raan, 2 * np.pi - raan)
         aop = vf.arccos(nvec.normalized().dot(evec.normalized()))
         aop = vf.ifelse(evec[2] > 0, aop, 2 * np.pi - aop)
-        return vf.stack([sma, ecc, inc_val, raan, aop]) - np.array([at, et, inc, om, argp])
+        return vf.stack([sma, ecc, inc_val, raan, aop]) - np.array(
+            [at, et, inc, om, argp]
+        )
 
     at = 24361140 / lstar
     et = 0.7308
@@ -191,13 +196,19 @@ def build_delta3():
             x[6] = m0_phase1 + (mf_phase1 - m0_phase1) * (t / tf_phase1)
             ig1.append(x.copy())
         elif t < tf_phase2:
-            x[6] = m0_phase2 + (mf_phase2 - m0_phase2) * ((t - tf_phase1) / (tf_phase2 - tf_phase1))
+            x[6] = m0_phase2 + (mf_phase2 - m0_phase2) * (
+                (t - tf_phase1) / (tf_phase2 - tf_phase1)
+            )
             ig2.append(x.copy())
         elif t < tf_phase3:
-            x[6] = m0_phase3 + (mf_phase3 - m0_phase3) * ((t - tf_phase2) / (tf_phase3 - tf_phase2))
+            x[6] = m0_phase3 + (mf_phase3 - m0_phase3) * (
+                (t - tf_phase2) / (tf_phase3 - tf_phase2)
+            )
             ig3.append(x.copy())
         elif t < tf_phase4:
-            x[6] = m0_phase4 + (mf_phase4 - m0_phase4) * ((t - tf_phase3) / (tf_phase4 - tf_phase3))
+            x[6] = m0_phase4 + (mf_phase4 - m0_phase4) * (
+                (t - tf_phase3) / (tf_phase4 - tf_phase3)
+            )
             ig4.append(x.copy())
 
     ode1 = RocketODE(thrust_phase1, mdot_phase1)
@@ -379,7 +390,9 @@ def build_optimal_docking():
             thrust = args.UVec().head3()
             torque = args.UVec().tail3()
             xdot = v
-            vdoto = vf.stack([2 * n * v[1] + (3 * n**2) * x[0], -2 * n * v[0], -(n**2) * x[2]])
+            vdoto = vf.stack(
+                [2 * n * v[1] + (3 * n**2) * x[0], -2 * n * v[0], -(n**2) * x[2]]
+            )
             thrust_global = vf.quatRotate(q, thrust)
             vdot = vdoto + thrust_global / mass
             qdot = vf.quatProduct(q, w.padded_lower(1)) / 2.0
@@ -400,7 +413,9 @@ def build_optimal_docking():
             super().__init__(ode, 7, 0)
 
     def rend_con(ud):
-        x, v, q, w, p, phi = Args(20).tolist([(0, 3), (3, 3), (6, 4), (10, 3), (13, 4), (17, 3)])
+        x, v, q, w, p, phi = Args(20).tolist(
+            [(0, 3), (3, 3), (6, 4), (10, 3), (13, 4), (17, 3)]
+        )
         q = q.normalized()
         p = p.normalized()
         xdq = vf.quatRotate(q, ud)

@@ -7,9 +7,11 @@ and repeated OCP solves.
 All plotting code removed. Output suppressed via PrintLevel.
 """
 
-import time
 import copy
+import time
+
 import numpy as np
+
 import tycho as ast
 import tycho.Astro.Constants as c
 from tycho.Astro.AstroModels import CR3BP

@@ -535,6 +535,7 @@ if __name__ == "__main__":
     phase.setThreads(8, 8)
     phase.optimizer.PrintLevel = 1
     phase.optimizer.set_EContol(1.0e-9)
+    # phase.optimizer.set_QPOrderingMode("MTMETIS")
 
     phase.setAdaptiveMesh(True)
     phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)

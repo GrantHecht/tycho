@@ -7,7 +7,9 @@ All plotting code removed. Output suppressed via PrintLevel.
 """
 
 import time
+
 import numpy as np
+
 import tycho as ast
 
 vf = ast.VectorFunctions
