@@ -165,6 +165,7 @@ python examples/Brachistochrone.py
 | `BUILD_CPP_TESTS`          | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
+| `VECTORIZATION_REPORT`     | `ON` to emit compiler vectorization diagnostics (Clang `-Rpass` / GCC `-fopt-info`)          |
 
 The CMake presets dynamically resolve `Python_EXECUTABLE` and
 `PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so they always target
@@ -173,6 +174,63 @@ the correct interpreter. When updating LLVM, change the hardcoded libomp path in
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
+
+## Vectorization Analysis
+
+The `VECTORIZATION_REPORT` CMake option enables compiler diagnostics for both
+loop auto-vectorization and SLP (Superword-Level Parallelism) vectorization.
+This is useful for verifying that performance-critical code paths (especially
+Eigen expression templates and PSIOPT's NLP core) are being vectorized.
+
+### Running the analysis
+
+1. **Reconfigure with the option enabled:**
+   ```bash
+   cmake --preset <your-preset> -DVECTORIZATION_REPORT=ON
+   ```
+
+2. **Do a clean build and capture remarks to a file:**
+   Remarks are emitted on stderr. Redirect accordingly for your shell:
+   ```bash
+   # bash / zsh
+   cd build && ninja -j2 all 2> vec_report.txt
+
+   # PowerShell (Windows)
+   cd build; ninja -j2 all 2> vec_report.txt
+   ```
+
+3. **Filter and summarise the results:**
+   ```bash
+   # Successful vectorizations (loop + SLP) in Tycho source
+   grep "\-Rpass=" vec_report.txt | grep "/Source/tycho/src/" | sort -u
+
+   # Successful vectorizations in Eigen
+   grep "\-Rpass=" vec_report.txt | grep "/dep/eigen/" | sort -u
+
+   # Missed opportunities (potential optimisation targets)
+   grep "\-Rpass-missed=" vec_report.txt | grep "/Source/tycho/src/" | sort -u
+   ```
+
+   Adapt the path patterns to match your build environment (e.g. on Windows
+   the paths will use backslashes or the repo may be under a different root).
+
+4. **Disable when done** (the volume of diagnostics slows the build):
+   ```bash
+   cmake --preset <your-preset> -DVECTORIZATION_REPORT=OFF
+   ```
+
+### What to look for
+
+- **`-Rpass=loop-vectorize`** — loop bodies packed into SIMD lanes.
+- **`-Rpass=slp-vectorize`** — straight-line scalar ops packed into SIMD
+  (dominates in this codebase due to Eigen expression templates).
+- **`-Rpass-missed=`** — the compiler tried but failed; check the
+  corresponding `-Rpass-analysis=` line for the reason.
+
+Key subsystems where vectorization matters most: `Solvers/NonLinearProgram.cpp`
+(PSIOPT inner loops), `VectorFunctions/DenseFunctionBase.h` (VF evaluation),
+`VectorFunctions/DenseDifferentiation/` (forward AD), `Integrators/Integrator.h`
+(RK steppers), and `dep/eigen/` (underlying linear algebra).
 
 ## Key Concepts and Domain Language
 
