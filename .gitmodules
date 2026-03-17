@@ -11,3 +11,6 @@
 [submodule "dep/nanobind"]
 	path = dep/nanobind
 	url = https://github.com/wjakob/nanobind
+[submodule "dep/thread-pool"]
+	path = dep/thread-pool
+	url = https://github.com/bshoshany/thread-pool.git

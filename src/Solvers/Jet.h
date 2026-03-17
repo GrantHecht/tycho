@@ -124,10 +124,10 @@ struct Jet {
 
         std::vector<std::future<PSIOPT::ConvergenceFlags>> results(NumJobs);
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        ctpl::ThreadPool pool(nt);
+        BS::thread_pool pool(nt);
         Utils::Timer t;
 
-        auto Job = [&](int threadid, int i) {
+        auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
             // Per-thread single-threaded mode (uses BLASSetThreading on
             // macOS 15+, env var fallback on older systems)
@@ -149,7 +149,7 @@ struct Jet {
         t.start();
 
         for (int i = 0; i < NumJobs; i++) {
-            results[i] = pool.push(Job, i);
+            results[i] = pool.submit_task([&Job, i] { return Job(i); });
         }
 
         for (int i = 0; i < NumJobs; i++) {

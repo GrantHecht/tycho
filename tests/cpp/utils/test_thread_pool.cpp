@@ -1,75 +1,68 @@
 ///////////////////////////////////////////////////////////////////////////////
 // ThreadPool unit tests
 //
-// Tests ctpl::ThreadPool from src/Utils/ThreadPool.h — construction,
-// task submission, resize, idle counts, and shutdown behavior.
+// Tests BS::thread_pool from dep/thread-pool — construction,
+// task submission, reset, thread counts, and shutdown behavior.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/ThreadPool.h"
+#include <BS_thread_pool.hpp>
 #include <atomic>
 #include <gtest/gtest.h>
 #include <vector>
 
-TEST(ThreadPoolTest, DefaultConstruct) {
-    ctpl::ThreadPool pool;
-    EXPECT_EQ(pool.size(), 0);
+TEST(ThreadPoolTest, ConstructWithZero) {
+    BS::thread_pool pool(0);
+    EXPECT_EQ(pool.get_thread_count(), 0u);
 }
 
 TEST(ThreadPoolTest, ConstructWithN) {
-    ctpl::ThreadPool pool(4);
-    EXPECT_EQ(pool.size(), 4);
+    BS::thread_pool pool(4);
+    EXPECT_EQ(pool.get_thread_count(), 4u);
 }
 
-TEST(ThreadPoolTest, PushAndGetResult) {
-    ctpl::ThreadPool pool(2);
-    auto fut = pool.push([](int) { return 42; });
+TEST(ThreadPoolTest, SubmitAndGetResult) {
+    BS::thread_pool pool(2);
+    auto fut = pool.submit_task([] { return 42; });
     EXPECT_EQ(fut.get(), 42);
 }
 
-TEST(ThreadPoolTest, PushMultipleTasks) {
-    ctpl::ThreadPool pool(4);
+TEST(ThreadPoolTest, SubmitMultipleTasks) {
+    BS::thread_pool pool(4);
     std::atomic<int> counter{0};
     std::vector<std::future<void>> futs;
     futs.reserve(100);
     for (int i = 0; i < 100; ++i) {
-        futs.push_back(pool.push([&counter](int) { counter.fetch_add(1); }));
+        futs.push_back(pool.submit_task([&counter] { counter.fetch_add(1); }));
     }
     for (auto &f : futs)
         f.get();
     EXPECT_EQ(counter.load(), 100);
 }
 
-TEST(ThreadPoolTest, ResizeUp) {
-    ctpl::ThreadPool pool(2);
-    pool.resize(6);
-    EXPECT_EQ(pool.size(), 6);
+TEST(ThreadPoolTest, Reset) {
+    BS::thread_pool pool(2);
+    pool.reset(6);
+    EXPECT_EQ(pool.get_thread_count(), 6u);
+    pool.reset(2);
+    EXPECT_EQ(pool.get_thread_count(), 2u);
 }
 
-TEST(ThreadPoolTest, ResizeDown) {
-    ctpl::ThreadPool pool(6);
-    pool.resize(2);
-    EXPECT_EQ(pool.size(), 2);
-}
-
-TEST(ThreadPoolTest, IdleCount) {
-    ctpl::ThreadPool pool(4);
-    // Poll until all threads are idle (with a generous deadline for CI load)
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-    while (pool.n_idle() < 4 && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
-    }
-    EXPECT_EQ(pool.n_idle(), 4);
-}
-
-TEST(ThreadPoolTest, StopWithWait) {
-    ctpl::ThreadPool pool(2);
+TEST(ThreadPoolTest, Wait) {
+    BS::thread_pool pool(4);
     std::atomic<int> counter{0};
     for (int i = 0; i < 50; ++i) {
-        pool.push([&counter](int) {
+        pool.detach_task([&counter] {
             counter.fetch_add(1);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         });
     }
-    pool.stop(true); // Wait for all tasks
+    pool.wait();
     EXPECT_EQ(counter.load(), 50);
+}
+
+TEST(ThreadPoolTest, TasksTotal) {
+    BS::thread_pool pool(2);
+    // After construction with no tasks, total should be 0
+    pool.wait();
+    EXPECT_EQ(pool.get_tasks_total(), 0u);
 }

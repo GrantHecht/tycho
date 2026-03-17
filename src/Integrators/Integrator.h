@@ -76,18 +76,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ControllerType controller;
     StepperWrapperType stepper;
     RKOptions RKMethod = RKOptions::DOPRI54;
-    std::shared_ptr<ctpl::ThreadPool> pool;
+    std::shared_ptr<BS::thread_pool> pool;
 
     void setPoolThreads(int thrs) {
-        if (this->pool->size() < thrs) {
-            this->pool->resize(thrs);
+        if (static_cast<int>(this->pool->get_thread_count()) < thrs) {
+            this->pool->reset(thrs);
         }
     }
 
   public:
     Integrator() {
         this->EnableVectorization = true;
-        this->pool = std::make_shared<ctpl::ThreadPool>();
+        this->pool = std::make_shared<BS::thread_pool>(0);
     }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
@@ -1698,7 +1698,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
         std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate(x0s[i], tfs[i], args...);
             }
@@ -1707,7 +1707,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (int i = 0; i < thrs; i++) {
             int start = (i * n) / thrs;
             int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
+            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
         }
         for (int i = 0; i < thrs; i++) {
             futures[i].get();
@@ -1867,7 +1867,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
         std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_dense(x0s[i], tfs[i], args...);
             }
@@ -1876,7 +1876,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (int i = 0; i < thrs; i++) {
             int start = (i * n) / thrs;
             int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
+            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
         }
         for (int i = 0; i < thrs; i++) {
             futures[i].get();
@@ -1919,7 +1919,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
         std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_dense(x0s[i], tfs[i], ns[i], args...);
             }
@@ -1928,7 +1928,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (int i = 0; i < thrs; i++) {
             int start = (i * n) / thrs;
             int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
+            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
         }
         for (int i = 0; i < thrs; i++) {
             futures[i].get();
@@ -1980,7 +1980,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
         std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_stm(x0s[i], tfs[i], args...);
             }
@@ -1989,7 +1989,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (int i = 0; i < thrs; i++) {
             int start = (i * n) / thrs;
             int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
+            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
         }
         for (int i = 0; i < thrs; i++) {
             futures[i].get();
@@ -2020,14 +2020,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         Eigen::MatrixXd jxall(this->IRows(), this->IRows());
         jxall.setIdentity();
 
-        auto stm_op = [&](int id, int i) {
+        auto stm_op = [&](int i) {
             auto xi = Xs[i];
             auto tf1 = ts[i + 1];
             return this->integrate_stm(xi, tf1);
         };
 
         for (int i = 0; i < thrs; i++) {
-            results[i] = this->pool->push(stm_op, i);
+            results[i] = this->pool->submit_task([&stm_op, i] { return stm_op(i); });
             if (i < (thrs - 1))
                 Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
         }

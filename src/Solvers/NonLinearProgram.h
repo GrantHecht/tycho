@@ -31,7 +31,7 @@ struct NonLinearProgram {
     using VectorXd = Eigen::VectorXd;
     using MatrixXi = Eigen::MatrixXi;
 
-    ctpl::ThreadPool TP; /// Active Threadpool for multithreaded function evaluation
+    BS::thread_pool TP; /// Active Threadpool for multithreaded function evaluation
     int Threads = 1;
 
     /// <summary>
@@ -118,16 +118,15 @@ struct NonLinearProgram {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    NonLinearProgram(int FunThr) {
+    NonLinearProgram(int FunThr) : TP(std::max(FunThr, 1) + 2) {
         this->Threads = std::max(FunThr, 1);
         this->ZThreads = this->Threads;
-        this->TP.resize(this->Threads + 2);
     }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
-                     int FunThr) {
+                     int FunThr)
+        : TP(std::max(FunThr, 1) + 2) {
         this->Threads = std::max(FunThr, 1);
-        this->TP.resize(this->Threads + 2);
 
         this->Objectives = obj;
         this->EqualityConstraints = eq;
@@ -249,7 +248,7 @@ struct NonLinearProgram {
     void setSlacksOnes() { this->SlackCoeffs().setConstant(1.0); }
 
     void fillSolverCoeffs(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
-        auto FillOp = [&](int id, int start, int stop) {
+        auto FillOp = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 mat.valuePtr()[this->KKTLocations.tail(this->numSolverKKTElems)[i]] +=
                     this->SolverCoeffs[i];
@@ -262,23 +261,18 @@ struct NonLinearProgram {
             int start = (i * this->numSolverKKTElems) / (th);
             int stop = ((i + 1) * this->numSolverKKTElems) / (th);
             if (i == (th - 1)) {
-                FillOp(0, start, stop);
+                FillOp(start, stop);
             } else {
-                results[i] = this->TP.push(FillOp, start, stop);
+                results[i] = this->TP.submit_task([&FillOp, start, stop] { FillOp(start, stop); });
             }
         }
         for (int i = 0; i < (th - 1); i++) {
             results[i].get();
         }
-
-        // for (int i = 0; i < this->numSolverKKTElems; i++) {
-        //   mat.valuePtr()[this->KKTLocations.tail(this->numSolverKKTElems)[i]] +=
-        //       this->SolverCoeffs[i];
-        // }
     }
 
     void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {
-        auto ZOp = [&](int id, int start, int size) {
+        auto ZOp = [&](int start, int size) {
             double *pt = mat.valuePtr() + start;
             std::fill_n(pt, size, 0.0);
         };
@@ -291,9 +285,9 @@ struct NonLinearProgram {
             int stop = ((i + 1) * n) / (th);
             int elems = stop - start;
             if (i == (th - 1)) {
-                ZOp(0, start, elems);
+                ZOp(start, elems);
             } else {
-                results[i] = this->TP.push(ZOp, start, elems);
+                results[i] = this->TP.submit_task([&ZOp, start, elems] { ZOp(start, elems); });
             }
         }
         for (int i = 0; i < (th - 1); i++) {

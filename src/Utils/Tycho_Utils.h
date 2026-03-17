@@ -21,7 +21,7 @@
 #include "MathFunctions.h"
 #include "STDExtensions.h"
 #include "SizingHelpers.h"
-#include "ThreadPool.h"
+#include <BS_thread_pool.hpp>
 #include "TupleIterator.h"
 #include "TypeName.h"
 
