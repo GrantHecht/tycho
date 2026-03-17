@@ -147,7 +147,7 @@ BENCHMARK(BM_AllocateRun_Nested);
 ///////////////////////////////////////////////////////////////////////////////
 
 static void BM_ThreadPool_Dispatch(benchmark::State &state) {
-    BS::thread_pool pool(1);
+    BS::thread_pool<> pool(1);
     for (auto _ : state) {
         auto fut = pool.submit_task([] { return 42; });
         int val = fut.get();
@@ -158,7 +158,7 @@ BENCHMARK(BM_ThreadPool_Dispatch);
 
 static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
     int N = static_cast<int>(state.range(0));
-    BS::thread_pool pool(4);
+    BS::thread_pool<> pool(4);
     for (auto _ : state) {
         std::vector<std::future<int>> futures;
         futures.reserve(N);

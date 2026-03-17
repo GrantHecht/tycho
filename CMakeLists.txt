@@ -326,9 +326,12 @@ include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
 include_directories(dep/thread-pool/include)
 
+# fmt is used by core libraries (utils) so it must always be available.
+add_subdirectory(dep/fmt)
+
 if(ENABLE_PYTHON_BINDINGS)
     find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
-    add_subdirectory(dep)
+    add_subdirectory(dep/nanobind)
 endif()
 
 # Set up external dependencies
@@ -433,9 +436,9 @@ endif()
 
 
 if(BUILD_SHARED_LIBS AND NOT APPLE AND NOT WIN32)  # Windows and Linux Dynamic Linking
-  list(APPEND LINKER_FLAGS "${OpenMP_CXX_FLAGS} -Wl,--no-undefined -Wl,--start-group ${MKL_LIBRARIES_LIST} -Wl, --end-group")
+  list(APPEND LINKER_FLAGS ${OpenMP_CXX_FLAGS} "-Wl,--no-undefined" "-Wl,--start-group" ${MKL_LIBRARIES} "-Wl,--end-group")
 elseif(UNIX AND NOT APPLE)  # Linux Static Linking
-  list(APPEND LINKER_FLAGS "${OpenMP_CXX_FLAGS} -Wl,--no-undefined -Wl,--start-group ${MKL_LIBRARIES_LIST} -Wl,--end-group")
+  list(APPEND LINKER_FLAGS ${OpenMP_CXX_FLAGS} "-Wl,--no-undefined" "-Wl,--start-group" ${MKL_LIBRARIES} "-Wl,--end-group")
 elseif(APPLE)  # Apple Dynamic and Static Linking
   list(APPEND LINKER_FLAGS ${OpenMP_CXX_FLAGS})
   list(APPEND LINKER_FLAGS "-Wl,-bind_at_load")

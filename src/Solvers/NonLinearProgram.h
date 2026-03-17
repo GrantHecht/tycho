@@ -31,7 +31,7 @@ struct NonLinearProgram {
     using VectorXd = Eigen::VectorXd;
     using MatrixXi = Eigen::MatrixXi;
 
-    BS::thread_pool TP; /// Active Threadpool for multithreaded function evaluation
+    BS::thread_pool<> TP; /// Active Threadpool for multithreaded function evaluation
     int Threads = 1;
 
     /// <summary>

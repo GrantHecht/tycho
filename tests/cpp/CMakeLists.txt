@@ -101,7 +101,10 @@ set(TYCHO_TEST_SOURCES
 )
 
 add_executable(tycho_tests ${TYCHO_TEST_SOURCES})
-target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
+# Match PIC mode with pch_tests (static lib gets -fPIC, executable gets -fPIE
+# by default — clang 20+ rejects the AST mismatch in reused PCH).
+set_target_properties(tycho_tests PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS} -fPIC)
 target_include_directories(tycho_tests PRIVATE
     ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h

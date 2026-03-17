@@ -124,7 +124,7 @@ struct Jet {
 
         std::vector<std::future<PSIOPT::ConvergenceFlags>> results(NumJobs);
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        BS::thread_pool pool(nt);
+        BS::thread_pool<> pool(nt);
         Utils::Timer t;
 
         auto Job = [&](int i) {

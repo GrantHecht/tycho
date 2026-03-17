@@ -76,7 +76,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ControllerType controller;
     StepperWrapperType stepper;
     RKOptions RKMethod = RKOptions::DOPRI54;
-    std::shared_ptr<BS::thread_pool> pool;
+    std::shared_ptr<BS::thread_pool<>> pool;
 
     void setPoolThreads(int thrs) {
         if (static_cast<int>(this->pool->get_thread_count()) < thrs) {
@@ -87,7 +87,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
   public:
     Integrator() {
         this->EnableVectorization = true;
-        this->pool = std::make_shared<BS::thread_pool>(0);
+        this->pool = std::make_shared<BS::thread_pool<>>(1);
     }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
