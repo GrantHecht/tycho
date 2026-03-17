@@ -1,0 +1,14 @@
+{
+  "planPath": "TYCHO_API_DESIGN_PHASE7_PLAN.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Create feature branch", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Fix Scaled<Scaled<...>> nesting", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Fix BUILD_ODE_FROM_EXPRESSION multi-parameter support", "status": "pending", "blockedBy": [1]},
+    {"id": 4, "subject": "Task 4: Implement firebreak mechanism (tycho::barrier)", "status": "pending", "blockedBy": [1]},
+    {"id": 5, "subject": "Task 5: Surface FD and forward-mode AD as first-class options", "status": "pending", "blockedBy": [1]},
+    {"id": 6, "subject": "Task 6: Implement compile-time named variables (XVar, UVar tags)", "status": "pending", "blockedBy": [1]},
+    {"id": 7, "subject": "Task 7: Prototype ODE definition syntax options (A and B)", "status": "pending", "blockedBy": [3, 6]},
+    {"id": 8, "subject": "Task 8: Full validation", "status": "pending", "blockedBy": [2, 3, 4, 5, 6, 7]}
+  ],
+  "lastUpdated": "2026-03-16T00:00:00Z"
+}

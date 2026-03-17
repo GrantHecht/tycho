@@ -1,0 +1,14 @@
+{
+  "planPath": "TYCHO_API_DESIGN_PHASE5_PLAN.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Create feature branch", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Design and implement VarRegistry", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Implement RuntimeODE", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Implement ODEBuilder", "status": "pending", "blockedBy": [3]},
+    {"id": 5, "subject": "Task 5: Implement tycho::Phase wrapper", "status": "pending", "blockedBy": [2]},
+    {"id": 6, "subject": "Task 6: Integration test - Brachistochrone via Builder API", "status": "pending", "blockedBy": [4, 5]},
+    {"id": 7, "subject": "Task 7: Add public header entries and update umbrella", "status": "pending", "blockedBy": [4, 5]},
+    {"id": 8, "subject": "Task 8: Full validation", "status": "pending", "blockedBy": [6, 7]}
+  ],
+  "lastUpdated": "2026-03-16T00:00:00Z"
+}

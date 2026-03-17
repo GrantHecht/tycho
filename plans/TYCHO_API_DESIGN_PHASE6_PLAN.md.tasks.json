@@ -1,0 +1,12 @@
+{
+  "planPath": "TYCHO_API_DESIGN_PHASE6_PLAN.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Create feature branch", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Implement Brachistochrone builder example", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Implement Zermelo builder example", "status": "pending", "blockedBy": [1]},
+    {"id": 4, "subject": "Task 4: Implement Delta3Launch builder example", "status": "pending", "blockedBy": [1]},
+    {"id": 5, "subject": "Task 5: Implement HyperSensLong builder example", "status": "pending", "blockedBy": [1]},
+    {"id": 6, "subject": "Task 6: Update top-level CMake and full validation", "status": "pending", "blockedBy": [2, 3, 4, 5]}
+  ],
+  "lastUpdated": "2026-03-16T00:00:00Z"
+}
