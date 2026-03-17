@@ -128,7 +128,11 @@ struct Jet {
         Utils::Timer t;
 
         auto Job = [&](int threadid, int i) {
-#ifndef USE_ACCELERATE_SPARSE
+#ifdef USE_ACCELERATE_SPARSE
+            // Per-thread single-threaded mode (uses BLASSetThreading on
+            // macOS 15+, env var fallback on older systems)
+            accelerate_set_num_threads(1);
+#else
             mkl_set_num_threads_local(1);
 #endif
 

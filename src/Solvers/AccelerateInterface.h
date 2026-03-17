@@ -25,6 +25,8 @@
 
 #include "AccelerateUtils.h"
 
+#include <limits>
+
 /*
 The classes in this file are directly based on the AccelerateSupport module from Eigen 3.4 and
 are subject to Eigen's MPL2 license, which can be found in the notices folder of the GitHub
@@ -264,7 +266,7 @@ class AccelerateImpl
             m_triType = (UpLo_ & Lower) ? SparseLowerTriangle : SparseUpperTriangle;
         }
 
-        m_order = SparseOrderMetis; // Use METIS ordering by default for better performance
+        m_order = SparseOrderMetis;
         m_doIterativeRefinement = false;
         m_iterativeRefinementIterations = 2;
     }
@@ -306,6 +308,9 @@ class AccelerateImpl
         eigen_assert(iterations >= 0 && "Number of iterations must be non-negative.");
         m_iterativeRefinementIterations = iterations;
     }
+
+    void setPivotTolerance(Scalar tol) { m_pivotTolerance = tol; }
+    void setZeroTolerance(Scalar tol) { m_zeroTolerance = tol; }
 
     MatrixType &getMatrix() { return m_matrix; }
 
@@ -354,51 +359,18 @@ class AccelerateImpl
     }
 
     template <SparseFactorization_t S = Solver_>
-    typename std::enable_if<S == SparseFactorizationLDLTTPP, Index>::type peigs() const {
-        eigen_assert(m_numericFactorization && "Numerical factorization must be computed first.");
-
-        int num_positive = 0, num_zero = 0, num_negative = 0;
-        int status =
-            SparseGetInertia(*m_numericFactorization, &num_positive, &num_zero, &num_negative);
-
-        if (status != 0) {
-            // If SparseGetInertia fails, return -1 to indicate error
-            return -1;
-        }
-
-        return static_cast<Index>(num_positive);
+    std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> peigs() const {
+        return static_cast<Index>(m_peigs);
     }
 
     template <SparseFactorization_t S = Solver_>
-    typename std::enable_if<S == SparseFactorizationLDLTTPP, Index>::type neigs() const {
-        eigen_assert(m_numericFactorization && "Numerical factorization must be computed first.");
-
-        int num_positive = 0, num_zero = 0, num_negative = 0;
-        int status =
-            SparseGetInertia(*m_numericFactorization, &num_positive, &num_zero, &num_negative);
-
-        if (status != 0) {
-            // If SparseGetInertia fails, return -1 to indicate error
-            return -1;
-        }
-
-        return static_cast<Index>(num_negative);
+    std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> neigs() const {
+        return static_cast<Index>(m_neigs);
     }
 
     template <SparseFactorization_t S = Solver_>
-    typename std::enable_if<S == SparseFactorizationLDLTTPP, Index>::type zeigs() const {
-        eigen_assert(m_numericFactorization && "Numerical factorization must be computed first.");
-
-        int num_positive = 0, num_zero = 0, num_negative = 0;
-        int status =
-            SparseGetInertia(*m_numericFactorization, &num_positive, &num_zero, &num_negative);
-
-        if (status != 0) {
-            // If SparseGetInertia fails, return -1 to indicate error
-            return -1;
-        }
-
-        return static_cast<Index>(num_zero);
+    std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> zeigs() const {
+        return static_cast<Index>(m_zeigs);
     }
 
     inline int ppivs() const {
@@ -415,6 +387,7 @@ class AccelerateImpl
     // Internal factorization methods
     AccelerateImpl &analyzePattern_internal();
     AccelerateImpl &factorize_internal();
+    AccelerateImpl &refactorize_internal();
     AccelerateImpl &compute_internal();
 
     // Cleanup method
@@ -425,6 +398,38 @@ class AccelerateImpl
     mutable int m_mem = 0;
 
   private:
+    void *getAlignedPointer(std::vector<uint8_t> &storage) const {
+        constexpr int kAlign = 16;
+        void *ptr = reinterpret_cast<void *>(storage.data());
+        size_t space = storage.size();
+        return std::align(kAlign, space - kAlign, ptr, space);
+    }
+
+    void cacheInertia() {
+        if constexpr (Solver_ == SparseFactorizationLDLTTPP) {
+            if (m_numericFactorization) {
+                int np = 0, nz = 0, nn = 0;
+                if (SparseGetInertia(*m_numericFactorization, &np, &nz, &nn) == 0) {
+                    m_peigs = np;
+                    m_neigs = nn;
+                    m_zeigs = nz;
+                } else {
+                    m_peigs = 0;
+                    m_neigs = 0;
+                    m_zeigs = 0;
+                }
+            }
+        }
+    }
+
+    void updatePerformanceMetrics() {
+        if (m_symbolicFactorization) {
+            m_mem = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
+                                                        : m_symbolicFactorization->factorSize_Float;
+        }
+        m_flops = 0;
+    }
+
     void buildAccelSparseMatrix() {
         SparseAttributes_t attributes{};
         attributes.kind = m_sparseKind;
@@ -515,9 +520,8 @@ class AccelerateImpl
             nopts.scalingMethod = SparseScalingDefault;
             nopts.scaling = nullptr;
             // Default values set by Apple
-            nopts.pivotTolerance = 0.01; // Recommended value for difficult matrices in double
-            nopts.zeroTolerance =
-                1e-4 * __DBL_EPSILON__; // "A few" orders of magnitude below epsilon.
+            nopts.pivotTolerance = m_pivotTolerance;
+            nopts.zeroTolerance = m_zeroTolerance;
 
             // Get factor and workspace size
             const int factorSize = std::is_same<Scalar, double>::value
@@ -536,9 +540,31 @@ class AccelerateImpl
 
             if (status != SparseStatusOK)
                 m_numericFactorization.reset(nullptr);
+            else
+                cacheInertia();
         }
 
         updateInfoStatus(status);
+    }
+
+    void doRefactorization() {
+        if (!m_numericFactorization || !m_symbolicFactorization) {
+            doFactorization();
+            if (m_numericFactorization)
+                updatePerformanceMetrics();
+            return;
+        }
+
+        void *ws = getAlignedPointer(m_workspace);
+        SparseRefactor(m_accel_matrix, m_numericFactorization.get(), ws);
+
+        SparseStatus_t status = m_numericFactorization->status;
+        updateInfoStatus(status);
+
+        if (status == SparseStatusOK) {
+            cacheInertia();
+            updatePerformanceMetrics();
+        }
     }
 
   protected:
@@ -577,6 +603,11 @@ class AccelerateImpl
     SparseOrder_t m_order;
     bool m_doIterativeRefinement;
     int m_iterativeRefinementIterations;
+    Scalar m_pivotTolerance = Scalar(0.01);
+    Scalar m_zeroTolerance = Scalar(1e-4) * std::numeric_limits<Scalar>::epsilon();
+    mutable int m_peigs = 0;
+    mutable int m_neigs = 0;
+    mutable int m_zeigs = 0;
     mutable std::vector<StorageIndex> m_permutation; // Store permutation from factorization
 };
 
@@ -697,13 +728,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
         ws = internal::resizeForAccelerateAlignment(workspaceSize, &m_solve_workspace);
         m_cached_solve_workspace_size = workspaceSize;
     } else {
-        // Reuse existing aligned workspace
-        constexpr int kAccelerateRequiredAlignment = 16;
-        ws = reinterpret_cast<void *>(
-            m_solve_workspace.data() +
-            (kAccelerateRequiredAlignment -
-             reinterpret_cast<uintptr_t>(m_solve_workspace.data()) % kAccelerateRequiredAlignment) %
-                kAccelerateRequiredAlignment);
+        ws = getAlignedPointer(m_solve_workspace);
     }
     assert(ws != nullptr && "Accelerate workspace alignment failed");
 
@@ -724,15 +749,23 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
         ref_mat.data = m_r_mem.data();
 
         for (int i = 0; i < m_iterativeRefinementIterations; ++i) {
-            // Calculate residual and store in ref_mat
-            vDSP_vnegD(bmat.data, 1, ref_mat.data, 1, n);
+            // Calculate residual: r = -b + A*x
+            if constexpr (std::is_same_v<Scalar, double>) {
+                vDSP_vnegD(bmat.data, 1, ref_mat.data, 1, n);
+            } else {
+                vDSP_vneg(bmat.data, 1, ref_mat.data, 1, n);
+            }
             SparseMultiplyAdd(m_accel_matrix, xmat, ref_mat);
 
-            // Solve for correction and store in ref_mat
+            // Solve for correction: ref = A^{-1} * r
             SparseSolve(*m_numericFactorization, ref_mat, ws);
 
-            // vDSP operation that calculates x -= correction
-            vDSP_vsubD(ref_mat.data, 1, xmat.data, 1, xmat.data, 1, n);
+            // Update solution: x -= correction
+            if constexpr (std::is_same_v<Scalar, double>) {
+                vDSP_vsubD(ref_mat.data, 1, xmat.data, 1, xmat.data, 1, n);
+            } else {
+                vDSP_vsub(ref_mat.data, 1, xmat.data, 1, xmat.data, 1, n);
+            }
         }
     }
 }
@@ -788,17 +821,16 @@ AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize_internal(
     m_numericFactorization.reset(nullptr);
     doFactorization();
 
-    // Update performance metrics after factorization
-    if (m_numericFactorization) {
-        // Estimate memory usage based on factorization storage
-        m_mem = static_cast<int>(m_factorStorage.size() + m_workspace.size());
+    if (m_numericFactorization)
+        updatePerformanceMetrics();
 
-        // Estimate FLOP count based on matrix size and sparsity
-        // This is a rough estimate since Accelerate doesn't provide exact FLOP counts
-        Index nnz = m_matrix.nonZeros();
-        m_flops = static_cast<int>(nnz * std::log(static_cast<double>(m_nRows)));
-    }
+    return *this;
+}
 
+template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
+AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_> &
+AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::refactorize_internal() {
+    doRefactorization();
     return *this;
 }
 
@@ -816,15 +848,8 @@ AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::compute_internal() 
     if (m_symbolicFactorization) {
         doFactorization();
 
-        // Update performance metrics after factorization
-        if (m_numericFactorization) {
-            // Estimate memory usage based on factorization storage
-            m_mem = static_cast<int>(m_factorStorage.size() + m_workspace.size());
-
-            // Estimate FLOP count based on matrix size and sparsity
-            Index nnz = m_matrix.nonZeros();
-            m_flops = static_cast<int>(nnz * std::log(static_cast<double>(m_nRows)));
-        }
+        if (m_numericFactorization)
+            updatePerformanceMetrics();
     }
 
     m_isInitialized = true;

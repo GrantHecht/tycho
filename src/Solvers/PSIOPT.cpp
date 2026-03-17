@@ -15,7 +15,7 @@
 
 #include "PSIOPT.h"
 
-#include "MKLInit.h"
+#include "SolverInit.h"
 
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
@@ -23,15 +23,15 @@
 
 #include "PyDocString/Solvers/PSIOPT_doc.h"
 
-void Tycho::PSIOPT::ensure_mkl_initialized() {
-    double initMs = ::Tycho::ensure_mkl_initialized();
+void Tycho::PSIOPT::ensure_solver_initialized() {
+    double initMs = ::Tycho::ensure_solver_initialized();
     if (initMs > 0.0) {
-        this->LastMKLInitTime = initMs / 1000.0;
-        // Suppress the MKL init line when init was trivially fast (< 0.5 ms),
-        // which also covers subsequent calls (return 0.0) and Accelerate (0.0).
-        constexpr double kMKLInitPrintThresholdMs = 0.5;
-        if (initMs > kMKLInitPrintThresholdMs && this->PrintLevel < 2) {
-            fmt::print(" MKL Initialization    : ");
+        this->LastSolverInitTime = initMs / 1000.0;
+        // Suppress the init line when init was trivially fast (< 0.5 ms),
+        // which also covers subsequent calls (return 0.0).
+        constexpr double kSolverInitPrintThresholdMs = 0.5;
+        if (initMs > kSolverInitPrintThresholdMs && this->PrintLevel < 2) {
+            fmt::print(" Solver Initialization : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
     }
@@ -457,13 +457,13 @@ int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
         }
     };
     auto Perturb = [&](double p) { this->nlp->perturbKKTPDiags(p, this->KKTSol.getMatrix()); };
-    auto Factor = [&]() { this->KKTSol.factorize_internal(); };
+    auto Refactor = [&]() { this->KKTSol.refactorize_internal(); };
     auto Compute = [&]() { this->KKTSol.compute_internal(); };
     int IncEigs;
 
     if (Zfac || docompute) {
         if (!docompute)
-            Factor();
+            Refactor();
         else
             Compute();
         RankDef();
@@ -476,7 +476,7 @@ int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
 
     for (int i = 0; i < this->MaxRefac; i++) {
         Perturb(p);
-        Factor();
+        Refactor();
         RankDef();
         IncEigs = Inertia();
         finalpert = p;
@@ -515,7 +515,7 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
     Utils::Timer Funtimer;
     Utils::Timer LStimer;
     Utils::Timer QPtimer;
-    Utils::Timer CBtimer;  // Callback time is included in LastMiscTime (not separately reported)
+    Utils::Timer CBtimer; // Callback time is included in LastMiscTime (not separately reported)
     Utils::Timer Printtimer;
 
     double Hpert0 = this->deltaH;
@@ -792,7 +792,7 @@ Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     if (docompute)
         this->KKTSol.compute_internal();
     else
-        this->KKTSol.factorize_internal();
+        this->KKTSol.refactorize_internal();
     kktt.stop();
 
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
@@ -804,10 +804,12 @@ Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     if (this->PrintLevel < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);
         if (docompute) {
-            fmt::print(" LDLT Factor NNZs      : ");
+            fmt::print(" LDLT Factor Size      : ");
             fmt::print(cyan, "{0:<10}\n", this->FactorMem);
-            fmt::print(" LDLT Factor FLOPs     : ");
-            fmt::print(cyan, "{0} MFLOPs\n", this->FactorFlops);
+            if (this->FactorFlops > 0) {
+                fmt::print(" LDLT Factor FLOPs     : ");
+                fmt::print(cyan, "{0} MFLOPs\n", this->FactorFlops);
+            }
         }
         fmt::print(" Analysis/Reorder Time : ");
         fmt::print(cyan, "{0:.3f} ms\n", pretime * 1000);
@@ -989,7 +991,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
-    this->ensure_mkl_initialized();
+    this->ensure_solver_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1011,9 +1013,8 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
-        this->LastPrintTime;
+    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
+                         this->LastFuncTime - this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_timing_summary();
@@ -1034,7 +1035,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
-    this->ensure_mkl_initialized();
+    this->ensure_solver_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1065,9 +1066,8 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
-        this->LastPrintTime;
+    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
+                         this->LastFuncTime - this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_Finished("Optimization Algorithm ");
@@ -1089,7 +1089,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
-    this->ensure_mkl_initialized();
+    this->ensure_solver_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1138,9 +1138,8 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
-        this->LastPrintTime;
+    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
+                         this->LastFuncTime - this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_timing_summary();
@@ -1161,7 +1160,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
-    this->ensure_mkl_initialized();
+    this->ensure_solver_initialized();
     Utils::Timer t;
     t.start();
 
@@ -1200,9 +1199,8 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
-        this->LastPrintTime;
+    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
+                         this->LastFuncTime - this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_timing_summary();
@@ -1224,7 +1222,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
         print_Header();
         print_Beginning("PSIOPT ");
     }
-    this->ensure_mkl_initialized();
+    this->ensure_solver_initialized();
     Utils::Timer t;
     t.start();
     bool docompute = analyze_KKT_Matrix();
@@ -1241,9 +1239,8 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime =
-        this->LastTotalTime - this->LastPreTime - this->LastKKTTime - this->LastFuncTime -
-        this->LastPrintTime;
+    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
+                         this->LastFuncTime - this->LastPrintTime;
 
     if (this->PrintLevel < 2) {
         print_Finished("Solve Algorithm ");

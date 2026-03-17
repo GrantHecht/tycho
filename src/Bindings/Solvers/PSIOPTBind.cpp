@@ -59,7 +59,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def_rw("LastKKTTime", &PSIOPT::LastKKTTime, PSIOPT_LastQPTime);
     obj.def_rw("LastMiscTime", &PSIOPT::LastMiscTime, PSIOPT_LastQPTime);
     obj.def_rw("LastPrintTime", &PSIOPT::LastPrintTime, PSIOPT_LastPrintTime);
-    obj.def_rw("LastMKLInitTime", &PSIOPT::LastMKLInitTime, PSIOPT_LastMKLInitTime);
+    obj.def_rw("LastSolverInitTime", &PSIOPT::LastSolverInitTime, PSIOPT_LastSolverInitTime);
     obj.def_rw("LastIterNum", &PSIOPT::LastIterNum, PSIOPT_LastIterNum);
     obj.def_rw("LastObjVal", &PSIOPT::LastObjVal);
 
@@ -175,6 +175,13 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_QPOrderingMode", nb::overload_cast<QPOrderingModes>(&PSIOPT::set_QPOrderingMode));
     obj.def("set_QPOrderingMode",
             nb::overload_cast<const std::string &>(&PSIOPT::set_QPOrderingMode));
+
+#ifdef USE_ACCELERATE_SPARSE
+    obj.def_rw("AccelPivotTolerance", &PSIOPT::AccelPivotTolerance);
+    obj.def_rw("AccelZeroTolerance", &PSIOPT::AccelZeroTolerance);
+    obj.def("set_AccelPivotTolerance", &PSIOPT::set_AccelPivotTolerance);
+    obj.def("set_AccelZeroTolerance", &PSIOPT::set_AccelZeroTolerance);
+#endif
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
     obj.def_rw("QPPrint", &PSIOPT::QPPrint);

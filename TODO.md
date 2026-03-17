@@ -1,351 +1,146 @@
-# Tycho — Modernization TODO
+# Tycho — TODO
 
-## Completed PRs
+## Betts Low-Thrust C++ Benchmark + C++ ODE API Improvements
 
-| PR   | Description                                                       | Status            |
-| ---- | ----------------------------------------------------------------- | ----------------- |
-| PR 1 | Rename ASSET/asset_asrl → Tycho/tycho                             | **DONE** (merged) |
-| PR 2 | Decouple C++ from Python bindings                                 | **DONE** (merged) |
-| PR 3 | Migrate pybind11 → nanobind                                       | **DONE** (merged) |
-| PR 4 | Separate extensions C++ from binding code                         | **DONE** (merged) |
-| PR 5 | Add per-file provenance headers to all ASSET-derived source files | **DONE** (merged) |
-| PR 6 | Type erasure refactor (flat vtable + C++20 bump)                  | **DONE** (merged) |
-| PR 7 | Fix GFStorage performance regression (shared_ptr)                 | **DONE** (merged) |
-| PR 8 | C++20 concept adoption in the CRTP hierarchy                      | **DONE** (implemented) |
-| PR 9 | Full rubber_types elimination                                      | **DONE** (implemented) |
+### Background
 
-### PR 6+7 Summary
+PR #20 added Accelerate sparse solver improvements and PSIOPT benchmarks.
+During regression investigation, we identified the need for a large-scale
+benchmark based on the Betts (2009) low-thrust orbit transfer (example 6).
+The Python version exists at `examples/UpdatedInterface/BettsLowThrust.py`
+and exercises the full solver stack: MEE dynamics with J2/J3/J4, LGL5
+collocation, adaptive mesh refinement, unit-vector control constraints.
 
-PR 6 replaced `rubber_types::TypeErasure` for `GenericFunction<IR,OR>` with a custom flat-vtable
-system (`GFConcept<IR,OR>` + `GFModel<IR,OR,T>` + `GFStorage<IR,OR>`) and bumped C++ standard
-to C++20. It also eliminated double-erasure in solver interfaces via `pack_into_*` dispatch.
+Implementing this in C++ exposed fundamental scalability issues with the
+static VectorFunction DSL used by `BUILD_ODE_FROM_EXPRESSION`.
 
-PR 6's SBO + value semantics caused a ~15-20x regression. PR 7 fixed it by switching GFStorage
-to `shared_ptr<GFConcept>`, restoring O(1) copies (1.56s vs 29.63s regression vs 1.91s baseline).
+### Problem: Template Instantiation Cost
 
-**Current GFStorage architecture:**
-```
-GFStorage<IR,OR>
-  shared_ptr<GFConcept<IR,OR>>       (O(1) copy via refcount)
-    GFConcept: flat vtable, non-virtual MI of Spec::Concepts
-      GFModel<IR,OR,T>: stores T directly
-```
+The MEE low-thrust ODE has 7 states, 3 controls, 1 parameter (12-element
+input vector, 7 complex outputs involving trig functions, divisions, and
+products). When defined via the static VF DSL (`Arguments<12>`, trig
+compositions, `StackedOutputs{7 items}`), clang consumes **11+ GB of RAM**
+per translation unit during template instantiation.
 
-**Remaining rubber_types usage** (eliminated in PR 9):
-- `GenericConditional<IR>`, `GenericComparative<IR>` — integrator stop functions
-- `ConstraintInterface`, `ObjectiveInterface` — solver interface wrappers
-- Dead `Model<>`/`ExternalInterface<>` boilerplate in Spec files
+For comparison:
+- `BrachODE` (3 states, 1 control → `Arguments<5>`, 3 outputs): ~2 GB
+- `PolarLTODE` (4 states, 2 controls → `Arguments<7>`, 4 outputs): ~8 GB
+- `MEELTODE` (7 states, 3 controls, 1 param → `Arguments<12>`, 7 outputs): **11+ GB**
 
----
+The cost grows super-linearly with expression tree depth because the Jacobian
+and VJP template expansions create deeply nested types. Placing a complex ODE
+in a shared header (`bench_common.h`) multiplies this cost across every TU
+that includes it.
 
-> **PR 8 is complete** — implemented as specified below with no runtime behavior change.
-> **PR 9 is complete** — rubber_types fully eliminated; `TypeErasure.h` and `DeepCopySpecs.h` deleted.
+### Additional Issues Discovered
 
-## PR 8 — C++20 Concept Adoption in the CRTP Hierarchy
+1. **`BUILD_ODE_FROM_EXPRESSION` only supports single-type constructor args.**
+   Multi-parameter ODEs require workarounds (struct wrapper or hardcoded
+   constants). The struct approach fails because `VectorExpression<Derived,
+   Impl, StructType>` doesn't generate the `Input<Scalar>`/`Output<Scalar>`
+   type aliases that `Integrator<ODE>` requires.
 
-**Status:** **DONE** (implemented)
+2. **No C++ equivalent of Python's `ODEBase` + named variable groups.**
+   The Python API (`oc.ODEBase` with `Vgroups`, `make_input()`, `make_units()`)
+   provides a clean interface for complex ODEs with named states/controls.
+   The C++ API requires manual index tracking for boundary conditions,
+   constraints, and objectives.
 
-### Goal
+3. **No C++ control-law integration API.**
+   Python's `ode.integrator(step, control_law, var_group)` allows generating
+   initial guesses with a control law applied during integration. The C++
+   `Integrator<ODE>` only supports autonomous integration — there's no way
+   to inject a control law for initial guess generation.
 
-Apply C++20 concepts to the VectorFunction CRTP layer. No runtime behavior change.
+4. **VF DSL double-scaling limitation.**
+   Expressions like `scalar * (1.0 + 0.01 * vf_expr) / scalar` produce
+   `Scaled<Scaled<...>>` nesting that triggers missing `Scaled_func` errors.
+   Workaround: pre-compute scalar coefficients before multiplying VF exprs.
 
-### New File: `src/VectorFunctions/VectorFunctionConcepts.h`
+### Implementation Plan
 
-**Group 1 — Scalar type concepts** (replace `DetectSuperScalar.h` type traits):
-```cpp
-template <typename T> concept IsSuperScalar = /* Eigen Array<Scalar,N,1> for N > 1 */;
-template <typename T> concept IsDoubleScalar = std::same_as<T, double>;
-```
+#### Phase 1: Dedicated BettsLT Benchmark TU (near-term)
 
-**Group 2 — Static capability flags** (wrap existing `static const bool` pattern):
-```cpp
-template <typename T> concept Vectorizable   = requires { requires bool(T::IsVectorizable); };
-template <typename T> concept LinearVF       = requires { requires bool(T::IsLinearFunction); };
-template <typename T> concept HasDiagonalJac = requires { requires bool(T::HasDiagonalJacobian); };
-template <typename T> concept IsGenericVF    = requires { requires bool(T::IsGenericFunction); };
-```
-
-**Group 3 — Sizing concepts:**
-```cpp
-template <typename T> concept StaticallySized  = requires { requires (T::InputRows > 0); requires (T::OutputRows > 0); };
-template <typename T> concept DynamicallySized = requires { requires (T::InputRows < 0 || T::OutputRows < 0); };
-```
-
-**Group 4 — Expression composition** (turn silent dimension mismatches into clear compile errors):
-```cpp
-template <typename T>
-concept VFSized = requires(const T& t) { { t.IRows() } -> std::same_as<int>; { t.ORows() } -> std::same_as<int>; };
-
-template <typename Inner, typename Outer>
-concept Composable = VFSized<Inner> && VFSized<Outer> && requires {
-    requires (Inner::OutputRows < 0 || Outer::InputRows < 0 || Inner::OutputRows == Outer::InputRows);
-};
-
-template <typename F1, typename F2>
-concept Stackable = VFSized<F1> && VFSized<F2> && requires {
-    requires (F1::InputRows < 0 || F2::InputRows < 0 || F1::InputRows == F2::InputRows);
-};
-```
-
-### Other Changes
-
-- **`DetectSuperScalar.h`**: Replace `Is_SuperScalar<T>` struct with `IsSuperScalar<T>` concept;
-  keep backward-compat `struct Is_SuperScalar : std::bool_constant<IsSuperScalar<T>> {}`
-- **`ComputableBase.h`**: `Is_SuperScalar<Scalar>::value` → `IsSuperScalar<Scalar>`;
-  `!Derived::IsVectorizable` → `!Vectorizable<Derived>`
-- **`[[nodiscard]]`** on `IRows()`, `ORows()`, `is_linear()`, `input_domain()`, `name()`,
-  `thread_safe()` in `InputOutputSize`, `DomainHolder`, `DenseFunctionBase`
-- **`OperatorOverloads.h`**: Add `requires Composable<Inner, Outer>` on `operator()`;
-  add `requires Stackable<F1, F2>` on `stack(...)` and `StackedOutputs`
-- **`using enum DenseDerivativeMode`** at local scope in derivative strategy headers
-- **`FunctionRegistry.h`**: `HasTychoBind<T>` concept on `Build_Register<T>` (requires
-  `typename TychoBind<T>::BuildTag`)
-
-### Explicit Non-Scope
-
-- No deducing-this migration (separate future refactor)
-- No concept constraints mid-CRTP-chain (circular dependency risk)
-- No modules (PCH already effective)
-
-### Verification
-
-- `ninja -j6 all` — clean build, no new warnings
-- `python scripts/run_examples.py` — 38/38 pass
-- `brachistochrone_cpp` — "Optimal Solution Found"
-- Trigger dimension mismatch → compiler names `Composable` constraint
-
----
-
-## PR 9 — Full rubber_types Elimination
-
-### Goal
-
-Remove all remaining `rubber_types::TypeErasure` usage and delete `TypeErasure.h` + notice.
-
-### Architecture
+Add the MEE ODE and BettsLT benchmarks in their own source file to avoid
+polluting other TUs with the template cost:
 
 ```
-GFStorage<IR,OR>:           UNCHANGED — shared_ptr (PR 7)
-GenericConditional<IR>:     TypeStorage<ConditionalBase<IR>>    (value semantics, not hot)
-GenericComparative<IR>:     type alias for GenericConditional<IR>
-ConstraintInterface:        TypeStorage<ConstraintBase>          (value semantics, built once per solve)
-ObjectiveInterface:         TypeStorage<ObjectiveBase>           (value semantics, built once per solve)
+bench/cpp/solvers/bench_betts_lt.cpp   — dedicated TU for BettsLT benchmarks
 ```
 
-### Performance Note
+This file would include `bench_common.h` for runtime init but define the
+`MEELT_Impl` ODE locally. Only the solver benchmark TU pays the 11 GB cost.
 
-GFStorage stays with shared_ptr — GenericFunction copies happen thousands of times during
-collocation transcription (lesson from PR 6/7). Conditionals, ConstraintInterface, and
-ObjectiveInterface are NOT on hot copy paths: conditionals are integrator stop functions;
-solver interfaces are constructed once per solve setup and stored in vectors.
+The CMake target should compile this file with reduced parallelism (`-j1`)
+to avoid OOM on machines with <16 GB RAM.
 
----
+**Benchmarks to add:**
+- `BM_PSIOPT_BettsLT_32seg` — fixed mesh, 32 segments
+- `BM_PSIOPT_BettsLT_64seg` — fixed mesh, 64 segments
+- `BM_PSIOPT_BettsLT_MeshRefine` — adaptive mesh starting from 16 segments
+  (LGL5, mesh tol 1e-7) — this is the key benchmark that grows the NLP to
+  realistic sizes via refinement
 
-### Task 1: `src/Utils/TypeStorage.h`
+**Open questions:**
+- Linear interpolation initial guess likely won't converge for this problem.
+  Need to either implement C++ control-law integration or pre-compute and
+  embed an initial trajectory (from the Python integrator).
+- The `std::make_shared<ODEPhase<MEELTODE>>` call fails with libc++ due to
+  `enable_shared_from_this` vtable issues. Workaround: use
+  `std::shared_ptr<ODEPhase<MEELTODE>>(new ODEPhase<MEELTODE>(...))`.
 
-General-purpose SBO container with value semantics. Replaces `rubber_types::TypeErasure` for
-all remaining use sites. GFStorage does NOT use this (it keeps shared_ptr).
+#### Phase 2: C++ ODE API Improvements (medium-term)
 
-`TypeStorage` is the canonical value-semantic type erasure container going forward — any future
-use site that needs polymorphism without heap-allocation overhead should reach for this rather than
-re-implementing the pattern.
+Improve the C++ API to match Python's usability for complex problems:
 
-**Convention:** The base class `C` must declare
-`virtual void clone_into(TypeStorage<C, SBO_CAP>&) const = 0`. Each use site defines its own
-`Model<T>` that implements this as `s.emplace<Model<T>>(data_)`.
+1. **Multi-parameter ODE support.** Fix `BUILD_ODE_FROM_EXPRESSION` to work
+   with struct constructor parameters, or provide an alternative macro that
+   accepts a parameter struct and generates the correct `Input`/`Output`
+   type aliases.
 
-**Key difference from GFStorage:** `emplace<Model, T>(obj)` takes the Model type explicitly
-(each use site has its own Model: `ConditionalModel<IR,T>`, `ConstraintModel<T>`, etc.).
+2. **Named variable interface.** Add a C++ equivalent of Python's `Vgroups`
+   / `make_input()` for ODE state/control/parameter naming. This would
+   enable `phase->addBoundaryValue("Front", {"MEEs", "w", "t"}, vals)`
+   instead of manual index vectors.
 
-```cpp
-template <typename C, std::size_t N>
-concept TypeStorageBase = requires(const C& c, TypeStorage<C, N>& s) { { c.clone_into(s) }; };
+3. **Control-law integration.** Extend `Integrator<ODE>` to accept a
+   control law VectorFunction, matching Python's
+   `ode.integrator(step, control_law, var_group)`.
 
-template <typename C, std::size_t SBO_CAP = 128>
-class TypeStorage {
-    static constexpr std::size_t SBO_ALIGN = alignof(std::max_align_t);
-    enum class Kind : uint8_t { Empty, Inline, Heap };
+#### Phase 3: VF DSL Compile-Time Scalability (longer-term)
 
-    Kind kind_ = Kind::Empty;
-    union { alignas(SBO_ALIGN) std::byte buf_[SBO_CAP]; C* ptr_; };
+The exponential template depth growth is the root cause of the memory issue.
+Potential approaches:
 
-public:
-    TypeStorage() noexcept = default;
-    template <typename Model, typename T> void emplace(T obj);  // SBO or heap
-    TypeStorage(const TypeStorage& o);             // deep-copy via clone_into
-    TypeStorage(TypeStorage&& o) noexcept;         // memcpy (inline) or ptr swap (heap)
-    TypeStorage& operator=(const TypeStorage&);
-    TypeStorage& operator=(TypeStorage&&) noexcept;
-    ~TypeStorage();
-    [[nodiscard]] bool empty() const noexcept;
-    C& get() const noexcept;
-    C* get_ptr() const noexcept;
-};
-```
+1. **Expression tree simplification pass.** Detect and collapse redundant
+   nesting (e.g., `Scaled<Scaled<...>>` → single `Scaled` with combined
+   coefficient).
 
-**Files:** Create `src/Utils/TypeStorage.h`. In `src/pch.h`, swap `#include "Utils/TypeErasure.h"`
-→ `#include "Utils/TypeStorage.h"`.
+2. **Runtime VF fallback.** For ODEs above a certain complexity threshold,
+   build the expression DAG at runtime (like Python's `ODEBase` does) instead
+   of at compile time. This trades some evaluation speed for dramatically
+   better compile times and memory.
 
----
+3. **Explicit Jacobian ODEs.** Allow users to provide hand-coded Jacobians
+   for complex ODEs, bypassing the automatic differentiation template
+   expansion entirely. This is common practice for production astrodynamics
+   codes.
 
-### Task 2: Migrate `GenericConditional` / `GenericComparative`
+### Current State
 
-Both are type-erased boolean predicates (integrator stop functions) with the same 3-method
-interface. They share one Concept/Model pair.
+The MEE ODE definition and `make_betts_lt_phase()` builder are written and
+`#if 0`'d in `bench/cpp/bench_common.h` with comments explaining the issue.
+The code is functional but disabled due to memory cost. The Python example
+(`examples/UpdatedInterface/BettsLowThrust.py`) serves as the reference
+implementation.
 
-**New file: `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h`**
+### MT-METIS Tracking Context
 
-```cpp
-template <int IR, typename T>
-concept ConditionalStorable = requires(const T& t,
-    const Eigen::Ref<const Eigen::Matrix<double, IR, 1>>& x) {
-    { t.name() } -> std::same_as<std::string>;
-    { t.IRows() } -> std::same_as<int>;
-    { t.compute(x) } -> std::same_as<bool>;
-};
-
-template <int IR>
-struct ConditionalBase {
-    using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
-    virtual ~ConditionalBase() = default;
-    virtual std::string name() const = 0;
-    virtual int IRows() const = 0;
-    virtual bool compute(const Eigen::MatrixBase<InType>& x) const = 0;
-    virtual void clone_into(TypeStorage<ConditionalBase<IR>>&) const = 0;
-};
-
-template <int IR, typename T>
-struct ConditionalModel final : ConditionalBase<IR> {
-    T data_;
-    explicit ConditionalModel(T t) : data_(std::move(t)) {}
-    // ... delegates all virtuals to data_, clone_into calls s.emplace<ConditionalModel<IR,T>>(data_)
-};
-```
-
-**`GenericConditional.h`:** Replace rubber_types guts with `TypeStorage<ConditionalBase<IR>> storage`.
-Constructor uses `storage.emplace<ConditionalModel<IR, T>>(t)`. Copy/move handled by TypeStorage.
-
-**`GenericComparative.h`:** Replace with `template <int IR> using GenericComparative = GenericConditional<IR>;`
-
-**Potential issues:** If any call site uses `obj.get_container()` or `reset_container()` (old
-rubber_types API), it will fail to compile — remove those calls.
-
----
-
-### Task 3: Migrate `ConstraintInterface` / `ObjectiveInterface`
-
-The largest change. These are the types PSIOPT calls at solve time (hot path for evaluation,
-but NOT hot for copy). Virtual signatures that PSIOPT sees are unchanged.
-
-**ConstraintBase** — flat abstract base, non-virtual MI (same pattern as GFConcept):
-```cpp
-struct ConstraintBase : SolverConstraintSpec::Concept, SizableSpec::Concept {
-    virtual ~ConstraintBase() = default;
-    virtual void clone_into(TypeStorage<ConstraintBase>&) const = 0;
-};
-
-template <typename T>
-struct ConstraintModel final : ConstraintBase {
-    T data_;
-    // ... delegates all SolverConstraintSpec + SizableSpec virtuals to data_
-    void clone_into(TypeStorage<ConstraintBase>& s) const override {
-        s.emplace<ConstraintModel<T>>(data_);
-    }
-};
-```
-
-**ConstraintInterface** — value-semantic wrapper:
-```cpp
-struct ConstraintInterface {
-    TypeStorage<ConstraintBase> storage;
-    ConstraintInterface() = default;
-    template <class T, /* SFINAE: not Eigen */> ConstraintInterface(const T& t) {
-        storage.emplace<ConstraintModel<std::decay_t<T>>>(t);
-    }
-    template <int IR, int OR>
-    ConstraintInterface(const GenericFunction<IR, OR>& t) {
-        t.func.get().pack_into_constraint_interface(*this);  // unchanged dispatch
-    }
-    // Forward all solver calls to storage.get()
-};
-```
-
-**ObjectiveBase/ObjectiveModel/ObjectiveInterface** — same pattern, additionally inherits
-`SolverObjectiveSpec::Concept` and implements `objective`, `objective_gradient`,
-`objective_gradient_hessian`.
-
-**pack_into_* body updates in `GFTypeErasure.h`:**
-```cpp
-// Before (constructs fresh rubber_types TypeErasure from T — heap alloc + copy)
-void pack_into_constraint_interface(ConstraintInterface& ci) const override {
-    ci = ConstraintInterface(this->data_);
-}
-// After (direct emplace into TypeStorage — avoids extra copy through CI constructor)
-void pack_into_constraint_interface(ConstraintInterface& ci) const override {
-    ci.storage.emplace<ConstraintModel<T>>(this->data_);
-}
-```
-
-Same change for `pack_into_objective_interface` → `oi.storage.emplace<ObjectiveModel<T>>(...)`.
-
-Note: `ConstraintModel` and `ObjectiveModel` are defined in `SolverInterfaceSpecs.h`, which
-`GFTypeErasure.h` already includes — no additional includes needed.
-
-**Dead code to delete:**
-- `SolverInterfaceSelector` template (defined but never used anywhere)
-- `DeepCopySpecs<ObjectiveInterface, ConstraintInterface>` — `deep_copy_into` is never called;
-  dead capability not reproduced
-- `SolverConstraintSpec::Model<>` and `ExternalInterface<>` inner structs
-- `SolverObjectiveSpec::Model<>` and `ExternalInterface<>` inner structs
-- `#include "DeepCopySpecs.h"` from `SolverInterfaceSpecs.h`
-
----
-
-### Task 4: Strip dead boilerplate + delete rubber_types files
-
-**`DenseFunctionSpecs.h`:** Delete dead `Model<Holder>` (~200 lines of virtual overrides using
-`rubber_types::model_get`) and `ExternalInterface<Container>`. Keep only the outer
-`DenseFunctionSpec<IR,OR>` struct, its type aliases, and `Concept`.
-
-**`SizingSpecs.h`:** Same — delete `Model<Holder>` and `ExternalInterface<Container>`. Keep
-only `SizableSpec` struct and `Concept`.
-
-**`Tycho_Utils.h`:** Remove `#include "TypeErasure.h"`.
-
-**Delete files:**
-```bash
-git rm src/Utils/TypeErasure.h
-git rm src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h
-```
-
-> **Note:** `notices/rubber_types-mit.txt` is **not** deleted. CLAUDE.md prohibits deleting files
-> under `notices/`. The notice stays even after the dependency is removed.
-
----
-
-### Files Changed Summary
-
-| File                                                                     | Action                                       |
-| ------------------------------------------------------------------------ | -------------------------------------------- |
-| `src/Utils/TypeStorage.h`                                                | **new** — SBO container with value semantics |
-| `src/VectorFunctions/VectorFunctionTypeErasure/ConditionalTypeErasure.h` | **new**                                      |
-| `src/Utils/TypeErasure.h`                                                | **deleted**                                  |
-| `src/VectorFunctions/VectorFunctionTypeErasure/DeepCopySpecs.h`          | **deleted**                                  |
-| `src/pch.h`                                                              | Swap TypeErasure.h → TypeStorage.h           |
-| `src/Utils/Tycho_Utils.h`                                                | Remove TypeErasure.h include                 |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GFTypeErasure.h`          | Update pack_into_* bodies                    |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GenericConditional.h`     | Use ConditionalTypeErasure                   |
-| `src/VectorFunctions/VectorFunctionTypeErasure/GenericComparative.h`     | Becomes alias                                |
-| `src/VectorFunctions/VectorFunctionTypeErasure/SolverInterfaceSpecs.h`   | Full migration + cleanup                     |
-| `src/VectorFunctions/VectorFunctionTypeErasure/DenseFunctionSpecs.h`     | Strip dead Model/ExternalInterface           |
-| `src/VectorFunctions/VectorFunctionTypeErasure/SizingSpecs.h`            | Strip dead Model/ExternalInterface           |
-| `src/Bindings/TychoModule.cpp`                                           | Remove `using namespace rubber_types;`       |
-
-### Verification
-
-- `ninja -j6 all` — clean build, no new warnings
-- `python scripts/run_examples.py` — 38/38 pass
-- `brachistochrone_cpp` — "Optimal Solution Found"
-- `grep -r "rubber_types" src/` — zero matches (only `notices/rubber_types-mit.txt` remains)
-- `grep -r "TypeErasure.h" src/` — zero matches
-- `grep -r "DeepCopySpecs" src/` — zero matches
+The BettsLT benchmark is also important for tracking MT-METIS performance.
+Current findings (macOS 26, Apple Silicon):
+- MT-METIS has ~5 ms per-call thread coordination overhead on small graphs
+- Overhead is amortized at large problem sizes (neutral at 128+ segments)
+- Serial METIS is the default; MT-METIS available via `PARMETIS`/`MTMETIS`
+  ordering mode
+- MT-METIS comparison benchmarks already exist for Brach and PolarLT
+- Apple may improve MT-METIS in future macOS releases — benchmarks track this
