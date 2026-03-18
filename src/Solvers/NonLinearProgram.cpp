@@ -281,7 +281,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
         }
     };
     int th1 = this->Threads;
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_blocks(0, this->numKKTElems, TripFillOP,
                                            static_cast<size_t>(th1));
         Tycho::thread_pool().wait();
@@ -316,7 +316,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
     };
 
     int th = this->Threads;
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_blocks(0, this->numKKTElems, FindOP,
                                            static_cast<size_t>(th));
         Tycho::thread_pool().wait();
@@ -344,7 +344,7 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs());
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, RHSevalOP);
         RHSevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -374,7 +374,7 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints(X, this->IConCoeffs());
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
         OGCevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -405,7 +405,7 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints(X, this->IConCoeffs());
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
         OGCevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -429,7 +429,7 @@ void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
             Obj.objective(ObjScale, X, Vals[thrnum]);
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
         OGCevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -465,7 +465,7 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
                 this->KKTClashes, this->KKTLocks);
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, KKTevalOP);
         KKTevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -476,7 +476,7 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
         this->fillSolverCoeffs(KKTmat);
         Tycho::thread_pool().wait();
@@ -506,7 +506,7 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                 this->KKTClashes, this->KKTLocks);
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, KKTevalOP);
         KKTevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -539,7 +539,7 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                      this->KKTClashes, this->KKTLocks);
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, SOEevalOP);
         SOEevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -548,7 +548,7 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
             SOEevalOP(i);
     }
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
         this->fillSolverCoeffs(KKTmat);
         Tycho::thread_pool().wait();
@@ -579,7 +579,7 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
                                                      this->KKTLocks);
     };
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_sequence(0, Thrmin1, SOEevalOP);
         SOEevalOP(Thrmin1);
         Tycho::thread_pool().wait();
@@ -590,7 +590,7 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
-    if (Tycho::use_thread_pool()) {
+    if (this->Threads > 1 && Tycho::use_thread_pool()) {
         Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
         this->fillSolverCoeffs(KKTmat);
         Tycho::thread_pool().wait();

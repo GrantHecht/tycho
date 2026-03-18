@@ -254,7 +254,7 @@ struct NonLinearProgram {
         };
 
         int th = this->ZThreads;
-        if (Tycho::use_thread_pool()) {
+        if (th > 1 && Tycho::use_thread_pool()) {
             Tycho::thread_pool().detach_blocks(0, this->numSolverKKTElems, FillOp,
                                                static_cast<size_t>(th));
             Tycho::thread_pool().wait();
@@ -270,7 +270,7 @@ struct NonLinearProgram {
             std::fill_n(pt, stop - start, 0.0);
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thr > 1 && Tycho::use_thread_pool()) {
             Tycho::thread_pool().detach_blocks(0, n, ZOp, static_cast<size_t>(thr));
             Tycho::thread_pool().wait();
         } else {

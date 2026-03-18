@@ -1692,7 +1692,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thrs > 1 && Tycho::use_thread_pool()) {
             auto futures =
                 Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
             futures.wait();
@@ -1858,7 +1858,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thrs > 1 && Tycho::use_thread_pool()) {
             auto futures =
                 Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
             futures.wait();
@@ -1907,7 +1907,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thrs > 1 && Tycho::use_thread_pool()) {
             auto futures =
                 Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
             futures.wait();
@@ -1965,7 +1965,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thrs > 1 && Tycho::use_thread_pool()) {
             auto futures =
                 Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
             futures.wait();
@@ -2002,7 +2002,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return this->integrate_stm(xi, tf1);
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (thrs > 1 && Tycho::use_thread_pool()) {
             for (int i = 0; i < thrs; i++) {
                 results[i] =
                     Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
