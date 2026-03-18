@@ -76,19 +76,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ControllerType controller;
     StepperWrapperType stepper;
     RKOptions RKMethod = RKOptions::DOPRI54;
-    std::shared_ptr<BS::thread_pool<>> pool;
-
-    void setPoolThreads(int thrs) {
-        if (static_cast<int>(this->pool->get_thread_count()) < thrs) {
-            this->pool->reset(thrs);
-        }
-    }
 
   public:
-    Integrator() {
-        this->EnableVectorization = true;
-        this->pool = std::make_shared<BS::thread_pool<>>(1);
-    }
+    Integrator() { this->EnableVectorization = true; }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
         // Use in_place_type to sidestep MSVC variant overload-resolution
@@ -1693,10 +1683,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
         auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
@@ -1704,13 +1692,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
+        if (Tycho::use_thread_pool()) {
+            auto futures =
+                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
+            futures.wait();
+        } else {
+            job(0, n);
         }
         return results;
     }
@@ -1862,10 +1849,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_dense(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
         auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
@@ -1873,13 +1858,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
+        if (Tycho::use_thread_pool()) {
+            auto futures =
+                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
+            futures.wait();
+        } else {
+            job(0, n);
         }
         return results;
     }
@@ -1914,10 +1898,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_dense(x0s[0], tfs[0], ns[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
         auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
@@ -1925,13 +1907,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
+        if (Tycho::use_thread_pool()) {
+            auto futures =
+                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
+            futures.wait();
+        } else {
+            job(0, n);
         }
         return results;
     }
@@ -1975,10 +1956,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_stm(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
         auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
@@ -1986,13 +1965,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->submit_task([&job, start, stop] { job(start, stop); });
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
+        if (Tycho::use_thread_pool()) {
+            auto futures =
+                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
+            futures.wait();
+        } else {
+            job(0, n);
         }
         return results;
     }
@@ -2009,8 +1987,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int thrs) {
-        this->setPoolThreads(thrs);
-
         VectorX<double> ts = VectorX<double>::LinSpaced(thrs + 1, x0[this->ode.TVar()], tf);
         std::vector<ODEState<double>> Xs(thrs + 1);
         Xs[0] = x0;
@@ -2026,10 +2002,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return this->integrate_stm(xi, tf1);
         };
 
-        for (int i = 0; i < thrs; i++) {
-            results[i] = this->pool->submit_task([&stm_op, i] { return stm_op(i); });
-            if (i < (thrs - 1))
-                Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+        if (Tycho::use_thread_pool()) {
+            for (int i = 0; i < thrs; i++) {
+                results[i] =
+                    Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
+                if (i < (thrs - 1))
+                    Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+            }
+        } else {
+            for (int i = 0; i < thrs; i++) {
+                std::promise<STMRet> p;
+                p.set_value(stm_op(i));
+                results[i] = p.get_future();
+                if (i < (thrs - 1))
+                    Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+            }
         }
         for (int i = 0; i < thrs; i++) {
             auto [xf, jx] = results[i].get();
