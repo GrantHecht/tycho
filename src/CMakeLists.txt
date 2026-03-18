@@ -83,6 +83,7 @@ add_library(utils STATIC
   Utils/ColorText.h Utils/ColorText.cpp
   Utils/GetCoreCount.h Utils/GetCoreCount.cpp
   Utils/MemoryManagement.h Utils/MemoryManagement.cpp
+  Utils/ThreadPool.h Utils/ThreadPool.cpp
  )
 target_include_directories(utils PRIVATE ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})

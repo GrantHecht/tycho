@@ -22,6 +22,7 @@
 #include "STDExtensions.h"
 #include "SizingHelpers.h"
 #include <BS_thread_pool.hpp>
+#include "ThreadPool.h"
 #include "TupleIterator.h"
 #include "TypeName.h"
 
