@@ -67,3 +67,69 @@ TEST(ThreadPoolTest, TasksTotal) {
     pool.wait();
     EXPECT_EQ(pool.get_tasks_total(), 0u);
 }
+
+// ---- Global thread pool singleton tests ----
+
+#include "Utils/ThreadPool.h"
+
+TEST(GlobalThreadPool, DefaultThreadCount) {
+    // Default should be hardware_concurrency
+    int n = Tycho::get_num_threads();
+    EXPECT_EQ(n, static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(GlobalThreadPool, SetAndGet) {
+    Tycho::set_num_threads(4);
+    EXPECT_EQ(Tycho::get_num_threads(), 4);
+    EXPECT_TRUE(Tycho::use_thread_pool());
+
+    Tycho::set_num_threads(1);
+    EXPECT_EQ(Tycho::get_num_threads(), 1);
+    EXPECT_FALSE(Tycho::use_thread_pool());
+
+    // Restore default
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(GlobalThreadPool, SetZeroMeansSingleThreaded) {
+    Tycho::set_num_threads(0);
+    EXPECT_EQ(Tycho::get_num_threads(), 1);
+    EXPECT_FALSE(Tycho::use_thread_pool());
+
+    // Restore default
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(GlobalThreadPool, PoolDispatch) {
+    Tycho::set_num_threads(4);
+    auto &pool = Tycho::thread_pool();
+    EXPECT_EQ(pool.get_thread_count(), 4u);
+
+    std::atomic<int> counter{0};
+    pool.detach_sequence(0, 100, [&counter](int) { counter.fetch_add(1); });
+    pool.wait();
+    EXPECT_EQ(counter.load(), 100);
+
+    // Restore default
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(GlobalThreadPool, SingleThreadedBypass) {
+    Tycho::set_num_threads(1);
+
+    // When single-threaded, user code should NOT call thread_pool()
+    // — instead check use_thread_pool() and run inline
+    EXPECT_FALSE(Tycho::use_thread_pool());
+
+    int result = 0;
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_task([&result] { result = 42; });
+        Tycho::thread_pool().wait();
+    } else {
+        result = 42; // inline
+    }
+    EXPECT_EQ(result, 42);
+
+    // Restore default
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
