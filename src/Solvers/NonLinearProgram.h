@@ -31,7 +31,6 @@ struct NonLinearProgram {
     using VectorXd = Eigen::VectorXd;
     using MatrixXi = Eigen::MatrixXi;
 
-    BS::thread_pool<> TP; /// Active Threadpool for multithreaded function evaluation
     int Threads = 1;
 
     /// <summary>
@@ -118,14 +117,13 @@ struct NonLinearProgram {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    NonLinearProgram(int FunThr) : TP(std::max(FunThr, 1) + 2) {
+    NonLinearProgram(int FunThr) {
         this->Threads = std::max(FunThr, 1);
         this->ZThreads = this->Threads;
     }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
-                     int FunThr)
-        : TP(std::max(FunThr, 1) + 2) {
+                     int FunThr) {
         this->Threads = std::max(FunThr, 1);
 
         this->Objectives = obj;
@@ -256,42 +254,27 @@ struct NonLinearProgram {
         };
 
         int th = this->ZThreads;
-        std::vector<std::future<void>> results(th - 1);
-        for (int i = 0; i < th; i++) {
-            int start = (i * this->numSolverKKTElems) / (th);
-            int stop = ((i + 1) * this->numSolverKKTElems) / (th);
-            if (i == (th - 1)) {
-                FillOp(start, stop);
-            } else {
-                results[i] = this->TP.submit_task([&FillOp, start, stop] { FillOp(start, stop); });
-            }
-        }
-        for (int i = 0; i < (th - 1); i++) {
-            results[i].get();
+        if (Tycho::use_thread_pool()) {
+            Tycho::thread_pool().detach_blocks(0, this->numSolverKKTElems, FillOp,
+                                               static_cast<size_t>(th));
+            Tycho::thread_pool().wait();
+        } else {
+            FillOp(0, this->numSolverKKTElems);
         }
     }
 
     void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {
-        auto ZOp = [&](int start, int size) {
+        int n = mat.nonZeros();
+        auto ZOp = [&](int start, int stop) {
             double *pt = mat.valuePtr() + start;
-            std::fill_n(pt, size, 0.0);
+            std::fill_n(pt, stop - start, 0.0);
         };
 
-        int th = thr;
-        std::vector<std::future<void>> results(th - 1);
-        int n = mat.nonZeros();
-        for (int i = 0; i < th; i++) {
-            int start = (i * n) / (th);
-            int stop = ((i + 1) * n) / (th);
-            int elems = stop - start;
-            if (i == (th - 1)) {
-                ZOp(start, elems);
-            } else {
-                results[i] = this->TP.submit_task([&ZOp, start, elems] { ZOp(start, elems); });
-            }
-        }
-        for (int i = 0; i < (th - 1); i++) {
-            results[i].get();
+        if (Tycho::use_thread_pool()) {
+            Tycho::thread_pool().detach_blocks(0, n, ZOp, static_cast<size_t>(thr));
+            Tycho::thread_pool().wait();
+        } else {
+            ZOp(0, n);
         }
     }
 

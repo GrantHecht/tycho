@@ -281,14 +281,12 @@ void Tycho::NonLinearProgram::analyzeSparsity(
         }
     };
     int th1 = this->Threads;
-    std::vector<std::future<void>> results1(th1);
-    for (int i = 0; i < th1; i++) {
-        int start = (i * this->numKKTElems) / (th1);
-        int stop = ((i + 1) * this->numKKTElems) / (th1);
-        results1[i] = this->TP.submit_task([&TripFillOP, start, stop] { TripFillOP(start, stop); });
-    }
-    for (int i = 0; i < th1; i++) {
-        results1[i].get();
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_blocks(0, this->numKKTElems, TripFillOP,
+                                           static_cast<size_t>(th1));
+        Tycho::thread_pool().wait();
+    } else {
+        TripFillOP(0, this->numKKTElems);
     }
 
     KKTmat.setFromTriplets(kktvec.begin(), kktvec.end());
@@ -318,14 +316,12 @@ void Tycho::NonLinearProgram::analyzeSparsity(
     };
 
     int th = this->Threads;
-    std::vector<std::future<void>> results(th);
-    for (int i = 0; i < th; i++) {
-        int start = (i * this->numKKTElems) / (th);
-        int stop = ((i + 1) * this->numKKTElems) / (th);
-        results[i] = this->TP.submit_task([&FindOP, start, stop] { FindOP(start, stop); });
-    }
-    for (int i = 0; i < th; i++) {
-        results[i].get();
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_blocks(0, this->numKKTElems, FindOP,
+                                           static_cast<size_t>(th));
+        Tycho::thread_pool().wait();
+    } else {
+        FindOP(0, this->numKKTElems);
     }
     // this->make_compressed();
     /////////////////////////////////////////////////////////////
@@ -336,7 +332,6 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     this->setRHSCoeffsZero();
 
@@ -349,14 +344,14 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs());
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&RHSevalOP, i] { RHSevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, RHSevalOP);
+        RHSevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            RHSevalOP(i);
     }
-
-    RHSevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
@@ -367,7 +362,6 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> PGX, EigenRef<VectorXd> FXE,
                                       EigenRef<VectorXd> FXI) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     this->setRHSCoeffsZero();
 
@@ -380,14 +374,14 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints(X, this->IConCoeffs());
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&OGCevalOP, i] { OGCevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
+        OGCevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            OGCevalOP(i);
     }
-
-    OGCevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
@@ -399,7 +393,6 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
 void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     // this->setRHSCoeffsZero();
     this->setConCoeffsZero();
@@ -412,14 +405,14 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints(X, this->IConCoeffs());
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&OGCevalOP, i] { OGCevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
+        OGCevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            OGCevalOP(i);
     }
-
-    OGCevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
@@ -429,7 +422,6 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
 
 void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
 
     auto OGCevalOP = [&](int thrnum) {
@@ -437,13 +429,14 @@ void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
             Obj.objective(ObjScale, X, Vals[thrnum]);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&OGCevalOP, i] { OGCevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, OGCevalOP);
+        OGCevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            OGCevalOP(i);
     }
-
-    OGCevalOP(Thrmin1);
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 }
@@ -454,7 +447,6 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
 
     this->setRHSCoeffsZero();
@@ -473,23 +465,25 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
                 this->KKTClashes, this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&KKTevalOP, i] { KKTevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, KKTevalOP);
+        KKTevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            KKTevalOP(i);
     }
-
-    KKTevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
-    std::future<void> fill =
-        this->TP.submit_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
-
-    this->fillSolverCoeffs(KKTmat);
-
-    fill.get();
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
+        this->fillSolverCoeffs(KKTmat);
+        Tycho::thread_pool().wait();
+    } else {
+        this->fillRHS(PGX, AGX, FXE, FXI);
+        this->fillSolverCoeffs(KKTmat);
+    }
 }
 
 void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
@@ -498,7 +492,6 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     this->setRHSCoeffsZero();
 
@@ -513,14 +506,14 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                 this->KKTClashes, this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&KKTevalOP, i] { KKTevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, KKTevalOP);
+        KKTevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            KKTevalOP(i);
     }
-
-    KKTevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
@@ -534,7 +527,6 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     this->setRHSCoeffsZero();
 
@@ -547,18 +539,23 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                      this->KKTClashes, this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&SOEevalOP, i] { SOEevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, SOEevalOP);
+        SOEevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            SOEevalOP(i);
     }
 
-    SOEevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    std::future<void> fill =
-        this->TP.submit_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
-    this->fillSolverCoeffs(KKTmat);
-    fill.get();
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
+        this->fillSolverCoeffs(KKTmat);
+        Tycho::thread_pool().wait();
+    } else {
+        this->fillRHS(PGX, AGX, FXE, FXI);
+        this->fillSolverCoeffs(KKTmat);
+    }
 }
 void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
@@ -566,7 +563,6 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
     std::vector<double> Vals(this->Threads, 0.0);
     this->setRHSCoeffsZero();
 
@@ -583,23 +579,25 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
                                                      this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.submit_task([&SOEevalOP, i] { SOEevalOP(i); });
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_sequence(0, Thrmin1, SOEevalOP);
+        SOEevalOP(Thrmin1);
+        Tycho::thread_pool().wait();
+    } else {
+        for (int i = 0; i < this->Threads; i++)
+            SOEevalOP(i);
     }
-
-    SOEevalOP(Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
     for (int i = 0; i < this->Threads; i++)
         val += Vals[i];
 
-    std::future<void> fill =
-        this->TP.submit_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
-
-    this->fillSolverCoeffs(KKTmat);
-
-    fill.get();
+    if (Tycho::use_thread_pool()) {
+        Tycho::thread_pool().detach_task([&] { this->fillRHS(PGX, AGX, FXE, FXI); });
+        this->fillSolverCoeffs(KKTmat);
+        Tycho::thread_pool().wait();
+    } else {
+        this->fillRHS(PGX, AGX, FXE, FXI);
+        this->fillSolverCoeffs(KKTmat);
+    }
 }
 
 void Tycho::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
