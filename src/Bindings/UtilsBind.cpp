@@ -21,6 +21,11 @@ namespace Tycho {
 void UtilsBuild(nb::module_ &m) {
     auto um = m.def_submodule("Utils", "Contains miscilanaeous utilities");
     um.def("get_core_count", &Tycho::get_core_count);
+    um.def("set_num_threads", &Tycho::set_num_threads, nb::arg("n"),
+           "Set the number of threads for parallel work. "
+           "n=1 for single-threaded mode, n>1 to use n threads.");
+    um.def("get_num_threads", &Tycho::get_num_threads,
+           "Get the current thread count setting. 1 = single-threaded mode.");
     TychoBind<BumpAllocator>::Build(um);
 }
 
