@@ -1692,13 +1692,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (thrs > 1 && Tycho::use_thread_pool()) {
-            auto futures =
-                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
-            futures.wait();
-        } else {
-            job(0, n);
-        }
+        Tycho::parallel_blocks(n, job, thrs);
         return results;
     }
 
@@ -1858,13 +1852,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (thrs > 1 && Tycho::use_thread_pool()) {
-            auto futures =
-                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
-            futures.wait();
-        } else {
-            job(0, n);
-        }
+        Tycho::parallel_blocks(n, job, thrs);
         return results;
     }
 
@@ -1907,13 +1895,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (thrs > 1 && Tycho::use_thread_pool()) {
-            auto futures =
-                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
-            futures.wait();
-        } else {
-            job(0, n);
-        }
+        Tycho::parallel_blocks(n, job, thrs);
         return results;
     }
 
@@ -1965,13 +1947,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        if (thrs > 1 && Tycho::use_thread_pool()) {
-            auto futures =
-                Tycho::thread_pool().submit_blocks(0, n, job, static_cast<size_t>(thrs));
-            futures.wait();
-        } else {
-            job(0, n);
-        }
+        Tycho::parallel_blocks(n, job, thrs);
         return results;
     }
 
@@ -2009,20 +1985,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 if (i < (thrs - 1))
                     Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
             }
+            for (int i = 0; i < thrs; i++) {
+                auto [xf, jx] = results[i].get(); // propagates exceptions
+                jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                if (i == (thrs - 1))
+                    Xs[i + 1] = xf;
+            }
         } else {
             for (int i = 0; i < thrs; i++) {
-                std::promise<STMRet> p;
-                p.set_value(stm_op(i));
-                results[i] = p.get_future();
-                if (i < (thrs - 1))
-                    Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+                auto [xf, jx] = stm_op(i);
+                jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                Xs[i + 1] = (i < thrs - 1) ? this->integrate(Xs[i], ts[i + 1]) : xf;
             }
-        }
-        for (int i = 0; i < thrs; i++) {
-            auto [xf, jx] = results[i].get();
-            jxall.topRows(this->ORows()) = (jx * jxall).eval();
-            if (i == (thrs - 1))
-                Xs[i + 1] = xf;
         }
 
         STMRet tup_final;

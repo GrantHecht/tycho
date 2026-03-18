@@ -253,14 +253,7 @@ struct NonLinearProgram {
             }
         };
 
-        int th = this->ZThreads;
-        if (th > 1 && Tycho::use_thread_pool()) {
-            Tycho::thread_pool().detach_blocks(0, this->numSolverKKTElems, FillOp,
-                                               static_cast<size_t>(th));
-            Tycho::thread_pool().wait();
-        } else {
-            FillOp(0, this->numSolverKKTElems);
-        }
+        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->ZThreads);
     }
 
     void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {
@@ -270,12 +263,7 @@ struct NonLinearProgram {
             std::fill_n(pt, stop - start, 0.0);
         };
 
-        if (thr > 1 && Tycho::use_thread_pool()) {
-            Tycho::thread_pool().detach_blocks(0, n, ZOp, static_cast<size_t>(thr));
-            Tycho::thread_pool().wait();
-        } else {
-            ZOp(0, n);
-        }
+        Tycho::parallel_blocks(n, ZOp, thr);
     }
 
     void assignKKTSlackHessian(const Eigen::Ref<const Eigen::VectorXd> &slhs,
