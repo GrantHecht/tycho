@@ -11,92 +11,51 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - Thread pool replaced with global Tycho::thread_pool() singleton
+//   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
 // =============================================================================
 
 #pragma once
 #include "OptimizationProblemBase.h"
-#ifdef USE_ACCELERATE_SPARSE
-#include "AccelerateUtils.h"
-#else
-#include "mkl.h"
-#endif
+#include "pch.h"
 
 namespace Tycho {
 
 namespace detail {
-template <class T, class Genfunc, class Arg> struct JetInvoker {
-    static inline std::shared_ptr<T> invoke(const Genfunc &f, const Arg &a) { return f(a); }
+
+template <class T, class GenFunc, class Args> struct JetInvoker {
+    static std::shared_ptr<T> invoke(const GenFunc &gf, const Args &args) { return gf(args); }
 };
 } // namespace detail
 
 struct Jet {
 
     static void print_beginning() {
-        constexpr const char *jestr = "          __  ______  ______\n"
-                                      "         / / / ____/ /_  __/\n"
-                                      "    __  / / / __/     / /   \n"
-                                      "   / /_/ / / /___    / /    \n"
-                                      "   \\____/ /_____/   /_/     \n\n";
-
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
-        fmt::print(fmt::fg(fmt::color::crimson), jestr);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Starting ");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");
         fmt::print("\n");
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
     }
 
-    static void print_progress(int i, double tsec, int NumJobs, int NumConv, int NumAcc,
-                               int NumNoConv, int NumDiv) {
-        double prog = 100 * double(i + 1) / double(NumJobs);
-        int len = 76 * double(i + 1) / double(NumJobs);
-        int wspace = 76 - len;
-        double remtime = (tsec / double(i + 1)) * (NumJobs - i - 1);
-        auto cyan = fmt::fg(fmt::color::cyan);
-        auto green = fmt::fg(fmt::color::green);
-
-        auto sminhrs = [cyan](double ts) {
-            if (ts < 60.0) {
-                fmt::print(cyan, "{0:>10.2f} s     \n", ts);
-            } else if (ts < 3600.0) {
-                fmt::print(cyan, "{0:>10.2f} min     \n", ts / 60.0);
-            } else {
-                fmt::print(cyan, "{0:>10.2f} hr     \n", ts / 3600.0);
-            }
-        };
-
+    static void print_progress(int i, double t, int nj, int nc, int na, int nn, int nd) {
+        auto jestr = fmt::format(fmt::runtime("({:>{}}/{})"), i + 1,
+                                 static_cast<int>(std::to_string(nj).size()), nj);
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Job ");
+        fmt::print(fmt::fg(fmt::color::royal_blue), "{}", jestr);
+        fmt::print(fmt::fg(fmt::color::dim_gray), " Done");
+        fmt::print(":");
+        fmt::print(fmt::fg(fmt::color::green), " Conv:{}", nc);
+        fmt::print(fmt::fg(fmt::color::yellow), " Acc:{}", na);
+        fmt::print(fmt::fg(fmt::color::orange), " NConv:{}", nn);
+        fmt::print(fmt::fg(fmt::color::red), " Div:{}", nd);
+        fmt::print(fmt::fg(fmt::color::dim_gray), " Time:{:.4f} s", t);
         fmt::print("\n");
-
-        fmt::print(" Remaining Time : ");
-        sminhrs(remtime);
-        fmt::print(" Elapsed Time   : ");
-        sminhrs(tsec);
-        fmt::print(" Progress       : ");
-        fmt::print(cyan, "{0:>10.2f} %  \n", prog);
-        fmt::print(" [");
-        fmt::print(green, "{0:#^{1}}{0:.^{2}}", "", len, wspace);
-        fmt::print("]");
-        fmt::print("\n\n");
-        fmt::print("  Completed        : ");
-        fmt::print(cyan, "{0:>10}/{1:<10}   \n", (i + 1), NumJobs);
-
-        fmt::print("    Optimal        : ");
-        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumConv, NumJobs);
-        fmt::print("    Acceptable     : ");
-        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumAcc, NumJobs);
-        fmt::print("    Not Converged  : ");
-        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumNoConv, NumJobs);
-        fmt::print("    Diverged       : ");
-        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumDiv, NumJobs);
-
-        if (i < (NumJobs - 1))
-            fmt::print("\033[11F");
-        else
-            fmt::print("\n");
-    };
+    }
 
     static void print_finished() {
-
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");
@@ -110,7 +69,7 @@ struct Jet {
     template <class T, class Args1, class Args2>
     static std::vector<std::shared_ptr<T>>
     map(const std::vector<std::function<std::shared_ptr<T>(Args1)>> &genfuncs,
-        const std::vector<Args2> &args, const Eigen::VectorXi &genfidxes, int nt, bool verbose) {
+        const std::vector<Args2> &args, const Eigen::VectorXi &genfidxes, bool verbose) {
 
 #ifdef USE_ACCELERATE_SPARSE
         accelerate_set_num_threads(1);
@@ -122,9 +81,7 @@ struct Jet {
         int NumNoConv = 0;
         int NumDiv = 0;
 
-        std::vector<std::future<PSIOPT::ConvergenceFlags>> results(NumJobs);
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        BS::thread_pool<> pool(nt);
         Utils::Timer t;
 
         auto Job = [&](int i) {
@@ -148,23 +105,40 @@ struct Jet {
             print_beginning();
         t.start();
 
-        for (int i = 0; i < NumJobs; i++) {
-            results[i] = pool.submit_task([&Job, i] { return Job(i); });
-        }
-
-        for (int i = 0; i < NumJobs; i++) {
-            auto flag = results[i].get();
-            if (verbose) {
-                if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
-                    NumConv++;
-                if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
-                    NumAcc++;
-                if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
-                    NumNoConv++;
-                if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
-                    NumDiv++;
-                double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
-                print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+        // Use global thread pool; honors Tycho::set_num_threads().
+        // parallel_sequence runs inline when get_num_threads() <= 1.
+        if (Tycho::use_thread_pool()) {
+            auto results = Tycho::thread_pool().submit_sequence(0, NumJobs, Job);
+            for (int i = 0; i < NumJobs; i++) {
+                auto flag = results[i].get();
+                if (verbose) {
+                    if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
+                        NumConv++;
+                    if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
+                        NumAcc++;
+                    if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
+                        NumNoConv++;
+                    if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
+                        NumDiv++;
+                    double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
+                    print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+                }
+            }
+        } else {
+            for (int i = 0; i < NumJobs; i++) {
+                auto flag = Job(i);
+                if (verbose) {
+                    if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
+                        NumConv++;
+                    if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
+                        NumAcc++;
+                    if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
+                        NumNoConv++;
+                    if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
+                        NumDiv++;
+                    double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
+                    print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+                }
             }
         }
         if (verbose)
@@ -174,8 +148,7 @@ struct Jet {
 
     template <class T, class Args1, class Args2>
     static std::vector<std::shared_ptr<T>> map(std::function<std::shared_ptr<T>(Args1)> genfunc,
-                                               const std::vector<Args2> &args, int nt,
-                                               bool verbose) {
+                                               const std::vector<Args2> &args, bool verbose) {
 
         std::vector<std::function<std::shared_ptr<T>(Args1)>> genfuncs;
         genfuncs.push_back(genfunc);
@@ -183,17 +156,17 @@ struct Jet {
 
         genfidxes.setConstant(0);
 
-        return Jet::map(genfuncs, args, genfidxes, nt, verbose);
+        return Jet::map(genfuncs, args, genfidxes, verbose);
     }
 
     template <class T>
     static std::vector<std::shared_ptr<T>> map(const std::vector<std::shared_ptr<T>> &optprobs,
-                                               int nt, bool verbose) {
+                                               bool verbose) {
 
         std::function<std::shared_ptr<T>(std::shared_ptr<T>)> genfunc =
             [](std::shared_ptr<T> optprob) { return optprob; };
 
-        return Jet::map(genfunc, optprobs, nt, verbose);
+        return Jet::map(genfunc, optprobs, verbose);
     }
     ////////////////////////////////////////////////////////////////////////////////////
 };

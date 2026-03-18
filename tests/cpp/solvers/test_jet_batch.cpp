@@ -17,7 +17,7 @@ TEST_F(SolverTest, JetMapPrebuiltProblems) {
         phases.push_back(p);
     }
 
-    auto results = Jet::map(phases, 2, false);
+    auto results = Jet::map(phases, false);
     ASSERT_EQ(results.size(), 3u);
     for (int i = 0; i < 3; ++i) {
         auto traj = results[i]->returnTraj();
@@ -36,7 +36,7 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     };
 
     std::vector<int> args = {16, 16};
-    auto results = Jet::map(gen, args, 2, false);
+    auto results = Jet::map(gen, args, false);
     ASSERT_EQ(results.size(), 2u);
     for (int i = 0; i < 2; ++i) {
         auto traj = results[i]->returnTraj();
@@ -63,7 +63,7 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     Eigen::VectorXi genfidxes(3);
     genfidxes << 0, 1, 0; // gen16, gen32, gen16
 
-    auto results = Jet::map(genfuncs, args, genfidxes, 2, false);
+    auto results = Jet::map(genfuncs, args, genfidxes, false);
     ASSERT_EQ(results.size(), 3u);
     for (int i = 0; i < 3; ++i) {
         auto traj = results[i]->returnTraj();

@@ -345,9 +345,9 @@ In addition to calling PSIOPT to solve or optimize a single problem at a time, w
 the :code:`Jet` tool. This can allow you to more efficiently tackle throughput oriented workloads from within a single python process,
 without having to resort to multiprocessing libraries. There are two ways to do this. In the first method, demonstrated below, we construct a python list 
 of fully configured phases or optimal control problems (or both) as we normally would, but rather than running solve or optimize on each individually, we specify the algorithm we would like Jet to invoke
-using :code:`.setJetJobMode("")`. These options correspond to the methods we have already covered. Having set the job mode, we add the objects a list and then pass the list to the :code:`Jet.map()` function along with 
-the number of threads we want to use, and a bool specifying whether we want to print the console scroll. It is not necessary to set the number of threads for
-each phase or optimal control problem, Jet will take care of optimally allocating the number of threads for each problem.
+using :code:`.setJetJobMode("")`. These options correspond to the methods we have already covered. Having set the job mode, we add the objects a list and then pass the list to the :code:`Jet.map()` function along with
+a bool specifying whether we want to print the console scroll. Parallelism is controlled by the global :code:`tycho.Utils.set_num_threads(n)` setting.
+It is not necessary to set the number of threads for each phase or optimal control problem, Jet will take care of optimally allocating work for each problem.
 After solving all the problems, the function returns the list of phases/optimal control problems. We can then access
 each element of the returned list to get the solved trajectories as we normally would. You can get the convergence flag of each problem by using the :code:`get_ConvergenceFlag()` method of the optimizer instance
 attached to each problem.
@@ -387,11 +387,9 @@ attached to each problem.
         ocps.append(ocp)
 
 
-    Nthreads = 8   # Set to number of cores on machine for best performance
-
     PrintConsole = True
 
-    ocps = solvers.Jet.map(ocps,Nthreads,PrintConsole)
+    ocps = solvers.Jet.map(ocps, PrintConsole)
 
     ### Access the solved phases/ocps
     ocps[0].Phase(0).returnTraj()
@@ -443,11 +441,9 @@ and expensive preprocessing that cannot be parallelized.
     
 
 
-    Nthreads = 8   # Set to number of cores on machine for best performance
-
     PrintConsole = True
 
-    ocps = solvers.Jet.map(ProblemGenerator,ProblemArgs,Nthreads,PrintConsole)
+    ocps = solvers.Jet.map(ProblemGenerator, ProblemArgs, PrintConsole)
 
     ### Access the solved phases/ocps
     ocps[0].Phase(0).returnTraj()

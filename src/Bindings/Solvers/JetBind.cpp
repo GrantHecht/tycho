@@ -10,6 +10,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
+//   - Removed `nt` parameter: parallelism controlled by Tycho::set_num_threads()
 //   - Namespace: Tycho
 // =============================================================================
 
@@ -23,28 +24,27 @@ void TychoBind<Jet>::Build(nb::module_ &m) {
 
     obj.def_static(
         "map",
-        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt) {
-            return Jet::map(optprobs, nt, true);
+        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs) {
+            return Jet::map(optprobs, true);
         },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
         [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)> genfun,
-           const std::vector<nb::args> &args, int nt) { return Jet::map(genfun, args, nt, true); },
+           const std::vector<nb::args> &args) { return Jet::map(genfun, args, true); },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
-        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, int nt, bool v) {
-            return Jet::map(optprobs, nt, v);
+        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, bool v) {
+            return Jet::map(optprobs, v);
         },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
         [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)> genfun,
-           const std::vector<nb::args> &args, int nt,
-           bool v) { return Jet::map(genfun, args, nt, v); },
+           const std::vector<nb::args> &args, bool v) { return Jet::map(genfun, args, v); },
         nb::call_guard<nb::gil_scoped_release>());
 }
