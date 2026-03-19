@@ -83,7 +83,12 @@ target_link_libraries(_tycho PUBLIC tycho_extensions_bindings)
 target_include_directories(_tycho PRIVATE ${INCLUDE_DIRS})
 target_precompile_headers(_tycho REUSE_FROM pch_bindings)
 
-if(UNIX)
+if(UNIX AND NOT APPLE)
+    # Python extension modules must NOT use -Wl,--no-undefined because Python
+    # symbols (PyObject_*, _Py_Dealloc, etc.) are resolved at runtime by the
+    # interpreter.  Link MKL/OpenMP directly instead of using LINKER_FLAGS.
+    target_link_libraries(_tycho PUBLIC ${LINK_LIBS})
+elseif(UNIX)
     target_link_options(_tycho PRIVATE ${LINKER_FLAGS})
 elseif(WIN32)
     target_link_libraries(_tycho PUBLIC ${LINK_LIBS})

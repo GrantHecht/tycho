@@ -17,7 +17,8 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously. 
 
 As a rule of thumb:
-- ALWAYS use -j2 for builds
+- macOS (Apple Silicon): ALWAYS use -j2 for builds
+- Linux / Windows: ALWAYS use -j8 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -81,6 +82,7 @@ tests/                  C++ test suite (Google Test)
 
 bench/                  Benchmark suite and tracking
   MACBENCH.md           macOS benchmarking procedure
+  WINBENCH.md           Windows benchmarking procedure
   bench_track.sh        Benchmark tracking script (record, compare, list)
   results/              Stored benchmark results (gitignored)
   cpp/                  Google Benchmark source files
@@ -117,16 +119,31 @@ notices/                Third-party license notices — DO NOT modify or delete
 ## Build System
 
 This is a CMake + nanobind project. The output is a nanobind shared library
-(`_tycho.cpython-<ver>-darwin.so`) plus the pure-Python `tycho/` package, both
+(`_tycho.cpython-<ver>-<platform>.so`) plus the pure-Python `tycho/` package, both
 installed directly into the active Python environment's site-packages by the build step.
 
-### macOS (Apple Silicon) — canonical development setup
+Each platform has a corresponding CMake preset in `CMakePresets.json` that defines
+compiler paths, parallelism, and output directories. **Always use the preset for
+your platform** — do not configure manually.
+
+| Platform         | Configure preset        | Build parallelism |
+| ---------------- | ----------------------- | ----------------- |
+| macOS (Apple Si) | `macos-llvm-release`    | `-j2`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
+| Windows x64      | `x64-Clang-Release`    | `-j8`             |
+
+The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
+first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
+
+### macOS (Apple Silicon)
 
 **System tools required (install once via Homebrew):**
 ```
 brew install llvm ninja ccache jq
 ```
 Current versions in use: LLVM 22.1.0, Ninja 1.13+.
+
+**Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
 
 **Python environment — conda env named `tycho` (Python 3.13):**
 ```bash
@@ -139,18 +156,61 @@ pip install numpy scipy matplotlib spiceypy
 ```bash
 mkdir build
 cmake --preset macos-llvm-release
-cd build && ninja -j4 all
-```
-
-**Subsequent builds** (after C++ source changes):
-```bash
 cd build && ninja -j2 all
 ```
 
-**Running examples:**
+**Note:** The macOS preset hardcodes the Homebrew LLVM and conda paths. When updating
+LLVM, also update the libomp path in `CMakeLists.txt` (search for
+`/opt/homebrew/Cellar/libomp/`).
+
+### Linux / WSL2 (Ubuntu)
+
+**System tools required:**
 ```bash
-conda activate tycho
-python examples/Brachistochrone.py
+sudo apt install clang-22 llvm-22 llvm-22-dev libomp-22-dev lld-22 ninja-build ccache
+```
+
+**Sparse solver — Intel MKL (via oneAPI):**
+```bash
+# Add Intel APT repository
+wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+  | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+sudo apt update
+sudo apt install intel-oneapi-mkl-devel
+
+# Set MKLROOT (add to ~/.bashrc)
+source /opt/intel/oneapi/setvars.sh
+# or: export MKLROOT=/opt/intel/oneapi/mkl/latest
+```
+
+**Python environment:** Use system Python 3.12+ or a conda/venv environment.
+If not using conda, install dependencies globally or in a venv:
+```bash
+pip install numpy scipy matplotlib spiceypy
+```
+
+**First-time build:**
+```bash
+mkdir build
+cmake --preset linux-clang-release
+cd build && ninja -j8 all
+```
+
+**Note:** The Linux preset does not hardcode `Python_EXECUTABLE` — CMake will
+auto-detect the active Python from `$PATH`. To target a specific interpreter,
+pass `-DPython_EXECUTABLE=/path/to/python` during configure, or set it in the preset.
+
+### Windows x64
+
+Uses LLVM/Clang with clang-cl frontend. Preset: `x64-Clang-Release`.
+See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
+
+### Subsequent builds (all platforms)
+
+After C++ source changes, rebuild from the `build` directory:
+```bash
+cd build && ninja -j<N> all    # N = 2 on macOS, 8 on Linux/Windows
 ```
 
 ### Key CMake variables
@@ -165,14 +225,6 @@ python examples/Brachistochrone.py
 | `BUILD_CPP_TESTS`          | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
-
-The CMake presets dynamically resolve `Python_EXECUTABLE` and
-`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so they always target
-the correct interpreter. When updating LLVM, change the hardcoded libomp path in
-`CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
-
-The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
-first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
 ## Key Concepts and Domain Language
 
@@ -258,15 +310,15 @@ clearly self-contained.
 Config: `.clang-format` at the repo root (LLVM base, 4-space indent, 100-column limit).
 The CMake `clang-format` target applies it to `src/` and `extensions/`.
 
-**Format all C++ source files:**
-```bash
-find src extensions \( -name "*.cpp" -o -name "*.h" \) -print0 \
-  | xargs -0 /opt/homebrew/opt/llvm/bin/clang-format -style=file -i
-```
-
-Or via CMake after configuring:
+**Format all C++ source files (preferred — uses CMake target):**
 ```bash
 cd build && ninja clang-format
+```
+
+Or manually (uses whichever `clang-format` is on `$PATH`):
+```bash
+find src extensions \( -name "*.cpp" -o -name "*.h" \) -print0 \
+  | xargs -0 clang-format -style=file -i
 ```
 
 Do **not** add or modify `.clang-format` files inside `src/` — the root config is
@@ -276,7 +328,7 @@ not be reformatted.
 ### Python — ruff (Black-compatible format + isort)
 
 Config: `pyproject.toml` at the repo root.
-Required packages (in the `tycho` conda env): `ruff`, `isort`.
+Required packages: `ruff`, `isort` (`pip install ruff isort`).
 
 **Format all Python files:**
 ```bash
@@ -311,11 +363,11 @@ compiled into a single `tycho_tests` executable.
 
 **Build and run:**
 ```bash
-# Reconfigure with tests enabled (one-time)
-cmake --preset macos-llvm-release -DBUILD_CPP_TESTS=ON
+# Reconfigure with tests enabled (one-time, use your platform's preset)
+cmake --preset <preset> -DBUILD_CPP_TESTS=ON
 
 # Build test executable
-cd build && ninja -j2 tycho_tests
+cd build && ninja -j<N> tycho_tests
 
 # Run all tests via CTest
 ctest --output-on-failure
@@ -326,16 +378,17 @@ ctest --output-on-failure
 46 micro-benchmarks live under `bench/cpp/` using Google Benchmark
 (fetched automatically via FetchContent), compiled into a single `bench_all`
 executable. A local tracking script (`bench/bench_track.sh`) records results
-by commit hash and detects regressions. See `bench/MACBENCH.md` for the full
-benchmarking procedure on macOS.
+by commit hash and detects regressions. See `bench/<SYS>BENCH.md` for the full
+benchmarking procedure on your platform (e.g., `MACBENCH.md` for macOS,
+`WINBENCH.md` for Windows).
 
 **Build and run:**
 ```bash
-# Reconfigure with benchmarks enabled (one-time)
-cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON
+# Reconfigure with benchmarks enabled (one-time, use your platform's preset)
+cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON
 
 # Build
-cd build && ninja -j2 bench_all
+cd build && ninja -j<N> bench_all
 
 # Run all benchmarks
 ./bench/cpp/bench_all
@@ -352,7 +405,6 @@ The 38 Python example scripts under `examples/` serve as the **integration test
 suite** and act as the acceptance gate for all changes merged into `main`.
 
 ```bash
-conda activate tycho
 python scripts/run_examples.py
 ```
 
@@ -391,15 +443,15 @@ introduces a benchmark regression, it must be explicitly justified in the PR.
 
 ### Required dependencies for the test environment
 
-The following packages must be present in the `tycho` conda environment for all
+The following packages must be present in the Python environment for all
 examples to run (none will be skipped):
 
-| Package                  | Install                                |
-| ------------------------ | -------------------------------------- |
-| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib`   |
-| seaborn                  | `pip install seaborn`                  |
-| spiceypy                 | `pip install spiceypy`                 |
-| basemap                  | `conda install -c conda-forge basemap` |
+| Package                  | Install                                     |
+| ------------------------ | ------------------------------------------- |
+| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib`        |
+| seaborn                  | `pip install seaborn`                       |
+| spiceypy                 | `pip install spiceypy`                      |
+| basemap                  | `conda install -c conda-forge basemap`      |
 
 ## Development Workflow
 

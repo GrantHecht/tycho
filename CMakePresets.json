@@ -17,10 +17,25 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
         "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_C_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang",
         "CMAKE_CXX_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang++",
         "Python_EXECUTABLE": "/opt/miniconda3/envs/tycho/bin/python",
         "PYTHON_LOCAL_INSTALL_DIR": "/opt/miniconda3/envs/tycho/lib/python3.13/site-packages"
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "displayName": "Linux Clang Release",
+      "description": "Release build using LLVM Clang 22 on Linux (Ubuntu/WSL2)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "installDir": "${sourceDir}/build/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+        "TYCHO_FP_MODE": "SAFER_FAST",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-22",
+        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
+        "PYTHON_LOCAL_INSTALL_DIR": "${sourceDir}/.venv/lib/python3.14/site-packages"
       }
     },
     {
@@ -62,6 +77,15 @@
       ]
     },
     {
+      "name": "linux-clang-release",
+      "displayName": "Linux Clang Release Build",
+      "configurePreset": "linux-clang-release",
+      "nativeToolOptions": [
+        "-j6",
+        "-v"
+      ]
+    },
+    {
       "name": "x64-Clang-Release",
       "displayName": "x64 Clang Release Build",
       "configurePreset": "x64-Clang-Release",
@@ -76,6 +100,14 @@
       "name": "macos-llvm-release",
       "displayName": "macOS LLVM Release Test",
       "configurePreset": "macos-llvm-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "displayName": "Linux Clang Release Test",
+      "configurePreset": "linux-clang-release",
       "output": {
         "outputOnFailure": true
       }

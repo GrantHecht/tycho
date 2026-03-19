@@ -111,7 +111,7 @@ target_include_directories(tycho_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/solvers         # for solver_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
-target_link_libraries(tycho_tests PRIVATE tycho_core ${LINK_LIBS} GTest::gtest_main)
+target_link_libraries(tycho_tests PRIVATE tycho_core GTest::gtest_main)
 target_precompile_headers(tycho_tests REUSE_FROM pch_tests)
 if(UNIX)
     target_link_options(tycho_tests PRIVATE ${LINKER_FLAGS})

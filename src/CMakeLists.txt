@@ -56,7 +56,7 @@ OptimalControl/LGLInterpTable.cpp
 
 target_include_directories(optimalcontrol PRIVATE ${INCLUDE_DIRS})
 target_precompile_headers(optimalcontrol REUSE_FROM pch)
-
+target_link_libraries(optimalcontrol PRIVATE psiopt)
 target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 
 
@@ -73,6 +73,7 @@ add_library(psiopt STATIC
  )
 target_include_directories(psiopt PRIVATE ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
+target_link_libraries(psiopt PRIVATE utils)
 if(APPLE)
     target_link_libraries(psiopt PUBLIC AccelerateSparse::AccelerateSparse)
 endif()
@@ -99,6 +100,7 @@ add_library(astro STATIC
 
 target_precompile_headers(astro REUSE_FROM pch)
 target_include_directories(astro PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(astro PRIVATE optimalcontrol)
 target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 
 
@@ -106,6 +108,7 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # tycho_core bundles all core static libs for use by bindings and future language frontends
 add_library(tycho_core INTERFACE)
 target_link_libraries(tycho_core INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
+target_link_libraries(tycho_core INTERFACE ${LINK_LIBS})
 
 #-------------------------------------------------------------------------------
 
