@@ -51,7 +51,7 @@ if __name__ == "__main__":
     phase.addLUVarBound("Path", 5, -Fmax, Fmax)
     phase.addLUVarBound("Path", 0, -xmax, xmax)
     phase.addIntegralObjective(Args(1)[0] ** 2, [5])
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
     phase.optimizer.PrintLevel = 4
 
     start = time.perf_counter()

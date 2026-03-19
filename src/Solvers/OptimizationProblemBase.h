@@ -32,7 +32,7 @@ struct OptimizationProblemBase {
         OptimizeSolve
     };
 
-    int Threads = TYCHO_DEFAULT_FUNC_THREADS;
+    int NumPartitions = TYCHO_DEFAULT_NUM_PARTITIONS;
     JetJobModes JetJobMode = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
@@ -42,7 +42,7 @@ struct OptimizationProblemBase {
 
     OptimizationProblemBase() {
         this->optimizer = std::make_shared<PSIOPT>();
-        this->initThreads(); // must called after initing optimizer
+        this->initPartitions();
     }
 
     virtual PSIOPT::ConvergenceFlags solve() = 0;
@@ -51,30 +51,34 @@ struct OptimizationProblemBase {
     virtual PSIOPT::ConvergenceFlags solve_optimize_solve() = 0;
     virtual PSIOPT::ConvergenceFlags optimize_solve() = 0;
 
-    virtual void initThreads() {
-        this->Threads =
-            std::min(TYCHO_DEFAULT_FUNC_THREADS, int(std::thread::hardware_concurrency()));
+    virtual void initPartitions() {
+        this->NumPartitions =
+            std::min(TYCHO_DEFAULT_NUM_PARTITIONS, int(std::thread::hardware_concurrency()));
         this->optimizer->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
-        ;
     }
 
-    virtual void setThreads(int functhreads, int qpthreads) {
-        if (functhreads < 1 || qpthreads < 1) {
-            throw std::invalid_argument("Number of threads must be positive");
+    virtual void setNumPartitions(int num_partitions, int qp_threads) {
+        if (num_partitions < 1 || qp_threads < 1) {
+            throw std::invalid_argument("Number of partitions/threads must be positive");
         }
-        this->Threads = functhreads;
-        this->optimizer->QPThreads = qpthreads;
+        this->NumPartitions = num_partitions;
+        this->optimizer->QPThreads = qp_threads;
     }
-    virtual void setThreads(int functhreads) {
-        if (functhreads < 1) {
-            throw std::invalid_argument("Number of threads must be positive");
+    virtual void setNumPartitions(int num_partitions) {
+        if (num_partitions < 1) {
+            throw std::invalid_argument("Number of partitions must be positive");
         }
-        this->Threads = functhreads;
+        this->NumPartitions = num_partitions;
     }
 
     virtual void jet_initialize() = 0;
     virtual void jet_release() = 0;
 
+    // IMPORTANT: jet_run() is called from Jet::map() which dispatches jobs to
+    // the global thread pool. To prevent deadlock (pool workers submitting sub-
+    // tasks to the same pool and blocking), jet_initialize() MUST set this
+    // problem to single-threaded mode (NumPartitions=1). This ensures NLP eval
+    // methods run inline rather than dispatching to the pool.
     virtual PSIOPT::ConvergenceFlags jet_run() {
         this->jet_initialize();
 

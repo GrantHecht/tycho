@@ -84,7 +84,7 @@ if __name__ == "__main__":
     phase.addBoundaryValue("Back", range(0, 6), XF[0:6])
     phase.addValueObjective("Back", 6, -1.0)
 
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
     phase.optimizer.set_OptLSMode("AUGLANG")
     phase.optimizer.set_MaxLSIters(2)
     phase.optimizer.set_MaxAccIters(200)

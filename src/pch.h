@@ -39,7 +39,6 @@
 #include "Utils/LambdaJumpTable.h"
 #include "Utils/MathFunctions.h"
 #include "Utils/STDExtensions.h"
-#include <BS_thread_pool.hpp>
 #include "Utils/ThreadPool.h"
 #include "Utils/Timer.h"
 #include "Utils/TupleIterator.h"

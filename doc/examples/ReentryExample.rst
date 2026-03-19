@@ -250,7 +250,7 @@ satisfying all constraints before minimizing the objective. Furthermore, we enab
     phase.addUpperDeltaTimeBound(tmax,1.0)
     phase.addBoundaryValue("Back" ,[0,2,3],[htf,vtf,gammatf])
     phase.addDeltaVarObjective(1,-1.0)
-    phase.setThreads(8,8)
+    phase.setNumPartitions(8,8)
     
     ## Our IG is bad, so i turn on line search
     phase.optimizer.set_SoeLSMode("L1")
@@ -509,7 +509,7 @@ Full Code
         phase.addUpperDeltaTimeBound(tmax,1.0)
         phase.addBoundaryValue("Back" ,[0,2,3],[htf,vtf,gammatf])
         phase.addDeltaVarObjective(1,-1.0)
-        phase.setThreads(8,8)
+        phase.setNumPartitions(8,8)
     
         ## Our IG is bad, so i turn on line search
         phase.optimizer.set_SoeLSMode("L1")

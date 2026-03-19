@@ -258,7 +258,7 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.optimizer.MaxLSIters = 2
         ocp.optimizer.PrintLevel = 3
 
-        ocp.Threads = 8
+        ocp.NumPartitions = 8
         ocp.optimizer.QPThreads = 8
 
         Flag = ocp.optimize()

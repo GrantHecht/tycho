@@ -124,7 +124,7 @@ void Tycho::OptimalControlProblem::transcribe_phases() {
         this->numPhaseIqCons.resize(this->phases.size());
 
         for (int i = 0; i < this->phases.size(); i++) {
-            this->phases[i]->Threads = this->Threads;
+            this->phases[i]->NumPartitions = this->NumPartitions;
             this->phases[i]->initIndexing();
             this->numPhaseVars[i] = this->phases[i]->indexer.numPhaseVars;
         }
@@ -395,7 +395,7 @@ void Tycho::OptimalControlProblem::update_objective_scales(double scale) {
 
 void Tycho::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
 
-    this->nlp = std::make_shared<NonLinearProgram>(this->Threads);
+    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
     check_functions();
     if (this->AutoScaling) {

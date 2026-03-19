@@ -61,7 +61,7 @@ if __name__ == "__main__":
     phase.optimizer.set_OptLSMode("L1")
     phase.optimizer.set_KKTtol(1.0e-10)
     phase.optimizer.set_PrintLevel(0)
-    phase.setThreads(1, 1)
+    phase.setNumPartitions(1, 1)
     phase.optimize()
 
     Traj = phase.returnTraj()

@@ -365,7 +365,7 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
         phase->setMeshTol(1.0e-7);
     }
 
-    phase->setThreads(8, 8);
+    phase->setNumPartitions(8, 8);
 
     if (print_level >= 0) {
         phase->optimizer->PrintLevel = print_level;

@@ -13,7 +13,7 @@ namespace Tycho {
 
 /// Returns the process-global thread pool.
 /// Created lazily on first call, sized to hardware_concurrency().
-BS::thread_pool<>& thread_pool();
+BS::thread_pool<> &thread_pool();
 
 /// Set the number of threads used for parallel work.
 /// n <= 1: single-threaded mode (all work runs inline, pool is never touched).
@@ -38,13 +38,12 @@ inline bool use_thread_pool() { return get_num_threads() > 1; }
 
 /// Run func(start, stop) over [0, count) split into nparts blocks.
 /// Exceptions from any block propagate to the caller.
-template <typename F>
-void parallel_blocks(int count, F &&func, int nparts) {
+template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     if (count <= 0)
         return;
     if (nparts > 1 && use_thread_pool()) {
-        auto futures =
-            thread_pool().submit_blocks(0, count, std::forward<F>(func), static_cast<size_t>(nparts));
+        auto futures = thread_pool().submit_blocks(0, count, std::forward<F>(func),
+                                                   static_cast<size_t>(nparts));
         futures.get();
     } else {
         func(0, count);
@@ -53,8 +52,7 @@ void parallel_blocks(int count, F &&func, int nparts) {
 
 /// Run func(i) for i in [0, n). Each index is a separate task.
 /// Exceptions from any task propagate to the caller.
-template <typename F>
-void parallel_sequence(int n, F &&func) {
+template <typename F> void parallel_sequence(int n, F &&func) {
     if (n <= 0)
         return;
     if (n > 1 && use_thread_pool()) {
@@ -67,10 +65,12 @@ void parallel_sequence(int n, F &&func) {
 }
 
 /// Run a single task concurrently with inline_work on the calling thread.
+/// Only dispatches to the pool when nparts > 1 AND the pool is active,
+/// preventing deadlock when called from a pool worker (e.g. inside a Jet job).
 /// Both exceptions propagate. Returns after both complete.
 template <typename FTask, typename FInline>
-void parallel_task(FTask &&task, FInline &&inline_work) {
-    if (use_thread_pool()) {
+void parallel_task(int nparts, FTask &&task, FInline &&inline_work) {
+    if (nparts > 1 && use_thread_pool()) {
         auto future = thread_pool().submit_task(std::forward<FTask>(task));
         inline_work();
         future.get();

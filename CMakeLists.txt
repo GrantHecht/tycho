@@ -289,7 +289,7 @@ add_definitions(-DEIGEN_DONT_PARALLELIZE) ##NEVER EVER GET RID OF THIS EVER
 
 
 add_definitions(-DTYCHO_DEFAULT_QP_THREADS=8) ## no spaces between = !!!! otherwise it is set to one
-add_definitions(-DTYCHO_DEFAULT_FUNC_THREADS=16) ## no spaces between = !!!! otherwise it is set to one
+add_definitions(-DTYCHO_DEFAULT_NUM_PARTITIONS=16) ## no spaces between = !!!! otherwise it is set to one
 
 ###  initial size of asset arena memory allocator in number of doubles/superscalars
 add_definitions(-DTYCHO_DEFAULT_ARENA_SIZE=256) ## no spaces between = !!!! otherwise it is set to one

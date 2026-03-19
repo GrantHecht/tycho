@@ -16,7 +16,7 @@
 #include "OptimizationProblem.h"
 
 void Tycho::OptimizationProblem::transcribe() {
-    this->nlp = std::make_shared<NonLinearProgram>(this->Threads);
+    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
     int numVars = this->ActiveVariables.size();
 

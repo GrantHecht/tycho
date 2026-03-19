@@ -81,7 +81,7 @@ sensitive problems.
     ## Neccessary for this problem
     phase.optimizer.set_QPOrderingMode("MINDEG")
     phase.optimizer.PrintLevel = 2
-    phase.setThreads(1,1)
+    phase.setNumPartitions(1,1)
 
 To highlight the difficulties of this problem, we initially discretize with only 10 LGL7 segments.
 If we were to now call optimize on our phase (code not shown here), PSIOPT would indeed converge to an optimal solution satisfying our constraints. 
@@ -190,7 +190,7 @@ Full Code
         ## Neccessary for this problem
         phase.optimizer.set_QPOrderingMode("MINDEG")
         phase.optimizer.PrintLevel = 2
-        phase.setThreads(1,1)
+        phase.setNumPartitions(1,1)
     
         # Enable Adaptive Mesh
         phase.setAdaptiveMesh(True)

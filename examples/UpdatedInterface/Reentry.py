@@ -244,7 +244,7 @@ if __name__ == "__main__":
 
     phase.addDeltaVarObjective("theta", -1.0)
 
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
 
     phase.optimizer.set_SoeLSMode("L1")
     phase.optimizer.set_OptLSMode("L1")

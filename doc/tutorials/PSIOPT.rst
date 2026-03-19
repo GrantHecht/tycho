@@ -259,27 +259,25 @@ use the flags in your code, it is recommended to compare flags to their enumerat
        constraints or gradient
      - 3
 
-Threading
----------
+Parallelism
+-----------
 
-By default, PSIOPT will set the number of threads used to parallelize function evaluations to be equal to the number of hardware threads
-on your machine up to a maximum of 16. So if your computer has 10 cores and 20 threads (ex: i9-10900k), only 16 threads will be used for function evaluations by default.
+By default, PSIOPT will partition function evaluations across up to 16 work partitions (or the number of hardware threads, whichever is smaller).
 Likewise by default, PSIOPT will set the number of threads used to factor KKT matrices to be equal to the number of physical cores on your machine up to a maximum of 8.
-So, if your computer has 10 cores and 20 threads, only 8 threads will be used for matrix factorization by default. Based on experience, this an appropriate
-threading allocation to solve single problems as fast as possible on most desktop machines. In our experience KKT matrix factorization does not scale beyond
-8 threads on most problems. Furthermore, applying too many threads to function evaluations on small to medium sized problems can actually degrade performance.
-However, you can manually set the thread count by using the :code:`.setThreads` member function of a :code:`phase` or :code:`OptimalControlProblem`. If speed is of concern we recommend you play around with
-these parameters to find the best option. However, we should note that if you are trying to maximize throughput by running ASSET in multiple processes simultaneously on your desktop or on a server, 
-you should almost always set the optimizer to run-serially to prevent over-subscription of the CPU.
+Based on experience, this is an appropriate allocation to solve single problems as fast as possible on most desktop machines. In our experience KKT matrix factorization does not scale beyond
+8 threads on most problems. Furthermore, applying too many partitions to function evaluations on small to medium sized problems can actually degrade performance.
+You can manually set the partition count by using the :code:`.setNumPartitions` member function of a :code:`phase` or :code:`OptimalControlProblem`. If speed is of concern we recommend you play around with
+these parameters to find the best option. However, we should note that if you are trying to maximize throughput by running Tycho in multiple processes simultaneously on your desktop or on a server,
+you should almost always set the optimizer to run serially to prevent over-subscription of the CPU.
 
 .. code-block:: python
 
-    phase.setThreads(1,1)  # force to run serially on a single thread only
+    phase.setNumPartitions(1, 1)  # force to run serially on a single thread only
     phase.solve_optimize()
-    
 
-    ocp.setThreads(FuncThreads = 20 ,KKTThreads=20) # Use more than default number of threads
-    ocp.Phase(0).setThreads(20,20)  #not necessary, will be overridden by the settings of the ocp
+
+    ocp.setNumPartitions(NumPartitions=20, QPThreads=20) # Use more than default
+    ocp.Phase(0).setNumPartitions(20, 20)  # not necessary, will be overridden by the ocp
     ocp.optimize()
 
     
@@ -368,7 +366,7 @@ attached to each problem.
         #.
         #.
 
-        ocp.setThreads(1,1)  # Not necessary, Jet will take care of this
+        ocp.setNumPartitions(1,1)  # Not necessary, Jet will take care of this
 
         ### SET the JetJobMode !!! #####
         ocp.setJetJobMode("optimize")
@@ -431,7 +429,7 @@ and expensive preprocessing that cannot be parallelized.
         #.
         #.
 
-        ocp.setThreads(1,1)  # Not necessary, Jet will take care of this
+        ocp.setNumPartitions(1,1)  # Not necessary, Jet will take care of this
 
         ### SET the JetJobMode !!! #####
         ocp.setJetJobMode("optimize")

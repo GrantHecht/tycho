@@ -918,13 +918,13 @@ void Tycho::ODEPhaseBase::transcribe_axis_funcs() {
 
     std::vector<ConstraintInterface> AxisFuncs;
     std::vector<ThreadingFlags> Tmodes;
-    Eigen::VectorXi bins(this->Threads + 1);
+    Eigen::VectorXi bins(this->NumPartitions + 1);
     bins.setLinSpaced(0, this->indexer.numNodalStates);
 
     for (int i = 0; i < this->indexer.numNodalStates - 2; i++) {
         AxisFuncs.emplace_back(SingleMeshSpacing(cspace[i + 1]));
         ThreadingFlags thrt = ThreadingFlags::Thread0;
-        for (int j = 0; j < this->Threads; j++) {
+        for (int j = 0; j < this->NumPartitions; j++) {
             if (i >= bins(j) && i < bins(j + 1)) {
                 thrt = static_cast<ThreadingFlags>(j);
             }
@@ -1295,7 +1295,7 @@ void Tycho::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
 }
 
 void Tycho::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
-    this->nlp = std::make_shared<NonLinearProgram>(this->Threads);
+    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
     this->initIndexing();
 

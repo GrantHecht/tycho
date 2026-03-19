@@ -45,6 +45,29 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     }
 }
 
+TEST_F(SolverTest, JetMapSaturatedPool) {
+    // Regression test: Jet.map must not deadlock when num_jobs >= pool threads.
+    // Root cause: parallel_task() in NLP eval methods was submitting work to the
+    // global pool while already running on a pool worker, saturating all threads.
+    int nt = Tycho::get_num_threads();
+    int num_jobs = std::max(nt + 2, 6); // more jobs than pool threads
+
+    std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
+    for (int i = 0; i < num_jobs; ++i) {
+        auto p = make_brach_solver_phase(16);
+        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        phases.push_back(p);
+    }
+
+    auto results = Jet::map(phases, false);
+    ASSERT_EQ(results.size(), static_cast<size_t>(num_jobs));
+    for (int i = 0; i < num_jobs; ++i) {
+        auto traj = results[i]->returnTraj();
+        double tf = traj.back()[3];
+        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet saturated-pool problem " << i << " did not converge";
+    }
+}
+
 TEST_F(SolverTest, JetMapMultiGenerator) {
     // Two generators: different segment counts
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen16 = [](int) {

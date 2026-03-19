@@ -183,7 +183,7 @@ class test_Reentry(unittest.TestCase):
         phase.optimizer.MaxLSIters = 2
         phase.optimizer.MaxAccIters = 100
         phase.optimizer.PrintLevel = 3
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         phase.optimizer.CNRMode = True
         phase.PrintMeshInfo = False
         phase.setMeshTol(mtol)

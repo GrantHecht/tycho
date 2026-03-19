@@ -22,13 +22,14 @@ void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
     obj.def_rw("JetJobMode", &OptimizationProblemBase::JetJobMode);
-    obj.def_rw("Threads", &OptimizationProblemBase::Threads);
+    obj.def_rw("NumPartitions", &OptimizationProblemBase::NumPartitions);
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
 
-    obj.def("setThreads", nb::overload_cast<int, int>(&OptimizationProblemBase::setThreads),
-            nb::arg("FuncThreads"), nb::arg("KKTThreads"));
+    obj.def("setNumPartitions",
+            nb::overload_cast<int, int>(&OptimizationProblemBase::setNumPartitions),
+            nb::arg("NumPartitions"), nb::arg("QPThreads"));
 
-    obj.def("setThreads", nb::overload_cast<int>(&OptimizationProblemBase::setThreads));
+    obj.def("setNumPartitions", nb::overload_cast<int>(&OptimizationProblemBase::setNumPartitions));
 
     obj.def("setJetJobMode",
             nb::overload_cast<JetJobModes>(&OptimizationProblemBase::setJetJobMode));

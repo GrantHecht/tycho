@@ -260,7 +260,7 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.optimizer.PrintLevel = 3
         ocp.optimizer.EContol = 1.0e-8
 
-        ocp.setThreads(1, 1)
+        ocp.setNumPartitions(1, 1)
         ocp.setAdaptiveMesh(True, True)
         ocp.MaxMeshIters = 10
         ocp.PrintMeshInfo = False

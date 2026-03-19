@@ -72,7 +72,7 @@ class test_ObjScaling(unittest.TestCase):
         phase.addIntegralObjective(ODE.obj() * iscale, [0, 2])
         phase.addValueObjective("Back", 0, vscale)
 
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         phase.optimizer.CNRMode = True
         phase.optimizer.set_QPOrderingMode("MINDEG")
 
@@ -97,7 +97,7 @@ class test_ObjScaling(unittest.TestCase):
         phase.addValueObjective("Back", 0, vscale)
 
         phase.setAutoScaling(True)
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         phase.optimizer.CNRMode = True
         phase.optimizer.set_QPOrderingMode("MINDEG")
 
@@ -125,7 +125,7 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.setAutoScaling(True)
 
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         phase.optimizer.CNRMode = True
         phase.optimizer.set_QPOrderingMode("MINDEG")
 
@@ -153,7 +153,7 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.setAutoScaling(True)
 
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         phase.optimizer.CNRMode = True
         phase.optimizer.set_QPOrderingMode("MINDEG")
 
@@ -195,7 +195,7 @@ class test_ObjScaling(unittest.TestCase):
         ocp.addForwardLinkEqualCon(phase1, phase2, range(0, 3))
 
         ocp.setAutoScaling(True, True)
-        ocp.setThreads(1, 1)
+        ocp.setNumPartitions(1, 1)
         ocp.optimizer.CNRMode = True
         ocp.optimizer.set_QPOrderingMode("MINDEG")
 

@@ -142,7 +142,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ocp.optimizer.set_OptLSMode("L1")
         ocp.optimizer.MaxLSIters = 2
         ocp.optimizer.PrintLevel = 3
-        ocp.setThreads(1, 1)
+        ocp.setNumPartitions(1, 1)
         ocp.optimizer.set_QPOrderingMode("MINDEG")
 
         Flag = ocp.optimize()

@@ -31,7 +31,7 @@ struct NonLinearProgram {
     using VectorXd = Eigen::VectorXd;
     using MatrixXi = Eigen::MatrixXi;
 
-    int Threads = 1;
+    int NumPartitions = 1;
 
     /// <summary>
     /// Master List of Objective functions that will be partitioned onto different threads (ThrObj)
@@ -113,18 +113,18 @@ struct NonLinearProgram {
     int AGXDataStart = 0;
     int EConDataStart = 0;
     int IConDataStart = 0;
-    int ZThreads = 1;
+    int NumFillPartitions = 1;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    NonLinearProgram(int FunThr) {
-        this->Threads = std::max(FunThr, 1);
-        this->ZThreads = this->Threads;
+    NonLinearProgram(int NumParts) {
+        this->NumPartitions = std::max(NumParts, 1);
+        this->NumFillPartitions = this->NumPartitions;
     }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
-                     int FunThr) {
-        this->Threads = std::max(FunThr, 1);
+                     int NumParts) {
+        this->NumPartitions = std::max(NumParts, 1);
 
         this->Objectives = obj;
         this->EqualityConstraints = eq;
@@ -135,7 +135,7 @@ struct NonLinearProgram {
     void make_NLP(int PV, int EQ, int IQ);
 
     void print_data() {
-        for (int i = 0; i < this->Threads; i++) {
+        for (int i = 0; i < this->NumPartitions; i++) {
             std::cout << "Thread: " << i << std::endl << std::endl;
             std::cout << "---------------Objectives---------------" << std::endl << std::endl;
 
@@ -253,7 +253,7 @@ struct NonLinearProgram {
             }
         };
 
-        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->ZThreads);
+        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumFillPartitions);
     }
 
     void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {

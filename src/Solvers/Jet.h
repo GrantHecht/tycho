@@ -17,7 +17,14 @@
 
 #pragma once
 #include "OptimizationProblemBase.h"
-#include "pch.h"
+#include "Utils/ThreadPool.h"
+#include "Utils/Timer.h"
+#include "Utils/fmtlib.h"
+#ifdef USE_ACCELERATE_SPARSE
+#include "AccelerateUtils.h"
+#else
+#include "mkl.h"
+#endif
 
 namespace Tycho {
 
@@ -105,41 +112,34 @@ struct Jet {
             print_beginning();
         t.start();
 
-        // Use global thread pool; honors Tycho::set_num_threads().
-        // parallel_sequence runs inline when get_num_threads() <= 1.
+        auto track = [&](PSIOPT::ConvergenceFlags flag, int i) {
+            if (!verbose)
+                return;
+            switch (flag) {
+            case PSIOPT::ConvergenceFlags::CONVERGED:
+                NumConv++;
+                break;
+            case PSIOPT::ConvergenceFlags::ACCEPTABLE:
+                NumAcc++;
+                break;
+            case PSIOPT::ConvergenceFlags::NOTCONVERGED:
+                NumNoConv++;
+                break;
+            case PSIOPT::ConvergenceFlags::DIVERGING:
+                NumDiv++;
+                break;
+            }
+            double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
+            print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+        };
+
         if (Tycho::use_thread_pool()) {
             auto results = Tycho::thread_pool().submit_sequence(0, NumJobs, Job);
-            for (int i = 0; i < NumJobs; i++) {
-                auto flag = results[i].get();
-                if (verbose) {
-                    if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
-                        NumConv++;
-                    if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
-                        NumAcc++;
-                    if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
-                        NumNoConv++;
-                    if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
-                        NumDiv++;
-                    double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
-                    print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
-                }
-            }
+            for (int i = 0; i < NumJobs; i++)
+                track(results[i].get(), i);
         } else {
-            for (int i = 0; i < NumJobs; i++) {
-                auto flag = Job(i);
-                if (verbose) {
-                    if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
-                        NumConv++;
-                    if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
-                        NumAcc++;
-                    if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
-                        NumNoConv++;
-                    if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
-                        NumDiv++;
-                    double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
-                    print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
-                }
-            }
+            for (int i = 0; i < NumJobs; i++)
+                track(Job(i), i);
         }
         if (verbose)
             print_finished();

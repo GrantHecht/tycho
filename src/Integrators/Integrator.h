@@ -1672,7 +1672,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                 const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                 const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1692,18 +1692,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, thrs);
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<IntegRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
-                                             const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_parallel_impl(x0s, tfs, thrs);
+                                             const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<IntegEventRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                                   const Eigen::VectorXd &tfs,
-                                                  const std::vector<EventPack> &events, int thrs) {
-        return this->integrate_parallel_impl(x0s, tfs, thrs, events);
+                                                  const std::vector<EventPack> &events, int n_parts) {
+        return this->integrate_parallel_impl(x0s, tfs, n_parts, events);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1832,7 +1832,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_dense_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                       const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                       const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1852,26 +1852,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, thrs);
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
-                                                   const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, thrs);
+                                                   const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<EventPack> &events,
-                                                        int thrs) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, thrs, events, false);
+                                                        int n_parts) {
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, events, false);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
     template <class... Args>
     auto integrate_dense_parallel_impl_n(const std::vector<ODEState<double>> &x0s,
                                          const Eigen::VectorXd &tfs, const std::vector<int> &ns,
-                                         int thrs, Args &&...args)
+                                         int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], ns[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1895,7 +1895,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, thrs);
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -1903,13 +1903,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<int> &ns,
                                                         const std::vector<EventPack> &events,
-                                                        int thrs) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, thrs, events);
+                                                        int n_parts) {
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, events);
     }
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs,
-                                                   const std::vector<int> &ns, int thrs) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, thrs);
+                                                   const std::vector<int> &ns, int n_parts) {
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1927,7 +1927,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_stm_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                     const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                     const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_stm(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1947,27 +1947,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, thrs);
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<STMRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
-                                               const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_stm_parallel_impl(x0s, tfs, thrs);
+                                               const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_stm_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<STMEventRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
                                                     const Eigen::VectorXd &tfs,
                                                     const std::vector<EventPack> &events,
-                                                    int thrs) {
-        return this->integrate_stm_parallel_impl(x0s, tfs, thrs, events);
+                                                    int n_parts) {
+        return this->integrate_stm_parallel_impl(x0s, tfs, n_parts, events);
     }
 
-    STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int thrs) {
-        VectorX<double> ts = VectorX<double>::LinSpaced(thrs + 1, x0[this->ode.TVar()], tf);
-        std::vector<ODEState<double>> Xs(thrs + 1);
+    STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
+        VectorX<double> ts = VectorX<double>::LinSpaced(n_parts + 1, x0[this->ode.TVar()], tf);
+        std::vector<ODEState<double>> Xs(n_parts + 1);
         Xs[0] = x0;
 
-        std::vector<std::future<STMRet>> results(thrs);
+        std::vector<std::future<STMRet>> results(n_parts);
 
         Eigen::MatrixXd jxall(this->IRows(), this->IRows());
         jxall.setIdentity();
@@ -1978,24 +1978,24 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return this->integrate_stm(xi, tf1);
         };
 
-        if (thrs > 1 && Tycho::use_thread_pool()) {
-            for (int i = 0; i < thrs; i++) {
+        if (n_parts > 1 && Tycho::use_thread_pool()) {
+            for (int i = 0; i < n_parts; i++) {
                 results[i] =
                     Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
-                if (i < (thrs - 1))
+                if (i < (n_parts - 1))
                     Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
             }
-            for (int i = 0; i < thrs; i++) {
+            for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = results[i].get(); // propagates exceptions
                 jxall.topRows(this->ORows()) = (jx * jxall).eval();
-                if (i == (thrs - 1))
+                if (i == (n_parts - 1))
                     Xs[i + 1] = xf;
             }
         } else {
-            for (int i = 0; i < thrs; i++) {
+            for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);
                 jxall.topRows(this->ORows()) = (jx * jxall).eval();
-                Xs[i + 1] = (i < thrs - 1) ? this->integrate(Xs[i], ts[i + 1]) : xf;
+                Xs[i + 1] = (i < n_parts - 1) ? this->integrate(Xs[i], ts[i + 1]) : xf;
             }
         }
 

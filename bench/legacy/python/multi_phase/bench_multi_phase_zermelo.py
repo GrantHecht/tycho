@@ -74,7 +74,7 @@ def navigate(Points, vM=1, wF=uniformWind):
         A = Points[i]
         B = Points[i + 1]
         phase = Zermelo(vM, wF).phase(oc.TranscriptionModes.LGL3)
-        phase.Threads = 8
+        phase.NumPartitions = 8
         phase.setTraj(trajG[i], nSeg)
         if i == 0:
             phase.addBoundaryValue("Front", [0, 1], A)
