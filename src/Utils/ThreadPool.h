@@ -47,6 +47,8 @@ inline bool use_thread_pool() { return get_num_threads() > 1; }
 /// Run func(start, stop) over [0, count) split into nparts blocks.
 /// All blocks dispatched to pool + wait (no inline block — BS::blocks computes
 /// ranges internally and we cannot easily extract one).
+/// WARNING: exceptions from worker tasks are swallowed (detach_* API).
+/// NOTE: wait() is global — do not nest parallel_* calls.
 template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     if (count <= 0)
         return;
@@ -60,6 +62,8 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
 
 /// Run func(i) for i in [0, n). Dispatches N-1 tasks to pool, runs last
 /// partition inline on calling thread, then waits.
+/// WARNING: exceptions from worker tasks are swallowed (detach_* API).
+/// NOTE: wait() is global — do not nest parallel_* calls.
 template <typename F> void parallel_sequence(int n, F &&func) {
     if (n <= 0)
         return;
@@ -77,6 +81,8 @@ template <typename F> void parallel_sequence(int n, F &&func) {
 /// Only dispatches to the pool when nparts > 1 AND the pool is active,
 /// preventing deadlock when called from a pool worker (e.g. inside a Jet job).
 /// Returns after both complete.
+/// WARNING: exceptions from worker tasks are swallowed (detach_* API).
+/// NOTE: wait() is global — do not nest parallel_* calls.
 template <typename FTask, typename FInline>
 void parallel_task(int nparts, FTask &&task, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {

@@ -1,4 +1,4 @@
-# Tycho — Claude Code Memory
+# Tycho — Codex Memory
 
 ## Project Overview
 
@@ -17,13 +17,15 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously. 
 
 As a rule of thumb:
-- ALWAYS use -j2 for builds
-- DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
+- 1 build system wide : -j6
+- 2 simultaneous builds system wide: -j3
+- 3 simultaneous builds system wide: -j2
+- NO NOT PERFORM MORE THAN 3 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
 
 Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CMakeSettings.json` (MSVC),
-`setup.py`, `requirements.txt`, `Dockerfile`, `Dockerfile-dev`.
+`setup.py`, `requirements.txt`, `config_and_build.sh`, `Dockerfile`, `Dockerfile-dev`.
 
 ```
 src/                    C++ source code (core library)
@@ -70,29 +72,6 @@ cmake/                  CMake helper modules
   cppcheck.cmake        cppcheck integration
   git-submodule-*.cmake Submodule init/update helpers
 
-tests/                  C++ test suite (Google Test)
-  cpp/                  Test source files organised by subsystem
-    astro/              Kepler, Lambert, CR3BP tests
-    integrators/        RK stepper, STM, dense output tests
-    optimal_control/    Phase construction, collocation, mesh refinement tests
-    solvers/            PSIOPT convergence, NLP structure, Jet tests
-    utils/              TypeStorage, ThreadPool, BumpAllocator tests
-    vector_functions/   VF DSL, composition, Hessian, generic function tests
-
-bench/                  Benchmark suite and tracking
-  MACBENCH.md           macOS benchmarking procedure
-  bench_track.sh        Benchmark tracking script (record, compare, list)
-  results/              Stored benchmark results (gitignored)
-  cpp/                  Google Benchmark source files
-    bench_common.h      Shared ODE definitions and helpers
-    kepler/             Kepler/Lambert astrodynamics benchmarks
-    vector_functions/   VF DSL evaluation benchmarks
-    type_erasure/       GenericFunction VJP dispatch, GFStorage clone
-    integrators/        RK stepper throughput benchmarks
-    optimal_control/    Phase construction + transcription benchmarks
-    solvers/            PSIOPT end-to-end convergence benchmarks
-    utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
-
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
   cpp_examples/         C++ example programs
@@ -100,7 +79,7 @@ examples/               Python example scripts (Brachistochrone, Zermelo, low-th
   MeshRefinement/       Mesh-refinement examples
   UpdatedInterface/     Examples for updated API
   Plots/                Shared plotting helpers
-scripts/                Build, test, and packaging helper scripts
+scripts/                Build helper scripts (Windows + OneAPI installers)
 dockerfiles/            Dockerfiles for Ubuntu 18.04 / 20.04 CI images
 misc/                   Code generation utilities (CodeGen.py, CodeGenExample.py)
 pypiwheel/              PyPI wheel packaging (CMakeLists.txt, setup.py.in)
@@ -124,7 +103,7 @@ installed directly into the active Python environment's site-packages by the bui
 
 **System tools required (install once via Homebrew):**
 ```
-brew install llvm ninja ccache jq
+brew install llvm ninja ccache
 ```
 Current versions in use: LLVM 22.1.0, Ninja 1.13+.
 
@@ -138,13 +117,12 @@ pip install numpy scipy matplotlib spiceypy
 **First-time build:**
 ```bash
 mkdir build
-cmake --preset macos-llvm-release
-cd build && ninja -j4 all
+bash config_and_build.sh
 ```
 
 **Subsequent builds** (after C++ source changes):
 ```bash
-cd build && ninja -j2 all
+cd build && ninja -j6 all
 ```
 
 **Running examples:**
@@ -162,14 +140,11 @@ python examples/Brachistochrone.py
 | `TYCHO_FP_MODE`            | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
 | `BUILD_SPHINX_DOCS`        | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
 | `BUILD_CPP_EXAMPLES`       | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
-| `BUILD_CPP_TESTS`          | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
-| `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
-| `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
 
-The CMake presets dynamically resolve `Python_EXECUTABLE` and
-`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so they always target
-the correct interpreter. When updating LLVM, change the hardcoded libomp path in
-`CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
+`config_and_build.sh` dynamically resolves `Python_EXECUTABLE` and
+`PYTHON_LOCAL_INSTALL_DIR` from the `tycho` conda environment, so it always targets
+the correct interpreter. When updating LLVM, change `LLVM_VERSION` in that script and
+the hardcoded libomp path in `CMakeLists.txt` (search for `/opt/homebrew/Cellar/libomp/`).
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
@@ -302,61 +277,19 @@ Use descriptive commit messages. Prefix with type where clear:
 
 ## Testing
 
-### C++ unit tests (Google Test)
+Tycho does not yet have a formal unit test suite. The example scripts under
+`examples/` and the C++ example binaries serve as the **integration test suite**
+and act as the acceptance gate for all changes merged into `main`.
 
-The project has a C++ unit test suite under `tests/cpp/` using Google Test
-(fetched automatically via FetchContent). 42 test files across 6 subdirectories
-(astro, integrators, optimal_control, solvers, utils, vector_functions),
-compiled into a single `tycho_tests` executable.
+### Running the tests
 
-**Build and run:**
-```bash
-# Reconfigure with tests enabled (one-time)
-cmake --preset macos-llvm-release -DBUILD_CPP_TESTS=ON
-
-# Build test executable
-cd build && ninja -j2 tycho_tests
-
-# Run all tests via CTest
-ctest --output-on-failure
-```
-
-### C++ benchmarks (Google Benchmark)
-
-46 micro-benchmarks live under `bench/cpp/` using Google Benchmark
-(fetched automatically via FetchContent), compiled into a single `bench_all`
-executable. A local tracking script (`bench/bench_track.sh`) records results
-by commit hash and detects regressions. See `bench/MACBENCH.md` for the full
-benchmarking procedure on macOS.
-
-**Build and run:**
-```bash
-# Reconfigure with benchmarks enabled (one-time)
-cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON
-
-# Build
-cd build && ninja -j2 bench_all
-
-# Run all benchmarks
-./bench/cpp/bench_all
-
-# Track performance across commits
-bench/bench_track.sh baseline   # record baseline
-bench/bench_track.sh record     # record after changes
-bench/bench_track.sh compare    # compare HEAD vs baseline
-```
-
-### Python examples (integration tests)
-
-The 38 Python example scripts under `examples/` serve as the **integration test
-suite** and act as the acceptance gate for all changes merged into `main`.
-
+**Python examples (38 scripts):**
 ```bash
 conda activate tycho
-python scripts/run_examples.py
+python run_examples.py
 ```
 
-The runner (`scripts/run_examples.py`) executes all 38 example scripts
+The runner (`run_examples.py` at the repo root) executes all 38 example scripts
 non-interactively (using the `Agg` matplotlib backend), enforces per-example
 timeouts, and exits with code 0 only if every example passes.
 
@@ -366,8 +299,7 @@ Options:
 --filter SUBSTRING  Run only examples whose path contains SUBSTRING.
 ```
 
-### C++ examples
-
+**C++ examples:**
 ```bash
 ./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp
 ```
@@ -377,17 +309,13 @@ The C++ brachistochrone example must converge to an optimal solution (PSIOPT pri
 
 ### Merge policy
 
-**All C++ unit tests must pass, all 38 Python examples must pass, the C++
-brachistochrone example must converge, and benchmarks must show no unexplained
-regressions before any pull request can be merged into `main`.** This is the
-project's definition of a green build. Reviewers must verify that `ctest`
-reports no failures, `python scripts/run_examples.py` exits 0,
-`brachistochrone_cpp` reports "Optimal Solution Found", and
-`bench/bench_track.sh compare` reports no regressions before approving.
+**All 38 Python examples must pass and the C++ brachistochrone example must converge
+before any pull request can be merged into `main`.** This is the project's definition
+of a green build. Reviewers must verify that `python run_examples.py` exits 0 with no
+failures and that `brachistochrone_cpp` reports "Optimal Solution Found" before approving.
 
 If a change intentionally breaks an example (e.g. an API change that requires
-updating an example), the example must be fixed in the same PR. If a change
-introduces a benchmark regression, it must be explicitly justified in the PR.
+updating an example), the example must be fixed in the same PR.
 
 ### Required dependencies for the test environment
 
@@ -400,30 +328,6 @@ examples to run (none will be skipped):
 | seaborn                  | `pip install seaborn`                  |
 | spiceypy                 | `pip install spiceypy`                 |
 | basemap                  | `conda install -c conda-forge basemap` |
-
-## Development Workflow
-
-Before implementing a change in Tycho, follow this procedure:
-
-1. **Run benchmarks to establish a pre-update baseline if necessary.**
-   This is only required if the most recent benchmark result does not correspond
-   to the current code. Exercise caution before deciding to skip this step — when
-   in doubt, record a fresh baseline. Refer to `bench/<SYS>BENCH.md` for the
-   benchmarking procedure on your platform (e.g., `bench/MACBENCH.md` for macOS).
-
-2. **Check out a new branch** from `main` for the work.
-
-3. **Develop the code and iterate on the design as necessary.** Iteration may
-   involve running benchmarks and tests during development, but this is not
-   strictly required at every step.
-
-4. **Before merging a PR into `main`, you MUST:**
-   - Run benchmarks and compare against baseline (see `bench/<SYS>BENCH.md`).
-   - Run all C++ unit tests (`ctest --output-on-failure`).
-   - Run all 38 Python examples (`python scripts/run_examples.py`).
-   - Verify the C++ brachistochrone example converges.
-   - Ensure no performance regressions are introduced (or that any regressions
-     are explicitly justified and acknowledged in the PR).
 
 ## Things to Flag for Human Review
 

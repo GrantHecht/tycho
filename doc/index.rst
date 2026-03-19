@@ -65,7 +65,7 @@ ASSET is distributed under the permissive Apache 2.0 license that can be found i
 The license and copyright notices of ASSET's source and redistributable dependencies are shown below. The full text for each respective license can be found in the 
 `notices <https://github.com/GrantHecht/tycho/tree/master/notices>`_ folder on the Github repo.
 
-    Pybind11      - BSD License : Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
+    Nanobind      - BSD License : Copyright (c) 2022 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
 
     Intel MKL     - Intel Simplified Software License : Copyright (c) 2022 Intel Corporation.
 
@@ -73,9 +73,9 @@ The license and copyright notices of ASSET's source and redistributable dependen
 
     fmt           - MIT License : Copyright (c) 2012 - present, Victor Zverovich
 
-    ctpl          - Apache 2.0 License : Copyright (C) 2014 by Vitaliy Vitsentiy
+    BS::thread_pool - MIT License : Copyright (c) 2024 Barak Shoshany
 
-    autodiff      - MIT License : Copyright (c) 2018–2024 Allan Leal
+    autodiff      - MIT License : Copyright (c) 2018â€“2024 Allan Leal
 
     boost-threads - Boost Software License : Copyright (c) 2003-2022
 

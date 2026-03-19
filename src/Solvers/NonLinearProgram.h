@@ -134,7 +134,7 @@ struct NonLinearProgram {
 
     void print_data() {
         for (int i = 0; i < this->NumPartitions; i++) {
-            std::cout << "Thread: " << i << std::endl << std::endl;
+            std::cout << "Partition: " << i << std::endl << std::endl;
             std::cout << "---------------Objectives---------------" << std::endl << std::endl;
 
             for (auto &obj : this->ThrObj[i]) {

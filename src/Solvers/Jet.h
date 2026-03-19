@@ -38,31 +38,71 @@ template <class T, class GenFunc, class Args> struct JetInvoker {
 struct Jet {
 
     static void print_beginning() {
+        constexpr const char *jestr = "          __  ______  ______\n"
+                                      "         / / / ____/ /_  __/\n"
+                                      "    __  / / / __/     / /   \n"
+                                      "   / /_/ / / /___    / /    \n"
+                                      "   \\____/ /_____/   /_/     \n\n";
+
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Starting ");
+        fmt::print(fmt::fg(fmt::color::crimson), jestr);
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");
         fmt::print("\n");
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
     }
 
-    static void print_progress(int i, double t, int nj, int nc, int na, int nn, int nd) {
-        auto jestr = fmt::format(fmt::runtime("({:>{}}/{})"), i + 1,
-                                 static_cast<int>(std::to_string(nj).size()), nj);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Job ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "{}", jestr);
-        fmt::print(fmt::fg(fmt::color::dim_gray), " Done");
-        fmt::print(":");
-        fmt::print(fmt::fg(fmt::color::green), " Conv:{}", nc);
-        fmt::print(fmt::fg(fmt::color::yellow), " Acc:{}", na);
-        fmt::print(fmt::fg(fmt::color::orange), " NConv:{}", nn);
-        fmt::print(fmt::fg(fmt::color::red), " Div:{}", nd);
-        fmt::print(fmt::fg(fmt::color::dim_gray), " Time:{:.4f} s", t);
+    static void print_progress(int i, double tsec, int NumJobs, int NumConv, int NumAcc,
+                               int NumNoConv, int NumDiv) {
+        double prog = 100 * double(i + 1) / double(NumJobs);
+        int len = 76 * double(i + 1) / double(NumJobs);
+        int wspace = 76 - len;
+        double remtime = (tsec / double(i + 1)) * (NumJobs - i - 1);
+        auto cyan = fmt::fg(fmt::color::cyan);
+        auto green = fmt::fg(fmt::color::green);
+
+        auto sminhrs = [cyan](double ts) {
+            if (ts < 60.0) {
+                fmt::print(cyan, "{0:>10.2f} s     \n", ts);
+            } else if (ts < 3600.0) {
+                fmt::print(cyan, "{0:>10.2f} min     \n", ts / 60.0);
+            } else {
+                fmt::print(cyan, "{0:>10.2f} hr     \n", ts / 3600.0);
+            }
+        };
+
         fmt::print("\n");
-    }
+
+        fmt::print(" Remaining Time : ");
+        sminhrs(remtime);
+        fmt::print(" Elapsed Time   : ");
+        sminhrs(tsec);
+        fmt::print(" Progress       : ");
+        fmt::print(cyan, "{0:>10.2f} %  \n", prog);
+        fmt::print(" [");
+        fmt::print(green, "{0:#^{1}}{0:.^{2}}", "", len, wspace);
+        fmt::print("]");
+        fmt::print("\n\n");
+        fmt::print("  Completed        : ");
+        fmt::print(cyan, "{0:>10}/{1:<10}   \n", (i + 1), NumJobs);
+
+        fmt::print("    Optimal        : ");
+        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumConv, NumJobs);
+        fmt::print("    Acceptable     : ");
+        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumAcc, NumJobs);
+        fmt::print("    Not Converged  : ");
+        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumNoConv, NumJobs);
+        fmt::print("    Diverged       : ");
+        fmt::print(cyan, "{0:>10}/{1:<10}   \n", NumDiv, NumJobs);
+
+        if (i < (NumJobs - 1))
+            fmt::print("\033[11F");
+        else
+            fmt::print("\n");
+    };
 
     static void print_finished() {
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 79);
+
         fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
         fmt::print(": ");
         fmt::print(fmt::fg(fmt::color::royal_blue), "Jet");
