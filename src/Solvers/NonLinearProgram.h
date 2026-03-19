@@ -113,13 +113,11 @@ struct NonLinearProgram {
     int AGXDataStart = 0;
     int EConDataStart = 0;
     int IConDataStart = 0;
-    int NumFillPartitions = 1;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     NonLinearProgram(int NumParts) {
         this->NumPartitions = std::max(NumParts, 1);
-        this->NumFillPartitions = this->NumPartitions;
     }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
@@ -253,17 +251,17 @@ struct NonLinearProgram {
             }
         };
 
-        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumFillPartitions);
+        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumPartitions);
     }
 
-    void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {
+    void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
         int n = mat.nonZeros();
         auto ZOp = [&](int start, int stop) {
             double *pt = mat.valuePtr() + start;
             std::fill_n(pt, stop - start, 0.0);
         };
 
-        Tycho::parallel_blocks(n, ZOp, thr);
+        Tycho::parallel_blocks(n, ZOp, this->NumPartitions);
     }
 
     void assignKKTSlackHessian(const Eigen::Ref<const Eigen::VectorXd> &slhs,

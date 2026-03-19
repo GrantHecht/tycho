@@ -32,7 +32,7 @@ struct OptimizationProblemBase {
         OptimizeSolve
     };
 
-    int NumPartitions = TYCHO_DEFAULT_NUM_PARTITIONS;
+    int NumPartitions = 1;
     JetJobModes JetJobMode = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
@@ -51,9 +51,17 @@ struct OptimizationProblemBase {
     virtual PSIOPT::ConvergenceFlags solve_optimize_solve() = 0;
     virtual PSIOPT::ConvergenceFlags optimize_solve() = 0;
 
+    /// Compute default partition count from the global thread budget.
+    /// Over-partitions by N² so the pool can dynamically load-balance.
+    static int default_num_partitions() {
+        int nt = Tycho::get_num_threads();
+        if (nt <= 1)
+            return 1;
+        return nt * nt;
+    }
+
     virtual void initPartitions() {
-        this->NumPartitions =
-            std::min(TYCHO_DEFAULT_NUM_PARTITIONS, int(std::thread::hardware_concurrency()));
+        this->NumPartitions = default_num_partitions();
         this->optimizer->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
     }
 
