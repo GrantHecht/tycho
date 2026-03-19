@@ -345,8 +345,8 @@ elseif(APPLE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
       # fina_package(OpenMP REQUIRED) will fail with AppleClang so 
       # we need this to point towards the homebrew libomp
-      include_directories("/opt/homebrew/Cellar/libomp/22.1.0/include/")
-      link_directories("/opt/homebrew/Cellar/libomp/22.1.0/lib/")
+      include_directories("/opt/homebrew/opt/libomp/include/")
+      link_directories("/opt/homebrew/opt/libomp/lib/")
       list(APPEND COMPILE_FLAGS "-Xclang")
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
@@ -469,11 +469,6 @@ if(ENABLE_PYTHON_BINDINGS)
       endif()
     endif()
 endif()
-
-message(STATUS "CMAKE DIR LOC" ${CMAKE_CURRENT_SOURCE_DIR})
-message(STATUS ${OpenMP_CXX_FLAGS})
-message(STATUS ${OpenMP_CXX_LIBRARIES})
-message(STATUS ${PYTHON_EXECUTABLE})
 
 message(STATUS "Floating-point mode: ${TYCHO_FP_MODE}")
 if(TYCHO_FP_MODE STREQUAL "STRICT")

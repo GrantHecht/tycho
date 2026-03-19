@@ -17,9 +17,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
         "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_CXX_COMPILER": "/opt/homebrew/Cellar/llvm/22.1.0/bin/clang++",
-        "Python_EXECUTABLE": "/opt/miniconda3/envs/tycho/bin/python",
-        "PYTHON_LOCAL_INSTALL_DIR": "/opt/miniconda3/envs/tycho/lib/python3.13/site-packages"
+        "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
       }
     },
     {
@@ -33,9 +31,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
         "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-22",
-        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
-        "PYTHON_LOCAL_INSTALL_DIR": "${sourceDir}/.venv/lib/python3.14/site-packages"
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-22"
       }
     },
     {
@@ -72,7 +68,7 @@
       "displayName": "macOS LLVM Release Build",
       "configurePreset": "macos-llvm-release",
       "nativeToolOptions": [
-        "-j6",
+        "-j2",
         "-v"
       ]
     },
@@ -81,7 +77,7 @@
       "displayName": "Linux Clang Release Build",
       "configurePreset": "linux-clang-release",
       "nativeToolOptions": [
-        "-j6",
+        "-j8",
         "-v"
       ]
     },

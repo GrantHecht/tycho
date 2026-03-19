@@ -141,7 +141,7 @@ first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automati
 ```
 brew install llvm ninja ccache jq
 ```
-Current versions in use: LLVM 22.1.0, Ninja 1.13+.
+Current versions in use: LLVM 22+, Ninja 1.13+.
 
 **Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
 
@@ -159,9 +159,10 @@ cmake --preset macos-llvm-release
 cd build && ninja -j2 all
 ```
 
-**Note:** The macOS preset hardcodes the Homebrew LLVM and conda paths. When updating
-LLVM, also update the libomp path in `CMakeLists.txt` (search for
-`/opt/homebrew/Cellar/libomp/`).
+**Note:** The macOS preset uses the stable Homebrew symlink `/opt/homebrew/opt/llvm`
+for the compiler. The libomp paths in `CMakeLists.txt` also use the stable symlink
+`/opt/homebrew/opt/libomp` — neither requires manual updating when Homebrew upgrades
+LLVM. Presets do not hardcode Python paths; activate your conda/venv before configuring.
 
 ### Linux / WSL2 (Ubuntu)
 
