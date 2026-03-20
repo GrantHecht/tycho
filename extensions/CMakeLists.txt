@@ -1,4 +1,3 @@
-
 # Pure C++ extension library — no Python dependency.
 # Extension ODE models (CR3BPAD, ModifiedDynamicsAD, etc.) live in Tycho_Extensions.h
 # and are usable from standalone C++ programs without pulling in the Python C API.

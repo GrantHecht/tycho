@@ -54,7 +54,7 @@ pip install numpy scipy matplotlib spiceypy
 
 Build:
 ```bash
-git clone git@github.com:GrantHecht/tycho.git
+git clone https://github.com/GrantHecht/tycho.git
 cd tycho
 mkdir build
 cmake --preset macos-llvm-release
@@ -93,7 +93,7 @@ pip install numpy scipy matplotlib spiceypy
 
 Build:
 ```bash
-git clone git@github.com:GrantHecht/tycho.git
+git clone https://github.com/GrantHecht/tycho.git
 cd tycho
 mkdir build
 cmake --preset linux-clang-release
@@ -109,7 +109,7 @@ Uses LLVM/Clang with the clang-cl frontend. See `CMakePresets.json` for
 compiler paths. Sparse solver: Intel MKL.
 
 ```bash
-git clone git@github.com:GrantHecht/tycho.git
+git clone https://github.com/GrantHecht/tycho.git
 cd tycho
 cmake --preset x64-Clang-Release
 cmake --build build --config Release -j8

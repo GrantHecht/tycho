@@ -103,7 +103,7 @@ set(TYCHO_TEST_SOURCES
 add_executable(tycho_tests ${TYCHO_TEST_SOURCES})
 target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
 target_include_directories(tycho_tests PRIVATE
-    ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
+    ${INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/astro           # for astro_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/integrators     # for integrator_test_utils.h
