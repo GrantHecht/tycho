@@ -345,8 +345,8 @@ elseif(APPLE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
       # fina_package(OpenMP REQUIRED) will fail with AppleClang so 
       # we need this to point towards the homebrew libomp
-      include_directories("/opt/homebrew/Cellar/libomp/22.1.0/include/")
-      link_directories("/opt/homebrew/Cellar/libomp/22.1.0/lib/")
+      include_directories("/opt/homebrew/opt/libomp/include/")
+      link_directories("/opt/homebrew/opt/libomp/lib/")
       list(APPEND COMPILE_FLAGS "-Xclang")
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
@@ -388,7 +388,13 @@ endif()
 
 # Set dependency variables
 set(INCLUDE_DIRS ${MKL_INCLUDE_DIRS})
-set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS})
+# On Linux, static MKL archives have circular dependencies and must be wrapped
+# in --start-group/--end-group so the linker rescans them.
+if(UNIX AND NOT APPLE)
+  set(LINK_LIBS -Wl,--start-group ${MKL_LIBRARIES} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})
+else()
+  set(LINK_LIBS ${MKL_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS})
+endif()
 
 # Handle OpenMP for Apple
 if (APPLE)
@@ -431,10 +437,8 @@ endif()
 ################ Linker Flags ##################################################
 
 
-if(BUILD_SHARED_LIBS AND NOT APPLE AND NOT WIN32)  # Windows and Linux Dynamic Linking
-  list(APPEND LINKER_FLAGS "${OpenMP_CXX_FLAGS} -Wl,--no-undefined -Wl,--start-group ${MKL_LIBRARIES_LIST} -Wl, --end-group")
-elseif(UNIX AND NOT APPLE)  # Linux Static Linking
-  list(APPEND LINKER_FLAGS "${OpenMP_CXX_FLAGS} -Wl,--no-undefined -Wl,--start-group ${MKL_LIBRARIES_LIST} -Wl,--end-group")
+if(UNIX AND NOT APPLE)  # Linux (MKL group wrapping is in LINK_LIBS)
+  list(APPEND LINKER_FLAGS ${OpenMP_CXX_FLAGS} -Wl,--no-undefined)
 elseif(APPLE)  # Apple Dynamic and Static Linking
   list(APPEND LINKER_FLAGS ${OpenMP_CXX_FLAGS})
   list(APPEND LINKER_FLAGS "-Wl,-bind_at_load")
@@ -465,11 +469,6 @@ if(ENABLE_PYTHON_BINDINGS)
       endif()
     endif()
 endif()
-
-message(STATUS "CMAKE DIR LOC" ${CMAKE_CURRENT_SOURCE_DIR})
-message(STATUS ${OpenMP_CXX_FLAGS})
-message(STATUS ${OpenMP_CXX_LIBRARIES})
-message(STATUS ${PYTHON_EXECUTABLE})
 
 message(STATUS "Floating-point mode: ${TYCHO_FP_MODE}")
 if(TYCHO_FP_MODE STREQUAL "STRICT")

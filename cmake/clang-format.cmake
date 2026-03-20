@@ -6,8 +6,8 @@ file(GLOB_RECURSE ALL_SOURCE_FILES
 )
 
 find_program(CLANG_FORMAT_EXE
-    NAMES clang-format
-    HINTS /opt/homebrew/opt/llvm/bin
+    NAMES clang-format clang-format-22 clang-format-21 clang-format-20 clang-format-19 clang-format-18
+    HINTS /opt/homebrew/opt/llvm/bin /usr/bin
     DOC "clang-format executable"
 )
 

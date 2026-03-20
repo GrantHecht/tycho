@@ -103,7 +103,7 @@ set(TYCHO_TEST_SOURCES
 add_executable(tycho_tests ${TYCHO_TEST_SOURCES})
 target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
 target_include_directories(tycho_tests PRIVATE
-    ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
+    ${INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/astro           # for astro_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/integrators     # for integrator_test_utils.h
@@ -111,7 +111,7 @@ target_include_directories(tycho_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/solvers         # for solver_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
-target_link_libraries(tycho_tests PRIVATE tycho_core ${LINK_LIBS} GTest::gtest_main)
+target_link_libraries(tycho_tests PRIVATE tycho_core GTest::gtest_main)
 target_precompile_headers(tycho_tests REUSE_FROM pch_tests)
 if(UNIX)
     target_link_options(tycho_tests PRIVATE ${LINKER_FLAGS})

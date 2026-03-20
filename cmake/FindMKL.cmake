@@ -94,8 +94,10 @@ else()  # if Windows
 endif() # End OS Conditional
 
 find_path(MKL_INCLUDE_DIR NAMES mkl.h
-                          HINTS $ENV{MKLROOT}/include /opt/intel/mkl/include   $ENV{ONEAPI_ROOT}/mkl/latest/include
-
+                          HINTS $ENV{MKLROOT}/include
+                                /opt/intel/mkl/include
+                                /opt/intel/oneapi/mkl/latest/include
+                                $ENV{ONEAPI_ROOT}/mkl/latest/include
                           PATH_SUFFIXES mkl)
 
 message(STATUS ${OMP_LIB})
@@ -118,6 +120,8 @@ find_library(MKL_INTERFACE_LIBRARY
                   $ENV{MKLROOT}/lib/intel64
                   $ENV{INTEL}/mkl/lib/intel64
                   $ENV{INTEL}/mkl/latest/lib/intel64
+                  /opt/intel/oneapi/mkl/latest/lib
+                  /opt/intel/oneapi/mkl/latest/lib/intel64
                   $ENV{ONEAPI_ROOT}/mkl/latest/lib
                   $ENV{ONEAPI_ROOT}/mkl/latest/lib/intel64
                   $ENV{MKLROOT}/lib/intel64_win
@@ -129,6 +133,8 @@ find_library(MKL_CORE_LIBRARY
                   $ENV{MKLROOT}/lib/intel64
                   $ENV{INTEL}/mkl/lib/intel64
                   $ENV{INTEL}/mkl/latest/lib/intel64
+                  /opt/intel/oneapi/mkl/latest/lib
+                  /opt/intel/oneapi/mkl/latest/lib/intel64
                   $ENV{ONEAPI_ROOT}/mkl/latest/lib
                   $ENV{ONEAPI_ROOT}/mkl/latest/lib/intel64
                   $ENV{MKLROOT}/lib/intel64_win
@@ -144,6 +150,7 @@ find_library(MKL_OMP_LIBRARY
                   $ENV{INTEL}/compiler/lib/intel64_win
                   $ENV{INTEL}/compiler/latest/lib/intel64
                   $ENV{INTEL}/compiler/latest/lib/intel64_win
+                  /opt/intel/oneapi/compiler/latest/lib
                   $ENV{ONEAPI_ROOT}/compiler/latest/lib
                   $ENV{ONEAPI_ROOT}/compiler/latest/linux/compiler/lib/intel64_lin
                   $ENV{ONEAPI_ROOT}/compiler/latest/windows/compiler/lib/intel64_win
@@ -160,6 +167,8 @@ if(MKL_USE_SEQUENTIAL)
         $ENV{MKLROOT}/lib/intel64
         $ENV{INTEL}/mkl/lib/intel64
         $ENV{MKLROOT}/lib/intel64_win
+        /opt/intel/oneapi/mkl/latest/lib
+        /opt/intel/oneapi/mkl/latest/lib/intel64
         $ENV{ONEAPI_ROOT}/mkl/latest/lib
         $ENV{INTEL}/mkl/lib/intel64_win)
 elseif(WIN32 AND MKL_USE_TBB)
@@ -184,6 +193,8 @@ else()
         $ENV{MKLROOT}/lib/intel64
         $ENV{INTEL}/mkl/lib/intel64
         $ENV{MKLROOT}/lib/intel64_win
+        /opt/intel/oneapi/mkl/latest/lib
+        /opt/intel/oneapi/mkl/latest/lib/intel64
         $ENV{ONEAPI_ROOT}/mkl/latest/lib
         $ENV{ONEAPI_ROOT}/mkl/latest/lib/intel64
         $ENV{INTEL}/mkl/lib/intel64_win)
