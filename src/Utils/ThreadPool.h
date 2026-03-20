@@ -332,6 +332,7 @@ inline bool use_thread_pool() { return get_num_threads() > 1; }
 template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     if (count <= 0)
         return;
+    nparts = std::min(nparts, count);
     if (nparts > 1 && use_thread_pool()) {
         int block_size = count / nparts;
         int remainder = count % nparts;

@@ -227,8 +227,7 @@ be aware of during development:
 - **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
   flag any changes touching MKL integration for manual review
 - **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT), **boost-threads** (Boost),
-  **BS::thread_pool** (MIT), **rubber_types** (MIT), **kepler propagator** (MIT) — all
-  permissive, just preserve notices
+  **rubber_types** (MIT), **kepler propagator** (MIT) — all permissive, just preserve notices
 
 **Never delete or modify files in `notices/`.**
 If a new dependency is added, its license notice must be added to `notices/` as well.
