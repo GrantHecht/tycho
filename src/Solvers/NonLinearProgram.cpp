@@ -22,6 +22,17 @@ void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->SlackVars = IQ;
 
     this->countElems();
+
+    // Cap partitions so each has enough work to offset dispatch overhead.
+    // numUserKKTElems counts Jacobian + Hessian NNZ across all functions —
+    // proportional to per-partition compute in evalKKT/evalAUG. Below ~1000
+    // NNZ per partition, dispatch overhead dominates actual work.
+    if (this->NumPartitions > 1) {
+        static constexpr int MIN_NNZ_PER_PARTITION = 1000;
+        int max_parts = std::max(1, this->numUserKKTElems / MIN_NNZ_PER_PARTITION);
+        this->NumPartitions = std::min(this->NumPartitions, max_parts);
+    }
+
     this->analyzeThreading();
     this->setMATDimensions();
     this->setRHSDimensions();
