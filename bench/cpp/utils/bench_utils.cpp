@@ -146,8 +146,10 @@ BENCHMARK(BM_AllocateRun_Nested);
 // ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "Utils/ThreadPool.h"
+
 static void BM_ThreadPool_Dispatch(benchmark::State &state) {
-    BS::thread_pool<> pool(1);
+    Tycho::ThreadPool pool(1);
     for (auto _ : state) {
         auto fut = pool.submit_task([] { return 42; });
         int val = fut.get();
@@ -158,7 +160,7 @@ BENCHMARK(BM_ThreadPool_Dispatch);
 
 static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
     int N = static_cast<int>(state.range(0));
-    BS::thread_pool<> pool(4);
+    Tycho::ThreadPool pool(4);
     for (auto _ : state) {
         std::vector<std::future<int>> futures;
         futures.reserve(N);
@@ -173,3 +175,17 @@ static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_ThreadPool_BatchDispatch)->Arg(10)->Arg(100);
+
+static void BM_ThreadPool_EnqueueWork(benchmark::State &state) {
+    int N = static_cast<int>(state.range(0));
+    Tycho::ThreadPool pool(4);
+    for (auto _ : state) {
+        std::atomic<int> counter{0};
+        for (int i = 0; i < N; ++i) {
+            pool.enqueue_work([&counter] { counter.fetch_add(1); });
+        }
+        pool.wait();
+        benchmark::DoNotOptimize(counter.load());
+    }
+}
+BENCHMARK(BM_ThreadPool_EnqueueWork)->Arg(10)->Arg(100);

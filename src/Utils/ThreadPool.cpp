@@ -8,8 +8,8 @@ std::atomic<int> g_num_threads{static_cast<int>(std::thread::hardware_concurrenc
 
 namespace Tycho {
 
-BS::thread_pool<> &thread_pool() {
-    static BS::thread_pool<> pool;
+ThreadPool &thread_pool() {
+    static ThreadPool pool;
     return pool;
 }
 
@@ -20,7 +20,7 @@ void set_num_threads(int n) {
         // Parked threads consume no CPU. set_num_threads is startup-only.
     } else {
         g_num_threads.store(n, std::memory_order_relaxed);
-        thread_pool().reset(static_cast<std::size_t>(n));
+        thread_pool().reset(static_cast<unsigned>(n));
     }
 }
 

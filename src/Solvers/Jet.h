@@ -174,7 +174,10 @@ struct Jet {
         };
 
         if (Tycho::use_thread_pool()) {
-            auto results = Tycho::thread_pool().submit_sequence(0, NumJobs, Job);
+            std::vector<std::future<PSIOPT::ConvergenceFlags>> results;
+            results.reserve(NumJobs);
+            for (int i = 0; i < NumJobs; i++)
+                results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
             for (int i = 0; i < NumJobs; i++)
                 track(results[i].get(), i);
         } else {

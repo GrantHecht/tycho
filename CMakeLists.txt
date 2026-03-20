@@ -323,7 +323,6 @@ endif()
 include_directories(dep/eigen)
 include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
-include_directories(dep/thread-pool/include)
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)
