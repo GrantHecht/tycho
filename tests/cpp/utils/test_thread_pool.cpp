@@ -7,7 +7,9 @@
 
 #include "Utils/ThreadPool.h"
 #include <atomic>
+#include <chrono>
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <vector>
 
 TEST(ThreadPoolTest, ConstructDefault) {
@@ -131,5 +133,95 @@ TEST(GlobalThreadPool, SingleThreadedBypass) {
     EXPECT_EQ(result, 42);
 
     // Restore default
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+// ---- Exception propagation tests ----
+
+TEST(DispatchHelpers, ExceptionPropagation_ParallelBlocks) {
+    Tycho::set_num_threads(4);
+    EXPECT_THROW(
+        Tycho::parallel_blocks(
+            4,
+            [](int start, int /*end*/) {
+                if (start == 0) // first pool task
+                    throw std::runtime_error("pool exception");
+            },
+            4),
+        std::runtime_error);
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(DispatchHelpers, ExceptionPropagation_ParallelSequence) {
+    Tycho::set_num_threads(4);
+    EXPECT_THROW(
+        Tycho::parallel_sequence(4,
+                                 [](int i) {
+                                     if (i == 1)
+                                         throw std::runtime_error("sequence exception");
+                                 }),
+        std::runtime_error);
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(DispatchHelpers, ExceptionPropagation_ParallelTask) {
+    Tycho::set_num_threads(4);
+    EXPECT_THROW(
+        Tycho::parallel_task(
+            2, [] { throw std::runtime_error("task exception"); }, [] {}),
+        std::runtime_error);
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(DispatchHelpers, InlineException_ParallelBlocks) {
+    Tycho::set_num_threads(4);
+    // With count=4, nparts=4: blocks are [0,1) [1,2) [2,3) [3,4).
+    // The inline block is [3,4) — throw from it.
+    EXPECT_THROW(
+        Tycho::parallel_blocks(
+            4,
+            [](int start, int /*end*/) {
+                if (start == 3) // inline (last) block
+                    throw std::runtime_error("inline exception");
+            },
+            4),
+        std::runtime_error);
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(DispatchHelpers, WorkerDetection) {
+    Tycho::set_num_threads(4);
+    EXPECT_FALSE(Tycho::is_pool_worker());
+
+    std::atomic<bool> worker_flag{false};
+    Tycho::thread_pool().enqueue_work(
+        [&worker_flag] { worker_flag.store(Tycho::is_pool_worker()); });
+    Tycho::thread_pool().wait();
+    EXPECT_TRUE(worker_flag.load());
+
+    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+TEST(ThreadPoolTest, ResetDrainsPending) {
+    Tycho::ThreadPool pool(4);
+    std::atomic<int> counter{0};
+    for (int i = 0; i < 100; ++i) {
+        pool.enqueue_work([&counter] {
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+            counter.fetch_add(1);
+        });
+    }
+    pool.reset(2); // wait() + shutdown + restart
+    EXPECT_EQ(counter.load(), 100);
+    EXPECT_EQ(pool.get_thread_count(), 2u);
+}
+
+TEST(DispatchHelpers, StressTest_ParallelSequence) {
+    Tycho::set_num_threads(4);
+    for (int round = 0; round < 100; ++round) {
+        std::atomic<int> counter{0};
+        Tycho::parallel_sequence(4, [&counter](int) { counter.fetch_add(1); });
+        EXPECT_EQ(counter.load(), 4);
+    }
     Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }

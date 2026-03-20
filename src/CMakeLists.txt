@@ -66,7 +66,7 @@ target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 add_library(psiopt STATIC
   Solvers/PSIOPT.h Solvers/PSIOPT.cpp
   Solvers/NonLinearProgram.h Solvers/NonLinearProgram.cpp
-  Solvers/Jet.h Solvers/Jet.cpp
+  Solvers/Jet.h
   Solvers/OptimizationProblemBase.h
   Solvers/OptimizationProblem.h Solvers/OptimizationProblem.cpp
   Solvers/SolverInit.h Solvers/SolverInit.cpp

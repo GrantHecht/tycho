@@ -323,12 +323,14 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
     this->setRHSCoeffsZero();
 
     auto RHSevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
         for (auto &Con : this->ThrEq[thrnum])
             Con.constraints_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs());
         for (auto &Con : this->ThrIq[thrnum])
             Con.constraints_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs());
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, RHSevalOP);
@@ -346,12 +348,14 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
     this->setRHSCoeffsZero();
 
     auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
         for (auto &Con : this->ThrEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
         for (auto &Con : this->ThrIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
@@ -370,12 +374,14 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
     // this->setRHSCoeffsZero();
     this->setConCoeffsZero();
     auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective(ObjScale, X, Vals[thrnum]);
+            Obj.objective(ObjScale, X, localVal);
         for (auto &Con : this->ThrEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
         for (auto &Con : this->ThrIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
@@ -391,8 +397,10 @@ void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
     std::vector<double> Vals(this->NumPartitions, 0.0);
 
     auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective(ObjScale, X, Vals[thrnum]);
+            Obj.objective(ObjScale, X, localVal);
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
@@ -411,8 +419,9 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
     this->setRHSCoeffsZero();
 
     auto KKTevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient_hessian(ObjScale, X, Vals[thrnum], this->PGXCoeffs(), KKTmat,
+            Obj.objective_gradient_hessian(ObjScale, X, localVal, this->PGXCoeffs(), KKTmat,
                                            this->KKTLocations, this->KKTClashes, this->KKTLocks);
         for (auto &Con : this->ThrEq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
@@ -422,6 +431,7 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->IConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
@@ -495,8 +505,9 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
     this->setRHSCoeffsZero();
 
     auto SOEevalOP = [&](int thrnum) {
+        double localVal = 0.0;
         for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
         for (auto &Con : this->ThrEq[thrnum])
             Con.constraints_jacobian_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
@@ -505,6 +516,7 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
             Con.constraints_jacobian_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
                                                      this->KKTLocks);
+        Vals[thrnum] = localVal;
     };
 
     Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
