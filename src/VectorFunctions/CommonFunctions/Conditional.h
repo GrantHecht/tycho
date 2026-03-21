@@ -110,7 +110,6 @@ template <class LHS, class RHS> struct ConditionalStatement {
     }
 
     int IRows() const { return this->InputRows; }
-    std::string name() const { return {}; }
 
   protected:
     ConditionalFlags flag;
@@ -131,7 +130,6 @@ struct ConstantConditional {
     }
 
     int IRows() const { return this->InputRows; }
-    std::string name() const { return {}; }
 
   protected:
     bool value;

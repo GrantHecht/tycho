@@ -464,6 +464,10 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                                         double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // No-objective mode: ObjScale and val are unused but kept in the signature
+    // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
+    (void)ObjScale;
+    (void)val;
 
     this->setRHSCoeffsZero();
 
@@ -492,6 +496,10 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // Constraint-only mode: ObjScale and val are unused but kept in the signature
+    // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
+    (void)ObjScale;
+    (void)val;
 
     this->setRHSCoeffsZero();
 

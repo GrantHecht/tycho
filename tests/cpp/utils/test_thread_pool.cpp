@@ -218,3 +218,74 @@ TEST(DispatchHelpers, StressTest_ParallelSequence) {
         EXPECT_EQ(counter.load(), 4);
     }
 }
+
+// ---- Nested dispatch tests ----
+
+TEST(DispatchHelpers, NestedDispatch_MainThread_Succeeds) {
+    // Mirrors the NLP evalKKT pattern: parallel_task's inline arm calls
+    // parallel_blocks. Safe because the inline arm runs on the main thread.
+    ScopedThreadCount guard(4);
+    std::atomic<int> pool_counter{0};
+    std::atomic<int> inner_sum{0};
+
+    Tycho::parallel_task(
+        4, [&pool_counter] { pool_counter.fetch_add(1); },
+        [&inner_sum] {
+            // Inline arm — runs on main thread, nested dispatch is allowed.
+            // parallel_blocks splits [0,8) into 4 blocks; each block sums its range.
+            Tycho::parallel_blocks(
+                8,
+                [&inner_sum](int start, int end) {
+                    inner_sum.fetch_add(end - start);
+                },
+                4);
+        });
+
+    EXPECT_EQ(pool_counter.load(), 1);
+    EXPECT_EQ(inner_sum.load(), 8); // sum of all block sizes = count
+}
+
+TEST(DispatchHelpers, NestedDispatch_PoolWorker_Throws) {
+    // Dispatch from a pool worker must throw logic_error.
+    // parallel_sequence runs i=0..2 on pool workers and i=3 inline.
+    // The pool workers attempting nested dispatch should throw.
+    ScopedThreadCount guard(4);
+    EXPECT_THROW(
+        Tycho::parallel_sequence(4,
+                                 [](int) {
+                                     Tycho::parallel_blocks(
+                                         4, [](int, int) {}, 2);
+                                 }),
+        std::logic_error);
+}
+
+TEST(DispatchHelpers, DualException_ParallelTask) {
+    // Both pool and inline arms throw. Pool exception should win.
+    ScopedThreadCount guard(4);
+    try {
+        Tycho::parallel_task(
+            2, [] { throw std::runtime_error("pool arm"); },
+            [] { throw std::runtime_error("inline arm"); });
+        FAIL() << "Expected exception";
+    } catch (const std::runtime_error &e) {
+        EXPECT_STREQ(e.what(), "pool arm");
+    }
+}
+
+TEST(DispatchHelpers, StressTest_ManyTasks_SmallPool) {
+    // 100 tasks on a 2-thread pool — forces heavy work stealing.
+    ScopedThreadCount guard(2);
+    for (int round = 0; round < 10; ++round) {
+        std::atomic<int> counter{0};
+        Tycho::parallel_sequence(100, [&counter](int) { counter.fetch_add(1); });
+        EXPECT_EQ(counter.load(), 100);
+    }
+}
+
+TEST(ThreadPoolTest, SubmitTask_ExceptionPropagation) {
+    Tycho::ThreadPool pool(2);
+    auto fut = pool.submit_task([]() -> int {
+        throw std::runtime_error("submit_task exception");
+    });
+    EXPECT_THROW(fut.get(), std::runtime_error);
+}

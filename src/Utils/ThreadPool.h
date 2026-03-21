@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <deque>
@@ -147,10 +148,14 @@ class task {
 // =============================================================================
 // WorkStealingQueue — per-worker task queue
 //
+// Mutex-based work-stealing queue. Not lock-free — Tycho dispatches 10-100
+// tasks per cycle with ms-scale durations, so lock contention is negligible
+// vs task cost. A lock-free Chase-Lev deque would be appropriate if tasks
+// were sub-microsecond, but would add complexity for no measurable benefit
+// at Tycho's task granularity.
+//
 // Owner pushes/pops from front (LIFO — cache locality).
 // Thieves steal from back (FIFO — older, larger work units).
-// Mutex-based: Tycho dispatches 10-100 tasks per cycle with ms-scale
-// durations, so lock contention is negligible vs task cost.
 // =============================================================================
 
 class WorkStealingQueue {
@@ -200,19 +205,23 @@ class WorkStealingQueue {
         return true;
     }
 
-    // Owner blocks until work arrives or done() is called.
-    // Returns false on shutdown (m_done && empty).
-    bool pop(task &f) {
+    enum class PopResult { GotTask, Timeout, Shutdown };
+
+    // Owner blocks with timeout until work arrives or done() is called.
+    // Returns GotTask on success, Timeout if no work within the deadline,
+    // or Shutdown if done() was called and the queue is empty.
+    PopResult try_pop_for(task &f, std::chrono::microseconds timeout) {
         std::unique_lock lock(m_mutex);
-        m_cv.wait(lock, [this] { return !m_deque.empty() || m_done; });
+        if (!m_cv.wait_for(lock, timeout, [this] { return !m_deque.empty() || m_done; }))
+            return PopResult::Timeout;
         if (m_deque.empty())
-            return false;
+            return PopResult::Shutdown;
         f = std::move(m_deque.front());
         m_deque.pop_front();
-        return true;
+        return PopResult::GotTask;
     }
 
-    // Signal shutdown — wakes all blocked pop() calls
+    // Signal shutdown — wakes all blocked try_pop_for() calls
     void done() {
         {
             std::lock_guard lock(m_mutex);
@@ -281,10 +290,17 @@ class ThreadPool {
                                 break;
                         }
                     }
-                    // Phase 2: if nothing found, block on own queue
+                    // Phase 2: if nothing found, timed wait on own queue.
+                    // 100us timeout prevents starvation when new work arrives on
+                    // other queues — worker re-enters the steal scan on timeout.
+                    // Zero hot-path cost: only reached when all queues are empty.
                     if (!f) {
-                        if (!m_queues[i].pop(f))
-                            break; // shutdown
+                        auto result =
+                            m_queues[i].try_pop_for(f, std::chrono::microseconds(100));
+                        if (result == WorkStealingQueue::PopResult::Shutdown)
+                            break;
+                        if (result == WorkStealingQueue::PopResult::Timeout)
+                            continue; // re-scan all queues
                     }
                     // Execute and signal completion
                     try {
@@ -319,6 +335,11 @@ class ThreadPool {
 
     /// Fire-and-forget enqueue — zero heap allocation (SBO task wrapper).
     template <std::invocable F> void enqueue_work(F &&f) {
+        // release: not strictly required (push() mutex provides the fence),
+        // but documents the intent that m_tasks_pending publishes "work was
+        // submitted". The correctness-critical pairing is:
+        //   worker fetch_sub(release) → wait() load(acquire)
+        // which ensures wait() sees task completion effects.
         m_tasks_pending.fetch_add(1, std::memory_order_release);
         task work{std::forward<F>(f)};
         unsigned i = tl_enqueue_index++;
@@ -390,6 +411,11 @@ int get_num_threads();
 /// Fast check: returns true if the global pool should be used (num_threads > 1).
 inline bool use_thread_pool() { return get_num_threads() > 1; }
 
+/// Returns true if set_num_threads() is mid-reset. Best-effort safety net:
+/// dispatch helpers throw if this is true, catching the common misuse of
+/// calling set_num_threads() from another thread during active computation.
+bool pool_configuring();
+
 // ---------------------------------------------------------------------------
 // Safe parallel dispatch helpers
 //
@@ -412,6 +438,8 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     if (nparts > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
             throw std::logic_error("Tycho::parallel_blocks: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_blocks: dispatch during set_num_threads");
         int pool_tasks = nparts - 1;
         detail::DispatchContext ctx(pool_tasks);
         int block_size = count / nparts;
@@ -453,6 +481,8 @@ template <typename F> void parallel_sequence(int n, F &&func) {
     if (n > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
             throw std::logic_error("Tycho::parallel_sequence: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_sequence: dispatch during set_num_threads");
         int pool_tasks = n - 1;
         detail::DispatchContext ctx(pool_tasks);
         for (int i = 0; i < pool_tasks; ++i)
@@ -490,6 +520,8 @@ void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
             throw std::logic_error("Tycho::parallel_task: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_task: dispatch during set_num_threads");
         detail::DispatchContext ctx(1);
         thread_pool().enqueue_work([f = std::forward<FTask>(pool_work), &ctx] {
             try {
@@ -505,6 +537,10 @@ void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
         } catch (...) {
             inline_ex = std::current_exception();
         }
+        // Exception priority: pool exception is rethrown first. If both arms
+        // throw (extremely unlikely — independent numerical failures), the
+        // inline exception is discarded. Both would indicate the same
+        // underlying issue; nested_exception adds complexity for no benefit.
         ctx.done.wait();
         ctx.rethrow_if_exception();
         if (inline_ex)
