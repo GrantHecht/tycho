@@ -67,6 +67,12 @@ inline bool is_pool_worker() noexcept { return detail::g_is_pool_worker; }
 // Replaces std::function<void()> as the task unit. Zero heap allocation for
 // all Tycho dispatch closures (verified <= 64 bytes). The static_assert
 // fires at compile time if a closure exceeds the buffer.
+//
+// Current largest closures (approximate, 64-bit):
+//   parallel_sequence wrapper: ~20 bytes (&func, &ctx, int i)
+//   parallel_blocks wrapper:   ~28 bytes (&func, &ctx, int start, int end)
+//   parallel_task wrapper:     ~24 bytes (captured lambda, &ctx)
+// Headroom: ~36 bytes
 // =============================================================================
 
 class task {
@@ -504,6 +510,8 @@ void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
         if (inline_ex)
             std::rethrow_exception(inline_ex);
     } else {
+        // Fallback: execute sequentially (pool_work first, then inline_work).
+        // In the parallel path above, execution order is unspecified.
         pool_work();
         inline_work();
     }

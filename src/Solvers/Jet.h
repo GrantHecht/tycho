@@ -178,6 +178,8 @@ struct Jet {
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
                 results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
+            // NOTE: track() mutates local counters and MUST be called sequentially
+            // on the main thread. Do not parallelize this loop.
             for (int i = 0; i < NumJobs; i++)
                 track(results[i].get(), i);
         } else {
