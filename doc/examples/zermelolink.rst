@@ -55,7 +55,7 @@ Now that we have our guess generator fixed to handle arbitrary size inputs we ne
             B = Points[i + 1]
             phase = Zermelo(vM, wF).phase(tModes.LGL3)
 
-            phase.Threads = 8  # Equal to number of physical cores
+            phase.NumPartitions = 8
 
             phase.setTraj(trajG[i], nSeg)
 
@@ -249,7 +249,7 @@ Full Code
             B = Points[i + 1]
             phase = Zermelo(vM, wF).phase(tModes.LGL3)
 
-            phase.Threads = 8  # Equal to number of physical cores
+            phase.NumPartitions = 8
 
             phase.setTraj(trajG[i], nSeg)
 

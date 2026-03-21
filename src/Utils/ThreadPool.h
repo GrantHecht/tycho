@@ -67,6 +67,12 @@ inline bool is_pool_worker() noexcept { return detail::g_is_pool_worker; }
 // Replaces std::function<void()> as the task unit. Zero heap allocation for
 // all Tycho dispatch closures (verified <= 64 bytes). The static_assert
 // fires at compile time if a closure exceeds the buffer.
+//
+// Current largest closures (approximate, 64-bit):
+//   parallel_sequence wrapper: ~20 bytes (&func, &ctx, int i)
+//   parallel_blocks wrapper:   ~28 bytes (&func, &ctx, int start, int end)
+//   parallel_task wrapper:     ~24 bytes (captured lambda, &ctx)
+// Headroom: ~36 bytes
 // =============================================================================
 
 class task {
@@ -141,10 +147,14 @@ class task {
 // =============================================================================
 // WorkStealingQueue — per-worker task queue
 //
+// Mutex-based work-stealing queue. Not lock-free — Tycho dispatches 10-100
+// tasks per cycle with ms-scale durations, so lock contention is negligible
+// vs task cost. A lock-free Chase-Lev deque would be appropriate if tasks
+// were sub-microsecond, but would add complexity for no measurable benefit
+// at Tycho's task granularity.
+//
 // Owner pushes/pops from front (LIFO — cache locality).
 // Thieves steal from back (FIFO — older, larger work units).
-// Mutex-based: Tycho dispatches 10-100 tasks per cycle with ms-scale
-// durations, so lock contention is negligible vs task cost.
 // =============================================================================
 
 class WorkStealingQueue {
@@ -275,7 +285,13 @@ class ThreadPool {
                                 break;
                         }
                     }
-                    // Phase 2: if nothing found, block on own queue
+                    // Phase 2: if nothing found, block on own queue.
+                    // Starvation note: a worker blocked here misses work on other
+                    // queues. In practice, round-robin enqueue from a single
+                    // dispatcher (Tycho's pattern) distributes evenly, and push()
+                    // wakes this worker when its queue gets work. A timed wait
+                    // (try_pop_for) was tested but pthread_cond_timedwait overhead
+                    // caused 13-17% PSIOPT regression vs pthread_cond_wait.
                     if (!f) {
                         if (!m_queues[i].pop(f))
                             break; // shutdown
@@ -313,7 +329,12 @@ class ThreadPool {
 
     /// Fire-and-forget enqueue — zero heap allocation (SBO task wrapper).
     template <std::invocable F> void enqueue_work(F &&f) {
-        m_tasks_pending.fetch_add(1, std::memory_order_relaxed);
+        // release: not strictly required (push() mutex provides the fence),
+        // but documents the intent that m_tasks_pending publishes "work was
+        // submitted". The correctness-critical pairing is:
+        //   worker fetch_sub(release) → wait() load(acquire)
+        // which ensures wait() sees task completion effects.
+        m_tasks_pending.fetch_add(1, std::memory_order_release);
         task work{std::forward<F>(f)};
         unsigned i = tl_enqueue_index++;
         for (unsigned n = 0; n < m_count * K; ++n)
@@ -343,6 +364,9 @@ class ThreadPool {
     }
 
     /// Shut down all workers and restart with n threads.
+    /// Called only from set_num_threads(), which sets pool_configuring() to
+    /// prevent concurrent dispatch (best-effort TOCTOU guard).
+    /// This is a configuration API, not a hot-path operation.
     void reset(unsigned n) {
         wait(); // drain pending tasks (one atomic load when idle)
         for (auto &q : m_queues)
@@ -382,6 +406,11 @@ int get_num_threads();
 /// Fast check: returns true if the global pool should be used (num_threads > 1).
 inline bool use_thread_pool() { return get_num_threads() > 1; }
 
+/// Returns true if set_num_threads() is mid-reset. Best-effort safety net:
+/// dispatch helpers throw if this is true, catching the common misuse of
+/// calling set_num_threads() from another thread during active computation.
+bool pool_configuring();
+
 // ---------------------------------------------------------------------------
 // Safe parallel dispatch helpers
 //
@@ -402,7 +431,10 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
         return;
     nparts = std::min(nparts, count);
     if (nparts > 1 && use_thread_pool()) {
-        assert(!detail::g_is_pool_worker && "nested dispatch from pool worker");
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_blocks: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_blocks: dispatch during set_num_threads");
         int pool_tasks = nparts - 1;
         detail::DispatchContext ctx(pool_tasks);
         int block_size = count / nparts;
@@ -442,7 +474,10 @@ template <typename F> void parallel_sequence(int n, F &&func) {
     if (n <= 0)
         return;
     if (n > 1 && use_thread_pool()) {
-        assert(!detail::g_is_pool_worker && "nested dispatch from pool worker");
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_sequence: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_sequence: dispatch during set_num_threads");
         int pool_tasks = n - 1;
         detail::DispatchContext ctx(pool_tasks);
         for (int i = 0; i < pool_tasks; ++i)
@@ -478,6 +513,10 @@ template <typename F> void parallel_sequence(int n, F &&func) {
 template <typename FTask, typename FInline>
 void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_task: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_task: dispatch during set_num_threads");
         detail::DispatchContext ctx(1);
         thread_pool().enqueue_work([f = std::forward<FTask>(pool_work), &ctx] {
             try {
@@ -493,11 +532,17 @@ void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
         } catch (...) {
             inline_ex = std::current_exception();
         }
+        // Exception priority: pool exception is rethrown first. If both arms
+        // throw (extremely unlikely — independent numerical failures), the
+        // inline exception is discarded. Both would indicate the same
+        // underlying issue; nested_exception adds complexity for no benefit.
         ctx.done.wait();
         ctx.rethrow_if_exception();
         if (inline_ex)
             std::rethrow_exception(inline_ex);
     } else {
+        // Fallback: execute sequentially (pool_work first, then inline_work).
+        // In the parallel path above, execution order is unspecified.
         pool_work();
         inline_work();
     }

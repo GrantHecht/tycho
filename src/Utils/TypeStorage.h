@@ -56,6 +56,13 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
             // Models wrap value-semantic VectorFunction types (Eigen matrices +
             // primitives) and satisfy this. If a non-relocatable Model is ever
             // stored here, the move path must be changed to virtual dispatch.
+            // SAFETY: memcpy-move requires no self-referential pointers.
+            // std::string SSO, std::list, etc. are NOT safe here.
+            // std::shared_ptr, Eigen matrices, and primitives ARE safe.
+            // Clang's __is_trivially_relocatable is overly conservative
+            // (rejects shared_ptr), so we cannot static_assert on it.
+            // If adding a new Model type here, manually verify it has no
+            // self-referential members before allowing inline storage.
             ::new (static_cast<void *>(buf_)) Model(std::move(obj));
             kind_ = Kind::Inline;
         } else {

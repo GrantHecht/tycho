@@ -12,6 +12,18 @@
 #include <stdexcept>
 #include <vector>
 
+// RAII guard to restore global thread count on scope exit.
+// Ensures test failures don't leave stale thread counts for subsequent tests.
+struct ScopedThreadCount {
+    int prev;
+    explicit ScopedThreadCount(int n) : prev(Tycho::get_num_threads()) {
+        Tycho::set_num_threads(n);
+    }
+    ~ScopedThreadCount() { Tycho::set_num_threads(prev); }
+    ScopedThreadCount(const ScopedThreadCount &) = delete;
+    ScopedThreadCount &operator=(const ScopedThreadCount &) = delete;
+};
+
 TEST(ThreadPoolTest, ConstructDefault) {
     Tycho::ThreadPool pool;
     EXPECT_GT(pool.get_thread_count(), 0u);
@@ -82,29 +94,23 @@ TEST(GlobalThreadPool, DefaultThreadCount) {
 }
 
 TEST(GlobalThreadPool, SetAndGet) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     EXPECT_EQ(Tycho::get_num_threads(), 4);
     EXPECT_TRUE(Tycho::use_thread_pool());
 
     Tycho::set_num_threads(1);
     EXPECT_EQ(Tycho::get_num_threads(), 1);
     EXPECT_FALSE(Tycho::use_thread_pool());
-
-    // Restore default
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(GlobalThreadPool, SetZeroMeansSingleThreaded) {
-    Tycho::set_num_threads(0);
+    ScopedThreadCount guard(0);
     EXPECT_EQ(Tycho::get_num_threads(), 1);
     EXPECT_FALSE(Tycho::use_thread_pool());
-
-    // Restore default
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(GlobalThreadPool, PoolDispatch) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     auto &pool = Tycho::thread_pool();
     EXPECT_EQ(pool.get_thread_count(), 4u);
 
@@ -113,13 +119,10 @@ TEST(GlobalThreadPool, PoolDispatch) {
         pool.enqueue_work([&counter] { counter.fetch_add(1); });
     pool.wait();
     EXPECT_EQ(counter.load(), 100);
-
-    // Restore default
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(GlobalThreadPool, SingleThreadedBypass) {
-    Tycho::set_num_threads(1);
+    ScopedThreadCount guard(1);
 
     EXPECT_FALSE(Tycho::use_thread_pool());
 
@@ -131,15 +134,12 @@ TEST(GlobalThreadPool, SingleThreadedBypass) {
         result = 42; // inline
     }
     EXPECT_EQ(result, 42);
-
-    // Restore default
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 // ---- Exception propagation tests ----
 
 TEST(DispatchHelpers, ExceptionPropagation_ParallelBlocks) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     EXPECT_THROW(
         Tycho::parallel_blocks(
             4,
@@ -149,11 +149,10 @@ TEST(DispatchHelpers, ExceptionPropagation_ParallelBlocks) {
             },
             4),
         std::runtime_error);
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(DispatchHelpers, ExceptionPropagation_ParallelSequence) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     EXPECT_THROW(
         Tycho::parallel_sequence(4,
                                  [](int i) {
@@ -161,20 +160,18 @@ TEST(DispatchHelpers, ExceptionPropagation_ParallelSequence) {
                                          throw std::runtime_error("sequence exception");
                                  }),
         std::runtime_error);
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(DispatchHelpers, ExceptionPropagation_ParallelTask) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     EXPECT_THROW(
         Tycho::parallel_task(
             2, [] { throw std::runtime_error("task exception"); }, [] {}),
         std::runtime_error);
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(DispatchHelpers, InlineException_ParallelBlocks) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     // With count=4, nparts=4: blocks are [0,1) [1,2) [2,3) [3,4).
     // The inline block is [3,4) — throw from it.
     EXPECT_THROW(
@@ -186,11 +183,10 @@ TEST(DispatchHelpers, InlineException_ParallelBlocks) {
             },
             4),
         std::runtime_error);
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(DispatchHelpers, WorkerDetection) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     EXPECT_FALSE(Tycho::is_pool_worker());
 
     std::atomic<bool> worker_flag{false};
@@ -198,8 +194,6 @@ TEST(DispatchHelpers, WorkerDetection) {
         [&worker_flag] { worker_flag.store(Tycho::is_pool_worker()); });
     Tycho::thread_pool().wait();
     EXPECT_TRUE(worker_flag.load());
-
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
 }
 
 TEST(ThreadPoolTest, ResetDrainsPending) {
@@ -217,11 +211,81 @@ TEST(ThreadPoolTest, ResetDrainsPending) {
 }
 
 TEST(DispatchHelpers, StressTest_ParallelSequence) {
-    Tycho::set_num_threads(4);
+    ScopedThreadCount guard(4);
     for (int round = 0; round < 100; ++round) {
         std::atomic<int> counter{0};
         Tycho::parallel_sequence(4, [&counter](int) { counter.fetch_add(1); });
         EXPECT_EQ(counter.load(), 4);
     }
-    Tycho::set_num_threads(static_cast<int>(std::thread::hardware_concurrency()));
+}
+
+// ---- Nested dispatch tests ----
+
+TEST(DispatchHelpers, NestedDispatch_MainThread_Succeeds) {
+    // Mirrors the NLP evalKKT pattern: parallel_task's inline arm calls
+    // parallel_blocks. Safe because the inline arm runs on the main thread.
+    ScopedThreadCount guard(4);
+    std::atomic<int> pool_counter{0};
+    std::atomic<int> inner_sum{0};
+
+    Tycho::parallel_task(
+        4, [&pool_counter] { pool_counter.fetch_add(1); },
+        [&inner_sum] {
+            // Inline arm — runs on main thread, nested dispatch is allowed.
+            // parallel_blocks splits [0,8) into 4 blocks; each block sums its range.
+            Tycho::parallel_blocks(
+                8,
+                [&inner_sum](int start, int end) {
+                    inner_sum.fetch_add(end - start);
+                },
+                4);
+        });
+
+    EXPECT_EQ(pool_counter.load(), 1);
+    EXPECT_EQ(inner_sum.load(), 8); // sum of all block sizes = count
+}
+
+TEST(DispatchHelpers, NestedDispatch_PoolWorker_Throws) {
+    // Dispatch from a pool worker must throw logic_error.
+    // parallel_sequence runs i=0..2 on pool workers and i=3 inline.
+    // The pool workers attempting nested dispatch should throw.
+    ScopedThreadCount guard(4);
+    EXPECT_THROW(
+        Tycho::parallel_sequence(4,
+                                 [](int) {
+                                     Tycho::parallel_blocks(
+                                         4, [](int, int) {}, 2);
+                                 }),
+        std::logic_error);
+}
+
+TEST(DispatchHelpers, DualException_ParallelTask) {
+    // Both pool and inline arms throw. Pool exception should win.
+    ScopedThreadCount guard(4);
+    try {
+        Tycho::parallel_task(
+            2, [] { throw std::runtime_error("pool arm"); },
+            [] { throw std::runtime_error("inline arm"); });
+        FAIL() << "Expected exception";
+    } catch (const std::runtime_error &e) {
+        EXPECT_STREQ(e.what(), "pool arm");
+    }
+}
+
+TEST(DispatchHelpers, StressTest_ManyTasks_SmallPool) {
+    // 100 tasks on a 2-thread pool — forces heavy work stealing.
+    ScopedThreadCount guard(2);
+    for (int round = 0; round < 10; ++round) {
+        std::atomic<int> counter{0};
+        Tycho::parallel_sequence(100, [&counter](int) { counter.fetch_add(1); });
+        EXPECT_EQ(counter.load(), 100);
+    }
+}
+
+TEST(ThreadPoolTest, SubmitTask_ExceptionPropagation) {
+    Tycho::ThreadPool pool(2);
+    auto fut = pool.submit_task([]() -> int {
+        throw std::runtime_error("submit_task exception");
+    });
+    EXPECT_THROW(fut.get(), std::runtime_error);
 }

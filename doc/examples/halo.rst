@@ -110,7 +110,7 @@ Here is the python implementation, with discussion below:
 
         # 2: Create optimal control phase and assign guess
         odePhase = ast.CR3BP.phase(ode, tModes.LGL3)  # LGL-3 collocation
-        odePhase.Threads = 8  # Equal to number of physical cores
+        odePhase.NumPartitions = 8
 
         nSeg = 150  # number of segments
         odePhase.setTraj(trajGuess, nSeg)
@@ -372,7 +372,7 @@ Full Code
 
         # 2: Create optimal control phase and assign guess
         odePhase = ode.phase("LGL3")  # LGL-3 collocation
-        odePhase.Threads = 8  # Equal to number of physical cores
+        odePhase.NumPartitions = 8
 
         nSeg = 150  # number of segments
         odePhase.setTraj(trajGuess, nSeg)
