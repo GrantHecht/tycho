@@ -1,11 +1,11 @@
-# Add Bindings/ and each subdirectory to the include path so headers resolve
-# with bare names regardless of which subdirectory the including file lives in.
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Solvers)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Astro)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Integrators)
+set(_TYCHO_BINDINGS_INCLUDES
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions
+    ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
+    ${CMAKE_CURRENT_SOURCE_DIR}/Astro
+    ${CMAKE_CURRENT_SOURCE_DIR}/Integrators
+)
 
 # Ensure nanobind-static exists before pch_bindings uses it
 nanobind_build_library(nanobind-static)
@@ -20,7 +20,7 @@ target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
-target_include_directories(pch_bindings PRIVATE ${INCLUDE_DIRS})
+target_include_directories(pch_bindings PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
@@ -74,20 +74,16 @@ target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
 # Prevent CMake from auto-defining _tycho_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
 set_target_properties(_tycho PROPERTIES DEFINE_SYMBOL "")
-target_link_libraries(_tycho PUBLIC psiopt)
-target_link_libraries(_tycho PUBLIC utils)
-target_link_libraries(_tycho PUBLIC optimalcontrol)
-target_link_libraries(_tycho PUBLIC vectorfunctions)
-target_link_libraries(_tycho PUBLIC astro)
-target_link_libraries(_tycho PUBLIC tycho_extensions_bindings)
-target_include_directories(_tycho PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(_tycho PUBLIC tycho_core tycho_extensions_bindings)
+target_include_directories(_tycho PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(_tycho REUSE_FROM pch_bindings)
 
-if(UNIX)
+if(APPLE)
+    # macOS needs -bind_at_load and -undefined dynamic_lookup for Python modules
     target_link_options(_tycho PRIVATE ${LINKER_FLAGS})
-elseif(WIN32)
-    target_link_libraries(_tycho PUBLIC ${LINK_LIBS})
 endif()
+# Linux/Windows: tycho_core provides LINK_LIBS (MKL, threads, dl) transitively.
+# Linux: no --no-undefined — Python symbols are resolved at runtime by the interpreter.
 
 # Install rule for scikit-build-core: places _tycho alongside the tycho package in the wheel.
 install(TARGETS _tycho LIBRARY DESTINATION .)
