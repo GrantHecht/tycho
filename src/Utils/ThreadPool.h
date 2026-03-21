@@ -313,7 +313,7 @@ class ThreadPool {
 
     /// Fire-and-forget enqueue — zero heap allocation (SBO task wrapper).
     template <std::invocable F> void enqueue_work(F &&f) {
-        m_tasks_pending.fetch_add(1, std::memory_order_relaxed);
+        m_tasks_pending.fetch_add(1, std::memory_order_release);
         task work{std::forward<F>(f)};
         unsigned i = tl_enqueue_index++;
         for (unsigned n = 0; n < m_count * K; ++n)
@@ -343,6 +343,8 @@ class ThreadPool {
     }
 
     /// Shut down all workers and restart with n threads.
+    /// Precondition: no concurrent enqueue_work() or submit_task() calls.
+    /// This is a configuration API, not a hot-path operation.
     void reset(unsigned n) {
         wait(); // drain pending tasks (one atomic load when idle)
         for (auto &q : m_queues)
@@ -402,7 +404,8 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
         return;
     nparts = std::min(nparts, count);
     if (nparts > 1 && use_thread_pool()) {
-        assert(!detail::g_is_pool_worker && "nested dispatch from pool worker");
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_blocks: nested dispatch from pool worker");
         int pool_tasks = nparts - 1;
         detail::DispatchContext ctx(pool_tasks);
         int block_size = count / nparts;
@@ -442,7 +445,8 @@ template <typename F> void parallel_sequence(int n, F &&func) {
     if (n <= 0)
         return;
     if (n > 1 && use_thread_pool()) {
-        assert(!detail::g_is_pool_worker && "nested dispatch from pool worker");
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_sequence: nested dispatch from pool worker");
         int pool_tasks = n - 1;
         detail::DispatchContext ctx(pool_tasks);
         for (int i = 0; i < pool_tasks; ++i)
@@ -478,6 +482,8 @@ template <typename F> void parallel_sequence(int n, F &&func) {
 template <typename FTask, typename FInline>
 void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_task: nested dispatch from pool worker");
         detail::DispatchContext ctx(1);
         thread_pool().enqueue_work([f = std::forward<FTask>(pool_work), &ctx] {
             try {
