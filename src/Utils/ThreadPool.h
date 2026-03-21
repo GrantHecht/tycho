@@ -364,7 +364,8 @@ class ThreadPool {
     }
 
     /// Shut down all workers and restart with n threads.
-    /// Precondition: no concurrent enqueue_work() or submit_task() calls.
+    /// Called only from set_num_threads(), which sets pool_configuring() to
+    /// prevent concurrent dispatch (best-effort TOCTOU guard).
     /// This is a configuration API, not a hot-path operation.
     void reset(unsigned n) {
         wait(); // drain pending tasks (one atomic load when idle)
