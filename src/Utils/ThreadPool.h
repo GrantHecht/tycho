@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <cassert>
-#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <deque>
@@ -205,23 +204,19 @@ class WorkStealingQueue {
         return true;
     }
 
-    enum class PopResult { GotTask, Timeout, Shutdown };
-
-    // Owner blocks with timeout until work arrives or done() is called.
-    // Returns GotTask on success, Timeout if no work within the deadline,
-    // or Shutdown if done() was called and the queue is empty.
-    PopResult try_pop_for(task &f, std::chrono::microseconds timeout) {
+    // Owner blocks until work arrives or done() is called.
+    // Returns false on shutdown (m_done && empty).
+    bool pop(task &f) {
         std::unique_lock lock(m_mutex);
-        if (!m_cv.wait_for(lock, timeout, [this] { return !m_deque.empty() || m_done; }))
-            return PopResult::Timeout;
+        m_cv.wait(lock, [this] { return !m_deque.empty() || m_done; });
         if (m_deque.empty())
-            return PopResult::Shutdown;
+            return false;
         f = std::move(m_deque.front());
         m_deque.pop_front();
-        return PopResult::GotTask;
+        return true;
     }
 
-    // Signal shutdown — wakes all blocked try_pop_for() calls
+    // Signal shutdown — wakes all blocked pop() calls
     void done() {
         {
             std::lock_guard lock(m_mutex);
@@ -290,17 +285,16 @@ class ThreadPool {
                                 break;
                         }
                     }
-                    // Phase 2: if nothing found, timed wait on own queue.
-                    // 100us timeout prevents starvation when new work arrives on
-                    // other queues — worker re-enters the steal scan on timeout.
-                    // Zero hot-path cost: only reached when all queues are empty.
+                    // Phase 2: if nothing found, block on own queue.
+                    // Starvation note: a worker blocked here misses work on other
+                    // queues. In practice, round-robin enqueue from a single
+                    // dispatcher (Tycho's pattern) distributes evenly, and push()
+                    // wakes this worker when its queue gets work. A timed wait
+                    // (try_pop_for) was tested but pthread_cond_timedwait overhead
+                    // caused 13-17% PSIOPT regression vs pthread_cond_wait.
                     if (!f) {
-                        auto result =
-                            m_queues[i].try_pop_for(f, std::chrono::microseconds(100));
-                        if (result == WorkStealingQueue::PopResult::Shutdown)
-                            break;
-                        if (result == WorkStealingQueue::PopResult::Timeout)
-                            continue; // re-scan all queues
+                        if (!m_queues[i].pop(f))
+                            break; // shutdown
                     }
                     // Execute and signal completion
                     try {
