@@ -11,6 +11,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(benchmark)
 
+# Separate PCH for benchmarks — the global CMAKE_POSITION_INDEPENDENT_CODE ON
+# causes the library PCH to be built with -fPIC, which is incompatible with
+# benchmark executables that should not use PIC/PIE (avoids indirection overhead
+# that would skew measurements).
+add_library(pch_bench STATIC ${CMAKE_SOURCE_DIR}/src/pch.h ${CMAKE_SOURCE_DIR}/src/pch.cpp)
+set_target_properties(pch_bench PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+target_precompile_headers(pch_bench PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/pch.h
+    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/Tycho_VectorFunctions.h
+)
+target_include_directories(pch_bench PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
+target_compile_options(pch_bench PRIVATE ${COMPILE_FLAGS})
+
 add_executable(bench_all
     kepler/bench_kepler.cpp
     vector_functions/bench_vector_functions.cpp
@@ -20,16 +33,11 @@ add_executable(bench_all
     solvers/bench_solvers.cpp
     utils/bench_utils.cpp
 )
+set_target_properties(bench_all PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 target_compile_options(bench_all PRIVATE ${COMPILE_FLAGS})
 target_include_directories(bench_all PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(bench_all PRIVATE tycho_core benchmark::benchmark_main)
-target_precompile_headers(bench_all REUSE_FROM pch)
-# bench_all is linked against benchmark (static), which adds BENCHMARK_STATIC_DEFINE
-# via its interface; the reused pch was built without it, causing a harmless mismatch
-# warning on clang-cl.  Suppress it.
-if(WIN32)
-    target_compile_options(bench_all PRIVATE -Wno-clang-cl-pch)
-endif()
+target_precompile_headers(bench_all REUSE_FROM pch_bench)
 if(UNIX)
     target_link_options(bench_all PRIVATE ${LINKER_FLAGS})
 endif()
