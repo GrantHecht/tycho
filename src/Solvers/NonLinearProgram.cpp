@@ -27,6 +27,8 @@ void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     // numUserKKTElems counts Jacobian + Hessian NNZ across all functions —
     // proportional to per-partition compute in evalKKT/evalAUG. Below ~1000
     // NNZ per partition, dispatch overhead dominates actual work.
+    // Threshold empirically chosen via solver benchmarks (bench_all);
+    // re-evaluate with bench/bench_track.sh if dispatch overhead changes.
     if (this->NumPartitions > 1) {
         static constexpr int MIN_NNZ_PER_PARTITION = 1000;
         int max_parts = std::max(1, this->numUserKKTElems / MIN_NNZ_PER_PARTITION);
@@ -449,6 +451,9 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
+    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
+    // dispatch from the inline arm. Safe because the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
@@ -460,7 +465,6 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
 
     auto KKTevalOP = [&](int thrnum) {
@@ -475,12 +479,13 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
     };
 
     Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
-    for (int i = 0; i < this->NumPartitions; i++)
-        val += Vals[i];
 
-    this->fillSolverCoeffs(KKTmat);
-
-    this->fillRHS(PGX, AGX, FXE, FXI);
+    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
+    // dispatch from the inline arm. Safe because the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
+    Tycho::parallel_task(
+        this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
+        [&] { this->fillSolverCoeffs(KKTmat); });
 }
 void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
@@ -488,7 +493,6 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
 
     auto SOEevalOP = [&](int thrnum) {
@@ -502,6 +506,9 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
 
     Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
 
+    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
+    // dispatch from the inline arm. Safe because the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
@@ -534,6 +541,9 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
+    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
+    // dispatch from the inline arm. Safe because the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
