@@ -18,7 +18,7 @@ simultaneously.
 
 As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j2 for builds
-- Linux / Windows: ALWAYS use -j8 for builds
+- Linux / Windows: ALWAYS use -j6 for builds (-j2 when building benchmarks)
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -129,8 +129,8 @@ your platform** — do not configure manually.
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
 | macOS (Apple Si) | `macos-llvm-release`    | `-j2`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
-| Windows x64      | `x64-Clang-Release`    | `-j8`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
+| Windows x64      | `x64-Clang-Release`    | `-j6`             |
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
@@ -168,7 +168,7 @@ LLVM. Presets do not hardcode Python paths; activate your conda/venv before conf
 
 **System tools required:**
 ```bash
-sudo apt install clang-22 llvm-22 llvm-22-dev libomp-22-dev lld-22 ninja-build ccache
+sudo apt install clang llvm llvm-dev libomp-dev lld ninja-build ccache
 ```
 
 **Sparse solver — Intel MKL (via oneAPI):**
@@ -195,7 +195,7 @@ pip install numpy scipy matplotlib spiceypy
 ```bash
 mkdir build
 cmake --preset linux-clang-release
-cd build && ninja -j8 all
+cd build && ninja -j6 all
 ```
 
 **Note:** The Linux preset does not hardcode `Python_EXECUTABLE` — CMake will
@@ -211,7 +211,7 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 
 After C++ source changes, rebuild from the `build` directory:
 ```bash
-cd build && ninja -j<N> all    # N = 2 on macOS, 8 on Linux/Windows
+cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
 ```
 
 ### Key CMake variables
@@ -388,7 +388,7 @@ benchmarking procedure on your platform (e.g., `MACBENCH.md` for macOS,
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON
 
 # Build
-cd build && ninja -j<N> bench_all
+cd build && ninja -j2 bench_all    # -j2 required for benchmark builds
 
 # Run all benchmarks
 ./bench/cpp/bench_all

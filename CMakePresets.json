@@ -77,7 +77,7 @@
             "displayName": "Linux Clang Release Build",
             "configurePreset": "linux-clang-release",
             "nativeToolOptions": [
-                "-j4",
+                "-j6",
                 "-v"
             ]
         },
@@ -86,7 +86,7 @@
             "displayName": "x64 Clang Release Build",
             "configurePreset": "x64-Clang-Release",
             "nativeToolOptions": [
-                "-j4",
+                "-j6",
                 "-v"
             ]
         }

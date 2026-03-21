@@ -73,8 +73,6 @@ The license and copyright notices of ASSET's source and redistributable dependen
 
     fmt           - MIT License : Copyright (c) 2012 - present, Victor Zverovich
 
-    BS::thread_pool - MIT License : Copyright (c) 2024 Barak Shoshany
-
     autodiff      - MIT License : Copyright (c) 2018–2024 Allan Leal
 
     boost-threads - Boost Software License : Copyright (c) 2003-2022
