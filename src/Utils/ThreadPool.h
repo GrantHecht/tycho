@@ -10,6 +10,7 @@
 #include <latch>
 #include <mutex>
 #include <new>
+#include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -257,6 +258,8 @@ class ThreadPool {
     // lambda type, breaking round-robin distribution.
     static inline thread_local unsigned tl_enqueue_index{0};
 
+    // try_push retry multiplier: on enqueue, try K * m_count queues before
+    // falling back to blocking push on the original queue.
     static constexpr unsigned K = 3;
 
     void start_workers() {
@@ -299,9 +302,15 @@ class ThreadPool {
                     // Execute and signal completion
                     try {
                         f();
-                    } catch (...) {
+                    } catch (const std::exception &e) {
                         // Safety net for raw enqueue_work users.
                         // Dispatch helpers handle their own exceptions via DispatchContext.
+                        std::fprintf(stderr,
+                                     "[Tycho] Unhandled exception in enqueue_work task: %s\n",
+                                     e.what());
+                    } catch (...) {
+                        std::fprintf(stderr,
+                                     "[Tycho] Unhandled non-std::exception in enqueue_work task\n");
                     }
                     if (m_tasks_pending.fetch_sub(1, std::memory_order_release) == 1)
                         m_tasks_pending.notify_all();
@@ -313,7 +322,8 @@ class ThreadPool {
   public:
     explicit ThreadPool(unsigned threads = std::thread::hardware_concurrency())
         : m_queues(threads), m_count(threads) {
-        assert(threads > 0);
+        if (threads == 0)
+            throw std::invalid_argument("ThreadPool: thread count must be > 0");
         start_workers();
     }
 
@@ -326,6 +336,8 @@ class ThreadPool {
 
     ThreadPool(const ThreadPool &) = delete;
     ThreadPool &operator=(const ThreadPool &) = delete;
+    ThreadPool(ThreadPool &&) = delete;
+    ThreadPool &operator=(ThreadPool &&) = delete;
 
     /// Fire-and-forget enqueue — zero heap allocation (SBO task wrapper).
     template <std::invocable F> void enqueue_work(F &&f) {

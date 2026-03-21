@@ -41,6 +41,21 @@ class VectorFunctionFixture : public ::testing::Test {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+// RAII guard to restore global thread count on scope exit.
+// Ensures test failures don't leave stale thread counts for subsequent tests.
+///////////////////////////////////////////////////////////////////////////////
+
+struct ScopedThreadCount {
+    int prev;
+    explicit ScopedThreadCount(int n) : prev(Tycho::get_num_threads()) {
+        Tycho::set_num_threads(n);
+    }
+    ~ScopedThreadCount() { Tycho::set_num_threads(prev); }
+    ScopedThreadCount(const ScopedThreadCount &) = delete;
+    ScopedThreadCount &operator=(const ScopedThreadCount &) = delete;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 // Derivative cross-check helpers
 ///////////////////////////////////////////////////////////////////////////////
 

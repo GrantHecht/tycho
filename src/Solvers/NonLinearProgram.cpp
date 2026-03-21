@@ -484,9 +484,7 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
 
     Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
 
-    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
-    // dispatch from the inline arm. Safe because the calling thread is the main
-    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
@@ -514,9 +512,7 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
 
     Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
 
-    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
-    // dispatch from the inline arm. Safe because the calling thread is the main
-    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
@@ -549,9 +545,7 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
-    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
-    // dispatch from the inline arm. Safe because the calling thread is the main
-    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });

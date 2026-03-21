@@ -141,8 +141,7 @@ TEST_F(IntegratorTest, STMParallelSingleTrajectoryMatchesSerial) {
 }
 
 TEST_F(IntegratorTest, STMParallelSingleTrajectorySerialFallback) {
-    int saved_threads = Tycho::get_num_threads();
-    Tycho::set_num_threads(1); // Force serial fallback
+    ScopedThreadCount guard(1); // Force serial fallback (restores on scope exit)
 
     Kepler kep(398600.4418);
     Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
@@ -171,6 +170,4 @@ TEST_F(IntegratorTest, STMParallelSingleTrajectorySerialFallback) {
                 << "STM mismatch at (" << r << "," << c << ")";
         }
     }
-
-    Tycho::set_num_threads(saved_threads); // Restore
 }

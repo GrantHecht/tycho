@@ -289,3 +289,59 @@ TEST(ThreadPoolTest, SubmitTask_ExceptionPropagation) {
     });
     EXPECT_THROW(fut.get(), std::runtime_error);
 }
+
+// ---- Edge-case tests for dispatch helpers ----
+
+TEST(DispatchHelpers, ParallelTask_SequentialFallback) {
+    // When nparts <= 1, both callables run inline sequentially.
+    // This is the path that prevents Jet/NLP deadlock with NumPartitions=1.
+    ScopedThreadCount guard(4); // pool is active, but nparts=1 bypasses it
+    int order = 0;
+    int pool_order = -1, inline_order = -1;
+
+    Tycho::parallel_task(
+        1, [&] { pool_order = order++; }, [&] { inline_order = order++; });
+
+    EXPECT_EQ(pool_order, 0);   // pool_work runs first in sequential mode
+    EXPECT_EQ(inline_order, 1); // inline_work runs second
+}
+
+TEST(DispatchHelpers, ParallelBlocks_CountLessThanNparts) {
+    // count < nparts triggers the clamp: nparts = std::min(nparts, count).
+    // Without it, block_size would be 0 producing incorrect partitions.
+    ScopedThreadCount guard(4);
+    std::atomic<int> sum{0};
+
+    Tycho::parallel_blocks(
+        2, [&sum](int start, int end) { sum.fetch_add(end - start); }, 10);
+
+    EXPECT_EQ(sum.load(), 2);
+}
+
+TEST(DispatchHelpers, ParallelBlocks_ZeroCount) {
+    ScopedThreadCount guard(4);
+    bool called = false;
+    Tycho::parallel_blocks(0, [&](int, int) { called = true; }, 4);
+    EXPECT_FALSE(called);
+}
+
+TEST(DispatchHelpers, ParallelSequence_ZeroCount) {
+    ScopedThreadCount guard(4);
+    bool called = false;
+    Tycho::parallel_sequence(0, [&](int) { called = true; });
+    EXPECT_FALSE(called);
+}
+
+TEST(DispatchHelpers, ParallelBlocks_NegativeCount) {
+    ScopedThreadCount guard(4);
+    bool called = false;
+    Tycho::parallel_blocks(-1, [&](int, int) { called = true; }, 4);
+    EXPECT_FALSE(called);
+}
+
+TEST(DispatchHelpers, ParallelSequence_NegativeCount) {
+    ScopedThreadCount guard(4);
+    bool called = false;
+    Tycho::parallel_sequence(-5, [&](int) { called = true; });
+    EXPECT_FALSE(called);
+}

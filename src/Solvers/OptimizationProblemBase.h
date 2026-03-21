@@ -83,11 +83,11 @@ struct OptimizationProblemBase {
     virtual void jet_initialize() = 0;
     virtual void jet_release() = 0;
 
-    // IMPORTANT: jet_run() is called from Jet::map() which dispatches jobs to
-    // the global thread pool. To prevent deadlock (pool workers submitting sub-
-    // tasks to the same pool and blocking), jet_initialize() MUST set this
-    // problem to single-threaded mode (NumPartitions=1). This ensures NLP eval
-    // methods run inline rather than dispatching to the pool.
+    // IMPORTANT: jet_run() is called from Jet::map() on pool worker threads.
+    // If jet_initialize() did NOT set NumPartitions=1, the NLP eval methods
+    // would call parallel_sequence/parallel_task from a pool worker, triggering
+    // the nested-dispatch guard (std::logic_error). jet_initialize() MUST set
+    // NumPartitions=1 so NLP eval methods run inline.
     virtual PSIOPT::ConvergenceFlags jet_run() {
         this->jet_initialize();
 

@@ -34,37 +34,37 @@ struct NonLinearProgram {
     int NumPartitions = 1;
 
     /// <summary>
-    /// Master List of Objective functions that will be partitioned onto different threads (ThrObj)
+    /// Master List of Objective functions that will be partitioned across work partitions (ThrObj)
     /// </summary>
     std::vector<ObjectiveFunction> Objectives;
 
     /// <summary>
-    /// Master List of Equality Constraint functions that will be partitioned onto different threads
+    /// Master List of Equality Constraint functions that will be partitioned across work partitions
     /// (ThrEq)
     /// </summary>
     std::vector<ConstraintFunction> EqualityConstraints;
 
     /// <summary>
-    /// Master List of Inequality Constraint functions that will be partitioned onto different
-    /// threads (ThrIq)
+    /// Master List of Inequality Constraint functions that will be partitioned across work
+    /// partitions (ThrIq)
     /// </summary>
     std::vector<ConstraintFunction> InequalityConstraints;
 
     /// <summary>
     /// Vector with each element being the list of ObjectiveFunctions
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
     std::vector<std::vector<ObjectiveFunction>> ThrObj;
 
     /// <summary>
     /// Vector with each element being the list of EqualityConstraints
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
     std::vector<std::vector<ConstraintFunction>> ThrEq;
 
     /// <summary>
     /// Vector with each element being the list of InequalityConstraints
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
     std::vector<std::vector<ConstraintFunction>> ThrIq;
 
@@ -116,9 +116,7 @@ struct NonLinearProgram {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    NonLinearProgram(int NumParts) {
-        this->NumPartitions = std::max(NumParts, 1);
-    }
+    NonLinearProgram(int NumParts) { this->NumPartitions = std::max(NumParts, 1); }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
                      int NumParts) {
