@@ -168,7 +168,7 @@ Based on those inputs, we need to:
 
         # 2. Initialize phase
         phase = Zermelo(vM, wF).phase(tModes.LGL3)
-        phase.Threads = 10  # Equal to number of physical cores
+        phase.NumPartitions = 10
 
         phase.setTraj(trajG, nSeg)
 
@@ -388,7 +388,7 @@ How would the phase boundary conditions need to change?
 
         # 2. Initialize phase
         phase = Zermelo(vM, wF).phase(tModes.LGL3)
-        phase.Threads = 10  # Equal to number of physical cores
+        phase.NumPartitions = 10
 
         phase.setTraj(trajG, nSeg)
 

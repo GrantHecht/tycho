@@ -1,7 +1,7 @@
 # Global Thread Pool Singleton
 
 **Date:** 2026-03-17
-**Status:** Approved
+**Status:** Superseded — see actual implementation in `src/Utils/ThreadPool.h`
 **Branch:** `claude/evaluate-thread-pool-JXbIA`
 
 ## Problem
