@@ -110,13 +110,12 @@ template <class LHS, class RHS> struct ConditionalStatement {
     }
 
     int IRows() const { return this->InputRows; }
-    std::string name() const { return this->name_; }
+    std::string name() const { return {}; }
 
   protected:
     ConditionalFlags flag;
     LHS lhs;
     RHS rhs;
-    std::string name_;
     int InputRows = 0;
 };
 
@@ -132,13 +131,11 @@ struct ConstantConditional {
     }
 
     int IRows() const { return this->InputRows; }
-    std::string name() const { return this->name_; }
+    std::string name() const { return {}; }
 
   protected:
     bool value;
-
     int InputRows = 0;
-    std::string name_;
 };
 
 template <class TestFunc, class TrueFunc, class FalseFunc>
