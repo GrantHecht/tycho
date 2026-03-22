@@ -156,6 +156,19 @@ TEST(FlatMapTest, MoveAssign) {
     EXPECT_TRUE(a.empty()); // NOLINT — testing post-move state
 }
 
+TEST(FlatMapTest, IntKeyCompiles) {
+    FlatMap<int, std::string> fm;
+    fm.insert(1, "one");
+    fm.insert(2, "two");
+
+    EXPECT_EQ(fm.at(1), "one");
+    EXPECT_EQ(fm.at(2), "two");
+    EXPECT_TRUE(fm.contains(1));
+    EXPECT_FALSE(fm.contains(3));
+    EXPECT_THROW(fm.at(99), std::out_of_range);
+    EXPECT_THROW(fm.insert(1, "duplicate"), std::invalid_argument);
+}
+
 TEST(FlatMapTest, EigenVectorXiValues) {
     FlatMap<std::string, Eigen::VectorXi> fm;
 

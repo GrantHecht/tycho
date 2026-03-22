@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include <fmt/format.h>
 #include <utility>
 #include <vector>
 
@@ -43,14 +44,14 @@ template <typename Key, typename Value> class FlatMap {
     const Value &at(const Key &k) const {
         auto it = find_it(k);
         if (it == data_.end())
-            throw std::out_of_range("FlatMap::at: key not found: " + k);
+            throw std::out_of_range(fmt::format("FlatMap::at: key not found: {}", k));
         return it->second;
     }
 
     Value &at(const Key &k) {
         auto it = find_it(k);
         if (it == data_.end())
-            throw std::out_of_range("FlatMap::at: key not found: " + k);
+            throw std::out_of_range(fmt::format("FlatMap::at: key not found: {}", k));
         return it->second;
     }
 
@@ -66,7 +67,7 @@ template <typename Key, typename Value> class FlatMap {
 
     void insert(const Key &k, const Value &v) {
         if (contains(k))
-            throw std::invalid_argument("FlatMap::insert: duplicate key");
+            throw std::invalid_argument(fmt::format("FlatMap::insert: duplicate key: {}", k));
         data_.emplace_back(k, v);
     }
 

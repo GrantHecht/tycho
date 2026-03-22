@@ -32,4 +32,29 @@ TEST(ODESizeTest, PidxsUsesCorrectSize) {
     ODESize<3, 2, 4> ode;
     auto pidxs = ode.Pidxs();
     EXPECT_EQ(pidxs.size(), 4);  // PVars=4, not UVars=2
+
+    // Verify actual index values: iota starting at XtUVars()=6
+    EXPECT_EQ(pidxs[0], 6);
+    EXPECT_EQ(pidxs[1], 7);
+    EXPECT_EQ(pidxs[2], 8);
+    EXPECT_EQ(pidxs[3], 9);
+}
+
+TEST(ODESizeTest, SetGetIdxsRoundtrip) {
+    ODESize<3, 2, 0> ode;
+
+    FlatMap<std::string, Eigen::VectorXi> idxs;
+    Eigen::VectorXi v1(2);
+    v1 << 0, 1;
+    Eigen::VectorXi v2(1);
+    v2 << 2;
+    idxs.insert("pos", v1);
+    idxs.insert("vel", v2);
+
+    ode.set_idxs(idxs);
+    auto result = ode.get_idxs();
+
+    EXPECT_EQ(result.size(), 2u);
+    EXPECT_EQ(result.at("pos"), v1);
+    EXPECT_EQ(result.at("vel"), v2);
 }
