@@ -93,29 +93,16 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
 
     FlatMap<std::string, Eigen::VectorXi> _XtUPidxs;
 
-    void add_default_idxs() {
-        for (int i = 0; i < this->XVars(); i++) {
-            this->add_idx(std::to_string(i), this->Xidxs(i));
-        }
-        this->add_idx("t", this->XVars());
-        for (int i = 0; i < this->UVars(); i++) {
-            this->add_idx(std::to_string(i), this->Uidxs(i));
-        }
-        for (int i = 0; i < this->PVars(); i++) {
-            this->add_idx(std::to_string(i), this->Pidxs(i));
-        }
-    }
-
     void add_idx(const std::string &name, const Eigen::VectorXi &idx) {
-        if (_XtUPidxs.contains(name)) {
-            throw std::invalid_argument(
-                fmt::format("Variable index group with name: {0:} already exists.", name));
-        }
         if (idx.size() == 0) {
             throw std::invalid_argument(
                 fmt::format("Variable index group with name: {0:} has no elements.", name));
         }
-        _XtUPidxs[name] = idx;
+        if (_XtUPidxs.contains(name)) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} already exists.", name));
+        }
+        _XtUPidxs.insert(name, idx);
     }
 
     void add_idx(const std::string &name, int indx) {
