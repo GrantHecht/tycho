@@ -176,16 +176,13 @@ static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
 }
 BENCHMARK(BM_ThreadPool_BatchDispatch)->Arg(10)->Arg(100);
 
-static void BM_ThreadPool_EnqueueWork(benchmark::State &state) {
+static void BM_ThreadPool_ParallelSequence(benchmark::State &state) {
     int N = static_cast<int>(state.range(0));
-    Tycho::ThreadPool pool(4);
+    Tycho::set_num_threads(4);
     for (auto _ : state) {
         std::atomic<int> counter{0};
-        for (int i = 0; i < N; ++i) {
-            pool.enqueue_work([&counter] { counter.fetch_add(1); });
-        }
-        pool.wait();
+        Tycho::parallel_sequence(N, [&counter](int) { counter.fetch_add(1); });
         benchmark::DoNotOptimize(counter.load());
     }
 }
-BENCHMARK(BM_ThreadPool_EnqueueWork)->Arg(10)->Arg(100);
+BENCHMARK(BM_ThreadPool_ParallelSequence)->Arg(10)->Arg(100);

@@ -93,8 +93,9 @@ void Tycho::NonLinearProgram::analyzePartitioning() {
     auto analyzeOP = [&](auto &SourceFuncs, auto &TargetThrFuncs) {
         for (auto &func : SourceFuncs) {
             if (func.getThreadMode() ==
-                ThreadingFlags::MainThread) { // Force to last partition (runs inline on calling
-                                              // thread)
+                ThreadingFlags::MainThread) { // Force to last partition — parallel_sequence runs
+                                              // the last index inline on the calling thread, so
+                                              // MainThread functions stay safe.
                 TargetThrFuncs.back().push_back(func);
             } else if (func.getThreadMode() == ThreadingFlags::RoundRobin) {
                 TargetThrFuncs[RRThr].push_back(func);

@@ -52,16 +52,19 @@ TEST(ThreadPoolTest, Reset) {
     EXPECT_EQ(pool.get_thread_count(), 2u);
 }
 
-TEST(ThreadPoolTest, EnqueueWorkAndWait) {
+TEST(ThreadPoolTest, SubmitWorkAndWait) {
     Tycho::ThreadPool pool(4);
     std::atomic<int> counter{0};
+    std::vector<std::future<void>> futs;
+    futs.reserve(50);
     for (int i = 0; i < 50; ++i) {
-        pool.enqueue_work([&counter] {
+        futs.push_back(pool.submit_task([&counter] {
             counter.fetch_add(1);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
-        });
+        }));
     }
-    pool.wait();
+    for (auto &f : futs)
+        f.get();
     EXPECT_EQ(counter.load(), 50);
 }
 
@@ -70,10 +73,13 @@ TEST(ThreadPoolTest, WorkStealing) {
     // varying worker speeds exercises the work-stealing path.
     Tycho::ThreadPool pool(4);
     std::atomic<int> counter{0};
+    std::vector<std::future<void>> futs;
+    futs.reserve(200);
     for (int i = 0; i < 200; ++i) {
-        pool.enqueue_work([&counter] { counter.fetch_add(1); });
+        futs.push_back(pool.submit_task([&counter] { counter.fetch_add(1); }));
     }
-    pool.wait();
+    for (auto &f : futs)
+        f.get();
     EXPECT_EQ(counter.load(), 200);
 }
 
@@ -128,9 +134,12 @@ TEST(GlobalThreadPool, PoolDispatch) {
     EXPECT_EQ(pool.get_thread_count(), 4u);
 
     std::atomic<int> counter{0};
+    std::vector<std::future<void>> futs;
+    futs.reserve(100);
     for (int i = 0; i < 100; ++i)
-        pool.enqueue_work([&counter] { counter.fetch_add(1); });
-    pool.wait();
+        futs.push_back(pool.submit_task([&counter] { counter.fetch_add(1); }));
+    for (auto &f : futs)
+        f.get();
     EXPECT_EQ(counter.load(), 100);
 }
 
@@ -139,14 +148,10 @@ TEST(GlobalThreadPool, SingleThreadedBypass) {
 
     EXPECT_FALSE(Tycho::use_thread_pool());
 
-    int result = 0;
-    if (Tycho::use_thread_pool()) {
-        Tycho::thread_pool().enqueue_work([&result] { result = 42; });
-        Tycho::thread_pool().wait();
-    } else {
-        result = 42; // inline
-    }
-    EXPECT_EQ(result, 42);
+    // With num_threads=1, dispatch helpers run inline without touching the pool.
+    std::atomic<int> counter{0};
+    Tycho::parallel_sequence(4, [&counter](int) { counter.fetch_add(1); });
+    EXPECT_EQ(counter.load(), 4);
 }
 
 // ---- Exception propagation tests ----
@@ -199,9 +204,9 @@ TEST(DispatchHelpers, WorkerDetection) {
     EXPECT_FALSE(Tycho::is_pool_worker());
 
     std::atomic<bool> worker_flag{false};
-    Tycho::thread_pool().enqueue_work(
+    auto fut = Tycho::thread_pool().submit_task(
         [&worker_flag] { worker_flag.store(Tycho::is_pool_worker()); });
-    Tycho::thread_pool().wait();
+    fut.get();
     EXPECT_TRUE(worker_flag.load());
 }
 
@@ -209,7 +214,7 @@ TEST(ThreadPoolTest, ResetDrainsPending) {
     Tycho::ThreadPool pool(4);
     std::atomic<int> counter{0};
     for (int i = 0; i < 100; ++i) {
-        pool.enqueue_work([&counter] {
+        pool.submit_task([&counter] {
             std::this_thread::sleep_for(std::chrono::microseconds(50));
             counter.fetch_add(1);
         });
@@ -421,4 +426,11 @@ TEST(DispatchHelpers, ParallelBlocks_NpartsOne_PoolActive) {
     Tycho::parallel_blocks(
         N, [&](int start, int end) { sum.fetch_add(end - start, std::memory_order_relaxed); }, 1);
     EXPECT_EQ(sum.load(), N);
+}
+
+TEST(DispatchHelpers, ParallelSequence_NOne_PoolActive) {
+    ScopedThreadCount guard(4);
+    std::atomic<int> count{0};
+    Tycho::parallel_sequence(1, [&](int) { count.fetch_add(1, std::memory_order_relaxed); });
+    EXPECT_EQ(count.load(), 1);
 }

@@ -69,11 +69,12 @@ inline bool is_pool_worker() noexcept { return detail::g_is_pool_worker; }
 // all Tycho dispatch closures (verified <= 64 bytes). The static_assert
 // fires at compile time if a closure exceeds the buffer.
 //
-// Current largest closures (approximate, 64-bit):
+// Current largest closures (approximate, 64-bit, Clang):
 //   parallel_sequence wrapper: ~20 bytes (&func, &ctx, int i)
 //   parallel_blocks wrapper:   ~28 bytes (&func, &ctx, int start, int end)
 //   parallel_task wrapper:     ~24 bytes (captured lambda, &ctx)
-// Headroom: ~36 bytes
+// Headroom: ~36 bytes. Sizes are compiler/ABI-dependent; the static_assert
+// in the constructor (line ~95) is the actual enforcement mechanism.
 // =============================================================================
 
 class task {
@@ -155,7 +156,7 @@ class task {
 // at Tycho's task granularity.
 //
 // Owner pushes/pops from front (LIFO — cache locality).
-// Thieves steal from back (FIFO — older, larger work units).
+// Thieves steal from back (FIFO — older tasks, reduces contention with owner's LIFO pops).
 // =============================================================================
 
 class WorkStealingQueue {
@@ -303,8 +304,8 @@ class ThreadPool {
                     try {
                         f();
                     } catch (const std::exception &e) {
-                        // Safety net for raw enqueue_work users.
-                        // Dispatch helpers handle their own exceptions via DispatchContext.
+                        // Safety net: enqueue_work is private, so this only fires if
+                        // a DispatchContext or packaged_task wrapper is bypassed.
                         std::fprintf(stderr,
                                      "[Tycho] Unhandled exception in enqueue_work task: %s\n",
                                      e.what());
@@ -316,6 +317,29 @@ class ThreadPool {
                         m_tasks_pending.notify_all();
                 }
             });
+        }
+    }
+
+    /// Fire-and-forget enqueue — no per-task heap allocation (SBO task wrapper).
+    /// Private: callers should use submit_task() or the dispatch helpers
+    /// (parallel_blocks, parallel_sequence, parallel_task).
+    template <std::invocable F> void enqueue_work(F &&f) {
+        // release: not strictly required (push() mutex provides the fence),
+        // but documents the intent that m_tasks_pending publishes "work was
+        // submitted". The correctness-critical pairing is:
+        //   worker fetch_sub(release) → wait() load(acquire)
+        // which ensures wait() sees task completion effects.
+        m_tasks_pending.fetch_add(1, std::memory_order_release);
+        task work{std::forward<F>(f)};
+        unsigned i = tl_enqueue_index++;
+        for (unsigned n = 0; n < m_count * K; ++n)
+            if (m_queues[(i + n) % m_count].try_push(work))
+                return;
+        try {
+            m_queues[i % m_count].push(std::move(work));
+        } catch (...) {
+            m_tasks_pending.fetch_sub(1, std::memory_order_release);
+            throw;
         }
     }
 
@@ -340,26 +364,11 @@ class ThreadPool {
     ThreadPool(ThreadPool &&) = delete;
     ThreadPool &operator=(ThreadPool &&) = delete;
 
-    /// Fire-and-forget enqueue — zero heap allocation (SBO task wrapper).
-    template <std::invocable F> void enqueue_work(F &&f) {
-        // release: not strictly required (push() mutex provides the fence),
-        // but documents the intent that m_tasks_pending publishes "work was
-        // submitted". The correctness-critical pairing is:
-        //   worker fetch_sub(release) → wait() load(acquire)
-        // which ensures wait() sees task completion effects.
-        m_tasks_pending.fetch_add(1, std::memory_order_release);
-        task work{std::forward<F>(f)};
-        unsigned i = tl_enqueue_index++;
-        for (unsigned n = 0; n < m_count * K; ++n)
-            if (m_queues[(i + n) % m_count].try_push(work))
-                return;
-        try {
-            m_queues[i % m_count].push(std::move(work));
-        } catch (...) {
-            m_tasks_pending.fetch_sub(1, std::memory_order_release);
-            throw;
-        }
-    }
+    // Dispatch helpers are free functions that need enqueue_work access.
+    template <typename F> friend void parallel_blocks(int, F &&, int);
+    template <typename F> friend void parallel_sequence(int, F &&);
+    template <typename FTask, typename FInline>
+    friend void parallel_task(int, FTask &&, FInline &&);
 
     /// Submit a task and get a future for its result.
     /// Cold path only (Jet full solves, Integrator STM).

@@ -1333,7 +1333,7 @@ void Tycho::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     this->optimizer->setNLP(this->nlp);
 }
 
-void Tycho::ODEPhaseBase::test_threads(int i, int j, int n) {
+void Tycho::ODEPhaseBase::test_partitions(int i, int j, int n) {
     this->resetTranscription();
 
     auto nlp1 = std::make_shared<NonLinearProgram>(i);

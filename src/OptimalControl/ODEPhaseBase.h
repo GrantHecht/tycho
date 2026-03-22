@@ -1122,7 +1122,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     void transcribe() { this->transcribe(false, false); }
 
-    void test_threads(int i, int j, int n);
+    void test_partitions(int i, int j, int n);
 
     void jet_initialize() {
         this->setNumPartitions(1, 1);

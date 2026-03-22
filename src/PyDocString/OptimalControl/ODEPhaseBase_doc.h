@@ -618,10 +618,6 @@ const char *const ODEPhaseBase_optimizer =
     "Returns a reference to the optimizer PSIOPT instance\n\n"
     ":type: PSIOT";
 
-const char *const ODEPhaseBase_Threads =
-    "The number of threads to parallelize the phase functions\n\n"
-    ":type: int";
-
 const char *const ODEPhaseBase_solve =
     "Solves the phase subject to the provided constraints. (Note: This does "
     "NOT optimize)\n\n"
