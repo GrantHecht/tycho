@@ -34,19 +34,19 @@ struct NonLinearProgram {
     int NumPartitions = 1;
 
     /// <summary>
-    /// Master List of Objective functions that will be partitioned across work partitions (ThrObj)
+    /// Master List of Objective functions that will be partitioned across work partitions (PartObj)
     /// </summary>
     std::vector<ObjectiveFunction> Objectives;
 
     /// <summary>
     /// Master List of Equality Constraint functions that will be partitioned across work partitions
-    /// (ThrEq)
+    /// (PartEq)
     /// </summary>
     std::vector<ConstraintFunction> EqualityConstraints;
 
     /// <summary>
     /// Master List of Inequality Constraint functions that will be partitioned across work
-    /// partitions (ThrIq)
+    /// partitions (PartIq)
     /// </summary>
     std::vector<ConstraintFunction> InequalityConstraints;
 
@@ -54,21 +54,21 @@ struct NonLinearProgram {
     /// Vector with each element being the list of ObjectiveFunctions
     /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ObjectiveFunction>> ThrObj;
+    std::vector<std::vector<ObjectiveFunction>> PartObj;
 
     /// <summary>
     /// Vector with each element being the list of EqualityConstraints
     /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ConstraintFunction>> ThrEq;
+    std::vector<std::vector<ConstraintFunction>> PartEq;
 
     /// <summary>
     /// Vector with each element being the list of InequalityConstraints
     /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ConstraintFunction>> ThrIq;
+    std::vector<std::vector<ConstraintFunction>> PartIq;
 
-    int PrimalVars = 0;  // Number of deisgn variables
+    int PrimalVars = 0;  // Number of design variables
     int SlackVars = 0;   // Number of slack variables appended to problem. One for every inequalcon
     int EqualCons = 0;   // Number of equality constraints,
     int InequalCons = 0; // Number of inequality constraints
@@ -77,7 +77,7 @@ struct NonLinearProgram {
 
     VectorXi KKTcoeffRows; // matched row indices
     VectorXi KKTcoeffCols; // matched col indices
-    VectorXi KKTcoeffThrIds;
+    VectorXi KKTcoeffPartIds;
     VectorXi KKTLocations;
 
     int numUserKKTElems = 0;
@@ -136,27 +136,26 @@ struct NonLinearProgram {
             std::cout << "Partition: " << i << std::endl << std::endl;
             std::cout << "---------------Objectives---------------" << std::endl << std::endl;
 
-            for (auto &obj : this->ThrObj[i]) {
+            for (auto &obj : this->PartObj[i]) {
                 obj.print_data();
             }
 
             std::cout << "---------------Equalities---------------" << std::endl << std::endl;
 
-            for (auto &eq : this->ThrEq[i]) {
+            for (auto &eq : this->PartEq[i]) {
                 eq.print_data();
             }
             std::cout << "--------------Inequalities--------------" << std::endl << std::endl;
 
-            for (auto &ineq : this->ThrIq[i]) {
+            for (auto &ineq : this->PartIq[i]) {
                 ineq.print_data();
-                // std::cout<<ineq.index_data.InnerKKTStarts()
             }
         }
     }
 
     void countElems();
 
-    void analyzeThreading();
+    void analyzePartitioning();
 
     void getMATSpace();
 
@@ -170,7 +169,7 @@ struct NonLinearProgram {
 
     void analyzeSparsity(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void make_compressed() {
-        this->KKTcoeffThrIds.resize(0);
+        this->KKTcoeffPartIds.resize(0);
         this->KKTcoeffRows.resize(0);
         this->KKTcoeffCols.resize(0);
     }

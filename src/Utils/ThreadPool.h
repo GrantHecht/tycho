@@ -353,7 +353,12 @@ class ThreadPool {
         for (unsigned n = 0; n < m_count * K; ++n)
             if (m_queues[(i + n) % m_count].try_push(work))
                 return;
-        m_queues[i % m_count].push(std::move(work));
+        try {
+            m_queues[i % m_count].push(std::move(work));
+        } catch (...) {
+            m_tasks_pending.fetch_sub(1, std::memory_order_release);
+            throw;
+        }
     }
 
     /// Submit a task and get a future for its result.

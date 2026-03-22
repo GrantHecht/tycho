@@ -35,7 +35,7 @@ void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
         this->NumPartitions = std::min(this->NumPartitions, max_parts);
     }
 
-    this->analyzeThreading();
+    this->analyzePartitioning();
     this->setMATDimensions();
     this->setRHSDimensions();
 
@@ -74,32 +74,35 @@ void Tycho::NonLinearProgram::countElems() {
     this->numEConElems = nec;
 }
 
-void Tycho::NonLinearProgram::analyzeThreading() {
+void Tycho::NonLinearProgram::analyzePartitioning() {
     /*
     This function loops over the master list of objectives and constraints and assigns them
     to NumPartitions work partitions. Each partition's work is dispatched as a single task
     to the global thread pool.
     */
-    this->ThrObj.clear();
-    this->ThrEq.clear();
-    this->ThrIq.clear();
+    this->PartObj.clear();
+    this->PartEq.clear();
+    this->PartIq.clear();
 
-    this->ThrObj.resize(this->NumPartitions);
-    this->ThrEq.resize(this->NumPartitions);
-    this->ThrIq.resize(this->NumPartitions);
+    this->PartObj.resize(this->NumPartitions);
+    this->PartEq.resize(this->NumPartitions);
+    this->PartIq.resize(this->NumPartitions);
 
     int RRThr = 0;
 
     auto analyzeOP = [&](auto &SourceFuncs, auto &TargetThrFuncs) {
         for (auto &func : SourceFuncs) {
-            if (func.getThreadMode() == ThreadingFlags::MainThread) { // Force to main thread
+            if (func.getThreadMode() ==
+                ThreadingFlags::MainThread) { // Force to last partition (runs inline on calling
+                                              // thread)
                 TargetThrFuncs.back().push_back(func);
             } else if (func.getThreadMode() == ThreadingFlags::RoundRobin) {
                 TargetThrFuncs[RRThr].push_back(func);
                 RRThr++;
                 if (RRThr > (this->NumPartitions - 1))
                     RRThr = 0;
-            } else if (static_cast<int>(func.getThreadMode()) >= 0) { // Specific Thread Assignment
+            } else if (static_cast<int>(func.getThreadMode()) >=
+                       0) { // Specific Partition Assignment
                 int thr = std::min(static_cast<int>(func.getThreadMode()), this->NumPartitions - 1);
                 TargetThrFuncs[thr].push_back(func);
             } else { // By application
@@ -111,9 +114,9 @@ void Tycho::NonLinearProgram::analyzeThreading() {
         }
     };
 
-    analyzeOP(this->Objectives, this->ThrObj);
-    analyzeOP(this->EqualityConstraints, this->ThrEq);
-    analyzeOP(this->InequalityConstraints, this->ThrIq);
+    analyzeOP(this->Objectives, this->PartObj);
+    analyzeOP(this->EqualityConstraints, this->PartEq);
+    analyzeOP(this->InequalityConstraints, this->PartIq);
 }
 
 void Tycho::NonLinearProgram::getMATSpace() {
@@ -132,29 +135,29 @@ void Tycho::NonLinearProgram::getMATSpace() {
     for (int i = 0; i < this->NumPartitions; i++) {
         int kkstart = KKTfreeloc;
 
-        for (auto &obj : this->ThrObj[i])
+        for (auto &obj : this->PartObj[i])
             obj.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                             this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, 0, false,
                             true);
-        for (auto &eq : this->ThrEq[i])
+        for (auto &eq : this->PartEq[i])
             eq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                            this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, eqoffset,
                            true, true);
-        for (auto &ineq : this->ThrIq[i])
+        for (auto &ineq : this->PartIq[i])
             ineq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                              this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, iqoffset,
                              true, true);
 
         int kklen = KKTfreeloc - kkstart;
 
-        this->KKTcoeffThrIds.segment(kkstart, kklen).setConstant(i);
+        this->KKTcoeffPartIds.segment(kkstart, kklen).setConstant(i);
     }
 
     Eigen::MatrixXi KKTclash(this->NumPartitions, this->KKTdim);
     KKTclash.setZero();
     for (int i = 0; i < this->numUserKKTElems; i++) {
         int col = this->KKTcoeffCols[i];
-        int thrid = this->KKTcoeffThrIds[i];
+        int thrid = this->KKTcoeffPartIds[i];
         KKTclash(thrid, col) = 1;
     }
 
@@ -181,14 +184,14 @@ void Tycho::NonLinearProgram::getRHSSpace() {
     int FXIfreeloc = 0;
 
     for (int i = 0; i < this->NumPartitions; i++) {
-        for (auto &obj : this->ThrObj[i]) {
+        for (auto &obj : this->PartObj[i]) {
             obj.getGradientSpace(this->PGXCoeffRows(), PGXfreeloc);
         }
-        for (auto &eq : this->ThrEq[i]) {
+        for (auto &eq : this->PartEq[i]) {
             eq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
             eq.getConstraintSpace(this->EConCoeffRows(), FXEfreeloc);
         }
-        for (auto &ineq : this->ThrIq[i]) {
+        for (auto &ineq : this->PartIq[i]) {
             ineq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
             ineq.getConstraintSpace(this->IConCoeffRows(), FXIfreeloc);
         }
@@ -222,7 +225,7 @@ void Tycho::NonLinearProgram::setMATDimensions() {
 
     this->KKTcoeffRows = Eigen::VectorXi::Constant(this->numKKTElems, -1);
     this->KKTcoeffCols = Eigen::VectorXi::Constant(this->numKKTElems, -1);
-    this->KKTcoeffThrIds = Eigen::VectorXi::Constant(this->numKKTElems, 0);
+    this->KKTcoeffPartIds = Eigen::VectorXi::Constant(this->numKKTElems, 0);
     this->KKTLocations = Eigen::VectorXi::Constant(this->numKKTElems, -1);
     this->SolverCoeffs = Eigen::VectorXd::Constant(this->numSolverKKTElems, 0);
     ///////////////////////////////////////////////////////////////////////////////////
@@ -324,7 +327,6 @@ void Tycho::NonLinearProgram::analyzeSparsity(
     };
 
     Tycho::parallel_blocks(this->numKKTElems, FindOP, this->NumPartitions);
-    // this->make_compressed();
     /////////////////////////////////////////////////////////////
 }
 
@@ -338,11 +340,11 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
 
     auto RHSevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs());
         Vals[thrnum] = localVal;
     };
@@ -363,11 +365,11 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
 
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
         Vals[thrnum] = localVal;
     };
@@ -385,15 +387,14 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
-    // this->setRHSCoeffsZero();
     this->setConCoeffsZero();
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective(ObjScale, X, localVal);
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
         Vals[thrnum] = localVal;
     };
@@ -412,7 +413,7 @@ void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
 
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective(ObjScale, X, localVal);
         Vals[thrnum] = localVal;
     };
@@ -434,14 +435,14 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
 
     auto KKTevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective_gradient_hessian(ObjScale, X, localVal, this->PGXCoeffs(), KKTmat,
                                            this->KKTLocations, this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LE, this->EConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->IConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
@@ -473,11 +474,11 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
     this->setRHSCoeffsZero();
 
     auto KKTevalOP = [&](int thrnum) {
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LE, this->EConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->IConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
@@ -503,10 +504,10 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
     this->setRHSCoeffsZero();
 
     auto SOEevalOP = [&](int thrnum) {
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian(X, this->EConCoeffs(), KKTmat, this->KKTLocations,
                                      this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian(X, this->IConCoeffs(), KKTmat, this->KKTLocations,
                                      this->KKTClashes, this->KKTLocks);
     };
@@ -529,13 +530,13 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
 
     auto SOEevalOP = [&](int thrnum) {
         double localVal = 0.0;
-        for (auto &Obj : this->ThrObj[thrnum])
+        for (auto &Obj : this->PartObj[thrnum])
             Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
                                                      this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
                                                      this->KKTLocks);
