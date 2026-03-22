@@ -72,7 +72,7 @@ struct NonLinearProgram {
     int SlackVars = 0;   // Number of slack variables appended to problem. One for every inequalcon
     int EqualCons = 0;   // Number of equality constraints,
     int InequalCons = 0; // Number of inequality constraints
-    int KKTdim = 0;      // Edge dimension of KKT matrix: = PrimalVars+ EqualCons + 2*InequalCons
+    int KKTdim = 0;      // Edge dimension of KKT matrix: = PrimalVars + SlackVars + EqualCons + InequalCons
 
     VectorXi KKTcoeffRows; // matched row indices
     VectorXi KKTcoeffCols; // matched col indices

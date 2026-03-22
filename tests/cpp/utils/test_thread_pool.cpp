@@ -75,7 +75,8 @@ TEST(ThreadPoolTest, EnqueueWorkAndWait) {
 }
 
 TEST(ThreadPoolTest, WorkStealing) {
-    // Enqueue many tasks to a single queue index to force stealing
+    // Enqueue many more tasks than threads; round-robin distribution plus
+    // varying worker speeds exercises the work-stealing path.
     Tycho::ThreadPool pool(4);
     std::atomic<int> counter{0};
     for (int i = 0; i < 200; ++i) {
@@ -88,9 +89,9 @@ TEST(ThreadPoolTest, WorkStealing) {
 // ---- Global thread pool singleton tests ----
 
 TEST(GlobalThreadPool, DefaultThreadCount) {
-    // Default should be hardware_concurrency
+    // Default should be hardware_concurrency, clamped to at least 1
     int n = Tycho::get_num_threads();
-    EXPECT_EQ(n, static_cast<int>(std::thread::hardware_concurrency()));
+    EXPECT_EQ(n, static_cast<int>(std::max(1u, std::thread::hardware_concurrency())));
 }
 
 TEST(GlobalThreadPool, SetAndGet) {
@@ -107,6 +108,27 @@ TEST(GlobalThreadPool, SetZeroMeansSingleThreaded) {
     ScopedThreadCount guard(0);
     EXPECT_EQ(Tycho::get_num_threads(), 1);
     EXPECT_FALSE(Tycho::use_thread_pool());
+}
+
+TEST(GlobalThreadPool, RoundTripNumThreads) {
+    // Verify the 4 -> 1 -> 4 transition: when n<=1 the pool stays alive but
+    // is bypassed; going back to n>1 resets the pool to the new thread count.
+    ScopedThreadCount guard(4);
+    EXPECT_EQ(Tycho::get_num_threads(), 4);
+    EXPECT_TRUE(Tycho::use_thread_pool());
+
+    Tycho::set_num_threads(1);
+    EXPECT_EQ(Tycho::get_num_threads(), 1);
+    EXPECT_FALSE(Tycho::use_thread_pool());
+
+    Tycho::set_num_threads(4);
+    EXPECT_EQ(Tycho::get_num_threads(), 4);
+    EXPECT_TRUE(Tycho::use_thread_pool());
+
+    // Verify pool is functional after round-trip
+    std::atomic<int> counter{0};
+    Tycho::parallel_sequence(20, [&counter](int) { counter.fetch_add(1); });
+    EXPECT_EQ(counter.load(), 20);
 }
 
 TEST(GlobalThreadPool, PoolDispatch) {
