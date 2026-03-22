@@ -57,7 +57,7 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
 
     # 2: Create optimal control phase and assign guess
     odePhase = ode.phase("LGL3")  # LGL-3 collocation
-    odePhase.NumPartitions = 8  # Equal to number of physical cores
+    odePhase.NumPartitions = 8
 
     nSeg = 150  # number of segments
     odePhase.setTraj(trajGuess, nSeg)
