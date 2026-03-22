@@ -14,6 +14,7 @@
 // =============================================================================
 
 #pragma once
+#include "Utils/FlatMap.h"
 #include "Utils/SizingHelpers.h"
 #include "pch.h"
 
@@ -90,49 +91,44 @@ template <int _XV, int _UV> struct ODEXUPVSizes<_XV, _UV, -1> : ODEXUVSizes<_XV,
 
 template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV> {
 
-    std::map<std::string, Eigen::VectorXi> _XtUPidxs;
-
-    void add_default_idxs() {
-        for (int i = 0; i < this->XVars(); i++) {
-            this->add_idx(std::to_string(i), this->Xidxs(i));
-        }
-        this->add_idx("t", this->XVars());
-        for (int i = 0; i < this->UVars(); i++) {
-            this->add_idx(std::to_string(i), this->Uidxs(i));
-        }
-        for (int i = 0; i < this->PVars(); i++) {
-            this->add_idx(std::to_string(i), this->Pidxs(i));
-        }
-    }
+    FlatMap<std::string, Eigen::VectorXi> _XtUPidxs;
 
     void add_idx(const std::string &name, const Eigen::VectorXi &idx) {
-        if (_XtUPidxs.count(name)) {
-            throw std::invalid_argument(
-                fmt::format("Variable index group with name: {0:} already exists.", name));
-        }
         if (idx.size() == 0) {
             throw std::invalid_argument(
                 fmt::format("Variable index group with name: {0:} has no elements.", name));
         }
-        _XtUPidxs[name] = idx;
+        if (_XtUPidxs.contains(name)) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} already exists.", name));
+        }
+        _XtUPidxs.insert(name, idx);
     }
 
     void add_idx(const std::string &name, int indx) {
         Eigen::VectorXi idxv(1);
         idxv[0] = indx;
-        this->add_idx(idxv);
+        this->add_idx(name, idxv);
     }
 
     Eigen::VectorXi idx(const std::string &name) const {
-        if (_XtUPidxs.count(name) == 0) {
+        if (!_XtUPidxs.contains(name)) {
             throw std::invalid_argument(
                 fmt::format("No variable index group with name: {0:} exists.", name));
         }
         return _XtUPidxs.at(name);
     }
 
-    void set_idxs(const std::map<std::string, Eigen::VectorXi> &idxs) { this->_XtUPidxs = idxs; }
-    std::map<std::string, Eigen::VectorXi> get_idxs() const { return this->_XtUPidxs; }
+    void set_idxs(const FlatMap<std::string, Eigen::VectorXi> &idxs) {
+        for (const auto &[name, idx] : idxs) {
+            if (idx.size() == 0) {
+                throw std::invalid_argument(
+                    fmt::format("Variable index group with name: {0:} has no elements.", name));
+            }
+        }
+        this->_XtUPidxs = idxs;
+    }
+    FlatMap<std::string, Eigen::VectorXi> get_idxs() const { return this->_XtUPidxs; }
 
     Eigen::VectorXi Xidxs() const {
         Eigen::VectorXi idxs(this->XVars());
@@ -155,7 +151,7 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
         return idxs;
     }
     Eigen::VectorXi Pidxs() const {
-        Eigen::VectorXi idxs(this->UVars());
+        Eigen::VectorXi idxs(this->PVars());
         std::iota(idxs.begin(), idxs.end(), this->XtUVars());
         return idxs;
     }

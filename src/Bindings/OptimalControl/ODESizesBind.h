@@ -44,10 +44,25 @@ template <int XV, int UV, int PV, class Derived, class Obj> void ODESizeBuild(Ob
     obj.def("Uidxs", nb::overload_cast<>(&Derived::Uidxs, nb::const_));
     obj.def("Uidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, nb::const_));
 
+    obj.def("Pidxs", nb::overload_cast<>(&Derived::Pidxs, nb::const_));
+    obj.def("Pidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Pidxs, nb::const_));
+
     obj.def("add_idx",
             nb::overload_cast<const std::string &, const Eigen::VectorXi &>(&Derived::add_idx));
-    obj.def("get_idxs", &Derived::get_idxs);
-    obj.def("set_idxs", &Derived::set_idxs);
+    obj.def("get_idxs", [](const Derived &self) {
+        nb::dict result;
+        for (const auto &[k, v] : self.get_idxs()) {
+            result[nb::cast(k)] = nb::cast(v);
+        }
+        return result;
+    });
+    obj.def("set_idxs", [](Derived &self, nb::dict d) {
+        FlatMap<std::string, Eigen::VectorXi> fm;
+        for (auto [k, v] : d) {
+            fm[nb::cast<std::string>(k)] = nb::cast<Eigen::VectorXi>(v);
+        }
+        self.set_idxs(fm);
+    });
     obj.def("idx", &Derived::idx);
 }
 
