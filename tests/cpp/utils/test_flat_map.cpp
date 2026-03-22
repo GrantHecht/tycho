@@ -6,6 +6,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Utils/FlatMap.h"
+#include <Eigen/Core>
 #include <gtest/gtest.h>
 #include <string>
 
@@ -153,4 +154,33 @@ TEST(FlatMapTest, MoveAssign) {
     b = std::move(a);
     EXPECT_EQ(b.at("k"), 42);
     EXPECT_TRUE(a.empty()); // NOLINT — testing post-move state
+}
+
+TEST(FlatMapTest, EigenVectorXiValues) {
+    FlatMap<std::string, Eigen::VectorXi> fm;
+
+    Eigen::VectorXi v1(3);
+    v1 << 0, 1, 2;
+    Eigen::VectorXi v2(2);
+    v2 << 10, 20;
+
+    fm.insert("x", v1);
+    fm.insert("u", v2);
+
+    EXPECT_EQ(fm.size(), 2u);
+    EXPECT_EQ(fm.at("x"), v1);
+    EXPECT_EQ(fm.at("u"), v2);
+
+    // Copy preserves Eigen vectors
+    auto copy = fm;
+    EXPECT_EQ(copy.at("x"), v1);
+
+    // Independence: modifying copy doesn't affect original
+    copy.at("x")[0] = 99;
+    EXPECT_EQ(fm.at("x")[0], 0);
+
+    // Move
+    auto moved = std::move(copy);
+    EXPECT_EQ(moved.at("x")[0], 99);
+    EXPECT_EQ(moved.at("u"), v2);
 }

@@ -156,7 +156,7 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
         return idxs;
     }
     Eigen::VectorXi Pidxs() const {
-        Eigen::VectorXi idxs(this->UVars());
+        Eigen::VectorXi idxs(this->PVars());
         std::iota(idxs.begin(), idxs.end(), this->XtUVars());
         return idxs;
     }

@@ -3,7 +3,9 @@
 //   Apache 2.0 — see LICENSE.txt)
 //
 // Minimal flat map backed by std::vector<std::pair<Key, Value>>.
-// Trivially relocatable (safe for TypeStorage SBO memcpy-move).
+// Memcpy-relocatable (safe for TypeStorage SBO memcpy-move):
+// only member is std::vector (stores {pointer, size, capacity},
+// no self-referential pointers). Elements live on the heap.
 // Unsorted, insertion-order preserved, linear-scan lookup.
 // Intended for small collections (N < ~20) where cache locality
 // beats tree/hash overhead.
@@ -41,14 +43,14 @@ template <typename Key, typename Value> class FlatMap {
     const Value &at(const Key &k) const {
         auto it = find_it(k);
         if (it == data_.end())
-            throw std::out_of_range("FlatMap::at: key not found");
+            throw std::out_of_range("FlatMap::at: key not found: " + k);
         return it->second;
     }
 
     Value &at(const Key &k) {
         auto it = find_it(k);
         if (it == data_.end())
-            throw std::out_of_range("FlatMap::at: key not found");
+            throw std::out_of_range("FlatMap::at: key not found: " + k);
         return it->second;
     }
 

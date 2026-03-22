@@ -93,6 +93,7 @@ set(TYCHO_TEST_SOURCES
     optimal_control/test_ocp_multiphase.cpp
     optimal_control/test_lgl_collocation.cpp
     optimal_control/test_mesh_refinement.cpp
+    optimal_control/test_ode_sizes.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
