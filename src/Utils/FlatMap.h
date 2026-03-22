@@ -76,8 +76,10 @@ template <typename Key, typename Value> class FlatMap {
     [[nodiscard]] bool empty() const { return data_.empty(); }
     [[nodiscard]] std::size_t size() const { return data_.size(); }
 
-    iterator begin() { return data_.begin(); }
-    iterator end() { return data_.end(); }
+    void reserve(std::size_t n) { data_.reserve(n); }
+
+    const_iterator begin() { return data_.begin(); }
+    const_iterator end() { return data_.end(); }
     const_iterator begin() const { return data_.begin(); }
     const_iterator end() const { return data_.end(); }
 };

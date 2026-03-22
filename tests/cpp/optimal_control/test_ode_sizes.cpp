@@ -40,6 +40,35 @@ TEST(ODESizeTest, PidxsUsesCorrectSize) {
     EXPECT_EQ(pidxs[3], 9);
 }
 
+TEST(ODESizeTest, AddIdxEmptyVectorThrows) {
+    ODESize<3, 1, 0> ode;
+    Eigen::VectorXi empty(0);
+    EXPECT_THROW(ode.add_idx("bad", empty), std::invalid_argument);
+}
+
+TEST(ODESizeTest, IdxMissingKeyThrows) {
+    ODESize<3, 1, 0> ode;
+    EXPECT_THROW(ode.idx("nonexistent"), std::invalid_argument);
+}
+
+TEST(ODESizeTest, SetIdxsEmptyVectorThrows) {
+    ODESize<3, 1, 0> ode;
+    FlatMap<std::string, Eigen::VectorXi> idxs;
+    idxs.insert("good", Eigen::VectorXi::LinSpaced(2, 0, 1));
+    idxs.insert("bad", Eigen::VectorXi(0));
+    EXPECT_THROW(ode.set_idxs(idxs), std::invalid_argument);
+}
+
+TEST(ODESizeTest, PidxsWithSubindexing) {
+    ODESize<3, 2, 4> ode;
+    Eigen::VectorXi sub(2);
+    sub << 0, 3;
+    auto result = ode.Pidxs(sub);
+    EXPECT_EQ(result.size(), 2);
+    EXPECT_EQ(result[0], 6);   // XtUVars() + 0
+    EXPECT_EQ(result[1], 9);   // XtUVars() + 3
+}
+
 TEST(ODESizeTest, SetGetIdxsRoundtrip) {
     ODESize<3, 2, 0> ode;
 

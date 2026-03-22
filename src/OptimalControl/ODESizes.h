@@ -119,7 +119,15 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
         return _XtUPidxs.at(name);
     }
 
-    void set_idxs(const FlatMap<std::string, Eigen::VectorXi> &idxs) { this->_XtUPidxs = idxs; }
+    void set_idxs(const FlatMap<std::string, Eigen::VectorXi> &idxs) {
+        for (const auto &[name, idx] : idxs) {
+            if (idx.size() == 0) {
+                throw std::invalid_argument(
+                    fmt::format("Variable index group with name: {0:} has no elements.", name));
+            }
+        }
+        this->_XtUPidxs = idxs;
+    }
     FlatMap<std::string, Eigen::VectorXi> get_idxs() const { return this->_XtUPidxs; }
 
     Eigen::VectorXi Xidxs() const {
