@@ -1997,12 +1997,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 } catch (...) {
                     if (!ex)
                         ex = std::current_exception();
+                    int suppressed = 0;
                     for (int j = i + 1; j < n_parts; j++) {
                         try {
                             results[j].get();
+                        } catch (const std::exception &e) {
+                            if (suppressed == 0)
+                                std::fprintf(stderr,
+                                             "[Tycho] integrate_stm_parallel: additional segment "
+                                             "also failed: %s\n",
+                                             e.what());
+                            ++suppressed;
                         } catch (...) {
+                            ++suppressed;
                         }
                     }
+                    if (suppressed > 1)
+                        std::fprintf(stderr,
+                                     "[Tycho] integrate_stm_parallel: %d additional exceptions "
+                                     "suppressed\n",
+                                     suppressed);
                     break;
                 }
             }

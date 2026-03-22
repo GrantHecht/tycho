@@ -6,23 +6,14 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "Utils/ThreadPool.h"
+#include "test_utils.h"
 #include <atomic>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <vector>
 
-// RAII guard to restore global thread count on scope exit.
-// Ensures test failures don't leave stale thread counts for subsequent tests.
-struct ScopedThreadCount {
-    int prev;
-    explicit ScopedThreadCount(int n) : prev(Tycho::get_num_threads()) {
-        Tycho::set_num_threads(n);
-    }
-    ~ScopedThreadCount() { Tycho::set_num_threads(prev); }
-    ScopedThreadCount(const ScopedThreadCount &) = delete;
-    ScopedThreadCount &operator=(const ScopedThreadCount &) = delete;
-};
+using TychoTest::ScopedThreadCount;
 
 TEST(ThreadPoolTest, ConstructDefault) {
     Tycho::ThreadPool pool;
@@ -366,4 +357,8 @@ TEST(DispatchHelpers, ParallelSequence_NegativeCount) {
     bool called = false;
     Tycho::parallel_sequence(-5, [&](int) { called = true; });
     EXPECT_FALSE(called);
+}
+
+TEST(ThreadPoolTest, ConstructZeroThreadsThrows) {
+    EXPECT_THROW(Tycho::ThreadPool pool(0), std::invalid_argument);
 }

@@ -30,7 +30,9 @@ void set_num_threads(int n) {
         g_pool_configuring.store(true, std::memory_order_release);
         try {
             thread_pool().reset(static_cast<unsigned>(n));
-            g_num_threads.store(n, std::memory_order_relaxed);
+            // Store after reset(): ensures use_thread_pool() sees the new count
+            // only after the pool is fully resized.
+            g_num_threads.store(n, std::memory_order_release);
         } catch (...) {
             g_pool_configuring.store(false, std::memory_order_release);
             throw;

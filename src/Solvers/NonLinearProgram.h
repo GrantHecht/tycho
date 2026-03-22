@@ -9,7 +9,7 @@
 // This file defines the default composite non-linear program class
 // for interfacing with PSIOPT. This class is responsible for combining many different
 // dense or sparse objective or constraints into a single optimization problem and
-// manages all memory allocation, sparsity pattern computuation, mult-threading, and function
+// manages all memory allocation, sparsity pattern computation, work partitioning, and function
 // evaluation.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
@@ -72,7 +72,8 @@ struct NonLinearProgram {
     int SlackVars = 0;   // Number of slack variables appended to problem. One for every inequalcon
     int EqualCons = 0;   // Number of equality constraints,
     int InequalCons = 0; // Number of inequality constraints
-    int KKTdim = 0;      // Edge dimension of KKT matrix: = PrimalVars + SlackVars + EqualCons + InequalCons
+    int KKTdim =
+        0; // Edge dimension of KKT matrix: = PrimalVars + SlackVars + EqualCons + InequalCons
 
     VectorXi KKTcoeffRows; // matched row indices
     VectorXi KKTcoeffCols; // matched col indices

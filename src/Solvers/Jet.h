@@ -188,12 +188,24 @@ struct Jet {
                 } catch (...) {
                     if (!ex)
                         ex = std::current_exception();
+                    int suppressed = 0;
                     for (int j = i + 1; j < NumJobs; j++) {
                         try {
                             results[j].get();
+                        } catch (const std::exception &e) {
+                            if (suppressed == 0)
+                                fmt::print(stderr,
+                                           "[Tycho] Jet::map: additional job also failed: {}\n",
+                                           e.what());
+                            ++suppressed;
                         } catch (...) {
+                            ++suppressed;
                         }
                     }
+                    if (suppressed > 1)
+                        fmt::print(stderr,
+                                   "[Tycho] Jet::map: {} additional exceptions suppressed\n",
+                                   suppressed);
                     break;
                 }
             }

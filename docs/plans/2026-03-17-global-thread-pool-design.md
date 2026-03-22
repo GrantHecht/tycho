@@ -2,6 +2,11 @@
 
 **Date:** 2026-03-17
 **Status:** Superseded — see implementation in `src/Utils/ThreadPool.h` (branch `feat/alternative-thread-pool`)
+
+> **ARCHIVED:** This document describes the initial design approach using `BS::thread_pool`.
+> The actual implementation uses a custom work-stealing `ThreadPool` with SBO task wrapper,
+> `parallel_blocks`/`parallel_sequence`/`parallel_task` dispatch helpers, and per-dispatch
+> latch synchronization. See `src/Utils/ThreadPool.h` for the authoritative implementation.
 **Branch:** `feat/alternative-thread-pool`
 
 ## Problem

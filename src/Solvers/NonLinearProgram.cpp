@@ -76,8 +76,9 @@ void Tycho::NonLinearProgram::countElems() {
 
 void Tycho::NonLinearProgram::analyzeThreading() {
     /*
-    This function loops over the Master list of objective and constraints and partitions them onto
-    the different threads allocated for function evaluation.
+    This function loops over the master list of objectives and constraints and assigns them
+    to NumPartitions work partitions. Each partition's work is dispatched as a single task
+    to the global thread pool.
     */
     this->ThrObj.clear();
     this->ThrEq.clear();
