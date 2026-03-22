@@ -52,6 +52,7 @@ set(TYCHO_TEST_SOURCES
     utils/test_eigen_stl.cpp
     utils/test_lambda_jump_table.cpp
     utils/test_misc_utils.cpp
+    utils/test_flat_map.cpp
     utils/test_type_storage.cpp
     utils/test_thread_pool.cpp
     utils/test_tuple_iterator.cpp
