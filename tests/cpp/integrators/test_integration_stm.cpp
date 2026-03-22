@@ -7,6 +7,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "integrator_test_utils.h"
+#include "Utils/ThreadPool.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;
@@ -103,4 +104,70 @@ TEST_F(IntegratorTest, KeplerSTMDeterminant) {
     Eigen::MatrixXd state_stm = stm.block(0, 0, 6, 6);
     double det = state_stm.determinant();
     EXPECT_NEAR(det, 1.0, 1e-5);
+}
+
+TEST_F(IntegratorTest, STMParallelSingleTrajectoryMatchesSerial) {
+    Kepler kep(398600.4418);
+    Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
+    integ.setAbsTol(1e-13);
+    integ.setRelTol(1e-13);
+
+    // Circular orbit initial state
+    double r0 = 7000.0;
+    double v0 = std::sqrt(398600.4418 / r0);
+    Eigen::VectorXd x0(7);
+    x0 << r0, 0, 0, 0, v0, 0, 0;
+
+    // Quarter period
+    double T = 2.0 * std::numbers::pi * std::sqrt(r0 * r0 * r0 / 398600.4418);
+    double tf = T / 4.0;
+
+    auto [xf_serial, stm_serial] = integ.integrate_stm(x0, tf);
+    auto [xf_parallel, stm_parallel] = integ.integrate_stm_parallel(x0, tf, 4);
+
+    // Final states should match
+    for (int i = 0; i < xf_serial.size(); ++i) {
+        EXPECT_NEAR(xf_parallel[i], xf_serial[i], 1e-8)
+            << "State mismatch at index " << i;
+    }
+
+    // STMs should match
+    for (int r = 0; r < stm_serial.rows(); ++r) {
+        for (int c = 0; c < stm_serial.cols(); ++c) {
+            EXPECT_NEAR(stm_parallel(r, c), stm_serial(r, c), 1e-6)
+                << "STM mismatch at (" << r << "," << c << ")";
+        }
+    }
+}
+
+TEST_F(IntegratorTest, STMParallelSingleTrajectorySerialFallback) {
+    ScopedThreadCount guard(1); // Force serial fallback (restores on scope exit)
+
+    Kepler kep(398600.4418);
+    Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
+    integ.setAbsTol(1e-13);
+    integ.setRelTol(1e-13);
+
+    double r0 = 7000.0;
+    double v0 = std::sqrt(398600.4418 / r0);
+    Eigen::VectorXd x0(7);
+    x0 << r0, 0, 0, 0, v0, 0, 0;
+
+    double T = 2.0 * std::numbers::pi * std::sqrt(r0 * r0 * r0 / 398600.4418);
+    double tf = T / 4.0;
+
+    auto [xf_serial, stm_serial] = integ.integrate_stm(x0, tf);
+    auto [xf_fallback, stm_fallback] = integ.integrate_stm_parallel(x0, tf, 4);
+
+    for (int i = 0; i < xf_serial.size(); ++i) {
+        EXPECT_NEAR(xf_fallback[i], xf_serial[i], 1e-8)
+            << "State mismatch at index " << i;
+    }
+
+    for (int r = 0; r < stm_serial.rows(); ++r) {
+        for (int c = 0; c < stm_serial.cols(); ++c) {
+            EXPECT_NEAR(stm_fallback(r, c), stm_serial(r, c), 1e-6)
+                << "STM mismatch at (" << r << "," << c << ")";
+        }
+    }
 }

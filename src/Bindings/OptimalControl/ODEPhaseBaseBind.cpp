@@ -164,7 +164,7 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("returnStaticParams", &ODEPhaseBase::returnStaticParams,
             ODEPhaseBase_returnStaticParam);
 
-    obj.def("test_threads", &ODEPhaseBase::test_threads);
+    obj.def("test_partitions", &ODEPhaseBase::test_partitions);
 
     obj.def("removeEqualCon", &ODEPhaseBase::removeEqualCon, ODEPhaseBase_removeEqualCon);
     obj.def("removeInequalCon", &ODEPhaseBase::removeInequalCon, ODEPhaseBase_removeInequalCon);

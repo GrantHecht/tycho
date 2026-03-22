@@ -1122,10 +1122,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     void transcribe() { this->transcribe(false, false); }
 
-    void test_threads(int i, int j, int n);
+    void test_partitions(int i, int j, int n);
 
     void jet_initialize() {
-        this->setThreads(1, 1);
+        this->setNumPartitions(1, 1);
         this->optimizer->PrintLevel = 10;
         this->PrintMeshInfo = false;
 
@@ -1134,7 +1134,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void jet_release() {
         this->indexer = PhaseIndexer();
         this->optimizer->release();
-        this->initThreads();
+        this->initPartitions();
         this->optimizer->PrintLevel = 0;
         this->PrintMeshInfo = true;
         this->nlp = std::shared_ptr<NonLinearProgram>();

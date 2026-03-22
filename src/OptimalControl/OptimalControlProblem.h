@@ -1518,14 +1518,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
     void transcribe() { this->transcribe(false, false); }
 
     void jet_initialize() {
-        this->setThreads(1, 1);
+        this->setNumPartitions(1, 1);
         this->optimizer->PrintLevel = 10;
         this->PrintMeshInfo = false;
         this->transcribe();
     }
     void jet_release() {
         this->optimizer->release();
-        this->initThreads();
+        this->initPartitions();
         this->optimizer->PrintLevel = 0;
         this->PrintMeshInfo = true;
         this->nlp = std::shared_ptr<NonLinearProgram>();

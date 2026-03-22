@@ -22,7 +22,20 @@ void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->SlackVars = IQ;
 
     this->countElems();
-    this->analyzeThreading();
+
+    // Cap partitions so each has enough work to offset dispatch overhead.
+    // numUserKKTElems counts Jacobian + Hessian NNZ across all functions —
+    // proportional to per-partition compute in evalKKT/evalAUG. Below ~1000
+    // NNZ per partition, dispatch overhead dominates actual work.
+    // Threshold empirically chosen via solver benchmarks (bench_all);
+    // re-evaluate with bench/bench_track.sh if dispatch overhead changes.
+    if (this->NumPartitions > 1) {
+        static constexpr int MIN_NNZ_PER_PARTITION = 1000;
+        int max_parts = std::max(1, this->numUserKKTElems / MIN_NNZ_PER_PARTITION);
+        this->NumPartitions = std::min(this->NumPartitions, max_parts);
+    }
+
+    this->analyzePartitioning();
     this->setMATDimensions();
     this->setRHSDimensions();
 
@@ -61,85 +74,92 @@ void Tycho::NonLinearProgram::countElems() {
     this->numEConElems = nec;
 }
 
-void Tycho::NonLinearProgram::analyzeThreading() {
+void Tycho::NonLinearProgram::analyzePartitioning() {
     /*
-    This function loops over the Master list of objective and constraints and partitions them onto
-    the different threads allocated for function evaluation.
+    This function loops over the master list of objectives and constraints and assigns them
+    to NumPartitions work partitions. Each partition's work is dispatched as a single task
+    to the global thread pool.
     */
-    this->ThrObj.clear();
-    this->ThrEq.clear();
-    this->ThrIq.clear();
+    this->PartObj.clear();
+    this->PartEq.clear();
+    this->PartIq.clear();
 
-    this->ThrObj.resize(this->Threads);
-    this->ThrEq.resize(this->Threads);
-    this->ThrIq.resize(this->Threads);
+    this->PartObj.resize(this->NumPartitions);
+    this->PartEq.resize(this->NumPartitions);
+    this->PartIq.resize(this->NumPartitions);
 
-    int RRThr = 0;
+    int rrPart = 0;
 
-    auto analyzeOP = [&](auto &SourceFuncs, auto &TargetThrFuncs) {
+    auto analyzeOP = [&](auto &SourceFuncs, auto &TargetPartFuncs) {
         for (auto &func : SourceFuncs) {
-            if (func.getThreadMode() == ThreadingFlags::MainThread) { // Force to main thread
-                TargetThrFuncs.back().push_back(func);
+            if (func.getThreadMode() ==
+                ThreadingFlags::MainThread) { // Force to last partition — parallel_sequence runs
+                                              // the last index inline on the calling thread, so
+                                              // MainThread functions stay safe.
+                TargetPartFuncs.back().push_back(func);
             } else if (func.getThreadMode() == ThreadingFlags::RoundRobin) {
-                TargetThrFuncs[RRThr].push_back(func);
-                if (RRThr > (this->Threads - 1))
-                    RRThr = 0;
-            } else if (static_cast<int>(func.getThreadMode()) >= 0) { // Specific Thread Assignment
-                int thr = std::min(static_cast<int>(func.getThreadMode()), this->Threads - 1);
-                TargetThrFuncs[thr].push_back(func);
+                TargetPartFuncs[rrPart].push_back(func);
+                rrPart++;
+                if (rrPart > (this->NumPartitions - 1))
+                    rrPart = 0;
+            } else if (static_cast<int>(func.getThreadMode()) >=
+                       0) { // Specific Partition Assignment
+                int part =
+                    std::min(static_cast<int>(func.getThreadMode()), this->NumPartitions - 1);
+                TargetPartFuncs[part].push_back(func);
             } else { // By application
-                auto TempThrFuncs = func.thread_split(this->Threads);
-                for (int i = 0; i < TempThrFuncs.size(); i++) {
-                    TargetThrFuncs[i].push_back(TempThrFuncs[i]);
+                auto TempPartFuncs = func.thread_split(this->NumPartitions);
+                for (int i = 0; i < TempPartFuncs.size(); i++) {
+                    TargetPartFuncs[i].push_back(TempPartFuncs[i]);
                 }
             }
         }
     };
 
-    analyzeOP(this->Objectives, this->ThrObj);
-    analyzeOP(this->EqualityConstraints, this->ThrEq);
-    analyzeOP(this->InequalityConstraints, this->ThrIq);
+    analyzeOP(this->Objectives, this->PartObj);
+    analyzeOP(this->EqualityConstraints, this->PartEq);
+    analyzeOP(this->InequalityConstraints, this->PartIq);
 }
 
 void Tycho::NonLinearProgram::getMATSpace() {
     /*
-     * Loops over all constraints and objectives on each thread and has each claim its
-     * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with thread that will be
-     * operating on it then from this info and calculates which columns/rows of the KKT matrix need
-     * to be locked when multiple threads are scattering into KKT matrix. Allocates KKTLocks mutexs
-     * based on this info.
+     * Loops over all constraints and objectives on each partition and has each claim its
+     * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with the partition that will be
+     * operating on it, then from this info calculates which columns/rows of the KKT matrix need
+     * to be locked when multiple partitions are scattering into the KKT matrix. Allocates KKTLocks
+     * mutexes based on this info.
      */
 
     int KKTfreeloc = 0;
 
     int eqoffset = this->PrimalVars + this->SlackVars;
     int iqoffset = this->PrimalVars + this->SlackVars + this->EqualCons;
-    for (int i = 0; i < this->Threads; i++) {
+    for (int i = 0; i < this->NumPartitions; i++) {
         int kkstart = KKTfreeloc;
 
-        for (auto &obj : this->ThrObj[i])
+        for (auto &obj : this->PartObj[i])
             obj.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                             this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, 0, false,
                             true);
-        for (auto &eq : this->ThrEq[i])
+        for (auto &eq : this->PartEq[i])
             eq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                            this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, eqoffset,
                            true, true);
-        for (auto &ineq : this->ThrIq[i])
+        for (auto &ineq : this->PartIq[i])
             ineq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
                              this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, iqoffset,
                              true, true);
 
         int kklen = KKTfreeloc - kkstart;
 
-        this->KKTcoeffThrIds.segment(kkstart, kklen).setConstant(i);
+        this->KKTcoeffPartIds.segment(kkstart, kklen).setConstant(i);
     }
 
-    Eigen::MatrixXi KKTclash(this->Threads, this->KKTdim);
+    Eigen::MatrixXi KKTclash(this->NumPartitions, this->KKTdim);
     KKTclash.setZero();
     for (int i = 0; i < this->numUserKKTElems; i++) {
         int col = this->KKTcoeffCols[i];
-        int thrid = this->KKTcoeffThrIds[i];
+        int thrid = this->KKTcoeffPartIds[i];
         KKTclash(thrid, col) = 1;
     }
 
@@ -165,15 +185,15 @@ void Tycho::NonLinearProgram::getRHSSpace() {
     int FXEfreeloc = 0;
     int FXIfreeloc = 0;
 
-    for (int i = 0; i < this->Threads; i++) {
-        for (auto &obj : this->ThrObj[i]) {
+    for (int i = 0; i < this->NumPartitions; i++) {
+        for (auto &obj : this->PartObj[i]) {
             obj.getGradientSpace(this->PGXCoeffRows(), PGXfreeloc);
         }
-        for (auto &eq : this->ThrEq[i]) {
+        for (auto &eq : this->PartEq[i]) {
             eq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
             eq.getConstraintSpace(this->EConCoeffRows(), FXEfreeloc);
         }
-        for (auto &ineq : this->ThrIq[i]) {
+        for (auto &ineq : this->PartIq[i]) {
             ineq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
             ineq.getConstraintSpace(this->IConCoeffRows(), FXIfreeloc);
         }
@@ -207,7 +227,7 @@ void Tycho::NonLinearProgram::setMATDimensions() {
 
     this->KKTcoeffRows = Eigen::VectorXi::Constant(this->numKKTElems, -1);
     this->KKTcoeffCols = Eigen::VectorXi::Constant(this->numKKTElems, -1);
-    this->KKTcoeffThrIds = Eigen::VectorXi::Constant(this->numKKTElems, 0);
+    this->KKTcoeffPartIds = Eigen::VectorXi::Constant(this->numKKTElems, 0);
     this->KKTLocations = Eigen::VectorXi::Constant(this->numKKTElems, -1);
     this->SolverCoeffs = Eigen::VectorXd::Constant(this->numSolverKKTElems, 0);
     ///////////////////////////////////////////////////////////////////////////////////
@@ -267,7 +287,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
     std::vector<Eigen::Triplet<double>> kktvec(this->numKKTElems,
                                                Eigen::Triplet<double>(0, 0, 0.0));
 
-    auto TripFillOP = [&](int id, int start, int stop) {
+    auto TripFillOP = [&](int start, int stop) {
         for (int i = start; i < stop; i++) {
             int row = this->KKTcoeffRows[i];
             int col = this->KKTcoeffCols[i];
@@ -280,16 +300,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
             }
         }
     };
-    int th1 = this->Threads;
-    std::vector<std::future<void>> results1(th1);
-    for (int i = 0; i < th1; i++) {
-        int start = (i * this->numKKTElems) / (th1);
-        int stop = ((i + 1) * this->numKKTElems) / (th1);
-        results1[i] = this->TP.push(TripFillOP, start, stop);
-    }
-    for (int i = 0; i < th1; i++) {
-        results1[i].get();
-    }
+    Tycho::parallel_blocks(this->numKKTElems, TripFillOP, this->NumPartitions);
 
     KKTmat.setFromTriplets(kktvec.begin(), kktvec.end());
     KKTmat.makeCompressed();
@@ -301,7 +312,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
         innerKKTNNZ[i] = KKTmat.row(i).nonZeros();
     }
 
-    auto FindOP = [&](int id, int start, int stop) {
+    auto FindOP = [&](int start, int stop) {
         for (int i = start; i < stop; i++) {
             int row = this->KKTcoeffRows(i);
             int col = this->KKTcoeffCols(i);
@@ -317,17 +328,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
         }
     };
 
-    int th = this->Threads;
-    std::vector<std::future<void>> results(th);
-    for (int i = 0; i < th; i++) {
-        int start = (i * this->numKKTElems) / (th);
-        int stop = ((i + 1) * this->numKKTElems) / (th);
-        results[i] = this->TP.push(FindOP, start, stop);
-    }
-    for (int i = 0; i < th; i++) {
-        results[i].get();
-    }
-    // this->make_compressed();
+    Tycho::parallel_blocks(this->numKKTElems, FindOP, this->NumPartitions);
     /////////////////////////////////////////////////////////////
 }
 
@@ -335,29 +336,23 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+
+    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
 
-    auto RHSevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+    auto RHSevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs());
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(RHSevalOP, i);
-    }
-
-    RHSevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, RHSevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
     this->fillRHS(PGX, AGX, FXE, FXI);
@@ -366,29 +361,23 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
 void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> PGX, EigenRef<VectorXd> FXE,
                                       EigenRef<VectorXd> FXI) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+
+    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
 
-    auto OGCevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+    auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(OGCevalOP, i);
-    }
-
-    OGCevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
     this->fillPGX(PGX);
@@ -398,29 +387,22 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
 
 void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
-    // this->setRHSCoeffsZero();
+
+    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setConCoeffsZero();
-    auto OGCevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective(ObjScale, X, Vals[thrnum]);
-        for (auto &Con : this->ThrEq[thrnum])
+    auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective(ObjScale, X, localVal);
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints(X, this->EConCoeffs());
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints(X, this->IConCoeffs());
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(OGCevalOP, i);
-    }
-
-    OGCevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
     this->fillFXE(FXE);
@@ -428,23 +410,18 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
 }
 
 void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
 
-    auto OGCevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective(ObjScale, X, Vals[thrnum]);
+    std::vector<double> Vals(this->NumPartitions, 0.0);
+
+    auto OGCevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective(ObjScale, X, localVal);
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(OGCevalOP, i);
-    }
-
-    OGCevalOP(0, Thrmin1);
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 }
 
@@ -453,44 +430,39 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+
+    std::vector<double> Vals(this->NumPartitions, 0.0);
 
     this->setRHSCoeffsZero();
 
-    auto KKTevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient_hessian(ObjScale, X, Vals[thrnum], this->PGXCoeffs(), KKTmat,
+    auto KKTevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective_gradient_hessian(ObjScale, X, localVal, this->PGXCoeffs(), KKTmat,
                                            this->KKTLocations, this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrEq[thrnum])
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LE, this->EConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->IConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(KKTevalOP, i);
-    }
-
-    KKTevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
-    auto fillop = [&](int id) { this->fillRHS(PGX, AGX, FXE, FXI); };
-
-    std::future<void> fill = this->TP.push(fillop);
-
-    this->fillSolverCoeffs(KKTmat);
-
-    fill.get();
+    // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
+    // dispatch from the inline arm. Safe because: (1) the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock, and
+    // (2) fillRHS and fillSolverCoeffs operate on disjoint data (RHS vectors vs. KKT
+    // matrix entries), so concurrent execution requires no synchronization.
+    Tycho::parallel_task(
+        this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
+        [&] { this->fillSolverCoeffs(KKTmat); });
 }
 
 void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
@@ -498,110 +470,91 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                                         double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+    // No-objective mode: ObjScale and val are unused but kept in the signature
+    // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
+    (void)ObjScale;
+    (void)val;
+
     this->setRHSCoeffsZero();
 
-    auto KKTevalOP = [&](int id, int thrnum) {
-        for (auto &Con : this->ThrEq[thrnum])
+    auto KKTevalOP = [&](int thrnum) {
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LE, this->EConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->IConCoeffs(), this->AGXCoeffs(), KKTmat, this->KKTLocations,
                 this->KKTClashes, this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(KKTevalOP, i);
-    }
+    Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
 
-    KKTevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
-        val += Vals[i];
-
-    this->fillSolverCoeffs(KKTmat);
-
-    this->fillRHS(PGX, AGX, FXE, FXI);
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
+    Tycho::parallel_task(
+        this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
+        [&] { this->fillSolverCoeffs(KKTmat); });
 }
 void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+    // Constraint-only mode: ObjScale and val are unused but kept in the signature
+    // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
+    (void)ObjScale;
+    (void)val;
+
     this->setRHSCoeffsZero();
 
-    auto SOEevalOP = [&](int id, int thrnum) {
-        for (auto &Con : this->ThrEq[thrnum])
+    auto SOEevalOP = [&](int thrnum) {
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian(X, this->EConCoeffs(), KKTmat, this->KKTLocations,
                                      this->KKTClashes, this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian(X, this->IConCoeffs(), KKTmat, this->KKTLocations,
                                      this->KKTClashes, this->KKTLocks);
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(SOEevalOP, i);
-    }
+    Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
 
-    SOEevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    auto fillop = [&](int id) { this->fillRHS(PGX, AGX, FXE, FXI); };
-    std::future<void> fill = this->TP.push(fillop);
-    this->fillSolverCoeffs(KKTmat);
-    fill.get();
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
+    Tycho::parallel_task(
+        this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
+        [&] { this->fillSolverCoeffs(KKTmat); });
 }
 void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    int Thrmin1 = this->Threads - 1;
-    std::vector<std::future<void>> results(Thrmin1);
-    std::vector<double> Vals(this->Threads, 0.0);
+
+    std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
 
-    auto SOEevalOP = [&](int id, int thrnum) {
-        for (auto &Obj : this->ThrObj[thrnum])
-            Obj.objective_gradient(ObjScale, X, Vals[thrnum], this->PGXCoeffs());
-        for (auto &Con : this->ThrEq[thrnum])
+    auto SOEevalOP = [&](int thrnum) {
+        double localVal = 0.0;
+        for (auto &Obj : this->PartObj[thrnum])
+            Obj.objective_gradient(ObjScale, X, localVal, this->PGXCoeffs());
+        for (auto &Con : this->PartEq[thrnum])
             Con.constraints_jacobian_adjointgradient(X, LE, this->EConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
                                                      this->KKTLocks);
-        for (auto &Con : this->ThrIq[thrnum])
+        for (auto &Con : this->PartIq[thrnum])
             Con.constraints_jacobian_adjointgradient(X, LI, this->IConCoeffs(), this->AGXCoeffs(),
                                                      KKTmat, this->KKTLocations, this->KKTClashes,
                                                      this->KKTLocks);
+        Vals[thrnum] = localVal;
     };
 
-    for (int i = 0; i < Thrmin1; i++) {
-        results[i] = this->TP.push(SOEevalOP, i);
-    }
-
-    SOEevalOP(0, Thrmin1);
-
-    for (int i = 0; i < Thrmin1; i++)
-        results[i].get();
-    for (int i = 0; i < this->Threads; i++)
+    Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
+    for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
-    auto fillop = [&](int id) { this->fillRHS(PGX, AGX, FXE, FXI); };
-
-    std::future<void> fill = this->TP.push(fillop);
-
-    this->fillSolverCoeffs(KKTmat);
-
-    fill.get();
+    // NOTE: nested dispatch from inline arm — see comment in evalKKT.
+    Tycho::parallel_task(
+        this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
+        [&] { this->fillSolverCoeffs(KKTmat); });
 }
 
 void Tycho::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,

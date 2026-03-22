@@ -184,7 +184,7 @@ class test_Reentry(unittest.TestCase):
         phase.MeshIncFactor = 5
         phase.MeshTol = 1.0e-7
         phase.PrintMeshInfo = False
-        phase.setThreads(1, 1)
+        phase.setNumPartitions(1, 1)
         Flag1 = phase.solve_optimize()
 
         Mconv1 = phase.MeshConverged

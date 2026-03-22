@@ -1,258 +1,594 @@
-/*********************************************************
- *
- *  Copyright (C) 2014 by Vitaliy Vitsentiy
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ********************************************************
-
- This file has been modified from its original version by renaming the original thread_pool class to
- ThreadPool and adding the push_member function to the class.
- */
-
 #pragma once
 
 #include <atomic>
+#include <cassert>
+#include <condition_variable>
+#include <cstdio>
+#include <deque>
 #include <exception>
-#include <functional>
 #include <future>
-#include <memory>
+#include <latch>
 #include <mutex>
-#include <queue>
+#include <new>
+#include <stdexcept>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
-namespace ctpl {
+#if defined(__APPLE__) || defined(__linux__)
+#include <pthread.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#endif
+
+namespace Tycho {
+
+// =============================================================================
+// Worker thread identification + per-dispatch synchronization
+// =============================================================================
 
 namespace detail {
-template <typename T> class Queue {
-  public:
-    bool push(T const &value) {
-        std::unique_lock<std::mutex> lock(this->mutex);
-        this->q.push(value);
-        return true;
-    }
-    // deletes the retrieved element, do not use for non integral types
-    bool pop(T &v) {
-        std::unique_lock<std::mutex> lock(this->mutex);
-        if (this->q.empty())
-            return false;
-        v = this->q.front();
-        this->q.pop();
-        return true;
-    }
-    bool empty() {
-        std::unique_lock<std::mutex> lock(this->mutex);
-        return this->q.empty();
+
+/// Set to true on each pool worker thread.
+inline thread_local bool g_is_pool_worker{false};
+
+/// Per-dispatch synchronization context.
+/// Lives on the caller's stack. Workers hold &ctx — caller MUST wait()
+/// on the latch before ctx goes out of scope.
+struct DispatchContext {
+    std::latch done;
+    std::atomic<bool> has_exception{false};
+    std::atomic<int> suppressed{0};
+    std::exception_ptr first_exception;
+
+    explicit DispatchContext(std::ptrdiff_t count) : done(count) {}
+
+    /// Store the first exception. Only called from catch blocks (cold path).
+    /// The seq_cst exchange on has_exception serializes concurrent callers:
+    /// only the thread whose exchange returns false writes first_exception.
+    /// Cost: ~0 (never executed on happy path).
+    void store_exception() noexcept {
+        if (!has_exception.exchange(true))
+            first_exception = std::current_exception();
+        else
+            suppressed.fetch_add(1, std::memory_order_relaxed);
     }
 
-  private:
-    std::queue<T> q;
-    std::mutex mutex;
+    /// Rethrow stored exception. MUST be called after done.wait()
+    /// (the latch provides the happens-before for the relaxed counter).
+    void rethrow_if_exception() {
+        if (has_exception.load()) {
+            int n = suppressed.load(std::memory_order_relaxed);
+            if (n > 0)
+                std::fprintf(stderr, "[Tycho] dispatch: %d additional exception(s) suppressed\n",
+                             n);
+            std::rethrow_exception(first_exception);
+        }
+    }
 };
+
 } // namespace detail
 
-class ThreadPool {
+/// Returns true if the calling thread is a pool worker.
+inline bool is_pool_worker() noexcept { return detail::g_is_pool_worker; }
+
+// =============================================================================
+// task — SBO callable wrapper (move-only, 64-byte inline buffer)
+//
+// Replaces std::function<void()> as the task unit. Zero heap allocation for
+// all Tycho dispatch closures (verified <= 64 bytes). The static_assert
+// fires at compile time if a closure exceeds the buffer.
+//
+// Current largest closures (approximate, 64-bit, Clang):
+//   parallel_sequence wrapper: ~20 bytes (&func, &ctx, int i)
+//   parallel_blocks wrapper:   ~28 bytes (&func, &ctx, int start, int end)
+//   parallel_task wrapper:     ~24 bytes (captured lambda, &ctx)
+// Headroom: ~36 bytes. Sizes are compiler/ABI-dependent; the static_assert
+// in the constructor (line ~95) is the actual enforcement mechanism.
+// =============================================================================
+
+class task {
+    static constexpr std::size_t BUF_SIZE = 64;
+    static constexpr std::size_t ALIGN = alignof(std::max_align_t);
+
+    alignas(ALIGN) unsigned char m_buf[BUF_SIZE];
+    void (*m_invoke)(void *) = nullptr;
+    void (*m_destroy)(void *) = nullptr;
+    void (*m_move)(void *src, void *dst) = nullptr;
+
   public:
-    ThreadPool() { this->init(); }
-    ThreadPool(int nThreads) {
-        this->init();
-        this->resize(nThreads);
-    }
+    task() = default;
 
-    // the destructor waits for all the functions in the queue to be finished
-    ~ThreadPool() { this->stop(true); }
-
-    // get the number of running threads in the pool
-    int size() { return static_cast<int>(this->threads.size()); }
-
-    // number of idle threads
-    int n_idle() { return this->nWaiting; }
-    std::thread &get_thread(int i) { return *this->threads[i]; }
-
-    // change the number of threads in the pool
-    // should be called from one thread, otherwise be careful to not interleave,
-    // also with this->stop() nThreads must be >= 0
-    void resize(int nThreads) {
-        if (!this->isStop && !this->isDone) {
-            int oldNThreads = static_cast<int>(this->threads.size());
-            if (oldNThreads <= nThreads) { // if the number of threads is increased
-                this->threads.resize(nThreads);
-                this->flags.resize(nThreads);
-
-                for (int i = oldNThreads; i < nThreads; ++i) {
-                    this->flags[i] = std::make_shared<std::atomic<bool>>(false);
-                    this->set_thread(i);
-                }
-            } else { // the number of threads is decreased
-                for (int i = oldNThreads - 1; i >= nThreads; --i) {
-                    *this->flags[i] = true; // this thread will finish
-                    this->threads[i]->detach();
-                }
-                {
-                    // stop the detached threads that were waiting
-                    std::unique_lock<std::mutex> lock(this->mutex);
-                    this->cv.notify_all();
-                }
-                this->threads.resize(nThreads); // safe to delete because the threads are detached
-                this->flags.resize(nThreads);   // safe to delete because the threads have copies of
-                                                // shared_ptr of the flags, not originals
-            }
-        }
-    }
-
-    // empty the queue
-    void clear_queue() {
-        std::function<void(int id)> *_f;
-        while (this->q.pop(_f))
-            delete _f; // empty the queue
-    }
-
-    // pops a functional wrapper to the original function
-    std::function<void(int)> pop() {
-        std::function<void(int id)> *_f = nullptr;
-        this->q.pop(_f);
-        std::unique_ptr<std::function<void(int id)>> func(
-            _f); // at return, delete the function even if an exception occurred
-        std::function<void(int)> f;
-        if (_f)
-            f = *_f;
-        return f;
-    }
-
-    // wait for all computing threads to finish and stop all threads
-    // may be called asynchronously to not pause the calling thread while waiting
-    // if isWait == true, all the functions in the queue are run, otherwise the
-    // queue is cleared without running the functions
-    void stop(bool isWait = false) {
-        if (!isWait) {
-            if (this->isStop)
-                return;
-            this->isStop = true;
-            for (int i = 0, n = this->size(); i < n; ++i) {
-                *this->flags[i] = true; // command the threads to stop
-            }
-            this->clear_queue(); // empty the queue
-        } else {
-            if (this->isDone || this->isStop)
-                return;
-            this->isDone = true; // give the waiting threads a command to finish
-        }
-        {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            this->cv.notify_all(); // stop all waiting threads
-        }
-        for (int i = 0; i < static_cast<int>(this->threads.size());
-             ++i) { // wait for the computing threads to finish
-            if (this->threads[i]->joinable())
-                this->threads[i]->join();
-        }
-        // if there were no threads in the pool but some functors in the queue, the
-        // functors are not deleted by the threads therefore delete them here
-        this->clear_queue();
-        this->threads.clear();
-        this->flags.clear();
-    }
-
-    template <typename F, typename... Rest>
-    auto push(F &&f, Rest &&...rest) -> std::future<decltype(f(0, rest...))> {
-        auto pck = std::make_shared<std::packaged_task<decltype(f(0, rest...))(int)>>(
-            std::bind(std::forward<F>(f), std::placeholders::_1, std::forward<Rest>(rest)...));
-        auto _f = new std::function<void(int id)>([pck](int id) { (*pck)(id); });
-        this->q.push(_f);
-        std::unique_lock<std::mutex> lock(this->mutex);
-        this->cv.notify_one();
-        return pck->get_future();
-    }
-    template <typename F, typename Obj, typename... Rest>
-    auto push_member(F &&f, Obj *obj, Rest &&...rest) -> std::future<decltype(f(obj, 0, rest...))> {
-        auto pck = std::make_shared<std::packaged_task<decltype(f(obj, 0, rest...))(int)>>(
-            std::bind(std::forward<F>(f), obj, std::placeholders::_1, std::forward<Rest>(rest)...));
-        auto _f = new std::function<void(int id)>([pck](int id) { (*pck)(id); });
-        this->q.push(_f);
-        std::unique_lock<std::mutex> lock(this->mutex);
-        this->cv.notify_one();
-        return pck->get_future();
-    }
-    // run the user's function that excepts argument int - id of the running
-    // thread. returned value is templatized operator returns std::future, where
-    // the user can get the result and rethrow the catched exceptins
-    template <typename F> auto push(F &&f) -> std::future<decltype(f(0))> {
-        auto pck = std::make_shared<std::packaged_task<decltype(f(0))(int)>>(std::forward<F>(f));
-        auto _f = new std::function<void(int id)>([pck](int id) { (*pck)(id); });
-        this->q.push(_f);
-        std::unique_lock<std::mutex> lock(this->mutex);
-        this->cv.notify_one();
-        return pck->get_future();
-    }
-
-  private:
-    // deleted
-    ThreadPool(const ThreadPool &);            // = delete;
-    ThreadPool(ThreadPool &&);                 // = delete;
-    ThreadPool &operator=(const ThreadPool &); // = delete;
-    ThreadPool &operator=(ThreadPool &&);      // = delete;
-
-    void set_thread(int i) {
-        std::shared_ptr<std::atomic<bool>> flag(
-            this->flags[i]); // a copy of the shared ptr to the flag
-        auto f = [this, i, flag /* a copy of the shared ptr to the flag */]() {
-            std::atomic<bool> &_flag = *flag;
-            std::function<void(int id)> *_f;
-            bool isPop = this->q.pop(_f);
-            while (true) {
-                while (isPop) { // if there is anything in the queue
-                    std::unique_ptr<std::function<void(int id)>> func(
-                        _f); // at return, delete the function even if
-                             // an exception occurred
-                    (*_f)(i);
-                    if (_flag)
-                        return; // the thread is wanted to stop, return even if the queue
-                                // is not empty yet
-                    else
-                        isPop = this->q.pop(_f);
-                }
-                // the queue is empty here, wait for the next command
-                std::unique_lock<std::mutex> lock(this->mutex);
-                ++this->nWaiting;
-                this->cv.wait(lock, [this, &_f, &isPop, &_flag]() {
-                    isPop = this->q.pop(_f);
-                    return isPop || this->isDone || _flag;
-                });
-                --this->nWaiting;
-                if (!isPop)
-                    return; // if the queue is empty and this->isDone == true or *flag
-                            // then return
-            }
+    template <typename F>
+        requires std::invocable<F &>
+    task(F &&f) noexcept {
+        using Fn = std::decay_t<F>;
+        static_assert(sizeof(Fn) <= BUF_SIZE, "Callable exceeds task SBO buffer (64 bytes)");
+        static_assert(alignof(Fn) <= ALIGN);
+        static_assert(std::is_nothrow_move_constructible_v<Fn>);
+        ::new (m_buf) Fn(std::forward<F>(f));
+        m_invoke = [](void *p) { (*static_cast<Fn *>(p))(); };
+        m_destroy = [](void *p) { static_cast<Fn *>(p)->~Fn(); };
+        m_move = [](void *src, void *dst) {
+            ::new (dst) Fn(std::move(*static_cast<Fn *>(src)));
+            static_cast<Fn *>(src)->~Fn();
         };
-        this->threads[i].reset(new std::thread(f)); // compiler may not support std::make_unique()
     }
 
-    void init() {
-        this->nWaiting = 0;
-        this->isStop = false;
-        this->isDone = false;
+    task(task &&o) noexcept : m_invoke(o.m_invoke), m_destroy(o.m_destroy), m_move(o.m_move) {
+        if (m_move) {
+            m_move(o.m_buf, m_buf);
+            o.m_invoke = nullptr;
+            o.m_destroy = nullptr;
+            o.m_move = nullptr;
+        }
     }
 
-    std::vector<std::unique_ptr<std::thread>> threads;
-    std::vector<std::shared_ptr<std::atomic<bool>>> flags;
-    detail::Queue<std::function<void(int id)> *> q;
-    std::atomic<bool> isDone;
-    std::atomic<bool> isStop;
-    std::atomic<int> nWaiting; // how many threads are waiting
+    task &operator=(task &&o) noexcept {
+        if (this != &o) {
+            if (m_destroy)
+                m_destroy(m_buf);
+            m_invoke = o.m_invoke;
+            m_destroy = o.m_destroy;
+            m_move = o.m_move;
+            if (m_move) {
+                m_move(o.m_buf, m_buf);
+                o.m_invoke = nullptr;
+                o.m_destroy = nullptr;
+                o.m_move = nullptr;
+            }
+        }
+        return *this;
+    }
 
-    std::mutex mutex;
-    std::condition_variable cv;
+    ~task() {
+        if (m_destroy)
+            m_destroy(m_buf);
+    }
+
+    void operator()() {
+        assert(m_invoke && "task::operator() called on empty task");
+        m_invoke(m_buf);
+    }
+    explicit operator bool() const noexcept { return m_invoke != nullptr; }
+
+    task(const task &) = delete;
+    task &operator=(const task &) = delete;
 };
 
-} // namespace ctpl
+// =============================================================================
+// WorkStealingQueue — per-worker task queue
+//
+// Mutex-based work-stealing queue. Not lock-free — Tycho dispatches O(NumPartitions)
+// tasks per PSIOPT iteration with ms-scale durations, so lock contention is negligible
+// vs task cost. A lock-free Chase-Lev deque would be appropriate if tasks
+// were sub-microsecond, but would add complexity for no measurable benefit
+// at Tycho's task granularity.
+//
+// Owner pushes/pops from front (LIFO — cache locality).
+// Thieves steal from back (FIFO — older tasks, reduces contention with owner's LIFO pops).
+// =============================================================================
+
+class WorkStealingQueue {
+    std::deque<task> m_deque;
+    mutable std::mutex m_mutex;
+    std::condition_variable m_cv;
+    bool m_done = false;
+
+  public:
+    // Owner pushes to front (blocking, always succeeds)
+    void push(task f) {
+        {
+            std::lock_guard lock(m_mutex);
+            m_deque.push_front(std::move(f));
+        }
+        m_cv.notify_one();
+    }
+
+    // Non-blocking push. Moves from f on success, leaves f untouched on failure.
+    bool try_push(task &f) {
+        std::unique_lock lock(m_mutex, std::try_to_lock);
+        if (!lock.owns_lock())
+            return false;
+        m_deque.push_front(std::move(f));
+        lock.unlock();
+        m_cv.notify_one();
+        return true;
+    }
+
+    // Owner pops from front (LIFO, non-blocking)
+    bool try_pop(task &f) {
+        std::unique_lock lock(m_mutex, std::try_to_lock);
+        if (!lock.owns_lock() || m_deque.empty())
+            return false;
+        f = std::move(m_deque.front());
+        m_deque.pop_front();
+        return true;
+    }
+
+    // Thief steals from back (FIFO, non-blocking)
+    bool try_steal(task &f) {
+        std::unique_lock lock(m_mutex, std::try_to_lock);
+        if (!lock.owns_lock() || m_deque.empty())
+            return false;
+        f = std::move(m_deque.back());
+        m_deque.pop_back();
+        return true;
+    }
+
+    // Owner blocks until work arrives or done() is called.
+    // Returns false on shutdown (m_done && empty).
+    bool pop(task &f) {
+        std::unique_lock lock(m_mutex);
+        m_cv.wait(lock, [this] { return !m_deque.empty() || m_done; });
+        if (m_deque.empty())
+            return false;
+        f = std::move(m_deque.front());
+        m_deque.pop_front();
+        return true;
+    }
+
+    // Signal shutdown — wakes all blocked pop() calls
+    void done() {
+        {
+            std::lock_guard lock(m_mutex);
+            m_done = true;
+        }
+        m_cv.notify_all();
+    }
+};
+
+// =============================================================================
+// ThreadPool — work-stealing thread pool
+//
+// Each worker has its own queue. Tasks are distributed round-robin on enqueue.
+// Workers try their own queue first, then steal from others. Cache-line
+// padding on m_tasks_pending prevents false sharing.
+// =============================================================================
+
+struct ThreadPoolTestAccess; // forward-declared for friend access from tests
+
+class ThreadPool {
+    std::vector<WorkStealingQueue> m_queues;
+    std::vector<std::thread> m_threads;
+    unsigned m_count;
+
+    // Apple Silicon L1 cache line is 128 bytes, not 64.
+    static constexpr std::size_t CL =
+#if defined(__APPLE__) && defined(__aarch64__)
+        128;
+#elif defined(__cpp_lib_hardware_interference_size)
+        std::hardware_destructive_interference_size;
+#else
+        64;
+#endif
+
+    alignas(CL) std::atomic<int> m_tasks_pending{0};
+
+    // TLS enqueue index — eliminates atomic contention on burst dispatch.
+    // Must be class-level static (not function-local) because enqueue_work
+    // is a template — function-local would create a separate counter per
+    // lambda type, breaking round-robin distribution.
+    static inline thread_local unsigned tl_enqueue_index{0};
+
+    // try_push retry multiplier: on enqueue, try K * m_count queues before
+    // falling back to blocking push on the original queue.
+    static constexpr unsigned K = 3;
+
+    void start_workers() {
+        for (unsigned i = 0; i < m_count; ++i) {
+            m_threads.emplace_back([this, i] {
+                detail::g_is_pool_worker = true;
+#if defined(__APPLE__)
+                char name[16];
+                std::snprintf(name, sizeof(name), "tycho-pool-%u", i);
+                pthread_setname_np(name);
+#elif defined(__linux__)
+                char name[16];
+                std::snprintf(name, sizeof(name), "tycho-pool-%u", i);
+                pthread_setname_np(pthread_self(), name);
+#elif defined(_WIN32)
+                wchar_t name[32];
+                swprintf(name, sizeof(name) / sizeof(wchar_t), L"tycho-pool-%u", i);
+                SetThreadDescription(GetCurrentThread(), name);
+#endif
+                while (true) {
+                    task f;
+                    // Phase 1: try own queue (LIFO), then steal from others (FIFO)
+                    if (!m_queues[i].try_pop(f)) {
+                        for (unsigned n = 1; n < m_count; ++n) {
+                            if (m_queues[(i + n) % m_count].try_steal(f))
+                                break;
+                        }
+                    }
+                    // Phase 2: if nothing found, block on own queue.
+                    // Starvation note: a worker blocked here misses work on other
+                    // queues. In practice, round-robin enqueue from a single
+                    // dispatcher (Tycho's pattern) distributes evenly, and push()
+                    // wakes this worker when its queue gets work. A timed wait
+                    // (try_pop_for) was tested but pthread_cond_timedwait overhead
+                    // caused 13-17% PSIOPT regression vs pthread_cond_wait.
+                    if (!f) {
+                        if (!m_queues[i].pop(f))
+                            break; // shutdown
+                    }
+                    // Execute and signal completion
+                    try {
+                        f();
+                    } catch (const std::exception &e) {
+                        // Safety net: enqueue_work is private, so this only fires if
+                        // a DispatchContext or packaged_task wrapper is bypassed.
+                        std::fprintf(stderr,
+                                     "[Tycho] Unhandled exception in enqueue_work task: %s\n",
+                                     e.what());
+                    } catch (...) {
+                        std::fprintf(stderr,
+                                     "[Tycho] Unhandled non-std::exception in enqueue_work task\n");
+                    }
+                    if (m_tasks_pending.fetch_sub(1, std::memory_order_release) == 1)
+                        m_tasks_pending.notify_all();
+                }
+            });
+        }
+    }
+
+    /// Fire-and-forget enqueue — no per-task heap allocation (SBO task wrapper).
+    /// Private: callers should use submit_task() or the dispatch helpers
+    /// (parallel_blocks, parallel_sequence, parallel_task).
+    template <std::invocable F> void enqueue_work(F &&f) {
+        // release: not strictly required (push() mutex provides the fence),
+        // but documents the intent that m_tasks_pending publishes "work was
+        // submitted". The correctness-critical pairing is:
+        //   worker fetch_sub(release) → wait() load(acquire)
+        // which ensures wait() sees task completion effects.
+        m_tasks_pending.fetch_add(1, std::memory_order_release);
+        task work{std::forward<F>(f)};
+        unsigned i = tl_enqueue_index++;
+        for (unsigned n = 0; n < m_count * K; ++n)
+            if (m_queues[(i + n) % m_count].try_push(work))
+                return;
+        try {
+            m_queues[i % m_count].push(std::move(work));
+        } catch (...) {
+            m_tasks_pending.fetch_sub(1, std::memory_order_release);
+            throw;
+        }
+    }
+
+    /// Shut down all workers and restart with n threads.
+    /// Called only from set_num_threads(), which sets pool_configuring() to
+    /// prevent concurrent dispatch (best-effort TOCTOU guard).
+    /// This is a configuration API, not a hot-path operation.
+    void reset(unsigned n) {
+        if (n == 0)
+            throw std::invalid_argument("ThreadPool: thread count must be > 0");
+        wait(); // drain pending tasks (one atomic load when idle)
+        for (auto &q : m_queues)
+            q.done();
+        for (auto &t : m_threads)
+            t.join();
+        m_threads.clear();
+        std::vector<WorkStealingQueue> fresh(n);
+        m_queues.swap(fresh);
+        m_count = n;
+        start_workers();
+    }
+
+  public:
+    explicit ThreadPool(unsigned threads = std::max(1u, std::thread::hardware_concurrency()))
+        : m_queues(threads), m_count(threads) {
+        if (threads == 0)
+            throw std::invalid_argument("ThreadPool: thread count must be > 0");
+        start_workers();
+    }
+
+    ~ThreadPool() noexcept {
+        wait();
+        for (auto &q : m_queues)
+            q.done();
+        for (auto &t : m_threads)
+            t.join();
+    }
+
+    ThreadPool(const ThreadPool &) = delete;
+    ThreadPool &operator=(const ThreadPool &) = delete;
+    ThreadPool(ThreadPool &&) = delete;
+    ThreadPool &operator=(ThreadPool &&) = delete;
+
+    // Dispatch helpers and set_num_threads need private access.
+    template <typename F> friend void parallel_blocks(int, F &&, int);
+    template <typename F> friend void parallel_sequence(int, F &&);
+    template <typename FTask, typename FInline>
+    friend void parallel_task(int, FTask &&, FInline &&);
+    friend void set_num_threads(int n);
+    friend struct ThreadPoolTestAccess;
+
+    /// Submit a task and get a future for its result.
+    /// Cold path only (Jet full solves, Integrator STM).
+    template <std::invocable F>
+    auto submit_task(F &&f) -> std::future<std::invoke_result_t<std::decay_t<F>>> {
+        using R = std::invoke_result_t<std::decay_t<F>>;
+        auto pt = std::make_shared<std::packaged_task<R()>>(std::forward<F>(f));
+        auto future = pt->get_future();
+        enqueue_work([pt = std::move(pt)]() { (*pt)(); });
+        return future;
+    }
+
+    /// Block until all enqueued tasks have completed.
+    void wait() {
+        int val = m_tasks_pending.load(std::memory_order_acquire);
+        while (val != 0) {
+            m_tasks_pending.wait(val, std::memory_order_acquire);
+            val = m_tasks_pending.load(std::memory_order_acquire);
+        }
+    }
+
+    unsigned get_thread_count() const noexcept { return m_count; }
+};
+
+// ---------------------------------------------------------------------------
+// Global thread budget
+//
+// set_num_threads() is the process-global execution budget. It is meant to be
+// called once at startup (or from a top-level Python script), NOT from deep
+// inside algorithms. Algorithms should never change it.
+// ---------------------------------------------------------------------------
+
+/// Returns the process-global thread pool (Meyers singleton, fixed address).
+/// Created lazily on first call, sized to hardware_concurrency().
+ThreadPool &thread_pool();
+
+/// Set the number of threads used for parallel work.
+/// n <= 1: single-threaded mode (all work runs inline, pool is never touched).
+/// n > 1: resize the pool to n threads.
+void set_num_threads(int n);
+
+/// Returns the current thread count setting. 1 = single-threaded mode.
+int get_num_threads();
+
+/// Fast check: returns true if the global pool should be used (num_threads > 1).
+inline bool use_thread_pool() { return get_num_threads() > 1; }
+
+/// Returns true if set_num_threads() is mid-reset. Best-effort safety net:
+/// dispatch helpers throw if this is true, catching the common misuse of
+/// calling set_num_threads() from another thread during active computation.
+bool pool_configuring();
+
+// ---------------------------------------------------------------------------
+// Safe parallel dispatch helpers
+//
+// These wrap ThreadPool's enqueue_work API with:
+//   1. Automatic inline fallback when use_thread_pool() is false or nparts <= 1
+//   2. Per-dispatch synchronization via std::latch (no global wait())
+//   3. Exception propagation — first exception from any task is rethrown
+//   4. Calling thread runs the last partition inline (stays productive)
+//
+// Per-dispatch latches make concurrent dispatches from separate threads
+// inherently safe — each dispatch waits only on its own latch.
+// ---------------------------------------------------------------------------
+
+/// Run func(start, stop) over [0, count) split into nparts blocks.
+/// Dispatches N-1 blocks to pool, runs last block inline, then waits.
+template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
+    if (count <= 0)
+        return;
+    nparts = std::min(nparts, count);
+    if (nparts > 1 && use_thread_pool()) {
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_blocks: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_blocks: dispatch during set_num_threads");
+        int pool_tasks = nparts - 1;
+        detail::DispatchContext ctx(pool_tasks);
+        int block_size = count / nparts;
+        int remainder = count % nparts;
+        int start = 0;
+        for (int p = 0; p < pool_tasks; ++p) {
+            int end = start + block_size + (p < remainder ? 1 : 0);
+            thread_pool().enqueue_work([&func, &ctx, start, end] {
+                try {
+                    func(start, end);
+                } catch (...) {
+                    ctx.store_exception();
+                }
+                ctx.done.count_down();
+            });
+            start = end;
+        }
+        // Run last block inline on calling thread
+        std::exception_ptr inline_ex;
+        try {
+            func(start, count);
+        } catch (...) {
+            inline_ex = std::current_exception();
+        }
+        ctx.done.wait(); // MUST complete before ctx destruction
+        ctx.rethrow_if_exception();
+        if (inline_ex)
+            std::rethrow_exception(inline_ex);
+    } else {
+        func(0, count);
+    }
+}
+
+/// Run func(i) for i in [0, n). Dispatches N-1 tasks to pool, runs last
+/// partition inline on calling thread, then waits.
+template <typename F> void parallel_sequence(int n, F &&func) {
+    if (n <= 0)
+        return;
+    if (n > 1 && use_thread_pool()) {
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_sequence: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_sequence: dispatch during set_num_threads");
+        int pool_tasks = n - 1;
+        detail::DispatchContext ctx(pool_tasks);
+        for (int i = 0; i < pool_tasks; ++i)
+            thread_pool().enqueue_work([&func, &ctx, i] {
+                try {
+                    func(i);
+                } catch (...) {
+                    ctx.store_exception();
+                }
+                ctx.done.count_down();
+            });
+        // Run last index inline on calling thread
+        std::exception_ptr inline_ex;
+        try {
+            func(n - 1);
+        } catch (...) {
+            inline_ex = std::current_exception();
+        }
+        ctx.done.wait();
+        ctx.rethrow_if_exception();
+        if (inline_ex)
+            std::rethrow_exception(inline_ex);
+    } else {
+        for (int i = 0; i < n; i++)
+            func(i);
+    }
+}
+
+/// Run pool_work concurrently with inline_work on the calling thread.
+/// Only dispatches when nparts > 1 AND the pool is active — when
+/// nparts == 1 (e.g. during Jet with NumPartitions=1), both run inline,
+/// avoiding deadlock from nested dispatch.
+template <typename FTask, typename FInline>
+void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
+    if (nparts > 1 && use_thread_pool()) {
+        if (detail::g_is_pool_worker)
+            throw std::logic_error("Tycho::parallel_task: nested dispatch from pool worker");
+        if (pool_configuring())
+            throw std::logic_error("Tycho::parallel_task: dispatch during set_num_threads");
+        detail::DispatchContext ctx(1);
+        thread_pool().enqueue_work([f = std::forward<FTask>(pool_work), &ctx] {
+            try {
+                f();
+            } catch (...) {
+                ctx.store_exception();
+            }
+            ctx.done.count_down();
+        });
+        std::exception_ptr inline_ex;
+        try {
+            inline_work();
+        } catch (...) {
+            inline_ex = std::current_exception();
+        }
+        // Exception priority: pool exception is rethrown first. If both arms
+        // throw (extremely unlikely — independent numerical failures), the
+        // inline exception is discarded. Both would indicate the same
+        // underlying issue; nested_exception adds complexity for no benefit.
+        ctx.done.wait();
+        ctx.rethrow_if_exception();
+        if (inline_ex)
+            std::rethrow_exception(inline_ex);
+    } else {
+        // Fallback: execute sequentially (pool_work first, then inline_work).
+        // In the parallel path above, execution order is unspecified.
+        pool_work();
+        inline_work();
+    }
+}
+
+} // namespace Tycho

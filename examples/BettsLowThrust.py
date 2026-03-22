@@ -532,7 +532,7 @@ if __name__ == "__main__":
     phase.addLUVarBound("ODEParams", 0, -50, 0)
     phase.addLowerVarBound("Back", 6, 0.05)
     phase.addValueObjective("Back", 6, -1.0)
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
     phase.optimizer.PrintLevel = 1
     phase.optimizer.set_EContol(1.0e-9)
     # phase.optimizer.set_QPOrderingMode("MTMETIS")

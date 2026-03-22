@@ -116,7 +116,7 @@ def navigate(A, B, vM=1, wF=uniformWind):
 
     # 2. Initialize phase
     phase = Zermelo(vM, wF).phase(tModes.LGL3)
-    phase.Threads = 10  # Equal to number of physical cores
+    phase.NumPartitions = 10
 
     phase.setTraj(trajG, nSeg)
 

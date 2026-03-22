@@ -47,7 +47,7 @@ if __name__ == "__main__":
     phase.optimizer.set_QPOrderingMode("MINDEG")
     phase.optimizer.PrintLevel = 4
     phase.PrintMeshInfo = False
-    phase.setThreads(1, 1)
+    phase.setNumPartitions(1, 1)
     phase.setAdaptiveMesh(True)
     phase.setMeshTol(1.0e-6)
     phase.setMaxMeshIters(10)

@@ -169,7 +169,7 @@ if __name__ == "__main__":
     # Enable autoscaling for ocp and all constituent phases
     ocp.setAutoScaling(True, True)
 
-    ocp.setThreads(8, 8)
+    ocp.setNumPartitions(8, 8)
     ocp.optimize()
 
     ##############################################################################

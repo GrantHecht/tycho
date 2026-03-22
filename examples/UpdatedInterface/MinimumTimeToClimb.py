@@ -211,7 +211,7 @@ if __name__ == "__main__":
     phase.addDeltaTimeObjective(1.0)
 
     phase.optimizer.PrintLevel = 1
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
     phase.setAdaptiveMesh(True)

@@ -93,7 +93,7 @@ if __name__ == "__main__":
     phase.optimizer.set_MaxLSIters(2)
 
     phase.optimizer.PrintLevel = 2
-    phase.setThreads(1, 1)
+    phase.setNumPartitions(1, 1)
 
     """
     For tf=10000.0 this problem is so sensitve that the static pivoting order 

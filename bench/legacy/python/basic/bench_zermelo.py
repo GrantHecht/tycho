@@ -47,7 +47,7 @@ def navigate(A, B, vM=1, wF=variableDirWind):
         np.array(list(A + d * x) + [t0 * x, ang]) for x in np.linspace(0, 1, num=nSeg)
     ]
     phase = Zermelo(vM, wF).phase(oc.TranscriptionModes.LGL3)
-    phase.Threads = 10
+    phase.NumPartitions = 10
     phase.setTraj(trajG, nSeg)
     phase.addBoundaryValue("Front", [0, 1], A)
     phase.addBoundaryValue("Front", [2], [0.0])

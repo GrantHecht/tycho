@@ -1,120 +1,120 @@
 {
-  "version": 3,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 21,
-    "patch": 0
-  },
-  "configurePresets": [
-    {
-      "name": "macos-llvm-release",
-      "displayName": "macOS LLVM Release",
-      "description": "Release build using Homebrew LLVM on this Mac, matching config_and_build.sh",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
-      "installDir": "${sourceDir}/build/install/${presetName}",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
-        "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
-      }
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
     },
-    {
-      "name": "linux-clang-release",
-      "displayName": "Linux Clang Release",
-      "description": "Release build using LLVM Clang 22 on Linux (Ubuntu/WSL2)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
-      "installDir": "${sourceDir}/build/install/${presetName}",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
-        "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-22"
-      }
-    },
-    {
-      "name": "x64-Clang-Release",
-      "displayName": "x64 Clang Release",
-      "description": "Release build using Clang compiler on Windows x64",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/out/install/${presetName}",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "TYCHO_FP_MODE": "SAFER_FAST",
-        "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
-        "CMAKE_C_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
-        "CMAKE_C_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
-        "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
-        "CMAKE_CXX_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
-        "CMAKE_CXX_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
-        "CMAKE_LINKER": "C:/Program Files/LLVM/bin/lld-link.exe"
-      },
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "toolset": {
-        "value": "host=x64",
-        "strategy": "external"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "macos-llvm-release",
-      "displayName": "macOS LLVM Release Build",
-      "configurePreset": "macos-llvm-release",
-      "nativeToolOptions": [
-        "-j2",
-        "-v"
-      ]
-    },
-    {
-      "name": "linux-clang-release",
-      "displayName": "Linux Clang Release Build",
-      "configurePreset": "linux-clang-release",
-      "nativeToolOptions": [
-        "-j8",
-        "-v"
-      ]
-    },
-    {
-      "name": "x64-Clang-Release",
-      "displayName": "x64 Clang Release Build",
-      "configurePreset": "x64-Clang-Release",
-      "nativeToolOptions": [
-        "-j4",
-        "-v"
-      ]
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "macos-llvm-release",
-      "displayName": "macOS LLVM Release Test",
-      "configurePreset": "macos-llvm-release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-clang-release",
-      "displayName": "Linux Clang Release Test",
-      "configurePreset": "linux-clang-release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "x64-Clang-Release",
-      "displayName": "x64 Clang Release Test",
-      "configurePreset": "x64-Clang-Release",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
-  ]
+    "configurePresets": [
+        {
+            "name": "macos-llvm-release",
+            "displayName": "macOS LLVM Release",
+            "description": "Release build using Homebrew LLVM on this Mac, matching config_and_build.sh",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "installDir": "${sourceDir}/build/install/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+                "TYCHO_FP_MODE": "SAFER_FAST",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
+            }
+        },
+        {
+            "name": "linux-clang-release",
+            "displayName": "Linux Clang Release",
+            "description": "Release build using LLVM Clang on Linux",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "installDir": "${sourceDir}/build/install/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+                "TYCHO_FP_MODE": "SAFER_FAST",
+                "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
+            }
+        },
+        {
+            "name": "x64-Clang-Release",
+            "displayName": "x64 Clang Release",
+            "description": "Release build using Clang compiler on Windows x64",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "TYCHO_FP_MODE": "SAFER_FAST",
+                "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
+                "CMAKE_C_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
+                "CMAKE_C_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
+                "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe",
+                "CMAKE_CXX_COMPILER_AR": "C:/Program Files/LLVM/bin/llvm-ar.exe",
+                "CMAKE_CXX_COMPILER_RANLIB": "C:/Program Files/LLVM/bin/llvm-ranlib.exe",
+                "CMAKE_LINKER": "C:/Program Files/LLVM/bin/lld-link.exe"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "macos-llvm-release",
+            "displayName": "macOS LLVM Release Build",
+            "configurePreset": "macos-llvm-release",
+            "nativeToolOptions": [
+                "-j2",
+                "-v"
+            ]
+        },
+        {
+            "name": "linux-clang-release",
+            "displayName": "Linux Clang Release Build",
+            "configurePreset": "linux-clang-release",
+            "nativeToolOptions": [
+                "-j6",
+                "-v"
+            ]
+        },
+        {
+            "name": "x64-Clang-Release",
+            "displayName": "x64 Clang Release Build",
+            "configurePreset": "x64-Clang-Release",
+            "nativeToolOptions": [
+                "-j6",
+                "-v"
+            ]
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "macos-llvm-release",
+            "displayName": "macOS LLVM Release Test",
+            "configurePreset": "macos-llvm-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "linux-clang-release",
+            "displayName": "Linux Clang Release Test",
+            "configurePreset": "linux-clang-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "x64-Clang-Release",
+            "displayName": "x64 Clang Release Test",
+            "configurePreset": "x64-Clang-Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
 }

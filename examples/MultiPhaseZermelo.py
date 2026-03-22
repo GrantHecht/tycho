@@ -131,7 +131,7 @@ def navigate(Points, vM=1, wF=uniformWind):
         B = Points[i + 1]
         phase = Zermelo(vM, wF).phase(tModes.LGL3)
 
-        phase.Threads = 8  # Equal to number of physical cores
+        phase.NumPartitions = 8
 
         phase.setTraj(trajG[i], nSeg)
 

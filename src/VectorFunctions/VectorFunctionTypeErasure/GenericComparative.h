@@ -45,7 +45,6 @@ template <int IR> struct GenericComparative {
     GenericComparative &operator=(const GenericComparative &) = default;
     GenericComparative &operator=(GenericComparative &&) noexcept = default;
 
-    std::string name() const { return storage.get().name(); }
     int IRows() const { return storage.get().IRows(); }
 
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {

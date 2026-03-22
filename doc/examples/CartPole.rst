@@ -134,7 +134,7 @@ and do not need any non-dimensionalization. Furthermore, it is sufficient to ini
     # Minimize the "control effort", the integral of square of applied force
     phase.addIntegralObjective(Args(1)[0]**2,[5])
     
-    phase.setThreads(8,8)
+    phase.setNumPartitions(8,8)
     phase.optimizer.set_PrintLevel(1)
     phase.optimize()
     
@@ -359,7 +359,7 @@ Full-Code
         # Minimize the "control effort", the integral of square of applied force
         phase.addIntegralObjective(Args(1)[0]**2,[5])
     
-        phase.setThreads(8,8)
+        phase.setNumPartitions(8,8)
         phase.optimizer.set_PrintLevel(1)
         phase.optimize()
     

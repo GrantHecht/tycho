@@ -54,7 +54,7 @@ struct OptimizationProblem : OptimizationProblemBase {
     std::vector<FuncIndexHolder<ConstraintInterface>> userInequalities;
     std::vector<FuncIndexHolder<ObjectiveInterface>> userObjectives;
 
-    OptimizationProblem() { this->setThreads(1, 1); }
+    OptimizationProblem() { this->setNumPartitions(1, 1); }
     virtual ~OptimizationProblem() = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -135,13 +135,13 @@ struct OptimizationProblem : OptimizationProblemBase {
     void transcribe();
 
     void jet_initialize() {
-        this->setThreads(1, 1);
+        this->setNumPartitions(1, 1);
         this->optimizer->PrintLevel = 10;
         this->transcribe();
     }
     void jet_release() {
         this->optimizer->release();
-        this->setThreads(1, 1);
+        this->setNumPartitions(1, 1);
         this->optimizer->PrintLevel = 0;
         this->nlp = std::shared_ptr<NonLinearProgram>();
         this->resetTranscription();

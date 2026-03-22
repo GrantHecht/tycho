@@ -29,7 +29,7 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
     steps = 1000
     trajGuess = odeItg.integrate_dense(ig, tf, steps)
     odePhase = ode.phase("LGL3")
-    odePhase.Threads = 8
+    odePhase.NumPartitions = 8
     nSeg = 150
     odePhase.setTraj(trajGuess, nSeg)
     for idx in fixInit:

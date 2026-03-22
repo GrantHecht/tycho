@@ -97,7 +97,7 @@ cols = sns.color_palette("plasma", len(Ls))
 
 JArgs = [(a, b, n, L) for L in Ls]
 
-Res = solvs.Jet.map(Job, JArgs, 16, True)
+Res = solvs.Jet.map(Job, JArgs, True)
 
 for i, res in enumerate(Res):
     Traj = res.returnTraj()

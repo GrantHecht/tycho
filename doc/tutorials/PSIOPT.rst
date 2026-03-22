@@ -259,27 +259,27 @@ use the flags in your code, it is recommended to compare flags to their enumerat
        constraints or gradient
      - 3
 
-Threading
----------
+Parallelism
+-----------
 
-By default, PSIOPT will set the number of threads used to parallelize function evaluations to be equal to the number of hardware threads
-on your machine up to a maximum of 16. So if your computer has 10 cores and 20 threads (ex: i9-10900k), only 16 threads will be used for function evaluations by default.
+By default, PSIOPT partitions function evaluations into 4x the global thread count
+(set via :code:`tycho.Utils.set_num_threads(n)`, defaulting to hardware concurrency).
+Small problems are automatically capped to fewer partitions based on problem size.
 Likewise by default, PSIOPT will set the number of threads used to factor KKT matrices to be equal to the number of physical cores on your machine up to a maximum of 8.
-So, if your computer has 10 cores and 20 threads, only 8 threads will be used for matrix factorization by default. Based on experience, this an appropriate
-threading allocation to solve single problems as fast as possible on most desktop machines. In our experience KKT matrix factorization does not scale beyond
-8 threads on most problems. Furthermore, applying too many threads to function evaluations on small to medium sized problems can actually degrade performance.
-However, you can manually set the thread count by using the :code:`.setThreads` member function of a :code:`phase` or :code:`OptimalControlProblem`. If speed is of concern we recommend you play around with
-these parameters to find the best option. However, we should note that if you are trying to maximize throughput by running ASSET in multiple processes simultaneously on your desktop or on a server, 
-you should almost always set the optimizer to run-serially to prevent over-subscription of the CPU.
+Based on experience, this is an appropriate allocation to solve single problems as fast as possible on most desktop machines. In our experience KKT matrix factorization does not scale beyond
+8 threads on most problems.
+You can manually set the partition count by using the :code:`.setNumPartitions` member function of a :code:`phase` or :code:`OptimalControlProblem`. If speed is of concern we recommend you play around with
+these parameters to find the best option. However, we should note that if you are trying to maximize throughput by running Tycho in multiple processes simultaneously on your desktop or on a server,
+you should almost always set the optimizer to run serially to prevent over-subscription of the CPU.
 
 .. code-block:: python
 
-    phase.setThreads(1,1)  # force to run serially on a single thread only
+    phase.setNumPartitions(1, 1)  # force to run serially on a single thread only
     phase.solve_optimize()
-    
 
-    ocp.setThreads(FuncThreads = 20 ,KKTThreads=20) # Use more than default number of threads
-    ocp.Phase(0).setThreads(20,20)  #not necessary, will be overridden by the settings of the ocp
+
+    ocp.setNumPartitions(NumPartitions=20, QPThreads=20) # Use more than default
+    ocp.Phase(0).setNumPartitions(20, 20)  # not necessary, will be overridden by the ocp
     ocp.optimize()
 
     
@@ -345,9 +345,9 @@ In addition to calling PSIOPT to solve or optimize a single problem at a time, w
 the :code:`Jet` tool. This can allow you to more efficiently tackle throughput oriented workloads from within a single python process,
 without having to resort to multiprocessing libraries. There are two ways to do this. In the first method, demonstrated below, we construct a python list 
 of fully configured phases or optimal control problems (or both) as we normally would, but rather than running solve or optimize on each individually, we specify the algorithm we would like Jet to invoke
-using :code:`.setJetJobMode("")`. These options correspond to the methods we have already covered. Having set the job mode, we add the objects a list and then pass the list to the :code:`Jet.map()` function along with 
-the number of threads we want to use, and a bool specifying whether we want to print the console scroll. It is not necessary to set the number of threads for
-each phase or optimal control problem, Jet will take care of optimally allocating the number of threads for each problem.
+using :code:`.setJetJobMode("")`. These options correspond to the methods we have already covered. Having set the job mode, we add the objects a list and then pass the list to the :code:`Jet.map()` function along with
+a bool specifying whether we want to print the console scroll. Parallelism is controlled by the global :code:`tycho.Utils.set_num_threads(n)` setting.
+It is not necessary to set the number of threads for each phase or optimal control problem, Jet will take care of optimally allocating work for each problem.
 After solving all the problems, the function returns the list of phases/optimal control problems. We can then access
 each element of the returned list to get the solved trajectories as we normally would. You can get the convergence flag of each problem by using the :code:`get_ConvergenceFlag()` method of the optimizer instance
 attached to each problem.
@@ -368,7 +368,7 @@ attached to each problem.
         #.
         #.
 
-        ocp.setThreads(1,1)  # Not necessary, Jet will take care of this
+        ocp.setNumPartitions(1,1)  # Not necessary, Jet will take care of this
 
         ### SET the JetJobMode !!! #####
         ocp.setJetJobMode("optimize")
@@ -387,11 +387,9 @@ attached to each problem.
         ocps.append(ocp)
 
 
-    Nthreads = 8   # Set to number of cores on machine for best performance
-
     PrintConsole = True
 
-    ocps = solvers.Jet.map(ocps,Nthreads,PrintConsole)
+    ocps = solvers.Jet.map(ocps, PrintConsole)
 
     ### Access the solved phases/ocps
     ocps[0].Phase(0).returnTraj()
@@ -433,7 +431,7 @@ and expensive preprocessing that cannot be parallelized.
         #.
         #.
 
-        ocp.setThreads(1,1)  # Not necessary, Jet will take care of this
+        ocp.setNumPartitions(1,1)  # Not necessary, Jet will take care of this
 
         ### SET the JetJobMode !!! #####
         ocp.setJetJobMode("optimize")
@@ -443,11 +441,9 @@ and expensive preprocessing that cannot be parallelized.
     
 
 
-    Nthreads = 8   # Set to number of cores on machine for best performance
-
     PrintConsole = True
 
-    ocps = solvers.Jet.map(ProblemGenerator,ProblemArgs,Nthreads,PrintConsole)
+    ocps = solvers.Jet.map(ProblemGenerator, ProblemArgs, PrintConsole)
 
     ### Access the solved phases/ocps
     ocps[0].Phase(0).returnTraj()

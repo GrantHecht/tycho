@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
     phase.setAdaptiveMesh(True)
     phase.optimizer.PrintLevel = 1
-    phase.setThreads(8, 8)
+    phase.setNumPartitions(8, 8)
     phase.setMeshTol(1.0e-7)
     phase.optimize()
 

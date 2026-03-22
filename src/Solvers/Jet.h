@@ -11,10 +11,15 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 / pybind11 header references removed
+//   - Thread pool replaced with global Tycho::thread_pool() singleton
+//   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
 // =============================================================================
 
 #pragma once
 #include "OptimizationProblemBase.h"
+#include "Utils/ThreadPool.h"
+#include "Utils/Timer.h"
+#include "Utils/fmtlib.h"
 #ifdef USE_ACCELERATE_SPARSE
 #include "AccelerateUtils.h"
 #else
@@ -24,8 +29,9 @@
 namespace Tycho {
 
 namespace detail {
-template <class T, class Genfunc, class Arg> struct JetInvoker {
-    static inline std::shared_ptr<T> invoke(const Genfunc &f, const Arg &a) { return f(a); }
+
+template <class T, class GenFunc, class Args> struct JetInvoker {
+    static std::shared_ptr<T> invoke(const GenFunc &gf, const Args &args) { return gf(args); }
 };
 } // namespace detail
 
@@ -110,7 +116,7 @@ struct Jet {
     template <class T, class Args1, class Args2>
     static std::vector<std::shared_ptr<T>>
     map(const std::vector<std::function<std::shared_ptr<T>(Args1)>> &genfuncs,
-        const std::vector<Args2> &args, const Eigen::VectorXi &genfidxes, int nt, bool verbose) {
+        const std::vector<Args2> &args, const Eigen::VectorXi &genfidxes, bool verbose) {
 
 #ifdef USE_ACCELERATE_SPARSE
         accelerate_set_num_threads(1);
@@ -122,12 +128,10 @@ struct Jet {
         int NumNoConv = 0;
         int NumDiv = 0;
 
-        std::vector<std::future<PSIOPT::ConvergenceFlags>> results(NumJobs);
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        ctpl::ThreadPool pool(nt);
         Utils::Timer t;
 
-        auto Job = [&](int threadid, int i) {
+        auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
             // Per-thread single-threaded mode (uses BLASSetThreading on
             // macOS 15+, env var fallback on older systems)
@@ -148,24 +152,68 @@ struct Jet {
             print_beginning();
         t.start();
 
-        for (int i = 0; i < NumJobs; i++) {
-            results[i] = pool.push(Job, i);
-        }
-
-        for (int i = 0; i < NumJobs; i++) {
-            auto flag = results[i].get();
-            if (verbose) {
-                if (flag == PSIOPT::ConvergenceFlags::CONVERGED)
-                    NumConv++;
-                if (flag == PSIOPT::ConvergenceFlags::ACCEPTABLE)
-                    NumAcc++;
-                if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED)
-                    NumNoConv++;
-                if (flag == PSIOPT::ConvergenceFlags::DIVERGING)
-                    NumDiv++;
-                double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
-                print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+        auto track = [&](PSIOPT::ConvergenceFlags flag, int i) {
+            if (!verbose)
+                return;
+            switch (flag) {
+            case PSIOPT::ConvergenceFlags::CONVERGED:
+                NumConv++;
+                break;
+            case PSIOPT::ConvergenceFlags::ACCEPTABLE:
+                NumAcc++;
+                break;
+            case PSIOPT::ConvergenceFlags::NOTCONVERGED:
+                NumNoConv++;
+                break;
+            case PSIOPT::ConvergenceFlags::DIVERGING:
+                NumDiv++;
+                break;
             }
+            double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
+            print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
+        };
+
+        if (Tycho::use_thread_pool()) {
+            std::vector<std::future<PSIOPT::ConvergenceFlags>> results;
+            results.reserve(NumJobs);
+            for (int i = 0; i < NumJobs; i++)
+                results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
+            // track() mutates local counters — must be called sequentially.
+            // If .get() throws, drain remaining futures before rethrowing to
+            // prevent use-after-free of stack-captured references (&Job, etc.).
+            std::exception_ptr ex;
+            for (int i = 0; i < NumJobs; i++) {
+                try {
+                    track(results[i].get(), i);
+                } catch (...) {
+                    if (!ex)
+                        ex = std::current_exception();
+                    int suppressed = 0;
+                    for (int j = i + 1; j < NumJobs; j++) {
+                        try {
+                            results[j].get();
+                        } catch (const std::exception &e) {
+                            if (suppressed == 0)
+                                fmt::print(stderr,
+                                           "[Tycho] Jet::map: additional job also failed: {}\n",
+                                           e.what());
+                            ++suppressed;
+                        } catch (...) {
+                            ++suppressed;
+                        }
+                    }
+                    if (suppressed > 1)
+                        fmt::print(stderr,
+                                   "[Tycho] Jet::map: {} additional exceptions suppressed\n",
+                                   suppressed - 1);
+                    break;
+                }
+            }
+            if (ex)
+                std::rethrow_exception(ex);
+        } else {
+            for (int i = 0; i < NumJobs; i++)
+                track(Job(i), i);
         }
         if (verbose)
             print_finished();
@@ -174,8 +222,7 @@ struct Jet {
 
     template <class T, class Args1, class Args2>
     static std::vector<std::shared_ptr<T>> map(std::function<std::shared_ptr<T>(Args1)> genfunc,
-                                               const std::vector<Args2> &args, int nt,
-                                               bool verbose) {
+                                               const std::vector<Args2> &args, bool verbose) {
 
         std::vector<std::function<std::shared_ptr<T>(Args1)>> genfuncs;
         genfuncs.push_back(genfunc);
@@ -183,17 +230,17 @@ struct Jet {
 
         genfidxes.setConstant(0);
 
-        return Jet::map(genfuncs, args, genfidxes, nt, verbose);
+        return Jet::map(genfuncs, args, genfidxes, verbose);
     }
 
     template <class T>
     static std::vector<std::shared_ptr<T>> map(const std::vector<std::shared_ptr<T>> &optprobs,
-                                               int nt, bool verbose) {
+                                               bool verbose) {
 
         std::function<std::shared_ptr<T>(std::shared_ptr<T>)> genfunc =
             [](std::shared_ptr<T> optprob) { return optprob; };
 
-        return Jet::map(genfunc, optprobs, nt, verbose);
+        return Jet::map(genfunc, optprobs, verbose);
     }
     ////////////////////////////////////////////////////////////////////////////////////
 };

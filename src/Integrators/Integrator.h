@@ -76,19 +76,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ControllerType controller;
     StepperWrapperType stepper;
     RKOptions RKMethod = RKOptions::DOPRI54;
-    std::shared_ptr<ctpl::ThreadPool> pool;
-
-    void setPoolThreads(int thrs) {
-        if (this->pool->size() < thrs) {
-            this->pool->resize(thrs);
-        }
-    }
 
   public:
-    Integrator() {
-        this->EnableVectorization = true;
-        this->pool = std::make_shared<ctpl::ThreadPool>();
-    }
+    Integrator() { this->EnableVectorization = true; }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
         // Use in_place_type to sidestep MSVC variant overload-resolution
@@ -1682,7 +1672,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                 const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                 const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1693,36 +1683,28 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate(x0s[i], tfs[i], args...);
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
-        }
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<IntegRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
-                                             const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_parallel_impl(x0s, tfs, thrs);
+                                             const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<IntegEventRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                                   const Eigen::VectorXd &tfs,
-                                                  const std::vector<EventPack> &events, int thrs) {
-        return this->integrate_parallel_impl(x0s, tfs, thrs, events);
+                                                  const std::vector<EventPack> &events,
+                                                  int n_parts) {
+        return this->integrate_parallel_impl(x0s, tfs, n_parts, events);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1851,7 +1833,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_dense_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                       const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                       const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1862,44 +1844,35 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_dense(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_dense(x0s[i], tfs[i], args...);
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
-        }
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
-                                                   const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, thrs);
+                                                   const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<EventPack> &events,
-                                                        int thrs) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, thrs, events, false);
+                                                        int n_parts) {
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, events, false);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
     template <class... Args>
     auto integrate_dense_parallel_impl_n(const std::vector<ODEState<double>> &x0s,
                                          const Eigen::VectorXd &tfs, const std::vector<int> &ns,
-                                         int thrs, Args &&...args)
+                                         int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], ns[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1914,25 +1887,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_dense(x0s[0], tfs[0], ns[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_dense(x0s[i], tfs[i], ns[i], args...);
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
-        }
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -1940,13 +1904,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<int> &ns,
                                                         const std::vector<EventPack> &events,
-                                                        int thrs) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, thrs, events);
+                                                        int n_parts) {
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, events);
     }
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs,
-                                                   const std::vector<int> &ns, int thrs) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, thrs);
+                                                   const std::vector<int> &ns, int n_parts) {
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1964,7 +1928,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_stm_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                     const Eigen::VectorXd &tfs, int thrs, Args &&...args)
+                                     const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_stm(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1975,67 +1939,111 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using SingleRetType = decltype(Integrator::integrate_stm(x0s[0], tfs[0], args...));
         using RetType = std::vector<SingleRetType>;
 
-        this->setPoolThreads(thrs);
         int n = x0s.size();
         RetType results(n);
-        std::vector<std::future<void>> futures(thrs);
 
-        auto job = [&](int id, int start, int stop) {
+        auto job = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 results[i] = this->integrate_stm(x0s[i], tfs[i], args...);
             }
         };
 
-        for (int i = 0; i < thrs; i++) {
-            int start = (i * n) / thrs;
-            int stop = ((i + 1) * n) / thrs;
-            futures[i] = this->pool->push(job, start, stop);
-        }
-        for (int i = 0; i < thrs; i++) {
-            futures[i].get();
-        }
+        Tycho::parallel_blocks(n, job, n_parts);
         return results;
     }
 
     std::vector<STMRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
-                                               const Eigen::VectorXd &tfs, int thrs) {
-        return this->integrate_stm_parallel_impl(x0s, tfs, thrs);
+                                               const Eigen::VectorXd &tfs, int n_parts) {
+        return this->integrate_stm_parallel_impl(x0s, tfs, n_parts);
     }
     std::vector<STMEventRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
                                                     const Eigen::VectorXd &tfs,
                                                     const std::vector<EventPack> &events,
-                                                    int thrs) {
-        return this->integrate_stm_parallel_impl(x0s, tfs, thrs, events);
+                                                    int n_parts) {
+        return this->integrate_stm_parallel_impl(x0s, tfs, n_parts, events);
     }
 
-    STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int thrs) {
-        this->setPoolThreads(thrs);
-
-        VectorX<double> ts = VectorX<double>::LinSpaced(thrs + 1, x0[this->ode.TVar()], tf);
-        std::vector<ODEState<double>> Xs(thrs + 1);
+    STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
+        VectorX<double> ts = VectorX<double>::LinSpaced(n_parts + 1, x0[this->ode.TVar()], tf);
+        std::vector<ODEState<double>> Xs(n_parts + 1);
         Xs[0] = x0;
 
-        std::vector<std::future<STMRet>> results(thrs);
+        std::vector<std::future<STMRet>> results(n_parts);
 
         Eigen::MatrixXd jxall(this->IRows(), this->IRows());
         jxall.setIdentity();
 
-        auto stm_op = [&](int id, int i) {
+        auto stm_op = [&](int i) {
             auto xi = Xs[i];
             auto tf1 = ts[i + 1];
             return this->integrate_stm(xi, tf1);
         };
 
-        for (int i = 0; i < thrs; i++) {
-            results[i] = this->pool->push(stm_op, i);
-            if (i < (thrs - 1))
-                Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
-        }
-        for (int i = 0; i < thrs; i++) {
-            auto [xf, jx] = results[i].get();
-            jxall.topRows(this->ORows()) = (jx * jxall).eval();
-            if (i == (thrs - 1))
-                Xs[i + 1] = xf;
+        if (n_parts > 1 && Tycho::use_thread_pool()) {
+            int submitted = 0;
+            try {
+                for (int i = 0; i < n_parts; i++) {
+                    results[i] =
+                        Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
+                    submitted = i + 1;
+                    if (i < (n_parts - 1))
+                        Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+                }
+            } catch (...) {
+                // If integrate() throws mid-loop, drain submitted futures to
+                // prevent use-after-free of stack-captured references (&stm_op).
+                auto ex = std::current_exception();
+                for (int j = 0; j < submitted; j++) {
+                    try {
+                        results[j].get();
+                    } catch (...) {
+                    }
+                }
+                std::rethrow_exception(ex);
+            }
+            // If .get() throws, drain remaining futures before rethrowing to
+            // prevent use-after-free of stack-captured references (&stm_op, etc.).
+            std::exception_ptr ex;
+            for (int i = 0; i < n_parts; i++) {
+                try {
+                    auto [xf, jx] = results[i].get();
+                    jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                    if (i == (n_parts - 1))
+                        Xs[i + 1] = xf;
+                } catch (...) {
+                    if (!ex)
+                        ex = std::current_exception();
+                    int suppressed = 0;
+                    for (int j = i + 1; j < n_parts; j++) {
+                        try {
+                            results[j].get();
+                        } catch (const std::exception &e) {
+                            if (suppressed == 0)
+                                std::fprintf(stderr,
+                                             "[Tycho] integrate_stm_parallel: additional segment "
+                                             "also failed: %s\n",
+                                             e.what());
+                            ++suppressed;
+                        } catch (...) {
+                            ++suppressed;
+                        }
+                    }
+                    if (suppressed > 1)
+                        std::fprintf(stderr,
+                                     "[Tycho] integrate_stm_parallel: %d additional exceptions "
+                                     "suppressed\n",
+                                     suppressed - 1);
+                    break;
+                }
+            }
+            if (ex)
+                std::rethrow_exception(ex);
+        } else {
+            for (int i = 0; i < n_parts; i++) {
+                auto [xf, jx] = stm_op(i);
+                jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                Xs[i + 1] = (i < n_parts - 1) ? this->integrate(Xs[i], ts[i + 1]) : xf;
+            }
         }
 
         STMRet tup_final;

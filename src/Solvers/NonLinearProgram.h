@@ -9,7 +9,7 @@
 // This file defines the default composite non-linear program class
 // for interfacing with PSIOPT. This class is responsible for combining many different
 // dense or sparse objective or constraints into a single optimization problem and
-// manages all memory allocation, sparsity pattern computuation, mult-threading, and function
+// manages all memory allocation, sparsity pattern computation, work partitioning, and function
 // evaluation.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
@@ -31,53 +31,53 @@ struct NonLinearProgram {
     using VectorXd = Eigen::VectorXd;
     using MatrixXi = Eigen::MatrixXi;
 
-    ctpl::ThreadPool TP; /// Active Threadpool for multithreaded function evaluation
-    int Threads = 1;
+    int NumPartitions = 1;
 
     /// <summary>
-    /// Master List of Objective functions that will be partitioned onto different threads (ThrObj)
+    /// Master List of Objective functions that will be partitioned across work partitions (PartObj)
     /// </summary>
     std::vector<ObjectiveFunction> Objectives;
 
     /// <summary>
-    /// Master List of Equality Constraint functions that will be partitioned onto different threads
-    /// (ThrEq)
+    /// Master List of Equality Constraint functions that will be partitioned across work partitions
+    /// (PartEq)
     /// </summary>
     std::vector<ConstraintFunction> EqualityConstraints;
 
     /// <summary>
-    /// Master List of Inequality Constraint functions that will be partitioned onto different
-    /// threads (ThrIq)
+    /// Master List of Inequality Constraint functions that will be partitioned across work
+    /// partitions (PartIq)
     /// </summary>
     std::vector<ConstraintFunction> InequalityConstraints;
 
     /// <summary>
     /// Vector with each element being the list of ObjectiveFunctions
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ObjectiveFunction>> ThrObj;
+    std::vector<std::vector<ObjectiveFunction>> PartObj;
 
     /// <summary>
     /// Vector with each element being the list of EqualityConstraints
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ConstraintFunction>> ThrEq;
+    std::vector<std::vector<ConstraintFunction>> PartEq;
 
     /// <summary>
     /// Vector with each element being the list of InequalityConstraints
-    /// that will be called on the corresponding thread.
+    /// assigned to the corresponding partition.
     /// </summary>
-    std::vector<std::vector<ConstraintFunction>> ThrIq;
+    std::vector<std::vector<ConstraintFunction>> PartIq;
 
-    int PrimalVars = 0;  // Number of deisgn variables
+    int PrimalVars = 0;  // Number of design variables
     int SlackVars = 0;   // Number of slack variables appended to problem. One for every inequalcon
     int EqualCons = 0;   // Number of equality constraints,
     int InequalCons = 0; // Number of inequality constraints
-    int KKTdim = 0;      // Edge dimension of KKT matrix: = PrimalVars+ EqualCons + 2*InequalCons
+    int KKTdim =
+        0; // Edge dimension of KKT matrix: = PrimalVars + SlackVars + EqualCons + InequalCons
 
     VectorXi KKTcoeffRows; // matched row indices
     VectorXi KKTcoeffCols; // matched col indices
-    VectorXi KKTcoeffThrIds;
+    VectorXi KKTcoeffPartIds;
     VectorXi KKTLocations;
 
     int numUserKKTElems = 0;
@@ -114,20 +114,14 @@ struct NonLinearProgram {
     int AGXDataStart = 0;
     int EConDataStart = 0;
     int IConDataStart = 0;
-    int ZThreads = 1;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    NonLinearProgram(int FunThr) {
-        this->Threads = std::max(FunThr, 1);
-        this->ZThreads = this->Threads;
-        this->TP.resize(this->Threads + 2);
-    }
+    NonLinearProgram(int NumParts) { this->NumPartitions = std::max(NumParts, 1); }
     NonLinearProgram(int PV, int EQ, int IQ, std::vector<ObjectiveFunction> &obj,
                      std::vector<ConstraintFunction> &eq, std::vector<ConstraintFunction> &ineq,
-                     int FunThr) {
-        this->Threads = std::max(FunThr, 1);
-        this->TP.resize(this->Threads + 2);
+                     int NumParts) {
+        this->NumPartitions = std::max(NumParts, 1);
 
         this->Objectives = obj;
         this->EqualityConstraints = eq;
@@ -138,31 +132,30 @@ struct NonLinearProgram {
     void make_NLP(int PV, int EQ, int IQ);
 
     void print_data() {
-        for (int i = 0; i < this->Threads; i++) {
-            std::cout << "Thread: " << i << std::endl << std::endl;
+        for (int i = 0; i < this->NumPartitions; i++) {
+            std::cout << "Partition: " << i << std::endl << std::endl;
             std::cout << "---------------Objectives---------------" << std::endl << std::endl;
 
-            for (auto &obj : this->ThrObj[i]) {
+            for (auto &obj : this->PartObj[i]) {
                 obj.print_data();
             }
 
             std::cout << "---------------Equalities---------------" << std::endl << std::endl;
 
-            for (auto &eq : this->ThrEq[i]) {
+            for (auto &eq : this->PartEq[i]) {
                 eq.print_data();
             }
             std::cout << "--------------Inequalities--------------" << std::endl << std::endl;
 
-            for (auto &ineq : this->ThrIq[i]) {
+            for (auto &ineq : this->PartIq[i]) {
                 ineq.print_data();
-                // std::cout<<ineq.index_data.InnerKKTStarts()
             }
         }
     }
 
     void countElems();
 
-    void analyzeThreading();
+    void analyzePartitioning();
 
     void getMATSpace();
 
@@ -176,7 +169,7 @@ struct NonLinearProgram {
 
     void analyzeSparsity(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void make_compressed() {
-        this->KKTcoeffThrIds.resize(0);
+        this->KKTcoeffPartIds.resize(0);
         this->KKTcoeffRows.resize(0);
         this->KKTcoeffCols.resize(0);
     }
@@ -249,56 +242,14 @@ struct NonLinearProgram {
     void setSlacksOnes() { this->SlackCoeffs().setConstant(1.0); }
 
     void fillSolverCoeffs(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
-        auto FillOp = [&](int id, int start, int stop) {
+        auto FillOp = [&](int start, int stop) {
             for (int i = start; i < stop; i++) {
                 mat.valuePtr()[this->KKTLocations.tail(this->numSolverKKTElems)[i]] +=
                     this->SolverCoeffs[i];
             }
         };
 
-        int th = this->ZThreads;
-        std::vector<std::future<void>> results(th - 1);
-        for (int i = 0; i < th; i++) {
-            int start = (i * this->numSolverKKTElems) / (th);
-            int stop = ((i + 1) * this->numSolverKKTElems) / (th);
-            if (i == (th - 1)) {
-                FillOp(0, start, stop);
-            } else {
-                results[i] = this->TP.push(FillOp, start, stop);
-            }
-        }
-        for (int i = 0; i < (th - 1); i++) {
-            results[i].get();
-        }
-
-        // for (int i = 0; i < this->numSolverKKTElems; i++) {
-        //   mat.valuePtr()[this->KKTLocations.tail(this->numSolverKKTElems)[i]] +=
-        //       this->SolverCoeffs[i];
-        // }
-    }
-
-    void setMatrixZero(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat, int thr) {
-        auto ZOp = [&](int id, int start, int size) {
-            double *pt = mat.valuePtr() + start;
-            std::fill_n(pt, size, 0.0);
-        };
-
-        int th = thr;
-        std::vector<std::future<void>> results(th - 1);
-        int n = mat.nonZeros();
-        for (int i = 0; i < th; i++) {
-            int start = (i * n) / (th);
-            int stop = ((i + 1) * n) / (th);
-            int elems = stop - start;
-            if (i == (th - 1)) {
-                ZOp(0, start, elems);
-            } else {
-                results[i] = this->TP.push(ZOp, start, elems);
-            }
-        }
-        for (int i = 0; i < (th - 1); i++) {
-            results[i].get();
-        }
+        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumPartitions);
     }
 
     void assignKKTSlackHessian(const Eigen::Ref<const Eigen::VectorXd> &slhs,

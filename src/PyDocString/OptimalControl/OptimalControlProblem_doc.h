@@ -223,7 +223,5 @@ const char *const OptimalControlProblem_Phases =
 const char *const OptimalControlProblem_optimizer =
     "PSIOPT: An optimizer instance attached to the OCP.";
 
-const char *const OptimalControlProblem_Threads = "int: Number of threads to use for this OCP.";
-
 } // namespace doc
 } // namespace Tycho

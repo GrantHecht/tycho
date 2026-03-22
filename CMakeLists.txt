@@ -289,7 +289,6 @@ add_definitions(-DEIGEN_DONT_PARALLELIZE) ##NEVER EVER GET RID OF THIS EVER
 
 
 add_definitions(-DTYCHO_DEFAULT_QP_THREADS=8) ## no spaces between = !!!! otherwise it is set to one
-add_definitions(-DTYCHO_DEFAULT_FUNC_THREADS=16) ## no spaces between = !!!! otherwise it is set to one
 
 ###  initial size of asset arena memory allocator in number of doubles/superscalars
 add_definitions(-DTYCHO_DEFAULT_ARENA_SIZE=256) ## no spaces between = !!!! otherwise it is set to one
@@ -325,9 +324,12 @@ include_directories(dep/eigen)
 include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
 
+# fmt is used by core libraries (utils) so it must always be available.
+add_subdirectory(dep/fmt)
+
 if(ENABLE_PYTHON_BINDINGS)
     find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
-    add_subdirectory(dep)
+    add_subdirectory(dep/nanobind)
 endif()
 
 # Set up external dependencies

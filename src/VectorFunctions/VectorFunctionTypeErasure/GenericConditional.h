@@ -40,7 +40,6 @@ template <int IR> struct GenericConditional {
     GenericConditional &operator=(const GenericConditional &) = default;
     GenericConditional &operator=(GenericConditional &&) noexcept = default;
 
-    std::string name() const { return storage.get().name(); }
     int IRows() const { return storage.get().IRows(); }
 
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
