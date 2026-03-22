@@ -381,6 +381,8 @@ class ThreadPool {
     /// prevent concurrent dispatch (best-effort TOCTOU guard).
     /// This is a configuration API, not a hot-path operation.
     void reset(unsigned n) {
+        if (n == 0)
+            throw std::invalid_argument("ThreadPool: thread count must be > 0");
         wait(); // drain pending tasks (one atomic load when idle)
         for (auto &q : m_queues)
             q.done();

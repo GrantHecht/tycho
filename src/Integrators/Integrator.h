@@ -2016,7 +2016,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         std::fprintf(stderr,
                                      "[Tycho] integrate_stm_parallel: %d additional exceptions "
                                      "suppressed\n",
-                                     suppressed);
+                                     suppressed - 1);
                     break;
                 }
             }

@@ -205,7 +205,7 @@ struct Jet {
                     if (suppressed > 1)
                         fmt::print(stderr,
                                    "[Tycho] Jet::map: {} additional exceptions suppressed\n",
-                                   suppressed);
+                                   suppressed - 1);
                     break;
                 }
             }

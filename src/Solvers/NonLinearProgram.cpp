@@ -118,11 +118,11 @@ void Tycho::NonLinearProgram::analyzeThreading() {
 
 void Tycho::NonLinearProgram::getMATSpace() {
     /*
-     * Loops over all constraints and objectives on each thread and has each claim its
-     * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with thread that will be
-     * operating on it then from this info and calculates which columns/rows of the KKT matrix need
-     * to be locked when multiple threads are scattering into KKT matrix. Allocates KKTLocks mutexs
-     * based on this info.
+     * Loops over all constraints and objectives on each partition and has each claim its
+     * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with the partition that will be
+     * operating on it, then from this info calculates which columns/rows of the KKT matrix need
+     * to be locked when multiple partitions are scattering into the KKT matrix. Allocates KKTLocks
+     * mutexes based on this info.
      */
 
     int KKTfreeloc = 0;
