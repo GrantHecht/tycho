@@ -262,10 +262,12 @@ use the flags in your code, it is recommended to compare flags to their enumerat
 Parallelism
 -----------
 
-By default, PSIOPT will partition function evaluations across up to 16 work partitions (or the number of hardware threads, whichever is smaller).
+By default, PSIOPT partitions function evaluations into 4x the global thread count
+(set via :code:`tycho.Utils.set_num_threads(n)`, defaulting to hardware concurrency).
+Small problems are automatically capped to fewer partitions based on problem size.
 Likewise by default, PSIOPT will set the number of threads used to factor KKT matrices to be equal to the number of physical cores on your machine up to a maximum of 8.
 Based on experience, this is an appropriate allocation to solve single problems as fast as possible on most desktop machines. In our experience KKT matrix factorization does not scale beyond
-8 threads on most problems. Furthermore, applying too many partitions to function evaluations on small to medium sized problems can actually degrade performance.
+8 threads on most problems.
 You can manually set the partition count by using the :code:`.setNumPartitions` member function of a :code:`phase` or :code:`OptimalControlProblem`. If speed is of concern we recommend you play around with
 these parameters to find the best option. However, we should note that if you are trying to maximize throughput by running Tycho in multiple processes simultaneously on your desktop or on a server,
 you should almost always set the optimizer to run serially to prevent over-subscription of the CPU.

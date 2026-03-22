@@ -15,6 +15,14 @@
 
 using TychoTest::ScopedThreadCount;
 
+/// Test-only accessor for ThreadPool::reset() (now private).
+namespace Tycho {
+struct ThreadPoolTestAccess {
+    static void reset(ThreadPool &pool, unsigned n) { pool.reset(n); }
+};
+} // namespace Tycho
+using Tycho::ThreadPoolTestAccess;
+
 TEST(ThreadPoolTest, ConstructDefault) {
     Tycho::ThreadPool pool;
     EXPECT_GT(pool.get_thread_count(), 0u);
@@ -46,9 +54,9 @@ TEST(ThreadPoolTest, SubmitMultipleTasks) {
 
 TEST(ThreadPoolTest, Reset) {
     Tycho::ThreadPool pool(2);
-    pool.reset(6);
+    ThreadPoolTestAccess::reset(pool, 6);
     EXPECT_EQ(pool.get_thread_count(), 6u);
-    pool.reset(2);
+    ThreadPoolTestAccess::reset(pool, 2);
     EXPECT_EQ(pool.get_thread_count(), 2u);
 }
 
@@ -219,7 +227,7 @@ TEST(ThreadPoolTest, ResetDrainsPending) {
             counter.fetch_add(1);
         });
     }
-    pool.reset(2); // wait() + shutdown + restart
+    ThreadPoolTestAccess::reset(pool, 2); // wait() + shutdown + restart
     EXPECT_EQ(counter.load(), 100);
     EXPECT_EQ(pool.get_thread_count(), 2u);
 }
@@ -354,7 +362,7 @@ TEST(ThreadPoolTest, ConstructZeroThreadsThrows) {
 
 TEST(ThreadPoolTest, ResetZeroThreadsThrows) {
     Tycho::ThreadPool pool(2);
-    EXPECT_THROW(pool.reset(0), std::invalid_argument);
+    EXPECT_THROW(ThreadPoolTestAccess::reset(pool, 0), std::invalid_argument);
     // Pool should still be functional after rejected reset.
     auto fut = pool.submit_task([] { return 7; });
     EXPECT_EQ(fut.get(), 7);

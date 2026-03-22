@@ -1980,10 +1980,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         };
 
         if (n_parts > 1 && Tycho::use_thread_pool()) {
-            for (int i = 0; i < n_parts; i++) {
-                results[i] = Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
-                if (i < (n_parts - 1))
-                    Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+            int submitted = 0;
+            try {
+                for (int i = 0; i < n_parts; i++) {
+                    results[i] =
+                        Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
+                    submitted = i + 1;
+                    if (i < (n_parts - 1))
+                        Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
+                }
+            } catch (...) {
+                // If integrate() throws mid-loop, drain submitted futures to
+                // prevent use-after-free of stack-captured references (&stm_op).
+                auto ex = std::current_exception();
+                for (int j = 0; j < submitted; j++) {
+                    try {
+                        results[j].get();
+                    } catch (...) {
+                    }
+                }
+                std::rethrow_exception(ex);
             }
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&stm_op, etc.).

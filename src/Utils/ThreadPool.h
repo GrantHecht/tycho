@@ -38,6 +38,7 @@ inline thread_local bool g_is_pool_worker{false};
 struct DispatchContext {
     std::latch done;
     std::atomic<bool> has_exception{false};
+    std::atomic<int> suppressed{0};
     std::exception_ptr first_exception;
 
     explicit DispatchContext(std::ptrdiff_t count) : done(count) {}
@@ -48,12 +49,20 @@ struct DispatchContext {
     void store_exception() noexcept {
         if (!has_exception.exchange(true))
             first_exception = std::current_exception();
+        else
+            suppressed.fetch_add(1, std::memory_order_relaxed);
     }
 
-    /// Rethrow stored exception. MUST be called after done.wait().
+    /// Rethrow stored exception. MUST be called after done.wait()
+    /// (the latch provides the happens-before for the relaxed counter).
     void rethrow_if_exception() {
-        if (has_exception.load())
+        if (has_exception.load()) {
+            int n = suppressed.load(std::memory_order_relaxed);
+            if (n > 0)
+                std::fprintf(stderr, "[Tycho] dispatch: %d additional exception(s) suppressed\n",
+                             n);
             std::rethrow_exception(first_exception);
+        }
     }
 };
 
@@ -236,6 +245,8 @@ class WorkStealingQueue {
 // padding on m_tasks_pending prevents false sharing.
 // =============================================================================
 
+struct ThreadPoolTestAccess; // forward-declared for friend access from tests
+
 class ThreadPool {
     std::vector<WorkStealingQueue> m_queues;
     std::vector<std::thread> m_threads;
@@ -343,6 +354,25 @@ class ThreadPool {
         }
     }
 
+    /// Shut down all workers and restart with n threads.
+    /// Called only from set_num_threads(), which sets pool_configuring() to
+    /// prevent concurrent dispatch (best-effort TOCTOU guard).
+    /// This is a configuration API, not a hot-path operation.
+    void reset(unsigned n) {
+        if (n == 0)
+            throw std::invalid_argument("ThreadPool: thread count must be > 0");
+        wait(); // drain pending tasks (one atomic load when idle)
+        for (auto &q : m_queues)
+            q.done();
+        for (auto &t : m_threads)
+            t.join();
+        m_threads.clear();
+        std::vector<WorkStealingQueue> fresh(n);
+        m_queues.swap(fresh);
+        m_count = n;
+        start_workers();
+    }
+
   public:
     explicit ThreadPool(unsigned threads = std::max(1u, std::thread::hardware_concurrency()))
         : m_queues(threads), m_count(threads) {
@@ -364,11 +394,13 @@ class ThreadPool {
     ThreadPool(ThreadPool &&) = delete;
     ThreadPool &operator=(ThreadPool &&) = delete;
 
-    // Dispatch helpers are free functions that need enqueue_work access.
+    // Dispatch helpers and set_num_threads need private access.
     template <typename F> friend void parallel_blocks(int, F &&, int);
     template <typename F> friend void parallel_sequence(int, F &&);
     template <typename FTask, typename FInline>
     friend void parallel_task(int, FTask &&, FInline &&);
+    friend void set_num_threads(int n);
+    friend struct ThreadPoolTestAccess;
 
     /// Submit a task and get a future for its result.
     /// Cold path only (Jet full solves, Integrator STM).
@@ -388,25 +420,6 @@ class ThreadPool {
             m_tasks_pending.wait(val, std::memory_order_acquire);
             val = m_tasks_pending.load(std::memory_order_acquire);
         }
-    }
-
-    /// Shut down all workers and restart with n threads.
-    /// Called only from set_num_threads(), which sets pool_configuring() to
-    /// prevent concurrent dispatch (best-effort TOCTOU guard).
-    /// This is a configuration API, not a hot-path operation.
-    void reset(unsigned n) {
-        if (n == 0)
-            throw std::invalid_argument("ThreadPool: thread count must be > 0");
-        wait(); // drain pending tasks (one atomic load when idle)
-        for (auto &q : m_queues)
-            q.done();
-        for (auto &t : m_threads)
-            t.join();
-        m_threads.clear();
-        std::vector<WorkStealingQueue> fresh(n);
-        m_queues.swap(fresh);
-        m_count = n;
-        start_workers();
     }
 
     unsigned get_thread_count() const noexcept { return m_count; }

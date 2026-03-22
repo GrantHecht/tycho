@@ -52,8 +52,9 @@ struct OptimizationProblemBase {
     virtual PSIOPT::ConvergenceFlags optimize_solve() = 0;
 
     /// Compute default partition count from the global thread budget.
-    /// Over-partitions by 4x so the pool can dynamically load-balance
-    /// without excessive task-creation overhead on small problems.
+    /// Over-partitions by 4x so the work-stealing pool can smooth out
+    /// unequal partition costs. make_NLP() further caps this via
+    /// MIN_NNZ_PER_PARTITION on small problems.
     static int default_num_partitions() {
         int nt = Tycho::get_num_threads();
         if (nt <= 1)
