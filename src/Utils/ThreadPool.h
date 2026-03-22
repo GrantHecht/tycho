@@ -44,8 +44,9 @@ struct DispatchContext {
     explicit DispatchContext(std::ptrdiff_t count) : done(count) {}
 
     /// Store the first exception. Only called from catch blocks (cold path).
-    /// Uses seq_cst — correctness is obvious without reasoning about
-    /// latch synchronization chains. Cost: ~0 (never executed on happy path).
+    /// The seq_cst exchange on has_exception serializes concurrent callers:
+    /// only the thread whose exchange returns false writes first_exception.
+    /// Cost: ~0 (never executed on happy path).
     void store_exception() noexcept {
         if (!has_exception.exchange(true))
             first_exception = std::current_exception();
@@ -158,8 +159,8 @@ class task {
 // =============================================================================
 // WorkStealingQueue — per-worker task queue
 //
-// Mutex-based work-stealing queue. Not lock-free — Tycho dispatches 10-100
-// tasks per cycle with ms-scale durations, so lock contention is negligible
+// Mutex-based work-stealing queue. Not lock-free — Tycho dispatches O(NumPartitions)
+// tasks per PSIOPT iteration with ms-scale durations, so lock contention is negligible
 // vs task cost. A lock-free Chase-Lev deque would be appropriate if tasks
 // were sub-microsecond, but would add complexity for no measurable benefit
 // at Tycho's task granularity.

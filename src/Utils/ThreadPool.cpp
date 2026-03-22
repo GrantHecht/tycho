@@ -1,5 +1,6 @@
 #include "ThreadPool.h"
 #include <atomic>
+#include <mutex>
 #include <thread>
 
 namespace {
@@ -12,6 +13,11 @@ std::atomic<int> g_num_threads{static_cast<int>(std::max(1u, std::thread::hardwa
 /// and the actual enqueue_work() call. Closing it fully would require a mutex
 /// on the hot path, which is unacceptable for Tycho's dispatch frequency.
 std::atomic<bool> g_pool_configuring{false};
+
+/// Serializes concurrent set_num_threads() calls. Without this, two concurrent
+/// callers would race on reset() — double-joining threads and data-racing on
+/// internal vectors. Cold path only (startup), zero cost on the dispatch path.
+std::mutex g_set_threads_mutex;
 } // namespace
 
 namespace Tycho {
@@ -22,10 +28,12 @@ ThreadPool &thread_pool() {
 }
 
 void set_num_threads(int n) {
+    std::lock_guard lock(g_set_threads_mutex);
     if (n <= 1) {
         g_num_threads.store(1, std::memory_order_relaxed);
         // Pool stays alive but parallel_* helpers bypass it via use_thread_pool().
-        // Parked threads consume no CPU. set_num_threads is startup-only.
+        // Idle workers block on their empty queues, consuming no CPU.
+        // set_num_threads is startup-only.
     } else {
         g_pool_configuring.store(true, std::memory_order_release);
         try {

@@ -88,28 +88,29 @@ void Tycho::NonLinearProgram::analyzePartitioning() {
     this->PartEq.resize(this->NumPartitions);
     this->PartIq.resize(this->NumPartitions);
 
-    int RRThr = 0;
+    int rrPart = 0;
 
-    auto analyzeOP = [&](auto &SourceFuncs, auto &TargetThrFuncs) {
+    auto analyzeOP = [&](auto &SourceFuncs, auto &TargetPartFuncs) {
         for (auto &func : SourceFuncs) {
             if (func.getThreadMode() ==
                 ThreadingFlags::MainThread) { // Force to last partition — parallel_sequence runs
                                               // the last index inline on the calling thread, so
                                               // MainThread functions stay safe.
-                TargetThrFuncs.back().push_back(func);
+                TargetPartFuncs.back().push_back(func);
             } else if (func.getThreadMode() == ThreadingFlags::RoundRobin) {
-                TargetThrFuncs[RRThr].push_back(func);
-                RRThr++;
-                if (RRThr > (this->NumPartitions - 1))
-                    RRThr = 0;
+                TargetPartFuncs[rrPart].push_back(func);
+                rrPart++;
+                if (rrPart > (this->NumPartitions - 1))
+                    rrPart = 0;
             } else if (static_cast<int>(func.getThreadMode()) >=
                        0) { // Specific Partition Assignment
-                int thr = std::min(static_cast<int>(func.getThreadMode()), this->NumPartitions - 1);
-                TargetThrFuncs[thr].push_back(func);
+                int part =
+                    std::min(static_cast<int>(func.getThreadMode()), this->NumPartitions - 1);
+                TargetPartFuncs[part].push_back(func);
             } else { // By application
-                auto TempThrFuncs = func.thread_split(this->NumPartitions);
-                for (int i = 0; i < TempThrFuncs.size(); i++) {
-                    TargetThrFuncs[i].push_back(TempThrFuncs[i]);
+                auto TempPartFuncs = func.thread_split(this->NumPartitions);
+                for (int i = 0; i < TempPartFuncs.size(); i++) {
+                    TargetPartFuncs[i].push_back(TempPartFuncs[i]);
                 }
             }
         }
@@ -455,8 +456,10 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
         val += Vals[i];
 
     // NOTE: fillSolverCoeffs internally calls parallel_blocks, creating a nested
-    // dispatch from the inline arm. Safe because the calling thread is the main
-    // thread (not a pool worker), so the pool absorbs all tasks without deadlock.
+    // dispatch from the inline arm. Safe because: (1) the calling thread is the main
+    // thread (not a pool worker), so the pool absorbs all tasks without deadlock, and
+    // (2) fillRHS and fillSolverCoeffs operate on disjoint data (RHS vectors vs. KKT
+    // matrix entries), so concurrent execution requires no synchronization.
     Tycho::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });

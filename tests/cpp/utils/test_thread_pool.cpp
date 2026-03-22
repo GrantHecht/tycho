@@ -207,6 +207,17 @@ TEST(DispatchHelpers, InlineException_ParallelBlocks) {
                  std::runtime_error);
 }
 
+TEST(DispatchHelpers, InlineException_ParallelSequence) {
+    ScopedThreadCount guard(4);
+    // With n=4, indices 0-2 go to pool, index 3 runs inline.
+    EXPECT_THROW(Tycho::parallel_sequence(4,
+                                          [](int i) {
+                                              if (i == 3) // inline (last) index
+                                                  throw std::runtime_error("inline exception");
+                                          }),
+                 std::runtime_error);
+}
+
 TEST(DispatchHelpers, WorkerDetection) {
     ScopedThreadCount guard(4);
     EXPECT_FALSE(Tycho::is_pool_worker());
