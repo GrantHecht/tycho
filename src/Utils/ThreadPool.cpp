@@ -3,7 +3,7 @@
 #include <thread>
 
 namespace {
-std::atomic<int> g_num_threads{static_cast<int>(std::thread::hardware_concurrency())};
+std::atomic<int> g_num_threads{static_cast<int>(std::max(1u, std::thread::hardware_concurrency()))};
 
 /// Best-effort guard: true while set_num_threads() is resizing the pool.
 /// Dispatch helpers check this and throw if true, catching the common misuse
@@ -28,8 +28,13 @@ void set_num_threads(int n) {
         // Parked threads consume no CPU. set_num_threads is startup-only.
     } else {
         g_pool_configuring.store(true, std::memory_order_release);
-        g_num_threads.store(n, std::memory_order_relaxed);
-        thread_pool().reset(static_cast<unsigned>(n));
+        try {
+            g_num_threads.store(n, std::memory_order_relaxed);
+            thread_pool().reset(static_cast<unsigned>(n));
+        } catch (...) {
+            g_pool_configuring.store(false, std::memory_order_release);
+            throw;
+        }
         g_pool_configuring.store(false, std::memory_order_release);
     }
 }

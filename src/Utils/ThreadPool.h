@@ -320,7 +320,7 @@ class ThreadPool {
     }
 
   public:
-    explicit ThreadPool(unsigned threads = std::thread::hardware_concurrency())
+    explicit ThreadPool(unsigned threads = std::max(1u, std::thread::hardware_concurrency()))
         : m_queues(threads), m_count(threads) {
         if (threads == 0)
             throw std::invalid_argument("ThreadPool: thread count must be > 0");
@@ -328,6 +328,7 @@ class ThreadPool {
     }
 
     ~ThreadPool() noexcept {
+        wait();
         for (auto &q : m_queues)
             q.done();
         for (auto &t : m_threads)

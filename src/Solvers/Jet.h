@@ -178,10 +178,27 @@ struct Jet {
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
                 results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
-            // NOTE: track() mutates local counters and MUST be called sequentially
-            // on the main thread. Do not parallelize this loop.
-            for (int i = 0; i < NumJobs; i++)
-                track(results[i].get(), i);
+            // track() mutates local counters — must be called sequentially.
+            // If .get() throws, drain remaining futures before rethrowing to
+            // prevent use-after-free of stack-captured references (&Job, etc.).
+            std::exception_ptr ex;
+            for (int i = 0; i < NumJobs; i++) {
+                try {
+                    track(results[i].get(), i);
+                } catch (...) {
+                    if (!ex)
+                        ex = std::current_exception();
+                    for (int j = i + 1; j < NumJobs; j++) {
+                        try {
+                            results[j].get();
+                        } catch (...) {
+                        }
+                    }
+                    break;
+                }
+            }
+            if (ex)
+                std::rethrow_exception(ex);
         } else {
             for (int i = 0; i < NumJobs; i++)
                 track(Job(i), i);

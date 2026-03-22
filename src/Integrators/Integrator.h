@@ -1702,7 +1702,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     std::vector<IntegEventRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                                   const Eigen::VectorXd &tfs,
-                                                  const std::vector<EventPack> &events, int n_parts) {
+                                                  const std::vector<EventPack> &events,
+                                                  int n_parts) {
         return this->integrate_parallel_impl(x0s, tfs, n_parts, events);
     }
     /////////////////////////////////////////////////////////////////////////////////////
@@ -1980,17 +1981,33 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         if (n_parts > 1 && Tycho::use_thread_pool()) {
             for (int i = 0; i < n_parts; i++) {
-                results[i] =
-                    Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
+                results[i] = Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
                 if (i < (n_parts - 1))
                     Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
             }
+            // If .get() throws, drain remaining futures before rethrowing to
+            // prevent use-after-free of stack-captured references (&stm_op, etc.).
+            std::exception_ptr ex;
             for (int i = 0; i < n_parts; i++) {
-                auto [xf, jx] = results[i].get(); // propagates exceptions
-                jxall.topRows(this->ORows()) = (jx * jxall).eval();
-                if (i == (n_parts - 1))
-                    Xs[i + 1] = xf;
+                try {
+                    auto [xf, jx] = results[i].get();
+                    jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                    if (i == (n_parts - 1))
+                        Xs[i + 1] = xf;
+                } catch (...) {
+                    if (!ex)
+                        ex = std::current_exception();
+                    for (int j = i + 1; j < n_parts; j++) {
+                        try {
+                            results[j].get();
+                        } catch (...) {
+                        }
+                    }
+                    break;
+                }
             }
+            if (ex)
+                std::rethrow_exception(ex);
         } else {
             for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);

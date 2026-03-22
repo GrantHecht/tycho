@@ -41,3 +41,16 @@ target_precompile_headers(bench_all REUSE_FROM pch_bench)
 if(UNIX)
     target_link_options(bench_all PRIVATE ${LINKER_FLAGS})
 endif()
+
+# Standalone KKT contention profiler (no Google Benchmark dependency).
+# Build with: ninja -j2 profile_kkt_contention
+# Run under:  perf lock record -- ./bench/cpp/profile_kkt_contention 256 3
+add_executable(profile_kkt_contention profile_kkt_contention.cpp)
+set_target_properties(profile_kkt_contention PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+target_compile_options(profile_kkt_contention PRIVATE ${COMPILE_FLAGS})
+target_include_directories(profile_kkt_contention PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(profile_kkt_contention PRIVATE tycho_core)
+target_precompile_headers(profile_kkt_contention REUSE_FROM pch_bench)
+if(UNIX)
+    target_link_options(profile_kkt_contention PRIVATE ${LINKER_FLAGS})
+endif()
