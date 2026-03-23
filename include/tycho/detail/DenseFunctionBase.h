@@ -8,12 +8,12 @@
 //
 // Implements the Base class for all dense vector functions in Tycho.
 // Forwards the Derived class and compile time input(IR) and output(OR) rows down the CRTP
-// inheretance chain. Also inherits from from domain holder so dynamic sized vector functions can
+// inheritance chain. Also inherits from from domain holder so dynamic sized vector functions can
 // hold an array containing their true input domain that is computed at run-time. Also defines the
 // default compile time INPUT_DOMAIN of both constant and dynamic size functions. Composite derived
-// classes will overide this typedef by design, in order to explicitly participate in the input
+// classes will override this typedef by design, in order to explicitly participate in the input
 // domain tracking system. The default input domain simply says that all inputs are used. This input
-// domain info is used to implement the default set of functions for manipluting the
+// domain info is used to implement the default set of functions for manipulating the
 // jacobian,hessian,and gradient of Derived function such as right_jacobian_product. Specialized
 // derived classes should perform simple overloads of these methods.
 //
@@ -21,15 +21,15 @@
 // and binary(.dot) mathematical operations that are used when writing expressions.
 //
 // Additionally, This class also defines the .compute_jacobian etc. methods in terms of the
-// compute_jacobian_impl methods implemented in derived classes. Theses methods are the used to
-// implement the dense vector functions interface with psiopt throught the constraints_jacobian etc.
+// compute_jacobian_impl methods implemented in derived classes. These methods are then used to
+// implement the dense vector functions interface with psiopt through the constraints_jacobian etc.
 // methods.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 // =============================================================================
 
 #pragma once

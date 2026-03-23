@@ -14,7 +14,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 //   - PR 9: Replaced rubber_types with TypeStorage; deleted dead
 //     Model<>/ExternalInterface<> boilerplate and SolverInterfaceSelector.
 // =============================================================================

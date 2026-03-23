@@ -15,7 +15,7 @@
 // for dynamic sized functions (IR=OR=-1).
 //
 // Defines the default set of constexpr boolean info about functions that are used by the expression
-// system, such as IsVectorizable. Derived classes are intended to overide these as neccessary.
+// system, such as IsVectorizable. Derived classes are intended to override these as necessary.
 //
 //
 // Adds functions for getting and setting the input and output rows.
@@ -30,7 +30,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 // =============================================================================
 
 #pragma once

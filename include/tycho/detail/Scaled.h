@@ -6,14 +6,14 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Defines ASSET all Vector Functionals that apply linear scalings to
+// Defines all Vector Functionals that apply linear scalings to
 // the outputs of other functions.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 // =============================================================================
 
 #pragma once

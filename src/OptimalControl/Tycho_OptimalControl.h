@@ -1,11 +1,11 @@
 #pragma once
 #include "tycho/optimal_control.h"
 
-// Private headers not in the public API
+// Forwarding headers to public detail/ headers (included here, not via optimal_control.h)
 #include "FDDerivArbitrary.h"
 #include "FDDerivUniform.h"
 
-// Binding headers (guarded by TYCHO_PYTHON_BINDINGS in the PCH)
+// Binding headers (guarded by #ifdef TYCHO_PYTHON_BINDINGS, defined on binding CMake targets)
 #include "Bindings/Integrators/IntegratorBind.h"
 #include "Bindings/OptimalControl/ODEBind.h"
 #include "Bindings/OptimalControl/ODEPhaseBind.h"

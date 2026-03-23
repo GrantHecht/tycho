@@ -1,5 +1,7 @@
 #pragma once
 
+// Tycho — Phase/ODE transcription, collocation, mesh refinement
+
 #include "tycho/vector_functions.h"
 
 #include "tycho/detail/OptimalControlFlags.h"

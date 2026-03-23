@@ -1,5 +1,7 @@
 #pragma once
 
+// Tycho — PSIOPT optimizer, NLP layer
+
 #include "tycho/vector_functions.h"
 
 #include "tycho/detail/SolverFlags.h"

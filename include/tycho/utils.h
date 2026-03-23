@@ -1,5 +1,7 @@
 #pragma once
 
+// Tycho — Thread pool, type storage, sizing helpers, CRTP base
+
 #include "tycho/detail/type_storage.h"
 #include "tycho/detail/sizing_helpers.h"
 #include "tycho/detail/crtp_base.h"

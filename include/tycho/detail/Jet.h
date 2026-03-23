@@ -10,7 +10,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 //   - Thread pool replaced with global Tycho::thread_pool() singleton
 //   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
 // =============================================================================

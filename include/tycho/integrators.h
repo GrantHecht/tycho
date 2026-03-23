@@ -1,5 +1,7 @@
 #pragma once
 
+// Tycho — Runge-Kutta steppers and coefficients
+
 #include "tycho/vector_functions.h"
 
 #include "tycho/detail/RKCoeffs.h"

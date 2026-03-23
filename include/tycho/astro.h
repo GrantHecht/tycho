@@ -1,5 +1,7 @@
 #pragma once
 
+// Tycho — Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
+
 #include "tycho/optimal_control.h"
 
 #include "tycho/detail/KeplerModel.h"

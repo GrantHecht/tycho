@@ -7,14 +7,14 @@
 // Original Developer: James B. Pezent
 //
 // This file implements the struct SolverIndexingData which holds all meta data
-// neccessary for an asset vector function to be used as a constraint or objective inside of psiopt.
+// necessary for an asset vector function to be used as a constraint or objective inside of psiopt.
 // It is coupled with a function by the interface classes ConstraintFunction and ObjectiveFunction.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
+//   - pybind11 header references removed
 // =============================================================================
 
 #pragma once
