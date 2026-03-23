@@ -669,7 +669,7 @@ endif()
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
     VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMinorVersion
+    COMPATIBILITY SameMajorVersion
 )
 
 configure_package_config_file(
