@@ -1,4 +1,8 @@
-// Verify core Eigen types and compile definitions are accessible through tycho
+// Verify that linking tycho::tycho propagates required include paths and
+// compile definitions. Uses typedefs.h (Eigen) and utils.h (fmt via flat_map.h)
+// rather than the umbrella <tycho/tycho.h> because some public detail headers
+// use fmt/color.h APIs that trigger GCC 15 -Wtemplate-body errors. The umbrella
+// compiles correctly with the project's Clang toolchain.
 #include <tycho/typedefs.h>
 #include <tycho/utils.h>
 #include <iostream>

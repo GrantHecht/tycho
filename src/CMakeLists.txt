@@ -27,6 +27,7 @@ target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 add_library(vectorfunctions INTERFACE)
 target_include_directories(vectorfunctions INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 
@@ -102,6 +103,11 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
+# CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
+# host-specific absolute paths in the export set. ALL libraries in LINK_LIBS
+# (set in root CMakeLists.txt) must be re-found and re-attached in
+# cmake/tychoConfig.cmake.in. If you modify LINK_LIBS, update the config
+# template to match.
 target_link_libraries(tycho INTERFACE $<BUILD_INTERFACE:${LINK_LIBS}>)
 target_link_libraries(tycho INTERFACE Eigen3::Eigen)
 target_include_directories(tycho INTERFACE
@@ -122,18 +128,26 @@ target_compile_definitions(tycho INTERFACE
 if(APPLE)
     target_compile_definitions(tycho INTERFACE USE_ACCELERATE_SPARSE)
 endif()
+# Note: TYCHO_DEFAULT_ARENA_SIZE is intentionally omitted — it is only
+# used in src/Utils/MemoryManagement.cpp (not in any public header).
 
-# fmt and autodiff include paths for build-tree consumers (FetchContent).
-# Install-tree consumers use the existing $<INSTALL_INTERFACE:include> above.
+# fmt, autodiff, and sparse-solver include paths for build-tree consumers
+# (FetchContent). Install-tree consumers get these via tychoConfig.cmake.in.
 target_include_directories(tycho INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/fmt/include>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/autodiff>
 )
+# MKL include directories are needed by public headers (PardisoInterface.h
+# includes <mkl_pardiso.h>). On Apple, AccelerateSparse headers are part of
+# the SDK and propagated via the AccelerateSparse::AccelerateSparse target.
+if(MKL_INCLUDE_DIRS)
+    target_include_directories(tycho INTERFACE
+        $<BUILD_INTERFACE:${MKL_INCLUDE_DIRS}>
+    )
+endif()
 
 #-------------------------------------------------------------------------------
 # Install rules
-
-include(GNUInstallDirs)
 
 install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions
     EXPORT tychoTargets

@@ -441,6 +441,17 @@ else()
           "Tycho requires Intel MKL. Set MKLROOT to the MKL installation directory.\n"
           "  See CLAUDE.md for installation instructions.")
   endif()
+  # Validate that no individual MKL library is NOTFOUND. FindMKL.cmake does not
+  # include MKL_OMP_LIBRARY in FIND_PACKAGE_HANDLE_STANDARD_ARGS, so MKL_FOUND
+  # can be TRUE while MKL_LIBRARIES contains a NOTFOUND entry (libiomp5).
+  foreach(_mkl_lib IN LISTS MKL_LIBRARIES)
+      if("${_mkl_lib}" MATCHES "NOTFOUND")
+          message(FATAL_ERROR
+              "MKL library component not found: ${_mkl_lib}\n"
+              "Your MKL installation may be incomplete. "
+              "Ensure MKLROOT points to a complete MKL installation.")
+      endif()
+  endforeach()
 endif()
 
 if(ENABLE_PYTHON_BINDINGS)
@@ -540,6 +551,7 @@ endif()
 
 ################################################################################
 # Code Directories
+include(GNUInstallDirs)
 add_subdirectory(src)
 
 add_subdirectory(extensions)
@@ -575,8 +587,6 @@ include(cmake/clang-format.cmake)
 
 ################################################################################
 # Install rules — headers, CMake package config, and Find modules
-
-include(GNUInstallDirs)
 
 install(DIRECTORY include/tycho
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -637,8 +647,19 @@ if(APPLE)
         get_filename_component(_tycho_omp_lib_dir "${TYCHO_OMP_LIBRARY}" DIRECTORY)
         get_filename_component(TYCHO_LIBOMP_DIR "${_tycho_omp_lib_dir}" DIRECTORY)
     else()
-        # Homebrew LLVM fallback: OpenMP found via find_package, use stable symlink
-        set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+        # Homebrew LLVM fallback: OpenMP found via find_package; derive
+        # hint path for consumer-side libomp re-detection.
+        if(EXISTS "/opt/homebrew/opt/libomp/lib")
+            set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+        elseif(EXISTS "/usr/local/opt/libomp/lib")
+            set(TYCHO_LIBOMP_DIR "/usr/local/opt/libomp")
+        else()
+            set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+            message(WARNING
+                "tycho: could not detect libomp prefix for consumer hint. "
+                "Defaulting to ${TYCHO_LIBOMP_DIR}. Consumers may need to "
+                "install libomp: brew install libomp")
+        endif()
     endif()
 else()
     set(TYCHO_SPARSE_SOLVER "MKL")

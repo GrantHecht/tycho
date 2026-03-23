@@ -33,7 +33,6 @@ if(TYCHO_NEEDS_OPENMP)
             "${_tycho_libomp_dir}/lib"
             /opt/homebrew/opt/libomp/lib       # Apple Silicon Homebrew
             /usr/local/opt/libomp/lib          # Intel Mac Homebrew
-        REQUIRED
     )
     if(NOT _tycho_omp_lib)
         message(FATAL_ERROR
@@ -78,11 +77,32 @@ if(NOT TARGET tycho::tycho)
         "The installation may be corrupted.")
 endif()
 
+# Validate critical installed headers are present
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/tycho/tycho.h")
+    message(FATAL_ERROR
+        "tycho: public headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/tycho/. "
+        "The tycho installation may be incomplete.")
+endif()
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/fmt/format.h")
+    message(FATAL_ERROR
+        "tycho: fmt headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/fmt/. "
+        "The tycho installation may be incomplete.")
+endif()
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/autodiff/forward/dual.hpp")
+    message(FATAL_ERROR
+        "tycho: autodiff headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/autodiff/. "
+        "The tycho installation may be incomplete.")
+endif()
+
 # Re-attach transitive link dependencies that were stripped from the export.
-# The tycho target uses BUILD_INTERFACE guards on its link libraries to avoid
-# encoding host-specific absolute paths in tychoTargets.cmake. The following
-# blocks re-find and re-attach: Threads, sparse solver (MKL or AccelerateSparse),
-# OpenMP (macOS only), and system libraries (dl, m).
+# The tycho target uses BUILD_INTERFACE guards on its link libraries (see
+# src/CMakeLists.txt line 105) to avoid encoding host-specific absolute paths
+# in tychoTargets.cmake. CRITICAL: every library in LINK_LIBS (root
+# CMakeLists.txt) must be re-found and re-attached below. If a new dependency
+# is added to LINK_LIBS, it must also be added here.
 
 # Threads
 set_property(TARGET tycho::tycho APPEND PROPERTY
@@ -90,8 +110,10 @@ set_property(TARGET tycho::tycho APPEND PROPERTY
 
 # Sparse solver
 if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
-    # Validate MKL was fully found (FindMKL can set MKL_FOUND=TRUE with
-    # NOTFOUND entries in MKL_LIBRARIES when individual components are missing)
+    # Validate MKL was fully found. FindMKL.cmake does not include
+    # MKL_OMP_LIBRARY in FIND_PACKAGE_HANDLE_STANDARD_ARGS, so MKL_FOUND=TRUE
+    # can occur while libiomp5 (MKL_OMP_LIBRARY) was not found, leaving a
+    # NOTFOUND entry in MKL_LIBRARIES.
     if(NOT MKL_LIBRARIES)
         message(FATAL_ERROR
             "tycho: MKL_LIBRARIES is empty after find_dependency(MKL). "
