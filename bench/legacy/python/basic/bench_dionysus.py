@@ -9,13 +9,13 @@ import time
 
 import numpy as np
 
-import tycho as ast
-import tycho.Astro.Constants as c
-from tycho.Astro.AstroModels import MEETwoBody_CSI
-from tycho.Astro.Extensions.ThrusterModels import CSIThruster
+import tychopy as typy
+import tychopy.Astro.Constants as c
+from tychopy.Astro.AstroModels import MEETwoBody_CSI
+from tychopy.Astro.Extensions.ThrusterModels import CSIThruster
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 
 
 if __name__ == "__main__":

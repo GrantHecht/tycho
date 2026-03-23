@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
+vf = typy.VectorFunctions
 Args = vf.Arguments
-oc = ast.OptimalControl
+oc = typy.OptimalControl
 
 
 class TwoBodyLTODE(oc.ODEBase):

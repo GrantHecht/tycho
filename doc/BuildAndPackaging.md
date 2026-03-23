@@ -22,7 +22,7 @@ powershell -File scripts/config_and_build.ps1
 
 When `PYTHON_LOCAL_INSTALL_DIR` is set (resolved automatically by the build
 scripts to the active conda environment's site-packages), a CMake POST_BUILD
-command copies `_tycho` and the `tycho/` package there immediately after
+command copies `_tychopy` and the `tychopy/` package there immediately after
 compilation. No separate install step is required during daily development.
 
 ## Distribution wheels
@@ -56,14 +56,14 @@ shared-library dependencies into the wheel and writes the repaired wheel to
 
 ### Windows: bundling DLLs with delvewheel
 
-On Windows, `_tycho.pyd` depends on `libiomp5md.dll` (Intel OpenMP, used by
+On Windows, `_tychopy.pyd` depends on `libiomp5md.dll` (Intel OpenMP, used by
 MKL) and potentially other non-system DLLs. End users will not have these on
 their search path. After building the wheel, run **delvewheel** to copy the
 required DLLs into the wheel and patch the load path:
 
 ```bash
 pip install delvewheel
-delvewheel repair dist/tycho-*.whl
+delvewheel repair dist/tychopy-*.whl
 ```
 
 The repaired wheel in `dist/repaired/` is self-contained and suitable for

@@ -12,12 +12,12 @@ import time
 
 import numpy as np
 
-import tycho as ast
-import tycho.Astro.Constants as c
-from tycho.Astro.AstroModels import CR3BP
+import tychopy as typy
+import tychopy.Astro.Constants as c
+from tychopy.Astro.AstroModels import CR3BP
 
-oc = ast.OptimalControl
-vf = ast.VectorFunctions
+oc = typy.OptimalControl
+vf = typy.VectorFunctions
 
 muE = c.MuEarth
 muM = c.MuMoon

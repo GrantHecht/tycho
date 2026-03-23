@@ -2,7 +2,7 @@
 """
 Break down transcription vs solve time for representative PR 8 workloads.
 
-Run with a built `_tycho` on `PYTHONPATH`, for example:
+Run with a built `_tychopy` on `PYTHONPATH`, for example:
 
   conda run -n tycho env \
     PYTHONPATH=/path/to/build/src/Bindings:/path/to/repo \
@@ -17,10 +17,10 @@ import time
 
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 
 
@@ -183,7 +183,7 @@ def build_delta3():
     y0[3] += 0.00001 / vstar
 
     oef = [at, et, inc, om, argp, -0.05]
-    yf = ast.Astro.classic_to_cartesian(oef, mu)
+    yf = typy.Astro.classic_to_cartesian(oef, mu)
 
     times = np.linspace(0, tf_phase4, 1000)
     ig1, ig2, ig3, ig4 = [], [], [], []

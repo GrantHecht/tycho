@@ -1,6 +1,6 @@
 # Binding Layer Developer Guide
 
-This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `Tycho::` type into the `_tycho` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
+This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `Tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
 
 This guide assumes familiarity with the [VectorFunction Developer Guide](VectorFunction.md). The binding layer is the bridge between that C++ system and the Python API users interact with.
 
@@ -14,7 +14,7 @@ This guide assumes familiarity with the [VectorFunction Developer Guide](VectorF
 6. [Precompiled Header Setup](#6-precompiled-header-setup)
 7. [File Organization](#7-file-organization)
 8. [Build System Integration](#8-build-system-integration)
-9. [Python-Side Wrappers (`tycho/`)](#9-python-side-wrappers-tycho)
+9. [Python-Side Wrappers (`tychopy/`)](#9-python-side-wrappers-tychopy)
 10. [Key Patterns and Conventions](#10-key-patterns-and-conventions)
 11. [Adding a New Binding (Step-by-Step)](#11-adding-a-new-binding-step-by-step)
 12. [Reference: Complete File Listing](#12-reference-complete-file-listing)
@@ -27,7 +27,7 @@ The binding layer is the translation layer between Tycho's C++ core and its Pyth
 
 1. **Map C++ types to Python classes** -- every `VectorFunction`, ODE, `Phase`, `Integrator`, and solver type visible in Python is bound in `src/Bindings/`.
 2. **Convert Python objects to C++ types** -- custom type casters handle `numpy.ndarray <-> Eigen::VectorXd`, `list/tuple -> VectorXd`, `None -> "none"` sentinel, and variant dispatch.
-3. **Provide ergonomic wrappers** -- the pure-Python `tycho/` package re-exports the C++ bindings and adds thin wrappers to coerce Python types that nanobind cannot handle natively (e.g., `list` to `numpy.ndarray` for fixed-size Eigen types).
+3. **Provide ergonomic wrappers** -- the pure-Python `tychopy/` package re-exports the C++ bindings and adds thin wrappers to coerce Python types that nanobind cannot handle natively (e.g., `list` to `numpy.ndarray` for fixed-size Eigen types).
 
 ### nanobind, not pybind11
 
@@ -55,9 +55,9 @@ Key API differences from pybind11 that affect the binding code:
 +-----------------------------+
 |  Python user code           |
 +-----------------------------+
-|  tycho/  (pure Python)      |  <-- Wrappers, re-exports, ODEBase class
+|  tychopy/  (pure Python)    |  <-- Wrappers, re-exports, ODEBase class
 +-----------------------------+
-|  _tycho  (nanobind C++)     |  <-- All C++ bindings live here
+|  _tychopy  (nanobind C++)   |  <-- All C++ bindings live here
 +-----------------------------+
 |  Tycho:: C++ core           |  <-- No nanobind code
 +-----------------------------+
@@ -74,7 +74,7 @@ Key API differences from pybind11 that affect the binding code:
 The module is defined in `src/Bindings/TychoModule.cpp`:
 
 ```cpp
-NB_MODULE(_tycho, m) {
+NB_MODULE(_tychopy, m) {
     m.doc() = "Tycho";
     m.def("PyMain", &main);
     m.def("SoftwareInfo", &SoftwareInfo);
@@ -98,10 +98,10 @@ The `FunctionRegistry` constructor creates four submodules:
 
 | Python path | C++ variable | Purpose |
 |---|---|---|
-| `_tycho.VectorFunctions` | `reg.vfmod` | Vector/scalar function types and free functions |
-| `_tycho.OptimalControl` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
-| `_tycho.Solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
-| `_tycho.Extensions` | `reg.extmod` | User-defined extension types |
+| `_tychopy.VectorFunctions` | `reg.vfmod` | Vector/scalar function types and free functions |
+| `_tychopy.OptimalControl` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
+| `_tychopy.Solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
+| `_tychopy.Extensions` | `reg.extmod` | User-defined extension types |
 
 The `Astro` submodule is created inside `AstroBuild()` rather than in the registry constructor.
 
@@ -492,20 +492,20 @@ namespace nb = nanobind;
 The `TYCHO_PYTHON_BINDINGS` preprocessor macro is defined **only** for:
 
 - `pch_bindings` static library
-- `_tycho` nanobind module
+- `_tychopy` nanobind module
 - `tycho_extensions` module
 
 It is **not** defined globally. This ensures that core C++ headers never see nanobind types. All `*Bind.h` files are guarded with `#ifdef TYCHO_PYTHON_BINDINGS`, making them safe to include from aggregate headers -- the guarded content is simply empty when compiled without the macro.
 
-### `_tycho` Reuses `pch_bindings`
+### `_tychopy` Reuses `pch_bindings`
 
-The `_tycho` target uses `REUSE_FROM pch_bindings` to share the precompiled header:
+The `_tychopy` target uses `REUSE_FROM pch_bindings` to share the precompiled header:
 
 ```cmake
-target_precompile_headers(_tycho REUSE_FROM pch_bindings)
+target_precompile_headers(_tychopy REUSE_FROM pch_bindings)
 ```
 
-This means `_tycho` TUs must use **exactly the same compile flags** as `pch_bindings` to avoid PCH mismatches. Both use `BINDING_COMPILE_FLAGS`.
+This means `_tychopy` TUs must use **exactly the same compile flags** as `pch_bindings` to avoid PCH mismatches. Both use `BINDING_COMPILE_FLAGS`.
 
 ---
 
@@ -517,7 +517,7 @@ This means `_tycho` TUs must use **exactly the same compile flags** as `pch_bind
 
 ```
 src/Bindings/
-  CMakeLists.txt                  Build rules for pch_bindings + _tycho
+  CMakeLists.txt                  Build rules for pch_bindings + _tychopy
   TychoModule.cpp                 NB_MODULE entry point
   FunctionRegistry.h              TychoBind<T> primary template, FunctionRegistry struct
   TypeCasters.h                   Custom nanobind type casters (Eigen, variants)
@@ -597,19 +597,19 @@ target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 ```
 
-2. **`_tycho`** -- the nanobind module listing all `.cpp` source files:
+2. **`_tychopy`** -- the nanobind module listing all `.cpp` source files:
 
 ```cmake
-nanobind_add_module(_tycho
+nanobind_add_module(_tychopy
     TychoModule.cpp
     UtilsBind.cpp
     MemoryManagerBind.cpp
     VectorFunctions/Tycho_VectorFunctions.cpp
     # ... all .cpp files listed explicitly
 )
-target_compile_options(_tycho PRIVATE ${BINDING_COMPILE_FLAGS})
-target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
-target_precompile_headers(_tycho REUSE_FROM pch_bindings)
+target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})
+target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
+target_precompile_headers(_tychopy REUSE_FROM pch_bindings)
 ```
 
 ### `BINDING_COMPILE_FLAGS`
@@ -641,16 +641,16 @@ The `ArgsSegBuildPart1..5.cpp` and `GenericODESBuildPart1..6.cpp` files exist pu
 
 The build installs two things into the Python site-packages directory:
 
-1. **`_tycho.cpython-<ver>-darwin.so`** -- the compiled extension module
-2. **`tycho/`** -- the entire pure-Python package directory (copied fresh each build)
+1. **`_tychopy.cpython-<ver>-darwin.so`** -- the compiled extension module
+2. **`tychopy/`** -- the entire pure-Python package directory (copied fresh each build)
 
 ```cmake
-add_custom_command(TARGET _tycho POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tycho> ${PYTHON_LOCAL_INSTALL_DIR}/
+add_custom_command(TARGET _tychopy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tychopy> ${PYTHON_LOCAL_INSTALL_DIR}/
 )
 add_custom_command(TARGET pytychosrc POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tycho
-                                                ${PYTHON_LOCAL_INSTALL_DIR}/tycho
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tychopy
+                                                ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
 )
 ```
 
@@ -658,33 +658,33 @@ add_custom_command(TARGET pytychosrc POST_BUILD
 
 ---
 
-## 9. Python-Side Wrappers (`tycho/`)
+## 9. Python-Side Wrappers (`tychopy/`)
 
-The `tycho/` package provides a pure-Python layer over the `_tycho` extension module. Its main roles are:
+The `tychopy/` package provides a pure-Python layer over the `_tychopy` extension module. Its main roles are:
 
-1. **Re-export** -- make C++ types available as `tycho.VectorFunctions.Arguments` instead of `_tycho.VectorFunctions.Arguments`.
+1. **Re-export** -- make C++ types available as `tychopy.VectorFunctions.Arguments` instead of `_tychopy.VectorFunctions.Arguments`.
 2. **Coerce types** -- wrap functions that accept fixed-size Eigen types (e.g., `Vector6<double>`) to also accept Python lists and tuples.
 3. **Add pure-Python extensions** -- like `ODEBase`, `CR3BPFrame`, and mesh error plotting.
 
-### `tycho/__init__.py`
+### `tychopy/__init__.py`
 
-Imports `_tycho` and each subpackage:
+Imports `_tychopy` and each subpackage:
 
 ```python
-import _tycho as _tycho
-import tycho.Astro
-import tycho.OptimalControl
-import tycho.Solvers
-import tycho.Utils
-import tycho.VectorFunctions
+import _tychopy as _tychopy
+import tychopy.Astro
+import tychopy.OptimalControl
+import tychopy.Solvers
+import tychopy.Utils
+import tychopy.VectorFunctions
 ```
 
-### `tycho/VectorFunctions/__init__.py` -- `cross` wrapper
+### `tychopy/VectorFunctions/__init__.py` -- `cross` wrapper
 
 The C++ `cross(a, b)` function expects VectorFunction types. When the first argument is a Python list or tuple (a constant vector), nanobind's fixed-size Eigen caster may reject it. The wrapper coerces it:
 
 ```python
-_cross_cpp = _tycho.VectorFunctions.cross
+_cross_cpp = _tychopy.VectorFunctions.cross
 
 def cross(a, b):
     if isinstance(a, (list, tuple)):
@@ -692,7 +692,7 @@ def cross(a, b):
     return _cross_cpp(a, b)
 ```
 
-### `tycho/Astro/__init__.py` -- `_vec6_wrap`
+### `tychopy/Astro/__init__.py` -- `_vec6_wrap`
 
 Many astrodynamics functions take `Vector6<double>` as their first argument. The `_vec6_wrap` decorator coerces lists/tuples to numpy arrays while passing VectorFunction objects through unchanged:
 
@@ -705,12 +705,12 @@ def _vec6_wrap(fn):
     wrapper.__name__ = fn.__name__
     return wrapper
 
-cartesian_to_classic = _vec6_wrap(_tycho.Astro.cartesian_to_classic)
-classic_to_cartesian = _vec6_wrap(_tycho.Astro.classic_to_cartesian)
+cartesian_to_classic = _vec6_wrap(_tychopy.Astro.cartesian_to_classic)
+classic_to_cartesian = _vec6_wrap(_tychopy.Astro.classic_to_cartesian)
 # ... etc.
 ```
 
-### `tycho/OptimalControl/__init__.py` -- `ODEBase`
+### `tychopy/OptimalControl/__init__.py` -- `ODEBase`
 
 Re-exports all C++ optimal control types and adds the pure-Python `ODEBase` class (from `ODEBaseClass.py`), which provides a Python-friendly base for defining ODEs with overridable `compute` methods.
 
@@ -833,12 +833,12 @@ template <> struct TychoBind<MyNewFunction> {
 reg.Build_Register<MyNewFunction>(reg.vfmod, "MyNewFunction");
 ```
 
-4. **Update CMakeLists.txt** if you created a new `.cpp` file -- add it to the `nanobind_add_module(_tycho ...)` list.
+4. **Update CMakeLists.txt** if you created a new `.cpp` file -- add it to the `nanobind_add_module(_tychopy ...)` list.
 
-5. **Re-export in Python** -- add to `tycho/VectorFunctions/__init__.py`:
+5. **Re-export in Python** -- add to `tychopy/VectorFunctions/__init__.py`:
 
 ```python
-MyNewFunction = _tycho.VectorFunctions.MyNewFunction
+MyNewFunction = _tychopy.VectorFunctions.MyNewFunction
 ```
 
 ### Adding a New ODE
@@ -850,7 +850,7 @@ Use `BuildGenODEModule` for a generic ODE (accepts any VectorFunction as dynamic
 Bind::BuildGenODEModule<BaseType, XV, UV, PV>("my_ode", reg.ocmod, reg);
 ```
 
-This creates a submodule `_tycho.OptimalControl.my_ode` with `ode`, `integrator`, and `phase` classes.
+This creates a submodule `_tychopy.OptimalControl.my_ode` with `ode`, `integrator`, and `phase` classes.
 
 ### Adding a New Type Caster
 
@@ -873,11 +873,11 @@ template <> struct type_caster<MyType> {
 - [ ] File is in `src/Bindings/` (not in core `src/` directories)
 - [ ] Header is guarded with `#ifdef TYCHO_PYTHON_BINDINGS`
 - [ ] Include paths use explicit subdirectory names (no shadowing)
-- [ ] New `.cpp` files added to `nanobind_add_module(_tycho ...)` in `src/Bindings/CMakeLists.txt`
+- [ ] New `.cpp` files added to `nanobind_add_module(_tychopy ...)` in `src/Bindings/CMakeLists.txt`
 - [ ] `nb::arg(...).none()` used for any parameter that accepts Python `None`
 - [ ] `nb::is_operator()` used for all dunder methods
 - [ ] `nb::call_guard<nb::gil_scoped_release>()` used for parallel methods
-- [ ] Re-exported in the corresponding `tycho/` Python subpackage
+- [ ] Re-exported in the corresponding `tychopy/` Python subpackage
 - [ ] Build and test: `cd build && ninja -j6 all && python scripts/run_examples.py`
 
 ---
@@ -889,8 +889,8 @@ Every file in `src/Bindings/` with a one-line description:
 | File | Purpose |
 |---|---|
 | **Top-level** | |
-| `CMakeLists.txt` | Build rules for `pch_bindings` and `_tycho` targets |
-| `TychoModule.cpp` | `NB_MODULE(_tycho, m)` entry point; orchestrates all build functions |
+| `CMakeLists.txt` | Build rules for `pch_bindings` and `_tychopy` targets |
+| `TychoModule.cpp` | `NB_MODULE(_tychopy, m)` entry point; orchestrates all build functions |
 | `FunctionRegistry.h` | `TychoBind<T>` primary template; `FunctionRegistry` struct with submodule refs |
 | `TypeCasters.h` | Custom type casters: VectorXd, VectorXi, Tensor, VarIndexType, ScaleType, variants |
 | `pch_nb.h` | Binding PCH: nanobind headers, TypeCasters, FunctionRegistry, JetBind |

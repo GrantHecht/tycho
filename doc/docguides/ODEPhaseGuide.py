@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 ODEArgs = oc.ODEArguments
 

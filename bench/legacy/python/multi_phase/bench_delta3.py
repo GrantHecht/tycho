@@ -10,10 +10,10 @@ import time
 
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 
 g0 = 9.80665
@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
     MF = -0.05
     OEF = [at, et, istart, Ot, Wt, MF]
-    yf = ast.Astro.classic_to_cartesian(OEF, mu)
+    yf = typy.Astro.classic_to_cartesian(OEF, mu)
 
     ts = np.linspace(0, tf_phase4, 1000)
 
