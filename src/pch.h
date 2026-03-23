@@ -47,6 +47,6 @@
 #include "Utils/fmtlib.h"
 
 // Python binding headers live in src/Bindings/pch_nb.h and are baked into the
-// pch_bindings precompiled header used exclusively by _tycho and tycho_extensions.
+// pch_bindings precompiled header used exclusively by _tychopy and tycho_extensions.
 
 #endif // PCH_H
