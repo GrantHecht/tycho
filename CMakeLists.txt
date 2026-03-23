@@ -541,3 +541,22 @@ endif()
 
 # Formatting
 include(cmake/clang-format.cmake)
+
+################################################################################
+# Install rules — public headers and bundled Eigen
+
+include(GNUInstallDirs)
+
+install(DIRECTORY include/tycho
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+if(NOT TYCHO_USE_SYSTEM_EIGEN)
+    install(DIRECTORY dep/eigen/Eigen
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+    install(DIRECTORY dep/eigen/unsupported
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+endif()

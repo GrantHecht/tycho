@@ -107,6 +107,23 @@ target_include_directories(tycho INTERFACE
 add_library(tycho::tycho ALIAS tycho)
 
 #-------------------------------------------------------------------------------
+# Install rules
+
+include(GNUInstallDirs)
+
+install(TARGETS tycho psiopt utils optimalcontrol astro
+    EXPORT tychoTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(TARGETS vectorfunctions
+    EXPORT tychoTargets
+)
+
+#-------------------------------------------------------------------------------
 
 if(ENABLE_PYTHON_BINDINGS)
     add_subdirectory(Bindings)
