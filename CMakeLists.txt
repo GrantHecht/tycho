@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 project(Tycho VERSION 0.1.0 LANGUAGES CXX)
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Detect if Tycho is the top-level project or consumed as a subdirectory
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(TYCHO_MASTER_PROJECT ON)
+else()
+    set(TYCHO_MASTER_PROJECT OFF)
+endif()
 
 set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 ################################################################################
@@ -84,13 +91,17 @@ if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     endif()
 endif()
 
-option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)" ON)
-option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
+option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)"
+    ${TYCHO_MASTER_PROJECT})
+option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables"
+    ${TYCHO_MASTER_PROJECT})
 option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
 option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+option(TYCHO_USE_SYSTEM_EIGEN
+    "Use system-installed Eigen3 instead of bundled dep/eigen" OFF)
 
 # Auto-detect ccache to accelerate repeated builds (brew install ccache)
 find_program(CCACHE_PROGRAM ccache)
@@ -320,7 +331,38 @@ endif()
 #endif()
 
 # Set up submodule dependencies
-include_directories(dep/eigen)
+if(TYCHO_USE_SYSTEM_EIGEN)
+    find_package(Eigen3 3.4 REQUIRED)
+    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers.
+    # Prefer modern target-based approach; fall back to legacy variable.
+    if(TARGET Eigen3::Eigen)
+        get_target_property(_eigen3_inc Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
+        if(_eigen3_inc)
+            include_directories(${_eigen3_inc})
+        else()
+            message(FATAL_ERROR
+                "Eigen3::Eigen target exists but has no INTERFACE_INCLUDE_DIRECTORIES. "
+                "Set EIGEN3_INCLUDE_DIR manually or use -DTYCHO_USE_SYSTEM_EIGEN=OFF.")
+        endif()
+    else()
+        if(NOT EIGEN3_INCLUDE_DIR)
+            message(FATAL_ERROR
+                "find_package(Eigen3) succeeded but EIGEN3_INCLUDE_DIR is not set.")
+        endif()
+        include_directories(${EIGEN3_INCLUDE_DIR})
+    endif()
+    message(STATUS "Using system Eigen3: ${Eigen3_DIR}")
+else()
+    if(NOT TARGET Eigen3::Eigen)
+        add_library(Eigen3::Eigen INTERFACE IMPORTED)
+        target_include_directories(Eigen3::Eigen INTERFACE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen>
+        )
+    endif()
+    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
+    include_directories(dep/eigen)
+    message(STATUS "Using bundled Eigen from dep/eigen")
+endif()
 include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
 
@@ -345,10 +387,22 @@ if(UNIX AND NOT APPLE)
 elseif(APPLE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
-      # fina_package(OpenMP REQUIRED) will fail with AppleClang so 
-      # we need this to point towards the homebrew libomp
-      include_directories("/opt/homebrew/opt/libomp/include/")
-      link_directories("/opt/homebrew/opt/libomp/lib/")
+      # find_package(OpenMP) fails with AppleClang, so detect libomp manually.
+      find_path(TYCHO_OMP_INCLUDE_DIR omp.h
+          PATHS
+              /opt/homebrew/opt/libomp/include   # Apple Silicon Homebrew
+              /usr/local/opt/libomp/include      # Intel Mac Homebrew
+          REQUIRED
+      )
+      find_library(TYCHO_OMP_LIBRARY omp
+          PATHS
+              /opt/homebrew/opt/libomp/lib
+              /usr/local/opt/libomp/lib
+          REQUIRED
+      )
+      include_directories("${TYCHO_OMP_INCLUDE_DIR}")
+      get_filename_component(_tycho_omp_lib_dir "${TYCHO_OMP_LIBRARY}" DIRECTORY)
+      link_directories("${_tycho_omp_lib_dir}")
       list(APPEND COMPILE_FLAGS "-Xclang")
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
@@ -381,7 +435,23 @@ if(APPLE)
   find_package(AccelerateSparse REQUIRED)
   add_compile_definitions(USE_ACCELERATE_SPARSE)
 else()
-  find_package(MKL REQUIRED)
+  find_package(MKL)
+  if(NOT MKL_FOUND)
+      message(FATAL_ERROR
+          "Tycho requires Intel MKL. Set MKLROOT to the MKL installation directory.\n"
+          "  See CLAUDE.md for installation instructions.")
+  endif()
+  # Validate that no individual MKL library is NOTFOUND. FindMKL.cmake does not
+  # include MKL_OMP_LIBRARY in FIND_PACKAGE_HANDLE_STANDARD_ARGS, so MKL_FOUND
+  # can be TRUE while MKL_LIBRARIES contains a NOTFOUND entry (libiomp5).
+  foreach(_mkl_lib IN LISTS MKL_LIBRARIES)
+      if("${_mkl_lib}" MATCHES "NOTFOUND")
+          message(FATAL_ERROR
+              "MKL library component not found: ${_mkl_lib}\n"
+              "Your MKL installation may be incomplete. "
+              "Ensure MKLROOT points to a complete MKL installation.")
+      endif()
+  endforeach()
 endif()
 
 if(ENABLE_PYTHON_BINDINGS)
@@ -417,15 +487,13 @@ if(ENABLE_PYTHON_BINDINGS)
     elseif(DEFINED PYTHON_INCLUDE_DIRS)
         list(APPEND INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS})
     endif()
-    if (NOT APPLE)
-        # Don't directly link with python library on mac and instead rely on -undefined dynamic_lookup
-        # to bind to the python symbols at runtime from the interpreter
-        if(DEFINED Python_LIBRARIES)
-            list(APPEND LINK_LIBS ${Python_LIBRARIES})
-        elseif(DEFINED PYTHON_LIBRARIES)
-            list(APPEND LINK_LIBS ${PYTHON_LIBRARIES})
-        endif()
-    endif()
+    # NOTE: Python_LIBRARIES is intentionally NOT added to LINK_LIBS.
+    # LINK_LIBS flows into the tycho::tycho INTERFACE target, which must
+    # remain pure C++ for find_package/FetchContent consumers.
+    # nanobind handles Python symbol resolution on all platforms:
+    #   - Linux: MODULE libraries resolve CPython symbols at runtime
+    #   - Windows: nanobind-static links Python::Module
+    #   - macOS: -undefined dynamic_lookup (Python symbols bound at load time)
 
 endif()
 
@@ -483,6 +551,7 @@ endif()
 
 ################################################################################
 # Code Directories
+include(GNUInstallDirs)
 add_subdirectory(src)
 
 add_subdirectory(extensions)
@@ -515,3 +584,115 @@ endif()
 
 # Formatting
 include(cmake/clang-format.cmake)
+
+################################################################################
+# Install rules — headers, CMake package config, and Find modules
+
+install(DIRECTORY include/tycho
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+if(NOT TYCHO_USE_SYSTEM_EIGEN)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen/Eigen/Core")
+        message(FATAL_ERROR
+            "Bundled Eigen not found at dep/eigen/. "
+            "Run: git submodule update --init dep/eigen")
+    endif()
+    install(DIRECTORY dep/eigen/Eigen
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+    install(DIRECTORY dep/eigen/unsupported
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+endif()
+
+# Install fmt headers (header-only, required by tycho public API)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/fmt/include/fmt/format.h")
+    message(FATAL_ERROR
+        "Bundled fmt not found at dep/fmt/. "
+        "Run: git submodule update --init dep/fmt")
+endif()
+install(DIRECTORY dep/fmt/include/fmt
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install autodiff headers (header-only, required by tycho public API)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/autodiff/autodiff/forward/dual.hpp")
+    message(FATAL_ERROR
+        "Bundled autodiff not found at dep/autodiff/. "
+        "Run: git submodule update --init dep/autodiff")
+endif()
+install(DIRECTORY dep/autodiff/autodiff
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+    PATTERN "tests" EXCLUDE
+    PATTERN "pybind11" EXCLUDE
+)
+
+# CMake package config for find_package(tycho)
+include(CMakePackageConfigHelpers)
+
+# Variables substituted into tychoConfig.cmake.in
+if(APPLE)
+    set(TYCHO_SPARSE_SOLVER "AccelerateSparse")
+    # macOS needs libomp linked explicitly. On Linux/Windows, MKL_LIBRARIES
+    # includes Intel's libiomp5 which satisfies OpenMP runtime linkage.
+    set(TYCHO_NEEDS_OPENMP ON)
+    # Derive libomp prefix from the library found at configure time.
+    # TYCHO_OMP_LIBRARY is set by the AppleClang find_library() block above;
+    # for Homebrew LLVM, find_package(OpenMP) handles it, but the config
+    # template still needs a hint path for consumer-side re-detection.
+    if(TYCHO_OMP_LIBRARY)
+        get_filename_component(_tycho_omp_lib_dir "${TYCHO_OMP_LIBRARY}" DIRECTORY)
+        get_filename_component(TYCHO_LIBOMP_DIR "${_tycho_omp_lib_dir}" DIRECTORY)
+    else()
+        # Homebrew LLVM fallback: OpenMP found via find_package; derive
+        # hint path for consumer-side libomp re-detection.
+        if(EXISTS "/opt/homebrew/opt/libomp/lib")
+            set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+        elseif(EXISTS "/usr/local/opt/libomp/lib")
+            set(TYCHO_LIBOMP_DIR "/usr/local/opt/libomp")
+        else()
+            set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+            message(WARNING
+                "tycho: could not detect libomp prefix for consumer hint. "
+                "Defaulting to ${TYCHO_LIBOMP_DIR}. Consumers may need to "
+                "install libomp: brew install libomp")
+        endif()
+    endif()
+else()
+    set(TYCHO_SPARSE_SOLVER "MKL")
+    set(TYCHO_NEEDS_OPENMP OFF)
+endif()
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tychoConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+install(EXPORT tychoTargets
+    FILE tychoTargets.cmake
+    NAMESPACE tycho::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+# Install Find modules so consumers can re-find transitive dependencies
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindMKL.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindAccelerateSparse.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)

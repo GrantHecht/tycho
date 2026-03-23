@@ -1,0 +1,171 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Make tycho's Find modules available for find_dependency calls below.
+# Save and restore to avoid polluting the consumer's module path.
+set(_tycho_cmake_module_path "${CMAKE_MODULE_PATH}")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+
+find_dependency(Threads)
+
+# Re-find the sparse solver that tycho was built with
+set(TYCHO_SPARSE_SOLVER "@TYCHO_SPARSE_SOLVER@")
+if(TYCHO_SPARSE_SOLVER STREQUAL "AccelerateSparse")
+    find_dependency(AccelerateSparse)
+elseif(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
+    find_dependency(MKL)
+else()
+    message(FATAL_ERROR
+        "tycho: unknown sparse solver '${TYCHO_SPARSE_SOLVER}'. "
+        "Expected 'AccelerateSparse' or 'MKL'.")
+endif()
+
+# OpenMP handling (macOS only -- consumers need the libomp runtime to link tycho).
+# On Linux/Windows, MKL_LIBRARIES includes Intel's libiomp5 for OpenMP linkage.
+# We use find_library instead of find_dependency(OpenMP) because AppleClang does
+# not support CMake's standard OpenMP detection.
+set(TYCHO_NEEDS_OPENMP "@TYCHO_NEEDS_OPENMP@")
+if(TYCHO_NEEDS_OPENMP)
+    set(_tycho_libomp_dir "@TYCHO_LIBOMP_DIR@")
+    find_library(_tycho_omp_lib omp
+        PATHS
+            "${_tycho_libomp_dir}/lib"
+            /opt/homebrew/opt/libomp/lib       # Apple Silicon Homebrew
+            /usr/local/opt/libomp/lib          # Intel Mac Homebrew
+    )
+    if(NOT _tycho_omp_lib)
+        message(FATAL_ERROR
+            "tycho: libomp not found. Install via: brew install libomp\n"
+            "  Searched: ${_tycho_libomp_dir}/lib, "
+            "/opt/homebrew/opt/libomp/lib, /usr/local/opt/libomp/lib")
+    endif()
+endif()
+
+# Eigen3 handling
+set(TYCHO_USE_SYSTEM_EIGEN "@TYCHO_USE_SYSTEM_EIGEN@")
+if(TYCHO_USE_SYSTEM_EIGEN)
+    find_dependency(Eigen3 3.4)
+else()
+    # Bundled Eigen headers were installed alongside tycho
+    if(NOT TARGET Eigen3::Eigen)
+        if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/Eigen/Core")
+            message(FATAL_ERROR
+                "tycho: bundled Eigen headers not found at "
+                "${PACKAGE_PREFIX_DIR}/include/Eigen/. "
+                "The tycho installation may be incomplete.")
+        endif()
+        add_library(Eigen3::Eigen INTERFACE IMPORTED)
+        set_target_properties(Eigen3::Eigen PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
+        )
+    endif()
+endif()
+
+set(_tycho_targets_file "${CMAKE_CURRENT_LIST_DIR}/tychoTargets.cmake")
+if(NOT EXISTS "${_tycho_targets_file}")
+    message(FATAL_ERROR
+        "tycho: required file not found: ${_tycho_targets_file}\n"
+        "The tycho installation may be incomplete.")
+endif()
+include("${_tycho_targets_file}")
+unset(_tycho_targets_file)
+
+if(NOT TARGET tycho::tycho)
+    message(FATAL_ERROR
+        "tycho: target tycho::tycho was not defined by tychoTargets.cmake. "
+        "The installation may be corrupted.")
+endif()
+
+# Validate critical installed headers are present
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/tycho/tycho.h")
+    message(FATAL_ERROR
+        "tycho: public headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/tycho/. "
+        "The tycho installation may be incomplete.")
+endif()
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/fmt/format.h")
+    message(FATAL_ERROR
+        "tycho: fmt headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/fmt/. "
+        "The tycho installation may be incomplete.")
+endif()
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/autodiff/forward/dual.hpp")
+    message(FATAL_ERROR
+        "tycho: autodiff headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/autodiff/. "
+        "The tycho installation may be incomplete.")
+endif()
+
+# Re-attach transitive link dependencies that were stripped from the export.
+# The tycho target uses BUILD_INTERFACE guards on its link libraries (see
+# src/CMakeLists.txt line 105) to avoid encoding host-specific absolute paths
+# in tychoTargets.cmake. CRITICAL: every library in LINK_LIBS (root
+# CMakeLists.txt) must be re-found and re-attached below. If a new dependency
+# is added to LINK_LIBS, it must also be added here.
+
+# Threads
+set_property(TARGET tycho::tycho APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES Threads::Threads)
+
+# Sparse solver
+if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
+    # Validate MKL was fully found. FindMKL.cmake does not include
+    # MKL_OMP_LIBRARY in FIND_PACKAGE_HANDLE_STANDARD_ARGS, so MKL_FOUND=TRUE
+    # can occur while libiomp5 (MKL_OMP_LIBRARY) was not found, leaving a
+    # NOTFOUND entry in MKL_LIBRARIES.
+    if(NOT MKL_LIBRARIES)
+        message(FATAL_ERROR
+            "tycho: MKL_LIBRARIES is empty after find_dependency(MKL). "
+            "Set MKLROOT to the MKL installation directory.")
+    endif()
+    foreach(_mkl_lib IN LISTS MKL_LIBRARIES)
+        if("${_mkl_lib}" MATCHES "NOTFOUND")
+            message(FATAL_ERROR
+                "tycho: MKL library not found: ${_mkl_lib}. "
+                "Your MKL installation may be incomplete.")
+        endif()
+    endforeach()
+    if(UNIX AND NOT APPLE)
+        set_property(TARGET tycho::tycho APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES
+                -Wl,--start-group ${MKL_LIBRARIES} -Wl,--end-group)
+    else()
+        set_property(TARGET tycho::tycho APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${MKL_LIBRARIES})
+    endif()
+    if(MKL_INCLUDE_DIRS)
+        set_property(TARGET tycho::tycho APPEND PROPERTY
+            INTERFACE_INCLUDE_DIRECTORIES ${MKL_INCLUDE_DIRS})
+    endif()
+elseif(TYCHO_SPARSE_SOLVER STREQUAL "AccelerateSparse")
+    # AccelerateSparse: re-found above via find_dependency(). The PUBLIC link on
+    # psiopt in tychoTargets.cmake references this target. Re-attach explicitly
+    # on tycho::tycho as well, for resilience against future link-visibility changes.
+    if(NOT TARGET AccelerateSparse::AccelerateSparse)
+        message(FATAL_ERROR
+            "tycho: AccelerateSparse::AccelerateSparse target not found after "
+            "find_dependency(AccelerateSparse).")
+    endif()
+    set_property(TARGET tycho::tycho APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES AccelerateSparse::AccelerateSparse)
+endif()
+
+# OpenMP (macOS only — libomp runtime)
+if(TYCHO_NEEDS_OPENMP AND _tycho_omp_lib)
+    set_property(TARGET tycho::tycho APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES "${_tycho_omp_lib}")
+endif()
+
+# System libraries
+if(UNIX)
+    set_property(TARGET tycho::tycho APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES ${CMAKE_DL_LIBS} m)
+endif()
+
+# Restore caller's CMAKE_MODULE_PATH. Assumes no find_dependency() call above
+# legitimately appends entries the caller needs to keep.
+set(CMAKE_MODULE_PATH "${_tycho_cmake_module_path}")
+unset(_tycho_cmake_module_path)
+
+check_required_components(tycho)

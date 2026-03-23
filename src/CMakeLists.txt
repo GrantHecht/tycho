@@ -1,5 +1,5 @@
 set(_TYCHO_SRC_INCLUDES
-  ${CMAKE_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
   ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
@@ -12,12 +12,10 @@ set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 
 #-------------------------------------------------------------------------------
 ## PCH
-add_library(pch STATIC pch.h pch.cpp  )
+add_library(pch STATIC pch.h pch.cpp)
 target_precompile_headers(pch PRIVATE pch.h
-VectorFunctions/Tycho_VectorFunctions.h)
-
+    VectorFunctions/Tycho_VectorFunctions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
-#target_link_libraries(pch PRIVATE fmt::fmt-header-only)
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 
 
@@ -27,7 +25,10 @@ target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 # vectorfunctions is header-only (all VF code is template-based);
 # expose it as an INTERFACE library so dependents get the include path.
 add_library(vectorfunctions INTERFACE)
-target_include_directories(vectorfunctions INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions)
+target_include_directories(vectorfunctions INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 
 
@@ -77,7 +78,10 @@ add_library(utils STATIC
  )
 target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
-target_link_libraries(utils PRIVATE fmt::fmt-header-only)
+# fmt is header-only (FMT_HEADER_ONLY defined globally); include path comes from
+# the global include_directories(dep/fmt/include) in the root CMakeLists.txt.
+# We do not link fmt::fmt-header-only because it would require exporting the fmt
+# target alongside tycho.
 
 
 add_library(astro STATIC
@@ -95,14 +99,63 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 
 
 #-------------------------------------------------------------------------------
-# tycho bundles all core static libs for use by bindings and future language frontends
+# tycho: public INTERFACE target bundling all core static libs.
+# Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
-target_link_libraries(tycho INTERFACE ${LINK_LIBS})
+# CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
+# host-specific absolute paths in the export set. ALL libraries in LINK_LIBS
+# (set in root CMakeLists.txt) must be re-found and re-attached in
+# cmake/tychoConfig.cmake.in. If you modify LINK_LIBS, update the config
+# template to match.
+target_link_libraries(tycho INTERFACE $<BUILD_INTERFACE:${LINK_LIBS}>)
+target_link_libraries(tycho INTERFACE Eigen3::Eigen)
 target_include_directories(tycho INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )
 add_library(tycho::tycho ALIAS tycho)
+target_compile_features(tycho INTERFACE cxx_std_20)
+
+# Compile definitions required by public headers
+target_compile_definitions(tycho INTERFACE
+    FMT_HEADER_ONLY
+    FMT_USE_LOCALE=0
+    EIGEN_INITIALIZE_MATRICES_BY_ZERO
+    EIGEN_DONT_PARALLELIZE
+    TYCHO_DEFAULT_QP_THREADS=8
+)
+if(APPLE)
+    target_compile_definitions(tycho INTERFACE USE_ACCELERATE_SPARSE)
+endif()
+# Note: TYCHO_DEFAULT_ARENA_SIZE is intentionally omitted — it is only
+# used in src/Utils/MemoryManagement.cpp (not in any public header).
+
+# fmt, autodiff, and sparse-solver include paths for build-tree consumers
+# (FetchContent). Install-tree consumers get these via tychoConfig.cmake.in.
+target_include_directories(tycho INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/fmt/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/autodiff>
+)
+# MKL include directories are needed by public headers (PardisoInterface.h
+# includes <mkl_pardiso.h>). On Apple, AccelerateSparse headers are part of
+# the SDK and propagated via the AccelerateSparse::AccelerateSparse target.
+if(MKL_INCLUDE_DIRS)
+    target_include_directories(tycho INTERFACE
+        $<BUILD_INTERFACE:${MKL_INCLUDE_DIRS}>
+    )
+endif()
+
+#-------------------------------------------------------------------------------
+# Install rules
+
+install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions
+    EXPORT tychoTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 #-------------------------------------------------------------------------------
 
