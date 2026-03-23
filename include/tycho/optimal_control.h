@@ -17,4 +17,3 @@
 #include "tycho/detail/LGLInterpTable.h"
 #include "tycho/detail/LGLInterpFunctions.h"
 #include "tycho/detail/MeshIterateInfo.h"
-#include "tycho/detail/OptimalControlFwdDecl.h"

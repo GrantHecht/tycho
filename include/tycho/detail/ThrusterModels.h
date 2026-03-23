@@ -22,11 +22,7 @@ namespace Tycho {
 ////////////////////////////////////////////////////////////////////////////////////////
 
 struct IdealSolarSail_Impl {
-    /// <summary>
-    /// ASSET Function to compute thrust output of an Ideal Solar Sail
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <returns></returns>
+    /// Tycho VectorFunction to compute thrust output of an Ideal Solar Sail.
     static auto Definition(double mu, double beta) {
 
         double scale = mu * beta;
@@ -48,11 +44,7 @@ BUILD_FROM_EXPRESSION(IdealSolarSail, IdealSolarSail_Impl, double, double);
 ////////////////////////////////////////////////////////////////////////////////////////
 
 struct NonIdealSolarSail_Impl {
-    /// <summary>
-    /// ASSET Function to compute thrust output of an Ideal Solar Sail
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <returns></returns>
+    /// Tycho VectorFunction to compute thrust output of a Non-Ideal Solar Sail.
     static auto Definition(double mu, double beta, double n1, double n2, double t1) {
         double scale = mu * beta / 2.0;
 

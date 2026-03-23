@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Overloads the common mathematical functions contained in cmath for ASSET scalar
+// Overloads the common mathematical functions contained in cmath for Tycho scalar
 // functions.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,

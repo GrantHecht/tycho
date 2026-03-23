@@ -11,7 +11,7 @@
 // and output (OR) rows of the vectorfunction.
 //
 // Inherits from CRTP to gain derived casting capabilities.
-// Inherits from InputOutputSize<IR, OR> to gain fields for holding input and outsizes if necessary
+// Inherits from InputOutputSize<IR, OR> to gain fields for holding input and output sizes if necessary
 // for dynamic sized functions (IR=OR=-1).
 //
 // Defines the default set of constexpr boolean info about functions that are used by the expression
@@ -20,11 +20,11 @@
 //
 // Adds functions for getting and setting the input and output rows.
 //
-// Defines the .compute fuction in terms of derived().compute_impl which must be implemented by a
+// Defines the .compute function in terms of derived().compute_impl which must be implemented by a
 // derived class.
 //
 // Also defines implements the constraints function in terms of the compute function. The
-// constraints functions is part of a vector functions interface to the non-linear optimzier PSIOPT.
+// constraints functions is part of a vector functions interface to the non-linear optimizer PSIOPT.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
@@ -196,7 +196,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
      * @brief Returns the output of compute on the derived class
      *
      * @tparam InType Eigen type of input vector
-     * @param x Input vecter
+     * @param x Input vector
      * @return Output<typename InType::Scalar> Output type
      */
     template <class InType>
@@ -242,7 +242,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     * This function is the interface allowing the vector function to be used as a constraint inside
     psiopt.
     * Vector X is the total variables vector for the full optimization problem, and FX is the total
-    eqaility or inequality constraints vector for the problem. Data pertaining to the loction of the
+    equality or inequality constraints vector for the problem. Data pertaining to the location of the
     input variables in X for each distinct call as well as the target location for the output
     variables in FX is stored in the SolverIndexingData object. In general users should not directly
     overload this function unless they have a very good reason.
@@ -256,7 +256,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             const int IRR = this->IRows();
             const int ORR = this->ORows();
 
-            // Scalar non-vectorized call to the funtion
+            // Scalar non-vectorized call to the function
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
                     this->gatherInput(X, x, V, data);
@@ -351,9 +351,9 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     /*
      * This helper is used to gather the required variables for the Vth function call
      * from the optimizer variables vector, X, into the local input vector of the function, xt.
-     * The solver indexing data structure constains the locations of the variables for the Vth
+     * The solver indexing data structure contains the locations of the variables for the Vth
      * function call as well as precomputed metadata indicating whether these variables are stored
-     * contiguously. In the case of contiguous storage the varibels are retrieved in a single call
+     * contiguously. In the case of contiguous storage the variables are retrieved in a single call
      * This is implemented here to potentially take advantage of the fact the the input size is a
      * known compile time constant. This was observed to provide a modest but measurable perf
      * improvement.

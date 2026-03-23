@@ -23,7 +23,6 @@
 #include "tycho/detail/Conditional.h"
 #include "tycho/detail/Constant.h"
 
-// #include "CrossProduct.h"
 #include "tycho/detail/CwiseOperators.h"
 #include "tycho/detail/CwiseProduct.h"
 #include "tycho/detail/CwiseSum.h"

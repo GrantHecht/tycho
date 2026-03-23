@@ -8,7 +8,7 @@
 //
 // Implements the Base class for all dense vector functions in Tycho.
 // Forwards the Derived class and compile time input(IR) and output(OR) rows down the CRTP
-// inheritance chain. Also inherits from from domain holder so dynamic sized vector functions can
+// inheritance chain. Also inherits from domain holder so dynamic sized vector functions can
 // hold an array containing their true input domain that is computed at run-time. Also defines the
 // default compile time INPUT_DOMAIN of both constant and dynamic size functions. Composite derived
 // classes will override this typedef by design, in order to explicitly participate in the input
@@ -960,13 +960,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     * This function is the interface allowing Derived to be used as a constraint inside psiopt.
     * It computes both the value of the function and its jacobian and is called during psiopts solve
     * algorithm. Vector X is the total variables vector for the full optimization problem, and FX is
-    the total eqaility or inequality constraints vector for the problem. Sparse Matrix KKTMat is the
+    the total equality or inequality constraints vector for the problem. Sparse Matrix KKTMat is the
     full KKT matrix of the problem. KKTLocations contains the location where every non-zero element
-    of each jacobian arrising from of a call to derived should be summed into KKTMat. KKTClashes
+    of each jacobian arising from of a call to derived should be summed into KKTMat. KKTClashes
     contains a flag (-1) indicating if we can sum into the corresponding column without clashing
     with the work of another function on another thread. If the flag is greater than zero, the
     element of KKTClash is the index of the mutex in KKTLocks, which derived should lock when
-    summing into the column and then release. This logic is controled by KKTFillAll and KKTFillJac.
+    summing into the column and then release. This logic is controlled by KKTFillAll and KKTFillJac.
     Do not overload these functions unless you really know what you are doing.
     */
 
@@ -1092,17 +1092,17 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     /*
     * This function is the interface allowing Derived to be used as a constraint inside psiopt.
-    * It computes both the value of the function and its jacobain gradient and hessian and is called
+    * It computes both the value of the function and its jacobian gradient and hessian and is called
     during psiopts optimize
     * algorithm. Vector X is the total variables vector for the full optimization problem, and FX is
-    the total eqaility or inequality constraints vector for the problem. Vector L is the vector of
-    equality or inequlity lagrange multipliers for the full optimization problem and. Sparse Matrix
+    the total equality or inequality constraints vector for the problem. Vector L is the vector of
+    equality or inequality lagrange multipliers for the full optimization problem and. Sparse Matrix
     KKTMat is the full KKT matrix of the problem. KKTLocations contains the location where every
-    non-zero element of each jacobian arrising from of call to derived should be summed into KKTMat.
+    non-zero element of each jacobian arising from of call to derived should be summed into KKTMat.
     KKTClashes contains a flag (-1) indicating if we can sum into the corresponding column without
     clashing with the work of another function on another thread. If the flag is greater than zero,
     the element of KKTClash is the index of the mutex in KKTLocks, which derived should lock when
-    summing into the column and then release. This logic is controled by KKTFillAll and KKTFillJac.
+    summing into the column and then release. This logic is controlled by KKTFillAll and KKTFillJac.
     Do not overload these functions unless you really know what you are doing.
     */
 
@@ -1335,7 +1335,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     if (this->derived().HessianElemIsNonZero(j, i))
                         freeloc++;
                 }
-                ///// insert jacobain column
+                ///// insert jacobian column
 
                 for (int j = 0; j < this->ORows(); j++) {
                     this->derived().AddJacobianElem(jx(j, i), j, i, mpt, lpt, freeloc);

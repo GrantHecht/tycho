@@ -352,15 +352,11 @@ Vector6<Scalar> cartesian_to_classic_true(const Vector6<Scalar> &XV, Scalar mu) 
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
-////////////////////         Conversions as ASSET Functions    /////////////////////////
+////////////////////    Conversions as Tycho VectorFunctions   /////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
 struct ModifiedToCartesian_Impl {
-    /// <summary>
-    /// ASSET Function to convert from Modified Equinoctual Elements to Cartesian State
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <returns></returns>
+    /// Tycho VectorFunction to convert from Modified Equinoctial Elements to Cartesian State.
     static auto Definition(double mu) {
 
         auto meelems = Arguments<6>();
@@ -402,11 +398,7 @@ struct ModifiedToCartesian_Impl {
 BUILD_FROM_EXPRESSION(ModifiedToCartesian, ModifiedToCartesian_Impl, double);
 
 struct CartesianToClassic_Impl {
-    /// <summary>
-    /// ASSET Function to convert from Modified Equinoctual Elements to Cartesian State
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <returns></returns>
+    /// Tycho VectorFunction to convert from Cartesian State to Classical Orbital Elements.
     static auto Definition(double mu) {
         const double PI = 3.14159265358979;
 
