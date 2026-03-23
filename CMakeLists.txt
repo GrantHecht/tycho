@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.16)
 project(Tycho VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
+# Detect if Tycho is the top-level project or consumed as a subdirectory
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(TYCHO_MASTER_PROJECT ON)
+else()
+    set(TYCHO_MASTER_PROJECT OFF)
+endif()
+
 set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 ################################################################################
 ################## Includes ####################################################
@@ -84,8 +91,10 @@ if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     endif()
 endif()
 
-option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)" ON)
-option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
+option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)"
+    ${TYCHO_MASTER_PROJECT})
+option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables"
+    ${TYCHO_MASTER_PROJECT})
 option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
 option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
