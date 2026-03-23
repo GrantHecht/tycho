@@ -9,7 +9,7 @@
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
 #   - Updated imports: import asset_asrl -> import tychopy
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import matplotlib as mpl

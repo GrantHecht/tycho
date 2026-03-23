@@ -27,6 +27,6 @@ SoftwareInfo = _tychopy.SoftwareInfo
 
 if __name__ == "__main__":
     _tychopy.SoftwareInfo()
-    mlist = inspect.getmembers(_asset)
+    mlist = inspect.getmembers(_tychopy)
     for m in mlist:
         print(m[0], "= _tychopy." + str(m[0]))
