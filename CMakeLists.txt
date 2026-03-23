@@ -560,3 +560,30 @@ if(NOT TYCHO_USE_SYSTEM_EIGEN)
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
 endif()
+
+# CMake package config for find_package(tycho)
+include(CMakePackageConfigHelpers)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tychoConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+install(EXPORT tychoTargets
+    FILE tychoTargets.cmake
+    NAMESPACE tycho::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)

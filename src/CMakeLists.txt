@@ -27,7 +27,9 @@ target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 # vectorfunctions is header-only (all VF code is template-based);
 # expose it as an INTERFACE library so dependents get the include path.
 add_library(vectorfunctions INTERFACE)
-target_include_directories(vectorfunctions INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions)
+target_include_directories(vectorfunctions INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions>
+)
 
 
 
@@ -77,7 +79,7 @@ add_library(utils STATIC
  )
 target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
-target_link_libraries(utils PRIVATE fmt::fmt-header-only)
+target_link_libraries(utils PRIVATE $<BUILD_INTERFACE:fmt::fmt-header-only>)
 
 
 add_library(astro STATIC

@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# If tycho was built with system Eigen, consumers need it too
+set(TYCHO_USE_SYSTEM_EIGEN @TYCHO_USE_SYSTEM_EIGEN@)
+if(TYCHO_USE_SYSTEM_EIGEN)
+    find_dependency(Eigen3 3.4)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/tychoTargets.cmake")
+
+check_required_components(tycho)
