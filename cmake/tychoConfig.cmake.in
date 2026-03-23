@@ -21,10 +21,19 @@ else()
         "Expected 'AccelerateSparse' or 'MKL'.")
 endif()
 
-# OpenMP handling (macOS only -- Linux/Windows get OpenMP linkage through MKL)
+# OpenMP handling (macOS only -- consumers need the libomp runtime to link tycho).
+# On Linux/Windows, MKL_LIBRARIES includes Intel's libiomp5 for OpenMP linkage.
+# We use find_library instead of find_dependency(OpenMP) because AppleClang does
+# not support CMake's standard OpenMP detection.
 set(TYCHO_NEEDS_OPENMP "@TYCHO_NEEDS_OPENMP@")
 if(TYCHO_NEEDS_OPENMP)
-    find_dependency(OpenMP)
+    set(_tycho_libomp_dir "@TYCHO_LIBOMP_DIR@")
+    find_library(_tycho_omp_lib omp PATHS "${_tycho_libomp_dir}/lib" REQUIRED)
+    if(NOT _tycho_omp_lib)
+        message(FATAL_ERROR
+            "tycho: libomp not found. Install via: brew install libomp\n"
+            "  Searched: ${_tycho_libomp_dir}/lib")
+    endif()
 endif()
 
 # Eigen3 handling
@@ -62,9 +71,11 @@ if(NOT TARGET tycho::tycho)
         "The installation may be corrupted.")
 endif()
 
-# Re-attach transitive link dependencies to the imported tycho target.
-# LINK_LIBS was wrapped in BUILD_INTERFACE to avoid encoding host-specific
-# library paths in the export. We re-find and re-attach them here.
+# Re-attach transitive link dependencies that were stripped from the export.
+# The tycho target uses BUILD_INTERFACE guards on its link libraries to avoid
+# encoding host-specific absolute paths in tychoTargets.cmake. The following
+# blocks re-find and re-attach: Threads, sparse solver (MKL or AccelerateSparse),
+# OpenMP (macOS only), and system libraries (dl, m).
 
 # Threads
 set_property(TARGET tycho::tycho APPEND PROPERTY
@@ -72,6 +83,20 @@ set_property(TARGET tycho::tycho APPEND PROPERTY
 
 # Sparse solver
 if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
+    # Validate MKL was fully found (FindMKL can set MKL_FOUND=TRUE with
+    # NOTFOUND entries in MKL_LIBRARIES when individual components are missing)
+    if(NOT MKL_LIBRARIES)
+        message(FATAL_ERROR
+            "tycho: MKL_LIBRARIES is empty after find_dependency(MKL). "
+            "Set MKLROOT to the MKL installation directory.")
+    endif()
+    foreach(_mkl_lib IN LISTS MKL_LIBRARIES)
+        if("${_mkl_lib}" MATCHES "NOTFOUND")
+            message(FATAL_ERROR
+                "tycho: MKL library not found: ${_mkl_lib}. "
+                "Your MKL installation may be incomplete.")
+        endif()
+    endforeach()
     if(UNIX AND NOT APPLE)
         set_property(TARGET tycho::tycho APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES
@@ -84,13 +109,23 @@ if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
         set_property(TARGET tycho::tycho APPEND PROPERTY
             INTERFACE_INCLUDE_DIRECTORIES ${MKL_INCLUDE_DIRS})
     endif()
-endif()
-# AccelerateSparse is already on tycho::psiopt (PUBLIC link), handled by tychoTargets.cmake.
-
-# OpenMP
-if(TYCHO_NEEDS_OPENMP AND TARGET OpenMP::OpenMP_CXX)
+elseif(TYCHO_SPARSE_SOLVER STREQUAL "AccelerateSparse")
+    # AccelerateSparse: re-found above via find_dependency(). The PUBLIC link on
+    # psiopt in tychoTargets.cmake references this target. Re-attach explicitly
+    # on tycho::tycho as well, for resilience against future link-visibility changes.
+    if(NOT TARGET AccelerateSparse::AccelerateSparse)
+        message(FATAL_ERROR
+            "tycho: AccelerateSparse::AccelerateSparse target not found after "
+            "find_dependency(AccelerateSparse).")
+    endif()
     set_property(TARGET tycho::tycho APPEND PROPERTY
-        INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+        INTERFACE_LINK_LIBRARIES AccelerateSparse::AccelerateSparse)
+endif()
+
+# OpenMP (macOS only — libomp runtime)
+if(TYCHO_NEEDS_OPENMP AND _tycho_omp_lib)
+    set_property(TARGET tycho::tycho APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES "${_tycho_omp_lib}")
 endif()
 
 # System libraries
@@ -99,7 +134,8 @@ if(UNIX)
         INTERFACE_LINK_LIBRARIES ${CMAKE_DL_LIBS} m)
 endif()
 
-# Restore caller's CMAKE_MODULE_PATH
+# Restore caller's CMAKE_MODULE_PATH. Assumes no find_dependency() call above
+# legitimately appends entries the caller needs to keep.
 set(CMAKE_MODULE_PATH "${_tycho_cmake_module_path}")
 unset(_tycho_cmake_module_path)
 

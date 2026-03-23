@@ -11,5 +11,15 @@ endif()
 # (In real usage, this would be FetchContent_Declare/MakeAvailable)
 add_subdirectory(${TYCHO_SOURCE_DIR} ${CMAKE_BINARY_DIR}/tycho-build)
 
+# Verify subdirectory guards suppress bindings and examples
+if(ENABLE_PYTHON_BINDINGS)
+    message(FATAL_ERROR
+        "ENABLE_PYTHON_BINDINGS should default OFF in subdirectory mode")
+endif()
+if(BUILD_CPP_EXAMPLES)
+    message(FATAL_ERROR
+        "BUILD_CPP_EXAMPLES should default OFF in subdirectory mode")
+endif()
+
 add_executable(fetch_test main.cpp)
 target_link_libraries(fetch_test PRIVATE tycho::tycho)

@@ -339,8 +339,16 @@ if(TYCHO_USE_SYSTEM_EIGEN)
         get_target_property(_eigen3_inc Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
         if(_eigen3_inc)
             include_directories(${_eigen3_inc})
+        else()
+            message(FATAL_ERROR
+                "Eigen3::Eigen target exists but has no INTERFACE_INCLUDE_DIRECTORIES. "
+                "Set EIGEN3_INCLUDE_DIR manually or use -DTYCHO_USE_SYSTEM_EIGEN=OFF.")
         endif()
     else()
+        if(NOT EIGEN3_INCLUDE_DIR)
+            message(FATAL_ERROR
+                "find_package(Eigen3) succeeded but EIGEN3_INCLUDE_DIR is not set.")
+        endif()
         include_directories(${EIGEN3_INCLUDE_DIR})
     endif()
     message(STATUS "Using system Eigen3: ${Eigen3_DIR}")
@@ -556,7 +564,7 @@ endif()
 include(cmake/clang-format.cmake)
 
 ################################################################################
-# Install rules — public headers and bundled Eigen
+# Install rules — headers, CMake package config, and Find modules
 
 include(GNUInstallDirs)
 
@@ -580,11 +588,21 @@ if(NOT TYCHO_USE_SYSTEM_EIGEN)
 endif()
 
 # Install fmt headers (header-only, required by tycho public API)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/fmt/include/fmt/format.h")
+    message(FATAL_ERROR
+        "Bundled fmt not found at dep/fmt/. "
+        "Run: git submodule update --init dep/fmt")
+endif()
 install(DIRECTORY dep/fmt/include/fmt
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 # Install autodiff headers (header-only, required by tycho public API)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/autodiff/autodiff/forward/dual.hpp")
+    message(FATAL_ERROR
+        "Bundled autodiff not found at dep/autodiff/. "
+        "Run: git submodule update --init dep/autodiff")
+endif()
 install(DIRECTORY dep/autodiff/autodiff
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.hpp"
@@ -598,8 +616,12 @@ include(CMakePackageConfigHelpers)
 # Variables substituted into tychoConfig.cmake.in
 if(APPLE)
     set(TYCHO_SPARSE_SOLVER "AccelerateSparse")
-    # macOS needs OpenMP re-found (Linux/Windows get OpenMP through MKL_LIBRARIES)
+    # macOS needs libomp linked explicitly. On Linux/Windows, MKL_LIBRARIES
+    # includes Intel's libiomp5 which satisfies OpenMP runtime linkage.
     set(TYCHO_NEEDS_OPENMP ON)
+    # Capture the libomp path used at build time for the config template.
+    # Both AppleClang and Homebrew LLVM use /opt/homebrew/opt/libomp.
+    set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
 else()
     set(TYCHO_SPARSE_SOLVER "MKL")
     set(TYCHO_NEEDS_OPENMP OFF)

@@ -12,6 +12,12 @@
 #ifndef FMT_HEADER_ONLY
 #error "FMT_HEADER_ONLY must be defined by tycho"
 #endif
+#if FMT_USE_LOCALE != 0
+#error "FMT_USE_LOCALE must be 0 (set by tycho)"
+#endif
+#ifndef TYCHO_DEFAULT_QP_THREADS
+#error "TYCHO_DEFAULT_QP_THREADS must be defined by tycho"
+#endif
 
 int main() {
     Tycho::Vector3<double> v;

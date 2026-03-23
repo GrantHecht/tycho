@@ -117,6 +117,7 @@ target_compile_definitions(tycho INTERFACE
     FMT_USE_LOCALE=0
     EIGEN_INITIALIZE_MATRICES_BY_ZERO
     EIGEN_DONT_PARALLELIZE
+    TYCHO_DEFAULT_QP_THREADS=8
 )
 if(APPLE)
     target_compile_definitions(tycho INTERFACE USE_ACCELERATE_SPARSE)
