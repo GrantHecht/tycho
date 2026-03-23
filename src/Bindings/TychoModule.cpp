@@ -146,7 +146,7 @@ int main() {
     return 0;
 }
 
-NB_MODULE(_tycho, m) {
+NB_MODULE(_tychopy, m) {
 
     Tycho::enable_color_console(); // This only does something on windows
 

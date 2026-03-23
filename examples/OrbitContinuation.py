@@ -8,8 +8,8 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Updated imports: import asset_asrl -> import tychopy
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import copy
@@ -17,14 +17,14 @@ import copy
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
-import tycho.Astro.Constants as c
-from tycho.Astro.AstroModels import CR3BP
+import tychopy as typy
+import tychopy.Astro.Constants as c
+from tychopy.Astro.AstroModels import CR3BP
 
 ################################################################################
 # Setup
-oc = ast.OptimalControl
-vf = ast.VectorFunctions
+oc = typy.OptimalControl
+vf = typy.VectorFunctions
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes

@@ -11,7 +11,7 @@ set(_TYCHO_BINDINGS_INCLUDES
 nanobind_build_library(nanobind-static)
 
 # Separate PCH compiled WITH TYCHO_PYTHON_BINDINGS so that nanobind headers
-# are baked into the precompiled header used by _tycho and its binding sources.
+# are baked into the precompiled header used by _tychopy and its binding sources.
 add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
@@ -24,7 +24,7 @@ target_include_directories(pch_bindings PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_
 target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
-nanobind_add_module(_tycho
+nanobind_add_module(_tychopy
     TychoModule.cpp
     # Utils bindings
     UtilsBind.cpp
@@ -69,33 +69,33 @@ nanobind_add_module(_tycho
     Integrators/RKCoeffsBind.cpp
 )
 
-target_compile_options(_tycho PRIVATE ${BINDING_COMPILE_FLAGS})
-target_compile_definitions(_tycho PUBLIC TYCHO_PYTHON_BINDINGS)
-# Prevent CMake from auto-defining _tycho_EXPORTS on the module target; the macro
+target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})
+target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
+# Prevent CMake from auto-defining _tychopy_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
-set_target_properties(_tycho PROPERTIES DEFINE_SYMBOL "")
-target_link_libraries(_tycho PUBLIC tycho_core tycho_extensions_bindings)
-target_include_directories(_tycho PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
-target_precompile_headers(_tycho REUSE_FROM pch_bindings)
+set_target_properties(_tychopy PROPERTIES DEFINE_SYMBOL "")
+target_link_libraries(_tychopy PUBLIC tycho_core tycho_extensions_bindings)
+target_include_directories(_tychopy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
+target_precompile_headers(_tychopy REUSE_FROM pch_bindings)
 
 if(APPLE)
     # macOS needs -bind_at_load and -undefined dynamic_lookup for Python modules
-    target_link_options(_tycho PRIVATE ${LINKER_FLAGS})
+    target_link_options(_tychopy PRIVATE ${LINKER_FLAGS})
 endif()
 # Linux/Windows: tycho_core provides LINK_LIBS (MKL, threads, dl) transitively.
 # Linux: no --no-undefined — Python symbols are resolved at runtime by the interpreter.
 
-# Install rule for scikit-build-core: places _tycho alongside the tycho package in the wheel.
-install(TARGETS _tycho LIBRARY DESTINATION .)
+# Install rule for scikit-build-core: places _tychopy alongside the tychopy package in the wheel.
+install(TARGETS _tychopy LIBRARY DESTINATION .)
 
 # Dev-install shortcut: when PYTHON_LOCAL_INSTALL_DIR is set (e.g. by config_and_build.sh),
-# copy _tycho and the Python package directly to site-packages after every build so that
+# copy _tychopy and the Python package directly to site-packages after every build so that
 # changes are immediately usable without a separate pip install step.
 if(PYTHON_LOCAL_INSTALL_DIR)
-    add_custom_command(TARGET _tycho POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tycho> ${PYTHON_LOCAL_INSTALL_DIR}/
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tycho
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tycho ${PYTHON_LOCAL_INSTALL_DIR}/tycho
-        COMMENT "Installed _tycho and tycho package to ${PYTHON_LOCAL_INSTALL_DIR}"
+    add_custom_command(TARGET _tychopy POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tychopy> ${PYTHON_LOCAL_INSTALL_DIR}/
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tychopy ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
+        COMMENT "Installed _tychopy and tychopy package to ${PYTHON_LOCAL_INSTALL_DIR}"
     )
 endif()

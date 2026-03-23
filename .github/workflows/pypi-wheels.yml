@@ -55,19 +55,19 @@ jobs:
 
       - name: "Create build directory and run CMake"
         run: >
-         cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DPIP_INSTALL=True -DBUILD_ASSET_WHEEL=True
+         cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DPIP_INSTALL=True -DBUILD_TYCHO_WHEEL=True
          -DCMAKE_C_COMPILER:FILEPATH="C:/Program Files/LLVM/bin/clang-cl.exe"
          -DCMAKE_CXX_COMPILER:FILEPATH="C:/Program Files/LLVM/bin/clang-cl.exe"
          -DCMAKE_LINKER:FILEPATH="C:/Program Files/LLVM/bin/lld-link.exe"
 
       - name: "Build Project"
-        run: cmake --build build --target asset pypiwheel --config Release -- -j3
+        run: cmake --build build --target _tychopy --config Release -- -j3
 
       - name: 'Upload Wheels'
         uses: actions/upload-artifact@v3
         with:
           name: dist_${{ matrix.python-version }}_${{ matrix.platform }}
-          path: build/pypiwheel/asset_asrl/dist/*.whl
+          path: dist/*.whl
           retention-days: 5
 
  

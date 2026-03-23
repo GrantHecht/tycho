@@ -84,7 +84,7 @@ if(WIN32 AND TYCHO_FP_MODE STREQUAL "SAFER_FAST")
     endif()
 endif()
 
-option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tycho pybind11 module)" ON)
+option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)" ON)
 option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" ON)
 option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
 option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
@@ -366,7 +366,7 @@ endif()
 # Binding-specific compile flags: -Os (nanobind best practice) instead of -O3.
 # Computed AFTER all platform flags (OpenMP etc.) are appended to COMPILE_FLAGS.
 # Core libs (psiopt, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
-# not propagate into _tycho TUs; pch_bindings and _tycho both use only
+# not propagate into _tychopy TUs; pch_bindings and _tychopy both use only
 # BINDING_COMPILE_FLAGS, keeping PCH and TU flags in sync.
 if(OPTIMIZE_BINDINGS)
     set(BINDING_COMPILE_FLAGS ${COMPILE_FLAGS})

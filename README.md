@@ -21,8 +21,8 @@ Original ASSET development was funded by NASA under Grant No. 80NSSC19K1643.
 ## Building from Source
 
 Tycho is a C++20 / Python library built with CMake and nanobind. The build
-produces a native extension module (`_tycho`) and installs it alongside the
-pure-Python `tycho` package into your active Python environment.
+produces a native extension module (`_tychopy`) and installs it alongside the
+pure-Python `tychopy` package into your active Python environment.
 
 ### Prerequisites
 
@@ -122,7 +122,7 @@ After modifying C++ source files, rebuild from the `build` directory:
 cd build && ninja -j<N> all    # N = 2 on macOS, 8 on Linux/Windows
 ```
 
-Only changed files will be recompiled. Pure-Python changes in `tycho/` take
+Only changed files will be recompiled. Pure-Python changes in `tychopy/` take
 effect immediately (the build step copies the package to site-packages).
 
 ### CMake Options
@@ -142,7 +142,7 @@ These can be passed as `-D<VARIABLE>=<VALUE>` during the configure step:
 
 ```bash
 # Quick smoke test — import the module
-python -c "import tycho; print('tycho loaded successfully')"
+python -c "import tychopy as typy; print('tychopy loaded successfully')"
 
 # Run the C++ brachistochrone example (should print "Optimal Solution Found")
 ./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp

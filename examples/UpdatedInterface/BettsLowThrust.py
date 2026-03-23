@@ -8,8 +8,8 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Updated imports: import asset_asrl -> import tychopy
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import time
@@ -20,11 +20,11 @@ import seaborn as sns  # pip install seaborn if you dont have it
 from matplotlib import ticker
 from mpl_toolkits.basemap import Basemap
 
-import tycho as ast
-import tycho.OptimalControl as oc
-import tycho.VectorFunctions as vf
-from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
-from tycho.VectorFunctions import Arguments as Args
+import tychopy as typy
+import tychopy.OptimalControl as oc
+import tychopy.VectorFunctions as vf
+from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+from tychopy.VectorFunctions import Arguments as Args
 
 """
 Low-Thrust Orbit Transfer taken from example 6 on page 265 of

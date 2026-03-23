@@ -533,6 +533,8 @@ MigrationBackup/
 ##########################################################################
 # Manual
 bench/results/
+build-*/
+uv.lock
 /doc/html
 build
 .vscode

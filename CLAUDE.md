@@ -8,7 +8,7 @@ The core use cases are general optimal control problems (solved via direct collo
 and space trajectory optimization. The built-in optimizer is called **PSIOPT**
 (a high-performance interior-point solver).
 
-The Python-facing module is `_tycho` (nanobind extension) imported via the `tycho` package.
+The Python-facing module is `_tychopy` (nanobind extension) imported via the `tychopy` package.
 The C++ namespace is `Tycho`.
 
 ## A Word of Caution for Multi-Agent Workloads
@@ -48,7 +48,7 @@ src/                    C++ source code (core library)
   TypeDefs/             Eigen type aliases (EigenTypes.h, Tycho_TypeDefs.h)
   PyDocString/          C++-side Python docstring literals
 
-tycho/                  Python package (pure-Python layer over _tycho extension)
+tychopy/                Python package (pure-Python layer over _tychopy extension)
   __init__.py           Package entry point
   VectorFunctions/      Python-side VectorFunction utilities
   OptimalControl/       Pure-Python ODE base class, mesh-error plotting
@@ -119,7 +119,7 @@ notices/                Third-party license notices — DO NOT modify or delete
 ## Build System
 
 This is a CMake + nanobind project. The output is a nanobind shared library
-(`_tycho.cpython-<ver>-<platform>.so`) plus the pure-Python `tycho/` package, both
+(`_tychopy.cpython-<ver>-<platform>.so`) plus the pure-Python `tychopy/` package, both
 installed directly into the active Python environment's site-packages by the build step.
 
 Each platform has a corresponding CMake preset in `CMakePresets.json` that defines
@@ -261,7 +261,7 @@ All Python binding code lives exclusively in `src/Bindings/`. Core C++ headers (
 - Must include aggregate headers (`Tycho_Astro.h`, `Tycho_OptimalControl.h`) rather than
   raw core headers — function declarations like `KeplerUtilsBuild`, `BuildKeplerMod`
   live in aggregate headers under `#ifdef TYCHO_PYTHON_BINDINGS`
-- `TYCHO_PYTHON_BINDINGS` is defined only for `_tycho` and `tycho_extensions` targets
+- `TYCHO_PYTHON_BINDINGS` is defined only for `_tychopy` and `tycho_extensions` targets
   (scoped via `pch_bindings` precompiled header), not globally
 
 **`*Bind.h` files** (included from aggregate headers):
@@ -290,8 +290,8 @@ If a new dependency is added, its license notice must be added to `notices/` as 
 The naming migration is substantially complete:
 - Repository: `tycho` ✅
 - C++ namespace: `Tycho` ✅
-- Python extension module: `_tycho` ✅
-- Python package: `tycho` ✅
+- Python extension module: `_tychopy` ✅
+- Python package: `tychopy` ✅
 - PyPI package: not yet published
 
 Do not do a bulk find-and-replace of any remaining `asset_asrl` or `ASSET` identifiers

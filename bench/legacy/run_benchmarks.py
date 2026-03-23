@@ -13,7 +13,7 @@ Options:
     --compare FILE      Compare against a previous JSON file
     --label LABEL       Name for this run (default: current git branch)
     --compare-label L   Name for the comparison run (default: "baseline")
-    --binary-sizes      Measure sizes of _tycho extension and bench binary
+    --binary-sizes      Measure sizes of _tychopy extension and bench binary
     --skip-python       Skip Python benchmarks
     --skip-cpp          Skip C++ benchmarks
     --suite SUITE       Run only benchmarks in the given subdirectory (e.g. basic,
@@ -103,16 +103,16 @@ def run_cpp_benchmark(binary: str, runs: int = 5) -> Tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def find_tycho_extension(build_dir: Path) -> Optional[Path]:
-    """Return the path to the _tycho*.so file, searching build dir then site-packages."""
+def find_tychopy_extension(build_dir: Path) -> Optional[Path]:
+    """Return the path to the _tychopy*.so file, searching build dir then site-packages."""
     # Look inside the build tree first (covers in-tree builds)
-    matches = list(build_dir.glob("**/_tycho*.so"))
+    matches = list(build_dir.glob("**/_tychopy*.so"))
     if matches:
         return max(matches, key=lambda p: p.stat().st_size)
 
     # Fall back to the installed module
     result = subprocess.run(
-        [sys.executable, "-c", "import _tycho; print(_tycho.__file__)"],
+        [sys.executable, "-c", "import _tychopy; print(_tychopy.__file__)"],
         capture_output=True,
         text=True,
     )
@@ -127,12 +127,12 @@ def measure_binary_sizes(build_dir: Path) -> Dict[str, object]:
     """Return a dict of {name: bytes, name_path: str} for key binaries."""
     sizes: Dict[str, object] = {}
 
-    so = find_tycho_extension(build_dir)
+    so = find_tychopy_extension(build_dir)
     if so:
-        sizes["_tycho.so"] = so.stat().st_size
-        sizes["_tycho.so_path"] = str(so)
+        sizes["_tychopy.so"] = so.stat().st_size
+        sizes["_tychopy.so_path"] = str(so)
     else:
-        print("  Warning: _tycho extension not found — skipping .so size")
+        print("  Warning: _tychopy extension not found — skipping .so size")
 
     bench = (
         build_dir
@@ -415,7 +415,7 @@ def main() -> None:
     parser.add_argument(
         "--binary-sizes",
         action="store_true",
-        help="Measure sizes of _tycho extension and bench binary",
+        help="Measure sizes of _tychopy extension and bench binary",
     )
     parser.add_argument(
         "--compile-json",

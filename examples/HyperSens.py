@@ -8,18 +8,18 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Updated imports: import asset_asrl -> import tychopy
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
-from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+import tychopy as typy
+from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 
 

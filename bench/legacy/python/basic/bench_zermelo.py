@@ -9,10 +9,10 @@ import time
 
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
-oc = ast.OptimalControl
-vf = ast.VectorFunctions
+oc = typy.OptimalControl
+vf = typy.VectorFunctions
 
 nSeg = 250
 tol = 1e-12

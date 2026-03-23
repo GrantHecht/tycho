@@ -1,5 +1,6 @@
-import asset as ast
 import numpy as np
+
+import tychopy as typy
 
 """
 One of the goals of ASSET is to provide the ability to users to construct functions
@@ -24,7 +25,7 @@ It always serves as the starting point for defining a more complicated functiona
 some or all of its outputs.
 """
 
-vf = ast.VectorFunctions
+vf = typy.VectorFunctions
 Args = vf.Arguments
 
 """

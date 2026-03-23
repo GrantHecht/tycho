@@ -3,7 +3,7 @@ requires = ["scikit-build-core>=0.9", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "tycho"
+name = "tychopy"
 version = "0.1.0"
 description = "High-speed, extensible, object-oriented trajectory design and optimization"
 authors = [{ name = "Grant Hecht" }]
@@ -26,8 +26,8 @@ Homepage = "https://github.com/GrantHecht/tycho"
 
 [tool.scikit-build]
 cmake.build-type = "Release"
-# Pure-Python package collected from source tree; _tycho extension installed via CMake install()
-wheel.packages = ["tycho"]
+# Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
+wheel.packages = ["tychopy"]
 
 [tool.ruff]
 line-length = 88

@@ -8,22 +8,22 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Updated imports: import asset_asrl -> import tychopy
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
-import tycho.Astro.Constants as c
-from tycho.Astro.AstroModels import MEETwoBody_CSI
-from tycho.Astro.Extensions.ThrusterModels import CSIThruster
-from tycho.Astro.FramePlot import TBPlot, colpal
+import tychopy as typy
+import tychopy.Astro.Constants as c
+from tychopy.Astro.AstroModels import MEETwoBody_CSI
+from tychopy.Astro.Extensions.ThrusterModels import CSIThruster
+from tychopy.Astro.FramePlot import TBPlot, colpal
 
 ##############################################################################
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 
 """
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     tf_dim = 3534 * c.day  # s
     mass_dim = 4000  # kg
 
-    ast.SoftwareInfo()
+    typy.SoftwareInfo()
     thruster = CSIThruster(Tmag_dim, Isp_dim, mass_dim)
     ode = MEETwoBody_CSI(c.MuSun, c.AU, thruster)
 
@@ -137,12 +137,12 @@ if __name__ == "__main__":
         XE = np.zeros((6))
         XE[0:5] = X0[0:5]
         XE[5] = ang
-        Earth.append(ast.Astro.modified_to_cartesian(XE, 1))
+        Earth.append(typy.Astro.modified_to_cartesian(XE, 1))
 
         XD = np.zeros((6))
         XD[0:5] = XF[0:5]
         XD[5] = ang
-        Dion.append(ast.Astro.modified_to_cartesian(XD, 1))
+        Dion.append(typy.Astro.modified_to_cartesian(XD, 1))
 
     TrajCart = ode.MEEToCartesian(ReintTraj1)
     TrajIGCart = ode.MEEToCartesian(TrajIG)

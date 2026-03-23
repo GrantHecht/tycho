@@ -45,31 +45,31 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
     // Static PyObject* (not nb::object) so destructors never run after interpreter shutdown.
     // The lambda trick forces assignment through nb::object to trigger accessor evaluation.
     static PyObject *vftype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("VectorFunction");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("VectorFunction");
         return o.release().ptr();
     }();
     static PyObject *sftype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("ScalarFunction");
         return o.release().ptr();
     }();
     static PyObject *elemtype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Element");
         return o.release().ptr();
     }();
     static PyObject *segtype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Segment");
         return o.release().ptr();
     }();
     static PyObject *seg2type = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment2");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Segment2");
         return o.release().ptr();
     }();
     static PyObject *seg3type = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Segment3");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Segment3");
         return o.release().ptr();
     }();
     static PyObject *argtype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Arguments");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Arguments");
         return o.release().ptr();
     }();
     static PyObject *py_int = [] {
@@ -196,11 +196,11 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
 
     // Static PyObject* (not nb::object) so destructors never run after interpreter shutdown.
     static PyObject *sftype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("ScalarFunction");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("ScalarFunction");
         return o.release().ptr();
     }();
     static PyObject *elemtype = [] {
-        nb::object o = nb::module_::import_("_tycho.VectorFunctions").attr("Element");
+        nb::object o = nb::module_::import_("_tychopy.VectorFunctions").attr("Element");
         return o.release().ptr();
     }();
     static PyObject *py_int = [] {

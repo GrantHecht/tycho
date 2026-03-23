@@ -8,17 +8,17 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
-#   - Module usage updated to _tycho (nanobind) bindings
+#   - Updated imports: import asset_asrl -> import tychopy
+#   - Module usage updated to _tychopy (nanobind) bindings
 # =============================================================================
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
-import tycho.OptimalControl as oc
-import tycho.VectorFunctions as vf
-from tycho.VectorFunctions import Arguments as Args
+import tychopy as typy
+import tychopy.OptimalControl as oc
+import tychopy.VectorFunctions as vf
+from tychopy.VectorFunctions import Arguments as Args
 
 """
 This example was taken from the Dymos Optimal control library. It is an excellent
