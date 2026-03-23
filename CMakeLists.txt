@@ -100,6 +100,8 @@ option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executabl
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+option(TYCHO_USE_SYSTEM_EIGEN
+    "Use system-installed Eigen3 instead of bundled dep/eigen" OFF)
 
 # Auto-detect ccache to accelerate repeated builds (brew install ccache)
 find_program(CCACHE_PROGRAM ccache)
@@ -329,7 +331,22 @@ endif()
 #endif()
 
 # Set up submodule dependencies
-include_directories(dep/eigen)
+if(TYCHO_USE_SYSTEM_EIGEN)
+    find_package(Eigen3 3.4 REQUIRED)
+    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
+    include_directories(${EIGEN3_INCLUDE_DIR})
+    message(STATUS "Using system Eigen3: ${Eigen3_DIR}")
+else()
+    if(NOT TARGET Eigen3::Eigen)
+        add_library(Eigen3::Eigen INTERFACE IMPORTED)
+        target_include_directories(Eigen3::Eigen INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen
+        )
+    endif()
+    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
+    include_directories(dep/eigen)
+    message(STATUS "Using bundled Eigen from dep/eigen")
+endif()
 include_directories(dep/fmt/include)
 include_directories(dep/autodiff)
 

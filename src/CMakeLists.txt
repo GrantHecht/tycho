@@ -99,6 +99,7 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
 target_link_libraries(tycho INTERFACE ${LINK_LIBS})
+target_link_libraries(tycho INTERFACE Eigen3::Eigen)
 target_include_directories(tycho INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
