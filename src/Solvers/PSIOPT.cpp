@@ -16,6 +16,7 @@
 #include "PSIOPT.h"
 
 #include "SolverInit.h"
+#include "Utils/Timer.h"
 
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>

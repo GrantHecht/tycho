@@ -36,7 +36,7 @@ add_executable(bench_all
 set_target_properties(bench_all PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 target_compile_options(bench_all PRIVATE ${COMPILE_FLAGS})
 target_include_directories(bench_all PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(bench_all PRIVATE tycho_core benchmark::benchmark_main)
+target_link_libraries(bench_all PRIVATE tycho benchmark::benchmark_main)
 target_precompile_headers(bench_all REUSE_FROM pch_bench)
 if(UNIX)
     target_link_options(bench_all PRIVATE ${LINKER_FLAGS})

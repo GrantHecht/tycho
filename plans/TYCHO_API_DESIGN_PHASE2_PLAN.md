@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
 
-**Goal:** Separate Tycho's public C++ API headers into `include/tycho/`, migrate from `namespace Tycho` to `namespace tycho`, and rename the `tycho_core` library target to `tycho`.
+**Goal:** Separate Tycho's public C++ API headers into `include/tycho/` and rename the `tycho_core` library target to `tycho`. The `namespace Tycho` is kept as-is (no lowercase rename).
 
 **Architecture:** Create a clean `include/tycho/` public header tree with `detail/` subdirectories for template implementation bodies. Public headers contain API declarations and type definitions; private implementation stays in `src/`. The `detail/` convention signals "included automatically, don't use directly." Template-heavy modules (VectorFunctions, Integrators) require most of their implementation in `detail/` headers since they must be visible at compile time. Non-template code (PSIOPT internals, linear solver backends) stays entirely in `src/`.
 
@@ -60,71 +60,13 @@ git commit -m "feat: create include/tycho/ public header directory structure"
 
 ---
 
-### Task 3: Namespace migration `Tycho` -> `tycho`
+### ~~Task 3: Namespace migration~~ — REMOVED
 
-**Files:**
-- Modify: ALL `.h` and `.cpp` files in `src/`, `extensions/`, `tests/`, `bench/`, `examples/`
-
-**Step 1: Bulk rename namespace**
-
-This is a mechanical find-and-replace across the codebase. The key patterns:
-
-```
-namespace Tycho     ->  namespace tycho
-Tycho::             ->  tycho::
-using namespace Tycho  ->  using namespace tycho
-```
-
-Use `sed` or equivalent to perform the bulk rename across all C++ source files:
-
-```bash
-# All .h and .cpp files in src/, extensions/, tests/, bench/, examples/
-find src extensions tests bench examples -type f \( -name "*.h" -o -name "*.cpp" \) -print0 | \
-    xargs -0 sed -i '' \
-        -e 's/namespace Tycho/namespace tycho/g' \
-        -e 's/Tycho::/tycho::/g' \
-        -e 's/using namespace Tycho/using namespace tycho/g'
-```
-
-**Important exclusions:**
-- `dep/` — do NOT modify vendored dependencies
-- `notices/` — do NOT modify license files
-- String literals containing "Tycho" (e.g., `"Tycho"` in SoftwareInfo) should be preserved as the display name. These will need manual review after the bulk rename.
-
-**Step 2: Fix string literals**
-
-After the bulk rename, some string literals will have been incorrectly changed. Review and fix:
-- `src/Bindings/TychoModule.cpp` — the SoftwareInfo/docstring should still say "Tycho" as the product name
-- Any `fmt::format("Tycho...")` strings that are user-facing display text
-- File path strings (e.g., in CMake variables) — these should NOT change
-
-**Step 3: Handle `TYCHO_PYTHON_BINDINGS` macro**
-
-The `TYCHO_PYTHON_BINDINGS` preprocessor macro should stay uppercase (it's a build system macro, not a namespace). Verify sed didn't break it. Same for `TYCHO_FP_MODE` and other preprocessor defines.
-
-**Step 4: Update forward declarations**
-
-Search for any explicit forward declarations like `namespace Tycho { class Foo; }` and update them.
-
-**Step 5: Build and verify**
-
-```bash
-cd build && rm -rf * && cmake --preset macos-llvm-release && ninja -j2 all
-```
-
-All targets must compile. Run:
-```bash
-python -c "import tychopy as typy; typy.SoftwareInfo()"
-python scripts/run_examples.py --filter Brachistochrone
-./examples/cpp_examples/brachistochrone/brachistochrone_cpp
-```
-
-**Step 6: Commit**
-
-```bash
-git add src/ extensions/ tests/ bench/ examples/
-git commit -m "refactor: migrate namespace Tycho -> tycho"
-```
+> **Decision (2026-03-22):** Keep `namespace Tycho` (uppercase). The namespace rename
+> has been removed from this phase. Rationale: the churn of touching every C++ file
+> for a purely aesthetic change is not justified. Uppercase namespaces are common
+> (Eigen::, Qt::). The include path `<tycho/...>` is lowercase per filesystem convention;
+> the C++ namespace inside remains `Tycho`.
 
 ---
 
@@ -197,12 +139,13 @@ Public (used by consumers):
 - `TypeStorage.h` — SBO container, used in VF type erasure
 - `SizingHelpers.h` — compile-time size arithmetic (`SZ_SUM`, etc.)
 - `CRTPBase.h` — CRTP base traits
-- `ThreadPool.h` — if consumers need to configure threading
+- `ThreadPool.h` — work-stealing pool, `set_num_threads()`, `get_num_threads()`, `parallel_blocks()`, `parallel_sequence()`, `parallel_task()` dispatch helpers, `DispatchContext`
 - `GetCoreCount.h` — CPU core detection
 - `MathFunctions.h` — basic math utilities
 - `STDExtensions.h` — STL extensions used in public API
 - `FunctionReturnType.h` — return type deduction (used in VF)
 - `TypeName.h` — type name printing (debug utility)
+- `FlatMap.h` — fixed-capacity sorted map (used by `ODESize`)
 
 Private (stays in `src/`):
 - `ColorText.h` — terminal output
@@ -232,6 +175,7 @@ leave a forwarding include in `src/Utils/`. Update namespace references.
 #include "tycho/detail/std_extensions.h"
 #include "tycho/detail/function_return_type.h"
 #include "tycho/detail/type_name.h"
+#include "tycho/detail/flat_map.h"
 ```
 
 **Step 4: Update `src/Utils/Tycho_Utils.h` to forward**
@@ -674,7 +618,7 @@ And update namespace usage:
 // Before:
 using namespace Tycho;
 // After:
-using namespace tycho;
+using namespace Tycho;
 ```
 
 (The namespace change should already be done from Task 3, but verify the include
@@ -717,7 +661,6 @@ git commit -m "feat: update C++ examples/tests/benchmarks for public headers"
 **Step 1: Update `CLAUDE.md`**
 
 Key changes:
-- `namespace Tycho` -> `namespace tycho`
 - `#include "Tycho.h"` -> `#include <tycho/tycho.h>`
 - `tycho_core` -> `tycho` (library target)
 - Update repository structure section with `include/` directory
@@ -729,7 +672,7 @@ Key changes:
 
 ```bash
 git add CLAUDE.md TYCHO_API_DESIGN_PLAN.md TODO.md doc/
-git commit -m "docs: update documentation for public headers and namespace tycho"
+git commit -m "docs: update documentation for public headers"
 ```
 
 ---
@@ -775,7 +718,7 @@ Create a minimal test file outside the source tree:
 // /tmp/test_tycho.cpp
 #include <tycho/tycho.h>
 int main() {
-    auto args = tycho::Arguments<3>();
+    auto args = Tycho::Arguments<3>();
     return 0;
 }
 ```
@@ -788,29 +731,21 @@ clang++ -std=c++20 -I/path/to/tycho/include -I/path/to/tycho/dep/eigen \
 
 This verifies the public headers are self-contained.
 
-**Step 6: Verify no `namespace Tycho` remains**
-
-```bash
-grep -rn "namespace Tycho\b" src/ include/ extensions/ tests/ bench/ examples/
-```
-
-Expected: no matches (except possibly in string literals or comments).
-
-**Step 7: Run clang-format on changed files**
+**Step 6: Run clang-format on changed files**
 
 ```bash
 find src extensions include -name "*.cpp" -o -name "*.h" -print0 | \
     xargs -0 /opt/homebrew/opt/llvm/bin/clang-format -style=file -i
 ```
 
-**Step 8: Run ruff on Python files**
+**Step 7: Run ruff on Python files**
 
 ```bash
 ruff format .
 ruff check --select I --fix .
 ```
 
-**Step 9: Final commit if formatting changed anything**
+**Step 8: Final commit if formatting changed anything**
 
 ```bash
 git add -A
@@ -825,7 +760,7 @@ Before marking Phase 2 complete:
 
 - [ ] `include/tycho/tycho.h` exists and includes all module headers
 - [ ] `include/tycho/detail/` contains template implementation bodies
-- [ ] `namespace tycho` used everywhere (no `namespace Tycho` remaining)
+- [ ] `namespace Tycho` used consistently (no lowercase `namespace tycho`)
 - [ ] `tycho_core` renamed to `tycho` in all CMake files
 - [ ] `tycho::tycho` alias target works
 - [ ] Public include path: `#include <tycho/tycho.h>` works from outside `src/`

@@ -4,7 +4,7 @@
 
 **Goal:** Create a C++ equivalent of Python's `ODEBase` — an ergonomic runtime ODE definition interface with string-named variables, `make_input()`, `make_units()`, and phase construction helpers. Zero overhead when names are not used.
 
-**Architecture:** Three new public types: `tycho::ODEBuilder` (fluent builder), `tycho::RuntimeODE` (built ODE + variable registry), and `tycho::Phase` (wrapper around `ODEPhaseBase` that adds named-variable overloads). The builder produces a `GenericODE` internally. The `Phase` wrapper delegates to index-based methods after resolving names via a map lookup.
+**Architecture:** Three new public types: `Tycho::ODEBuilder` (fluent builder), `Tycho::RuntimeODE` (built ODE + variable registry), and `Tycho::Phase` (wrapper around `ODEPhaseBase` that adds named-variable overloads). The builder produces a `GenericODE` internally. The `Phase` wrapper delegates to index-based methods after resolving names via a map lookup.
 
 **Tech Stack:** C++20, `std::unordered_map<std::string, ...>`, `GenericFunction<-1,-1>`, `GenericODE`
 
@@ -30,7 +30,7 @@ The variable registry is the core data structure shared by `RuntimeODE` and `Pha
 
 ```cpp
 TEST(VarRegistry, SingleVarLookup) {
-    tycho::VarRegistry reg(/*XVars=*/3, /*UVars=*/1, /*PVars=*/0);
+    Tycho::VarRegistry reg(/*XVars=*/3, /*UVars=*/1, /*PVars=*/0);
     reg.add_name("x", 0);
     reg.add_name("y", 1);
     reg.add_name("v", 2);
@@ -42,7 +42,7 @@ TEST(VarRegistry, SingleVarLookup) {
 }
 
 TEST(VarRegistry, GroupLookup) {
-    tycho::VarRegistry reg(7, 3, 1);
+    Tycho::VarRegistry reg(7, 3, 1);
     reg.add_group("MEEs", 0, 5);   // indices 0-5
     reg.add_name("w", 6);
     reg.add_name("t", 7);          // time index in XtUP space
@@ -53,7 +53,7 @@ TEST(VarRegistry, GroupLookup) {
 }
 
 TEST(VarRegistry, MakeInput) {
-    tycho::VarRegistry reg(3, 1, 0);
+    Tycho::VarRegistry reg(3, 1, 0);
     reg.add_name("x", 0);
     reg.add_name("y", 1);
     reg.add_name("v", 2);
@@ -71,7 +71,7 @@ TEST(VarRegistry, MakeInput) {
 **Step 2: Implement `VarRegistry`**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 class VarRegistry {
 public:
@@ -116,7 +116,7 @@ private:
     std::unordered_map<std::string, Eigen::VectorXi> name_to_indices_;
 };
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 **Step 3: Build and run tests**
@@ -144,19 +144,19 @@ git commit -m "feat: implement VarRegistry for named variable resolution"
 
 ```cpp
 TEST(RuntimeODE, BrachistochroneConstruction) {
-    auto args = tycho::ODEArguments(3, 1);
+    auto args = Tycho::ODEArguments(3, 1);
     auto XtU = args;
     auto x = XtU.XVec().coeff(0);
     auto y = XtU.XVec().coeff(1);
     auto v = XtU.XVec().coeff(2);
     auto theta = XtU.UVar(0);
 
-    auto xdot = tycho::sin(theta) * v;
-    auto ydot = -1.0 * tycho::cos(theta) * v;
-    auto vdot = 9.81 * tycho::cos(theta);
-    auto ode_expr = tycho::stack(xdot, ydot, vdot);
+    auto xdot = Tycho::sin(theta) * v;
+    auto ydot = -1.0 * Tycho::cos(theta) * v;
+    auto vdot = 9.81 * Tycho::cos(theta);
+    auto ode_expr = Tycho::stack(xdot, ydot, vdot);
 
-    tycho::RuntimeODE ode(ode_expr, 3, 1, 0);
+    Tycho::RuntimeODE ode(ode_expr, 3, 1, 0);
     EXPECT_EQ(ode.xvars(), 3);
     EXPECT_EQ(ode.uvars(), 1);
     EXPECT_EQ(ode.pvars(), 0);
@@ -166,7 +166,7 @@ TEST(RuntimeODE, BrachistochroneConstruction) {
 **Step 2: Implement `RuntimeODE`**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 class RuntimeODE {
 public:
@@ -181,7 +181,7 @@ public:
     RuntimeODE& var_group(const std::string& name,
                           std::initializer_list<std::string> members);
 
-    // Phase construction (returns tycho::Phase if names registered, raw phase otherwise)
+    // Phase construction (returns Tycho::Phase if names registered, raw phase otherwise)
     Phase phase(TranscriptionModes mode,
                 const std::vector<Eigen::VectorXd>& traj,
                 int num_segments) const;
@@ -214,7 +214,7 @@ private:
     VarRegistry registry_;
 };
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 **Key design decision:** Since XV, UV, PV are runtime values, we can't use
@@ -246,16 +246,16 @@ constructs the appropriately-typed `GenericODE` on demand (when creating a phase
 
 ```cpp
 TEST(ODEBuilder, LambdaDefinition) {
-    auto ode = tycho::ODEBuilder(3, 1)
+    auto ode = Tycho::ODEBuilder(3, 1)
         .define([](auto& args) {
             auto x = args.XVar(0);
             auto y = args.XVar(1);
             auto v = args.XVar(2);
             auto theta = args.UVar(0);
-            return tycho::stack(
-                tycho::sin(theta) * v,
-                -1.0 * tycho::cos(theta) * v,
-                9.81 * tycho::cos(theta)
+            return Tycho::stack(
+                Tycho::sin(theta) * v,
+                -1.0 * Tycho::cos(theta) * v,
+                9.81 * Tycho::cos(theta)
             );
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 3}})
@@ -269,16 +269,16 @@ TEST(ODEBuilder, LambdaDefinition) {
 }
 
 TEST(ODEBuilder, FromExpression) {
-    auto XtU = tycho::ODEArguments(3, 1);
+    auto XtU = Tycho::ODEArguments(3, 1);
     auto theta = XtU.UVar(0);
     auto v = XtU.XVar(2);
-    auto expr = tycho::stack(
-        tycho::sin(theta) * v,
-        -1.0 * tycho::cos(theta) * v,
-        9.81 * tycho::cos(theta)
+    auto expr = Tycho::stack(
+        Tycho::sin(theta) * v,
+        -1.0 * Tycho::cos(theta) * v,
+        9.81 * Tycho::cos(theta)
     );
 
-    auto ode = tycho::ODEBuilder(3, 1)
+    auto ode = Tycho::ODEBuilder(3, 1)
         .from(expr)
         .build();
 
@@ -289,7 +289,7 @@ TEST(ODEBuilder, FromExpression) {
 **Step 2: Implement `ODEBuilder`**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 class ODEBuilder {
 public:
@@ -319,12 +319,12 @@ private:
     std::vector<std::tuple<std::string, int, int>> pending_groups_;
 };
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 The `define()` lambda receives an `ODEArguments`-like proxy object that provides
 `XVar()`, `UVar()`, `PVar()`, `TVar()`, `XVec()`, `UVec()` accessors. Internally
-it creates the expression using `tycho::ODEArguments` and type-erases the result.
+it creates the expression using `Tycho::ODEArguments` and type-erases the result.
 
 **Step 3: Build and test**
 
@@ -332,7 +332,7 @@ it creates the expression using `tycho::ODEArguments` and type-erases the result
 
 ---
 
-### Task 5: Implement `tycho::Phase` wrapper
+### Task 5: Implement `Tycho::Phase` wrapper
 
 **Files:**
 - Create: `include/tycho/detail/phase_wrapper.h`
@@ -356,10 +356,10 @@ TEST(PhaseWrapper, NamedBoundaryValue) {
 }
 ```
 
-**Step 2: Implement `tycho::Phase`**
+**Step 2: Implement `Tycho::Phase`**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 class Phase {
 public:
@@ -417,7 +417,8 @@ public:
     void setMeshIncFactor(double factor);
     void setMeshRedFactor(double factor);
     void setMeshErrFactor(double factor);
-    void setThreads(int threads, int subthreads);
+    void setNumPartitions(int nparts);
+    void setNumPartitions(int nparts, int qp_threads);
     void setUnits(const Eigen::VectorXd& units);
 
     // Solve
@@ -443,7 +444,7 @@ private:
     VarRegistry registry_;
 };
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 **Step 3: Build and test**
@@ -461,14 +462,14 @@ private:
 
 ```cpp
 TEST(BuilderAPI, BrachistochroneConverges) {
-    auto ode = tycho::ODEBuilder(3, 1)
+    auto ode = Tycho::ODEBuilder(3, 1)
         .define([](auto& args) {
             auto v = args.XVar(2);
             auto theta = args.UVar(0);
-            return tycho::stack(
-                tycho::sin(theta) * v,
-                -1.0 * tycho::cos(theta) * v,
-                9.81 * tycho::cos(theta)
+            return Tycho::stack(
+                Tycho::sin(theta) * v,
+                -1.0 * Tycho::cos(theta) * v,
+                9.81 * Tycho::cos(theta)
             );
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 3}})
@@ -483,16 +484,16 @@ TEST(BuilderAPI, BrachistochroneConverges) {
         traj.push_back(pt);
     }
 
-    auto phase = ode.phase(tycho::TranscriptionModes::LGL3, traj, 32);
-    phase.addBoundaryValue(tycho::PhaseRegionFlags::Front,
+    auto phase = ode.phase(Tycho::TranscriptionModes::LGL3, traj, 32);
+    phase.addBoundaryValue(Tycho::PhaseRegionFlags::Front,
         {"x", "y", "v", "t"}, Eigen::Vector4d(0, 10, 0, 0));
-    phase.addBoundaryValue(tycho::PhaseRegionFlags::Back,
+    phase.addBoundaryValue(Tycho::PhaseRegionFlags::Back,
         {"x", "y"}, Eigen::Vector2d(10, 5));
-    phase.addLUVarBound(tycho::PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.addLUVarBound(Tycho::PhaseRegionFlags::Path, "theta", -0.1, 2.0);
     phase.addDeltaTimeObjective(1.0);
 
     auto status = phase.optimize();
-    EXPECT_EQ(status, tycho::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, Tycho::PSIOPT::ConvergenceFlags::CONVERGED);
 
     auto result = phase.returnTraj();
     double tf = result.back()(3);
@@ -579,8 +580,8 @@ Before marking Phase 5 complete:
 - [ ] `VarRegistry::make_input()` and `make_units()` work correctly
 - [ ] `ODEBuilder` accepts both lambda and pre-built expression forms
 - [ ] `RuntimeODE` correctly constructs and stores GenericODE
-- [ ] `tycho::Phase` named overloads resolve to correct index-based calls
-- [ ] `tycho::Phase` index overloads are direct passthroughs
+- [ ] `Tycho::Phase` named overloads resolve to correct index-based calls
+- [ ] `Tycho::Phase` index overloads are direct passthroughs
 - [ ] End-to-end Brachistochrone via builder converges to correct solution
 - [ ] All existing C++ tests still pass
 - [ ] All 38 Python examples still pass

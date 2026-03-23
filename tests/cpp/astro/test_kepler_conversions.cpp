@@ -4,7 +4,7 @@
 // Round-trip checks for classic, modified (MEE), and Cartesian element sets.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "astro_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>

@@ -27,25 +27,31 @@ Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CM
 `setup.py`, `requirements.txt`, `Dockerfile`, `Dockerfile-dev`.
 
 ```
-src/                    C++ source code (core library)
-  Tycho.h               Top-level C++ include (aggregates all modules)
+include/                Public C++ API headers
+  tycho/
+    tycho.h             Umbrella header — includes all public modules
+    typedefs.h          Eigen type aliases and SIMD detection
+    utils.h             Thread pool, type storage, sizing helpers, CRTP base
+    vector_functions.h  Core VectorFunction DSL
+    integrators.h       Runge-Kutta steppers and coefficients
+    optimal_control.h   Phase/ODE transcription, collocation, mesh refinement
+    solvers.h           PSIOPT optimizer, NLP layer
+    astro.h             Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
+    detail/             Template implementation bodies (included automatically)
+
+src/                    C++ source code (private implementation + forwarding headers)
+  Tycho.h               Internal aggregate (forwards to include/tycho/tycho.h)
   pch.h / pch.cpp       Precompiled header
   Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
                           headers, FunctionRegistry.h (TychoBind<T> trait),
                           TypeCasters.h, TychoModule.cpp
-  VectorFunctions/      Core VectorFunction DSL — autodiff, dense/sparse functions,
-                          operator overloads, type erasure (no binding code)
-  OptimalControl/       Phase/ODE transcription — LGL & trapezoidal collocation,
-                          FD derivatives, mesh refinement, link functions,
-                          OptimalControlProblem (no binding code)
-  Solvers/              PSIOPT interior-point optimizer, NLP layer,
-                          Pardiso / MUMPS / Accelerate / MKL interfaces
-  Astro/                Astrodynamics models — Kepler, CR3BP, J2, MEE dynamics,
-                          Lambert solvers, thruster models
-  Integrators/          Runge-Kutta steppers and coefficients
-  Utils/                Thread pool, timers, memory management, type erasure
-                          helpers, color terminal output, STD extensions
-  TypeDefs/             Eigen type aliases (EigenTypes.h, Tycho_TypeDefs.h)
+  VectorFunctions/      Forwarding headers → include/tycho/detail/
+  OptimalControl/       Forwarding headers + .cpp implementation files
+  Solvers/              Forwarding headers + .cpp implementation files
+  Astro/                Forwarding headers + .cpp implementation files
+  Integrators/          Forwarding headers → include/tycho/detail/
+  Utils/                Forwarding headers (public) + private utilities
+  TypeDefs/             Forwarding headers → include/tycho/detail/
   PyDocString/          C++-side Python docstring literals
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)

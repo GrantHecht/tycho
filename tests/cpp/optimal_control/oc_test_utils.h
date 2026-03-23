@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>

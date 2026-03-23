@@ -14,17 +14,10 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/solvers.h"
 
-#include "ConstraintFunction.h"
-#include "Jet.h"
-#include "NonLinearProgram.h"
-#include "ObjectiveFunction.h"
-#include "OptimizationProblem.h"
-#include "OptimizationProblemBase.h"
-#include "PSIOPT.h"
-#include "SolverInit.h"
 #ifdef USE_ACCELERATE_SPARSE
-#include "AccelerateInterface.h"
+#include "tycho/detail/AccelerateInterface.h"
 #else
 #include "mkl.h"
 #endif

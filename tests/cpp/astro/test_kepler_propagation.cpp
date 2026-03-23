@@ -5,7 +5,7 @@
 // consistency.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "astro_test_utils.h"
 #include "test_utils.h"
 #include <cmath>

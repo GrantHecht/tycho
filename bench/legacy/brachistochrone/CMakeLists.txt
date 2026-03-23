@@ -2,7 +2,7 @@ add_executable(brachistochrone_bench bench.cpp)
 
 target_compile_options(brachistochrone_bench PUBLIC ${COMPILE_FLAGS})
 target_include_directories(brachistochrone_bench PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(brachistochrone_bench PRIVATE tycho_core)
+target_link_libraries(brachistochrone_bench PRIVATE tycho)
 target_precompile_headers(brachistochrone_bench REUSE_FROM pch)
 
 if(UNIX)

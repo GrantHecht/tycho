@@ -1,28 +1,11 @@
-// =============================================================================
-// Originally from ASSET (AlabamaASRL/asset_asrl)
-// Copyright 2020-present The University of Alabama-Astrodynamics and Space
-//   Research Lab. Licensed under the Apache License, Version 2.0
-// License: notices/asset-apache2.txt.
-// Source: https://github.com/AlabamaASRL/asset_asrl
-// Original Developer: James B. Pezent
-//
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 / pybind11 header references removed
-// =============================================================================
-
 #pragma once
-#include "CRTPBase.h"
-#include "FunctionReturnType.h"
-#include "GetCoreCount.h"
-#include "LambdaJumpTable.h"
-#include "MathFunctions.h"
-#include "STDExtensions.h"
-#include "SizingHelpers.h"
-#include "ThreadPool.h"
-#include "TupleIterator.h"
-#include "TypeName.h"
+#include "tycho/utils.h"
 
-namespace Tycho {} // namespace Tycho
+// Private headers (not in public API)
+#include "ColorText.h"
+#include "EigenSTL.h"
+#include "LambdaJumpTable.h"
+
+// Forwarding headers to public detail/ headers (included here, not via utils.h)
+#include "MemoryManagement.h"
+#include "TupleIterator.h"

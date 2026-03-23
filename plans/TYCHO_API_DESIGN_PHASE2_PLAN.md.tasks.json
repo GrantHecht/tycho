@@ -3,8 +3,7 @@
   "tasks": [
     {"id": 1, "subject": "Task 1: Create feature branch", "status": "pending"},
     {"id": 2, "subject": "Task 2: Create include/tycho/ directory structure", "status": "pending", "blockedBy": [1]},
-    {"id": 3, "subject": "Task 3: Namespace migration Tycho -> tycho", "status": "pending", "blockedBy": [2]},
-    {"id": 4, "subject": "Task 4: Public headers - TypeDefs module", "status": "pending", "blockedBy": [3]},
+    {"id": 4, "subject": "Task 4: Public headers - TypeDefs module", "status": "pending", "blockedBy": [2]},
     {"id": 5, "subject": "Task 5: Public headers - Utils module", "status": "pending", "blockedBy": [4]},
     {"id": 6, "subject": "Task 6: Public headers - VectorFunctions module", "status": "pending", "blockedBy": [5]},
     {"id": 7, "subject": "Task 7: Public headers - OptimalControl module", "status": "pending", "blockedBy": [6]},
@@ -17,5 +16,5 @@
     {"id": 14, "subject": "Task 14: Update documentation", "status": "pending", "blockedBy": [13]},
     {"id": 15, "subject": "Task 15: Full validation", "status": "pending", "blockedBy": [13, 14]}
   ],
-  "lastUpdated": "2026-03-16T00:00:00Z"
+  "lastUpdated": "2026-03-22T00:00:00Z"
 }

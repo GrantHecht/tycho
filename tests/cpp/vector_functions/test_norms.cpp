@@ -4,7 +4,7 @@
 // Extracted from test_common_functions.cpp — Norms section.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "test_utils.h"
 #include "vf_test_utils.h"
 #include <cmath>

@@ -1,4 +1,5 @@
 set(_TYCHO_SRC_INCLUDES
+  ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
   ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
@@ -94,11 +95,14 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 
 
 #-------------------------------------------------------------------------------
-# tycho_core bundles all core static libs for use by bindings and future language frontends
-add_library(tycho_core INTERFACE)
-target_link_libraries(tycho_core INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
-target_link_libraries(tycho_core INTERFACE ${LINK_LIBS})
-target_include_directories(tycho_core INTERFACE ${_TYCHO_SRC_INCLUDES})
+# tycho bundles all core static libs for use by bindings and future language frontends
+add_library(tycho INTERFACE)
+target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
+target_link_libraries(tycho INTERFACE ${LINK_LIBS})
+target_include_directories(tycho INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+)
+add_library(tycho::tycho ALIAS tycho)
 
 #-------------------------------------------------------------------------------
 

@@ -4,7 +4,7 @@
 // ODE adjoint consistency and L1 approximate location verification.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
