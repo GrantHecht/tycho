@@ -21,5 +21,6 @@ if(BUILD_CPP_EXAMPLES)
         "BUILD_CPP_EXAMPLES should default OFF in subdirectory mode")
 endif()
 
-add_executable(fetch_test main.cpp)
+add_executable(fetch_test ../common/tycho_cmake_test.cpp)
 target_link_libraries(fetch_test PRIVATE tycho::tycho)
+target_compile_definitions(fetch_test PRIVATE TYCHO_TEST_NAME="FetchContent")

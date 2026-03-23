@@ -28,11 +28,18 @@ endif()
 set(TYCHO_NEEDS_OPENMP "@TYCHO_NEEDS_OPENMP@")
 if(TYCHO_NEEDS_OPENMP)
     set(_tycho_libomp_dir "@TYCHO_LIBOMP_DIR@")
-    find_library(_tycho_omp_lib omp PATHS "${_tycho_libomp_dir}/lib" REQUIRED)
+    find_library(_tycho_omp_lib omp
+        PATHS
+            "${_tycho_libomp_dir}/lib"
+            /opt/homebrew/opt/libomp/lib       # Apple Silicon Homebrew
+            /usr/local/opt/libomp/lib          # Intel Mac Homebrew
+        REQUIRED
+    )
     if(NOT _tycho_omp_lib)
         message(FATAL_ERROR
             "tycho: libomp not found. Install via: brew install libomp\n"
-            "  Searched: ${_tycho_libomp_dir}/lib")
+            "  Searched: ${_tycho_libomp_dir}/lib, "
+            "/opt/homebrew/opt/libomp/lib, /usr/local/opt/libomp/lib")
     endif()
 endif()
 

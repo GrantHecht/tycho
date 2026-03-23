@@ -1,4 +1,4 @@
-// Verify core Eigen types and compile definitions are accessible via find_package(tycho)
+// Verify core Eigen types and compile definitions are accessible through tycho
 #include <tycho/typedefs.h>
 #include <tycho/utils.h>
 #include <iostream>
@@ -19,10 +19,14 @@
 #error "TYCHO_DEFAULT_QP_THREADS must be defined by tycho"
 #endif
 
+#ifndef TYCHO_TEST_NAME
+#define TYCHO_TEST_NAME "unknown"
+#endif
+
 int main() {
     Tycho::Vector3<double> v;
     v << 1.0, 2.0, 3.0;
-    std::cout << "Tycho find_package test: OK (norm=" << v.norm() << ")"
+    std::cout << "Tycho " TYCHO_TEST_NAME " test: OK (norm=" << v.norm() << ")"
               << std::endl;
     return 0;
 }

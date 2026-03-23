@@ -387,10 +387,22 @@ if(UNIX AND NOT APPLE)
 elseif(APPLE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
-      # fina_package(OpenMP REQUIRED) will fail with AppleClang so 
-      # we need this to point towards the homebrew libomp
-      include_directories("/opt/homebrew/opt/libomp/include/")
-      link_directories("/opt/homebrew/opt/libomp/lib/")
+      # find_package(OpenMP) fails with AppleClang, so detect libomp manually.
+      find_path(TYCHO_OMP_INCLUDE_DIR omp.h
+          PATHS
+              /opt/homebrew/opt/libomp/include   # Apple Silicon Homebrew
+              /usr/local/opt/libomp/include      # Intel Mac Homebrew
+          REQUIRED
+      )
+      find_library(TYCHO_OMP_LIBRARY omp
+          PATHS
+              /opt/homebrew/opt/libomp/lib
+              /usr/local/opt/libomp/lib
+          REQUIRED
+      )
+      include_directories("${TYCHO_OMP_INCLUDE_DIR}")
+      get_filename_component(_tycho_omp_lib_dir "${TYCHO_OMP_LIBRARY}" DIRECTORY)
+      link_directories("${_tycho_omp_lib_dir}")
       list(APPEND COMPILE_FLAGS "-Xclang")
       list(APPEND COMPILE_FLAGS "-fopenmp")
       list(APPEND OpenMP_CXX_FLAGS "-lomp")
@@ -464,15 +476,13 @@ if(ENABLE_PYTHON_BINDINGS)
     elseif(DEFINED PYTHON_INCLUDE_DIRS)
         list(APPEND INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS})
     endif()
-    if (NOT APPLE)
-        # Don't directly link with python library on mac and instead rely on -undefined dynamic_lookup
-        # to bind to the python symbols at runtime from the interpreter
-        if(DEFINED Python_LIBRARIES)
-            list(APPEND LINK_LIBS ${Python_LIBRARIES})
-        elseif(DEFINED PYTHON_LIBRARIES)
-            list(APPEND LINK_LIBS ${PYTHON_LIBRARIES})
-        endif()
-    endif()
+    # NOTE: Python_LIBRARIES is intentionally NOT added to LINK_LIBS.
+    # LINK_LIBS flows into the tycho::tycho INTERFACE target, which must
+    # remain pure C++ for find_package/FetchContent consumers.
+    # nanobind handles Python symbol resolution on all platforms:
+    #   - Linux: MODULE libraries resolve CPython symbols at runtime
+    #   - Windows: nanobind-static links Python::Module
+    #   - macOS: -undefined dynamic_lookup (Python symbols bound at load time)
 
 endif()
 
@@ -619,9 +629,17 @@ if(APPLE)
     # macOS needs libomp linked explicitly. On Linux/Windows, MKL_LIBRARIES
     # includes Intel's libiomp5 which satisfies OpenMP runtime linkage.
     set(TYCHO_NEEDS_OPENMP ON)
-    # Capture the libomp path used at build time for the config template.
-    # Both AppleClang and Homebrew LLVM use /opt/homebrew/opt/libomp.
-    set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+    # Derive libomp prefix from the library found at configure time.
+    # TYCHO_OMP_LIBRARY is set by the AppleClang find_library() block above;
+    # for Homebrew LLVM, find_package(OpenMP) handles it, but the config
+    # template still needs a hint path for consumer-side re-detection.
+    if(TYCHO_OMP_LIBRARY)
+        get_filename_component(_tycho_omp_lib_dir "${TYCHO_OMP_LIBRARY}" DIRECTORY)
+        get_filename_component(TYCHO_LIBOMP_DIR "${_tycho_omp_lib_dir}" DIRECTORY)
+    else()
+        # Homebrew LLVM fallback: OpenMP found via find_package, use stable symlink
+        set(TYCHO_LIBOMP_DIR "/opt/homebrew/opt/libomp")
+    endif()
 else()
     set(TYCHO_SPARSE_SOLVER "MKL")
     set(TYCHO_NEEDS_OPENMP OFF)
