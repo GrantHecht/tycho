@@ -1,20 +1,20 @@
 {
   "planPath": "TYCHO_API_DESIGN_PHASE1_PLAN.md",
   "tasks": [
-    {"id": 1, "subject": "Task 1: Create feature branch", "status": "pending"},
-    {"id": 2, "subject": "Task 2: Rename nanobind module _tycho -> _tychopy", "status": "pending", "blockedBy": [1]},
-    {"id": 3, "subject": "Task 3: Rename Python package directory tycho/ -> tychopy/", "status": "pending", "blockedBy": [2]},
-    {"id": 4, "subject": "Task 4: Update imports in tychopy/ package files", "status": "pending", "blockedBy": [3]},
-    {"id": 5, "subject": "Task 5: Update pyproject.toml", "status": "pending", "blockedBy": [3]},
-    {"id": 6, "subject": "Task 6: Update all 38 example scripts", "status": "pending", "blockedBy": [3]},
-    {"id": 7, "subject": "Task 7: Update test files", "status": "pending", "blockedBy": [3]},
-    {"id": 8, "subject": "Task 8: Update doc guide scripts", "status": "pending", "blockedBy": [3]},
-    {"id": 9, "subject": "Task 9: Update legacy benchmark scripts", "status": "pending", "blockedBy": [3]},
-    {"id": 10, "subject": "Task 10: Update shell scripts", "status": "pending", "blockedBy": [3]},
-    {"id": 11, "subject": "Task 11: Update documentation and markdown files", "status": "pending", "blockedBy": [3]},
-    {"id": 12, "subject": "Task 12: Update GitHub workflows", "status": "pending", "blockedBy": [3]},
-    {"id": 13, "subject": "Task 13: Build and verify", "status": "pending", "blockedBy": [4, 5, 6, 7, 8, 9, 10, 11, 12]},
-    {"id": 14, "subject": "Task 14: Final verification and cleanup", "status": "pending", "blockedBy": [13]}
+    {"id": 1, "subject": "Task 1: Create feature branch", "status": "completed", "lastUpdated": "2026-03-22T19:30:00Z"},
+    {"id": 2, "subject": "Task 2: Rename nanobind module _tycho -> _tychopy", "status": "completed", "blockedBy": [1], "lastUpdated": "2026-03-22T19:32:00Z"},
+    {"id": 3, "subject": "Task 3: Rename Python package directory tycho/ -> tychopy/", "status": "completed", "blockedBy": [2], "lastUpdated": "2026-03-22T19:33:00Z"},
+    {"id": 4, "subject": "Task 4: Update imports in tychopy/ package files", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:38:00Z"},
+    {"id": 5, "subject": "Task 5: Update pyproject.toml", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 6, "subject": "Task 6: Update all 38 example scripts", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 7, "subject": "Task 7: Update test files", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:38:00Z"},
+    {"id": 8, "subject": "Task 8: Update doc guide scripts", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 9, "subject": "Task 9: Update legacy benchmark scripts", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 10, "subject": "Task 10: Update shell scripts", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 11, "subject": "Task 11: Update documentation and markdown files", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 12, "subject": "Task 12: Update GitHub workflows", "status": "completed", "blockedBy": [3], "lastUpdated": "2026-03-22T19:42:00Z"},
+    {"id": 13, "subject": "Task 13: Build and verify", "status": "completed", "blockedBy": [4, 5, 6, 7, 8, 9, 10, 11, 12], "lastUpdated": "2026-03-22T20:00:00Z"},
+    {"id": 14, "subject": "Task 14: Final verification and cleanup", "status": "completed", "blockedBy": [13], "lastUpdated": "2026-03-22T20:05:00Z"}
   ],
-  "lastUpdated": "2026-03-16T00:00:00Z"
+  "lastUpdated": "2026-03-22T20:05:00Z"
 }
