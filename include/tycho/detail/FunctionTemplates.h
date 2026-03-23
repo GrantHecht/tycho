@@ -13,6 +13,8 @@
 //   - pybind11 / pybind11 header references removed
 // =============================================================================
 
+#pragma once
+
 namespace Avoid {
 
 template <int Args, class Derived, class Base> struct Function_ExprTemplate : Base {

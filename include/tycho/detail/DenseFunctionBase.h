@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Implements the Base class for all dense vector functions in asset.
+// Implements the Base class for all dense vector functions in Tycho.
 // Forwards the Derived class and compile time input(IR) and output(OR) rows down the CRTP
 // inheretance chain. Also inherits from from domain holder so dynamic sized vector functions can
 // hold an array containing their true input domain that is computed at run-time. Also defines the
@@ -24,9 +24,6 @@
 // compute_jacobian_impl methods implemented in derived classes. Theses methods are the used to
 // implement the dense vector functions interface with psiopt throught the constraints_jacobian etc.
 // methods.
-//
-// Finally, this class also contains methods (Postfixed Build) defining the python binding code of a
-// vector functions public interface.
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):

@@ -7,7 +7,7 @@
 // Original Developer: James B. Pezent
 //
 // Defines the type erasure spec (DenseFunctionSpec) for the methods of Dense
-// ASSET vector functions. This encompasses the primary compute and derivative
+// Tycho vector functions. This encompasses the primary compute and derivative
 // methods with both double and super-scalar arguments as well as selected
 // jacobian operations on double valued matrices that have been shown to improve
 // performance under certain circumstances. This Spec is used to define the

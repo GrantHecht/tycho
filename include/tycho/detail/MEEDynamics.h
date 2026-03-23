@@ -13,6 +13,7 @@
 //   - pybind11 / pybind11 header references removed
 // =============================================================================
 
+#pragma once
 #include "tycho/vector_functions.h"
 
 namespace Tycho {
