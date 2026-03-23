@@ -2,15 +2,38 @@
 
 include(CMakeFindDependencyMacro)
 
+# Make tycho's Find modules available for find_dependency calls
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+
 find_dependency(Threads)
 
-# If tycho was built with system Eigen, consumers need it too
+# Re-find the sparse solver that tycho was built with
+set(TYCHO_SPARSE_SOLVER "@TYCHO_SPARSE_SOLVER@")
+if(TYCHO_SPARSE_SOLVER STREQUAL "AccelerateSparse")
+    find_dependency(AccelerateSparse)
+elseif(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
+    find_dependency(MKL)
+endif()
+
+# OpenMP handling (macOS only -- Linux uses implicit compiler flags)
+set(TYCHO_NEEDS_OPENMP "@TYCHO_NEEDS_OPENMP@")
+if(TYCHO_NEEDS_OPENMP)
+    find_dependency(OpenMP)
+endif()
+
+# Eigen3 handling
 set(TYCHO_USE_SYSTEM_EIGEN @TYCHO_USE_SYSTEM_EIGEN@)
 if(TYCHO_USE_SYSTEM_EIGEN)
     find_dependency(Eigen3 3.4)
 else()
     # Bundled Eigen headers were installed alongside tycho
     if(NOT TARGET Eigen3::Eigen)
+        if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/Eigen/Core")
+            message(FATAL_ERROR
+                "tycho: bundled Eigen headers not found at "
+                "${PACKAGE_PREFIX_DIR}/include/Eigen/. "
+                "The tycho installation may be incomplete.")
+        endif()
         add_library(Eigen3::Eigen INTERFACE IMPORTED)
         set_target_properties(Eigen3::Eigen PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
@@ -19,5 +42,43 @@ else()
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/tychoTargets.cmake")
+
+# Append re-found transitive link dependencies to the imported tycho target.
+# These were wrapped in BUILD_INTERFACE during the build so they don't appear
+# in tychoTargets.cmake -- we re-find them here for portability.
+if(TARGET tycho::tycho)
+    # Threads
+    set_property(TARGET tycho::tycho APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES Threads::Threads)
+
+    # Sparse solver
+    if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
+        if(UNIX AND NOT APPLE)
+            set_property(TARGET tycho::tycho APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES
+                    -Wl,--start-group ${MKL_LIBRARIES} -Wl,--end-group)
+        else()
+            set_property(TARGET tycho::tycho APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES ${MKL_LIBRARIES})
+        endif()
+        if(MKL_INCLUDE_DIRS)
+            set_property(TARGET tycho::tycho APPEND PROPERTY
+                INTERFACE_INCLUDE_DIRECTORIES ${MKL_INCLUDE_DIRS})
+        endif()
+    endif()
+    # AccelerateSparse is already on tycho::psiopt (PUBLIC link), handled by tychoTargets.cmake.
+
+    # OpenMP
+    if(TYCHO_NEEDS_OPENMP AND TARGET OpenMP::OpenMP_CXX)
+        set_property(TARGET tycho::tycho APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+    endif()
+
+    # System libraries
+    if(UNIX)
+        set_property(TARGET tycho::tycho APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${CMAKE_DL_LIBS} m)
+    endif()
+endif()
 
 check_required_components(tycho)

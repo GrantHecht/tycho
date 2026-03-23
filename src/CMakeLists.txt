@@ -79,7 +79,10 @@ add_library(utils STATIC
  )
 target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
-target_link_libraries(utils PRIVATE $<BUILD_INTERFACE:fmt::fmt-header-only>)
+# fmt is header-only (FMT_HEADER_ONLY defined globally); include path comes from
+# the global include_directories(dep/fmt/include) in the root CMakeLists.txt.
+# We do not link fmt::fmt-header-only because it would require exporting the fmt
+# target alongside tycho.
 
 
 add_library(astro STATIC
@@ -100,20 +103,39 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # tycho bundles all core static libs for use by bindings and future language frontends
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
-target_link_libraries(tycho INTERFACE ${LINK_LIBS})
+target_link_libraries(tycho INTERFACE $<BUILD_INTERFACE:${LINK_LIBS}>)
 target_link_libraries(tycho INTERFACE Eigen3::Eigen)
 target_include_directories(tycho INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 add_library(tycho::tycho ALIAS tycho)
+target_compile_features(tycho INTERFACE cxx_std_20)
+
+# Compile definitions required by public headers
+target_compile_definitions(tycho INTERFACE
+    FMT_HEADER_ONLY
+    FMT_USE_LOCALE=0
+    EIGEN_INITIALIZE_MATRICES_BY_ZERO
+    EIGEN_DONT_PARALLELIZE
+)
+if(APPLE)
+    target_compile_definitions(tycho INTERFACE USE_ACCELERATE_SPARSE)
+endif()
+
+# fmt and autodiff include paths for build-tree consumers (FetchContent).
+# Install-tree consumers use the existing $<INSTALL_INTERFACE:include> above.
+target_include_directories(tycho INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/fmt/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/autodiff>
+)
 
 #-------------------------------------------------------------------------------
 # Install rules
 
 include(GNUInstallDirs)
 
-install(TARGETS tycho psiopt utils optimalcontrol astro
+install(TARGETS tycho psiopt utils optimalcontrol astro pch
     EXPORT tychoTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

@@ -333,8 +333,16 @@ endif()
 # Set up submodule dependencies
 if(TYCHO_USE_SYSTEM_EIGEN)
     find_package(Eigen3 3.4 REQUIRED)
-    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
-    include_directories(${EIGEN3_INCLUDE_DIR})
+    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers.
+    # Prefer modern target-based approach; fall back to legacy variable.
+    if(TARGET Eigen3::Eigen)
+        get_target_property(_eigen3_inc Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
+        if(_eigen3_inc)
+            include_directories(${_eigen3_inc})
+        endif()
+    else()
+        include_directories(${EIGEN3_INCLUDE_DIR})
+    endif()
     message(STATUS "Using system Eigen3: ${Eigen3_DIR}")
 else()
     if(NOT TARGET Eigen3::Eigen)
@@ -407,7 +415,12 @@ if(APPLE)
   find_package(AccelerateSparse REQUIRED)
   add_compile_definitions(USE_ACCELERATE_SPARSE)
 else()
-  find_package(MKL REQUIRED)
+  find_package(MKL)
+  if(NOT MKL_FOUND)
+      message(FATAL_ERROR
+          "Tycho requires Intel MKL. Set MKLROOT to the MKL installation directory.\n"
+          "  See CLAUDE.md for installation instructions.")
+  endif()
 endif()
 
 if(ENABLE_PYTHON_BINDINGS)
@@ -553,6 +566,11 @@ install(DIRECTORY include/tycho
 )
 
 if(NOT TYCHO_USE_SYSTEM_EIGEN)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen/Eigen/Core")
+        message(FATAL_ERROR
+            "Bundled Eigen not found at dep/eigen/. "
+            "Run: git submodule update --init dep/eigen")
+    endif()
     install(DIRECTORY dep/eigen/Eigen
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
@@ -561,13 +579,36 @@ if(NOT TYCHO_USE_SYSTEM_EIGEN)
     )
 endif()
 
+# Install fmt headers (header-only, required by tycho public API)
+install(DIRECTORY dep/fmt/include/fmt
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install autodiff headers (header-only, required by tycho public API)
+install(DIRECTORY dep/autodiff/autodiff
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+    PATTERN "tests" EXCLUDE
+    PATTERN "pybind11" EXCLUDE
+)
+
 # CMake package config for find_package(tycho)
 include(CMakePackageConfigHelpers)
+
+# Variables substituted into tychoConfig.cmake.in
+if(APPLE)
+    set(TYCHO_SPARSE_SOLVER "AccelerateSparse")
+    # macOS needs OpenMP re-found (Linux links implicitly via compiler flags)
+    set(TYCHO_NEEDS_OPENMP ON)
+else()
+    set(TYCHO_SPARSE_SOLVER "MKL")
+    set(TYCHO_NEEDS_OPENMP OFF)
+endif()
 
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
     VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
+    COMPATIBILITY SameMinorVersion
 )
 
 configure_package_config_file(
@@ -585,5 +626,12 @@ install(EXPORT tychoTargets
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+)
+
+# Install Find modules so consumers can re-find transitive dependencies
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindMKL.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindAccelerateSparse.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
 )
