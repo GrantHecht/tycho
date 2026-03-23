@@ -1,5 +1,5 @@
 set(_TYCHO_SRC_INCLUDES
-  ${CMAKE_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
   ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
@@ -101,7 +101,7 @@ target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunction
 target_link_libraries(tycho INTERFACE ${LINK_LIBS})
 target_link_libraries(tycho INTERFACE Eigen3::Eigen)
 target_include_directories(tycho INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 add_library(tycho::tycho ALIAS tycho)

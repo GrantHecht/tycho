@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(Tycho VERSION 0.1.0 LANGUAGES CXX)
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Detect if Tycho is the top-level project or consumed as a subdirectory
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
