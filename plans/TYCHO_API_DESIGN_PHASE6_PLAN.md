@@ -47,14 +47,14 @@ target_link_libraries(brachistochrone_builder PRIVATE tycho::tycho)
 int main() {
     double g = 9.81;
 
-    auto ode = tycho::ODEBuilder(3, 1)
+    auto ode = Tycho::ODEBuilder(3, 1)
         .define([g](auto& args) {
             auto v = args.XVar(2);
             auto theta = args.UVar(0);
-            return tycho::stack(
-                tycho::sin(theta) * v,
-                -1.0 * tycho::cos(theta) * v,
-                g * tycho::cos(theta)
+            return Tycho::stack(
+                Tycho::sin(theta) * v,
+                -1.0 * Tycho::cos(theta) * v,
+                g * Tycho::cos(theta)
             );
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 3}})
@@ -70,12 +70,12 @@ int main() {
         traj.push_back(pt);
     }
 
-    auto phase = ode.phase(tycho::TranscriptionModes::LGL3, traj, 32);
-    phase.addBoundaryValue(tycho::PhaseRegionFlags::Front,
+    auto phase = ode.phase(Tycho::TranscriptionModes::LGL3, traj, 32);
+    phase.addBoundaryValue(Tycho::PhaseRegionFlags::Front,
         {"x","y","v","t"}, Eigen::Vector4d(x0, y0, v0, 0));
-    phase.addBoundaryValue(tycho::PhaseRegionFlags::Back,
+    phase.addBoundaryValue(Tycho::PhaseRegionFlags::Back,
         {"x","y"}, Eigen::Vector2d(xf, yf));
-    phase.addLUVarBound(tycho::PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.addLUVarBound(Tycho::PhaseRegionFlags::Path, "theta", -0.1, 2.0);
     phase.addDeltaTimeObjective(1.0);
 
     phase.optimize();
@@ -122,23 +122,23 @@ git commit -m "feat: add Brachistochrone builder API example"
 ```cpp
 // Wind as a GenericFunction
 auto uniform_wind = [](double vel, double ang) {
-    auto args = tycho::Arguments<3>();
-    return tycho::stack(
-        tycho::Value<double, 3>(vel * std::cos(ang)),
-        tycho::Value<double, 3>(vel * std::sin(ang))
+    auto args = Tycho::Arguments<3>();
+    return Tycho::stack(
+        Tycho::Value<double, 3>(vel * std::cos(ang)),
+        Tycho::Value<double, 3>(vel * std::sin(ang))
     );
 };
 
 auto make_zermelo_ode = [](double vMax, auto wind_func) {
-    auto args = tycho::Arguments<4>(); // [x, y, t, theta]
+    auto args = Tycho::Arguments<4>(); // [x, y, t, theta]
     auto xyt = args.head<3>();
     auto theta = args.coeff<3>();
     auto wind = wind_func(xyt);
-    auto xdot = vMax * tycho::cos(theta) + /* wx from wind */;
-    auto ydot = vMax * tycho::sin(theta) + /* wy from wind */;
+    auto xdot = vMax * Tycho::cos(theta) + /* wx from wind */;
+    auto ydot = vMax * Tycho::sin(theta) + /* wy from wind */;
 
-    return tycho::ODEBuilder(2, 1)
-        .from(tycho::stack(xdot, ydot))
+    return Tycho::ODEBuilder(2, 1)
+        .from(Tycho::stack(xdot, ydot))
         .var_names({{"x", 0}, {"y", 1}, {"theta", 2}})
         .build();
 };
@@ -169,7 +169,7 @@ Mirror the Python `compareWind()` function — solve with multiple wind models.
 
 ```cpp
 auto make_rocket_ode = [](double T, double mdot) {
-    auto XtU = tycho::ODEArguments(7, 3);
+    auto XtU = Tycho::ODEArguments(7, 3);
     auto R = XtU.XVec().head(3);
     auto V = XtU.XVec().segment(3, 3);
     auto m = XtU.XVar(6);
@@ -177,7 +177,7 @@ auto make_rocket_ode = [](double T, double mdot) {
 
     // ... dynamics ...
 
-    return tycho::ODEBuilder(7, 3)
+    return Tycho::ODEBuilder(7, 3)
         .from(ode_expr)
         .var_group("R", 0, 2)
         .var_group("V", 3, 5)
@@ -190,10 +190,10 @@ auto make_rocket_ode = [](double T, double mdot) {
 **Step 2: Set up 4 phases with named variables**
 
 ```cpp
-auto phase1 = ode1.phase(tycho::TranscriptionModes::LGL3, IG1, nsegs1);
-phase1.addBoundaryValue(tycho::PhaseRegionFlags::Front,
+auto phase1 = ode1.phase(Tycho::TranscriptionModes::LGL3, IG1, nsegs1);
+phase1.addBoundaryValue(Tycho::PhaseRegionFlags::Front,
     {"R", "V", "m", "t"}, IG1[0].head(8));
-phase1.addLUNormBound(tycho::PhaseRegionFlags::Path, "u", 0.5, 1.5);
+phase1.addLUNormBound(Tycho::PhaseRegionFlags::Path, "u", 0.5, 1.5);
 ```
 
 **Step 3: Compare ergonomics against static DSL version**
@@ -213,7 +213,7 @@ Document the differences in code size, readability, and any API gaps.
 **Step 1: Implement**
 
 ```cpp
-auto ode = tycho::ODEBuilder(1, 1)
+auto ode = Tycho::ODEBuilder(1, 1)
     .define([](auto& args) {
         auto x = args.XVar(0);
         auto u = args.UVar(0);
@@ -222,8 +222,8 @@ auto ode = tycho::ODEBuilder(1, 1)
     .var_names({{"x", 0}, {"u", 1}})
     .build();
 
-auto phase = ode.phase(tycho::TranscriptionModes::LGL7, traj_ig, 50);
-phase.addBoundaryValue(tycho::PhaseRegionFlags::Front, {"x", "t"}, ...);
+auto phase = ode.phase(Tycho::TranscriptionModes::LGL7, traj_ig, 50);
+phase.addBoundaryValue(Tycho::PhaseRegionFlags::Front, {"x", "t"}, ...);
 phase.addIntegralObjective(obj_func, {"x", "u"});
 ```
 

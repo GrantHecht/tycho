@@ -8,6 +8,8 @@
 
 **Tech Stack:** C++20, CMake, Tycho static VF DSL
 
+**Threading model note:** Tycho now uses a global work-stealing thread pool controlled by `Tycho::set_num_threads(n)`. Per-phase work distribution is configured via `phase->setNumPartitions(n)` (not the old `setThreads()`). Examples should demonstrate this two-level model where appropriate: `set_num_threads()` for the global pool size, `setNumPartitions()` for per-phase partitioning.
+
 ---
 
 ### Task 1: Create feature branch and reorganize example structure
@@ -52,7 +54,7 @@ target_link_libraries(brachistochrone_cpp PRIVATE tycho::tycho)
 Update `main.cpp`:
 ```cpp
 #include <tycho/tycho.h>
-using namespace tycho;
+using namespace Tycho;
 ```
 
 (These changes may already be done from Phase 2.)
@@ -104,7 +106,7 @@ functions. The C++ static DSL equivalent:
 #include <vector>
 #include <cmath>
 
-using namespace tycho;
+using namespace Tycho;
 
 // Wind function type: takes Arguments<3> (x, y, t), returns 2 outputs (wx, wy)
 // Uniform wind model
@@ -272,7 +274,7 @@ phase->optimizer.set_OptLSMode("L1");
 phase->optimizer.set_SoeLSMode("L1");
 phase->optimizer.set_MaxLSIters(2);
 phase->optimizer.PrintLevel = 2;
-phase->setThreads(1, 1);
+phase->setNumPartitions(1, 1);
 phase->optimizer.set_QPOrderingMode("MINDEG");
 
 // Adaptive mesh refinement

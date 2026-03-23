@@ -30,7 +30,7 @@ This is the simplest fix — pure implementation, no API change.
 
 ```cpp
 TEST(ScaledNesting, DoubleScaleCollapse) {
-    auto args = tycho::Arguments<3>();
+    auto args = Tycho::Arguments<3>();
     auto x = args.coeff<0>();
 
     // This pattern triggers Scaled<Scaled<...>> today
@@ -45,7 +45,7 @@ TEST(ScaledNesting, DoubleScaleCollapse) {
 }
 
 TEST(ScaledNesting, DivisionPattern) {
-    auto args = tycho::Arguments<3>();
+    auto args = Tycho::Arguments<3>();
     auto x = args.coeff<0>();
 
     // Pattern from TODO.md: scalar * (1.0 + 0.01 * vf) / scalar
@@ -102,15 +102,15 @@ git commit -m "fix: collapse Scaled<Scaled<...>> nesting to single Scaled"
 **Step 1: Write failing test**
 
 ```cpp
-struct MultiParamODE_Impl : tycho::ODESize<3, 1, 0> {
+struct MultiParamODE_Impl : Tycho::ODESize<3, 1, 0> {
     static auto Definition(double g, double drag) {
-        auto args = tycho::Arguments<5>();
+        auto args = Tycho::Arguments<5>();
         auto v = args.coeff<2>();
         auto theta = args.coeff<4>();
-        return tycho::StackedOutputs{
-            tycho::sin(theta) * v,
-            -1.0 * tycho::cos(theta) * v,
-            g * tycho::cos(theta) - drag * v
+        return Tycho::StackedOutputs{
+            Tycho::sin(theta) * v,
+            -1.0 * Tycho::cos(theta) * v,
+            g * Tycho::cos(theta) - drag * v
         };
     }
 };
@@ -132,8 +132,8 @@ variadic parameters:
 
 ```cpp
 #define TYCHO_BUILD_ODE(Name, Impl, ...)                                     \
-    struct Name : tycho::VectorExpression<Name, Impl, __VA_ARGS__> {         \
-        using Base = tycho::VectorExpression<Name, Impl, __VA_ARGS__>;       \
+    struct Name : Tycho::VectorExpression<Name, Impl, __VA_ARGS__> {         \
+        using Base = Tycho::VectorExpression<Name, Impl, __VA_ARGS__>;       \
         Name(__VA_ARGS__) : Base(/* forward args */) {}                      \
     };
 ```
@@ -145,7 +145,7 @@ May need a helper that generates the constructor signature from the type list.
 construction:
 
 ```cpp
-auto ode = tycho::make_static_ode<MultiParamODE_Impl>(9.81, 0.1);
+auto ode = Tycho::make_static_ode<MultiParamODE_Impl>(9.81, 0.1);
 ```
 
 Where `make_static_ode` is a factory function template.
@@ -169,20 +169,20 @@ Test that `Integrator<MultiParamODE>` compiles.
 
 ```cpp
 TEST(Barrier, CutsTypeTree) {
-    auto args = tycho::Arguments<5>();
+    auto args = Tycho::Arguments<5>();
     auto x = args.coeff<0>();
     auto y = args.coeff<1>();
 
     // Build a complex subexpression
-    auto complex_expr = tycho::sin(x) * tycho::cos(y) + tycho::exp(x * y);
+    auto complex_expr = Tycho::sin(x) * Tycho::cos(y) + Tycho::exp(x * y);
 
     // Insert a barrier — type-erases to GenericFunction
-    auto barrier_expr = tycho::barrier(complex_expr);
+    auto barrier_expr = Tycho::barrier(complex_expr);
 
     // barrier_expr should be a GenericFunction, not a deeply nested template type
     static_assert(std::is_same_v<
         std::decay_t<decltype(barrier_expr)>,
-        tycho::GenericFunction<-1, -1>
+        Tycho::GenericFunction<-1, -1>
     > || /* some other erased type */);
 
     // Should still compute correctly
@@ -196,10 +196,10 @@ TEST(Barrier, CutsTypeTree) {
 }
 ```
 
-**Step 2: Implement `tycho::barrier()`**
+**Step 2: Implement `Tycho::barrier()`**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 // Type-erase a VectorFunction expression to cut template depth.
 // The resulting GenericFunction uses virtual dispatch for evaluation.
@@ -214,7 +214,7 @@ GenericFunction<IR, OR> barrier(const Func& f) {
     return GenericFunction<IR, OR>(f);
 }
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 This is surprisingly simple — `GenericFunction`'s constructor already type-erases
@@ -231,7 +231,7 @@ barriers:
 auto deep = sin(cos(sin(cos(sin(x)))));
 
 // With barrier: intermediate results type-erased
-auto shallow = sin(tycho::barrier(cos(sin(tycho::barrier(cos(sin(x)))))));
+auto shallow = sin(Tycho::barrier(cos(sin(Tycho::barrier(cos(sin(x)))))));
 ```
 
 **Step 4: Build, test, commit**
@@ -248,15 +248,15 @@ auto shallow = sin(tycho::barrier(cos(sin(tycho::barrier(cos(sin(x)))))));
 
 ```cpp
 // ODE with finite-difference Jacobian
-struct FD_ODE_Impl : tycho::ODESize<3, 1, 0> {
+struct FD_ODE_Impl : Tycho::ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args = tycho::Arguments<5>();
+        auto args = Tycho::Arguments<5>();
         auto v = args.coeff<2>();
         auto theta = args.coeff<4>();
-        return tycho::StackedOutputs{
-            tycho::sin(theta) * v,
-            -1.0 * tycho::cos(theta) * v,
-            g * tycho::cos(theta)
+        return Tycho::StackedOutputs{
+            Tycho::sin(theta) * v,
+            -1.0 * Tycho::cos(theta) * v,
+            g * Tycho::cos(theta)
         };
     }
 };
@@ -266,11 +266,11 @@ BUILD_ODE_FROM_EXPRESSION_FD(FD_ODE, FD_ODE_Impl, double);
 
 TEST(FDODE, ConvergesWithFD) {
     FD_ODE ode(9.81);
-    auto phase = std::make_shared<tycho::ODEPhase<FD_ODE>>(
-        ode, tycho::TranscriptionModes::LGL3, traj, 32);
+    auto phase = std::make_shared<Tycho::ODEPhase<FD_ODE>>(
+        ode, Tycho::TranscriptionModes::LGL3, traj, 32);
     // ... add constraints ...
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, tycho::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, Tycho::PSIOPT::ConvergenceFlags::CONVERGED);
 }
 ```
 
@@ -308,11 +308,11 @@ and `VectorExpression` base classes.
 
 ```cpp
 TEST(StaticVarTags, IndexAccess) {
-    constexpr auto x = tycho::XVar<0>;
-    constexpr auto y = tycho::XVar<1>;
-    constexpr auto theta = tycho::UVar<0>;
+    constexpr auto x = Tycho::XVar<0>;
+    constexpr auto y = Tycho::XVar<1>;
+    constexpr auto theta = Tycho::UVar<0>;
 
-    auto args = tycho::Arguments<4>();
+    auto args = Tycho::Arguments<4>();
     auto x_expr = args[x];   // Same as args.coeff<0>()
     auto y_expr = args[y];   // Same as args.coeff<1>()
     auto th_expr = args[theta]; // Maps to correct index based on ODE sizing
@@ -327,7 +327,7 @@ TEST(StaticVarTags, IndexAccess) {
 **Step 2: Implement var tags**
 
 ```cpp
-namespace tycho {
+namespace Tycho {
 
 // Compile-time variable index tags
 template <int I>
@@ -351,7 +351,7 @@ auto operator[](const Arguments<N>& args, XVarTag<I>) {
     return args.template coeff<I>();
 }
 
-} // namespace tycho
+} // namespace Tycho
 ```
 
 The mapping from `UVar<I>` to the correct index in the full XtUP vector
@@ -395,7 +395,7 @@ choice.
 **Step 1: Implement Option A — Single-struct, macro-free**
 
 ```cpp
-struct Brachistochrone : tycho::StaticODE<3, 1, 0> {
+struct Brachistochrone : Tycho::StaticODE<3, 1, 0> {
     double g;
     Brachistochrone(double g) : g(g) {}
 
@@ -404,16 +404,16 @@ struct Brachistochrone : tycho::StaticODE<3, 1, 0> {
         constexpr auto theta = UVar<0>;
 
         auto args = this->args();
-        return tycho::stack(
-            tycho::sin(args[theta]) * args[v],
-            -1.0 * tycho::cos(args[theta]) * args[v],
-            g * tycho::cos(args[theta])
+        return Tycho::stack(
+            Tycho::sin(args[theta]) * args[v],
+            -1.0 * Tycho::cos(args[theta]) * args[v],
+            g * Tycho::cos(args[theta])
         );
     }
 };
 ```
 
-Requires implementing `tycho::StaticODE<XV, UV, PV>` base class.
+Requires implementing `Tycho::StaticODE<XV, UV, PV>` base class.
 
 **Step 2: Implement Option B — Refined macro**
 
@@ -422,10 +422,10 @@ TYCHO_DEFINE_ODE(Brachistochrone, XVars=3, UVars=1, Params=(double g)) {
     constexpr auto v = XVar<2>;
     constexpr auto theta = UVar<0>;
 
-    return tycho::stack(
-        tycho::sin(args[theta]) * args[v],
-        -1.0 * tycho::cos(args[theta]) * args[v],
-        g * tycho::cos(args[theta])
+    return Tycho::stack(
+        Tycho::sin(args[theta]) * args[v],
+        -1.0 * Tycho::cos(args[theta]) * args[v],
+        g * Tycho::cos(args[theta])
     );
 }
 ```
@@ -484,7 +484,7 @@ All existing code using the old macro should compile without changes.
 
 - [ ] `Scaled<Scaled<...>>` collapses to single `Scaled`
 - [ ] `BUILD_ODE_FROM_EXPRESSION` works with multiple parameters
-- [ ] `tycho::barrier()` type-erases expressions to `GenericFunction`
+- [ ] `Tycho::barrier()` type-erases expressions to `GenericFunction`
 - [ ] FD Jacobian mode available via `BUILD_ODE_FROM_EXPRESSION_FD`
 - [ ] Forward-mode AD available via `BUILD_ODE_FROM_EXPRESSION_FWAD`
 - [ ] `XVar<I>`, `UVar<I>`, `PVar<I>` compile-time tags work

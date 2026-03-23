@@ -215,7 +215,7 @@ int main() {
     Eigen::VectorXd v(3);
     v << 1.0, 2.0, 3.0;
 
-    auto args = tycho::Arguments<3>();
+    auto args = Tycho::Arguments<3>();
 
     std::cout << "Tycho FetchContent test: OK" << std::endl;
     return 0;

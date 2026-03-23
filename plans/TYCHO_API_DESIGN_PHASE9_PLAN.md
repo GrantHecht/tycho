@@ -24,13 +24,19 @@ prioritized into tiers but not scheduled.
 
 ### C++ OptimalControlProblem Builder
 - Named-phase builder for multi-phase problems
-- `tycho::OCPBuilder` that manages named phases and link constraints
+- `Tycho::OCPBuilder` that manages named phases and link constraints
 - Simplifies the 4-phase Delta3Launch pattern significantly
 
 ### Additional C++ Examples
 - CR3BP / DeltaV_CR3BP — tests astro module from C++
 - MultiPhaseZermelo — simpler multi-phase problem
 - SimpleLowThrust — mid-complexity astro problem
+
+### PSIOPT Struct→Class Refactor
+- Convert PSIOPT from public struct with ~60 read-write fields to a proper class
+- Design encapsulated configuration API (builder, named setters, or config struct)
+- Current flat-property access works but exposes too many internals
+- This is the right time to design the public solver configuration interface
 
 ---
 
@@ -55,6 +61,13 @@ prioritized into tiers but not scheduled.
 - Quantify runtime performance gap
 - Measure: function evaluation, Jacobian computation, full phase solve
 - Help users make informed API choice
+
+### Python Binding Surface Audit
+- Dedicated plan to review all types exposed via nanobind bindings
+- Some exposures are intentional (Jet for parallel solving, OptimizationProblem)
+- Others may warrant hiding (JetJobModes, internal StateConstraint/StateObjective wrappers)
+- Requires careful analysis of what users actually depend on
+- Should be done before PyPI publication
 
 ---
 

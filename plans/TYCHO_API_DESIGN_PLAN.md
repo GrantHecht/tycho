@@ -65,9 +65,8 @@ with no compatibility shim (no external users yet).
 
 ### Scope
 
-Separate public API headers from implementation details, create a proper
-`include/tycho/` header tree, and migrate from `namespace Tycho` to
-`namespace tycho`.
+Separate public API headers from implementation details and create a proper
+`include/tycho/` header tree.
 
 ### Public header layout
 
@@ -98,7 +97,7 @@ include/
 | Solvers | `PSIOPT` (configuration + convergence flags), `OptimizationProblem` | NLP structure, KKT system internals, linear solver backends |
 | Integrators | `Integrator<ODE>`, RK method names | RK coefficient tables, stepper internals |
 | Astro | Kepler utilities, Lambert solvers, CR3BP, MEE dynamics, frame conversions | Internal propagator details |
-| Utils | Thread pool (if public), type aliases | Memory management, color output, internal helpers |
+| Utils | Thread pool (`set_num_threads`, `get_num_threads`, `parallel_blocks`, `parallel_task`), `FlatMap`, type aliases | Memory management, color output, internal helpers |
 
 ### Template handling
 
@@ -110,11 +109,6 @@ Tycho is heavily templated. The strategy:
   directly." This is the primary strategy for most of the codebase.
 - **Explicit instantiation** — For non-template types (e.g., `PSIOPT`), the public
   header contains only declarations; implementations stay in `src/` as `.cpp` files.
-
-### Namespace migration
-
-- `namespace Tycho` -> `namespace tycho` across all C++ source.
-- Clean break (no compatibility alias needed — no external users).
 
 ### Library target rename
 
@@ -301,31 +295,31 @@ string-named variables, runtime construction, and convenience methods. Uses
   on top of the existing API. Users who don't use names pay no overhead.
 - **Two-tier phase API:**
   - `ODEPhaseBase` / `ODEPhase<DODE>` — existing, unchanged, index-based only.
-  - `tycho::Phase` — wrapper that adds named-variable overloads, holds a variable
+  - `Tycho::Phase` — wrapper that adds named-variable overloads, holds a variable
     registry. Named overloads resolve strings to indices at call time (map lookup),
     then delegate to the underlying index-based methods.
 
-### `tycho::ODEBuilder`
+### `Tycho::ODEBuilder`
 
 ```cpp
 // Lambda form (inline definition)
-auto ode = tycho::ODEBuilder(/*XVars=*/3, /*UVars=*/1)
+auto ode = Tycho::ODEBuilder(/*XVars=*/3, /*UVars=*/1)
     .define([](auto& args) {
         auto [x, y, v] = args.XVec();
         auto theta = args.UVar(0);
-        return tycho::stack(
-            tycho::sin(theta) * v,
-            -1.0 * tycho::cos(theta) * v,
-            9.81 * tycho::cos(theta)
+        return Tycho::stack(
+            Tycho::sin(theta) * v,
+            -1.0 * Tycho::cos(theta) * v,
+            9.81 * Tycho::cos(theta)
         );
     })
     .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 3}})
     .build();
 
 // Pre-built expression form
-auto XtU = tycho::ODEArguments(3, 1);
+auto XtU = Tycho::ODEArguments(3, 1);
 // ... build expression ...
-auto ode = tycho::ODEBuilder(3, 1)
+auto ode = Tycho::ODEBuilder(3, 1)
     .from(ode_expr)
     .var_names(...)
     .build();
@@ -372,7 +366,7 @@ Strings are used **only** for user-defined variable names.
 
 ### Internal representation
 
-- `ODEBuilder::build()` returns a `tycho::RuntimeODE` that wraps a
+- `ODEBuilder::build()` returns a `Tycho::RuntimeODE` that wraps a
   `GenericODE<GenericFunction<-1,-1>, ...>` plus a variable name registry.
 - `RuntimeODE` exposes the underlying `GenericODE` for users who want to
   drop down to the raw API:
@@ -381,13 +375,13 @@ Strings are used **only** for user-defined variable names.
   auto phase = built.phase(...);            // convenience, with names
   ```
 
-### `tycho::Phase` wrapper
+### `Tycho::Phase` wrapper
 
 ```
 ODEPhaseBase / ODEPhase<DODE>    (existing, unchanged, index-based only)
         ^
         | held by (shared_ptr)
-tycho::Phase                     (wrapper, adds named-variable overloads)
+Tycho::Phase                     (wrapper, adds named-variable overloads)
 ```
 
 - Holds `std::shared_ptr<ODEPhaseBase>` + variable registry.
@@ -401,7 +395,7 @@ tycho::Phase                     (wrapper, adds named-variable overloads)
 - Builder API produces identical solutions to static DSL and Python for all
   test problems.
 - Named-variable resolution is correct for single variables and variable groups.
-- Index-based path through `tycho::Phase` has zero overhead vs. using
+- Index-based path through `Tycho::Phase` has zero overhead vs. using
   `ODEPhaseBase` directly.
 
 ---
@@ -473,11 +467,11 @@ Three mitigation strategies (all to be implemented as user-selectable options):
 **A. Firebreak mechanism (new)**
 ```cpp
 // Insert a type-erasure barrier to cap template depth
-auto mee_dynamics = tycho::barrier(raw_mee_expr);  // evaluates to GenericFunction
-auto full_ode = tycho::stack(mee_dynamics(mee_input), weight_dot);
+auto mee_dynamics = Tycho::barrier(raw_mee_expr);  // evaluates to GenericFunction
+auto full_ode = Tycho::stack(mee_dynamics(mee_input), weight_dot);
 ```
 
-`tycho::barrier(expr)` evaluates `expr` into a `GenericFunction`, cutting the type
+`Tycho::barrier(expr)` evaluates `expr` into a `GenericFunction`, cutting the type
 tree. Virtual dispatch at the barrier point trades a small runtime cost for
 dramatically reduced template depth. Users place barriers at natural subexpression
 boundaries (e.g., `MEEDynamics`, `ZonalGrav`).
@@ -506,7 +500,7 @@ approach so `Input<Scalar>`/`Output<Scalar>` aliases are correctly generated.
 
 Compile-time named variable accessors:
 ```cpp
-struct MyODE : tycho::StaticODE<3, 1, 0> {
+struct MyODE : Tycho::StaticODE<3, 1, 0> {
     static constexpr auto x     = XVar<0>;
     static constexpr auto y     = XVar<1>;
     static constexpr auto v     = XVar<2>;
@@ -514,8 +508,8 @@ struct MyODE : tycho::StaticODE<3, 1, 0> {
 
     static auto Definition(double g) {
         auto args = Arguments<5>();
-        return tycho::stack(
-            tycho::sin(args[theta]) * args[v],
+        return Tycho::stack(
+            Tycho::sin(args[theta]) * args[v],
             ...
         );
     }
@@ -538,7 +532,7 @@ Currently requires: `struct Impl : ODESize<...>` + `static auto Definition(...)`
 
 **Option A — Single-struct, macro-free:**
 ```cpp
-struct Brachistochrone : tycho::StaticODE<3, 1, 0> {
+struct Brachistochrone : Tycho::StaticODE<3, 1, 0> {
     double g;
     Brachistochrone(double g) : g(g) {}
 
@@ -546,10 +540,10 @@ struct Brachistochrone : tycho::StaticODE<3, 1, 0> {
         auto args = Arguments<5>();
         auto [x, y, v] = args.head<3>();
         auto theta = args[4];
-        return tycho::stack(
-            tycho::sin(theta) * v,
-            -1.0 * tycho::cos(theta) * v,
-            g * tycho::cos(theta)
+        return Tycho::stack(
+            Tycho::sin(theta) * v,
+            -1.0 * Tycho::cos(theta) * v,
+            g * Tycho::cos(theta)
         );
     }
 };
@@ -560,10 +554,10 @@ struct Brachistochrone : tycho::StaticODE<3, 1, 0> {
 TYCHO_ODE(Brachistochrone, XVars=3, UVars=1, Params=(double g)) {
     auto [x, y, v] = args.XVec();
     auto theta = args.UVar(0);
-    return tycho::stack(
-        tycho::sin(theta) * v,
-        -1.0 * tycho::cos(theta) * v,
-        g * tycho::cos(theta)
+    return Tycho::stack(
+        Tycho::sin(theta) * v,
+        -1.0 * Tycho::cos(theta) * v,
+        g * Tycho::cos(theta)
     );
 };
 ```
@@ -648,7 +642,7 @@ A living list of follow-up work, to be updated as phases 1-8 progress.
 | Phase | Deliverable | Depends on |
 |-------|-------------|------------|
 | 1 | `tycho/` -> `tychopy/` rename | — |
-| 2 | Public headers + `namespace tycho` | Phase 1 |
+| 2 | Public headers | Phase 1 |
 | 3 | CMake packaging (FetchContent + install) | Phase 2 |
 | 4 | C++ examples (static DSL): Zermelo, Delta3Launch, HyperSensLong | Phase 3 |
 | 5 | Builder API (runtime ODE interface) | Phase 4 |

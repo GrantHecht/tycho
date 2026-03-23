@@ -57,10 +57,10 @@ syntax from Phase 7.
 **Step 2: Add compile-time named variables**
 
 ```cpp
-constexpr auto x_var = tycho::XVar<0>;
-constexpr auto y_var = tycho::XVar<1>;
-constexpr auto v_var = tycho::XVar<2>;
-constexpr auto theta_var = tycho::UVar<0>;
+constexpr auto x_var = Tycho::XVar<0>;
+constexpr auto y_var = Tycho::XVar<1>;
+constexpr auto v_var = Tycho::XVar<2>;
+constexpr auto theta_var = Tycho::UVar<0>;
 ```
 
 Use these for boundary conditions:
@@ -89,7 +89,7 @@ phase->addBoundaryValue(PhaseRegionFlags::Front, idx, vals);
 **Step 2: Use firebreaks if wind functions cause template bloat**
 
 If the composable wind function pattern creates deep template trees, insert
-`tycho::barrier()` at the wind function boundary.
+`Tycho::barrier()` at the wind function boundary.
 
 **Step 3: Build, verify, measure, commit**
 
@@ -133,15 +133,15 @@ TYCHO_BUILD_ODE(RocketODE, RocketODE_Impl, double, double);
 
 If template memory is still problematic, insert barriers in the dynamics:
 ```cpp
-auto drag = tycho::barrier(drag_expr);
-auto gravity = tycho::barrier(gravity_expr);
+auto drag = Tycho::barrier(drag_expr);
+auto gravity = Tycho::barrier(gravity_expr);
 auto Vdot = gravity + (T * u + drag) / m;
 ```
 
 **Step 3: Add named variable tags**
 
 ```cpp
-constexpr auto R = tycho::XVar<0>;  // (or use a group concept)
+constexpr auto R = Tycho::XVar<0>;  // (or use a group concept)
 // ...
 ```
 
