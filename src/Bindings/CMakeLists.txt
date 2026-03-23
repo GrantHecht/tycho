@@ -74,7 +74,7 @@ target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
 # Prevent CMake from auto-defining _tychopy_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
 set_target_properties(_tychopy PROPERTIES DEFINE_SYMBOL "")
-target_link_libraries(_tychopy PUBLIC tycho_core tycho_extensions_bindings)
+target_link_libraries(_tychopy PUBLIC tycho tycho_extensions_bindings)
 target_include_directories(_tychopy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(_tychopy REUSE_FROM pch_bindings)
 
@@ -82,7 +82,7 @@ if(APPLE)
     # macOS needs -bind_at_load and -undefined dynamic_lookup for Python modules
     target_link_options(_tychopy PRIVATE ${LINKER_FLAGS})
 endif()
-# Linux/Windows: tycho_core provides LINK_LIBS (MKL, threads, dl) transitively.
+# Linux/Windows: tycho provides LINK_LIBS (MKL, threads, dl) transitively.
 # Linux: no --no-undefined — Python symbols are resolved at runtime by the interpreter.
 
 # Install rule for scikit-build-core: places _tychopy alongside the tychopy package in the wheel.

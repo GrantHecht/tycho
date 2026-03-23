@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include <cmath>
 #include <numbers>
 

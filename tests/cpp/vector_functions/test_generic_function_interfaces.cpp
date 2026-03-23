@@ -5,7 +5,7 @@
 // GenericConditional/Comparative.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "test_utils.h"
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>

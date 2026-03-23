@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include <gtest/gtest.h>
 #include <numbers>
 #include <random>

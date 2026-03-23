@@ -19,7 +19,7 @@
 // Corresponds to the Python example in examples/Brachistochrone.py.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include <iomanip>
 #include <iostream>
 #include <vector>

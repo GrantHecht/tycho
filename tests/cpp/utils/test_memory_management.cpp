@@ -5,7 +5,7 @@
 // queries, allocate_run correctness, overflow, learning, and nesting.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include <gtest/gtest.h>
 
 using namespace Tycho;

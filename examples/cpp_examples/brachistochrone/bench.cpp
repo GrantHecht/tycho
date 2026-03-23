@@ -5,7 +5,7 @@
 // All I/O removed except timing output.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include <chrono>
 #include <iostream>
 #include <vector>

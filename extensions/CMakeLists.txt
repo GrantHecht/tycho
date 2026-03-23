@@ -3,7 +3,7 @@
 # and are usable from standalone C++ programs without pulling in the Python C API.
 add_library(tycho_extensions STATIC Tycho_Extensions.h Tycho_Extensions.cpp)
 target_precompile_headers(tycho_extensions REUSE_FROM pch)
-target_link_libraries(tycho_extensions PUBLIC tycho_core)
+target_link_libraries(tycho_extensions PUBLIC tycho)
 target_include_directories(tycho_extensions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${INCLUDE_DIRS})
 target_compile_options(tycho_extensions PRIVATE ${COMPILE_FLAGS})
 

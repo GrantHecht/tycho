@@ -5,7 +5,7 @@
 // BUILD_ODE_FROM_EXPRESSION macro, and Basic erasure section.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "test_utils.h"
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>

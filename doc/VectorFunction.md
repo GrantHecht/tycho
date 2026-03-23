@@ -1260,7 +1260,7 @@ phase.addIntegralObjective(LowThrust.effort_obj(), [7, 8, 9])
 ### Example 3: Brachistochrone (C++)
 
 ```cpp
-#include "Tycho.h"
+#include <tycho/tycho.h>
 using namespace Tycho;
 
 // Define ODE dynamics as a VectorFunction expression

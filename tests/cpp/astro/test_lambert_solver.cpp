@@ -5,7 +5,7 @@
 // near-antipodal transfer tests.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "astro_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>

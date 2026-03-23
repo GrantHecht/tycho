@@ -8,7 +8,7 @@
 #pragma once
 
 #include "Solvers/Jet.h"
-#include "Tycho.h"
+#include <tycho/tycho.h>
 #include "oc_test_utils.h"
 #include "test_utils.h"
 #include <cmath>

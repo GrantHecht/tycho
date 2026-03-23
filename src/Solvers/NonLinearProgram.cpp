@@ -14,6 +14,7 @@
 // =============================================================================
 
 #include "NonLinearProgram.h"
+#include "Utils/Timer.h"
 
 void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->PrimalVars = PV;

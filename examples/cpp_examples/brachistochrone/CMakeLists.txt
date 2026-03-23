@@ -5,7 +5,7 @@ target_compile_options(brachistochrone_cpp PRIVATE ${COMPILE_FLAGS}
     # without this, Clang 22+ rejects the reused PCH due to PIC/PIE mismatch.
     $<$<NOT:$<PLATFORM_ID:Windows>>:-fPIC>)
 target_include_directories(brachistochrone_cpp PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(brachistochrone_cpp PRIVATE tycho_core)
+target_link_libraries(brachistochrone_cpp PRIVATE tycho)
 target_precompile_headers(brachistochrone_cpp REUSE_FROM pch)
 
 if(UNIX)
@@ -17,7 +17,7 @@ add_executable(brachistochrone_bench bench.cpp)
 target_compile_options(brachistochrone_bench PRIVATE ${COMPILE_FLAGS}
     $<$<NOT:$<PLATFORM_ID:Windows>>:-fPIC>)
 target_include_directories(brachistochrone_bench PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(brachistochrone_bench PRIVATE tycho_core)
+target_link_libraries(brachistochrone_bench PRIVATE tycho)
 target_precompile_headers(brachistochrone_bench REUSE_FROM pch)
 
 if(UNIX)
