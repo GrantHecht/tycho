@@ -101,7 +101,6 @@ target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunction
 target_link_libraries(tycho INTERFACE ${LINK_LIBS})
 target_include_directories(tycho INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-    ${_TYCHO_SRC_INCLUDES}
 )
 add_library(tycho::tycho ALIAS tycho)
 

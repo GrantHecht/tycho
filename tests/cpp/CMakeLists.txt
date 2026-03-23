@@ -110,6 +110,7 @@ target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS}
     $<$<NOT:$<PLATFORM_ID:Windows>>:-fPIC>)
 target_include_directories(tycho_tests PRIVATE
     ${INCLUDE_DIRS}
+    ${TYCHO_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/astro           # for astro_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/integrators     # for integrator_test_utils.h

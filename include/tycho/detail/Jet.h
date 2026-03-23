@@ -30,7 +30,7 @@
 
 #include "tycho/detail/thread_pool.h"
 #include "tycho/detail/OptimizationProblemBase.h"
-#include "Utils/Timer.h"
+#include "tycho/detail/timer.h"
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/AccelerateUtils.h"
 #else

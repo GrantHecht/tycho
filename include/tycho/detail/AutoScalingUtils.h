@@ -15,7 +15,7 @@
 
 #pragma once
 #include "tycho/detail/IOScaled.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <functional>

@@ -40,8 +40,6 @@
 #include "tycho/detail/FunctionalFlags.h"
 #include "tycho/detail/IndexingData.h"
 #include "tycho/detail/InputOuputSize.h"
-#include "tycho/detail/crtp_base.h"
-#include "tycho/detail/sizing_helpers.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -70,7 +68,7 @@
 #include "tycho/detail/get_core_count.h"
 #include "tycho/detail/crtp_base.h"
 
-#include "Utils/MemoryManagement.h"
+#include "tycho/detail/memory_management.h"
 
 namespace Tycho {
 

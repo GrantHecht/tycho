@@ -26,7 +26,7 @@
 #include "tycho/detail/OptimizationProblemBase.h"
 #include "tycho/detail/PSIOPT.h"
 #include "tycho/detail/StateFunction.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <functional>

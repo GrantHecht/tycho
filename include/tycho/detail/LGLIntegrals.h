@@ -17,7 +17,7 @@
 
 #include "tycho/detail/LGLCoeffs.h"
 #include "tycho/detail/TranscriptionSizing.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 
 namespace Tycho {
 

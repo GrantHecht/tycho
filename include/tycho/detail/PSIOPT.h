@@ -43,7 +43,6 @@
 #include "tycho/detail/PardisoInterface.h"
 #endif
 
-#include "Utils/ColorText.h"
 
 namespace Tycho {
 

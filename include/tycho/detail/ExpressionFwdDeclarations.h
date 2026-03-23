@@ -16,7 +16,6 @@
 #pragma once
 
 #include "tycho/detail/VectorFunctionConcepts.h"
-#include "tycho/detail/sizing_helpers.h"
 #include <algorithm>
 #include <array>
 #include <functional>

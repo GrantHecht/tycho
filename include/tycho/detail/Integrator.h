@@ -16,8 +16,8 @@
 #pragma once
 #include <sstream>
 
-#include "OptimalControl/LGLInterpFunctions.h"
-#include "OptimalControl/LGLInterpTable.h"
+#include "tycho/detail/LGLInterpFunctions.h"
+#include "tycho/detail/LGLInterpTable.h"
 #include "tycho/detail/RKSteppers.h"
 #include "tycho/detail/GenericConditional.h"
 #include "tycho/detail/GenericFunction.h"
@@ -49,7 +49,7 @@
 #include "tycho/detail/get_core_count.h"
 #include "tycho/detail/crtp_base.h"
 
-#include "Utils/MemoryManagement.h"
+#include "tycho/detail/memory_management.h"
 
 namespace Tycho {
 

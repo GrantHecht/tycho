@@ -17,7 +17,7 @@
 
 #include "tycho/detail/ODEPhase.h"
 #include "tycho/detail/ODESizes.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 
 namespace Tycho {
 

@@ -18,7 +18,7 @@
 #include "tycho/detail/FDDerivArbitrary.h"
 #include "tycho/detail/LGLCoeffs.h"
 #include "tycho/detail/OptimalControlFlags.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <functional>

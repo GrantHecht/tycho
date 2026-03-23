@@ -16,7 +16,7 @@
 #pragma once
 
 #include "tycho/detail/OptimalControlFlags.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <functional>

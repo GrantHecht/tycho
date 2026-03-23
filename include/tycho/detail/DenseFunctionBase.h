@@ -43,7 +43,6 @@
 #include "tycho/detail/DenseFunctionOperations.h"
 #include "tycho/detail/FunctionDomains.h"
 #include "tycho/detail/FunctionTypeDefMacros.h"
-#include "PyDocString/VectorFunctions/DenseFunctionBase_doc.h"
 
 namespace Tycho {
 
