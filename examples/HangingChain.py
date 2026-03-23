@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -16,15 +16,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-import tycho as ast
+import tychopy as typy
 
 norm = np.linalg.norm
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
-solvs = ast.Solvers
+solvs = typy.Solvers
 
 
 class Chain(oc.ODEBase):
@@ -80,7 +80,7 @@ def Job(a, b, n, L):
     phase.optimizer.set_OptLSMode("L1")
     phase.optimizer.set_MaxLSIters(2)
     phase.optimizer.PrintLevel = 1
-    phase.JetJobMode = ast.Solvers.JetJobModes.SolveOptimize
+    phase.JetJobMode = typy.Solvers.JetJobModes.SolveOptimize
 
     return phase
 

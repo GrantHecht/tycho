@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -17,12 +17,12 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
 ################################################################################
 ## Setup
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 
 Args = vf.Arguments
 
@@ -170,7 +170,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         Flag = ocp.optimize()
         tf = time.perf_counter()
         print((tf - t0) * 1000.0)
-        if Flag == ast.Solvers.ConvergenceFlags.NOTCONVERGED:
+        if Flag == typy.Solvers.ConvergenceFlags.NOTCONVERGED:
             ocp.solve_optimize()
 
         Data.append(

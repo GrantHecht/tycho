@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -16,7 +16,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tycho as ast
+import tychopy as typy
 
 # Change a few of the matplotlib label sizes for ease of reading plots
 params = {
@@ -28,8 +28,8 @@ params = {
 mpl.rcParams.update(params)
 ################################################################################
 ## Setup
-oc = ast.OptimalControl
-vf = ast.VectorFunctions
+oc = typy.OptimalControl
+vf = typy.VectorFunctions
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes

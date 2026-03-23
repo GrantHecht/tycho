@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-import tycho as ast
+import tychopy as typy
 
 """
 
@@ -38,10 +38,10 @@ table. This problem (Form2) is much smaller and solves faster yielding the same 
 
 """
 norm = np.linalg.norm
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
-solvs = ast.Solvers
+solvs = typy.Solvers
 
 ##############################################################################
 Lstar = 10.0  ## m

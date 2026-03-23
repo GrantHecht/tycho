@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -16,10 +16,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 
 ############################################################################
@@ -280,7 +280,7 @@ def Plot(Phase1, Phase2, Phase3, Phase4):
 ###############################################################################
 
 if __name__ == "__main__":
-    ast.SoftwareInfo()
+    typy.SoftwareInfo()
 
     # Target orbital elements
     at = 24361140 / Lstar
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     ## eastward from KSC in and doesnt pass through earth when LERPed from KSC
     MF = -0.05
     OEF = [at, et, istart, Ot, Wt, MF]
-    yf = ast.Astro.classic_to_cartesian(OEF, mu)
+    yf = typy.Astro.classic_to_cartesian(OEF, mu)
 
     ts = np.linspace(0, tf_phase4, 1000)
 

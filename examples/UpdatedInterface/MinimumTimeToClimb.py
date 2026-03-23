@@ -8,7 +8,7 @@
 #
 # Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
-#   - Updated imports: import asset_asrl -> import tycho
+#   - Updated imports: import asset_asrl -> import tychopy
 #   - Module usage updated to _tycho (nanobind) bindings
 # =============================================================================
 
@@ -25,11 +25,11 @@ from MinimumTimeToClimbTables import (
     sosTab,
 )
 
-import tycho as ast
-import tycho.OptimalControl as oc
-import tycho.VectorFunctions as vf
-from tycho.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot, sns
-from tycho.VectorFunctions import Arguments as Args
+import tychopy as typy
+import tychopy.OptimalControl as oc
+import tychopy.VectorFunctions as vf
+from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot, sns
+from tychopy.VectorFunctions import Arguments as Args
 
 """
 Minumum time to climb for supersonic aircraft. 
