@@ -348,7 +348,7 @@ else()
     if(NOT TARGET Eigen3::Eigen)
         add_library(Eigen3::Eigen INTERFACE IMPORTED)
         target_include_directories(Eigen3::Eigen INTERFACE
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen>
         )
     endif()
     # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
@@ -598,7 +598,7 @@ include(CMakePackageConfigHelpers)
 # Variables substituted into tychoConfig.cmake.in
 if(APPLE)
     set(TYCHO_SPARSE_SOLVER "AccelerateSparse")
-    # macOS needs OpenMP re-found (Linux links implicitly via compiler flags)
+    # macOS needs OpenMP re-found (Linux/Windows get OpenMP through MKL_LIBRARIES)
     set(TYCHO_NEEDS_OPENMP ON)
 else()
     set(TYCHO_SPARSE_SOLVER "MKL")

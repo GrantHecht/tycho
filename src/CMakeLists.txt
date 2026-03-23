@@ -12,12 +12,10 @@ set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 
 #-------------------------------------------------------------------------------
 ## PCH
-add_library(pch STATIC pch.h pch.cpp  )
+add_library(pch STATIC pch.h pch.cpp)
 target_precompile_headers(pch PRIVATE pch.h
-VectorFunctions/Tycho_VectorFunctions.h)
-
+    VectorFunctions/Tycho_VectorFunctions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
-#target_link_libraries(pch PRIVATE fmt::fmt-header-only)
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 
 
@@ -100,7 +98,8 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 
 
 #-------------------------------------------------------------------------------
-# tycho bundles all core static libs for use by bindings and future language frontends
+# tycho: public INTERFACE target bundling all core static libs.
+# Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
 target_link_libraries(tycho INTERFACE $<BUILD_INTERFACE:${LINK_LIBS}>)
@@ -135,16 +134,12 @@ target_include_directories(tycho INTERFACE
 
 include(GNUInstallDirs)
 
-install(TARGETS tycho psiopt utils optimalcontrol astro pch
+install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions
     EXPORT tychoTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-install(TARGETS vectorfunctions
-    EXPORT tychoTargets
 )
 
 #-------------------------------------------------------------------------------
