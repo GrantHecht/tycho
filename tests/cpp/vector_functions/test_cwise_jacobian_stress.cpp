@@ -12,61 +12,10 @@
 #include <tycho/tycho.h>
 #include "test_utils.h"
 #include "vf_test_utils.h"
-#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace Tycho;
 using namespace TychoTest;
-
-///////////////////////////////////////////////////////////////////////////////
-// FD Jacobian helper
-///////////////////////////////////////////////////////////////////////////////
-
-template <class Func>
-Eigen::MatrixXd fd_jacobian(Func &f, const Eigen::VectorXd &x, double eps = 1e-7) {
-    int nr = f.ORows(), nc = f.IRows();
-    Eigen::MatrixXd jac(nr, nc);
-    Eigen::VectorXd xp = x, fp(nr), fm(nr);
-    for (int j = 0; j < nc; ++j) {
-        xp[j] = x[j] + eps;
-        f.compute(xp, fp);
-        xp[j] = x[j] - eps;
-        f.compute(xp, fm);
-        jac.col(j) = (fp - fm) / (2.0 * eps);
-        xp[j] = x[j];
-    }
-    return jac;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Verify Jacobian matches FD (direct and through GenericFunction)
-///////////////////////////////////////////////////////////////////////////////
-
-template <class Func>
-void check_jac_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    int nr = f.ORows(), nc = f.IRows();
-    Eigen::VectorXd fx(nr);
-    Eigen::MatrixXd jx(nr, nc);
-    fx.setZero();
-    jx.setZero();
-    f.compute_jacobian(x, fx, jx);
-    Eigen::MatrixXd jx_fd = fd_jacobian(f, x);
-    for (int i = 0; i < nr; ++i)
-        for (int j = 0; j < nc; ++j)
-            EXPECT_NEAR(jx(i, j), jx_fd(i, j), tol)
-                << "at (" << i << "," << j << ")";
-}
-
-template <int IR, int OR, class Func>
-void check_gf_jac_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    GenericFunction<IR, OR> gf(f);
-    Eigen::MatrixXd jx = gf.jacobian(x);
-    Eigen::MatrixXd jx_fd = fd_jacobian(gf, x);
-    for (int i = 0; i < gf.ORows(); ++i)
-        for (int j = 0; j < gf.IRows(); ++j)
-            EXPECT_NEAR(jx(i, j), jx_fd(i, j), tol)
-                << "GF at (" << i << "," << j << ")";
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture
@@ -86,7 +35,7 @@ TEST_F(CwiseJacobianStressTest, Sin_SegmentSum) {
     auto f = sin(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.7, -0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Cos_SegmentSum) {
@@ -94,7 +43,7 @@ TEST_F(CwiseJacobianStressTest, Cos_SegmentSum) {
     auto f = cos(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.7, -0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Tan_SegmentSum) {
@@ -102,7 +51,7 @@ TEST_F(CwiseJacobianStressTest, Tan_SegmentSum) {
     auto f = tan(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.3, -0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, ArcSin_SegmentSum) {
@@ -111,7 +60,7 @@ TEST_F(CwiseJacobianStressTest, ArcSin_SegmentSum) {
     auto f = asin(0.3 * (a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.2, -0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, ArcCos_SegmentSum) {
@@ -119,7 +68,7 @@ TEST_F(CwiseJacobianStressTest, ArcCos_SegmentSum) {
     auto f = acos(0.3 * (a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.2, -0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, ArcTan_SegmentSum) {
@@ -127,7 +76,7 @@ TEST_F(CwiseJacobianStressTest, ArcTan_SegmentSum) {
     auto f = atan(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 1.5, -0.7;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Exp_SegmentSum) {
@@ -135,7 +84,7 @@ TEST_F(CwiseJacobianStressTest, Exp_SegmentSum) {
     auto f = exp(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.3, -0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Log_SegmentSum) {
@@ -144,7 +93,7 @@ TEST_F(CwiseJacobianStressTest, Log_SegmentSum) {
     auto f = log(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 2.0, 1.0;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sqrt_SegmentSum) {
@@ -152,7 +101,7 @@ TEST_F(CwiseJacobianStressTest, Sqrt_SegmentSum) {
     auto f = sqrt(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 2.0, 1.0;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sinh_SegmentSum) {
@@ -160,7 +109,7 @@ TEST_F(CwiseJacobianStressTest, Sinh_SegmentSum) {
     auto f = sinh(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.2;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Cosh_SegmentSum) {
@@ -168,7 +117,7 @@ TEST_F(CwiseJacobianStressTest, Cosh_SegmentSum) {
     auto f = cosh(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.2;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Tanh_SegmentSum) {
@@ -176,7 +125,7 @@ TEST_F(CwiseJacobianStressTest, Tanh_SegmentSum) {
     auto f = tanh(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.2;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -188,7 +137,7 @@ TEST_F(CwiseJacobianStressTest, Cos_ScaledSegmentSum) {
     auto f = cos(3.0 * a.coeff<0>() + (-2.0) * a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.4, 0.6;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sin_ScaledSegmentSum) {
@@ -196,7 +145,7 @@ TEST_F(CwiseJacobianStressTest, Sin_ScaledSegmentSum) {
     auto f = sin(0.5 * a.coeff<0>() + 1.5 * a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 1.0, -0.5;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -208,7 +157,7 @@ TEST_F(CwiseJacobianStressTest, Cos_SegmentDifference) {
     auto f = cos(a.coeff<0>() - a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.8, 0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Exp_SegmentDifference) {
@@ -216,7 +165,7 @@ TEST_F(CwiseJacobianStressTest, Exp_SegmentDifference) {
     auto f = exp(a.coeff<0>() - a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.5, 0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -228,7 +177,7 @@ TEST_F(CwiseJacobianStressTest, Sin_ThreeSegmentSum) {
     auto f = sin(a.coeff<0>() + a.coeff<1>() + a.coeff<2>());
     Eigen::VectorXd tp(3);
     tp << 0.1, -0.2, 0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Cos_FourSegmentSum) {
@@ -236,7 +185,7 @@ TEST_F(CwiseJacobianStressTest, Cos_FourSegmentSum) {
     auto f = cos(a.coeff<0>() + a.coeff<1>() + a.coeff<2>() + a.coeff<3>());
     Eigen::VectorXd tp(4);
     tp << 0.1, -0.2, 0.3, -0.4;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Exp_FiveSegmentSum) {
@@ -244,7 +193,7 @@ TEST_F(CwiseJacobianStressTest, Exp_FiveSegmentSum) {
     auto f = exp(a.coeff<0>() + a.coeff<1>() + a.coeff<2>() + a.coeff<3>() + a.coeff<4>());
     Eigen::VectorXd tp(5);
     tp << 0.05, -0.1, 0.05, -0.1, 0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -256,7 +205,7 @@ TEST_F(CwiseJacobianStressTest, Cos_Sin_SegmentSum) {
     auto f = cos(sin(a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Exp_Cos_SegmentSum) {
@@ -264,7 +213,7 @@ TEST_F(CwiseJacobianStressTest, Exp_Cos_SegmentSum) {
     auto f = exp(cos(a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.4, -0.2;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sin_Sqrt_SegmentSum) {
@@ -273,7 +222,7 @@ TEST_F(CwiseJacobianStressTest, Sin_Sqrt_SegmentSum) {
     auto f = sin(sqrt(a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 1.5, 0.5;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Log_Exp_SegmentSum) {
@@ -281,7 +230,7 @@ TEST_F(CwiseJacobianStressTest, Log_Exp_SegmentSum) {
     auto f = log(exp(a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.3, -0.1;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, TripleNesting) {
@@ -289,7 +238,7 @@ TEST_F(CwiseJacobianStressTest, TripleNesting) {
     auto f = cos(sin(exp(a.coeff<0>() + a.coeff<1>())));
     Eigen::VectorXd tp(2);
     tp << 0.1, -0.05;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -301,7 +250,7 @@ TEST_F(CwiseJacobianStressTest, Cos_ScaledSum) {
     auto f = cos(2.0 * (a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.2, -0.5;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sin_SumTimesScalar) {
@@ -309,7 +258,7 @@ TEST_F(CwiseJacobianStressTest, Sin_SumTimesScalar) {
     auto f = sin(5.0 * (a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.1, 0.05;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Cos_SumOfProducts) {
@@ -320,7 +269,7 @@ TEST_F(CwiseJacobianStressTest, Cos_SumOfProducts) {
     auto f = cos(x * x + y * y);
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.3;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -332,7 +281,7 @@ TEST_F(CwiseJacobianStressTest, GF_Cos_SegmentSum) {
     auto f = cos(a.coeff<0>() + a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.7, -0.3;
-    check_gf_jac_fd<2, 1>(f, tp);
+    verify_gf_jacobian_fd<2, 1>(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, GF_Sin_ScaledSegmentSum) {
@@ -340,7 +289,7 @@ TEST_F(CwiseJacobianStressTest, GF_Sin_ScaledSegmentSum) {
     auto f = sin(3.0 * a.coeff<0>() + (-2.0) * a.coeff<1>());
     Eigen::VectorXd tp(2);
     tp << 0.4, 0.6;
-    check_gf_jac_fd<2, 1>(f, tp);
+    verify_gf_jacobian_fd<2, 1>(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, GF_Exp_ThreeSegmentSum) {
@@ -348,7 +297,7 @@ TEST_F(CwiseJacobianStressTest, GF_Exp_ThreeSegmentSum) {
     auto f = exp(a.coeff<0>() + a.coeff<1>() + a.coeff<2>());
     Eigen::VectorXd tp(3);
     tp << 0.1, -0.2, 0.05;
-    check_gf_jac_fd<3, 1>(f, tp);
+    verify_gf_jacobian_fd<3, 1>(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, GF_Cos_Sin_SegmentSum) {
@@ -356,7 +305,7 @@ TEST_F(CwiseJacobianStressTest, GF_Cos_Sin_SegmentSum) {
     auto f = cos(sin(a.coeff<0>() + a.coeff<1>()));
     Eigen::VectorXd tp(2);
     tp << 0.5, -0.3;
-    check_gf_jac_fd<2, 1>(f, tp);
+    verify_gf_jacobian_fd<2, 1>(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -432,14 +381,14 @@ TEST_F(CwiseJacobianStressTest, Cos_TwoSegSum_LargeInput) {
     auto a = Arguments<10>();
     auto f = cos(a.coeff<3>() + a.coeff<7>());
     Eigen::VectorXd tp = deterministic_random_vector(10, 99, -1.0, 1.0);
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, Sin_ThreeSegSum_LargeInput) {
     auto a = Arguments<10>();
     auto f = sin(a.coeff<0>() + a.coeff<4>() + a.coeff<9>());
     Eigen::VectorXd tp = deterministic_random_vector(10, 100, -1.0, 1.0);
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -455,7 +404,7 @@ TEST_F(CwiseJacobianStressTest, ODE_SinTheta_Times_V) {
     GenericFunction<5, 1> gf(f);
     Eigen::VectorXd tp(5);
     tp << 0.0, -1.0, 2.0, 0.5, 0.8;
-    check_gf_jac_fd<5, 1>(f, tp);
+    verify_gf_jacobian_fd<5, 1>(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, ODE_CosThetaPlusV) {
@@ -466,7 +415,7 @@ TEST_F(CwiseJacobianStressTest, ODE_CosThetaPlusV) {
     auto f = cos(theta + v);
     Eigen::VectorXd tp(5);
     tp << 0.0, -1.0, 2.0, 0.5, 0.8;
-    check_jac_fd(f, tp);
+    verify_jacobian_fd(f, tp);
 }
 
 TEST_F(CwiseJacobianStressTest, ODE_StackedTrigSegmentSums) {
@@ -477,5 +426,5 @@ TEST_F(CwiseJacobianStressTest, ODE_StackedTrigSegmentSums) {
     GenericFunction<2, 3> gf(f);
     Eigen::VectorXd tp(2);
     tp << 0.3, -0.1;
-    check_gf_jac_fd<2, 3>(f, tp);
+    verify_gf_jacobian_fd<2, 3>(f, tp);
 }

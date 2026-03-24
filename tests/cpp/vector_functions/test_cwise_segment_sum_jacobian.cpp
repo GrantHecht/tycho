@@ -20,60 +20,6 @@ using namespace Tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Finite-difference Jacobian for cross-checking
-///////////////////////////////////////////////////////////////////////////////
-
-template <class Func>
-Eigen::MatrixXd fd_jacobian(Func &f, const Eigen::VectorXd &x, double eps = 1e-7) {
-    int nr = f.ORows();
-    int nc = f.IRows();
-    Eigen::MatrixXd jac(nr, nc);
-    Eigen::VectorXd xp = x, fp(nr), fm(nr);
-    for (int j = 0; j < nc; ++j) {
-        xp[j] = x[j] + eps;
-        f.compute(xp, fp);
-        xp[j] = x[j] - eps;
-        f.compute(xp, fm);
-        jac.col(j) = (fp - fm) / (2.0 * eps);
-        xp[j] = x[j];
-    }
-    return jac;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Helpers: verify analytical Jacobian against FD
-///////////////////////////////////////////////////////////////////////////////
-
-template <class Func>
-void verify_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    int nr = f.ORows();
-    int nc = f.IRows();
-    Eigen::VectorXd fx(nr);
-    Eigen::MatrixXd jx(nr, nc);
-    fx.setZero();
-    jx.setZero();
-    f.compute_jacobian(x, fx, jx);
-
-    Eigen::MatrixXd jx_fd = fd_jacobian(f, x);
-    for (int i = 0; i < nr; ++i)
-        for (int j = 0; j < nc; ++j)
-            EXPECT_NEAR(jx(i, j), jx_fd(i, j), tol)
-                << "Jacobian mismatch at (" << i << "," << j << ")";
-}
-
-// Same check but through GenericFunction (virtual dispatch path)
-template <int IR, int OR, class Func>
-void verify_gf_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    GenericFunction<IR, OR> gf(f);
-    Eigen::MatrixXd jx = gf.jacobian(x);
-    Eigen::MatrixXd jx_fd = fd_jacobian(gf, x);
-    for (int i = 0; i < gf.ORows(); ++i)
-        for (int j = 0; j < gf.IRows(); ++j)
-            EXPECT_NEAR(jx(i, j), jx_fd(i, j), tol)
-                << "GF Jacobian mismatch at (" << i << "," << j << ")";
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Test fixture
 ///////////////////////////////////////////////////////////////////////////////
 
