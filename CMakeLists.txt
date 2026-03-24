@@ -567,6 +567,7 @@ endif()
 
 if(BUILD_CPP_EXAMPLES)
     add_subdirectory(examples/cpp_examples)
+    add_subdirectory(bug-fix)
 endif()
 
 if(BUILD_CPP_BENCHMARKS)

@@ -216,18 +216,12 @@ struct BumpAllocator {
 
     template <class Func, class... TempSpecs>
     static void allocate_run(Func &&f, const TempSpecs &...tspecs) {
-        // Always use the arena. The ExactTempPack fast path (stack-allocating
-        // fixed-size Eigen matrices) is disabled because aggressive inlining
-        // (-mllvm -inline-threshold=225) allows the compiler to merge stack
-        // slots across inlined allocate_run boundaries, aliasing ExactTempPack
-        // storage with callers' Eigen::Ref output buffers. This breaks the
-        // Aliased=false contract in NestedFunction's chain-rule computation,
-        // producing wrong Jacobians (confirmed at -O3, correct at -O0).
-        // The original ASSET codebase always uses the arena path.
-        // TODO: re-enable with a proper aliasing barrier (e.g., compiler fence
-        // or noinline attribute on the lambda call) once profiling shows the
-        // arena overhead is measurable.
-        BumpAllocator::run_arena_impl(f, tspecs...);
+        if constexpr ((... && std::remove_cvref_t<TempSpecs>::IsConstantSize)) {
+            auto Temps = detail::ExactTempPack<std::remove_cvref_t<TempSpecs>...>();
+            std::apply(f, Temps.data);
+        } else {
+            BumpAllocator::run_arena_impl(f, tspecs...);
+        }
     }
 
     static void resize(int sizeScalar, int sizeSuper) {
