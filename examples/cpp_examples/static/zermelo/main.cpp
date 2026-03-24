@@ -162,6 +162,21 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
 ///////////////////////////////////////////////////////////////////////////////
 
 int main() {
+    // Quick Jacobian sanity check
+    {
+        ZermeloVarWind ode_test(1.25);
+        Eigen::VectorXd tp(4);
+        tp << 0.2, -0.5, 0.5, 1.0;
+        Eigen::VectorXd fx(2);
+        ode_test.compute(tp, fx);
+        Eigen::MatrixXd jac(2, 4);
+        ode_test.jacobian(tp, jac);
+        // Python: [[ 0.842 -0.079 0 -1.052] [0.667 1.297 0 0.675]]
+        bool ok = std::abs(jac(0, 1) - (-0.0787)) < 0.01;
+        std::cout << "ODE Jacobian dy column: " << jac(0, 1) << " " << jac(1, 1)
+                  << (ok ? "  OK" : "  BUG") << "\n\n";
+    }
+
     Eigen::VectorXd A(2), B(2);
     A << 0.0, -1.0;
     B << 1.0, 1.0;

@@ -265,17 +265,22 @@ struct TwoFunctionSum_Impl
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (is_sum_of_segments) {
-            // Each segment writes only to its own (non-overlapping) columns of
-            // target.  When the incoming assignment is DirectAssignment, both
-            // segments must use DirectAssignment for their own columns — using
-            // PlusEquals for func2 is incorrect because func1 only initialised
-            // its own columns, leaving func2's columns uninitialised.
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
-            this->func2.right_jacobian_product(target_, left, right, assign, aliased);
+            if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
+                this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
+                                                   aliased);
+            } else {
+                this->func2.right_jacobian_product(target_, left, right, assign, aliased);
+            }
         } else if constexpr (func1_is_sumordiff && func2_is_segment) {
             if constexpr (Func1::is_sum_of_segments) {
                 this->func1.right_jacobian_product(target_, left, right, assign, aliased);
-                this->func2.right_jacobian_product(target_, left, right, assign, aliased);
+                if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
+                    this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
+                                                       aliased);
+                } else {
+                    this->func2.right_jacobian_product(target_, left, right, assign, aliased);
+                }
             } else {
                 Base::right_jacobian_product(target_, left, right, assign, aliased);
             }
@@ -288,7 +293,11 @@ struct TwoFunctionSum_Impl
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
         if constexpr (is_sum_of_segments) {
             this->func1.accumulate_jacobian(target_, right, assign);
-            this->func2.accumulate_jacobian(target_, right, assign);
+            if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
+                this->func2.accumulate_jacobian(target_, right, PlusEqualsAssignment());
+            } else {
+                this->func2.accumulate_jacobian(target_, right, assign);
+            }
         } else {
             Base::accumulate_jacobian(target_, right, assign);
         }
