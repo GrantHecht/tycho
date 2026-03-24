@@ -1,8 +1,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Jacobian Aliasing Diagnostic
 //
-// Reproduces the BumpAllocator Jacobian aliasing bug documented in
-// doc/BumpAllocatorJacobianBug.md
+// Reproduces the TwoFunctionSum Jacobian aliasing bug documented in
+// bug-fix/ANALYSIS.md
 //
 // Tests several VectorFunction expression patterns and checks whether
 // their Jacobians are computed correctly. Prints pointer diagnostics

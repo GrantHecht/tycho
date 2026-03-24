@@ -240,6 +240,20 @@ TEST_F(CwiseSegmentSumJacobianTest, Cos2XplusY_HessianConsistency) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// FunctionDifference + Segment (exercises the func1_is_sumordiff branch)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CwiseSegmentSumJacobianTest, Cos_DifferencePlusSegment) {
+    auto a = Arguments<3>();
+    auto f = cos((a.coeff<0>() - a.coeff<1>()) + a.coeff<2>());
+
+    Eigen::VectorXd tp(3);
+    tp << 0.5, 0.2, 0.3;
+    verify_jacobian_fd(f, tp);
+    verify_gf_jacobian_fd<3, 1>(f, tp);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Multiple test points to catch optimisation-level-dependent issues
 ///////////////////////////////////////////////////////////////////////////////
 
