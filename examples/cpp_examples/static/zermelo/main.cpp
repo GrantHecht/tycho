@@ -187,34 +187,50 @@ int main() {
     std::cout << "Solving: no wind ... " << std::flush;
     ZermeloNoWind ode_nw(1.0);
     auto traj1 = navigate(ode_nw, A, B, 1.0);
-    double tf1 = traj1.back()[2];
-    std::cout << std::fixed << std::setprecision(4) << "tf = " << tf1 << " s\n";
-    if (traj1.empty()) ++failures;
+    if (traj1.empty()) {
+        ++failures;
+        std::cout << "FAILED\n";
+    } else {
+        double tf1 = traj1.back()[2];
+        std::cout << std::fixed << std::setprecision(4) << "tf = " << tf1 << " s\n";
+    }
 
     // Uniform wind
     std::cout << "Solving: uniform wind ... " << std::flush;
     constexpr double vM = 1.25;
     ZermeloUniformWind ode_uw(vM, 0.5, 135.0 * M_PI / 180.0);
     auto traj2 = navigate(ode_uw, A, B, vM);
-    double tf2 = traj2.back()[2];
-    std::cout << "tf = " << tf2 << " s\n";
-    if (traj2.empty()) ++failures;
+    if (traj2.empty()) {
+        ++failures;
+        std::cout << "FAILED\n";
+    } else {
+        double tf2 = traj2.back()[2];
+        std::cout << "tf = " << tf2 << " s\n";
+    }
 
     // Constant-direction wind
     std::cout << "Solving: constant-direction wind ... " << std::flush;
     ZermeloConstDirWind ode_cd(vM, 45.0 * M_PI / 180.0);
     auto traj3 = navigate(ode_cd, A, B, vM);
-    double tf3 = traj3.back()[2];
-    std::cout << "tf = " << tf3 << " s\n";
-    if (traj3.empty()) ++failures;
+    if (traj3.empty()) {
+        ++failures;
+        std::cout << "FAILED\n";
+    } else {
+        double tf3 = traj3.back()[2];
+        std::cout << "tf = " << tf3 << " s\n";
+    }
 
     // Variable-direction wind
     std::cout << "Solving: variable-direction wind ... " << std::flush;
     ZermeloVarWind ode_vw(vM);
     auto traj4 = navigate(ode_vw, A, B, vM);
-    double tf4 = traj4.back()[2];
-    std::cout << "tf = " << tf4 << " s\n";
-    if (traj4.empty()) ++failures;
+    if (traj4.empty()) {
+        ++failures;
+        std::cout << "FAILED\n";
+    } else {
+        double tf4 = traj4.back()[2];
+        std::cout << "tf = " << tf4 << " s\n";
+    }
 
     // Summary
     std::cout << "\nZermelo: " << (4 - failures) << "/4 wind models converged\n";

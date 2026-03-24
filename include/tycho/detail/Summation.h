@@ -267,8 +267,16 @@ struct TwoFunctionSum_Impl
         if constexpr (is_sum_of_segments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-                this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
-                                                   aliased);
+                if constexpr (Aliased) {
+                    // target and right alias: target columns hold the original
+                    // right values, not zero.  Each segment writes to its own
+                    // non-overlapping columns, so DirectAssignment is correct.
+                    this->func2.right_jacobian_product(target_, left, right, DirectAssignment(),
+                                                       aliased);
+                } else {
+                    this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
+                                                       aliased);
+                }
             } else {
                 this->func2.right_jacobian_product(target_, left, right, assign, aliased);
             }
@@ -276,8 +284,13 @@ struct TwoFunctionSum_Impl
             if constexpr (Func1::is_sum_of_segments) {
                 this->func1.right_jacobian_product(target_, left, right, assign, aliased);
                 if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-                    this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
-                                                       aliased);
+                    if constexpr (Aliased) {
+                        this->func2.right_jacobian_product(target_, left, right, DirectAssignment(),
+                                                           aliased);
+                    } else {
+                        this->func2.right_jacobian_product(target_, left, right,
+                                                           PlusEqualsAssignment(), aliased);
+                    }
                 } else {
                     this->func2.right_jacobian_product(target_, left, right, assign, aliased);
                 }
@@ -550,12 +563,24 @@ struct MultiFunctionSum_Impl
         if constexpr (IsSumofSegments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-                this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
-                                                   aliased);
-                Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
-                    func.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
-                                                aliased);
-                });
+                if constexpr (Aliased) {
+                    // target and right alias: target columns hold the original
+                    // right values, not zero.  Each segment writes to its own
+                    // non-overlapping columns, so DirectAssignment is correct.
+                    this->func2.right_jacobian_product(target_, left, right, DirectAssignment(),
+                                                       aliased);
+                    Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
+                        func.right_jacobian_product(target_, left, right, DirectAssignment(),
+                                                    aliased);
+                    });
+                } else {
+                    this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
+                                                       aliased);
+                    Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
+                        func.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
+                                                    aliased);
+                    });
+                }
             } else {
                 this->func2.right_jacobian_product(target_, left, right, assign, aliased);
                 Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
