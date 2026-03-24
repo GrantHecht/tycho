@@ -165,6 +165,15 @@ endif()
 if(FP_FLAGS)
     target_compile_options(tycho INTERFACE ${FP_FLAGS})
 endif()
+# Inline threshold — critical for VectorFunction expression template performance.
+# Without aggressive inlining, the compiler cannot flatten the DSL expression tree
+# into efficient machine code, causing 5-10x slowdowns in NLP evaluation.
+target_compile_options(tycho INTERFACE
+    $<$<CXX_COMPILER_ID:Clang>:-mllvm>
+    $<$<CXX_COMPILER_ID:Clang>:-inline-threshold=${CLANG_MAX_INLINE_DEPTH}>
+    $<$<CXX_COMPILER_ID:AppleClang>:-mllvm>
+    $<$<CXX_COMPILER_ID:AppleClang>:-inline-threshold=${CLANG_MAX_INLINE_DEPTH}>
+)
 # OpenMP compile flags
 target_compile_options(tycho INTERFACE
     $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:Clang>>:-fopenmp=libiomp5>
