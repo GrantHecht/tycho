@@ -74,6 +74,7 @@ set(TYCHO_TEST_SOURCES
     vector_functions/test_vf_hessian.cpp
     vector_functions/test_vector_functions.cpp
     vector_functions/test_cwise_segment_sum_jacobian.cpp
+    vector_functions/test_cwise_jacobian_stress.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
