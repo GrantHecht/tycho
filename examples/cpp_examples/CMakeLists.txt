@@ -1,1 +1,1 @@
-add_subdirectory(brachistochrone)
+add_subdirectory(static/brachistochrone)
