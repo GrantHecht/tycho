@@ -73,6 +73,7 @@ set(TYCHO_TEST_SOURCES
     vector_functions/test_vf_composition_chains.cpp
     vector_functions/test_vf_hessian.cpp
     vector_functions/test_vector_functions.cpp
+    vector_functions/test_cwise_segment_sum_jacobian.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
