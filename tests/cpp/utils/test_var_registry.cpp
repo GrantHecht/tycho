@@ -164,6 +164,28 @@ TEST(VarRegistry, AddGroupNegativeCountThrows) {
     EXPECT_THROW(reg.add_group("neg", 0, -1), std::invalid_argument);
 }
 
+TEST(VarRegistry, EmptyNameThrows) {
+    VarRegistry reg(3, 1, 0);
+    EXPECT_THROW(reg.add_name("", 0), std::invalid_argument);
+}
+
+TEST(VarRegistry, EmptyGroupNameThrows) {
+    VarRegistry reg(3, 1, 0);
+    EXPECT_THROW(reg.add_group("", 0, 2), std::invalid_argument);
+}
+
+TEST(VarRegistry, EmptyMemberListThrows) {
+    VarRegistry reg(3, 1, 0);
+    reg.add_name("x", 0);
+    EXPECT_THROW(reg.add_group("empty", {}), std::invalid_argument);
+}
+
+TEST(VarRegistry, MakeInputDuplicateThrows) {
+    VarRegistry reg(3, 1, 0);
+    reg.add_name("x", 0);
+    EXPECT_THROW(reg.make_input({{"x", 1.0}, {"x", 2.0}}), std::invalid_argument);
+}
+
 TEST(VarRegistry, ResolveVector) {
     VarRegistry reg(3, 1, 0);
     reg.add_name("x", 0);

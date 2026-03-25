@@ -2,7 +2,7 @@
 // Tycho — Builder API: ODEBuilder
 //
 // Fluent builder for constructing RuntimeODE objects.  Accepts dynamics via
-// a lambda (receiving a proxy with XVar/UVar/TVar/XVec/UVec accessors) or
+// a lambda (receiving a proxy with XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors) or
 // a pre-built VectorFunction expression.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
@@ -143,6 +143,13 @@ class ODEBuilder {
     ODEBuilder &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         if (built_)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
+        int xtup = xvars_ + 1 + uvars_ + pvars_;
+        for (const auto &[name, idx] : names) {
+            if (idx < 0 || idx >= xtup)
+                throw std::invalid_argument(fmt::format(
+                    "ODEBuilder::var_names: index {} for '{}' out of XtUP range [0, {})", idx, name,
+                    xtup));
+        }
         for (const auto &p : names)
             pending_names_.push_back(p);
         return *this;

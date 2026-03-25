@@ -167,6 +167,42 @@ TEST_F(ODEBuilderTest, TVarAccessor) {
     EXPECT_EQ(ode.xtup_size(), 2); // x + t
 }
 
+TEST_F(ODEBuilderTest, VectorAccessors) {
+    auto ode = ODEBuilder(3, 1, 1)
+                   .define([](auto &args) {
+                       auto x = args.XVec();
+                       auto u = args.UVec();
+                       auto p = args.PVec();
+                       return stack(x.coeff(0) + u.coeff(0), x.coeff(1) * p.coeff(0), x.coeff(2));
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 3);
+    EXPECT_EQ(ode.uvars(), 1);
+    EXPECT_EQ(ode.pvars(), 1);
+    EXPECT_EQ(ode.xtup_size(), 6);
+}
+
+TEST_F(ODEBuilderTest, FromAfterDefineThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto expr =
+        stack(args.segment(0, 3).coeff(0), args.segment(0, 3).coeff(1), args.segment(0, 3).coeff(2));
+    EXPECT_THROW(builder.from(expr), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, VarNamesOutOfRangeThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    EXPECT_THROW(builder.var_names({{"bad", 999}}), std::invalid_argument);
+    EXPECT_THROW(builder.var_names({{"neg", -1}}), std::invalid_argument);
+}
+
 TEST_F(ODEBuilderTest, WithPVars) {
     auto ode = ODEBuilder(2, 1, 1)
                    .define([](auto &args) {

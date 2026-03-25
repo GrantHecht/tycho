@@ -47,6 +47,7 @@ class VarRegistry {
 
     /// Map a single name to one XtUP-space index.
     void add_name(const std::string &name, int xtup_index) {
+        check_name_not_empty(name, "add_name");
         check_not_registered(name);
         check_index(xtup_index);
         Eigen::VectorXi idx(1);
@@ -56,6 +57,7 @@ class VarRegistry {
 
     /// Map a name to a contiguous range [start, start+count-1] in XtUP space.
     void add_group(const std::string &name, int start, int count) {
+        check_name_not_empty(name, "add_group");
         check_not_registered(name);
         if (count <= 0) {
             throw std::invalid_argument(
@@ -71,7 +73,12 @@ class VarRegistry {
 
     /// Map a group name to the union of previously registered names.
     void add_group(const std::string &name, std::initializer_list<std::string> members) {
+        check_name_not_empty(name, "add_group");
         check_not_registered(name);
+        if (members.size() == 0) {
+            throw std::invalid_argument(
+                fmt::format("VarRegistry::add_group: member list for '{}' must not be empty", name));
+        }
         int total = 0;
         for (const auto &m : members)
             total += resolve(m).size();
@@ -114,6 +121,7 @@ class VarRegistry {
     Eigen::VectorXd
     make_input(std::initializer_list<std::pair<std::string, double>> scalar_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Zero(xtup_size());
+        std::vector<bool> assigned(xtup_size(), false);
         for (const auto &[name, val] : scalar_vals) {
             auto idx = resolve(name);
             if (idx.size() != 1) {
@@ -122,7 +130,13 @@ class VarRegistry {
                     "assignment",
                     name, idx.size()));
             }
+            if (assigned[idx[0]]) {
+                throw std::invalid_argument(fmt::format(
+                    "VarRegistry::make_input: duplicate assignment to index {} (variable '{}')",
+                    idx[0], name));
+            }
             vec[idx[0]] = val;
+            assigned[idx[0]] = true;
         }
         return vec;
     }
@@ -131,10 +145,18 @@ class VarRegistry {
     Eigen::VectorXd
     make_units(std::initializer_list<std::pair<std::string, double>> unit_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Ones(xtup_size());
+        std::vector<bool> assigned(xtup_size(), false);
         for (const auto &[name, val] : unit_vals) {
             auto idx = resolve(name);
-            for (int i = 0; i < idx.size(); ++i)
+            for (int i = 0; i < idx.size(); ++i) {
+                if (assigned[idx[i]]) {
+                    throw std::invalid_argument(fmt::format(
+                        "VarRegistry::make_units: duplicate assignment to index {} (variable '{}')",
+                        idx[i], name));
+                }
                 vec[idx[i]] = val;
+                assigned[idx[i]] = true;
+            }
         }
         return vec;
     }
@@ -171,6 +193,13 @@ class VarRegistry {
                 idx[pos++] = sub[i];
         }
         return idx;
+    }
+
+    void check_name_not_empty(const std::string &name, const char *method) const {
+        if (name.empty()) {
+            throw std::invalid_argument(
+                fmt::format("VarRegistry::{}: variable name must not be empty", method));
+        }
     }
 
     void check_not_registered(const std::string &name) const {

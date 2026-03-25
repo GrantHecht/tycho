@@ -36,7 +36,7 @@ Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::Vector
 
     // Populate the GenericODE's ODESize FlatMap from the registry so that
     // ODEPhaseBase's string-based VarIndexType overloads also work.
-    // ODEPhase's constructor auto-copies via set_idxs(this->ode.get_idxs()).
+    // The ODEPhase constructor propagates these indices to the phase base.
     if (registry_) {
         for (const auto &[name, idxs] : registry_->entries()) {
             ode.add_idx(name, idxs);

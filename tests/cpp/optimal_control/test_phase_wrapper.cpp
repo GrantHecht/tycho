@@ -281,6 +281,33 @@ TEST_F(PhaseWrapperTest, NamedValueObjective) {
     SUCCEED();
 }
 
+TEST_F(PhaseWrapperTest, BoundaryValueSizeMismatchThrows) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // 3 names but 2 values
+    EXPECT_THROW(
+        phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v"}, Eigen::Vector2d(0, 10)),
+        std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, NamedDeltaVarEqualCon) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+    phase.addDeltaVarEqualCon("v", 5.0);
+    SUCCEED();
+}
+
+TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+    phase.addLowerDeltaVarBound("v", 0.0);
+    SUCCEED();
+}
+
 TEST_F(PhaseWrapperTest, NamedEqualCon) {
     auto ode = make_brach_runtime_ode();
     auto traj = make_brach_guess();

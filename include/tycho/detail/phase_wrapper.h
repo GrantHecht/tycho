@@ -50,17 +50,20 @@ class Phase {
 
     int addBoundaryValue(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
                          const Eigen::VectorXd &values, ScaleType scale = ScaleModes::AUTO) {
-        return phase_->addBoundaryValue(flag, resolve(var_names), values, scale);
+        auto idx = resolve(var_names);
+        if (idx.size() != values.size()) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addBoundaryValue: resolved {} indices from names but values has size {}",
+                idx.size(), values.size()));
+        }
+        return phase_->addBoundaryValue(flag, idx, values, scale);
     }
 
     int addBoundaryValue(PhaseRegionFlags flag, const std::string &var_name, double value,
                          ScaleType scale = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(
-                fmt::format("Phase::addBoundaryValue (scalar): '{}' maps to {} indices, expected 1",
-                            var_name, idx.size()));
-        }
+        int i = resolve_single(var_name, "addBoundaryValue");
+        Eigen::VectorXi idx(1);
+        idx[0] = i;
         Eigen::VectorXd v(1);
         v[0] = value;
         return phase_->addBoundaryValue(flag, idx, v, scale);
@@ -68,45 +71,26 @@ class Phase {
 
     int addLUVarBound(PhaseRegionFlags flag, const std::string &var_name, double lower,
                       double upper, double scale = 1.0) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addLUVarBound: '{}' maps to {} indices, expected 1", var_name, idx.size()));
-        }
-        return phase_->addLUVarBound(flag, idx[0], lower, upper, scale);
+        return phase_->addLUVarBound(flag, resolve_single(var_name, "addLUVarBound"), lower, upper,
+                                     scale);
     }
 
     int addLowerVarBound(PhaseRegionFlags flag, const std::string &var_name, double lower,
                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addLowerVarBound: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addLowerVarBound(flag, idx[0], lower, scale, scale_t);
+        return phase_->addLowerVarBound(flag, resolve_single(var_name, "addLowerVarBound"), lower,
+                                        scale, scale_t);
     }
 
     int addUpperVarBound(PhaseRegionFlags flag, const std::string &var_name, double upper,
                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addUpperVarBound: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addUpperVarBound(flag, idx[0], upper, scale, scale_t);
+        return phase_->addUpperVarBound(flag, resolve_single(var_name, "addUpperVarBound"), upper,
+                                        scale, scale_t);
     }
 
     int addValueObjective(PhaseRegionFlags flag, const std::string &var_name, double scale,
                           ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addValueObjective: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addValueObjective(flag, idx[0], scale, scale_t);
+        return phase_->addValueObjective(flag, resolve_single(var_name, "addValueObjective"), scale,
+                                         scale_t);
     }
 
     int addValueLock(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
@@ -335,13 +319,8 @@ class Phase {
 
     int addDeltaVarObjective(const std::string &var_name, double scale,
                              ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(
-                fmt::format("Phase::addDeltaVarObjective: '{}' maps to {} indices, expected 1",
-                            var_name, idx.size()));
-        }
-        return phase_->addDeltaVarObjective(idx, scale, scale_t);
+        return phase_->addDeltaVarObjective(resolve_single(var_name, "addDeltaVarObjective"), scale,
+                                            scale_t);
     }
 
     int addDeltaVarObjective(int var, double scale, ScaleType scale_t = ScaleModes::AUTO) {
@@ -350,13 +329,8 @@ class Phase {
 
     int addDeltaVarEqualCon(const std::string &var_name, double value, double scale = 1.0,
                             ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addDeltaVarEqualCon: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addDeltaVarEqualCon(idx[0], value, scale, scale_t);
+        return phase_->addDeltaVarEqualCon(resolve_single(var_name, "addDeltaVarEqualCon"), value,
+                                           scale, scale_t);
     }
 
     int addDeltaVarEqualCon(int var, double value, double scale = 1.0,
@@ -371,13 +345,8 @@ class Phase {
 
     int addLowerDeltaVarBound(const std::string &var_name, double lower, double scale = 1.0,
                               ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addLowerDeltaVarBound: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addLowerDeltaVarBound(idx[0], lower, scale, scale_t);
+        return phase_->addLowerDeltaVarBound(resolve_single(var_name, "addLowerDeltaVarBound"),
+                                             lower, scale, scale_t);
     }
 
     int addLowerDeltaVarBound(int var, double lower, double scale = 1.0,
@@ -392,13 +361,8 @@ class Phase {
 
     int addUpperDeltaVarBound(const std::string &var_name, double upper, double scale = 1.0,
                               ScaleType scale_t = ScaleModes::AUTO) {
-        auto idx = resolve(var_name);
-        if (idx.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-                "Phase::addUpperDeltaVarBound: '{}' maps to {} indices, expected 1", var_name,
-                idx.size()));
-        }
-        return phase_->addUpperDeltaVarBound(idx[0], upper, scale, scale_t);
+        return phase_->addUpperDeltaVarBound(resolve_single(var_name, "addUpperDeltaVarBound"),
+                                             upper, scale, scale_t);
     }
 
     int addUpperDeltaVarBound(int var, double upper, double scale = 1.0,
@@ -471,14 +435,37 @@ class Phase {
     std::shared_ptr<ODEPhaseBase> phase_;
     VarRegistry registry_;
 
-    Eigen::VectorXi resolve(const std::string &name) const { return registry_.resolve(name); }
+    void check_registry(const char *context) const {
+        if (registry_.empty()) {
+            throw std::invalid_argument(
+                fmt::format("Phase::{}: no variable names registered. Use the index-based overload "
+                            "or register names via ODEBuilder::var_names()",
+                            context));
+        }
+    }
+
+    Eigen::VectorXi resolve(const std::string &name) const {
+        check_registry("resolve");
+        return registry_.resolve(name);
+    }
 
     Eigen::VectorXi resolve(std::initializer_list<std::string> names) const {
+        check_registry("resolve");
         return registry_.resolve(names);
     }
 
     Eigen::VectorXi resolve(const std::vector<std::string> &names) const {
+        check_registry("resolve");
         return registry_.resolve(names);
+    }
+
+    int resolve_single(const std::string &var_name, const char *method) const {
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::{}: '{}' maps to {} indices, expected 1", method, var_name, idx.size()));
+        }
+        return idx[0];
     }
 };
 
