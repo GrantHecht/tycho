@@ -19,6 +19,9 @@ Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::Vector
                         int num_segments) const {
     if (traj.empty())
         throw std::invalid_argument("RuntimeODE::phase: trajectory must not be empty");
+    if (num_segments <= 0)
+        throw std::invalid_argument(
+            fmt::format("RuntimeODE::phase: num_segments must be positive (got {})", num_segments));
     int expected = xtup_size();
     for (size_t i = 0; i < traj.size(); ++i) {
         if (traj[i].size() != expected) {

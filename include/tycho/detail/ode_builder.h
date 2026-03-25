@@ -24,13 +24,16 @@ namespace Tycho {
 
 /// Proxy passed to the ODEBuilder::define() lambda.  Provides simplified
 /// XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors for building VectorFunction
-/// expressions, mirroring the Python ODEArguments API.
+/// expressions from the XtUP input layout.
 class ODEArgsProxy {
   public:
     ODEArgsProxy(int xv, int uv, int pv) : args_(xv, uv, pv) {}
 
     /// i-th state variable (0-based within X).
     auto XVar(int i) const {
+        if (args_.XVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::XVar: no state variables declared (xvars=0)");
         if (i < 0 || i >= args_.XVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::XVar: index {} out of range [0, {})", i, args_.XVars()));
@@ -45,6 +48,9 @@ class ODEArgsProxy {
 
     /// i-th control variable (0-based within U).
     auto UVar(int i) const {
+        if (args_.UVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::UVar: no control variables declared (uvars=0)");
         if (i < 0 || i >= args_.UVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::UVar: index {} out of range [0, {})", i, args_.UVars()));
@@ -56,6 +62,9 @@ class ODEArgsProxy {
 
     /// i-th parameter variable (0-based within P).
     auto PVar(int i) const {
+        if (args_.PVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::PVar: no parameter variables declared (pvars=0)");
         if (i < 0 || i >= args_.PVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::PVar: index {} out of range [0, {})", i, args_.PVars()));

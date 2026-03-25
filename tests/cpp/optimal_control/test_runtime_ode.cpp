@@ -176,6 +176,32 @@ TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
     EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, bad_traj, 16), std::invalid_argument);
 }
 
+TEST_F(RuntimeODETest, ZeroSegmentsThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .build();
+
+    std::vector<Eigen::VectorXd> traj(50, Eigen::VectorXd::Zero(5));
+    EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, traj, 0), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, NegativeSegmentsThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .build();
+
+    std::vector<Eigen::VectorXd> traj(50, Eigen::VectorXd::Zero(5));
+    EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, traj, -1), std::invalid_argument);
+}
+
 TEST_F(RuntimeODETest, FluentVarGroupRegistration) {
     auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);

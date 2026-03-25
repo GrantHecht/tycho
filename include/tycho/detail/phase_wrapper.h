@@ -15,6 +15,7 @@
 #include "tycho/detail/OptimalControlFlags.h"
 #include "tycho/detail/PSIOPT.h"
 #include "tycho/detail/var_registry.h"
+#include <fmt/format.h>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -36,6 +37,13 @@ class Phase {
         if (!phase_)
             throw std::invalid_argument(
                 "Phase: null phase pointer (construct via RuntimeODE::phase())");
+        if (registry_.xvars() != phase_->XVars() || registry_.uvars() != phase_->UVars() ||
+            registry_.pvars() != phase_->PVars()) {
+            throw std::invalid_argument(fmt::format(
+                "Phase: registry dimensions ({},{},{}) do not match phase dimensions ({},{},{})",
+                registry_.xvars(), registry_.uvars(), registry_.pvars(), phase_->XVars(),
+                phase_->UVars(), phase_->PVars()));
+        }
     }
 
     // ── Named-variable constraint overloads ─────────────────────────────
@@ -47,9 +55,15 @@ class Phase {
 
     int addBoundaryValue(PhaseRegionFlags flag, const std::string &var_name, double value,
                          ScaleType scale = ScaleModes::AUTO) {
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(
+                fmt::format("Phase::addBoundaryValue (scalar): '{}' maps to {} indices, expected 1",
+                            var_name, idx.size()));
+        }
         Eigen::VectorXd v(1);
         v[0] = value;
-        return phase_->addBoundaryValue(flag, resolve(var_name), v, scale);
+        return phase_->addBoundaryValue(flag, idx, v, scale);
     }
 
     int addLUVarBound(PhaseRegionFlags flag, const std::string &var_name, double lower,
@@ -173,7 +187,13 @@ class Phase {
 
     int addDeltaVarObjective(const std::string &var_name, double scale,
                              ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->addDeltaVarObjective(resolve(var_name), scale, scale_t);
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(
+                fmt::format("Phase::addDeltaVarObjective: '{}' maps to {} indices, expected 1",
+                            var_name, idx.size()));
+        }
+        return phase_->addDeltaVarObjective(idx, scale, scale_t);
     }
 
     int addDeltaTimeEqualCon(double value, double scale = 1.0,

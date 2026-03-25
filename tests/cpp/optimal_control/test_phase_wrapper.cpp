@@ -155,3 +155,57 @@ TEST_F(PhaseWrapperTest, AccessBase) {
     EXPECT_EQ(phase.base().UVars(), 1);
     EXPECT_EQ(phase.base().PVars(), 0);
 }
+
+TEST_F(PhaseWrapperTest, NullPhaseThrows) {
+    EXPECT_THROW(Phase(nullptr, VarRegistry(3, 1, 0)), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, ScalarBoundaryValueGroupThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
+                   .var_group("pos", 0, 2)
+                   .build();
+
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // "pos" maps to 2 indices — scalar addBoundaryValue requires exactly 1
+    EXPECT_THROW(phase.addBoundaryValue(PhaseRegionFlags::Front, "pos", 5.0),
+                 std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, DeltaVarObjectiveGroupThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
+                   .var_group("pos", 0, 2)
+                   .build();
+
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // "pos" maps to 2 indices — addDeltaVarObjective requires exactly 1
+    EXPECT_THROW(phase.addDeltaVarObjective("pos", 1.0), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, NamedEqualCon) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // Constraint: identity function on "x" at the front
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+    phase.addEqualCon(PhaseRegionFlags::Front, identity, {"x"});
+
+    SUCCEED();
+}

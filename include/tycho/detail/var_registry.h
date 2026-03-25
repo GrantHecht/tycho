@@ -25,7 +25,8 @@ namespace Tycho {
 ///
 /// After construction and registration of names/groups, the registry is
 /// intended to be populated during setup and then used read-only.
-/// Thread-safe for reads.
+/// Thread-safe for concurrent reads after registration is complete.
+/// Not thread-safe for concurrent writes or mixed read/write access.
 class VarRegistry {
   public:
     VarRegistry() = default;
