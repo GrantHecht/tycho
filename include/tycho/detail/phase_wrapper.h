@@ -155,6 +155,58 @@ class Phase {
         return phase_->addLUNormBound(flag, resolve(var_names), lower, upper, scale, scale_t);
     }
 
+    int addLowerFuncBound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
+                          std::initializer_list<std::string> var_names, double lower,
+                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerFuncBound(flag, func, resolve(var_names), lower, scale, scale_t);
+    }
+
+    int addUpperFuncBound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
+                          std::initializer_list<std::string> var_names, double upper,
+                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperFuncBound(flag, func, resolve(var_names), upper, scale, scale_t);
+    }
+
+    int addLUSquaredNormBound(PhaseRegionFlags flag,
+                              std::initializer_list<std::string> var_names, double lower,
+                              double upper, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLUSquaredNormBound(flag, resolve(var_names), lower, upper, scale,
+                                             scale_t);
+    }
+
+    int addLowerNormBound(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
+                          double lower, double scale = 1.0,
+                          ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerNormBound(flag, resolve(var_names), lower, scale, scale_t);
+    }
+
+    int addUpperNormBound(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
+                          double upper, double scale = 1.0,
+                          ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperNormBound(flag, resolve(var_names), upper, scale, scale_t);
+    }
+
+    int addLowerSquaredNormBound(PhaseRegionFlags flag,
+                                 std::initializer_list<std::string> var_names, double lower,
+                                 double scale = 1.0,
+                                 ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerSquaredNormBound(flag, resolve(var_names), lower, scale, scale_t);
+    }
+
+    int addUpperSquaredNormBound(PhaseRegionFlags flag,
+                                 std::initializer_list<std::string> var_names, double upper,
+                                 double scale = 1.0,
+                                 ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperSquaredNormBound(flag, resolve(var_names), upper, scale, scale_t);
+    }
+
+    int addIntegralParamFunction(GenericFunction<-1, 1> func,
+                                 std::initializer_list<std::string> var_names, int accum_parm,
+                                 ScaleType scale = ScaleModes::AUTO) {
+        return phase_->addIntegralParamFunction(func, resolve(var_names), accum_parm, scale);
+    }
+
     // ── Index-based overloads (direct passthrough) ──────────────────────
 
     int addBoundaryValue(PhaseRegionFlags flag, const Eigen::VectorXi &indices,
@@ -197,6 +249,84 @@ class Phase {
         return phase_->addValueObjective(flag, var, scale, scale_t);
     }
 
+    int addLowerVarBound(PhaseRegionFlags flag, int var, double lower, double scale = 1.0,
+                         ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerVarBound(flag, var, lower, scale, scale_t);
+    }
+
+    int addUpperVarBound(PhaseRegionFlags flag, int var, double upper, double scale = 1.0,
+                         ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperVarBound(flag, var, upper, scale, scale_t);
+    }
+
+    int addValueLock(PhaseRegionFlags flag, const Eigen::VectorXi &vars,
+                     ScaleType scale = ScaleModes::AUTO) {
+        return phase_->addValueLock(flag, VarIndexType(vars), scale);
+    }
+
+    int addPeriodicityCon(const Eigen::VectorXi &vars, ScaleType scale = ScaleModes::AUTO) {
+        return phase_->addPeriodicityCon(VarIndexType(vars), scale);
+    }
+
+    int addLUFuncBound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
+                       const Eigen::VectorXi &vars, double lower, double upper,
+                       double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLUFuncBound(flag, func, VarIndexType(vars), lower, upper, scale,
+                                      scale_t);
+    }
+
+    int addLowerFuncBound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
+                          const Eigen::VectorXi &vars, double lower, double scale = 1.0,
+                          ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerFuncBound(flag, func, VarIndexType(vars), lower, scale, scale_t);
+    }
+
+    int addUpperFuncBound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
+                          const Eigen::VectorXi &vars, double upper, double scale = 1.0,
+                          ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperFuncBound(flag, func, VarIndexType(vars), upper, scale, scale_t);
+    }
+
+    int addLUNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars, double lower,
+                       double upper, double scale = 1.0,
+                       ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLUNormBound(flag, VarIndexType(vars), lower, upper, scale, scale_t);
+    }
+
+    int addLUSquaredNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars, double lower,
+                              double upper, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLUSquaredNormBound(flag, VarIndexType(vars), lower, upper, scale,
+                                             scale_t);
+    }
+
+    int addLowerNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars, double lower,
+                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerNormBound(flag, VarIndexType(vars), lower, scale, scale_t);
+    }
+
+    int addUpperNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars, double upper,
+                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperNormBound(flag, VarIndexType(vars), upper, scale, scale_t);
+    }
+
+    int addLowerSquaredNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars,
+                                 double lower, double scale = 1.0,
+                                 ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerSquaredNormBound(flag, VarIndexType(vars), lower, scale, scale_t);
+    }
+
+    int addUpperSquaredNormBound(PhaseRegionFlags flag, const Eigen::VectorXi &vars,
+                                 double upper, double scale = 1.0,
+                                 ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperSquaredNormBound(flag, VarIndexType(vars), upper, scale, scale_t);
+    }
+
+    int addIntegralParamFunction(GenericFunction<-1, 1> func, const Eigen::VectorXi &vars,
+                                 int accum_parm, ScaleType scale = ScaleModes::AUTO) {
+        return phase_->addIntegralParamFunction(func, VarIndexType(vars), accum_parm, scale);
+    }
+
     // ── Delta-time / delta-var objectives ───────────────────────────────
 
     int addDeltaTimeObjective(double scale, ScaleType scale_t = ScaleModes::AUTO) {
@@ -214,14 +344,66 @@ class Phase {
         return phase_->addDeltaVarObjective(idx, scale, scale_t);
     }
 
+    int addDeltaVarObjective(int var, double scale, ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addDeltaVarObjective(var, scale, scale_t);
+    }
+
+    int addDeltaVarEqualCon(const std::string &var_name, double value, double scale = 1.0,
+                            ScaleType scale_t = ScaleModes::AUTO) {
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addDeltaVarEqualCon: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addDeltaVarEqualCon(idx[0], value, scale, scale_t);
+    }
+
+    int addDeltaVarEqualCon(int var, double value, double scale = 1.0,
+                            ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addDeltaVarEqualCon(var, value, scale, scale_t);
+    }
+
     int addDeltaTimeEqualCon(double value, double scale = 1.0,
                              ScaleType scale_t = ScaleModes::AUTO) {
         return phase_->addDeltaTimeEqualCon(value, scale, scale_t);
     }
 
+    int addLowerDeltaVarBound(const std::string &var_name, double lower, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addLowerDeltaVarBound: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addLowerDeltaVarBound(idx[0], lower, scale, scale_t);
+    }
+
+    int addLowerDeltaVarBound(int var, double lower, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addLowerDeltaVarBound(var, lower, scale, scale_t);
+    }
+
     int addLowerDeltaTimeBound(double lower, double scale = 1.0,
                                ScaleType scale_t = ScaleModes::AUTO) {
         return phase_->addLowerDeltaTimeBound(lower, scale, scale_t);
+    }
+
+    int addUpperDeltaVarBound(const std::string &var_name, double upper, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addUpperDeltaVarBound: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addUpperDeltaVarBound(idx[0], upper, scale, scale_t);
+    }
+
+    int addUpperDeltaVarBound(int var, double upper, double scale = 1.0,
+                              ScaleType scale_t = ScaleModes::AUTO) {
+        return phase_->addUpperDeltaVarBound(var, upper, scale, scale_t);
     }
 
     int addUpperDeltaTimeBound(double upper, double scale = 1.0,
