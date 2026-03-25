@@ -162,6 +162,8 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
 ///////////////////////////////////////////////////////////////////////////////
 
 int main() {
+    int failures = 0;
+
     // Quick Jacobian sanity check
     {
         ZermeloVarWind ode_test(1.25);
@@ -175,13 +177,12 @@ int main() {
         bool ok = std::abs(jac(0, 1) - (-0.0787)) < 0.01;
         std::cout << "ODE Jacobian dy column: " << jac(0, 1) << " " << jac(1, 1)
                   << (ok ? "  OK" : "  BUG") << "\n\n";
+        if (!ok) ++failures;
     }
 
     Eigen::VectorXd A(2), B(2);
     A << 0.0, -1.0;
     B << 1.0, 1.0;
-
-    int failures = 0;
 
     // No wind
     std::cout << "Solving: no wind ... " << std::flush;

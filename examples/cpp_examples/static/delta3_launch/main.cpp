@@ -425,11 +425,14 @@ int main() {
     }
 
     auto traj4 = phase4->returnTraj();
-    if (!traj4.empty()) {
-        const double final_mass_kg = traj4.back()[6] * Mstar;
-        std::cout << std::fixed << std::setprecision(2);
-        std::cout << "Delta3Launch: Final mass = " << final_mass_kg << " kg\n";
+    if (traj4.empty()) {
+        std::cerr << "Delta3Launch: solver converged but trajectory is empty\n";
+        return 1;
     }
+
+    const double final_mass_kg = traj4.back()[6] * Mstar;
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "Delta3Launch: Final mass = " << final_mass_kg << " kg\n";
 
     return 0;
 }

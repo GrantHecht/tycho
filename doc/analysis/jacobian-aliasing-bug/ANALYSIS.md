@@ -7,7 +7,7 @@ The bug is NOT in BumpAllocator. It is in `TwoFunctionSum::right_jacobian_produc
 
 ### Mechanism
 
-`CwiseFunctionOperator::compute_jacobian_impl` (CwiseOperators.h:891-899) computes
+`CwiseFunctionOperator::compute_jacobian_impl` (CwiseOperators.h:879-900) computes
 the Jacobian of `cos(f(x))` by first computing the inner Jacobian into `jx_`, then
 scaling it in-place:
 

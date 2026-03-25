@@ -61,7 +61,7 @@ int main() {
     constexpr double tf_guess = 1.0;    // guess for flight time (s)
     constexpr double theta_guess = 1.0; // constant control guess (rad)
     constexpr int n_pts = 100;          // number of initial-guess points
-    constexpr int n_defects = 32;       // collocation defects per segment
+    constexpr int n_defects = 32;       // number of collocation segments
 
     // Build a linearly-interpolated initial trajectory
     std::vector<Eigen::VectorXd> traj;
@@ -106,7 +106,7 @@ int main() {
     // ---- Solve -------------------------------------------------------------
     const auto status = phase->solve_optimize();
 
-    if (status == PSIOPT::ConvergenceFlags::CONVERGED) {
+    if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
         const auto result = phase->returnTraj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone: optimal solution found\n";
@@ -115,7 +115,7 @@ int main() {
         std::cout << "  Final y      : " << result.back()[1] << "\n";
         std::cout << "  Nodes        : " << result.size() << "\n";
     } else {
-        std::cerr << "Optimization did not converge (status " << static_cast<int>(status) << ")\n";
+        std::cerr << "Brachistochrone: FAILED (status " << static_cast<int>(status) << ")\n";
         return 1;
     }
 

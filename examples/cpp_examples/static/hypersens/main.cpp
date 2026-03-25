@@ -162,5 +162,10 @@ int main() {
         std::cout << "  segments = " << traj.size() - 1 << "\n";
     }
 
+    if (phase->MeshConverged) {
+        std::cout << "HyperSens: PASS\n";
+    } else {
+        std::cout << "HyperSens: FAIL (mesh did not converge)\n";
+    }
     return phase->MeshConverged ? 0 : 1;
 }

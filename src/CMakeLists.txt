@@ -156,6 +156,8 @@ endif()
 # Generator expressions ensure correct flags per compiler/platform, and work
 # in both build-tree and install-tree usage (CMake stores genexes as-is in
 # tychoTargets.cmake, evaluating them against the consumer's compiler).
+# Note: ${CLANG_MAX_INLINE_DEPTH} is a CMake variable expanded at configure
+# time, so the inline threshold value is baked into the installed target.
 
 # SIMD flags — Eigen alignment/vectorization must match between library and consumer
 if(SIMD_FLAGS)
@@ -175,6 +177,7 @@ target_compile_options(tycho INTERFACE
     $<$<CXX_COMPILER_ID:AppleClang>:-inline-threshold=${CLANG_MAX_INLINE_DEPTH}>
 )
 # OpenMP compile flags
+# TODO: Add Windows (clang-cl) OpenMP flags for INTERFACE consumers
 target_compile_options(tycho INTERFACE
     $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:Clang>>:-fopenmp=libiomp5>
     $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:GNU>>:-fopenmp>
