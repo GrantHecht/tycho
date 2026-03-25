@@ -57,6 +57,7 @@ set(TYCHO_TEST_SOURCES
     utils/test_thread_pool.cpp
     utils/test_tuple_iterator.cpp
     utils/test_memory_management.cpp
+    utils/test_var_registry.cpp
 
     # VectorFunctions
     vector_functions/test_args_segment.cpp
@@ -96,6 +97,10 @@ set(TYCHO_TEST_SOURCES
     optimal_control/test_lgl_collocation.cpp
     optimal_control/test_mesh_refinement.cpp
     optimal_control/test_ode_sizes.cpp
+    optimal_control/test_runtime_ode.cpp
+    optimal_control/test_ode_builder.cpp
+    optimal_control/test_phase_wrapper.cpp
+    optimal_control/test_builder_brachistochrone.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp

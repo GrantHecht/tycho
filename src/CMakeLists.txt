@@ -42,6 +42,7 @@ OptimalControl/OptimalControlProblem.h
 OptimalControl/OptimalControlProblem.cpp
 OptimalControl/LGLInterpTable.h
 OptimalControl/LGLInterpTable.cpp
+OptimalControl/RuntimeODE.cpp
 )
 
 target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
