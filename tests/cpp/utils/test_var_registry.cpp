@@ -138,6 +138,22 @@ TEST(VarRegistry, EmptyAndContains) {
     EXPECT_TRUE(reg.contains("x"));
 }
 
+TEST(VarRegistry, NegativeSizesThrow) {
+    EXPECT_THROW(VarRegistry(-1, 0, 0), std::invalid_argument);
+    EXPECT_THROW(VarRegistry(3, -1, 0), std::invalid_argument);
+    EXPECT_THROW(VarRegistry(3, 0, -1), std::invalid_argument);
+}
+
+TEST(VarRegistry, EntriesAccessor) {
+    VarRegistry reg(3, 1, 0);
+    reg.add_name("x", 0);
+    reg.add_name("y", 1);
+    const auto &entries = reg.entries();
+    EXPECT_EQ(entries.size(), 2u);
+    EXPECT_EQ(entries.at("x")[0], 0);
+    EXPECT_EQ(entries.at("y")[0], 1);
+}
+
 TEST(VarRegistry, ResolveVector) {
     VarRegistry reg(3, 1, 0);
     reg.add_name("x", 0);

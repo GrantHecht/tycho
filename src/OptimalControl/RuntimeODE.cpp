@@ -17,17 +17,19 @@ Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::Vector
                         int num_segments) const {
     DynODE ode = generic_ode();
 
-    // Copy named variable groups into the GenericODE's ODESize index map
-    // so that ODEPhaseBase's string-based VarIndexType overloads also work.
-    if (has_registry_) {
-        // Populate the ODESize FlatMap from the registry
-        // (the registry stores all names; we re-register them on the ODE)
+    // Populate the GenericODE's ODESize FlatMap from the registry so that
+    // ODEPhaseBase's string-based VarIndexType overloads also work.
+    // ODEPhase's constructor auto-copies via set_idxs(this->ode.get_idxs()).
+    if (registry_) {
+        for (const auto &[name, idxs] : registry_->entries()) {
+            ode.add_idx(name, idxs);
+        }
     }
 
     auto phase_ptr = std::make_shared<ODEPhase<DynODE>>(ode, mode, traj, num_segments);
 
-    if (has_registry_) {
-        return Phase(phase_ptr, registry_);
+    if (registry_) {
+        return Phase(phase_ptr, *registry_);
     }
     return Phase(phase_ptr, VarRegistry(xvars_, uvars_, pvars_));
 }

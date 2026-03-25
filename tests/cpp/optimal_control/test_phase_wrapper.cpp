@@ -115,6 +115,17 @@ TEST_F(PhaseWrapperTest, SetUnitsNamed) {
     SUCCEED();
 }
 
+TEST_F(PhaseWrapperTest, BasePhaseResolvesNames) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // After FlatMap bridge: base phase resolves names directly
+    auto idx = phase.base().idx("theta");
+    EXPECT_EQ(idx.size(), 1);
+    EXPECT_EQ(idx[0], 4);
+}
+
 TEST_F(PhaseWrapperTest, AccessBase) {
     auto ode = make_brach_runtime_ode();
     auto traj = make_brach_guess();

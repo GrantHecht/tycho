@@ -77,6 +77,40 @@ TEST_F(ODEBuilderTest, VarGroups) {
     EXPECT_EQ(idx[1], 1);
 }
 
+TEST_F(ODEBuilderTest, InvalidSizesThrow) {
+    EXPECT_THROW(ODEBuilder(0), std::invalid_argument);
+    EXPECT_THROW(ODEBuilder(-1), std::invalid_argument);
+    EXPECT_THROW(ODEBuilder(3, -1), std::invalid_argument);
+    EXPECT_THROW(ODEBuilder(3, 0, -1), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, XVarBoundsCheck) {
+    EXPECT_THROW(
+        ODEBuilder(3, 1).define([](auto &args) {
+            return stack(args.XVar(3), args.XVar(0), args.XVar(0));
+        }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, PVarWithoutPvarsThrows) {
+    EXPECT_THROW(
+        ODEBuilder(2, 1).define([](auto &args) {
+            return stack(args.XVar(0), args.PVar(0));
+        }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, DoubleBuildThrows) {
+    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+        auto v = args.XVar(2);
+        auto theta = args.UVar(0);
+        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+    });
+
+    builder.build();
+    EXPECT_THROW(builder.build(), std::invalid_argument);
+}
+
 TEST_F(ODEBuilderTest, WithPVars) {
     auto ode = ODEBuilder(2, 1, 1)
                    .define([](auto &args) {

@@ -13,6 +13,7 @@
 #include "tycho/detail/ODE.h"
 #include "tycho/detail/OptimalControlFlags.h"
 #include "tycho/detail/var_registry.h"
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,23 +24,24 @@ class Phase; // forward
 
 /// A runtime-defined ODE wrapping a type-erased VectorFunction and optional
 /// named-variable registry.  Construct via ODEBuilder or directly from a
-/// pre-built VectorFunction expression.
+/// pre-built VectorFunction expression.  Call phase() to produce a Phase
+/// object for setting up constraints, objectives, and solving.
 class RuntimeODE {
   public:
     using DynODE = GenericODE<GenericFunction<-1, -1>, -1, -1, -1>;
-
-    RuntimeODE() = default;
 
     /// Construct from any VectorFunction expression and explicit sizes.
     template <typename Func>
     RuntimeODE(const Func &ode_func, int xvars, int uvars, int pvars = 0)
         : func_(ode_func), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
+        validate_sizes();
         validate();
     }
 
     /// Construct from an already type-erased GenericFunction and sizes.
     RuntimeODE(GenericFunction<-1, -1> func, int xvars, int uvars, int pvars = 0)
         : func_(std::move(func)), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
+        validate_sizes();
         validate();
     }
 
@@ -48,19 +50,19 @@ class RuntimeODE {
     RuntimeODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         ensure_registry();
         for (const auto &[name, idx] : names)
-            registry_.add_name(name, idx);
+            registry_->add_name(name, idx);
         return *this;
     }
 
     RuntimeODE &var_group(const std::string &name, int start, int count) {
         ensure_registry();
-        registry_.add_group(name, start, count);
+        registry_->add_group(name, start, count);
         return *this;
     }
 
     RuntimeODE &var_group(const std::string &name, std::initializer_list<std::string> members) {
         ensure_registry();
-        registry_.add_group(name, members);
+        registry_->add_group(name, members);
         return *this;
     }
 
@@ -74,12 +76,12 @@ class RuntimeODE {
 
     Eigen::VectorXd make_input(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
-        return registry_.make_input(vals);
+        return registry_->make_input(vals);
     }
 
     Eigen::VectorXd make_units(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
-        return registry_.make_units(vals);
+        return registry_->make_units(vals);
     }
 
     // ── Accessors ───────────────────────────────────────────────────────
@@ -89,10 +91,10 @@ class RuntimeODE {
     int pvars() const { return pvars_; }
     int xtup_size() const { return xvars_ + 1 + uvars_ + pvars_; }
 
-    bool has_registry() const { return has_registry_; }
+    bool has_registry() const { return registry_.has_value(); }
     const VarRegistry &registry() const {
         check_registry();
-        return registry_;
+        return *registry_;
     }
 
     /// Access the underlying GenericFunction (for advanced use).
@@ -106,8 +108,19 @@ class RuntimeODE {
     int xvars_ = 0;
     int uvars_ = 0;
     int pvars_ = 0;
-    VarRegistry registry_;
-    bool has_registry_ = false;
+    std::optional<VarRegistry> registry_;
+
+    void validate_sizes() const {
+        if (xvars_ <= 0)
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE: xvars must be positive (got {})", xvars_));
+        if (uvars_ < 0)
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE: uvars must be non-negative (got {})", uvars_));
+        if (pvars_ < 0)
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE: pvars must be non-negative (got {})", pvars_));
+    }
 
     void validate() const {
         int expected_ir = xvars_ + 1 + uvars_ + pvars_;
@@ -124,14 +137,12 @@ class RuntimeODE {
     }
 
     void ensure_registry() {
-        if (!has_registry_) {
-            registry_ = VarRegistry(xvars_, uvars_, pvars_);
-            has_registry_ = true;
-        }
+        if (!registry_)
+            registry_.emplace(xvars_, uvars_, pvars_);
     }
 
     void check_registry() const {
-        if (!has_registry_) {
+        if (!registry_) {
             throw std::invalid_argument(
                 "RuntimeODE: no variable names registered (call var_names() first)");
         }

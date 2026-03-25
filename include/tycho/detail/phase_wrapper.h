@@ -31,10 +31,12 @@ namespace Tycho {
 /// registry before forwarding to the base phase.
 class Phase {
   public:
-    Phase() = default;
-
     Phase(std::shared_ptr<ODEPhaseBase> phase, VarRegistry registry)
-        : phase_(std::move(phase)), registry_(std::move(registry)) {}
+        : phase_(std::move(phase)), registry_(std::move(registry)) {
+        if (!phase_)
+            throw std::invalid_argument(
+                "Phase: null phase pointer (construct via RuntimeODE::phase())");
+    }
 
     // ── Named-variable constraint overloads ─────────────────────────────
 
@@ -255,8 +257,8 @@ class Phase {
         return registry_.resolve(names);
     }
 
-    VarIndexType resolve(const std::vector<std::string> &names) const {
-        return VarIndexType(names);
+    Eigen::VectorXi resolve(const std::vector<std::string> &names) const {
+        return registry_.resolve(names);
     }
 };
 

@@ -22,16 +22,20 @@
 
 namespace Tycho {
 
-/// Proxy passed to the `define()` lambda.  Provides XVar/UVar/TVar/PVar/XVec/
-/// UVec/PVec accessors that mirror the Python ODEArguments API.
-///
-/// Wraps a fully-dynamic ODEArguments<-1,-1,-1>.
+/// Proxy passed to the ODEBuilder::define() lambda.  Provides simplified
+/// XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors for building VectorFunction
+/// expressions, mirroring the Python ODEArguments API.
 class ODEArgsProxy {
   public:
     ODEArgsProxy(int xv, int uv, int pv) : args_(xv, uv, pv) {}
 
     /// i-th state variable (0-based within X).
-    auto XVar(int i) const { return args_.segment(0, args_.XVars()).coeff(i); }
+    auto XVar(int i) const {
+        if (i < 0 || i >= args_.XVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::XVar: index {} out of range [0, {})", i, args_.XVars()));
+        return args_.segment(0, args_.XVars()).coeff(i);
+    }
 
     /// State vector segment.
     auto XVec() const { return args_.segment(0, args_.XVars()); }
@@ -40,13 +44,23 @@ class ODEArgsProxy {
     auto TVar() const { return args_.coeff(args_.TVar()); }
 
     /// i-th control variable (0-based within U).
-    auto UVar(int i) const { return args_.segment(args_.XtVars(), args_.UVars()).coeff(i); }
+    auto UVar(int i) const {
+        if (i < 0 || i >= args_.UVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::UVar: index {} out of range [0, {})", i, args_.UVars()));
+        return args_.segment(args_.XtVars(), args_.UVars()).coeff(i);
+    }
 
     /// Control vector segment.
     auto UVec() const { return args_.segment(args_.XtVars(), args_.UVars()); }
 
     /// i-th parameter variable (0-based within P).
-    auto PVar(int i) const { return args_.segment(args_.XtUVars(), args_.PVars()).coeff(i); }
+    auto PVar(int i) const {
+        if (i < 0 || i >= args_.PVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::PVar: index {} out of range [0, {})", i, args_.PVars()));
+        return args_.segment(args_.XtUVars(), args_.PVars()).coeff(i);
+    }
 
     /// Parameter vector segment.
     auto PVec() const { return args_.segment(args_.XtUVars(), args_.PVars()); }
@@ -66,14 +80,24 @@ class ODEArgsProxy {
 ///       .define([](auto& args) {
 ///           auto v = args.XVar(2);
 ///           auto theta = args.UVar(0);
-///           return stack(sin(theta)*v, -cos(theta)*v, 9.81*cos(theta));
+///           return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
 ///       })
 ///       .var_names({{"x",0}, {"y",1}, {"v",2}, {"theta",4}})
 ///       .build();
 class ODEBuilder {
   public:
     ODEBuilder(int xvars, int uvars = 0, int pvars = 0)
-        : xvars_(xvars), uvars_(uvars), pvars_(pvars) {}
+        : xvars_(xvars), uvars_(uvars), pvars_(pvars) {
+        if (xvars <= 0)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder: xvars must be positive (got {})", xvars));
+        if (uvars < 0)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder: uvars must be non-negative (got {})", uvars));
+        if (pvars < 0)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder: pvars must be non-negative (got {})", pvars));
+    }
 
     /// Define ODE dynamics via a lambda.
     /// The lambda receives an ODEArgsProxy and must return a VectorFunction
@@ -101,6 +125,8 @@ class ODEBuilder {
 
     /// Register named variables (name -> XtUP index).
     ODEBuilder &var_names(std::initializer_list<std::pair<std::string, int>> names) {
+        if (built_)
+            throw std::invalid_argument("ODEBuilder: cannot modify after build()");
         for (const auto &p : names)
             pending_names_.push_back(p);
         return *this;
@@ -108,12 +134,17 @@ class ODEBuilder {
 
     /// Register a named variable group (contiguous range).
     ODEBuilder &var_group(const std::string &name, int start, int count) {
+        if (built_)
+            throw std::invalid_argument("ODEBuilder: cannot modify after build()");
         pending_groups_.emplace_back(name, start, count);
         return *this;
     }
 
     /// Build the RuntimeODE.
     RuntimeODE build() {
+        if (built_)
+            throw std::invalid_argument(
+                "ODEBuilder: build() already called; create a new ODEBuilder");
         if (!func_set_) {
             throw std::invalid_argument(
                 "ODEBuilder: no dynamics defined (call define() or from())");
@@ -128,6 +159,7 @@ class ODEBuilder {
                 ode.var_group(name, start, count);
         }
 
+        built_ = true;
         return ode;
     }
 
@@ -137,6 +169,7 @@ class ODEBuilder {
     int pvars_;
     GenericFunction<-1, -1> func_;
     bool func_set_ = false;
+    bool built_ = false;
     std::vector<std::pair<std::string, int>> pending_names_;
     std::vector<std::tuple<std::string, int, int>> pending_groups_;
 };

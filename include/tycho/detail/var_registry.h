@@ -20,13 +20,26 @@ namespace Tycho {
 
 /// Maps string variable names to XtUP-space indices.
 ///
+/// XtUP-space is the concatenated layout [X_0..X_{n-1}, t, U_0..U_{m-1}, P_0..P_{k-1}]
+/// used as the input vector for ODE functions.
+///
 /// After construction and registration of names/groups, the registry is
 /// effectively immutable — all lookups are const. Thread-safe for reads.
 class VarRegistry {
   public:
     VarRegistry() = default;
 
-    VarRegistry(int xvars, int uvars, int pvars) : xvars_(xvars), uvars_(uvars), pvars_(pvars) {}
+    VarRegistry(int xvars, int uvars, int pvars) : xvars_(xvars), uvars_(uvars), pvars_(pvars) {
+        if (xvars < 0)
+            throw std::invalid_argument(
+                fmt::format("VarRegistry: xvars must be non-negative (got {})", xvars));
+        if (uvars < 0)
+            throw std::invalid_argument(
+                fmt::format("VarRegistry: uvars must be non-negative (got {})", uvars));
+        if (pvars < 0)
+            throw std::invalid_argument(
+                fmt::format("VarRegistry: pvars must be non-negative (got {})", pvars));
+    }
 
     // ── Registration ────────────────────────────────────────────────────
 
@@ -117,7 +130,7 @@ class VarRegistry {
 
     // ── Convenience builders ────────────────────────────────────────────
 
-    /// Build a state vector from name-value pairs.  Unset entries default to 0.
+    /// Build an XtUP vector from name-value pairs.  Unset entries default to 0.
     Eigen::VectorXd
     make_input(std::initializer_list<std::pair<std::string, double>> scalar_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Zero(xtup_size());
@@ -134,7 +147,7 @@ class VarRegistry {
         return vec;
     }
 
-    /// Build a units vector from name-value pairs.  Unset entries default to 1.
+    /// Build an XtUP-sized scaling vector from name-value pairs.  Unset entries default to 1.
     Eigen::VectorXd
     make_units(std::initializer_list<std::pair<std::string, double>> unit_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Ones(xtup_size());
@@ -154,6 +167,9 @@ class VarRegistry {
     int xtup_size() const { return xvars_ + 1 + uvars_ + pvars_; }
     bool empty() const { return map_.empty(); }
     bool contains(const std::string &name) const { return map_.count(name) > 0; }
+
+    /// Read-only access to registered name-index pairs (for FlatMap bridging).
+    const std::unordered_map<std::string, Eigen::VectorXi> &entries() const { return map_; }
 
   private:
     int xvars_ = 0;

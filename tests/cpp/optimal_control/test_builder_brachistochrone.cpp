@@ -112,7 +112,7 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     // Index-based control bounds
     phase.addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
-    // Named objective
+    // Minimize final time
     phase.addDeltaTimeObjective(1.0);
 
     auto status = phase.solve_optimize();

@@ -4,6 +4,7 @@
 
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
+#include <tycho/detail/ode_builder.h>
 #include <tycho/detail/phase_wrapper.h>
 #include <tycho/detail/runtime_ode.h>
 #include <tycho/tycho.h>
@@ -74,6 +75,57 @@ TEST_F(RuntimeODETest, SizeMismatchThrows) {
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
     EXPECT_THROW(RuntimeODE(ode_expr, 2, 1, 0), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, InvalidSizesThrow) {
+    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto v = args.segment(0, 3).coeff(2);
+    auto theta = args.segment(4, 1).coeff(0);
+    auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+
+    EXPECT_THROW(RuntimeODE(ode_expr, 0, 1, 0), std::invalid_argument);
+    EXPECT_THROW(RuntimeODE(ode_expr, -1, 1, 0), std::invalid_argument);
+    EXPECT_THROW(RuntimeODE(ode_expr, 3, -1, 0), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, InputSizeMismatchThrows) {
+    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto v = args.segment(0, 3).coeff(2);
+    auto theta = args.segment(4, 1).coeff(0);
+    auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+
+    // Expression built for (3,1,0) but we claim (3,2,0) — input size mismatch
+    EXPECT_THROW(RuntimeODE(ode_expr, 3, 2, 0), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+                   .build();
+
+    std::vector<Eigen::VectorXd> traj;
+    for (int i = 0; i < 50; ++i) {
+        double s = static_cast<double>(i) / 49.0;
+        Eigen::VectorXd pt(5);
+        pt << 10.0 * s, 10.0 - 5.0 * s, 9.81 * s * std::cos(1.0), s, 1.0;
+        traj.push_back(pt);
+    }
+
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 16);
+
+    // Verify FlatMap was populated: base phase resolves names via idx()
+    auto x_idx = phase.base().idx("x");
+    EXPECT_EQ(x_idx.size(), 1);
+    EXPECT_EQ(x_idx[0], 0);
+
+    auto theta_idx = phase.base().idx("theta");
+    EXPECT_EQ(theta_idx.size(), 1);
+    EXPECT_EQ(theta_idx[0], 4);
 }
 
 TEST_F(RuntimeODETest, FluentVarGroupRegistration) {
