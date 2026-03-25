@@ -216,7 +216,7 @@ struct BumpAllocator {
 
     template <class Func, class... TempSpecs>
     static void allocate_run(Func &&f, const TempSpecs &...tspecs) {
-        if constexpr ((... && TempSpecs::IsConstantSize)) {
+        if constexpr ((... && std::remove_cvref_t<TempSpecs>::IsConstantSize)) {
             auto Temps = detail::ExactTempPack<std::remove_cvref_t<TempSpecs>...>();
             std::apply(f, Temps.data);
         } else {

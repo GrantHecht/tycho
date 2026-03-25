@@ -3,6 +3,11 @@
 // Tycho — High-performance trajectory design and optimal control
 // Public API umbrella header
 
+// fmt color/formatting support required by detail headers
+#include <fmt/color.h>
+#include <fmt/core.h>
+#include <fmt/format.h>
+
 #include "tycho/typedefs.h"
 #include "tycho/utils.h"
 #include "tycho/vector_functions.h"

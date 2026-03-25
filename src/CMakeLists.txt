@@ -146,6 +146,46 @@ if(MKL_INCLUDE_DIRS)
     )
 endif()
 
+# Compile options required for correct ABI with header-template code.
+# Tycho's public headers contain Eigen types and template definitions that are
+# instantiated in the consumer's translation units. Consumers MUST compile with
+# matching SIMD, FP, and OpenMP flags to ensure:
+#   - Eigen vectorization/alignment matches the library (prevents segfaults)
+#   - Floating-point semantics match for template ABI consistency
+#   - OpenMP runtime is linked (static libs contain OpenMP symbols)
+# Generator expressions ensure correct flags per compiler/platform, and work
+# in both build-tree and install-tree usage (CMake stores genexes as-is in
+# tychoTargets.cmake, evaluating them against the consumer's compiler).
+# Note: ${CLANG_MAX_INLINE_DEPTH} is a CMake variable expanded at configure
+# time, so the inline threshold value is baked into the installed target.
+
+# SIMD flags — Eigen alignment/vectorization must match between library and consumer
+if(SIMD_FLAGS)
+    target_compile_options(tycho INTERFACE ${SIMD_FLAGS})
+endif()
+# FP mode flags
+if(FP_FLAGS)
+    target_compile_options(tycho INTERFACE ${FP_FLAGS})
+endif()
+# Inline threshold — critical for VectorFunction expression template performance.
+# Without aggressive inlining, the compiler cannot flatten the DSL expression tree
+# into efficient machine code, causing 5-10x slowdowns in NLP evaluation.
+target_compile_options(tycho INTERFACE
+    $<$<CXX_COMPILER_ID:Clang>:-mllvm>
+    $<$<CXX_COMPILER_ID:Clang>:-inline-threshold=${CLANG_MAX_INLINE_DEPTH}>
+    $<$<CXX_COMPILER_ID:AppleClang>:-mllvm>
+    $<$<CXX_COMPILER_ID:AppleClang>:-inline-threshold=${CLANG_MAX_INLINE_DEPTH}>
+)
+# OpenMP compile flags
+# TODO: Add Windows (clang-cl) OpenMP flags for INTERFACE consumers
+target_compile_options(tycho INTERFACE
+    $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:Clang>>:-fopenmp=libiomp5>
+    $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:GNU>>:-fopenmp>
+    $<$<AND:$<PLATFORM_ID:Darwin>,$<CXX_COMPILER_ID:AppleClang>>:-Xclang>
+    $<$<AND:$<PLATFORM_ID:Darwin>,$<CXX_COMPILER_ID:AppleClang>>:-fopenmp>
+    $<$<AND:$<PLATFORM_ID:Darwin>,$<CXX_COMPILER_ID:Clang>,$<NOT:$<CXX_COMPILER_ID:AppleClang>>>:-fopenmp>
+)
+
 #-------------------------------------------------------------------------------
 # Install rules
 
