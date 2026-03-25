@@ -86,7 +86,7 @@ class ODEArgsProxy {
 ///
 /// Usage:
 ///   auto ode = ODEBuilder(3, 1)
-///       .define([](auto& args) {
+///       .define([](const auto& args) {
 ///           auto v = args.XVar(2);
 ///           auto theta = args.UVar(0);
 ///           return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
@@ -108,6 +108,11 @@ class ODEBuilder {
                 fmt::format("ODEBuilder: pvars must be non-negative (got {})", pvars));
     }
 
+    ODEBuilder(const ODEBuilder &) = delete;
+    ODEBuilder &operator=(const ODEBuilder &) = delete;
+    ODEBuilder(ODEBuilder &&) = delete;
+    ODEBuilder &operator=(ODEBuilder &&) = delete;
+
     /// Define ODE dynamics via a lambda.
     /// The lambda receives an ODEArgsProxy and must return a VectorFunction
     /// expression (typically via stack() or StackedOutputs).
@@ -115,7 +120,7 @@ class ODEBuilder {
         if (func_set_) {
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
         }
-        ODEArgsProxy proxy(xvars_, uvars_, pvars_);
+        const ODEArgsProxy proxy(xvars_, uvars_, pvars_);
         auto expr = func(proxy);
         func_ = GenericFunction<-1, -1>(expr);
         validate_func();
@@ -181,6 +186,8 @@ class ODEBuilder {
     GenericFunction<-1, -1> func_;
     bool func_set_ = false;
     bool built_ = false;
+    std::vector<std::pair<std::string, int>> pending_names_;
+    std::vector<std::tuple<std::string, int, int>> pending_groups_;
 
     void validate_func() const {
         int expected_ir = xvars_ + 1 + uvars_ + pvars_;
@@ -193,8 +200,6 @@ class ODEBuilder {
             throw std::invalid_argument(fmt::format(
                 "ODEBuilder: function output size {} does not match XV={}", func_.ORows(), xvars_));
     }
-    std::vector<std::pair<std::string, int>> pending_names_;
-    std::vector<std::tuple<std::string, int, int>> pending_groups_;
 };
 
 } // namespace Tycho

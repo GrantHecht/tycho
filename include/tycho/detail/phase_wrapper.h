@@ -78,17 +78,35 @@ class Phase {
 
     int addLowerVarBound(PhaseRegionFlags flag, const std::string &var_name, double lower,
                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->addLowerVarBound(flag, resolve(var_name), lower, scale, scale_t);
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addLowerVarBound: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addLowerVarBound(flag, idx[0], lower, scale, scale_t);
     }
 
     int addUpperVarBound(PhaseRegionFlags flag, const std::string &var_name, double upper,
                          double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->addUpperVarBound(flag, resolve(var_name), upper, scale, scale_t);
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addUpperVarBound: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addUpperVarBound(flag, idx[0], upper, scale, scale_t);
     }
 
     int addValueObjective(PhaseRegionFlags flag, const std::string &var_name, double scale,
                           ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->addValueObjective(flag, resolve(var_name), scale, scale_t);
+        auto idx = resolve(var_name);
+        if (idx.size() != 1) {
+            throw std::invalid_argument(fmt::format(
+                "Phase::addValueObjective: '{}' maps to {} indices, expected 1", var_name,
+                idx.size()));
+        }
+        return phase_->addValueObjective(flag, idx[0], scale, scale_t);
     }
 
     int addValueLock(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,

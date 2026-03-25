@@ -51,7 +51,8 @@ TEST_F(ODEBuilderTest, BuildWithoutDefineThrows) {
 }
 
 TEST_F(ODEBuilderTest, DoubleDefineThrows) {
-    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
         auto v = args.XVar(2);
         auto theta = args.UVar(0);
         return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -101,7 +102,8 @@ TEST_F(ODEBuilderTest, PVarWithoutPvarsThrows) {
 }
 
 TEST_F(ODEBuilderTest, DoubleBuildThrows) {
-    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
         auto v = args.XVar(2);
         auto theta = args.UVar(0);
         return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -112,7 +114,8 @@ TEST_F(ODEBuilderTest, DoubleBuildThrows) {
 }
 
 TEST_F(ODEBuilderTest, VarNamesAfterBuildThrows) {
-    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
         auto v = args.XVar(2);
         auto theta = args.UVar(0);
         return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -123,7 +126,8 @@ TEST_F(ODEBuilderTest, VarNamesAfterBuildThrows) {
 }
 
 TEST_F(ODEBuilderTest, VarGroupAfterBuildThrows) {
-    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
         auto v = args.XVar(2);
         auto theta = args.UVar(0);
         return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));

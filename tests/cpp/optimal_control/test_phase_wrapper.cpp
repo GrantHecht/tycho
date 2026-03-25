@@ -197,6 +197,90 @@ TEST_F(PhaseWrapperTest, DeltaVarObjectiveGroupThrows) {
     EXPECT_THROW(phase.addDeltaVarObjective("pos", 1.0), std::invalid_argument);
 }
 
+TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
+                   .var_group("pos", 0, 2)
+                   .build();
+
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // "pos" maps to 2 indices — addLowerVarBound requires exactly 1
+    EXPECT_THROW(phase.addLowerVarBound(PhaseRegionFlags::Path, "pos", -1.0),
+                 std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, UpperVarBoundGroupThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
+                   .var_group("pos", 0, 2)
+                   .build();
+
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // "pos" maps to 2 indices — addUpperVarBound requires exactly 1
+    EXPECT_THROW(phase.addUpperVarBound(PhaseRegionFlags::Path, "pos", 1.0),
+                 std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, ValueObjectiveGroupThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
+                   .var_group("pos", 0, 2)
+                   .build();
+
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    // "pos" maps to 2 indices — addValueObjective requires exactly 1
+    EXPECT_THROW(phase.addValueObjective(PhaseRegionFlags::Front, "pos", 1.0),
+                 std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, NamedLowerVarBound) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    phase.addLowerVarBound(PhaseRegionFlags::Path, "theta", -0.1);
+    SUCCEED();
+}
+
+TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    phase.addUpperVarBound(PhaseRegionFlags::Path, "theta", 2.0);
+    SUCCEED();
+}
+
+TEST_F(PhaseWrapperTest, NamedValueObjective) {
+    auto ode = make_brach_runtime_ode();
+    auto traj = make_brach_guess();
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+
+    phase.addValueObjective(PhaseRegionFlags::Front, "v", 1.0);
+    SUCCEED();
+}
+
 TEST_F(PhaseWrapperTest, NamedEqualCon) {
     auto ode = make_brach_runtime_ode();
     auto traj = make_brach_guess();
