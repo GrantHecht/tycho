@@ -154,6 +154,16 @@ TEST(VarRegistry, EntriesAccessor) {
     EXPECT_EQ(entries.at("y")[0], 1);
 }
 
+TEST(VarRegistry, AddGroupZeroCountThrows) {
+    VarRegistry reg(3, 1, 0);
+    EXPECT_THROW(reg.add_group("empty", 0, 0), std::invalid_argument);
+}
+
+TEST(VarRegistry, AddGroupNegativeCountThrows) {
+    VarRegistry reg(3, 1, 0);
+    EXPECT_THROW(reg.add_group("neg", 0, -1), std::invalid_argument);
+}
+
 TEST(VarRegistry, ResolveVector) {
     VarRegistry reg(3, 1, 0);
     reg.add_name("x", 0);

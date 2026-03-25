@@ -24,7 +24,8 @@ namespace Tycho {
 /// used as the input vector for ODE functions.
 ///
 /// After construction and registration of names/groups, the registry is
-/// effectively immutable — all lookups are const. Thread-safe for reads.
+/// intended to be populated during setup and then used read-only.
+/// Thread-safe for reads.
 class VarRegistry {
   public:
     VarRegistry() = default;
@@ -98,34 +99,12 @@ class VarRegistry {
 
     /// Resolve multiple names, concatenating their indices.
     Eigen::VectorXi resolve(std::initializer_list<std::string> names) const {
-        int total = 0;
-        for (const auto &n : names)
-            total += resolve(n).size();
-
-        Eigen::VectorXi idx(total);
-        int pos = 0;
-        for (const auto &n : names) {
-            auto sub = resolve(n);
-            for (int i = 0; i < sub.size(); ++i)
-                idx[pos++] = sub[i];
-        }
-        return idx;
+        return resolve_impl(names);
     }
 
     /// Resolve a vector of names.
     Eigen::VectorXi resolve(const std::vector<std::string> &names) const {
-        int total = 0;
-        for (const auto &n : names)
-            total += resolve(n).size();
-
-        Eigen::VectorXi idx(total);
-        int pos = 0;
-        for (const auto &n : names) {
-            auto sub = resolve(n);
-            for (int i = 0; i < sub.size(); ++i)
-                idx[pos++] = sub[i];
-        }
-        return idx;
+        return resolve_impl(names);
     }
 
     // ── Convenience builders ────────────────────────────────────────────
@@ -168,7 +147,8 @@ class VarRegistry {
     bool empty() const { return map_.empty(); }
     bool contains(const std::string &name) const { return map_.count(name) > 0; }
 
-    /// Read-only access to registered name-index pairs (for FlatMap bridging).
+    /// Read-only access to registered name-index pairs (used by
+    /// RuntimeODE::phase() to populate the GenericODE's internal index map).
     const std::unordered_map<std::string, Eigen::VectorXi> &entries() const { return map_; }
 
   private:
@@ -176,6 +156,21 @@ class VarRegistry {
     int uvars_ = 0;
     int pvars_ = 0;
     std::unordered_map<std::string, Eigen::VectorXi> map_;
+
+    template <typename Range> Eigen::VectorXi resolve_impl(const Range &names) const {
+        int total = 0;
+        for (const auto &n : names)
+            total += resolve(n).size();
+
+        Eigen::VectorXi idx(total);
+        int pos = 0;
+        for (const auto &n : names) {
+            auto sub = resolve(n);
+            for (int i = 0; i < sub.size(); ++i)
+                idx[pos++] = sub[i];
+        }
+        return idx;
+    }
 
     void check_not_registered(const std::string &name) const {
         if (map_.count(name) > 0) {

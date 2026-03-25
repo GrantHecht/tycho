@@ -111,6 +111,58 @@ TEST_F(ODEBuilderTest, DoubleBuildThrows) {
     EXPECT_THROW(builder.build(), std::invalid_argument);
 }
 
+TEST_F(ODEBuilderTest, VarNamesAfterBuildThrows) {
+    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+        auto v = args.XVar(2);
+        auto theta = args.UVar(0);
+        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+    });
+
+    builder.build();
+    EXPECT_THROW(builder.var_names({{"x", 0}}), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, VarGroupAfterBuildThrows) {
+    auto builder = ODEBuilder(3, 1).define([](auto &args) {
+        auto v = args.XVar(2);
+        auto theta = args.UVar(0);
+        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+    });
+
+    builder.build();
+    EXPECT_THROW(builder.var_group("pos", 0, 2), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, DefineWrongOutputSizeThrows) {
+    // Lambda returns 2 outputs but xvars=3
+    EXPECT_THROW(
+        ODEBuilder(3, 1).define([](auto &args) {
+            return stack(args.XVar(0), args.XVar(1));
+        }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, FromWrongOutputSizeThrows) {
+    auto args = ODEArguments<-1, -1, -1>(2, 1, 0);
+    auto expr = stack(args.segment(0, 2).coeff(0), args.segment(0, 2).coeff(1));
+
+    // Expression has 2 outputs / 4 inputs, but builder declares xvars=3, uvars=1 (5 inputs, 3 outputs)
+    EXPECT_THROW(ODEBuilder(3, 1).from(expr), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, TVarAccessor) {
+    auto ode = ODEBuilder(1, 0)
+                   .define([](auto &args) {
+                       // dx/dt = t (time-dependent ODE)
+                       return args.TVar();
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 1);
+    EXPECT_EQ(ode.uvars(), 0);
+    EXPECT_EQ(ode.xtup_size(), 2); // x + t
+}
+
 TEST_F(ODEBuilderTest, WithPVars) {
     auto ode = ODEBuilder(2, 1, 1)
                    .define([](auto &args) {

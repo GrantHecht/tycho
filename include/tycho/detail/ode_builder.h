@@ -109,6 +109,7 @@ class ODEBuilder {
         ODEArgsProxy proxy(xvars_, uvars_, pvars_);
         auto expr = func(proxy);
         func_ = GenericFunction<-1, -1>(expr);
+        validate_func();
         func_set_ = true;
         return *this;
     }
@@ -119,6 +120,7 @@ class ODEBuilder {
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
         }
         func_ = GenericFunction<-1, -1>(ode_expr);
+        validate_func();
         func_set_ = true;
         return *this;
     }
@@ -170,6 +172,18 @@ class ODEBuilder {
     GenericFunction<-1, -1> func_;
     bool func_set_ = false;
     bool built_ = false;
+
+    void validate_func() const {
+        int expected_ir = xvars_ + 1 + uvars_ + pvars_;
+        if (func_.IRows() != expected_ir)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder: function input size {} does not match XtUP size {} "
+                            "(xv={}, uv={}, pv={})",
+                            func_.IRows(), expected_ir, xvars_, uvars_, pvars_));
+        if (func_.ORows() != xvars_)
+            throw std::invalid_argument(fmt::format(
+                "ODEBuilder: function output size {} does not match XV={}", func_.ORows(), xvars_));
+    }
     std::vector<std::pair<std::string, int>> pending_names_;
     std::vector<std::tuple<std::string, int, int>> pending_groups_;
 };

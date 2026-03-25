@@ -23,9 +23,10 @@ namespace Tycho {
 class Phase; // forward
 
 /// A runtime-defined ODE wrapping a type-erased VectorFunction and optional
-/// named-variable registry.  Construct via ODEBuilder or directly from a
-/// pre-built VectorFunction expression.  Call phase() to produce a Phase
-/// object for setting up constraints, objectives, and solving.
+/// named-variable registry.  Construct via ODEBuilder, from a VectorFunction
+/// expression (auto-erased), or from a pre-built GenericFunction.  Call
+/// phase() to produce a Phase object for setting up constraints, objectives,
+/// and solving.
 class RuntimeODE {
   public:
     using DynODE = GenericODE<GenericFunction<-1, -1>, -1, -1, -1>;

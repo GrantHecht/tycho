@@ -128,6 +128,54 @@ TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
     EXPECT_EQ(theta_idx[0], 4);
 }
 
+TEST_F(RuntimeODETest, MakeInputWithoutRegistryThrows) {
+    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto v = args.segment(0, 3).coeff(2);
+    auto theta = args.segment(4, 1).coeff(0);
+    auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+
+    RuntimeODE ode(ode_expr, 3, 1, 0);
+    EXPECT_FALSE(ode.has_registry());
+    EXPECT_THROW(ode.make_input({{"x", 1.0}}), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, MakeUnitsWithoutRegistryThrows) {
+    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto v = args.segment(0, 3).coeff(2);
+    auto theta = args.segment(4, 1).coeff(0);
+    auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+
+    RuntimeODE ode(ode_expr, 3, 1, 0);
+    EXPECT_THROW(ode.make_units({{"x", 10.0}}), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, EmptyTrajectoryThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .build();
+
+    std::vector<Eigen::VectorXd> empty_traj;
+    EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, empty_traj, 16), std::invalid_argument);
+}
+
+TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
+    auto ode = ODEBuilder(3, 1)
+                   .define([](auto &args) {
+                       auto v = args.XVar(2);
+                       auto theta = args.UVar(0);
+                       return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
+                   })
+                   .build();
+
+    // Trajectory points have size 4 but XtUP size is 5
+    std::vector<Eigen::VectorXd> bad_traj(50, Eigen::VectorXd::Zero(4));
+    EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, bad_traj, 16), std::invalid_argument);
+}
+
 TEST_F(RuntimeODETest, FluentVarGroupRegistration) {
     auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);

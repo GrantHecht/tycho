@@ -11,10 +11,24 @@
 #include "tycho/detail/phase_wrapper.h"
 #include "tycho/detail/runtime_ode.h"
 
+#include <fmt/format.h>
+
 namespace Tycho {
 
 Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                         int num_segments) const {
+    if (traj.empty())
+        throw std::invalid_argument("RuntimeODE::phase: trajectory must not be empty");
+    int expected = xtup_size();
+    for (size_t i = 0; i < traj.size(); ++i) {
+        if (traj[i].size() != expected) {
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE::phase: trajectory point {} has size {}, expected {} "
+                            "(XtUP = {}+1+{}+{})",
+                            i, traj[i].size(), expected, xvars_, uvars_, pvars_));
+        }
+    }
+
     DynODE ode = generic_ode();
 
     // Populate the GenericODE's ODESize FlatMap from the registry so that
