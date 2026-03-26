@@ -75,7 +75,7 @@ TEST_F(MixedSizeOpsTest, DynamicSegmentMinusStaticCrossProduct) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(MixedSizeOpsTest, DynamicVectorTimesStaticScalar) {
-    // Vector (IRC=-1) * Scalar (IRC=3) — mixed IRC
+    // Vector (IRC=-1, ORC=3) * Scalar (IRC=6, ORC=1) — mixed IRC
     auto dyn_args = Arguments<-1>(6);
     auto vec = dyn_args.segment(0, 3);   // IRC=-1, ORC=-1 (3 at runtime)
 

@@ -119,7 +119,7 @@ RuntimeODE make_rocket_ode(double T, double mdot) {
 
     auto h = R.norm() - Re;
 
-    // Atmospheric density
+    // Exponential atmosphere model: density decay factor exp(-h / h_scale)
     auto exp_neg_h = exp(h * (-1.0 / h_scale));
 
     // Relative velocity: Vr = V + R x [0, 0, We]
@@ -331,7 +331,8 @@ int main() {
     ocp.addPhase(phase3);
     ocp.addPhase(phase4);
 
-    // Continuity in everything except mass — named variables
+    // Continuity in R, V, t, u across consecutive phase pairs (1->2, 2->3, 3->4);
+    // mass is discontinuous at staging events.
     ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});
 
     ocp.optimizer().set_OptLSMode("L1");

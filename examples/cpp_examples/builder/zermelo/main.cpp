@@ -106,9 +106,8 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
     double cwAng = std::cos(wAng);
     double swAng = std::sin(wAng);
 
-    // For position-dependent wind, we need the VF DSL norm.
-    // ODEArgsProxy gives scalar XVar(0), XVar(1); we need sqrt(x^2 + y^2).
-    // Alternative: use from() with ODEArguments for vector operations.
+    // Position-dependent wind requires the full-vector norm of pos,
+    // so we use ODEArguments + from() to build the expression directly.
     auto XtU = ODEArguments(2, 1, 0);
     auto pos = XtU.segment(0, 2);
     auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);

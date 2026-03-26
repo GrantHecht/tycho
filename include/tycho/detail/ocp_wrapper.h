@@ -105,7 +105,7 @@ class OCP {
     void check_has_phases(const char *method) const {
         if (ocp_.phases.empty())
             throw std::invalid_argument(
-                fmt::format("OCP::{}: no phases added", method));
+                fmt::format("OCP::{}: no phases added — call addPhase() before solving", method));
     }
 
     OptimalControlProblem ocp_;

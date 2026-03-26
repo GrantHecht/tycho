@@ -39,7 +39,7 @@ auto Vr = V + R.cross(omega);     // compiles — both ORC=3
 `PVec(start, count)` overloads to `ODEArgsProxy`. These return dynamic
 sub-segments within each variable group (0-based indexing within the group).
 
-Note: sub-segments are dynamic-sized (`Segment<-1,-1,-1>`), producing dynamic
+Note: sub-segments are dynamic-sized (with dynamic ORC), producing dynamic
 ORC. Since pain point 1 is now resolved (operators accept mixed static/dynamic
 sizes), sub-segments work with all operations including `cross()` and
 `normalized_power()`. Template overloads `XVec<SZ>()`, `UVec<SZ>()`,
