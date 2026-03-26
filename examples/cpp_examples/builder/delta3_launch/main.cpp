@@ -109,13 +109,12 @@ static const double mf_phase4 = m0_phase4 - PM2;
 ///////////////////////////////////////////////////////////////////////////////
 
 RuntimeODE make_rocket_ode(double T, double mdot) {
-    // PAIN POINT: ODEArguments<-1,-1,-1> (dynamic segments) does not support
-    // all VF DSL operators (cross, +, normalized_power, etc.).  Must fall back
-    // to Arguments<11>() with compile-time segments for vector operations.
-    auto args = Arguments<11>(); // [R(3), V(3), m, t, u(3)]
+    // Dynamic args with template segment accessors: dynamic shell, static core.
+    // head<3>() / segment<3>() produce ORC=3, enabling cross/normalized_power.
+    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
     auto R = args.head<3>();
-    auto V = args.segment<3, 3>();
-    auto m = args.coeff<6>();
+    auto V = args.segment<3>(3);
+    auto m = args.coeff(6);
     auto u = args.tail<3>().normalized();
 
     auto h = R.norm() - Re;
@@ -125,7 +124,7 @@ RuntimeODE make_rocket_ode(double T, double mdot) {
 
     // Relative velocity: Vr = V + R x [0, 0, We]
     Eigen::Vector3d omega_val(0.0, 0.0, We);
-    auto omega = Constant<11, 3>(11, omega_val);
+    auto omega = Constant<-1, 3>(11, omega_val);
     auto Vr = V + R.cross(omega);
 
     // Drag
@@ -138,7 +137,7 @@ RuntimeODE make_rocket_ode(double T, double mdot) {
     // Constant mass flow rate
     Eigen::Matrix<double, 1, 1> neg_mdot_val;
     neg_mdot_val[0] = -mdot;
-    auto neg_mdot_vf = Constant<11, 1>(11, neg_mdot_val);
+    auto neg_mdot_vf = Constant<-1, 1>(11, neg_mdot_val);
 
     auto ode_expr = StackedOutputs{Rdot, Vdot, neg_mdot_vf};
 
