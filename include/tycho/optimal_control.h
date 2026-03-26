@@ -21,3 +21,4 @@
 #include "tycho/detail/runtime_ode.h"
 #include "tycho/detail/ode_builder.h"
 #include "tycho/detail/phase_wrapper.h"
+#include "tycho/detail/ocp_wrapper.h"

@@ -40,8 +40,20 @@ class ODEArgsProxy {
         return args_.segment(0, args_.XVars()).coeff(i);
     }
 
-    /// State vector segment.
+    /// Full state vector segment.
     auto XVec() const { return args_.segment(0, args_.XVars()); }
+
+    /// Sub-segment of the state vector (0-based within X).
+    auto XVec(int start, int count) const {
+        if (count <= 0)
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::XVec: count must be positive (got {})", count));
+        if (start < 0 || start + count > args_.XVars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::XVec: range [{}, {}) out of X range [0, {})", start, start + count,
+                args_.XVars()));
+        return args_.segment(start, count);
+    }
 
     /// Time variable.
     auto TVar() const { return args_.coeff(args_.TVar()); }
@@ -57,8 +69,20 @@ class ODEArgsProxy {
         return args_.segment(args_.XtVars(), args_.UVars()).coeff(i);
     }
 
-    /// Control vector segment.
+    /// Full control vector segment.
     auto UVec() const { return args_.segment(args_.XtVars(), args_.UVars()); }
+
+    /// Sub-segment of the control vector (0-based within U).
+    auto UVec(int start, int count) const {
+        if (count <= 0)
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::UVec: count must be positive (got {})", count));
+        if (start < 0 || start + count > args_.UVars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::UVec: range [{}, {}) out of U range [0, {})", start, start + count,
+                args_.UVars()));
+        return args_.segment(args_.XtVars() + start, count);
+    }
 
     /// i-th parameter variable (0-based within P).
     auto PVar(int i) const {
@@ -71,8 +95,20 @@ class ODEArgsProxy {
         return args_.segment(args_.XtUVars(), args_.PVars()).coeff(i);
     }
 
-    /// Parameter vector segment.
+    /// Full parameter vector segment.
     auto PVec() const { return args_.segment(args_.XtUVars(), args_.PVars()); }
+
+    /// Sub-segment of the parameter vector (0-based within P).
+    auto PVec(int start, int count) const {
+        if (count <= 0)
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::PVec: count must be positive (got {})", count));
+        if (start < 0 || start + count > args_.PVars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::PVec: range [{}, {}) out of P range [0, {})", start, start + count,
+                args_.PVars()));
+        return args_.segment(args_.XtUVars() + start, count);
+    }
 
     int xvars() const { return args_.XVars(); }
     int uvars() const { return args_.UVars(); }

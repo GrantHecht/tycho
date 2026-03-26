@@ -183,6 +183,38 @@ TEST_F(ODEBuilderTest, VectorAccessors) {
     EXPECT_EQ(ode.xtup_size(), 6);
 }
 
+TEST_F(ODEBuilderTest, SubSegmentAccessors) {
+    // XVec(start, count), UVec(start, count), PVec(start, count)
+    auto ode = ODEBuilder(5, 3, 2)
+                   .define([](auto &args) {
+                       // First 3 states + first 2 controls + first param
+                       auto x_sub = args.XVec(0, 3);
+                       auto u_sub = args.UVec(0, 2);
+                       auto p_sub = args.PVec(0, 1);
+                       return stack(x_sub.coeff(0) + u_sub.coeff(0), x_sub.coeff(1) + u_sub.coeff(1),
+                                    x_sub.coeff(2) + p_sub.coeff(0), args.XVar(3), args.XVar(4));
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 5);
+    EXPECT_EQ(ode.uvars(), 3);
+    EXPECT_EQ(ode.pvars(), 2);
+}
+
+TEST_F(ODEBuilderTest, SubSegmentBoundsCheck) {
+    EXPECT_THROW(
+        ODEBuilder(3, 1).define([](auto &args) {
+            return stack(args.XVec(0, 4).coeff(0), args.XVar(1), args.XVar(2)); // 4 > xvars=3
+        }),
+        std::invalid_argument);
+
+    EXPECT_THROW(
+        ODEBuilder(3, 2).define([](auto &args) {
+            return stack(args.XVar(0), args.XVar(1), args.UVec(1, 2).coeff(0)); // 1+2=3 > uvars=2
+        }),
+        std::invalid_argument);
+}
+
 TEST_F(ODEBuilderTest, FromAfterDefineThrows) {
     ODEBuilder builder(3, 1);
     builder.define([](auto &args) {

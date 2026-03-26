@@ -324,30 +324,21 @@ int main() {
     phase4.addValueObjective(PhaseRegionFlags::Back, "m", -1.0);
 
     ///////////////////////////////////////////////////////////////////////////
-    // Optimal Control Problem — link phases
+    // Optimal Control Problem — link phases via OCP wrapper
     ///////////////////////////////////////////////////////////////////////////
-    OptimalControlProblem ocp;
-    ocp.addPhase(phase1.base_ptr());
-    ocp.addPhase(phase2.base_ptr());
-    ocp.addPhase(phase3.base_ptr());
-    ocp.addPhase(phase4.base_ptr());
+    OCP ocp;
+    ocp.addPhase(phase1);
+    ocp.addPhase(phase2);
+    ocp.addPhase(phase3);
+    ocp.addPhase(phase4);
 
-    // Continuity in everything except mass (var 6)
-    // Must use index-based link since OCP doesn't know about our named variables
-    auto make_idx = [](std::initializer_list<int> vals) {
-        Eigen::VectorXi v(vals.size());
-        int i = 0;
-        for (auto val : vals)
-            v[i++] = val;
-        return v;
-    };
-    auto link_vars = make_idx({0, 1, 2, 3, 4, 5, 7, 8, 9, 10});
-    ocp.addForwardLinkEqualCon(phase1.base_ptr(), phase4.base_ptr(), link_vars);
+    // Continuity in everything except mass — named variables
+    ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});
 
-    ocp.optimizer->set_OptLSMode("L1");
-    ocp.optimizer->set_SoeLSMode("L1");
-    ocp.optimizer->set_MaxLSIters(2);
-    ocp.optimizer->set_PrintLevel(1);
+    ocp.optimizer().set_OptLSMode("L1");
+    ocp.optimizer().set_SoeLSMode("L1");
+    ocp.optimizer().set_MaxLSIters(2);
+    ocp.optimizer().set_PrintLevel(1);
 
     ///////////////////////////////////////////////////////////////////////////
     // Solve

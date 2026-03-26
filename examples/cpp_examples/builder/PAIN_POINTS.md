@@ -32,46 +32,37 @@ parameterization), but the compile cost from `Arguments<11>` remains.
 `.segment<S,K>()`, `.coeff<I>()` for complex vector ODEs, and reserve
 `ODEBuilder::define()` with `ODEArgsProxy` for simpler scalar ODEs.
 
-## Pain Point 2: `define()` lambda only offers scalar accessors
+## Pain Point 2: `define()` lambda only offers scalar accessors — RESOLVED
 
-**Severity: Medium** — `ODEArgsProxy` provides `XVar(i)`, `UVar(i)`, `PVar(i)`
-(individual scalars) and `XVec()`, `UVec()`, `PVec()` (full group segments).
-There is no way to get a sub-segment of the state vector, e.g., the first 3
-elements of a 7-element state.
+**Status: Fixed** — Added `XVec(start, count)`, `UVec(start, count)`, and
+`PVec(start, count)` overloads to `ODEArgsProxy`. These return dynamic
+sub-segments within each variable group (0-based indexing within the group).
 
-For simple ODEs (Brachistochrone: 3 states, HyperSens: 1 state), scalar
-accessors are perfectly ergonomic. For ODEs with structured state vectors
-(Delta3Launch: R(3)+V(3)+m = 7 states), you need sub-segments with vector
-operations — which requires falling back to `from()` with `Arguments<N>()`.
+Note: sub-segments are still dynamic-sized (`Segment<-1,-1,-1>`), so they
+have the same operator limitations as pain point 1. For simple operations
+(`.coeff(i)`, scalar arithmetic), they work well. For vector operations
+(`cross`, `normalized_power`), `from()` with `Arguments<N>()` is still needed.
 
-**Suggestion:** Add `XVec(start, count)` or `XSeg(start, count)` to
-`ODEArgsProxy` that returns a sub-segment of the state vector with proper VF
-DSL support. Similarly for `USeg(start, count)`.
+## Pain Point 3: OCP link constraints require index-based API — RESOLVED
 
-## Pain Point 3: OCP link constraints require index-based API
-
-**Severity: Medium** — `OptimalControlProblem::addForwardLinkEqualCon()` takes
-`shared_ptr<ODEPhaseBase>` and `VectorXi` index arrays. It does not know about
-the Phase wrapper's named variables. This means multi-phase problems still
-require manual index construction for phase linking:
+**Status: Fixed** — Added `OCP` wrapper class that accepts Phase wrappers
+directly and resolves named variables for link constraints:
 
 ```cpp
-// Named variables used throughout, then suddenly:
-auto link_vars = make_idx({0, 1, 2, 3, 4, 5, 7, 8, 9, 10});
-ocp.addForwardLinkEqualCon(phase1.base_ptr(), phase4.base_ptr(), link_vars);
+OCP ocp;
+ocp.addPhase(phase1);                                          // no base_ptr()
+ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});  // named vars
+ocp.optimizer().set_PrintLevel(1);
+ocp.solve_optimize();
 ```
 
-**Suggestion:** Add OCP-aware helpers that accept Phase wrappers and named
-variables, e.g.:
-```cpp
-ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});
-```
+Use `ocp.base()` to access the underlying `OptimalControlProblem` for methods
+not yet wrapped.
 
-## Pain Point 4: `base_ptr()` required for OCP integration
+## Pain Point 4: `base_ptr()` required for OCP integration — RESOLVED
 
-**Severity: Low** — Every `ocp.addPhase()` call requires `phase.base_ptr()`
-to extract the underlying `shared_ptr<ODEPhaseBase>`. This is a minor
-ergonomic friction that could be avoided with an `addPhase(Phase&)` overload.
+**Status: Fixed** — The `OCP` wrapper's `addPhase(Phase&)` accepts Phase
+wrappers directly, eliminating all `base_ptr()` calls for the common workflow.
 
 ## Positive Findings
 
