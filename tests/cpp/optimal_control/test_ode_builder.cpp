@@ -319,3 +319,13 @@ TEST_F(ODEBuilderTest, TemplatePVecBoundsCheck) {
     EXPECT_THROW(proxy.PVec<3>(0), std::invalid_argument);   // 3 > pvars=2
     EXPECT_NO_THROW(proxy.PVec<2>(0));                        // exact fit
 }
+
+TEST_F(ODEBuilderTest, UVecThrowsWhenNoControls) {
+    ODEArgsProxy proxy(3, 0, 0);
+    EXPECT_THROW(proxy.UVec(), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, PVecThrowsWhenNoParams) {
+    ODEArgsProxy proxy(3, 1, 0);
+    EXPECT_THROW(proxy.PVec(), std::invalid_argument);
+}

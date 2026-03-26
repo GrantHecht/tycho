@@ -41,7 +41,12 @@ class ODEArgsProxy {
     }
 
     /// Full state vector segment.
-    auto XVec() const { return args_.segment(0, args_.XVars()); }
+    auto XVec() const {
+        if (args_.XVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::XVec: no state variables declared (xvars=0)");
+        return args_.segment(0, args_.XVars());
+    }
 
     /// Sub-segment of the state vector (0-based within X).
     auto XVec(int start, int count) const {
@@ -70,7 +75,12 @@ class ODEArgsProxy {
     }
 
     /// Full control vector segment.
-    auto UVec() const { return args_.segment(args_.XtVars(), args_.UVars()); }
+    auto UVec() const {
+        if (args_.UVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::UVec: no control variables declared (uvars=0)");
+        return args_.segment(args_.XtVars(), args_.UVars());
+    }
 
     /// Sub-segment of the control vector (0-based within U).
     auto UVec(int start, int count) const {
@@ -96,7 +106,12 @@ class ODEArgsProxy {
     }
 
     /// Full parameter vector segment.
-    auto PVec() const { return args_.segment(args_.XtUVars(), args_.PVars()); }
+    auto PVec() const {
+        if (args_.PVars() == 0)
+            throw std::invalid_argument(
+                "ODEArgsProxy::PVec: no parameter variables declared (pvars=0)");
+        return args_.segment(args_.XtUVars(), args_.PVars());
+    }
 
     /// Sub-segment of the parameter vector (0-based within P).
     auto PVec(int start, int count) const {
