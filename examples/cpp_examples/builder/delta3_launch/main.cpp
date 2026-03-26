@@ -4,7 +4,7 @@
 // Same problem as the static DSL version.  Demonstrates:
 //   - var_group() for named groups (R, V, u)
 //   - from() with ODEArguments for vector ODE expressions
-//   - OptimalControlProblem integration via base_ptr()
+//   - OCP wrapper for named-variable link constraints (no base_ptr())
 //   - Named variables for all constraint/objective calls
 //
 // State  : [Rx, Ry, Rz, Vx, Vy, Vz, m]   (7)

@@ -213,6 +213,28 @@ TEST_F(ODEBuilderTest, SubSegmentBoundsCheck) {
             return stack(args.XVar(0), args.XVar(1), args.UVec(1, 2).coeff(0)); // 1+2=3 > uvars=2
         }),
         std::invalid_argument);
+
+    EXPECT_THROW(
+        ODEBuilder(3, 1, 2).define([](auto &args) {
+            return stack(args.XVar(0), args.XVar(1), args.PVec(1, 2).coeff(0)); // 1+2=3 > pvars=2
+        }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, VarGroupEagerValidation) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+
+    // XtUP size is 3+1+1 = 5, so range [3, 6) exceeds bounds
+    EXPECT_THROW(builder.var_group("bad", 3, 3), std::invalid_argument);
+    // Negative start
+    EXPECT_THROW(builder.var_group("neg", -1, 2), std::invalid_argument);
+    // Zero count
+    EXPECT_THROW(builder.var_group("zero", 0, 0), std::invalid_argument);
+    // Valid
+    EXPECT_NO_THROW(builder.var_group("ok", 0, 3));
 }
 
 TEST_F(ODEBuilderTest, FromAfterDefineThrows) {

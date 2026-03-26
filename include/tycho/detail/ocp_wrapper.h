@@ -33,11 +33,22 @@ class OCP {
 
     // ── Forward link constraints ────────────────────────────────────────
 
-    /// Link two phases with named variables (resolves via first phase's registry).
+    /// Link two phases with named variables.
+    /// Resolves via both phases' registries and validates consistency.
     int addForwardLinkEqualCon(Phase &p1, Phase &p2,
                                std::initializer_list<std::string> var_names) {
-        return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(),
-                                           p1.registry().resolve(var_names));
+        auto idx1 = p1.registry().resolve(var_names);
+        if (!p2.registry().empty()) {
+            auto idx2 = p2.registry().resolve(var_names);
+            if (idx1.size() != idx2.size() ||
+                (idx1.array() != idx2.array()).any()) {
+                throw std::invalid_argument(
+                    "OCP::addForwardLinkEqualCon: variable names resolve to "
+                    "different indices in p1 vs p2 — use index-based overload "
+                    "for heterogeneous phase layouts");
+            }
+        }
+        return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(), idx1);
     }
 
     /// Link two phases with an index vector.
@@ -47,10 +58,22 @@ class OCP {
 
     // ── Solve ───────────────────────────────────────────────────────────
 
-    PSIOPT::ConvergenceFlags solve() { return ocp_.solve(); }
-    PSIOPT::ConvergenceFlags optimize() { return ocp_.optimize(); }
-    PSIOPT::ConvergenceFlags solve_optimize() { return ocp_.solve_optimize(); }
-    PSIOPT::ConvergenceFlags optimize_solve() { return ocp_.optimize_solve(); }
+    PSIOPT::ConvergenceFlags solve() {
+        check_has_phases("solve");
+        return ocp_.solve();
+    }
+    PSIOPT::ConvergenceFlags optimize() {
+        check_has_phases("optimize");
+        return ocp_.optimize();
+    }
+    PSIOPT::ConvergenceFlags solve_optimize() {
+        check_has_phases("solve_optimize");
+        return ocp_.solve_optimize();
+    }
+    PSIOPT::ConvergenceFlags optimize_solve() {
+        check_has_phases("optimize_solve");
+        return ocp_.optimize_solve();
+    }
 
     // ── Settings ────────────────────────────────────────────────────────
 
@@ -72,6 +95,12 @@ class OCP {
     const OptimalControlProblem &base() const { return ocp_; }
 
   private:
+    void check_has_phases(const char *method) const {
+        if (ocp_.phases.empty())
+            throw std::invalid_argument(
+                fmt::format("OCP::{}: no phases added", method));
+    }
+
     OptimalControlProblem ocp_;
 };
 

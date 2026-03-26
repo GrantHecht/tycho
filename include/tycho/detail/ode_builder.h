@@ -113,6 +113,7 @@ class ODEArgsProxy {
     /// Sub-segment of the state vector with compile-time size (0-based within X).
     template <int SZ>
     auto XVec(int start = 0) const {
+        static_assert(SZ > 0, "ODEArgsProxy::XVec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.XVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::XVec<{}>: range [{}, {}) out of X range [0, {})", SZ,
@@ -123,6 +124,7 @@ class ODEArgsProxy {
     /// Sub-segment of the control vector with compile-time size (0-based within U).
     template <int SZ>
     auto UVec(int start = 0) const {
+        static_assert(SZ > 0, "ODEArgsProxy::UVec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.UVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::UVec<{}>: range [{}, {}) out of U range [0, {})", SZ,
@@ -133,6 +135,7 @@ class ODEArgsProxy {
     /// Sub-segment of the parameter vector with compile-time size (0-based within P).
     template <int SZ>
     auto PVec(int start = 0) const {
+        static_assert(SZ > 0, "ODEArgsProxy::PVec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.PVars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::PVec<{}>: range [{}, {}) out of P range [0, {})", SZ,
@@ -183,9 +186,10 @@ class ODEBuilder {
     /// The lambda receives an ODEArgsProxy and must return a VectorFunction
     /// expression (typically via stack() or StackedOutputs).
     template <typename F> ODEBuilder &define(F &&func) {
-        if (func_set_) {
+        if (built_)
+            throw std::invalid_argument("ODEBuilder: cannot modify after build()");
+        if (func_set_)
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
-        }
         const ODEArgsProxy proxy(xvars_, uvars_, pvars_);
         auto expr = func(proxy);
         func_ = GenericFunction<-1, -1>(expr);
@@ -196,9 +200,10 @@ class ODEBuilder {
 
     /// Define ODE from a pre-built VectorFunction expression.
     template <typename Func> ODEBuilder &from(const Func &ode_expr) {
-        if (func_set_) {
+        if (built_)
+            throw std::invalid_argument("ODEBuilder: cannot modify after build()");
+        if (func_set_)
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
-        }
         func_ = GenericFunction<-1, -1>(ode_expr);
         validate_func();
         func_set_ = true;
@@ -225,6 +230,17 @@ class ODEBuilder {
     ODEBuilder &var_group(const std::string &name, int start, int count) {
         if (built_)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
+        const int xtup = xvars_ + 1 + uvars_ + pvars_;
+        if (start < 0)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder::var_group: start must be non-negative (got {})", start));
+        if (count <= 0)
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder::var_group: count must be positive (got {})", count));
+        if (start + count > xtup)
+            throw std::invalid_argument(fmt::format(
+                "ODEBuilder::var_group: range [{}, {}) exceeds XtUP size {}", start,
+                start + count, xtup));
         pending_groups_.emplace_back(name, start, count);
         return *this;
     }

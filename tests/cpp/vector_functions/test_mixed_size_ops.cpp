@@ -233,13 +233,103 @@ TEST_F(MixedSizeOpsTest, StaticMatchStillWorks) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Multi-operand sums with mixed sizes (TwoFunctionSum/MultiFunctionSum)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(MixedSizeOpsTest, ThreeOperandMixedSizeSum) {
+    // a + b + c: exercises DenseFunctionBase + TwoFunctionSum overload
+    auto dyn_args = Arguments<-1>(6);
+    auto a = dyn_args.segment(0, 3); // IRC=-1, ORC=-1
+
+    auto stat_args = Arguments<6>();
+    auto b = stat_args.head<3>();    // IRC=6, ORC=3
+    auto c = stat_args.tail<3>();    // IRC=6, ORC=3
+
+    auto result = a + b + c;
+    EXPECT_EQ(result.IRows(), 6);
+    EXPECT_EQ(result.ORows(), 3);
+
+    Eigen::VectorXd x = deterministic_random_vector(6, 200, -5.0, 5.0);
+    verify_jacobian_fd(result, x);
+}
+
+TEST_F(MixedSizeOpsTest, FourOperandMixedSizeSum) {
+    // a + b + c + d: exercises DenseFunctionBase + MultiFunctionSum overload
+    auto dyn_args = Arguments<-1>(6);
+    auto a = dyn_args.segment(0, 3);
+
+    auto stat_args = Arguments<6>();
+    auto b = stat_args.head<3>();
+    auto c = stat_args.tail<3>();
+
+    Eigen::Vector3d offset(1.0, 2.0, 3.0);
+    auto d = Constant<-1, 3>(6, offset);
+
+    auto result = a + b + c + d;
+    EXPECT_EQ(result.IRows(), 6);
+    EXPECT_EQ(result.ORows(), 3);
+
+    Eigen::VectorXd x = deterministic_random_vector(6, 201, -5.0, 5.0);
+    verify_jacobian_fd(result, x);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// operator- with mixed IRC
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRC) {
+    // Dynamic segment (IRC=-1) - static segment (IRC=6), same runtime IRows
+    auto dyn_args = Arguments<-1>(6);
+    auto a = dyn_args.segment(0, 3); // IRC=-1
+
+    auto stat_args = Arguments<6>();
+    auto b = stat_args.head<3>();    // IRC=6
+
+    auto result = a - b;
+    EXPECT_EQ(result.IRows(), 6);
+    EXPECT_EQ(result.ORows(), 3);
+
+    // Both select the same elements: a - b should be zero
+    Eigen::VectorXd x = deterministic_random_vector(6, 202, -5.0, 5.0);
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    result.compute(x, fx);
+    for (int i = 0; i < 3; ++i)
+        EXPECT_DOUBLE_EQ(fx[i], 0.0);
+
+    verify_jacobian_fd(result, x);
+}
+
+TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRCNonOverlapping) {
+    // Mixed IRC subtraction where segments select different elements
+    auto dyn_args = Arguments<-1>(6);
+    auto a = dyn_args.segment(0, 3); // IRC=-1, selects [0,1,2]
+
+    auto stat_args = Arguments<6>();
+    auto b = stat_args.tail<3>();    // IRC=6, selects [3,4,5]
+
+    auto result = a - b;
+    EXPECT_EQ(result.IRows(), 6);
+    EXPECT_EQ(result.ORows(), 3);
+
+    Eigen::VectorXd x = deterministic_random_vector(6, 203, -5.0, 5.0);
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    result.compute(x, fx);
+    for (int i = 0; i < 3; ++i)
+        EXPECT_DOUBLE_EQ(fx[i], x[i] - x[i + 3]);
+
+    verify_jacobian_fd(result, x);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Comparison operators with mixed IRC
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(MixedSizeOpsTest, ComparisonMixedIR) {
     // Dynamic scalar (IRC=-1) compared with static scalar (IRC=6)
-    // ConditionalStatement is not a DenseFunctionBase — it's a boolean
-    // used inside IfElseFunction.  We verify the comparison compiles
+    // ConditionalStatement is not a DenseFunctionBase — it's a conditional
+    // predicate used inside IfElseFunction.  We verify the comparison compiles
     // and then use it in an IfElseFunction to confirm runtime behavior.
     auto dyn_args = Arguments<-1>(6);
     auto dyn_scl = dyn_args.coeff(0);         // IRC=-1, ORC=1
