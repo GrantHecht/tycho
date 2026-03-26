@@ -175,7 +175,7 @@ class ODEArgsProxy {
 ///           auto theta = args.UVar(0);
 ///           return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
 ///       })
-///       .var_names({{"x",0}, {"y",1}, {"v",2}, {"theta",4}})
+///       .var_names({{"x",0}, {"y",1}, {"v",2}, {"t",3}, {"theta",4}})
 ///       .build();
 class ODEBuilder {
   public:
@@ -199,35 +199,36 @@ class ODEBuilder {
 
     /// Define ODE dynamics via a lambda.
     /// The lambda receives an ODEArgsProxy and must return a VectorFunction
-    /// expression (typically via stack() or StackedOutputs).
+    /// expression (via stack(), StackedOutputs, or a single expression for
+    /// 1-state ODEs).
     template <typename F> ODEBuilder &define(F &&func) {
-        if (built_)
+        if (state_ == State::Built)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
-        if (func_set_)
+        if (state_ != State::Initial)
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
         const ODEArgsProxy proxy(xvars_, uvars_, pvars_);
         auto expr = func(proxy);
         func_ = GenericFunction<-1, -1>(expr);
         validate_func();
-        func_set_ = true;
+        state_ = State::Defined;
         return *this;
     }
 
     /// Define ODE from a pre-built VectorFunction expression.
     template <typename Func> ODEBuilder &from(const Func &ode_expr) {
-        if (built_)
+        if (state_ == State::Built)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
-        if (func_set_)
+        if (state_ != State::Initial)
             throw std::invalid_argument("ODEBuilder: dynamics already defined");
         func_ = GenericFunction<-1, -1>(ode_expr);
         validate_func();
-        func_set_ = true;
+        state_ = State::Defined;
         return *this;
     }
 
     /// Register named variables (name -> XtUP index).
     ODEBuilder &var_names(std::initializer_list<std::pair<std::string, int>> names) {
-        if (built_)
+        if (state_ == State::Built)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
         int xtup = xvars_ + 1 + uvars_ + pvars_;
         for (const auto &[name, idx] : names) {
@@ -243,7 +244,7 @@ class ODEBuilder {
 
     /// Register a named variable group (contiguous range).
     ODEBuilder &var_group(const std::string &name, int start, int count) {
-        if (built_)
+        if (state_ == State::Built)
             throw std::invalid_argument("ODEBuilder: cannot modify after build()");
         const int xtup = xvars_ + 1 + uvars_ + pvars_;
         if (start < 0)
@@ -262,10 +263,10 @@ class ODEBuilder {
 
     /// Build the RuntimeODE.
     RuntimeODE build() {
-        if (built_)
+        if (state_ == State::Built)
             throw std::invalid_argument(
                 "ODEBuilder: build() already called; create a new ODEBuilder");
-        if (!func_set_) {
+        if (state_ == State::Initial) {
             throw std::invalid_argument(
                 "ODEBuilder: no dynamics defined (call define() or from())");
         }
@@ -279,7 +280,7 @@ class ODEBuilder {
                 ode.var_group(name, start, count);
         }
 
-        built_ = true;
+        state_ = State::Built;
         return ode;
     }
 
@@ -288,8 +289,8 @@ class ODEBuilder {
     int uvars_;
     int pvars_;
     GenericFunction<-1, -1> func_;
-    bool func_set_ = false;
-    bool built_ = false;
+    enum class State { Initial, Defined, Built };
+    State state_ = State::Initial;
     std::vector<std::pair<std::string, int>> pending_names_;
     std::vector<std::tuple<std::string, int, int>> pending_groups_;
 

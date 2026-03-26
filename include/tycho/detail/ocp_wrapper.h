@@ -40,20 +40,35 @@ class OCP {
     /// different indices.
     int addForwardLinkEqualCon(Phase &p1, Phase &p2,
                                std::initializer_list<std::string> var_names) {
-        if (p1.registry().empty() || p2.registry().empty())
-            throw std::invalid_argument(
-                "OCP::addForwardLinkEqualCon: both phases must have variable "
-                "names registered when using the named-variable overload — "
-                "register names via ODEBuilder::var_names() or use the "
-                "index-based overload");
+        bool p1_empty = p1.registry().empty();
+        bool p2_empty = p2.registry().empty();
+        if (p1_empty || p2_empty) {
+            std::string which = p1_empty && p2_empty ? "both phases"
+                               : p1_empty            ? "phase p1"
+                                                     : "phase p2";
+            throw std::invalid_argument(fmt::format(
+                "OCP::addForwardLinkEqualCon: {} {} no variable names "
+                "registered -- register names via ODEBuilder::var_names() "
+                "or use the index-based overload",
+                which, (p1_empty && p2_empty) ? "have" : "has"));
+        }
         auto idx1 = p1.registry().resolve(var_names);
         auto idx2 = p2.registry().resolve(var_names);
         if (idx1.size() != idx2.size() ||
             (idx1.array() != idx2.array()).any()) {
-            throw std::invalid_argument(
+            auto fmt_idx = [](const Eigen::VectorXi &v) {
+                std::string s = "[";
+                for (int i = 0; i < v.size(); ++i) {
+                    if (i > 0) s += ", ";
+                    s += std::to_string(v[i]);
+                }
+                return s + "]";
+            };
+            throw std::invalid_argument(fmt::format(
                 "OCP::addForwardLinkEqualCon: variable names resolve to "
-                "different indices in p1 vs p2 — use index-based overload "
-                "for heterogeneous phase layouts");
+                "different indices in p1 {} vs p2 {} -- use the "
+                "index-based overload for heterogeneous phase layouts",
+                fmt_idx(idx1), fmt_idx(idx2)));
         }
         return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(), idx1);
     }

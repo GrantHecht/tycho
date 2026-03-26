@@ -20,8 +20,8 @@ class MixedSizeOpsTest : public VectorFunctionFixture {};
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(MixedSizeOpsTest, DynamicSegmentPlusStaticCrossProduct) {
-    // This is the exact scenario from PAIN_POINTS.md #1:
-    // ODEArguments<-1,-1,-1> segment (ORC=-1) + CrossProduct (ORC=3)
+    // Regression: dynamic segment (ORC=-1) + CrossProduct (ORC=3) previously
+    // failed to compile due to mismatched output sizes in the operator+ template.
     auto args = ODEArguments(7, 3, 0);
     auto R = args.segment(0, 3);  // Segment<-1,-1,-1>, ORC=-1
     auto V = args.segment(3, 3);  // Segment<-1,-1,-1>, ORC=-1
@@ -383,4 +383,24 @@ TEST_F(MixedSizeOpsTest, RuntimeORowsMismatchThrows) {
     auto seg3 = args.segment(0, 3);   // IRC=-1, ORows=3
 
     EXPECT_THROW(seg2 + seg3, std::invalid_argument);
+}
+
+TEST_F(MixedSizeOpsTest, DivisionInputMismatchThrows) {
+    // Vector (IRows=6) / Scalar (IRows=8) — runtime IRows mismatch
+    auto f6 = Arguments<-1>(6).segment(0, 3);     // IRows=6, ORows=3
+    auto f8 = Arguments<-1>(8).coeff(0);           // IRows=8, ORows=1
+    EXPECT_THROW(f6 / f8, std::invalid_argument);
+}
+
+TEST_F(MixedSizeOpsTest, DynamicScalarTimesStaticScalar) {
+    // Scalar (IRC=-1, ORC=1) * Scalar (IRC=6, ORC=1) — mixed IRC
+    auto dyn = GenericFunction<-1, 1>(Arguments<6>().coeff<0>());  // IRC=-1, ORC=1
+    auto stat = Arguments<6>().coeff<5>();                          // IRC=6, ORC=1
+
+    auto product = dyn * stat;
+    EXPECT_EQ(product.IRows(), 6);
+    EXPECT_EQ(product.ORows(), 1);
+
+    Eigen::VectorXd x = deterministic_random_vector(6, 300, 0.5, 5.0);
+    verify_jacobian_fd(product, x);
 }

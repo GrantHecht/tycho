@@ -251,6 +251,48 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
         std::invalid_argument);
 }
 
+TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
+    // Verifies the index-based overload — the escape hatch recommended by
+    // error messages when named variables resolve to different indices.
+    constexpr double g = 9.81;
+
+    auto make_ode = [g]() {
+        return ODEBuilder(3, 1)
+            .define([g](auto &args) {
+                auto v = args.XVar(2);
+                auto theta = args.UVar(0);
+                return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+            })
+            .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+            .build();
+    };
+
+    auto ode1 = make_ode();
+    auto ode2 = make_ode();
+
+    std::vector<Eigen::VectorXd> traj;
+    for (int i = 0; i < 50; ++i) {
+        double s = static_cast<double>(i) / 49.0;
+        Eigen::VectorXd pt(5);
+        pt << 10.0 * s, 10.0 - 5.0 * s, g * s * std::cos(1.0), s, 1.0;
+        traj.push_back(pt);
+    }
+
+    auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
+    auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
+
+    OCP ocp;
+    ocp.addPhase(phase1);
+    ocp.addPhase(phase2);
+
+    // Index-based link — the escape hatch for heterogeneous phase layouts
+    Eigen::VectorXi link_vars(4);
+    link_vars << 0, 1, 2, 3;  // x, y, v, t
+    ocp.addForwardLinkEqualCon(phase1, phase2, link_vars);
+
+    EXPECT_EQ(ocp.base().phases.size(), 2u);
+}
+
 TEST_F(BuilderAPITest, OCPSolveThrowsWithNoPhases) {
     OCP ocp;
     EXPECT_THROW(ocp.solve(), std::invalid_argument);

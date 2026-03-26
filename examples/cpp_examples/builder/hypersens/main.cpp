@@ -72,7 +72,7 @@ int main() {
     phase.optimizer().PrintLevel = 2;
     phase.setNumPartitions(1);
 
-    // MINDEG ordering — required for stability at tf=10000
+    // MINDEG ordering — needed for reliable convergence at tf=10000
     phase.optimizer().set_QPOrderingMode("MINDEG");
 
     // Adaptive mesh refinement

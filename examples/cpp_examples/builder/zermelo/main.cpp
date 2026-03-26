@@ -1,10 +1,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Zermelo Navigation — C++ example (Builder API)
 //
-// Same problem as the static DSL version, but demonstrating the key Builder
-// API advantage: composable wind functions at runtime.  The static version
-// requires 4 separate ODE types; here we use a single navigate() function
-// and pass different RuntimeODE instances.
+// Same problem as the Python examples (examples/Zermelo*.py), but
+// demonstrating the key Builder API advantage: composable wind functions
+// at runtime.  The static DSL approach requires 4 separate ODE types;
+// here we use a single navigate() function and pass different RuntimeODE
+// instances.
 //
 // State  : [x, y]    (2D position)
 // Control: [theta]   (heading angle)
