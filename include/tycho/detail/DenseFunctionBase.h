@@ -501,6 +501,12 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     template <class GenType> GenType MakeGeneric() const { return GenType(this->derived()); }
 
+    /// Type-erase this expression into a GenericFunction, analogous to
+    /// Eigen's .eval().  Use at intermediate points to reduce compile-time
+    /// cost of deeply nested expression templates.  Preserves compile-time
+    /// input/output sizes.
+    GenericFunction<IR, OR> pack() const;
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /*
