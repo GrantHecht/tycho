@@ -83,6 +83,8 @@ RetType make_dynamic_sum(const std::vector<FuncType> &funcs) {
     int size = funcs.size();
     RetType summed;
     if (size == 0) {
+        throw std::invalid_argument(
+            "make_dynamic_sum: cannot construct a sum from an empty vector of functions");
     } else if (size == 1) {
         summed = funcs[0];
     } else if (size == 2) {

@@ -352,3 +352,13 @@ TEST_F(MixedSizeOpsTest, ComparisonMixedIR) {
     double expected = (x[0] > x[5]) ? x[0] : x[5];
     EXPECT_DOUBLE_EQ(fx[0], expected);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Runtime error detection
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(MixedSizeOpsTest, EmptyDynamicSumThrows) {
+    using DynFunc = GenericFunction<-1, -1>;
+    std::vector<DynFunc> empty;
+    EXPECT_THROW(make_dynamic_sum<DynFunc>(empty), std::invalid_argument);
+}
