@@ -109,7 +109,7 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
     // For position-dependent wind, we need the VF DSL norm.
     // ODEArgsProxy gives scalar XVar(0), XVar(1); we need sqrt(x^2 + y^2).
     // Alternative: use from() with ODEArguments for vector operations.
-    auto XtU = ODEArguments<-1, -1, -1>(2, 1, 0);
+    auto XtU = ODEArguments(2, 1, 0);
     auto pos = XtU.segment(0, 2);
     auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);
     auto vel = cos(pos.norm());
@@ -125,7 +125,7 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
 RuntimeODE make_var_wind(double vMax) {
     // Wind speed and direction both depend on position.
     // vel = sin(||pos||), ang = 2*(x+y)
-    auto XtU = ODEArguments<-1, -1, -1>(2, 1, 0);
+    auto XtU = ODEArguments(2, 1, 0);
     auto pos = XtU.segment(0, 2);
     auto x = XtU.segment(0, 2).coeff(0);
     auto y = XtU.segment(0, 2).coeff(1);

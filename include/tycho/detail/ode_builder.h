@@ -145,7 +145,7 @@ class ODEArgsProxy {
     int pvars() const { return args_.PVars(); }
 
   private:
-    ODEArguments<-1, -1, -1> args_;
+    ODEArguments<> args_;
 };
 
 /// Fluent builder for RuntimeODE.

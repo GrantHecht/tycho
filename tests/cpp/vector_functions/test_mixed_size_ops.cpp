@@ -22,7 +22,7 @@ class MixedSizeOpsTest : public VectorFunctionFixture {};
 TEST_F(MixedSizeOpsTest, DynamicSegmentPlusStaticCrossProduct) {
     // This is the exact scenario from PAIN_POINTS.md #1:
     // ODEArguments<-1,-1,-1> segment (ORC=-1) + CrossProduct (ORC=3)
-    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+    auto args = ODEArguments(7, 3, 0);
     auto R = args.segment(0, 3);  // Segment<-1,-1,-1>, ORC=-1
     auto V = args.segment(3, 3);  // Segment<-1,-1,-1>, ORC=-1
 
@@ -41,7 +41,7 @@ TEST_F(MixedSizeOpsTest, DynamicSegmentPlusStaticCrossProduct) {
 
 TEST_F(MixedSizeOpsTest, StaticSegmentPlusStaticCrossProduct) {
     // Template segment accessors: ORC=3 + ORC=3 (should still work)
-    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+    auto args = ODEArguments(7, 3, 0);
     auto R = args.head<3>();       // ORC=3
     auto V = args.segment<3>(3);   // ORC=3
 
@@ -56,7 +56,7 @@ TEST_F(MixedSizeOpsTest, StaticSegmentPlusStaticCrossProduct) {
 }
 
 TEST_F(MixedSizeOpsTest, DynamicSegmentMinusStaticCrossProduct) {
-    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+    auto args = ODEArguments(7, 3, 0);
     auto R = args.segment(0, 3);
     auto V = args.segment(3, 3);
 
@@ -111,7 +111,7 @@ TEST_F(MixedSizeOpsTest, DynamicVectorDividedByStaticScalar) {
 
 TEST_F(MixedSizeOpsTest, FullDynamicODEExpression) {
     // Simulate a simplified rocket ODE with dynamic args
-    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+    auto args = ODEArguments(7, 3, 0);
 
     // Use dynamic segments (ORC=-1) — the relaxed operators allow this
     auto R = args.segment(0, 3);

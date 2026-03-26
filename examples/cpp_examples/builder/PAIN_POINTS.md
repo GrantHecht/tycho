@@ -27,7 +27,7 @@ The Delta3Launch example now uses `ODEArguments<-1,-1,-1>` with template
 segment accessors:
 
 ```cpp
-auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+auto args = ODEArguments(7, 3, 0);
 auto R = args.head<3>();           // ORC=3
 auto V = args.segment<3>(3);      // ORC=3
 auto Vr = V + R.cross(omega);     // compiles — both ORC=3

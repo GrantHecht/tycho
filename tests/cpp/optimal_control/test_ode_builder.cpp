@@ -33,7 +33,7 @@ TEST_F(ODEBuilderTest, LambdaDefinition) {
 }
 
 TEST_F(ODEBuilderTest, FromExpression) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
@@ -147,7 +147,7 @@ TEST_F(ODEBuilderTest, DefineWrongOutputSizeThrows) {
 }
 
 TEST_F(ODEBuilderTest, FromWrongOutputSizeThrows) {
-    auto args = ODEArguments<-1, -1, -1>(2, 1, 0);
+    auto args = ODEArguments(2, 1, 0);
     auto expr = stack(args.segment(0, 2).coeff(0), args.segment(0, 2).coeff(1));
 
     // Expression has 2 outputs / 4 inputs, but builder declares xvars=3, uvars=1 (5 inputs, 3 outputs)
@@ -220,7 +220,7 @@ TEST_F(ODEBuilderTest, FromAfterDefineThrows) {
     builder.define([](auto &args) {
         return stack(args.XVar(0), args.XVar(1), args.XVar(2));
     });
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto expr =
         stack(args.segment(0, 3).coeff(0), args.segment(0, 3).coeff(1), args.segment(0, 3).coeff(2));
     EXPECT_THROW(builder.from(expr), std::invalid_argument);

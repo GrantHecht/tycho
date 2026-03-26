@@ -16,7 +16,7 @@ class RuntimeODETest : public OptimalControlTest {};
 
 TEST_F(RuntimeODETest, ConstructFromExpression) {
     // Build Brachistochrone dynamics using the VF DSL
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);     // XVar(2)
     auto theta = args.segment(4, 1).coeff(0); // UVar(0)
 
@@ -34,7 +34,7 @@ TEST_F(RuntimeODETest, ConstructFromExpression) {
 }
 
 TEST_F(RuntimeODETest, VarNameRegistration) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
@@ -52,7 +52,7 @@ TEST_F(RuntimeODETest, VarNameRegistration) {
 }
 
 TEST_F(RuntimeODETest, GenericODEConstruction) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
@@ -67,7 +67,7 @@ TEST_F(RuntimeODETest, GenericODEConstruction) {
 }
 
 TEST_F(RuntimeODETest, SizeMismatchThrows) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
@@ -78,7 +78,7 @@ TEST_F(RuntimeODETest, SizeMismatchThrows) {
 }
 
 TEST_F(RuntimeODETest, InvalidSizesThrow) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -89,7 +89,7 @@ TEST_F(RuntimeODETest, InvalidSizesThrow) {
 }
 
 TEST_F(RuntimeODETest, InputSizeMismatchThrows) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -129,7 +129,7 @@ TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
 }
 
 TEST_F(RuntimeODETest, MakeInputWithoutRegistryThrows) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -140,7 +140,7 @@ TEST_F(RuntimeODETest, MakeInputWithoutRegistryThrows) {
 }
 
 TEST_F(RuntimeODETest, MakeUnitsWithoutRegistryThrows) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
@@ -203,7 +203,7 @@ TEST_F(RuntimeODETest, NegativeSegmentsThrows) {
 }
 
 TEST_F(RuntimeODETest, FluentVarGroupRegistration) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 

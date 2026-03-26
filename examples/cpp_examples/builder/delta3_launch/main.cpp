@@ -111,7 +111,7 @@ static const double mf_phase4 = m0_phase4 - PM2;
 RuntimeODE make_rocket_ode(double T, double mdot) {
     // Dynamic args with template segment accessors: dynamic shell, static core.
     // head<3>() / segment<3>() produce ORC=3, enabling cross/normalized_power.
-    auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
+    auto args = ODEArguments(7, 3, 0);
     auto R = args.head<3>();
     auto V = args.segment<3>(3);
     auto m = args.coeff(6);

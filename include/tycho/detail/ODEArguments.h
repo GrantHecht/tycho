@@ -19,7 +19,7 @@
 
 namespace Tycho {
 
-template <int _XV, int _UV, int _PV>
+template <int _XV = -1, int _UV = -1, int _PV = -1>
 struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV, _PV> {
 
     using Base = Arguments<ODESize<_XV, _UV, _PV>::XtUPV>;
