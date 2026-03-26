@@ -250,3 +250,11 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
         ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y"}),
         std::invalid_argument);
 }
+
+TEST_F(BuilderAPITest, OCPSolveThrowsWithNoPhases) {
+    OCP ocp;
+    EXPECT_THROW(ocp.solve(), std::invalid_argument);
+    EXPECT_THROW(ocp.optimize(), std::invalid_argument);
+    EXPECT_THROW(ocp.solve_optimize(), std::invalid_argument);
+    EXPECT_THROW(ocp.optimize_solve(), std::invalid_argument);
+}

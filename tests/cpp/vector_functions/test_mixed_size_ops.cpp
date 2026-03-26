@@ -362,3 +362,25 @@ TEST_F(MixedSizeOpsTest, EmptyDynamicSumThrows) {
     std::vector<DynFunc> empty;
     EXPECT_THROW(make_dynamic_sum<DynFunc>(empty), std::invalid_argument);
 }
+
+TEST_F(MixedSizeOpsTest, RuntimeIRowsMismatchThrows) {
+    // Two dynamic functions with different runtime IRows
+    auto args6 = Arguments<-1>(6);
+    auto seg6 = args6.segment(0, 3);   // IRC=-1, IRows=6, ORows=3
+
+    auto args8 = Arguments<-1>(8);
+    auto seg8 = args8.segment(0, 3);   // IRC=-1, IRows=8, ORows=3
+
+    // Same ORC, different IRows — should throw at construction time
+    EXPECT_THROW(seg6 + seg8, std::invalid_argument);
+    EXPECT_THROW(seg6 - seg8, std::invalid_argument);
+}
+
+TEST_F(MixedSizeOpsTest, RuntimeORowsMismatchThrows) {
+    // Two dynamic functions with different runtime ORows
+    auto args = Arguments<-1>(6);
+    auto seg2 = args.segment(0, 2);   // IRC=-1, ORows=2
+    auto seg3 = args.segment(0, 3);   // IRC=-1, ORows=3
+
+    EXPECT_THROW(seg2 + seg3, std::invalid_argument);
+}

@@ -329,3 +329,25 @@ TEST_F(ODEBuilderTest, PVecThrowsWhenNoParams) {
     ODEArgsProxy proxy(3, 1, 0);
     EXPECT_THROW(proxy.PVec(), std::invalid_argument);
 }
+
+TEST_F(ODEBuilderTest, DefineAfterBuildThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    builder.build();
+    EXPECT_THROW(
+        builder.define([](auto &args) { return args.XVar(0); }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, FromAfterBuildThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    builder.build();
+    auto args = ODEArguments(3, 1, 0);
+    auto expr = stack(args.coeff(0), args.coeff(1), args.coeff(2));
+    EXPECT_THROW(builder.from(expr), std::invalid_argument);
+}
