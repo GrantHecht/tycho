@@ -33,20 +33,27 @@ class OCP {
 
     // ── Forward link constraints ────────────────────────────────────────
 
-    /// Link two phases with named variables.
-    /// Resolves via both phases' registries and validates consistency.
+    /// Link phases with named variables.
+    /// Creates equality constraints between consecutive phase pairs from p1
+    /// through p2 (using phase ordering within the OCP).  Both phases must
+    /// have registries; throws if either is empty or if names resolve to
+    /// different indices.
     int addForwardLinkEqualCon(Phase &p1, Phase &p2,
                                std::initializer_list<std::string> var_names) {
+        if (p1.registry().empty() || p2.registry().empty())
+            throw std::invalid_argument(
+                "OCP::addForwardLinkEqualCon: both phases must have variable "
+                "names registered when using the named-variable overload — "
+                "register names via ODEBuilder::var_names() or use the "
+                "index-based overload");
         auto idx1 = p1.registry().resolve(var_names);
-        if (!p2.registry().empty()) {
-            auto idx2 = p2.registry().resolve(var_names);
-            if (idx1.size() != idx2.size() ||
-                (idx1.array() != idx2.array()).any()) {
-                throw std::invalid_argument(
-                    "OCP::addForwardLinkEqualCon: variable names resolve to "
-                    "different indices in p1 vs p2 — use index-based overload "
-                    "for heterogeneous phase layouts");
-            }
+        auto idx2 = p2.registry().resolve(var_names);
+        if (idx1.size() != idx2.size() ||
+            (idx1.array() != idx2.array()).any()) {
+            throw std::invalid_argument(
+                "OCP::addForwardLinkEqualCon: variable names resolve to "
+                "different indices in p1 vs p2 — use index-based overload "
+                "for heterogeneous phase layouts");
         }
         return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(), idx1);
     }

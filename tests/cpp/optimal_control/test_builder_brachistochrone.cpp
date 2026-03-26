@@ -8,6 +8,7 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 #include <tycho/detail/ode_builder.h>
+#include <tycho/detail/ocp_wrapper.h>
 #include <tycho/detail/phase_wrapper.h>
 #include <tycho/detail/runtime_ode.h>
 #include <tycho/tycho.h>
@@ -163,4 +164,89 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     auto result = phase.returnTraj();
     double tf = result.back()[3];
     EXPECT_NEAR(tf, 1.8013, 0.01);
+}
+
+TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
+    constexpr double g = 9.81;
+
+    // Phase 1: has registry
+    auto ode1 = ODEBuilder(3, 1)
+        .define([g](auto &args) {
+            auto v = args.XVar(2);
+            auto theta = args.UVar(0);
+            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+        })
+        .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+        .build();
+
+    // Phase 2: no registry
+    auto ode2 = ODEBuilder(3, 1)
+        .define([g](auto &args) {
+            auto v = args.XVar(2);
+            auto theta = args.UVar(0);
+            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+        })
+        .build();
+
+    std::vector<Eigen::VectorXd> traj;
+    for (int i = 0; i < 50; ++i) {
+        double s = static_cast<double>(i) / 49.0;
+        Eigen::VectorXd pt(5);
+        pt << 10.0 * s, 10.0 - 5.0 * s, g * s * std::cos(1.0), s, 1.0;
+        traj.push_back(pt);
+    }
+
+    auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
+    auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
+
+    OCP ocp;
+    ocp.addPhase(phase1);
+    ocp.addPhase(phase2);
+
+    EXPECT_THROW(
+        ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y", "v", "t"}),
+        std::invalid_argument);
+}
+
+TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
+    constexpr double g = 9.81;
+
+    // Phase 1: x=0, y=1, v=2
+    auto ode1 = ODEBuilder(3, 1)
+        .define([g](auto &args) {
+            auto v = args.XVar(2);
+            auto theta = args.UVar(0);
+            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+        })
+        .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+        .build();
+
+    // Phase 2: same names but x=1, y=0 (swapped)
+    auto ode2 = ODEBuilder(3, 1)
+        .define([g](auto &args) {
+            auto v = args.XVar(2);
+            auto theta = args.UVar(0);
+            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+        })
+        .var_names({{"x", 1}, {"y", 0}, {"v", 2}, {"t", 3}, {"theta", 4}})
+        .build();
+
+    std::vector<Eigen::VectorXd> traj;
+    for (int i = 0; i < 50; ++i) {
+        double s = static_cast<double>(i) / 49.0;
+        Eigen::VectorXd pt(5);
+        pt << 10.0 * s, 10.0 - 5.0 * s, g * s * std::cos(1.0), s, 1.0;
+        traj.push_back(pt);
+    }
+
+    auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
+    auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
+
+    OCP ocp;
+    ocp.addPhase(phase1);
+    ocp.addPhase(phase2);
+
+    EXPECT_THROW(
+        ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y"}),
+        std::invalid_argument);
 }
