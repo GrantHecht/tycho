@@ -110,6 +110,36 @@ class ODEArgsProxy {
         return args_.segment(args_.XtUVars() + start, count);
     }
 
+    /// Sub-segment of the state vector with compile-time size (0-based within X).
+    template <int SZ>
+    auto XVec(int start = 0) const {
+        if (start < 0 || start + SZ > args_.XVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::XVec<{}>: range [{}, {}) out of X range [0, {})", SZ,
+                            start, start + SZ, args_.XVars()));
+        return args_.segment<SZ>(start);
+    }
+
+    /// Sub-segment of the control vector with compile-time size (0-based within U).
+    template <int SZ>
+    auto UVec(int start = 0) const {
+        if (start < 0 || start + SZ > args_.UVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::UVec<{}>: range [{}, {}) out of U range [0, {})", SZ,
+                            start, start + SZ, args_.UVars()));
+        return args_.segment<SZ>(args_.XtVars() + start);
+    }
+
+    /// Sub-segment of the parameter vector with compile-time size (0-based within P).
+    template <int SZ>
+    auto PVec(int start = 0) const {
+        if (start < 0 || start + SZ > args_.PVars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::PVec<{}>: range [{}, {}) out of P range [0, {})", SZ,
+                            start, start + SZ, args_.PVars()));
+        return args_.segment<SZ>(args_.XtUVars() + start);
+    }
+
     int xvars() const { return args_.XVars(); }
     int uvars() const { return args_.UVars(); }
     int pvars() const { return args_.PVars(); }

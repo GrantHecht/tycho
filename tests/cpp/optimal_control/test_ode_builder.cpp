@@ -251,3 +251,49 @@ TEST_F(ODEBuilderTest, WithPVars) {
     EXPECT_EQ(ode.pvars(), 1);
     EXPECT_EQ(ode.xtup_size(), 5); // 2 + 1 + 1 + 1
 }
+
+TEST_F(ODEBuilderTest, TemplateXVecCrossProduct) {
+    // Template XVec<3> produces ORC=3, enabling cross products in define()
+    auto ode = ODEBuilder(7, 3)
+                   .define([](auto &args) {
+                       auto R = args.template XVec<3>(0);
+                       auto V = args.template XVec<3>(3);
+                       auto u = args.template UVec<3>();
+
+                       Eigen::Vector3d omega_val(0.0, 0.0, 0.1);
+                       auto omega = Constant<-1, 3>(11, omega_val);
+                       auto Vr = V + R.cross(omega);
+
+                       auto Rdot = V;
+                       auto Vdot = Vr + u;
+                       auto mdot_val = Eigen::Matrix<double, 1, 1>::Constant(-0.1);
+                       auto mdot = Constant<-1, 1>(11, mdot_val);
+                       return StackedOutputs{Rdot, Vdot, mdot};
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 7);
+    EXPECT_EQ(ode.uvars(), 3);
+    EXPECT_EQ(ode.function().IRows(), 11);
+    EXPECT_EQ(ode.function().ORows(), 7);
+}
+
+TEST_F(ODEBuilderTest, TemplateXVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 1, 0);
+    EXPECT_THROW(proxy.XVec<4>(0), std::invalid_argument);   // 4 > xvars=3
+    EXPECT_THROW(proxy.XVec<2>(2), std::invalid_argument);   // 2+2 > 3
+    EXPECT_NO_THROW(proxy.XVec<3>(0));                        // exact fit
+    EXPECT_NO_THROW(proxy.XVec<2>(1));                        // 1+2 = 3, ok
+}
+
+TEST_F(ODEBuilderTest, TemplateUVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 2, 0);
+    EXPECT_THROW(proxy.UVec<3>(0), std::invalid_argument);   // 3 > uvars=2
+    EXPECT_NO_THROW(proxy.UVec<2>(0));                        // exact fit
+}
+
+TEST_F(ODEBuilderTest, TemplatePVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 1, 2);
+    EXPECT_THROW(proxy.PVec<3>(0), std::invalid_argument);   // 3 > pvars=2
+    EXPECT_NO_THROW(proxy.PVec<2>(0));                        // exact fit
+}
