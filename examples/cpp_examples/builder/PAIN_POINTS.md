@@ -3,34 +3,35 @@
 Documented during Phase 6 builder example implementation. These findings inform
 design priorities for future Builder API iterations.
 
-## Pain Point 1: Dynamic VF DSL operators are incomplete
+## Pain Point 1: Dynamic VF DSL operators are incomplete — RESOLVED
 
-**Severity: High** — `ODEArguments<-1,-1,-1>` produces `Segment<-1,-1,-1>` types
-that do not support all VF DSL operators. Specifically, `operator+` between a
-dynamic Segment and a CrossProduct does not compile:
+**Status: Fixed** — Three complementary fixes address this:
+
+1. **Template segment accessors** (`head<3>()`, `segment<3>(start)`, `tail<3>()`)
+   on dynamic `ODEArguments<-1,-1,-1>` produce segments with static output sizes
+   (ORC=3), enabling composition with `cross()`, `normalized_power<N>()`, etc.
+
+2. **Relaxed operator signatures** — `operator+`, `operator-`, `operator*`,
+   `operator/`, and comparison operators now accept operands with mixed
+   static/dynamic compile-time sizes. `static_assert` guards preserve
+   compile-time error detection when both operands are fully static.
+
+3. **`pack()` method** — `DenseFunctionBase::pack()` type-erases an expression
+   into `GenericFunction<IR, OR>` (like Eigen's `.eval()`), giving users
+   opt-in control over compile-time complexity for deeply nested expressions.
+
+Template overloads `XVec<SZ>()`, `UVec<SZ>()`, `PVec<SZ>()` were also added
+to `ODEArgsProxy` for use in the `define()` lambda path.
+
+The Delta3Launch example now uses `ODEArguments<-1,-1,-1>` with template
+segment accessors:
 
 ```cpp
 auto args = ODEArguments<-1, -1, -1>(7, 3, 0);
-auto R = args.segment(0, 3);
-auto V = args.segment(3, 3);
-auto omega = Constant<-1, 3>(11, omega_val);
-auto Vr = V + R.cross(omega);  // COMPILE ERROR
+auto R = args.head<3>();           // ORC=3
+auto V = args.segment<3>(3);      // ORC=3
+auto Vr = V + R.cross(omega);     // compiles — both ORC=3
 ```
-
-This means any ODE using vector operations (cross products, normalized vectors,
-norm-based expressions composed with arithmetic) must fall back to
-`Arguments<N>()` with compile-time segments, losing the dynamic-sizing
-advantage of the Builder API.
-
-**Impact:** The Delta3Launch example's `make_rocket_ode()` had to use
-`Arguments<11>()` instead of `ODEArguments<-1,-1,-1>()`, which means the
-expression template tree is still statically typed. The Builder API's `from()`
-still helps (no `BUILD_ODE_FROM_EXPRESSION` macro, named variables, runtime
-parameterization), but the compile cost from `Arguments<11>` remains.
-
-**Workaround:** Use `Arguments<N>()` with compile-time `.head<K>()`,
-`.segment<S,K>()`, `.coeff<I>()` for complex vector ODEs, and reserve
-`ODEBuilder::define()` with `ODEArgsProxy` for simpler scalar ODEs.
 
 ## Pain Point 2: `define()` lambda only offers scalar accessors — RESOLVED
 

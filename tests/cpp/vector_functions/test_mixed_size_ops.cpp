@@ -238,20 +238,27 @@ TEST_F(MixedSizeOpsTest, StaticMatchStillWorks) {
 
 TEST_F(MixedSizeOpsTest, ComparisonMixedIR) {
     // Dynamic scalar (IRC=-1) compared with static scalar (IRC=6)
+    // ConditionalStatement is not a DenseFunctionBase — it's a boolean
+    // used inside IfElseFunction.  We verify the comparison compiles
+    // and then use it in an IfElseFunction to confirm runtime behavior.
     auto dyn_args = Arguments<-1>(6);
     auto dyn_scl = dyn_args.coeff(0);         // IRC=-1, ORC=1
 
     auto stat_args = Arguments<6>();
     auto stat_scl = stat_args.coeff<5>();      // IRC=6, ORC=1
 
-    auto cond = dyn_scl > stat_scl;
-    EXPECT_EQ(cond.IRows(), 6);
+    auto cond = dyn_scl > stat_scl;           // mixed IR comparison compiles
+    EXPECT_EQ(cond.IRC, -1);                  // SZ_MAX<-1, 6> = -1
+
+    // Use the conditional in an IfElseFunction to verify runtime behavior
+    auto true_branch = dyn_scl;               // returns x[0]
+    auto false_branch = stat_scl;             // returns x[5]
+    auto ite = IfElseFunction(cond, true_branch, false_branch);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 112, -5.0, 5.0);
     Eigen::VectorXd fx(1);
     fx.setZero();
-    cond.compute(x, fx);
-    // Result should be 1.0 if x[0] > x[5], else 0.0
-    double expected = (x[0] > x[5]) ? 1.0 : 0.0;
+    ite.compute(x, fx);
+    double expected = (x[0] > x[5]) ? x[0] : x[5];
     EXPECT_DOUBLE_EQ(fx[0], expected);
 }
