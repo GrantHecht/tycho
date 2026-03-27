@@ -54,7 +54,7 @@ src/                    C++ source code (private implementation)
   Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
                           headers, FunctionRegistry.h (TychoBind<T> trait),
                           TypeCasters.h, TychoModule.cpp
-  VectorFunctions/      tycho_vector_functions.h aggregate + snake_case .cpp files
+  VectorFunctions/      tycho_vector_functions.h aggregate + function_domains.cpp
   OptimalControl/       tycho_optimal_control.h aggregate + snake_case .cpp files
   Solvers/              tycho_solvers.h aggregate + snake_case .cpp files
   Astro/                tycho_astro.h aggregate + snake_case .cpp files
@@ -111,12 +111,13 @@ bench/                  Benchmark suite and tracking
     utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
 
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
-examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
+examples/               Example programs
   cpp_examples/         C++ example programs
     brachistochrone/    C++ Brachistochrone optimal control example
-  MeshRefinement/       Mesh-refinement examples
-  UpdatedInterface/     Examples for updated API
-  Plots/                Shared plotting helpers
+  python_examples/      Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
+    MeshRefinement/     Mesh-refinement examples
+    UpdatedInterface/   Examples for updated API
+    Plots/              Shared plotting helpers
 scripts/                Build, test, and packaging helper scripts
 dockerfiles/            Dockerfiles for Ubuntu 18.04 / 20.04 CI images
 misc/                   Code generation utilities (CodeGen.py, CodeGenExample.py)
@@ -417,7 +418,7 @@ bench/bench_track.sh compare    # compare HEAD vs baseline
 
 ### Python examples (integration tests)
 
-The 38 Python example scripts under `examples/` serve as the **integration test
+The 38 Python example scripts under `examples/python_examples/` serve as the **integration test
 suite** and act as the acceptance gate for all changes merged into `main`.
 
 ```bash
