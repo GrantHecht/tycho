@@ -1,10 +1,10 @@
 set(_TYCHO_BINDINGS_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions
-    ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
-    ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
-    ${CMAKE_CURRENT_SOURCE_DIR}/Astro
-    ${CMAKE_CURRENT_SOURCE_DIR}/Integrators
+    ${CMAKE_CURRENT_SOURCE_DIR}/vf
+    ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
+    ${CMAKE_CURRENT_SOURCE_DIR}/solvers
+    ${CMAKE_CURRENT_SOURCE_DIR}/astro
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
 )
 
 # Ensure nanobind-static exists before pch_bindings uses it
@@ -16,8 +16,8 @@ add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
     ${CMAKE_CURRENT_SOURCE_DIR}/pch_nb.h
-    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/tycho_vector_functions.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
+    ${CMAKE_SOURCE_DIR}/src/vf/tycho_vector_functions.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions_bind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
 target_include_directories(pch_bindings PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
@@ -25,48 +25,48 @@ target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
 nanobind_add_module(_tychopy
-    TychoModule.cpp
+    tycho_module.cpp
     # Utils bindings
-    UtilsBind.cpp
-    BumpAllocatorBind.cpp
+    utils_bind.cpp
+    bump_allocator_bind.cpp
     # VectorFunctions bindings
-    VectorFunctions/Tycho_VectorFunctions.cpp
-    VectorFunctions/VectorFunctionBuildPart1.cpp
-    VectorFunctions/VectorFunctionBuildPart2.cpp
-    VectorFunctions/ArgsSegBuildPart1.cpp
-    VectorFunctions/ArgsSegBuildPart2.cpp
-    VectorFunctions/ArgsSegBuildPart3.cpp
-    VectorFunctions/ArgsSegBuildPart4.cpp
-    VectorFunctions/ArgsSegBuildPart5.cpp
-    VectorFunctions/BulkOperationsBuild.cpp
-    VectorFunctions/FreeFunctionsBuild.cpp
-    VectorFunctions/MatrixFunctionBuild.cpp
-    VectorFunctions/PythonArgParsing.cpp
+    vf/tycho_vector_functions.cpp
+    vf/vector_function_build_part1.cpp
+    vf/vector_function_build_part2.cpp
+    vf/args_seg_build_part1.cpp
+    vf/args_seg_build_part2.cpp
+    vf/args_seg_build_part3.cpp
+    vf/args_seg_build_part4.cpp
+    vf/args_seg_build_part5.cpp
+    vf/bulk_operations_build.cpp
+    vf/free_functions_build.cpp
+    vf/matrix_function_build.cpp
+    vf/python_arg_parsing.cpp
     # OptimalControl bindings
-    OptimalControl/Tycho_OptimalControl.cpp
-    OptimalControl/GenericODESBuildPart1.cpp
-    OptimalControl/GenericODESBuildPart2.cpp
-    OptimalControl/GenericODESBuildPart3.cpp
-    OptimalControl/GenericODESBuildPart4.cpp
-    OptimalControl/GenericODESBuildPart5.cpp
-    OptimalControl/GenericODESBuildPart6.cpp
-    OptimalControl/ODEPhaseBaseBind.cpp
-    OptimalControl/OptimalControlProblemBind.cpp
-    OptimalControl/LGLInterpTableBind.cpp
-    OptimalControl/MeshIterateInfoBind.cpp
+    optimal_control/tycho_optimal_control.cpp
+    optimal_control/generic_odes_build_part1.cpp
+    optimal_control/generic_odes_build_part2.cpp
+    optimal_control/generic_odes_build_part3.cpp
+    optimal_control/generic_odes_build_part4.cpp
+    optimal_control/generic_odes_build_part5.cpp
+    optimal_control/generic_odes_build_part6.cpp
+    optimal_control/ode_phase_base_bind.cpp
+    optimal_control/optimal_control_problem_bind.cpp
+    optimal_control/lgl_interp_table_bind.cpp
+    optimal_control/mesh_iterate_info_bind.cpp
     # Solvers bindings
-    Solvers/Tycho_Solvers.cpp
-    Solvers/OptimizationProblemBase.cpp
-    Solvers/PSIOPTBind.cpp
-    Solvers/OptimizationProblemBind.cpp
-    Solvers/JetBind.cpp
+    solvers/tycho_solvers.cpp
+    solvers/optimization_problem_base.cpp
+    solvers/psiopt_bind.cpp
+    solvers/optimization_problem_bind.cpp
+    solvers/jet_bind.cpp
     # Astro bindings
-    Astro/Tycho_Astro.cpp
-    Astro/KeplerUtils.cpp
-    Astro/KeplerModel.cpp
-    Astro/LambertSolversBind.cpp
+    astro/tycho_astro.cpp
+    astro/kepler_utils.cpp
+    astro/kepler_model.cpp
+    astro/lambert_solvers_bind.cpp
     # Integrators bindings
-    Integrators/RKCoeffsBind.cpp
+    integrators/rk_coeffs_bind.cpp
 )
 
 target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})

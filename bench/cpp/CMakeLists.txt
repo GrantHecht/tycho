@@ -19,7 +19,7 @@ add_library(pch_bench STATIC ${CMAKE_SOURCE_DIR}/src/pch.h ${CMAKE_SOURCE_DIR}/s
 set_target_properties(pch_bench PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 target_precompile_headers(pch_bench PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
-    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/tycho_vector_functions.h
+    ${CMAKE_SOURCE_DIR}/src/vf/tycho_vector_functions.h
 )
 target_include_directories(pch_bench PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch_bench PRIVATE ${COMPILE_FLAGS})
