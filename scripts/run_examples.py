@@ -31,7 +31,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES_DIR = REPO_ROOT / "examples"
+EXAMPLES_DIR = REPO_ROOT / "examples" / "python_examples"
 
 DEFAULT_TIMEOUT = 300  # seconds
 

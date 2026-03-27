@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
-#include <tycho/detail/var_registry.h>
+#include <tycho/detail/optimal_control/builder/var_registry.h>
 
 using namespace Tycho;
 

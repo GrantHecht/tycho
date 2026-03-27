@@ -4,7 +4,7 @@
 // Tests factorial and factorialDiv from src/Utils/MathFunctions.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/MathFunctions.h"
+#include "tycho/detail/utils/math_functions.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

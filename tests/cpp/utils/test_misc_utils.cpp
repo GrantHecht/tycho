@@ -5,10 +5,10 @@
 // utilities.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/FunctionReturnType.h"
-#include "Utils/GetCoreCount.h"
-#include "Utils/STDExtensions.h"
-#include "Utils/TypeName.h"
+#include "tycho/detail/utils/function_return_type.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/type_name.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

@@ -13,16 +13,16 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "PythonArgParsing.h"
+#include "python_arg_parsing.h"
 
-#include "CommonFunctions/CommonFunctions.h"
 #include "FunctionRegistry.h"
-#include "MathOverloads.h"
-#include "OperatorOverloads.h"
-#include "VectorFunction.h"
-#include "VectorFunctionTypeErasure/GenericComparative.h"
-#include "VectorFunctionTypeErasure/GenericConditional.h"
-#include "VectorFunctionTypeErasure/GenericFunction.h"
+#include "tycho/detail/vf/common/common_functions.h"
+#include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/operators/math_overloads.h"
+#include "tycho/detail/vf/operators/operator_overloads.h"
+#include "tycho/detail/vf/type_erasure/generic_comparative.h"
+#include "tycho/detail/vf/type_erasure/generic_conditional.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 
 namespace Tycho {
 

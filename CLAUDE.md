@@ -38,20 +38,29 @@ include/                Public C++ API headers
     solvers.h           PSIOPT optimizer, NLP layer
     astro.h             Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
     detail/             Template implementation bodies (included automatically)
+      utils/            Threading, math helpers, type utilities, CRTP base
+      typedefs/         Eigen type aliases
+      vf/               VectorFunction implementation (core/, expressions/, operators/,
+                          derivatives/, scaling/, type_erasure/, common/)
+      integrators/      RK steppers and coefficients
+      optimal_control/  Phase/ODE transcription (core/, phase/, transcription/,
+                          interp/, builder/)
+      solvers/          PSIOPT and NLP layer (linear/ for sparse solver interfaces)
+      astro/            Astrodynamics models
 
-src/                    C++ source code (private implementation + forwarding headers)
-  Tycho.h               Internal aggregate (forwards to include/tycho/tycho.h)
+src/                    C++ source code (private implementation)
+  tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
   pch.h / pch.cpp       Precompiled header
   Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
                           headers, FunctionRegistry.h (TychoBind<T> trait),
                           TypeCasters.h, TychoModule.cpp
-  VectorFunctions/      Forwarding headers → include/tycho/detail/
-  OptimalControl/       Forwarding headers + .cpp implementation files
-  Solvers/              Forwarding headers + .cpp implementation files
-  Astro/                Forwarding headers + .cpp implementation files
-  Integrators/          Forwarding headers → include/tycho/detail/
-  Utils/                Forwarding headers (public) + private utilities
-  TypeDefs/             Forwarding headers → include/tycho/detail/
+  VectorFunctions/      tycho_vector_functions.h aggregate + function_domains.cpp
+  OptimalControl/       tycho_optimal_control.h aggregate + snake_case .cpp files
+  Solvers/              tycho_solvers.h aggregate + snake_case .cpp files
+  Astro/                tycho_astro.h aggregate + snake_case .cpp files
+  Integrators/          tycho_integrators.h aggregate (header-only)
+  Utils/                tycho_utils.h aggregate + private utility .cpp files
+  TypeDefs/             tycho_typedefs.h aggregate (header-only)
   PyDocString/          C++-side Python docstring literals
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
@@ -102,12 +111,13 @@ bench/                  Benchmark suite and tracking
     utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
 
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
-examples/               Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
+examples/               Example programs
   cpp_examples/         C++ example programs
     brachistochrone/    C++ Brachistochrone optimal control example
-  MeshRefinement/       Mesh-refinement examples
-  UpdatedInterface/     Examples for updated API
-  Plots/                Shared plotting helpers
+  python_examples/      Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
+    MeshRefinement/     Mesh-refinement examples
+    UpdatedInterface/   Examples for updated API
+    Plots/              Shared plotting helpers
 scripts/                Build, test, and packaging helper scripts
 dockerfiles/            Dockerfiles for Ubuntu 18.04 / 20.04 CI images
 misc/                   Code generation utilities (CodeGen.py, CodeGenExample.py)
@@ -248,8 +258,9 @@ cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
 
 ## Binding Architecture
 
-All Python binding code lives exclusively in `src/Bindings/`. Core C++ headers (`src/VectorFunctions/`,
-`src/OptimalControl/`, `src/Integrators/`, `src/Astro/`) contain no nanobind code.
+All Python binding code lives exclusively in `src/Bindings/`. Core C++ source under
+`src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, etc.
+contains no nanobind code.
 
 **`TychoBind<T>` trait pattern** — the central dispatch mechanism:
 - Primary template declared in `src/Bindings/FunctionRegistry.h`
@@ -264,7 +275,7 @@ All Python binding code lives exclusively in `src/Bindings/`. Core C++ headers (
 - `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` — builds a GenericODE submodule
 
 **Key rules for binding `.cpp` files:**
-- Must include aggregate headers (`Tycho_Astro.h`, `Tycho_OptimalControl.h`) rather than
+- Must include aggregate headers (`tycho_astro.h`, `tycho_optimal_control.h`) rather than
   raw core headers — function declarations like `KeplerUtilsBuild`, `BuildKeplerMod`
   live in aggregate headers under `#ifdef TYCHO_PYTHON_BINDINGS`
 - `TYCHO_PYTHON_BINDINGS` is defined only for `_tychopy` and `tycho_extensions` targets
@@ -274,7 +285,7 @@ All Python binding code lives exclusively in `src/Bindings/`. Core C++ headers (
 - `DenseFunctionBaseBind.h`, `VectorFunctionBind.h`, `CommonFunctionsBind.h`
 - `InterpTableBind.h`, `GenericFunctionBind.h`
 - `IntegratorBind.h`, `ODEPhaseBind.h`, `ODEBind.h`, `ODESizesBind.h`
-- `PythonFunctions.h`, `PythonArgParsing.h` (moved from core headers)
+- `PythonFunctions.h`, `python_arg_parsing.h` (moved from core headers)
 
 ## Third-Party Dependencies and License Obligations
 
@@ -407,7 +418,7 @@ bench/bench_track.sh compare    # compare HEAD vs baseline
 
 ### Python examples (integration tests)
 
-The 38 Python example scripts under `examples/` serve as the **integration test
+The 38 Python example scripts under `examples/python_examples/` serve as the **integration test
 suite** and act as the acceptance gate for all changes merged into `main`.
 
 ```bash

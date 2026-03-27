@@ -18,7 +18,7 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "DenseFunctionBaseBind.h"
-#include "VectorFunction.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 

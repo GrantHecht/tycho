@@ -17,7 +17,7 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "FunctionRegistry.h"
-#include "Solvers/Jet.h"
+#include "tycho/detail/solvers/jet.h"
 
 namespace Tycho {
 

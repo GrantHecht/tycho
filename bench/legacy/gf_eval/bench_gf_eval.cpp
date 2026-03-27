@@ -18,7 +18,7 @@
 // All other output is suppressed so the benchmark runner can parse the result.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Tycho.h"
+#include "tycho_internal.h"
 #include <chrono>
 #include <iostream>
 #include <vector>

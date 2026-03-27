@@ -5,7 +5,7 @@
 // duplicate rejection, copy/move semantics, iteration.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/FlatMap.h"
+#include "tycho/detail/utils/flat_map.h"
 #include <Eigen/Core>
 #include <gtest/gtest.h>
 #include <string>

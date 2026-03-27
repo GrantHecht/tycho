@@ -17,8 +17,8 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "FunctionRegistry.h"
-#include "Solvers/OptimizationProblem.h"
-#include "Solvers/OptimizationProblemBase.h"
+#include "tycho/detail/solvers/optimization_problem.h"
+#include "tycho/detail/solvers/optimization_problem_base.h"
 
 namespace Tycho {
 

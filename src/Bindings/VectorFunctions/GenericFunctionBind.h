@@ -18,7 +18,7 @@
 
 // Free function templates in namespace Tycho::Bind for GenericFunction,
 // GenericComparative, and GenericConditional binding methods.
-// Included from Tycho_VectorFunctions.h under TYCHO_PYTHON_BINDINGS,
+// Included from tycho_vector_functions.h under TYCHO_PYTHON_BINDINGS,
 // after all three type definitions are complete.
 
 #include "DenseFunctionBaseBind.h"

@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Tycho_VectorFunctions.h"
+#include "tycho_vector_functions.h"
 
 namespace Tycho {
 void ArgsSegBuildPart2(FunctionRegistry &reg, nb::module_ &m) {

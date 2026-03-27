@@ -1,0 +1,228 @@
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> Tycho
+//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
+//   - pybind11 header references removed
+// =============================================================================
+
+#pragma once
+#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <functional>
+#include <iostream>
+#include <numeric>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <typeinfo>
+#include <variant>
+#include <vector>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <Eigen/Sparse>
+
+#include <fmt/format.h>
+
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
+
+namespace Tycho {
+
+template <int _XV, int _UV, int _PV> struct ODEConstSizes {
+    static const int XV = _XV;
+    static const int UV = _UV;
+    static const int PV = _PV;
+    static const int XtV = SZ_SUM<_XV, 1>::value;
+    static const int XtUV = SZ_SUM<_XV, 1, _UV>::value;
+    static const int XtUPV = SZ_SUM<_XV, 1, _UV, _PV>::value;
+};
+
+template <int _XV, int _UV, int _PV> struct ODEXVSizes : ODEConstSizes<_XV, _UV, _PV> {
+    inline int TVar() const { return this->XV; }
+    inline int XVars() const { return this->XV; }
+    inline int XtVars() const { return this->XtV; }
+    void setXVars(int xv) {}
+};
+
+template <int _UV, int _PV> struct ODEXVSizes<-1, _UV, _PV> : ODEConstSizes<-1, _UV, _PV> {
+    inline int TVar() const { return this->XVdynamic; }
+    inline int XVars() const { return this->XVdynamic; }
+    inline int XtVars() const { return this->XtVdynamic; }
+    void setXVars(int xv) {
+        this->XVdynamic = xv;
+        this->XtVdynamic = xv + 1;
+    }
+
+  protected:
+    int XVdynamic = 0;
+    int XtVdynamic = 0;
+};
+
+template <int _XV, int _UV, int _PV> struct ODEXUVSizes : ODEXVSizes<_XV, _UV, _PV> {
+    inline int UVars() const { return this->UV; }
+    inline int XtUVars() const { return this->UV + this->XtVars(); }
+    void setUVars(int uv) {}
+};
+template <int _XV, int _PV> struct ODEXUVSizes<_XV, -1, _PV> : ODEXVSizes<_XV, -1, _PV> {
+    inline int UVars() const { return this->UVdynamic; }
+    inline int XtUVars() const { return this->UVdynamic + this->XtVars(); }
+    void setUVars(int uv) { this->UVdynamic = uv; }
+
+  protected:
+    int UVdynamic = 0;
+};
+
+template <int _XV, int _UV, int _PV> struct ODEXUPVSizes : ODEXUVSizes<_XV, _UV, _PV> {
+    inline int PVars() const { return this->PV; }
+    inline int XtUPVars() const { return this->PV + this->XtUVars(); }
+    void setPVars(int pv) {}
+    void setXtUPVars(int xv, int uv, int pv) {
+        this->setXVars(xv);
+        this->setUVars(uv);
+        this->setPVars(pv);
+    }
+};
+
+template <int _XV, int _UV> struct ODEXUPVSizes<_XV, _UV, -1> : ODEXUVSizes<_XV, _UV, -1> {
+    inline int PVars() const { return this->PVdynamic; }
+    inline int XtUPVars() const { return this->PVdynamic + this->XtUVars(); }
+    void setPVars(int pv) { this->PVdynamic = pv; }
+    void setXtUPVars(int xv, int uv, int pv) {
+        this->setXVars(xv);
+        this->setUVars(uv);
+        this->setPVars(pv);
+    }
+
+  protected:
+    int PVdynamic = 0;
+};
+
+template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV> {
+
+    FlatMap<std::string, Eigen::VectorXi> _XtUPidxs;
+
+    void add_idx(const std::string &name, const Eigen::VectorXi &idx) {
+        if (idx.size() == 0) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} has no elements.", name));
+        }
+        if (_XtUPidxs.contains(name)) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} already exists.", name));
+        }
+        _XtUPidxs.insert(name, idx);
+    }
+
+    void add_idx(const std::string &name, int indx) {
+        Eigen::VectorXi idxv(1);
+        idxv[0] = indx;
+        this->add_idx(name, idxv);
+    }
+
+    Eigen::VectorXi idx(const std::string &name) const {
+        if (!_XtUPidxs.contains(name)) {
+            throw std::invalid_argument(
+                fmt::format("No variable index group with name: {0:} exists.", name));
+        }
+        return _XtUPidxs.at(name);
+    }
+
+    void set_idxs(const FlatMap<std::string, Eigen::VectorXi> &idxs) {
+        for (const auto &[name, idx] : idxs) {
+            if (idx.size() == 0) {
+                throw std::invalid_argument(
+                    fmt::format("Variable index group with name: {0:} has no elements.", name));
+            }
+        }
+        this->_XtUPidxs = idxs;
+    }
+    FlatMap<std::string, Eigen::VectorXi> get_idxs() const { return this->_XtUPidxs; }
+
+    Eigen::VectorXi Xidxs() const {
+        Eigen::VectorXi idxs(this->XVars());
+        std::iota(idxs.begin(), idxs.end(), 0);
+        return idxs;
+    }
+    Eigen::VectorXi Xtidxs() const {
+        Eigen::VectorXi idxs(this->XtVars());
+        std::iota(idxs.begin(), idxs.end(), 0);
+        return idxs;
+    }
+    Eigen::VectorXi XtUidxs() const {
+        Eigen::VectorXi idxs(this->XtUVars());
+        std::iota(idxs.begin(), idxs.end(), 0);
+        return idxs;
+    }
+    Eigen::VectorXi Uidxs() const {
+        Eigen::VectorXi idxs(this->UVars());
+        std::iota(idxs.begin(), idxs.end(), this->XtVars());
+        return idxs;
+    }
+    Eigen::VectorXi Pidxs() const {
+        Eigen::VectorXi idxs(this->PVars());
+        std::iota(idxs.begin(), idxs.end(), this->XtUVars());
+        return idxs;
+    }
+
+    Eigen::VectorXi idxs_impl(const Eigen::VectorXi &zidxs, const Eigen::VectorXi &idxs) const {
+
+        auto minelem = *std::min_element(zidxs.begin(), zidxs.end());
+        auto maxelem = *std::max_element(zidxs.begin(), zidxs.end());
+
+        if (minelem < 0 || maxelem >= idxs.size()) {
+            throw std::invalid_argument("Indexing error in ODESizes idxs");
+        }
+
+        Eigen::VectorXi nidxs(zidxs.size());
+
+        for (int i = 0; i < zidxs.size(); i++) {
+            nidxs[i] = idxs[zidxs[i]];
+        }
+
+        return nidxs;
+    }
+
+    Eigen::VectorXi idxs_impl(int zidx, const Eigen::VectorXi &idxs) const {
+        Eigen::VectorXi zidxs(1);
+        zidxs[0] = zidx;
+        return this->idxs_impl(zidxs, idxs);
+    }
+
+    Eigen::VectorXi Xidxs(const Eigen::VectorXi &zidxs) const {
+        return idxs_impl(zidxs, this->Xidxs());
+    }
+    Eigen::VectorXi Xtidxs(const Eigen::VectorXi &zidxs) const {
+        return idxs_impl(zidxs, this->Xtidxs());
+    }
+    Eigen::VectorXi XtUidxs(const Eigen::VectorXi &zidxs) const {
+        return idxs_impl(zidxs, this->XtUidxs());
+    }
+    Eigen::VectorXi Uidxs(const Eigen::VectorXi &zidxs) const {
+        return idxs_impl(zidxs, this->Uidxs());
+    }
+    Eigen::VectorXi Pidxs(const Eigen::VectorXi &zidxs) const {
+        return idxs_impl(zidxs, this->Pidxs());
+    }
+
+    Eigen::VectorXi Xidxs(int zidxs) const { return idxs_impl(zidxs, this->Xidxs()); }
+    Eigen::VectorXi Xtidxs(int zidxs) const { return idxs_impl(zidxs, this->Xtidxs()); }
+    Eigen::VectorXi XtUidxs(int zidxs) const { return idxs_impl(zidxs, this->XtUidxs()); }
+    Eigen::VectorXi Uidxs(int zidxs) const { return idxs_impl(zidxs, this->Uidxs()); }
+    Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
+};
+
+} // namespace Tycho

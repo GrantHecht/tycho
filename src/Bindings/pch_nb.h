@@ -23,7 +23,7 @@ namespace nb = nanobind;
 #include <nanobind/stl/vector.h>
 
 // FunctionRegistry.h: TychoBind<T> primary template + FunctionRegistry struct.
-// Must come before Tycho_VectorFunctions.h in PCH so all binding TUs see the
+// Must come before tycho_vector_functions.h in PCH so all binding TUs see the
 // primary template before any specializations are instantiated.
 #include "FunctionRegistry.h"
 

@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "OptimizationProblemBind.h"
-#include "OptimizationProblem.h"
+#include "tycho/detail/solvers/optimization_problem.h"
 
 using namespace Tycho;
 

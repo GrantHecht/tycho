@@ -13,9 +13,9 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Tycho_VectorFunctions.h"
+#include "tycho_vector_functions.h"
 
-#include "CommonFunctions/IOScaled.h"
+#include "tycho/detail/vf/scaling/io_scaled.h"
 
 // TychoBind<IOScaled<Func>> specialization — must come after IOScaled.h
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
@@ -29,11 +29,11 @@ template <class Func> struct TychoBind<IOScaled<Func>> {
 };
 } // namespace Tycho
 
-#include "CommonFunctions/InterpTable1D.h"
-#include "CommonFunctions/InterpTable2D.h"
-#include "CommonFunctions/InterpTable3D.h"
-#include "CommonFunctions/InterpTable4D.h"
 #include "Utils/fmtlib.h"
+#include "tycho/detail/optimal_control/interp/interp_table_1d.h"
+#include "tycho/detail/optimal_control/interp/interp_table_2d.h"
+#include "tycho/detail/optimal_control/interp/interp_table_3d.h"
+#include "tycho/detail/optimal_control/interp/interp_table_4d.h"
 
 // Out-of-class definitions for InterpTable binding functions.
 // Included here after all InterpTable headers so all types are complete.

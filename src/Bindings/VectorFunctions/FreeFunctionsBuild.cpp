@@ -13,8 +13,8 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "CommonFunctions/RootFinder.h"
-#include "Tycho_VectorFunctions.h"
+#include "tycho/detail/vf/operators/root_finder.h"
+#include "tycho_vector_functions.h"
 namespace Tycho {
 
 template <class T> void UnaryVectorOpBuild(nb::module_ &m) {

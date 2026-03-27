@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Solvers/Tycho_Solvers.h"
+#include "Solvers/tycho_solvers.h"
 #include "JetBind.h"
 #include "OptimizationProblemBind.h"
 #include "PSIOPTBind.h"

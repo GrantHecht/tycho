@@ -19,13 +19,13 @@
 // TychoBind specializations for ODEPhase<DODE>, StateFunction<T>, LinkFunction<T>,
 // FDDerivArbitrary<T>, ODEPhaseBase, LGLInterpTable, and OptimalControlProblem.
 
-#include "OptimalControl/FDDerivArbitrary.h"
-#include "OptimalControl/LGLInterpFunctions.h"
-#include "OptimalControl/LinkFunction.h"
-#include "OptimalControl/ODEPhase.h"
-#include "OptimalControl/ODEPhaseBase.h"
-#include "OptimalControl/OptimalControlProblem.h"
-#include "OptimalControl/StateFunction.h"
+#include "tycho/detail/optimal_control/core/link_function.h"
+#include "tycho/detail/optimal_control/core/state_function.h"
+#include "tycho/detail/optimal_control/phase/ode_phase.h"
+#include "tycho/detail/optimal_control/phase/ode_phase_base.h"
+#include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
+#include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
+#include "tycho/detail/vf/derivatives/fd_deriv_arbitrary.h"
 
 namespace Tycho {
 

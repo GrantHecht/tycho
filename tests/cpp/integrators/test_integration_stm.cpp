@@ -7,7 +7,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "integrator_test_utils.h"
-#include "Utils/ThreadPool.h"
+#include "tycho/detail/utils/thread_pool.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

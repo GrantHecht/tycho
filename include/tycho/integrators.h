@@ -4,6 +4,6 @@
 
 #include "tycho/vector_functions.h"
 
-#include "tycho/detail/RKCoeffs.h"
-#include "tycho/detail/RKSteppers.h"
-#include "tycho/detail/Integrator.h"
+#include "tycho/detail/integrators/rk_coeffs.h"
+#include "tycho/detail/integrators/rk_steppers.h"
+#include "tycho/detail/integrators/integrator.h"

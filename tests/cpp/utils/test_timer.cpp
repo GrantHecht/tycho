@@ -5,7 +5,7 @@
 // accumulation, reset, and duration type queries.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/Timer.h"
+#include "tycho/detail/utils/timer.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <thread>

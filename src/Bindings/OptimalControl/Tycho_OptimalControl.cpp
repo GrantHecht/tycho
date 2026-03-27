@@ -13,11 +13,11 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Tycho_OptimalControl.h"
 #include "MeshIterateInfoBind.h"
 #include "ODEArgumentsBind.h"
+#include "tycho_optimal_control.h"
 
-#include "Integrators/Integrator.h"
+#include "tycho/detail/integrators/integrator.h"
 
 namespace Tycho {
 

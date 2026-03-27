@@ -63,7 +63,7 @@ Key API differences from pybind11 that affect the binding code:
 +-----------------------------+
 ```
 
-**Strict separation rule:** Core C++ headers in `src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, `src/Solvers/`, and `src/Utils/` contain **zero** nanobind code. All binding code lives exclusively in `src/Bindings/`.
+**Strict separation rule:** Core C++ source under `src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, `src/Solvers/`, and `src/Utils/` contains **zero** nanobind code. All binding code lives exclusively in `src/Bindings/`.
 
 ---
 
@@ -455,15 +455,15 @@ The `pch_bindings` static library defines the PCH order:
 ```
 src/pch.h                              # STL headers, Eigen, fmt, autodiff
   -> src/Bindings/pch_nb.h             # nanobind headers, TypeCasters.h, FunctionRegistry.h, JetBind.h
-    -> src/VectorFunctions/Tycho_VectorFunctions.h  # All VF type definitions
-      -> src/Bindings/VectorFunctionsBind.h         # VF binding helpers
+    -> src/VectorFunctions/tycho_vector_functions.h  # All VF type definitions
+      -> src/Bindings/VectorFunctionsBind.h          # VF binding helpers
 ```
 
 **Why this order?**
 
 - `pch.h` provides all standard library and Eigen types.
 - `pch_nb.h` brings in nanobind and the type casters. `TypeCasters.h` must come before STL casters (see [Section 5](#5-type-casters-typecastersH)).
-- `Tycho_VectorFunctions.h` defines all VectorFunction types (GenericFunction, Segment, etc.) that the binding headers need.
+- `tycho_vector_functions.h` defines all VectorFunction types (GenericFunction, Segment, etc.) that the binding headers need.
 - `VectorFunctionsBind.h` aggregates the VF binding headers that depend on all of the above.
 
 ### `pch_nb.h` Contents
@@ -524,7 +524,7 @@ src/Bindings/
   pch_nb.h                        Binding-specific PCH (nanobind + type casters)
   VectorFunctionsBind.h           Aggregate: includes all VF binding headers
   UtilsBind.cpp                   Thread pool, timer, memory utilities
-  MemoryManagerBind.cpp/.h        Memory manager binding
+  BumpAllocatorBind.cpp/.h        Bump allocator / memory manager binding
   VectorFunctions/
     DenseFunctionBaseBind.h       Core binding helpers: DenseBaseBuild, math builders, SegBuild
     CommonFunctionsBind.h         TychoBind<> for Segment, Arguments, Constant, etc.
@@ -532,7 +532,8 @@ src/Bindings/
     VectorFunctionBind.h          TychoBind<> for VectorFunction base types
     InterpTableBind.h             InterpTable1D/2D/3D/4D build functions
     PythonFunctions.h             PyVectorFunction/PyScalarFunction (Python-callable VFs)
-    PythonArgParsing.h/.cpp       ParsePythonArgs, ParsePythonArgsScalar
+    python_arg_parsing.h          ParsePythonArgs, ParsePythonArgsScalar declarations
+    PythonArgParsing.cpp          ParsePythonArgs/ParsePythonArgsScalar implementations
     Tycho_VectorFunctions.cpp     VectorFunctionBuild() orchestrator
     VectorFunctionBuildPart1.cpp  VF type registrations (part 1)
     VectorFunctionBuildPart2.cpp  VF type registrations (part 2)
@@ -589,7 +590,7 @@ add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
     ${CMAKE_CURRENT_SOURCE_DIR}/pch_nb.h
-    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/Tycho_VectorFunctions.h
+    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/tycho_vector_functions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
@@ -603,7 +604,7 @@ target_link_libraries(pch_bindings PRIVATE nanobind-static)
 nanobind_add_module(_tychopy
     TychoModule.cpp
     UtilsBind.cpp
-    MemoryManagerBind.cpp
+    BumpAllocatorBind.cpp
     VectorFunctions/Tycho_VectorFunctions.cpp
     # ... all .cpp files listed explicitly
 )
@@ -737,11 +738,11 @@ When including a `Bindings/` header from another `Bindings/` file, **always use 
 
 ```cpp
 // CORRECT:
-#include "VectorFunctions/PythonArgParsing.h"
+#include "VectorFunctions/python_arg_parsing.h"
 #include "Solvers/JetBind.h"
 
-// WRONG (may resolve to a stale stub in src/VectorFunctions/):
-#include "PythonArgParsing.h"
+// WRONG (may resolve to a file in another src/ subdirectory):
+#include "python_arg_parsing.h"
 ```
 
 Because `src/Bindings/` subdirectories are added to the include path alongside the core `src/` subdirectories, flat names can be shadowed by files in the core directories.
@@ -812,7 +813,7 @@ This prevents numpy from hijacking `__radd__` and `__rmul__` when a VectorFuncti
 
 ### Adding a New VectorFunction Type
 
-1. **Implement the C++ type** in `src/VectorFunctions/` as a `VectorFunction<Derived, IR, OR, Jm, Hm>` subclass (see [VectorFunction Developer Guide](VectorFunction.md)).
+1. **Implement the C++ type** in `include/tycho/detail/vf/` as a `VectorFunction<Derived, IR, OR, Jm, Hm>` subclass (see [VectorFunction Developer Guide](VectorFunction.md)), then include it from the appropriate aggregate header in `src/VectorFunctions/tycho_vector_functions.h`.
 
 2. **Add a `TychoBind<T>` specialization** in an appropriate `*Bind.h` file (or create a new one in `src/Bindings/VectorFunctions/`):
 
@@ -896,8 +897,8 @@ Every file in `src/Bindings/` with a one-line description:
 | `pch_nb.h` | Binding PCH: nanobind headers, TypeCasters, FunctionRegistry, JetBind |
 | `VectorFunctionsBind.h` | Aggregate include for VF binding headers (CommonFunctions, DenseBase, Generic, etc.) |
 | `UtilsBind.cpp` | Thread pool, timers, color console, memory utilities |
-| `MemoryManagerBind.cpp` | Memory manager binding implementation |
-| `MemoryManagerBind.h` | Memory manager binding declaration |
+| `BumpAllocatorBind.cpp` | Bump allocator / memory manager binding implementation |
+| `BumpAllocatorBind.h` | Bump allocator / memory manager binding declaration |
 | **VectorFunctions/** | |
 | `DenseFunctionBaseBind.h` | `DenseBaseBuild`, `DoubleMathBuild`, `UnaryMathBuild`, `BinaryMathBuild`, `BinaryOperatorsBuild`, `FunctionIndexingBuild`, `ConditionalOperatorsBuild` |
 | `CommonFunctionsBind.h` | `SegBuild`; `TychoBind` for Segment, Arguments, Constant, NestedFunction, ParsedInput, TwoFunctionSum, NormalizedPower, IntegralNorm |
@@ -905,7 +906,7 @@ Every file in `src/Bindings/` with a one-line description:
 | `VectorFunctionBind.h` | `TychoBind` specializations for VectorFunction wrapper types |
 | `InterpTableBind.h` | `InterpTable1DBuild`, `InterpTable2DBuild`, `InterpTable3DBuild`, `InterpTable4DBuild` |
 | `PythonFunctions.h` | `PyVectorFunction` / `PyScalarFunction` -- Python-callable VF wrappers using FD derivatives |
-| `PythonArgParsing.h` | `ParsePythonArgs()`, `ParsePythonArgsScalar()` declarations |
+| `python_arg_parsing.h` | `ParsePythonArgs()`, `ParsePythonArgsScalar()` declarations |
 | `PythonArgParsing.cpp` | Implementations of ParsePythonArgs/ParsePythonArgsScalar |
 | `Tycho_VectorFunctions.cpp` | `VectorFunctionBuild()` orchestrator |
 | `VectorFunctionBuildPart1.cpp` | VF type registrations (first half) |

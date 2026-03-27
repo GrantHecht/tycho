@@ -13,9 +13,9 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/Tycho_Astro.h"
+#include "Astro/tycho_astro.h"
 
-#include "VectorFunctions/CommonFunctions/RootFinder.h"
+#include "tycho/detail/vf/operators/root_finder.h"
 
 namespace Tycho {
 

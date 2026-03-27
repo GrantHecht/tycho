@@ -16,7 +16,7 @@ add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
     ${CMAKE_CURRENT_SOURCE_DIR}/pch_nb.h
-    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/Tycho_VectorFunctions.h
+    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/tycho_vector_functions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)

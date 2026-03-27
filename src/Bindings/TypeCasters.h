@@ -1,6 +1,6 @@
 #pragma once
 
-#include "InterfaceTypes.h"
+#include "tycho/detail/optimal_control/core/interface_types.h"
 #include <nanobind/ndarray.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
