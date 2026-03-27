@@ -806,7 +806,7 @@ NormalizedPower<IR,P>: f(x) = x / ||x||^P        (OR = IR)
 All operate on objects inheriting from `DenseFunctionBase` and return new VectorFunction expression objects:
 
 ```cpp
-// Scalar multiplication (from OperatorOverloads.h)
+// Scalar multiplication (from operators/operator_overloads.h)
 f * 2.0       -->  Scaled<Func>(f, 2.0)
 2.0 * f       -->  Scaled<Func>(f, 2.0)
 
@@ -828,7 +828,7 @@ f + vec       -->  FunctionPlusVector<Func>(f, vec)
 
 ### Free-Function Math (C++)
 
-For scalar functions (OR=1), free functions are defined in `MathOverloads.h`:
+For scalar functions (OR=1), free functions are defined in `operators/math_overloads.h`:
 
 ```cpp
 sin(f)    -->  CwiseSin<Func>(f)
