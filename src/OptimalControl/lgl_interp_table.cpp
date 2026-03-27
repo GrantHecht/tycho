@@ -13,7 +13,7 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "LGLInterpTable.h"
+#include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 
 void Tycho::LGLInterpTable::setMethod(TranscriptionModes m) {
     this->Method = m;

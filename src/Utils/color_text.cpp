@@ -13,7 +13,7 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "ColorText.h"
+#include "color_text.h"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRALEAN

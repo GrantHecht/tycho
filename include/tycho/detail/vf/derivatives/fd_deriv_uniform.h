@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/FDCoeffs.h"
+#include "tycho/detail/vf/derivatives/fd_coeffs.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -35,10 +35,10 @@
 
 #include <fmt/format.h>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
 
 namespace Tycho {
 

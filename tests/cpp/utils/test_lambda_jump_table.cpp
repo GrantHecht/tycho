@@ -4,7 +4,7 @@
 // Tests compile-time dispatch table from src/Utils/LambdaJumpTable.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/LambdaJumpTable.h"
+#include "tycho/detail/utils/lambda_jump_table.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

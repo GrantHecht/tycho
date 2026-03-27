@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/CommonFunctions.h"
-#include "tycho/detail/GenericFunction.h"
+#include "tycho/detail/vf/common/common_functions.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 
 namespace Tycho {
 

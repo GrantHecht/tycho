@@ -31,8 +31,8 @@
 
 #include <Eigen/Core>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/tuple_iterator.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/tuple_iterator.h"
 
 namespace Tycho {
 

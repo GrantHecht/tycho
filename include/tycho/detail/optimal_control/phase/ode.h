@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/ODEPhase.h"
-#include "tycho/detail/ODESizes.h"
+#include "tycho/detail/optimal_control/phase/ode_phase.h"
+#include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/vector_functions.h"
 
 namespace Tycho {

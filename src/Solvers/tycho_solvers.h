@@ -17,7 +17,7 @@
 #include "tycho/solvers.h"
 
 #ifdef USE_ACCELERATE_SPARSE
-#include "tycho/detail/AccelerateInterface.h"
+#include "tycho/detail/solvers/linear/accelerate_interface.h"
 #else
 #include "mkl.h"
 #endif

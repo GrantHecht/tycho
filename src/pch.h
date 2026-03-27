@@ -33,18 +33,22 @@
 #include <variant>
 #include <vector>
 
-#include "TypeDefs/EigenTypes.h"
-#include "Utils/EigenSTL.h"
-#include "Utils/GetCoreCount.h"
-#include "Utils/LambdaJumpTable.h"
-#include "Utils/MathFunctions.h"
-#include "Utils/STDExtensions.h"
-#include "Utils/ThreadPool.h"
-#include "Utils/Timer.h"
-#include "Utils/TupleIterator.h"
-#include "Utils/TypeName.h"
-#include "Utils/TypeStorage.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+
+// Real private headers (no detail/ counterpart)
+#include "Utils/eigen_stl.h"
 #include "Utils/fmtlib.h"
+
+// Utils
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/lambda_jump_table.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/timer.h"
+#include "tycho/detail/utils/tuple_iterator.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 // Python binding headers live in src/Bindings/pch_nb.h and are baked into the
 // pch_bindings precompiled header used exclusively by _tychopy and tycho_extensions.

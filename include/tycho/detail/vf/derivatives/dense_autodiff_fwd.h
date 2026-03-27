@@ -19,7 +19,7 @@
 #include <autodiff/forward/dual/eigen.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 
-#include "tycho/detail/DenseDerivatives.h"
+#include "tycho/detail/vf/derivatives/dense_derivatives.h"
 
 namespace Tycho {
 

@@ -23,9 +23,9 @@
 
 #pragma once
 
-#include "tycho/detail/DenseFunctionBase.h"
-#include "tycho/detail/GFTypeErasure.h"
-#include "tycho/detail/CommonFunctions.h"
+#include "tycho/detail/vf/core/dense_function_base.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
+#include "tycho/detail/vf/common/common_functions.h"
 
 namespace Tycho {
 

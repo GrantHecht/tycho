@@ -9,10 +9,10 @@
 
 #pragma once
 
-#include "tycho/detail/GenericFunction.h"
-#include "tycho/detail/ODE.h"
-#include "tycho/detail/OptimalControlFlags.h"
-#include "tycho/detail/var_registry.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
+#include "tycho/detail/optimal_control/phase/ode.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/optimal_control/builder/var_registry.h"
 #include <optional>
 #include <string>
 #include <utility>

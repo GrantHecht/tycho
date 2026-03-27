@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/sizing_helpers.h"
+#include "tycho/detail/utils/sizing_helpers.h"
 
 namespace Tycho {
 

@@ -14,7 +14,7 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/IOScaled.h"
+#include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
@@ -32,17 +32,17 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
-#include "tycho/detail/type_storage.h"
-#include "tycho/detail/sizing_helpers.h"
-#include "tycho/detail/thread_pool.h"
-#include "tycho/detail/flat_map.h"
-#include "tycho/detail/function_return_type.h"
-#include "tycho/detail/get_core_count.h"
-#include "tycho/detail/crtp_base.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/utils/function_return_type.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/crtp_base.h"
 
 namespace Tycho {
 

@@ -13,7 +13,7 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "PhaseIndexer.h"
+#include "tycho/detail/optimal_control/phase/phase_indexer.h"
 
 int Tycho::PhaseIndexer::addEquality(ConstraintInterface eqfun, PhaseRegionFlags sreg,
                                      const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,

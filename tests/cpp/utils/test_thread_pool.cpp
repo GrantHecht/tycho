@@ -5,7 +5,7 @@
 // work stealing, thread counts, and shutdown behavior.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/ThreadPool.h"
+#include "tycho/detail/utils/thread_pool.h"
 #include "test_utils.h"
 #include <atomic>
 #include <chrono>

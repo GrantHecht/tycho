@@ -15,11 +15,11 @@
 
 #include <signal.h>
 
-#include "Astro/Tycho_Astro.h"
-#include "OptimalControl/Tycho_OptimalControl.h"
-#include "Solvers/Tycho_Solvers.h"
-#include "Utils/Tycho_Utils.h"
-#include "VectorFunctions/Tycho_VectorFunctions.h"
+#include "Astro/tycho_astro.h"
+#include "OptimalControl/tycho_optimal_control.h"
+#include "Solvers/tycho_solvers.h"
+#include "Utils/tycho_utils.h"
+#include "VectorFunctions/tycho_vector_functions.h"
 #include "pch.h"
 
 namespace Tycho {

@@ -17,7 +17,7 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "FunctionRegistry.h"
-#include "Solvers/PSIOPT.h"
+#include "tycho/detail/solvers/psiopt.h"
 
 namespace Tycho {
 

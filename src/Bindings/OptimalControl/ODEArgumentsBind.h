@@ -18,7 +18,7 @@
 
 #include "DenseFunctionBaseBind.h"
 #include "FunctionRegistry.h"
-#include "OptimalControl/ODEArguments.h"
+#include "tycho/detail/optimal_control/core/ode_arguments.h"
 
 namespace Tycho {
 

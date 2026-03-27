@@ -16,7 +16,7 @@
 #pragma once
 #include <unsupported/Eigen/CXX11/Tensor>
 
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/vf/core/vector_function.h"
 namespace Tycho {
 
 struct InterpTable4D {

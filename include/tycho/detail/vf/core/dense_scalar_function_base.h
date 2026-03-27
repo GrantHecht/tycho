@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/DenseFunctionBase.h"
+#include "tycho/detail/vf/core/dense_function_base.h"
 
 namespace Tycho {
 

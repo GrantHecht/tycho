@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Tycho_OptimalControl.h"
+#include "tycho_optimal_control.h"
 
 namespace Tycho {
 

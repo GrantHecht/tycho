@@ -24,7 +24,7 @@
 #include "VectorFunctions/CommonFunctionsBind.h"
 #include "VectorFunctions/DenseFunctionBaseBind.h"
 #include "VectorFunctions/GenericFunctionBind.h"
-#include "VectorFunctions/PythonArgParsing.h"
+#include "VectorFunctions/python_arg_parsing.h"
 #include "VectorFunctions/PythonFunctions.h"
 
 #endif // TYCHO_PYTHON_BINDINGS

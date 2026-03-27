@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include "tycho/detail/GenericFunction.h"
-#include "tycho/detail/ODEArguments.h"
-#include "tycho/detail/runtime_ode.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
+#include "tycho/detail/optimal_control/core/ode_arguments.h"
+#include "tycho/detail/optimal_control/builder/runtime_ode.h"
 #include <initializer_list>
 #include <stdexcept>
 #include <string>

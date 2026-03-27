@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/LGLCoeffs.h"
-#include "tycho/detail/TranscriptionSizing.h"
+#include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
+#include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/vector_functions.h"
 
 namespace Tycho {

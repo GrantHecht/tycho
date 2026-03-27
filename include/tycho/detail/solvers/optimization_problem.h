@@ -24,9 +24,9 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/NonLinearProgram.h"
-#include "tycho/detail/OptimizationProblemBase.h"
-#include "tycho/detail/PSIOPT.h"
+#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/solvers/psiopt.h"
 #include "tycho/vector_functions.h"
 
 namespace Tycho {

@@ -15,12 +15,12 @@
 
 #pragma once
 
-#include "tycho/detail/Blocked_ODE_Wrapper.h"
-#include "tycho/detail/Integrator.h"
-#include "tycho/detail/LGLDefects.h"
-#include "tycho/detail/ODEPhaseBase.h"
-#include "tycho/detail/ShootingDefects.h"
-#include "tycho/detail/TrapezoidalDefects.h"
+#include "tycho/detail/optimal_control/transcription/blocked_ode_wrapper.h"
+#include "tycho/detail/integrators/integrator.h"
+#include "tycho/detail/optimal_control/transcription/lgl_defects.h"
+#include "tycho/detail/optimal_control/phase/ode_phase_base.h"
+#include "tycho/detail/optimal_control/transcription/shooting_defects.h"
+#include "tycho/detail/optimal_control/transcription/trapezoidal_defects.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -37,17 +37,17 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
-#include "tycho/detail/type_storage.h"
-#include "tycho/detail/sizing_helpers.h"
-#include "tycho/detail/thread_pool.h"
-#include "tycho/detail/flat_map.h"
-#include "tycho/detail/function_return_type.h"
-#include "tycho/detail/get_core_count.h"
-#include "tycho/detail/crtp_base.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/utils/function_return_type.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/crtp_base.h"
 
 namespace Tycho {
 

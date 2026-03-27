@@ -13,10 +13,10 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "PSIOPT.h"
+#include "tycho/detail/solvers/psiopt.h"
 
-#include "SolverInit.h"
-#include "Utils/Timer.h"
+#include "tycho/detail/solvers/solver_init.h"
+#include "tycho/detail/utils/timer.h"
 
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>

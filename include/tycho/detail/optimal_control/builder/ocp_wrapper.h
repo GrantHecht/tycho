@@ -11,8 +11,8 @@
 
 #pragma once
 
-#include "tycho/detail/OptimalControlProblem.h"
-#include "tycho/detail/phase_wrapper.h"
+#include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
+#include "tycho/detail/optimal_control/builder/phase_wrapper.h"
 
 namespace Tycho {
 

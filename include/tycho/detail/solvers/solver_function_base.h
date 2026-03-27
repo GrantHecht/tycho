@@ -27,10 +27,10 @@
 
 #include <Eigen/Core>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/FunctionalFlags.h"
-#include "tycho/detail/IndexingData.h"
-#include "tycho/detail/SolverInterfaceSpecs.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/vf/core/functional_flags.h"
+#include "tycho/detail/solvers/indexing_data.h"
+#include "tycho/detail/solvers/solver_interface_specs.h"
 
 namespace Tycho {
 

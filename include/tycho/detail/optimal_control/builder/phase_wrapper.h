@@ -10,11 +10,11 @@
 
 #pragma once
 
-#include "tycho/detail/InterfaceTypes.h"
-#include "tycho/detail/ODEPhaseBase.h"
-#include "tycho/detail/OptimalControlFlags.h"
-#include "tycho/detail/PSIOPT.h"
-#include "tycho/detail/var_registry.h"
+#include "tycho/detail/optimal_control/core/interface_types.h"
+#include "tycho/detail/optimal_control/phase/ode_phase_base.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/optimal_control/builder/var_registry.h"
 #include <fmt/format.h>
 #include <initializer_list>
 #include <memory>

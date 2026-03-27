@@ -17,7 +17,7 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "FunctionRegistry.h"
-#include "OptimalControl/MeshIterateInfo.h"
+#include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
 
 namespace Tycho {
 

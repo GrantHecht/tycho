@@ -5,7 +5,7 @@
 // SZ_DIFF, SZ_DIVOP) from src/Utils/SizingHelpers.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/SizingHelpers.h"
+#include "tycho/detail/utils/sizing_helpers.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

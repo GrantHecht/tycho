@@ -25,8 +25,8 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/SolverFunctionBase.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/solvers/solver_function_base.h"
 
 namespace Tycho {
 

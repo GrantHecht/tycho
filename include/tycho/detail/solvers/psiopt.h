@@ -32,15 +32,15 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/get_core_count.h"
-#include "tycho/detail/IterateInfo.h"
-#include "tycho/detail/NonLinearProgram.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/non_linear_program.h"
 
 #ifdef USE_ACCELERATE_SPARSE
-#include "tycho/detail/AccelerateInterface.h"
+#include "tycho/detail/solvers/linear/accelerate_interface.h"
 #else
-#include "tycho/detail/PardisoInterface.h"
+#include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
 
 

@@ -13,7 +13,7 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "OptimizationProblem.h"
+#include "tycho/detail/solvers/optimization_problem.h"
 
 void Tycho::OptimizationProblem::transcribe() {
     this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);

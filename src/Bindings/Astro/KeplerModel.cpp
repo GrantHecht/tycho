@@ -13,8 +13,8 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/Tycho_Astro.h"
-#include "OptimalControl/Tycho_OptimalControl.h"
+#include "Astro/tycho_astro.h"
+#include "OptimalControl/tycho_optimal_control.h"
 
 // TychoBind<KeplerPropagator> — defined here since KeplerPropagator.h's inline Build was removed.
 namespace Tycho {

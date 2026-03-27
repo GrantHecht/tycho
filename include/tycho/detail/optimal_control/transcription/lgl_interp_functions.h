@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/LGLInterpTable.h"
-#include "tycho/detail/LambdaJumpTable.h"
+#include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
+#include "tycho/detail/utils/lambda_jump_table.h"
 
 namespace Tycho {
 

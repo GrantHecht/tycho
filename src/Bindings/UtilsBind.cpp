@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "BumpAllocatorBind.h"
-#include "Utils/Tycho_Utils.h"
+#include "Utils/tycho_utils.h"
 
 namespace Tycho {
 

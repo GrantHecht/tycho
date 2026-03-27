@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "Solvers/Jet.h"
+#include "tycho/detail/solvers/jet.h"
 #include <tycho/tycho.h>
 #include "oc_test_utils.h"
 #include "test_utils.h"

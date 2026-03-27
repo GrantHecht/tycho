@@ -23,7 +23,7 @@
 #include <cmath>
 #include <numeric>
 
-#include "tycho/detail/AccelerateUtils.h"
+#include "tycho/detail/solvers/linear/accelerate_utils.h"
 
 #include <limits>
 

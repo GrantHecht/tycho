@@ -13,8 +13,8 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "NonLinearProgram.h"
-#include "Utils/Timer.h"
+#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/utils/timer.h"
 
 void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->PrimalVars = PV;

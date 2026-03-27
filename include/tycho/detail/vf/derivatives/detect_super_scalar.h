@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/VectorFunctionConcepts.h"
+#include "tycho/detail/vf/core/vector_function_concepts.h"
 
 namespace Tycho {
 

@@ -2,10 +2,10 @@
 #include "tycho/utils.h"
 
 // Private headers (not in public API)
-#include "ColorText.h"
-#include "EigenSTL.h"
-#include "LambdaJumpTable.h"
+#include "color_text.h"
+#include "eigen_stl.h"
 
-// Forwarding headers to public detail/ headers (included here, not via utils.h)
-#include "MemoryManagement.h"
-#include "TupleIterator.h"
+// Public detail headers (not pulled in by utils.h directly)
+#include "tycho/detail/utils/lambda_jump_table.h"
+#include "tycho/detail/utils/memory_management.h"
+#include "tycho/detail/utils/tuple_iterator.h"

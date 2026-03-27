@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/DenseDerivatives.h"
+#include "tycho/detail/vf/derivatives/dense_derivatives.h"
 
 namespace Tycho {
 

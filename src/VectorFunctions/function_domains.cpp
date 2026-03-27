@@ -13,7 +13,7 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "FunctionDomains.h"
+#include "tycho/detail/vf/core/function_domains.h"
 
 // void Tycho::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>&
 // sub_domains) {

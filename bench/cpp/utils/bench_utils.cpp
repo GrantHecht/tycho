@@ -146,7 +146,7 @@ BENCHMARK(BM_AllocateRun_Nested);
 // ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/ThreadPool.h"
+#include "tycho/detail/utils/thread_pool.h"
 
 static void BM_ThreadPool_Dispatch(benchmark::State &state) {
     Tycho::ThreadPool pool(1);

@@ -13,4 +13,4 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "LambertSolvers.h"
+#include "tycho/detail/astro/lambert_solvers.h"

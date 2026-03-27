@@ -24,10 +24,10 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/get_core_count.h"
-#include "tycho/detail/thread_pool.h"
-#include "tycho/detail/NonLinearProgram.h"
-#include "tycho/detail/PSIOPT.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/solvers/psiopt.h"
 
 namespace Tycho {
 

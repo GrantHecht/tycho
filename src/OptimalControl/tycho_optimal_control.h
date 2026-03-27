@@ -1,9 +1,9 @@
 #pragma once
 #include "tycho/optimal_control.h"
 
-// Forwarding headers to public detail/ headers (included here, not via optimal_control.h)
-#include "FDDerivArbitrary.h"
-#include "FDDerivUniform.h"
+// Public detail headers (not pulled in by optimal_control.h directly)
+#include "tycho/detail/vf/derivatives/fd_deriv_arbitrary.h"
+#include "tycho/detail/vf/derivatives/fd_deriv_uniform.h"
 
 // Binding headers (guarded by #ifdef TYCHO_PYTHON_BINDINGS, defined on binding CMake targets)
 #include "Bindings/Integrators/IntegratorBind.h"

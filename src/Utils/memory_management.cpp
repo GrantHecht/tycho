@@ -14,7 +14,7 @@
 //   - Full rewrite: BumpStack with save/restore, SIMD alignment, learning
 // =============================================================================
 
-#include "MemoryManagement.h"
+#include "tycho/detail/utils/memory_management.h"
 
 namespace Tycho {
 

@@ -19,7 +19,7 @@
 
 #include "pch.h"
 
-#include "Tycho_VectorFunctions.h"
+#include "tycho_vector_functions.h"
 
 namespace Tycho {
 

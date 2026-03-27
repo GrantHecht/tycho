@@ -4,7 +4,7 @@
 // Tests ODESize idx methods and the Pidxs() bug fix.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "OptimalControl/ODESizes.h"
+#include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

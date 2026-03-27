@@ -7,9 +7,9 @@
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
 // =============================================================================
 
-#include "tycho/detail/ODEPhase.h"
-#include "tycho/detail/phase_wrapper.h"
-#include "tycho/detail/runtime_ode.h"
+#include "tycho/detail/optimal_control/phase/ode_phase.h"
+#include "tycho/detail/optimal_control/builder/phase_wrapper.h"
+#include "tycho/detail/optimal_control/builder/runtime_ode.h"
 
 #include <fmt/format.h>
 

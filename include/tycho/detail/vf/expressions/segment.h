@@ -15,10 +15,10 @@
 
 #pragma once
 
-#include "tycho/detail/Conditional.h"
-#include "tycho/detail/Constant.h"
-#include "tycho/detail/DetectDiagonal.h"
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/vf/type_erasure/conditional.h"
+#include "tycho/detail/vf/common/constant.h"
+#include "tycho/detail/vf/derivatives/detect_diagonal.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 

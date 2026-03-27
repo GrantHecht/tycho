@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/Conditional.h"
+#include "tycho/detail/vf/type_erasure/conditional.h"
 
 namespace Tycho {
 

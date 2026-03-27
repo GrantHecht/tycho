@@ -5,7 +5,7 @@
 // src/Utils/TupleIterator.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/TupleIterator.h"
+#include "tycho/detail/utils/tuple_iterator.h"
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>

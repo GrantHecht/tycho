@@ -13,8 +13,8 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/Tycho_Astro.h"
-#include "Astro/CR3BPModel.h"
+#include "Astro/tycho_astro.h"
+#include "tycho/detail/astro/cr3bp_model.h"
 
 namespace Tycho {
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);

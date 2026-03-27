@@ -13,9 +13,9 @@
 //   - pybind11 header references removed
 // =============================================================================
 
-#include "OptimalControlProblem.h"
+#include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 
-#include "AutoScalingUtils.h"
+#include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 #include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
 
 Eigen::VectorXd Tycho::OptimalControlProblem::get_input_scale(

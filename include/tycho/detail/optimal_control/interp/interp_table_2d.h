@@ -14,8 +14,8 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/timer.h"
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/utils/timer.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 

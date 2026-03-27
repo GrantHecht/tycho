@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/NestedFunction.h"
+#include "tycho/detail/vf/expressions/nested_function.h"
 
 namespace Tycho {
 

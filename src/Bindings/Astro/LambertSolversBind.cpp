@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/LambertSolvers.h"
+#include "tycho/detail/astro/lambert_solvers.h"
 #include "FunctionRegistry.h"
 
 namespace Tycho {

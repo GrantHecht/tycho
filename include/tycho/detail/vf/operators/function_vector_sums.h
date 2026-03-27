@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/DetectDiagonal.h"
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/vf/derivatives/detect_diagonal.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 

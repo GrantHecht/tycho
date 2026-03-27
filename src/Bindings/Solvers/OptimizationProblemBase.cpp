@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "OptimizationProblemBase.h"
+#include "tycho/detail/solvers/optimization_problem_base.h"
 #include "OptimizationProblemBind.h"
 
 using namespace Tycho;

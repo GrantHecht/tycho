@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include "tycho/detail/DenseFunctionSpecs.h"
-#include "tycho/detail/SizingSpecs.h"
-#include "tycho/detail/SolverInterfaceSpecs.h"
+#include "tycho/detail/vf/core/dense_function_specs.h"
+#include "tycho/detail/solvers/sizing_specs.h"
+#include "tycho/detail/solvers/solver_interface_specs.h"
 
 #include <concepts>
 #include <memory>

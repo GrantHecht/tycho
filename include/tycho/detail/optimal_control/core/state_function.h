@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/InterfaceTypes.h"
-#include "tycho/detail/OptimalControlFlags.h"
+#include "tycho/detail/optimal_control/core/interface_types.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -36,10 +36,10 @@
 
 #include <fmt/format.h>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
 
 namespace Tycho {
 

@@ -13,7 +13,7 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Integrators/RKCoeffs.h"
+#include "tycho/detail/integrators/rk_coeffs.h"
 
 namespace Tycho {
 

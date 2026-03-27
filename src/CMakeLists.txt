@@ -14,7 +14,7 @@ set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 ## PCH
 add_library(pch STATIC pch.h pch.cpp)
 target_precompile_headers(pch PRIVATE pch.h
-    VectorFunctions/Tycho_VectorFunctions.h)
+    VectorFunctions/tycho_vector_functions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 
@@ -33,16 +33,13 @@ target_include_directories(vectorfunctions INTERFACE
 
 
 
-add_library(optimalcontrol STATIC OptimalControl/Tycho_OptimalControl.h
-OptimalControl/ODEPhaseBase.h
-OptimalControl/ODEPhaseBase.cpp
-OptimalControl/PhaseIndexer.h
-OptimalControl/PhaseIndexer.cpp
-OptimalControl/OptimalControlProblem.h
-OptimalControl/OptimalControlProblem.cpp
-OptimalControl/LGLInterpTable.h
-OptimalControl/LGLInterpTable.cpp
-OptimalControl/RuntimeODE.cpp
+add_library(optimalcontrol STATIC
+    OptimalControl/tycho_optimal_control.h
+    OptimalControl/ode_phase_base.cpp
+    OptimalControl/phase_indexer.cpp
+    OptimalControl/optimal_control_problem.cpp
+    OptimalControl/lgl_interp_table.cpp
+    OptimalControl/runtime_ode.cpp
 )
 
 target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
@@ -55,13 +52,11 @@ target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 
 
 add_library(psiopt STATIC
-  Solvers/PSIOPT.h Solvers/PSIOPT.cpp
-  Solvers/NonLinearProgram.h Solvers/NonLinearProgram.cpp
-  Solvers/Jet.h
-  Solvers/OptimizationProblemBase.h
-  Solvers/OptimizationProblem.h Solvers/OptimizationProblem.cpp
-  Solvers/SolverInit.h Solvers/SolverInit.cpp
- )
+    Solvers/psiopt.cpp
+    Solvers/non_linear_program.cpp
+    Solvers/optimization_problem.cpp
+    Solvers/solver_init.cpp
+)
 target_include_directories(psiopt PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
 target_link_libraries(psiopt PRIVATE utils)
@@ -72,11 +67,11 @@ endif()
 
 
 add_library(utils STATIC
-  Utils/ColorText.h Utils/ColorText.cpp
-  Utils/GetCoreCount.h Utils/GetCoreCount.cpp
-  Utils/MemoryManagement.h Utils/MemoryManagement.cpp
-  Utils/ThreadPool.h Utils/ThreadPool.cpp
- )
+    Utils/color_text.h Utils/color_text.cpp
+    Utils/get_core_count.cpp
+    Utils/memory_management.cpp
+    Utils/thread_pool.cpp
+)
 target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
 # fmt is header-only (FMT_HEADER_ONLY defined globally); include path comes from
@@ -86,12 +81,10 @@ target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
 
 
 add_library(astro STATIC
-  Astro/Tycho_Astro.h
-  Astro/KeplerUtils.h
-  Astro/KeplerModel.h
-  Astro/LambertSolvers.h
-  Astro/LambertSolvers.cpp
-  )
+    Astro/tycho_astro.h
+    Astro/lambert_solvers.cpp
+    Astro/accelleration_models.cpp
+)
 
 target_precompile_headers(astro REUSE_FROM pch)
 target_include_directories(astro PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})

@@ -15,9 +15,9 @@
 
 #pragma once
 
-#include "tycho/detail/LGLCoeffs.h"
-#include "tycho/detail/TranscriptionSizing.h"
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
+#include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 template <class DODE, int CS>

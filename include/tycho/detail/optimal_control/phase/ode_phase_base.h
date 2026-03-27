@@ -15,17 +15,17 @@
 
 #pragma once
 
-#include "tycho/detail/IOScaled.h"
-#include "tycho/detail/InterfaceTypes.h"
-#include "tycho/detail/LGLInterpTable.h"
-#include "tycho/detail/MeshIterateInfo.h"
-#include "tycho/detail/ODESizes.h"
-#include "tycho/detail/OptimalControlFlags.h"
-#include "tycho/detail/PhaseIndexer.h"
-#include "tycho/detail/NonLinearProgram.h"
-#include "tycho/detail/OptimizationProblemBase.h"
-#include "tycho/detail/PSIOPT.h"
-#include "tycho/detail/StateFunction.h"
+#include "tycho/detail/vf/scaling/io_scaled.h"
+#include "tycho/detail/optimal_control/core/interface_types.h"
+#include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
+#include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
+#include "tycho/detail/optimal_control/core/ode_sizes.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/optimal_control/phase/phase_indexer.h"
+#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/optimal_control/core/state_function.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
@@ -43,17 +43,17 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
-#include "tycho/detail/type_storage.h"
-#include "tycho/detail/sizing_helpers.h"
-#include "tycho/detail/thread_pool.h"
-#include "tycho/detail/flat_map.h"
-#include "tycho/detail/function_return_type.h"
-#include "tycho/detail/get_core_count.h"
-#include "tycho/detail/crtp_base.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/utils/function_return_type.h"
+#include "tycho/detail/utils/get_core_count.h"
+#include "tycho/detail/utils/crtp_base.h"
 
 namespace Tycho {
 

@@ -14,7 +14,7 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/ExpressionFwdDeclarations.h"
+#include "tycho/detail/vf/core/expression_fwd_declarations.h"
 
 namespace Tycho {
 

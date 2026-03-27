@@ -33,13 +33,13 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/AssigmentTypes.h"
-#include "tycho/detail/BinaryMath.h"
-#include "tycho/detail/ExpressionFwdDeclarations.h"
-#include "tycho/detail/Computable.h"
-#include "tycho/detail/DenseFunctionOperations.h"
-#include "tycho/detail/FunctionDomains.h"
-#include "tycho/detail/FunctionTypeDefMacros.h"
+#include "tycho/detail/vf/core/assignment_types.h"
+#include "tycho/detail/vf/operators/binary_math.h"
+#include "tycho/detail/vf/core/expression_fwd_declarations.h"
+#include "tycho/detail/vf/core/computable.h"
+#include "tycho/detail/vf/core/dense_function_operations.h"
+#include "tycho/detail/vf/core/function_domains.h"
+#include "tycho/detail/vf/core/function_type_def_macros.h"
 
 namespace Tycho {
 

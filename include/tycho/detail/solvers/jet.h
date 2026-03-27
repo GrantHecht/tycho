@@ -28,11 +28,11 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/thread_pool.h"
-#include "tycho/detail/OptimizationProblemBase.h"
-#include "tycho/detail/timer.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/utils/timer.h"
 #ifdef USE_ACCELERATE_SPARSE
-#include "tycho/detail/AccelerateUtils.h"
+#include "tycho/detail/solvers/linear/accelerate_utils.h"
 #else
 #include "mkl.h"
 #endif

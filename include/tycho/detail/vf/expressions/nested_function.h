@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/Segment.h"
-#include "tycho/detail/VectorFunction.h"
+#include "tycho/detail/vf/expressions/segment.h"
+#include "tycho/detail/vf/core/vector_function.h"
 
 namespace Tycho {
 

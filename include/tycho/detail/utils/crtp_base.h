@@ -19,7 +19,7 @@
 #include <string>
 #include <type_traits>
 
-#include "tycho/detail/type_name.h"
+#include "tycho/detail/utils/type_name.h"
 
 namespace Tycho {
 

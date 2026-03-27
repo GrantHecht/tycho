@@ -5,7 +5,7 @@
 // semantics, SBO inline/heap paths, copy/move correctness.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/TypeStorage.h"
+#include "tycho/detail/utils/type_storage.h"
 #include <gtest/gtest.h>
 
 using namespace Tycho;

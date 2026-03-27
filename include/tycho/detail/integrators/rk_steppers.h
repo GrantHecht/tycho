@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/RKCoeffs.h"
+#include "tycho/detail/integrators/rk_coeffs.h"
 #include "tycho/vector_functions.h"
 
 namespace Tycho {

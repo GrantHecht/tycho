@@ -1,11 +1,11 @@
-#include "SolverInit.h"
+#include "tycho/detail/solvers/solver_init.h"
 
 #include <mutex>
 
-#include "Utils/Timer.h"
+#include "tycho/detail/utils/timer.h"
 
 #ifdef USE_ACCELERATE_SPARSE
-#include "AccelerateUtils.h"
+#include "tycho/detail/solvers/linear/accelerate_utils.h"
 #else
 #include <mkl.h>
 #endif

@@ -14,8 +14,8 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/flat_map.h"
-#include "tycho/detail/sizing_helpers.h"
+#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/utils/sizing_helpers.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -35,10 +35,10 @@
 
 #include <fmt/format.h>
 
-#include "tycho/detail/eigen_types.h"
-#include "tycho/detail/std_extensions.h"
-#include "tycho/detail/math_functions.h"
-#include "tycho/detail/type_name.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/type_name.h"
 
 namespace Tycho {
 

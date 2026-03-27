@@ -14,9 +14,9 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/KeplerPropagator.h"
-#include "tycho/detail/ODE.h"
-#include "tycho/detail/ODEPhase.h"
+#include "tycho/detail/astro/kepler_propagator.h"
+#include "tycho/detail/optimal_control/phase/ode.h"
+#include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/vector_functions.h"
 
 namespace Tycho {

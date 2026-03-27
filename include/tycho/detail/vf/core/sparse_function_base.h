@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "tycho/detail/ComputableBase.h"
+#include "tycho/detail/vf/core/computable_base.h"
 
 namespace Tycho {
 
