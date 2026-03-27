@@ -37,7 +37,7 @@ target_include_directories(pch_tests PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch_tests PRIVATE ${COMPILE_FLAGS})
 target_precompile_headers(pch_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/pch.h
-    ${PROJECT_SOURCE_DIR}/src/Tycho.h
+    ${PROJECT_SOURCE_DIR}/src/tycho_internal.h
 )
 
 #-------------------------------------------------------------------------------

@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "ODEPhaseBind.h"
-#include "PyDocString/OptimalControl/OptimalControlProblem_doc.h"
+#include "PyDocString/OptimalControl/optimal_control_problem_doc.h"
 
 using namespace Tycho;
 using VectorXd = Eigen::VectorXd;

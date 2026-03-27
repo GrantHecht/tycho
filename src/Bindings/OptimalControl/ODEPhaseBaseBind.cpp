@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "ODEPhaseBind.h"
-#include "PyDocString/OptimalControl/ODEPhaseBase_doc.h"
+#include "PyDocString/OptimalControl/ode_phase_base_doc.h"
 
 using namespace Tycho;
 using VectorXd = Eigen::VectorXd;

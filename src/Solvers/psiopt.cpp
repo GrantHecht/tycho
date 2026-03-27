@@ -22,7 +22,7 @@
 #include <mkl.h>
 #endif
 
-#include "PyDocString/Solvers/PSIOPT_doc.h"
+#include "PyDocString/Solvers/psiopt_doc.h"
 
 void Tycho::PSIOPT::ensure_solver_initialized() {
     double initMs = ::Tycho::ensure_solver_initialized();
