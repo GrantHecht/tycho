@@ -174,24 +174,32 @@ decltype(auto) operator-(double s, const DenseFunctionBase<Derived, IR, 1> &func
 ///////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class VFunc, int IR, int OR, class SFunc>
-decltype(auto) operator*(const DenseFunctionBase<VFunc, IR, OR> &vf,
-                         const DenseFunctionBase<SFunc, IR, 1> &sf) {
+template <class VFunc, int IR1, int OR, class SFunc, int IR2>
+decltype(auto) operator*(const DenseFunctionBase<VFunc, IR1, OR> &vf,
+                         const DenseFunctionBase<SFunc, IR2, 1> &sf) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator*: input size mismatch between vector and scalar functions");
     return VectorScalarFunctionProduct<VFunc, SFunc>(vf.derived(), sf.derived());
 }
-template <class VFunc, int IR, int OR, class SFunc>
-decltype(auto) operator*(const DenseFunctionBase<SFunc, IR, 1> &sf,
-                         const DenseFunctionBase<VFunc, IR, OR> &vf) {
+template <class VFunc, int IR1, int OR, class SFunc, int IR2>
+decltype(auto) operator*(const DenseFunctionBase<SFunc, IR2, 1> &sf,
+                         const DenseFunctionBase<VFunc, IR1, OR> &vf) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator*: input size mismatch between scalar and vector functions");
     return VectorScalarFunctionProduct<VFunc, SFunc>(vf.derived(), sf.derived());
 }
-template <class VFunc, int IR, class SFunc>
-decltype(auto) operator*(const DenseFunctionBase<SFunc, IR, 1> &sf,
-                         const DenseFunctionBase<VFunc, IR, 1> &vf) {
+template <class VFunc, int IR1, class SFunc, int IR2>
+decltype(auto) operator*(const DenseFunctionBase<SFunc, IR2, 1> &sf,
+                         const DenseFunctionBase<VFunc, IR1, 1> &vf) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator*: input size mismatch between scalar functions");
     return VectorScalarFunctionProduct<VFunc, SFunc>(vf.derived(), sf.derived());
 }
-template <class VFunc, int IR, int OR, class SFunc>
-decltype(auto) operator/(const DenseFunctionBase<VFunc, IR, OR> &vf,
-                         const DenseFunctionBase<SFunc, IR, 1> &sf) {
+template <class VFunc, int IR1, int OR, class SFunc, int IR2>
+decltype(auto) operator/(const DenseFunctionBase<VFunc, IR1, OR> &vf,
+                         const DenseFunctionBase<SFunc, IR2, 1> &sf) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator/: input size mismatch between vector and scalar functions");
     return VectorScalarFunctionDivision<VFunc, SFunc>(vf.derived(), sf.derived());
 }
 
@@ -199,60 +207,94 @@ decltype(auto) operator/(const DenseFunctionBase<VFunc, IR, OR> &vf,
 /// Subtraction/////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class Func1, int IR, int OR, class Func2>
-decltype(auto) operator+(const DenseFunctionBase<Func1, IR, OR> &f1,
-                         const DenseFunctionBase<Func2, IR, OR> &f2) {
+template <class Func1, int IR1, int OR1, class Func2, int IR2, int OR2>
+decltype(auto) operator+(const DenseFunctionBase<Func1, IR1, OR1> &f1,
+                         const DenseFunctionBase<Func2, IR2, OR2> &f2) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator+: input size mismatch — both functions have "
+                  "static sizes that don't match");
+    static_assert(OR1 == OR2 || OR1 < 0 || OR2 < 0,
+                  "VF operator+: output size mismatch — both functions have "
+                  "static sizes that don't match");
     return TwoFunctionSum<Func1, Func2>(f1.derived(), f2.derived());
 }
 
 template <class Func1, int IR, int OR, class Func2, class Func3>
 decltype(auto) operator+(const DenseFunctionBase<Func3, IR, OR> &f2,
                          const TwoFunctionSum<Func1, Func2> &f1) {
+    static_assert(IR == TwoFunctionSum<Func1, Func2>::IRC ||
+                      IR < 0 || TwoFunctionSum<Func1, Func2>::IRC < 0,
+                  "VF operator+: input size mismatch with sum operand");
+    static_assert(OR == TwoFunctionSum<Func1, Func2>::ORC ||
+                      OR < 0 || TwoFunctionSum<Func1, Func2>::ORC < 0,
+                  "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3>(f1.func1, f1.func2, f2.derived());
 }
 template <class Func1, int IR, int OR, class Func2, class Func3, class Func4>
 decltype(auto) operator+(const DenseFunctionBase<Func4, IR, OR> &f2,
                          const MultiFunctionSum<Func1, Func2, Func3> &f1) {
+    static_assert(IR == MultiFunctionSum<Func1, Func2, Func3>::IRC ||
+                      IR < 0 || MultiFunctionSum<Func1, Func2, Func3>::IRC < 0,
+                  "VF operator+: input size mismatch with sum operand");
+    static_assert(OR == MultiFunctionSum<Func1, Func2, Func3>::ORC ||
+                      OR < 0 || MultiFunctionSum<Func1, Func2, Func3>::ORC < 0,
+                  "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3, Func4>(f1.func1, f1.func2, std::get<0>(f1.funcs),
                                                         f2.derived());
 }
 
-template <class Func1, int IR, int OR, class Func2>
-decltype(auto) operator-(const DenseFunctionBase<Func1, IR, OR> &f1,
-                         const DenseFunctionBase<Func2, IR, OR> &f2) {
+template <class Func1, int IR1, int OR1, class Func2, int IR2, int OR2>
+decltype(auto) operator-(const DenseFunctionBase<Func1, IR1, OR1> &f1,
+                         const DenseFunctionBase<Func2, IR2, OR2> &f2) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF operator-: input size mismatch — both functions have "
+                  "static sizes that don't match");
+    static_assert(OR1 == OR2 || OR1 < 0 || OR2 < 0,
+                  "VF operator-: output size mismatch — both functions have "
+                  "static sizes that don't match");
     return FunctionDifference<Func1, Func2>(f1.derived(), f2.derived());
 }
 
 ////////////Comparisons///////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class Func1, int IR, class Func2>
-auto operator<(const DenseFunctionBase<Func1, IR, 1> &lhs,
-               const DenseFunctionBase<Func2, IR, 1> &rhs) {
+template <class Func1, int IR1, class Func2, int IR2>
+auto operator<(const DenseFunctionBase<Func1, IR1, 1> &lhs,
+               const DenseFunctionBase<Func2, IR2, 1> &rhs) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF comparison: input size mismatch between scalar functions");
     return ConditionalStatement<Func1, Func2>(lhs.derived(), ConditionalFlags::LessThanFlag,
                                               rhs.derived());
 }
-template <class Func1, int IR, class Func2>
-auto operator<=(const DenseFunctionBase<Func1, IR, 1> &lhs,
-                const DenseFunctionBase<Func2, IR, 1> &rhs) {
+template <class Func1, int IR1, class Func2, int IR2>
+auto operator<=(const DenseFunctionBase<Func1, IR1, 1> &lhs,
+                const DenseFunctionBase<Func2, IR2, 1> &rhs) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF comparison: input size mismatch between scalar functions");
     return ConditionalStatement<Func1, Func2>(lhs.derived(), ConditionalFlags::LessThanEqualToFlag,
                                               rhs.derived());
 }
-template <class Func1, int IR, class Func2>
-auto operator>(const DenseFunctionBase<Func1, IR, 1> &lhs,
-               const DenseFunctionBase<Func2, IR, 1> &rhs) {
+template <class Func1, int IR1, class Func2, int IR2>
+auto operator>(const DenseFunctionBase<Func1, IR1, 1> &lhs,
+               const DenseFunctionBase<Func2, IR2, 1> &rhs) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF comparison: input size mismatch between scalar functions");
     return ConditionalStatement<Func1, Func2>(lhs.derived(), ConditionalFlags::GreaterThanFlag,
                                               rhs.derived());
 }
-template <class Func1, int IR, class Func2>
-auto operator>=(const DenseFunctionBase<Func1, IR, 1> &lhs,
-                const DenseFunctionBase<Func2, IR, 1> &rhs) {
+template <class Func1, int IR1, class Func2, int IR2>
+auto operator>=(const DenseFunctionBase<Func1, IR1, 1> &lhs,
+                const DenseFunctionBase<Func2, IR2, 1> &rhs) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF comparison: input size mismatch between scalar functions");
     return ConditionalStatement<Func1, Func2>(
         lhs.derived(), ConditionalFlags::GreaterThanEqualToFlag, rhs.derived());
 }
-template <class Func1, int IR, class Func2>
-auto operator==(const DenseFunctionBase<Func1, IR, 1> &lhs,
-                const DenseFunctionBase<Func2, IR, 1> &rhs) {
+template <class Func1, int IR1, class Func2, int IR2>
+auto operator==(const DenseFunctionBase<Func1, IR1, 1> &lhs,
+                const DenseFunctionBase<Func2, IR2, 1> &rhs) {
+    static_assert(IR1 == IR2 || IR1 < 0 || IR2 < 0,
+                  "VF comparison: input size mismatch between scalar functions");
     return ConditionalStatement<Func1, Func2>(lhs.derived(), ConditionalFlags::EqualToFlag,
                                               rhs.derived());
 }
@@ -334,5 +376,12 @@ decltype(auto) operator*(const MatrixFunctionView<M1, M1Rows, M1Cols_M2Rows, M1M
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////// pack — type-erase to GenericFunction ///////////////////
+
+template <class Derived, int IR, int OR>
+GenericFunction<IR, OR> DenseFunctionBase<Derived, IR, OR>::pack() const {
+    return GenericFunction<IR, OR>(this->derived());
+}
 
 } // namespace Tycho

@@ -83,6 +83,8 @@ RetType make_dynamic_sum(const std::vector<FuncType> &funcs) {
     int size = funcs.size();
     RetType summed;
     if (size == 0) {
+        throw std::invalid_argument(
+            "make_dynamic_sum: cannot construct a sum from an empty vector of functions");
     } else if (size == 1) {
         summed = funcs[0];
     } else if (size == 2) {
@@ -144,20 +146,14 @@ struct TwoFunctionSum_Impl
         int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
 
         if (this->func1.ORows() != this->func2.ORows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in TwoFunctionSum/+- method !!!\n"
-                       "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
-                       "(ORows = {1:}).\n",
-                       this->func1.ORows(), this->func2.ORows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "TwoFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
+                this->func1.ORows(), this->func2.ORows()));
         }
         if (this->func1.IRows() != this->func2.IRows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in TwoFunctionSum/+- method !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.IRows(), this->func2.IRows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "TwoFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
+                this->func1.IRows(), this->func2.IRows()));
         }
 
         this->setIORows(irtemp, this->func1.ORows());
@@ -386,20 +382,14 @@ struct MultiFunctionSum_Impl
         tmp.push_back(func2.input_domain());
 
         if (this->func1.ORows() != this->func2.ORows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in MultiFunctionSum/+ method !!!\n"
-                       "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
-                       "(ORows = {1:}).\n",
-                       this->func1.ORows(), this->func2.ORows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "MultiFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
+                this->func1.ORows(), this->func2.ORows()));
         }
         if (this->func1.IRows() != this->func2.IRows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in MultiFunctionSum/+ method !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.IRows(), this->func2.IRows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "MultiFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
+                this->func1.IRows(), this->func2.IRows()));
         }
 
         Tycho::constexpr_for_loop(
@@ -407,24 +397,18 @@ struct MultiFunctionSum_Impl
             [&](auto i) {
                 tmp.push_back(std::get<i.value>(this->funcs).input_domain());
                 if (this->func1.ORows() != std::get<i.value>(this->funcs).ORows()) {
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Math Error in MultiFunctionSum/+ method !!!\n"
-                               "Output Size of Func1 (ORows = {0:}) does not match Output Size of "
-                               "Func{2:} (ORows "
-                               "= {1:}).\n",
-                               this->func1.ORows(), std::get<i.value>(this->funcs).ORows(),
-                               i.value);
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(fmt::format(
+                        "MultiFunctionSum: output size mismatch "
+                        "(Func1 ORows={}, Func{} ORows={})",
+                        this->func1.ORows(), i.value + 3,
+                        std::get<i.value>(this->funcs).ORows()));
                 }
                 if (this->func1.IRows() != std::get<i.value>(this->funcs).IRows()) {
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Math Error in MultiFunctionSum/+ method !!!\n"
-                               "Input Size of Func1 (IRows = {0:}) does not match Input Size of "
-                               "Func{2:} (IRows = "
-                               "{1:}).\n",
-                               this->func1.IRows(), std::get<i.value>(this->funcs).IRows(),
-                               i.value);
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(fmt::format(
+                        "MultiFunctionSum: input size mismatch "
+                        "(Func1 IRows={}, Func{} IRows={})",
+                        this->func1.IRows(), i.value + 3,
+                        std::get<i.value>(this->funcs).IRows()));
                 }
             });
         this->set_input_domain(this->IRows(), tmp);

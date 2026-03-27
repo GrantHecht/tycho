@@ -501,6 +501,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     template <class GenType> GenType MakeGeneric() const { return GenType(this->derived()); }
 
+    /// Type-erase this expression into a GenericFunction.  Similar in spirit
+    /// to Eigen's .eval() in that it breaks expression template chains, but
+    /// does not evaluate the function -- it wraps it for deferred evaluation
+    /// with reduced compile-time cost.  Preserves compile-time input/output
+    /// sizes.  Defined in OperatorOverloads.h (requires complete GenericFunction).
+    GenericFunction<IR, OR> pack() const;
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /*

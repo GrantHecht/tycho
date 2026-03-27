@@ -32,6 +32,13 @@ prioritized into tiers but not scheduled.
 - MultiPhaseZermelo — simpler multi-phase problem
 - SimpleLowThrust — mid-complexity astro problem
 
+### Builder API Type Renames
+- Rename `RuntimeODE` → `ODE` (the builder ODE is the primary C++ entry point)
+- Rename the current `OptimalControlProblem` → `OptimalControlProblemBase` (or similar)
+- Promote `OCP` wrapper → `OptimalControlProblem` (the named-variable wrapper becomes the public API)
+- Update all examples, tests, and documentation to use the new names
+- This is a breaking change for direct C++ users of `OptimalControlProblem`; coordinate with any downstream consumers
+
 ### PSIOPT Struct→Class Refactor
 - Convert PSIOPT from public struct with ~60 read-write fields to a proper class
 - Design encapsulated configuration API (builder, named setters, or config struct)

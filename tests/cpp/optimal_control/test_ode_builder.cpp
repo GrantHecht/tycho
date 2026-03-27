@@ -33,7 +33,7 @@ TEST_F(ODEBuilderTest, LambdaDefinition) {
 }
 
 TEST_F(ODEBuilderTest, FromExpression) {
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
@@ -147,7 +147,7 @@ TEST_F(ODEBuilderTest, DefineWrongOutputSizeThrows) {
 }
 
 TEST_F(ODEBuilderTest, FromWrongOutputSizeThrows) {
-    auto args = ODEArguments<-1, -1, -1>(2, 1, 0);
+    auto args = ODEArguments(2, 1, 0);
     auto expr = stack(args.segment(0, 2).coeff(0), args.segment(0, 2).coeff(1));
 
     // Expression has 2 outputs / 4 inputs, but builder declares xvars=3, uvars=1 (5 inputs, 3 outputs)
@@ -183,12 +183,66 @@ TEST_F(ODEBuilderTest, VectorAccessors) {
     EXPECT_EQ(ode.xtup_size(), 6);
 }
 
+TEST_F(ODEBuilderTest, SubSegmentAccessors) {
+    // XVec(start, count), UVec(start, count), PVec(start, count)
+    auto ode = ODEBuilder(5, 3, 2)
+                   .define([](auto &args) {
+                       // First 3 states + first 2 controls + first param
+                       auto x_sub = args.XVec(0, 3);
+                       auto u_sub = args.UVec(0, 2);
+                       auto p_sub = args.PVec(0, 1);
+                       return stack(x_sub.coeff(0) + u_sub.coeff(0), x_sub.coeff(1) + u_sub.coeff(1),
+                                    x_sub.coeff(2) + p_sub.coeff(0), args.XVar(3), args.XVar(4));
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 5);
+    EXPECT_EQ(ode.uvars(), 3);
+    EXPECT_EQ(ode.pvars(), 2);
+}
+
+TEST_F(ODEBuilderTest, SubSegmentBoundsCheck) {
+    EXPECT_THROW(
+        ODEBuilder(3, 1).define([](auto &args) {
+            return stack(args.XVec(0, 4).coeff(0), args.XVar(1), args.XVar(2)); // 4 > xvars=3
+        }),
+        std::invalid_argument);
+
+    EXPECT_THROW(
+        ODEBuilder(3, 2).define([](auto &args) {
+            return stack(args.XVar(0), args.XVar(1), args.UVec(1, 2).coeff(0)); // 1+2=3 > uvars=2
+        }),
+        std::invalid_argument);
+
+    EXPECT_THROW(
+        ODEBuilder(3, 1, 2).define([](auto &args) {
+            return stack(args.XVar(0), args.XVar(1), args.PVec(1, 2).coeff(0)); // 1+2=3 > pvars=2
+        }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, VarGroupEagerValidation) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+
+    // XtUP size is 3+1+1 = 5, so range [3, 6) exceeds bounds
+    EXPECT_THROW(builder.var_group("bad", 3, 3), std::invalid_argument);
+    // Negative start
+    EXPECT_THROW(builder.var_group("neg", -1, 2), std::invalid_argument);
+    // Zero count
+    EXPECT_THROW(builder.var_group("zero", 0, 0), std::invalid_argument);
+    // Valid
+    EXPECT_NO_THROW(builder.var_group("ok", 0, 3));
+}
+
 TEST_F(ODEBuilderTest, FromAfterDefineThrows) {
     ODEBuilder builder(3, 1);
     builder.define([](auto &args) {
         return stack(args.XVar(0), args.XVar(1), args.XVar(2));
     });
-    auto args = ODEArguments<-1, -1, -1>(3, 1, 0);
+    auto args = ODEArguments(3, 1, 0);
     auto expr =
         stack(args.segment(0, 3).coeff(0), args.segment(0, 3).coeff(1), args.segment(0, 3).coeff(2));
     EXPECT_THROW(builder.from(expr), std::invalid_argument);
@@ -218,4 +272,82 @@ TEST_F(ODEBuilderTest, WithPVars) {
     EXPECT_EQ(ode.uvars(), 1);
     EXPECT_EQ(ode.pvars(), 1);
     EXPECT_EQ(ode.xtup_size(), 5); // 2 + 1 + 1 + 1
+}
+
+TEST_F(ODEBuilderTest, TemplateXVecCrossProduct) {
+    // Template XVec<3> produces ORC=3, enabling cross products in define()
+    auto ode = ODEBuilder(7, 3)
+                   .define([](auto &args) {
+                       auto R = args.template XVec<3>(0);
+                       auto V = args.template XVec<3>(3);
+                       auto u = args.template UVec<3>();
+
+                       Eigen::Vector3d omega_val(0.0, 0.0, 0.1);
+                       auto omega = Constant<-1, 3>(11, omega_val);
+                       auto Vr = V + R.cross(omega);
+
+                       auto Rdot = V;
+                       auto Vdot = Vr + u;
+                       auto mdot_val = Eigen::Matrix<double, 1, 1>::Constant(-0.1);
+                       auto mdot = Constant<-1, 1>(11, mdot_val);
+                       return StackedOutputs{Rdot, Vdot, mdot};
+                   })
+                   .build();
+
+    EXPECT_EQ(ode.xvars(), 7);
+    EXPECT_EQ(ode.uvars(), 3);
+    EXPECT_EQ(ode.function().IRows(), 11);
+    EXPECT_EQ(ode.function().ORows(), 7);
+}
+
+TEST_F(ODEBuilderTest, TemplateXVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 1, 0);
+    EXPECT_THROW(proxy.XVec<4>(0), std::invalid_argument);   // 4 > xvars=3
+    EXPECT_THROW(proxy.XVec<2>(2), std::invalid_argument);   // 2+2 > 3
+    EXPECT_NO_THROW(proxy.XVec<3>(0));                        // exact fit
+    EXPECT_NO_THROW(proxy.XVec<2>(1));                        // 1+2 = 3, ok
+}
+
+TEST_F(ODEBuilderTest, TemplateUVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 2, 0);
+    EXPECT_THROW(proxy.UVec<3>(0), std::invalid_argument);   // 3 > uvars=2
+    EXPECT_NO_THROW(proxy.UVec<2>(0));                        // exact fit
+}
+
+TEST_F(ODEBuilderTest, TemplatePVecBoundsCheck) {
+    ODEArgsProxy proxy(3, 1, 2);
+    EXPECT_THROW(proxy.PVec<3>(0), std::invalid_argument);   // 3 > pvars=2
+    EXPECT_NO_THROW(proxy.PVec<2>(0));                        // exact fit
+}
+
+TEST_F(ODEBuilderTest, UVecThrowsWhenNoControls) {
+    ODEArgsProxy proxy(3, 0, 0);
+    EXPECT_THROW(proxy.UVec(), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, PVecThrowsWhenNoParams) {
+    ODEArgsProxy proxy(3, 1, 0);
+    EXPECT_THROW(proxy.PVec(), std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, DefineAfterBuildThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    builder.build();
+    EXPECT_THROW(
+        builder.define([](auto &args) { return args.XVar(0); }),
+        std::invalid_argument);
+}
+
+TEST_F(ODEBuilderTest, FromAfterBuildThrows) {
+    ODEBuilder builder(3, 1);
+    builder.define([](auto &args) {
+        return stack(args.XVar(0), args.XVar(1), args.XVar(2));
+    });
+    builder.build();
+    auto args = ODEArguments(3, 1, 0);
+    auto expr = stack(args.coeff(0), args.coeff(1), args.coeff(2));
+    EXPECT_THROW(builder.from(expr), std::invalid_argument);
 }

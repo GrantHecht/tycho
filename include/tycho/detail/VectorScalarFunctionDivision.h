@@ -57,13 +57,10 @@ struct VectorScalarFunctionDivision_Impl
                                {scalarfunc.input_domain(), vectorfunc.input_domain()});
 
         if (this->scalarfunc.IRows() != this->vectorfunc.IRows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in VectorScalarFunctionDivision/ * method !!!\n"
-                       "Input Size of VectorFunc (IRows = {0:}) does not match Input Size of "
-                       "ScalarFunc (IRows = "
-                       "{1:}).\n",
-                       this->vectorfunc.IRows(), this->scalarfunc.IRows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "VectorScalarFunctionDivision: input size mismatch "
+                "(VectorFunc IRows={}, ScalarFunc IRows={})",
+                this->vectorfunc.IRows(), this->scalarfunc.IRows()));
         }
     }
 
