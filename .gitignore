@@ -546,3 +546,7 @@ main6
 main8
 /references
 *.svg
+
+# Python example plot outputs (keep .gitkeep, ignore generated files)
+examples/python_examples/Plots/**
+!examples/python_examples/Plots/**/.gitkeep
