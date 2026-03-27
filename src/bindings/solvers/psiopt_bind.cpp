@@ -14,13 +14,11 @@
 // =============================================================================
 
 #include "PSIOPTBind.h"
-#include "PyDocString/Solvers/psiopt_doc.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 using namespace Tycho;
 
 void TychoBind<PSIOPT>::Build(nb::module_ &m) {
-    using namespace doc;
     using BarrierModes = PSIOPT::BarrierModes;
     using LineSearchModes = PSIOPT::LineSearchModes;
     using QPPivotModes = PSIOPT::QPPivotModes;
@@ -33,48 +31,48 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());
 
-    obj.def("optimize", &PSIOPT::optimize, PSIOPT_optimize);
-    obj.def("solve_optimize", &PSIOPT::solve_optimize, PSIOPT_solve_optimize);
-    obj.def("solve", &PSIOPT::solve, PSIOPT_solve);
+    obj.def("optimize", &PSIOPT::optimize, "");
+    obj.def("solve_optimize", &PSIOPT::solve_optimize, "");
+    obj.def("solve", &PSIOPT::solve, "");
     obj.def("setQPParams", &PSIOPT::setQPParams);
 
-    obj.def_rw("MaxIters", &PSIOPT::MaxIters, PSIOPT_MaxIters);
-    obj.def_rw("MaxAccIters", &PSIOPT::MaxAccIters, PSIOPT_MaxAccIters);
-    obj.def_rw("MaxLSIters", &PSIOPT::MaxLSIters, PSIOPT_MaxLSIters);
+    obj.def_rw("MaxIters", &PSIOPT::MaxIters, "");
+    obj.def_rw("MaxAccIters", &PSIOPT::MaxAccIters, "");
+    obj.def_rw("MaxLSIters", &PSIOPT::MaxLSIters, "");
 
     obj.def("set_MaxIters", &PSIOPT::set_MaxIters);
     obj.def("set_MaxAccIters", &PSIOPT::set_MaxAccIters);
     obj.def("set_MaxLSIters", &PSIOPT::set_MaxLSIters);
 
-    obj.def_rw("alphaRed", &PSIOPT::alphaRed, PSIOPT_alphaRed);
+    obj.def_rw("alphaRed", &PSIOPT::alphaRed, "");
     obj.def("set_alphaRed", &PSIOPT::set_alphaRed);
 
     obj.def_rw("WideConsole", &PSIOPT::WideConsole);
 
-    obj.def_rw("FastFactorAlg", &PSIOPT::FastFactorAlg, PSIOPT_FastFactorAlg);
+    obj.def_rw("FastFactorAlg", &PSIOPT::FastFactorAlg, "");
 
-    obj.def_rw("LastTotalTime", &PSIOPT::LastTotalTime, PSIOPT_LastUserTime);
-    obj.def_rw("LastPreTime", &PSIOPT::LastPreTime, PSIOPT_LastUserTime);
-    obj.def_rw("LastFuncTime", &PSIOPT::LastFuncTime, PSIOPT_LastUserTime);
-    obj.def_rw("LastKKTTime", &PSIOPT::LastKKTTime, PSIOPT_LastQPTime);
-    obj.def_rw("LastMiscTime", &PSIOPT::LastMiscTime, PSIOPT_LastQPTime);
-    obj.def_rw("LastPrintTime", &PSIOPT::LastPrintTime, PSIOPT_LastPrintTime);
-    obj.def_rw("LastSolverInitTime", &PSIOPT::LastSolverInitTime, PSIOPT_LastSolverInitTime);
-    obj.def_rw("LastIterNum", &PSIOPT::LastIterNum, PSIOPT_LastIterNum);
+    obj.def_rw("LastTotalTime", &PSIOPT::LastTotalTime, "");
+    obj.def_rw("LastPreTime", &PSIOPT::LastPreTime, "");
+    obj.def_rw("LastFuncTime", &PSIOPT::LastFuncTime, "");
+    obj.def_rw("LastKKTTime", &PSIOPT::LastKKTTime, "");
+    obj.def_rw("LastMiscTime", &PSIOPT::LastMiscTime, "");
+    obj.def_rw("LastPrintTime", &PSIOPT::LastPrintTime, "");
+    obj.def_rw("LastSolverInitTime", &PSIOPT::LastSolverInitTime, "");
+    obj.def_rw("LastIterNum", &PSIOPT::LastIterNum, "");
     obj.def_rw("LastObjVal", &PSIOPT::LastObjVal);
 
-    obj.def_rw("ObjScale", &PSIOPT::ObjScale, PSIOPT_ObjScale);
-    obj.def_rw("PrintLevel", &PSIOPT::PrintLevel, PSIOPT_PrintLevel);
+    obj.def_rw("ObjScale", &PSIOPT::ObjScale, "");
+    obj.def_rw("PrintLevel", &PSIOPT::PrintLevel, "");
     obj.def("set_PrintLevel", &PSIOPT::set_PrintLevel);
 
     obj.def_rw("ConvergeFlag", &PSIOPT::ConvergeFlag);
 
     obj.def("get_ConvergenceFlag", &PSIOPT::get_ConvergenceFlag);
 
-    obj.def_rw("KKTtol", &PSIOPT::KKTtol, PSIOPT_KKTtol);
-    obj.def_rw("Bartol", &PSIOPT::Bartol, PSIOPT_Bartol);
-    obj.def_rw("EContol", &PSIOPT::EContol, PSIOPT_EContol);
-    obj.def_rw("IContol", &PSIOPT::IContol, PSIOPT_IContol);
+    obj.def_rw("KKTtol", &PSIOPT::KKTtol, "");
+    obj.def_rw("Bartol", &PSIOPT::Bartol, "");
+    obj.def_rw("EContol", &PSIOPT::EContol, "");
+    obj.def_rw("IContol", &PSIOPT::IContol, "");
 
     obj.def("set_KKTtol", &PSIOPT::set_KKTtol);
     obj.def("set_Bartol", &PSIOPT::set_Bartol);
@@ -84,10 +82,10 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_tols", &PSIOPT::set_tols, nb::arg("KKTtol") = 1.0e-6, nb::arg("EContol") = 1.0e-6,
             nb::arg("IContol") = 1.0e-6, nb::arg("Bartol") = 1.0e-6);
 
-    obj.def_rw("AccKKTtol", &PSIOPT::AccKKTtol, PSIOPT_AccKKTtol);
-    obj.def_rw("AccBartol", &PSIOPT::AccBartol, PSIOPT_AccBartol);
-    obj.def_rw("AccEContol", &PSIOPT::AccEContol, PSIOPT_AccEContol);
-    obj.def_rw("AccIContol", &PSIOPT::AccIContol, PSIOPT_AccIContol);
+    obj.def_rw("AccKKTtol", &PSIOPT::AccKKTtol, "");
+    obj.def_rw("AccBartol", &PSIOPT::AccBartol, "");
+    obj.def_rw("AccEContol", &PSIOPT::AccEContol, "");
+    obj.def_rw("AccIContol", &PSIOPT::AccIContol, "");
 
     obj.def("set_AccKKTtol", &PSIOPT::set_AccKKTtol);
     obj.def("set_AccBartol", &PSIOPT::set_AccBartol);
@@ -98,28 +96,28 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::arg("AccEContol") = 1.0e-3, nb::arg("AccIContol") = 1.0e-3,
             nb::arg("AccBartol") = 1.0e-3);
 
-    obj.def_rw("DivKKTtol", &PSIOPT::DivKKTtol, PSIOPT_DivKKTtol);
-    obj.def_rw("DivBartol", &PSIOPT::DivBartol, PSIOPT_DivBartol);
-    obj.def_rw("DivEContol", &PSIOPT::DivEContol, PSIOPT_DivEContol);
-    obj.def_rw("DivIContol", &PSIOPT::DivIContol, PSIOPT_DivIContol);
+    obj.def_rw("DivKKTtol", &PSIOPT::DivKKTtol, "");
+    obj.def_rw("DivBartol", &PSIOPT::DivBartol, "");
+    obj.def_rw("DivEContol", &PSIOPT::DivEContol, "");
+    obj.def_rw("DivIContol", &PSIOPT::DivIContol, "");
 
     obj.def("set_DivKKTtol", &PSIOPT::set_DivKKTtol);
     obj.def("set_DivBartol", &PSIOPT::set_DivBartol);
     obj.def("set_DivEContol", &PSIOPT::set_DivEContol);
     obj.def("set_DivIContol", &PSIOPT::set_DivIContol);
 
-    obj.def_rw("NegSlackReset", &PSIOPT::NegSlackReset, PSIOPT_NegSlackReset);
+    obj.def_rw("NegSlackReset", &PSIOPT::NegSlackReset, "");
 
-    obj.def_rw("BoundFraction", &PSIOPT::BoundFraction, PSIOPT_BoundFraction);
+    obj.def_rw("BoundFraction", &PSIOPT::BoundFraction, "");
     obj.def("set_BoundFraction", &PSIOPT::set_BoundFraction);
 
-    obj.def_rw("BoundPush", &PSIOPT::BoundPush, PSIOPT_BoundPush);
+    obj.def_rw("BoundPush", &PSIOPT::BoundPush, "");
 
     /////////////////////////////////////////////////////////////
 
-    obj.def_rw("deltaH", &PSIOPT::deltaH, PSIOPT_deltaH);
-    obj.def_rw("incrH", &PSIOPT::incrH, PSIOPT_incrH);
-    obj.def_rw("decrH", &PSIOPT::decrH, PSIOPT_decrH);
+    obj.def_rw("deltaH", &PSIOPT::deltaH, "");
+    obj.def_rw("incrH", &PSIOPT::incrH, "");
+    obj.def_rw("decrH", &PSIOPT::decrH, "");
 
     obj.def("set_deltaH", &PSIOPT::set_deltaH);
     obj.def("set_incrH", &PSIOPT::set_incrH);
@@ -129,22 +127,22 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::arg("decrH"));
 
     /////////////////////////////////////////////////////////////
-    obj.def_rw("initMu", &PSIOPT::initMu, PSIOPT_initMu);
-    obj.def_rw("MinMu", &PSIOPT::MinMu, PSIOPT_MinMu);
-    obj.def_rw("MaxMu", &PSIOPT::MaxMu, PSIOPT_MaxMu);
+    obj.def_rw("initMu", &PSIOPT::initMu, "");
+    obj.def_rw("MinMu", &PSIOPT::MinMu, "");
+    obj.def_rw("MaxMu", &PSIOPT::MaxMu, "");
 
-    obj.def_rw("MaxSOC", &PSIOPT::MaxSOC, PSIOPT_MaxSOC);
+    obj.def_rw("MaxSOC", &PSIOPT::MaxSOC, "");
 
-    obj.def_rw("PDStepStrategy", &PSIOPT::PDStepStrategy, PSIOPT_PDStepStrategy);
-    obj.def_rw("SOEboundRelax", &PSIOPT::SOEboundRelax, PSIOPT_SOEboundRelax);
-    obj.def_rw("QPParSolve", &PSIOPT::QPParSolve, PSIOPT_QPParSolve);
+    obj.def_rw("PDStepStrategy", &PSIOPT::PDStepStrategy, "");
+    obj.def_rw("SOEboundRelax", &PSIOPT::SOEboundRelax, "");
+    obj.def_rw("QPParSolve", &PSIOPT::QPParSolve, "");
 
-    obj.def_rw("SoeMode", &PSIOPT::SoeMode, PSIOPT_SoeMode);
+    obj.def_rw("SoeMode", &PSIOPT::SoeMode, "");
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    obj.def_rw("OptBarMode", &PSIOPT::OptBarMode, PSIOPT_OptBarMode);
-    obj.def_rw("SoeBarMode", &PSIOPT::SoeBarMode, PSIOPT_SoeBarMode);
+    obj.def_rw("OptBarMode", &PSIOPT::OptBarMode, "");
+    obj.def_rw("SoeBarMode", &PSIOPT::SoeBarMode, "");
 
     obj.def("set_OptBarMode", nb::overload_cast<BarrierModes>(&PSIOPT::set_OptBarMode));
     obj.def("set_OptBarMode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptBarMode));
@@ -152,8 +150,8 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_SoeBarMode", nb::overload_cast<const std::string &>(&PSIOPT::set_SoeBarMode));
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    obj.def_rw("OptLSMode", &PSIOPT::OptLSMode, PSIOPT_OptLSMode);
-    obj.def_rw("SoeLSMode", &PSIOPT::SoeLSMode, PSIOPT_SoeLSMode);
+    obj.def_rw("OptLSMode", &PSIOPT::OptLSMode, "");
+    obj.def_rw("SoeLSMode", &PSIOPT::SoeLSMode, "");
 
     obj.def("set_OptLSMode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_OptLSMode));
     obj.def("set_OptLSMode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptLSMode));
@@ -162,15 +160,15 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    obj.def_rw("ForceQPanalysis", &PSIOPT::ForceQPanalysis, PSIOPT_ForceQPanalysis);
-    obj.def_rw("QPRefSteps", &PSIOPT::QPRefSteps, PSIOPT_QPRefSteps);
+    obj.def_rw("ForceQPanalysis", &PSIOPT::ForceQPanalysis, "");
+    obj.def_rw("QPRefSteps", &PSIOPT::QPRefSteps, "");
 
-    obj.def_rw("QPPivotPerturb", &PSIOPT::QPPivotPerturb, PSIOPT_QPPivotPerturb);
-    obj.def_rw("QPThreads", &PSIOPT::QPThreads, PSIOPT_QPThreads);
-    obj.def_rw("QPPivotStrategy", &PSIOPT::QPPivotStrategy, PSIOPT_QPPivotStrategy);
+    obj.def_rw("QPPivotPerturb", &PSIOPT::QPPivotPerturb, "");
+    obj.def_rw("QPThreads", &PSIOPT::QPThreads, "");
+    obj.def_rw("QPPivotStrategy", &PSIOPT::QPPivotStrategy, "");
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    obj.def_rw("QPOrderingMode", &PSIOPT::QPOrd, PSIOPT_QPOrd);
+    obj.def_rw("QPOrderingMode", &PSIOPT::QPOrd, "");
 
     obj.def("set_QPOrderingMode", nb::overload_cast<QPOrderingModes>(&PSIOPT::set_QPOrderingMode));
     obj.def("set_QPOrderingMode",
@@ -202,11 +200,11 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_BestCriteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_BestCriteria));
     obj.def("set_BestCriteria", nb::overload_cast<const std::string &>(&PSIOPT::set_BestCriteria));
 
-    obj.def_rw("storespmat", &PSIOPT::storespmat, PSIOPT_storespmat);
-    obj.def("getSPmat", &PSIOPT::getSPmat, PSIOPT_getSPmat);
-    obj.def("getSPmat2", &PSIOPT::getSPmat2, PSIOPT_getSPmat2);
+    obj.def_rw("storespmat", &PSIOPT::storespmat, "");
+    obj.def("getSPmat", &PSIOPT::getSPmat, "");
+    obj.def("getSPmat2", &PSIOPT::getSPmat2, "");
 
-    obj.def_rw("CNRMode", &PSIOPT::CNRMode, PSIOPT_CNRMode);
+    obj.def_rw("CNRMode", &PSIOPT::CNRMode, "");
 
     nb::enum_<BarrierModes>(m, "BarrierModes")
         .value("PROBE", BarrierModes::PROBE)

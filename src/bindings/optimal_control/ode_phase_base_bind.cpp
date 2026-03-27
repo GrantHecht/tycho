@@ -14,7 +14,6 @@
 // =============================================================================
 
 #include "ODEPhaseBind.h"
-#include "PyDocString/OptimalControl/ode_phase_base_doc.h"
 
 using namespace Tycho;
 using VectorXd = Eigen::VectorXd;
@@ -25,7 +24,6 @@ using StateConstraint = StateFunction<VectorFunctionalX>;
 using StateObjective = StateFunction<ScalarFunctionalX>;
 
 void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
-    using namespace doc;
     auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
     obj.doc() = "Base Class for All Optimal Control Phases";
 
@@ -54,14 +52,14 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
         "setTraj",
         nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd, Eigen::VectorXi>(
             &ODEPhaseBase::setTraj),
-        ODEPhaseBase_setTraj1);
+        "");
 
     obj.def("setTraj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
                                          Eigen::VectorXi, bool>(&ODEPhaseBase::setTraj));
 
     obj.def("setTraj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::setTraj),
-            ODEPhaseBase_setTraj2);
+            "");
 
     obj.def("setTraj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
                            &ODEPhaseBase::setTraj));
@@ -72,34 +70,34 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("switchTranscriptionMode",
             nb::overload_cast<TranscriptionModes, VectorXd, VectorXi>(
                 &ODEPhaseBase::switchTranscriptionMode),
-            ODEPhaseBase_switchTranscriptionMode1);
+            "");
     obj.def("switchTranscriptionMode",
             nb::overload_cast<TranscriptionModes>(&ODEPhaseBase::switchTranscriptionMode),
-            ODEPhaseBase_switchTranscriptionMode2);
+            "");
 
     obj.def(
         "switchTranscriptionMode",
         nb::overload_cast<std::string, VectorXd, VectorXi>(&ODEPhaseBase::switchTranscriptionMode),
-        ODEPhaseBase_switchTranscriptionMode1);
+        "");
     obj.def("switchTranscriptionMode",
             nb::overload_cast<std::string>(&ODEPhaseBase::switchTranscriptionMode),
-            ODEPhaseBase_switchTranscriptionMode2);
+            "");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe),
-            ODEPhaseBase_transcribe);
+            "");
 
     obj.def("refineTrajManual", nb::overload_cast<int>(&ODEPhaseBase::refineTrajManual),
-            ODEPhaseBase_refineTrajManual1);
+            "");
     obj.def("refineTrajManual",
             nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refineTrajManual),
-            ODEPhaseBase_refineTrajManual2);
-    obj.def("refineTrajEqual", &ODEPhaseBase::refineTrajEqual, ODEPhaseBase_refineTrajEqual);
+            "");
+    obj.def("refineTrajEqual", &ODEPhaseBase::refineTrajEqual, "");
 
     obj.def("setStaticParams",
             nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::setStaticParams),
-            ODEPhaseBase_setStaticParams);
+            "");
     obj.def("setStaticParams", nb::overload_cast<VectorXd>(&ODEPhaseBase::setStaticParams),
-            ODEPhaseBase_setStaticParams);
+            "");
 
     obj.def("addStaticParams",
             nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::addStaticParams));
@@ -114,45 +112,45 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
             nb::overload_cast<int, std::string>(&ODEPhaseBase::addStaticParamVgroup));
 
     obj.def("setControlMode", nb::overload_cast<ControlModes>(&ODEPhaseBase::setControlMode),
-            ODEPhaseBase_setControlMode);
+            "");
     obj.def("setControlMode", nb::overload_cast<std::string>(&ODEPhaseBase::setControlMode),
-            ODEPhaseBase_setControlMode);
+            "");
 
-    obj.def("setIntegralMode", &ODEPhaseBase::setIntegralMode, ODEPhaseBase_setIntegralMode);
+    obj.def("setIntegralMode", &ODEPhaseBase::setIntegralMode, "");
 
-    obj.def("subStaticParams", &ODEPhaseBase::subStaticParams, ODEPhaseBase_subStaticParams);
+    obj.def("subStaticParams", &ODEPhaseBase::subStaticParams, "");
 
     obj.def("subVariables",
             nb::overload_cast<PhaseRegionFlags, VectorXi, VectorXd>(&ODEPhaseBase::subVariables),
-            ODEPhaseBase_subVariables);
+            "");
     obj.def("subVariable",
             nb::overload_cast<PhaseRegionFlags, int, double>(&ODEPhaseBase::subVariable),
-            ODEPhaseBase_subVariable);
+            "");
 
     obj.def("subVariables",
             nb::overload_cast<std::string, VectorXi, VectorXd>(&ODEPhaseBase::subVariables),
-            ODEPhaseBase_subVariables);
+            "");
     obj.def("subVariable", nb::overload_cast<std::string, int, double>(&ODEPhaseBase::subVariable),
-            ODEPhaseBase_subVariable);
+            "");
 
-    obj.def("returnTraj", &ODEPhaseBase::returnTraj, ODEPhaseBase_returnTraj);
-    obj.def("returnTrajRange", &ODEPhaseBase::returnTrajRange, ODEPhaseBase_returnTrajRange);
-    obj.def("returnTrajRangeND", &ODEPhaseBase::returnTrajRangeND, ODEPhaseBase_returnTrajRangeND);
+    obj.def("returnTraj", &ODEPhaseBase::returnTraj, "");
+    obj.def("returnTrajRange", &ODEPhaseBase::returnTrajRange, "");
+    obj.def("returnTrajRangeND", &ODEPhaseBase::returnTrajRangeND, "");
     obj.def("returnTrajTable", &ODEPhaseBase::returnTrajTable);
 
-    obj.def("returnCostateTraj", &ODEPhaseBase::returnCostateTraj, ODEPhaseBase_returnCostateTraj);
+    obj.def("returnCostateTraj", &ODEPhaseBase::returnCostateTraj, "");
     obj.def("returnTrajError", &ODEPhaseBase::returnTrajError);
 
     obj.def("returnUSplineConLmults", &ODEPhaseBase::returnUSplineConLmults);
     obj.def("returnUSplineConVals", &ODEPhaseBase::returnUSplineConVals);
 
     obj.def("returnEqualConLmults", &ODEPhaseBase::returnEqualConLmults,
-            ODEPhaseBase_returnEqualConLmults);
+            "");
     obj.def("returnEqualConVals", &ODEPhaseBase::returnEqualConVals);
     obj.def("returnEqualConScales", &ODEPhaseBase::returnEqualConScales);
 
     obj.def("returnInequalConLmults", &ODEPhaseBase::returnInequalConLmults,
-            ODEPhaseBase_returnInequalConLmults);
+            "");
     obj.def("returnInequalConVals", &ODEPhaseBase::returnInequalConVals);
     obj.def("returnInequalConScales", &ODEPhaseBase::returnInequalConScales);
 
@@ -162,18 +160,18 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("returnODEOutputScales", &ODEPhaseBase::returnODEOutputScales);
 
     obj.def("returnStaticParams", &ODEPhaseBase::returnStaticParams,
-            ODEPhaseBase_returnStaticParam);
+            "");
 
     obj.def("test_partitions", &ODEPhaseBase::test_partitions);
 
-    obj.def("removeEqualCon", &ODEPhaseBase::removeEqualCon, ODEPhaseBase_removeEqualCon);
-    obj.def("removeInequalCon", &ODEPhaseBase::removeInequalCon, ODEPhaseBase_removeInequalCon);
+    obj.def("removeEqualCon", &ODEPhaseBase::removeEqualCon, "");
+    obj.def("removeInequalCon", &ODEPhaseBase::removeInequalCon, "");
     obj.def("removeStateObjective", &ODEPhaseBase::removeStateObjective,
-            ODEPhaseBase_removeStateObjective);
+            "");
     obj.def("removeIntegralObjective", &ODEPhaseBase::removeIntegralObjective,
-            ODEPhaseBase_removeIntegralObjective);
+            "");
     obj.def("removeIntegralParamFunction", &ODEPhaseBase::removeIntegralParamFunction,
-            ODEPhaseBase_removeIntegralParamFunction);
+            "");
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /////////////////////////////////////////////
@@ -407,37 +405,37 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     ///////////////////////////////////////////////////////////////////
 
     obj.def("addEqualCon", nb::overload_cast<StateConstraint>(&ODEPhaseBase::addEqualCon),
-            ODEPhaseBase_addEqualCon1);
+            "");
 
     ///////////////////////////////////////////////////////////////////////////////
 
     obj.def("addInequalCon", nb::overload_cast<StateConstraint>(&ODEPhaseBase::addInequalCon),
-            ODEPhaseBase_addInequalCon1);
+            "");
     ////////////////////////////////////////////////////////////////////////////
     obj.def("addLUVarBounds",
             nb::overload_cast<PhaseRegionFlags, Eigen::VectorXi, double, double, double>(
                 &ODEPhaseBase::addLUVarBounds),
-            ODEPhaseBase_addLUVarBounds);
+            "");
     obj.def("addLUVarBounds",
             nb::overload_cast<std::string, Eigen::VectorXi, double, double, double>(
                 &ODEPhaseBase::addLUVarBounds),
-            ODEPhaseBase_addLUVarBounds);
+            "");
 
     ////////////////////////////////////////////////////////////////////////////
     obj.def("addStateObjective",
             nb::overload_cast<StateObjective>(&ODEPhaseBase::addStateObjective),
-            ODEPhaseBase_addStateObjective);
+            "");
 
     ////////////////////////////////////////////////////////////////////////////
 
     obj.def("addIntegralObjective",
             nb::overload_cast<StateObjective>(&ODEPhaseBase::addIntegralObjective),
-            ODEPhaseBase_addIntegralObjective1);
+            "");
 
     ///////////////////////////////////////////////////////////////////////////////
     obj.def("addIntegralParamFunction",
             nb::overload_cast<StateObjective, int>(&ODEPhaseBase::addIntegralParamFunction),
-            ODEPhaseBase_addIntegralParamFunction1);
+            "");
 
     ////////////////////////////////////////////////////
     obj.def("getMeshInfo", &ODEPhaseBase::getMeshInfo);

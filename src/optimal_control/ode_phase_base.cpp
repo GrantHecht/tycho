@@ -15,7 +15,6 @@
 
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
 
-#include "PyDocString/OptimalControl/ode_phase_base_doc.h"
 #include "tycho/detail/optimal_control/transcription/lgl_control_splines.h"
 #include "tycho/detail/optimal_control/transcription/lgl_integrals.h"
 #include "tycho/detail/optimal_control/transcription/mesh_spacing_constraints.h"
