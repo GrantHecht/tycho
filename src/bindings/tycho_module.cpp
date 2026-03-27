@@ -38,8 +38,8 @@ using namespace Tycho;
 void SoftwareInfo() {
 
     int tcount = std::thread::hardware_concurrency();
-    int ccount = Tycho::get_core_count();
-    int vsize = Tycho::DefaultSuperScalar::SizeAtCompileTime;
+    int ccount = tycho::utils::get_core_count();
+    int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
     std::string assetversion = std::string(TYCHO_VERSIONSTRING);
     std::string osversion = std::string(TYCHO_OS) + " " + std::string(TYCHO_OSVERSION);
@@ -137,7 +137,7 @@ int main() {
     using std::cout;
     using std::endl;
 
-    Tycho::enable_color_console();
+    tycho::utils::enable_color_console();
 
     signal(SIGINT, signal_callback);
 
@@ -148,7 +148,7 @@ int main() {
 
 NB_MODULE(_tychopy, m) {
 
-    Tycho::enable_color_console(); // This only does something on windows
+    tycho::utils::enable_color_console(); // This only does something on windows
 
     signal(SIGINT, signal_callback);
 

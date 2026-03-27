@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Timer unit tests
 //
-// Tests Utils::Timer from src/Utils/Timer.h — construction, start/stop
+// Tests Timer from src/Utils/Timer.h — construction, start/stop
 // accumulation, reset, and duration type queries.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -10,21 +10,21 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(TimerTest, DefaultNotStarted) {
-    Utils::Timer t;
+    Timer t;
     EXPECT_EQ(t.count<std::chrono::microseconds>(), 0);
 }
 
 TEST(TimerTest, ConstructWithStart) {
-    Utils::Timer t(true);
+    Timer t(true);
     // Timer is running — count should be non-negative (may be 0 on fast machines)
     EXPECT_GE(t.count<std::chrono::microseconds>(), 0);
 }
 
 TEST(TimerTest, StartStopAccumulates) {
-    Utils::Timer t;
+    Timer t;
     t.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     t.stop();
@@ -33,7 +33,7 @@ TEST(TimerTest, StartStopAccumulates) {
 }
 
 TEST(TimerTest, ResetClearsAccumulated) {
-    Utils::Timer t(true);
+    Timer t(true);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     t.stop();
     EXPECT_GT(t.count<std::chrono::milliseconds>(), 0);
@@ -42,13 +42,13 @@ TEST(TimerTest, ResetClearsAccumulated) {
 }
 
 TEST(TimerTest, StopWithoutStartIsNoOp) {
-    Utils::Timer t;
+    Timer t;
     t.stop(); // Should not crash
     EXPECT_EQ(t.count<std::chrono::microseconds>(), 0);
 }
 
 TEST(TimerTest, CountWithDurationTypes) {
-    Utils::Timer t(true);
+    Timer t(true);
     std::this_thread::sleep_for(std::chrono::milliseconds(15));
     t.stop();
     // Microseconds should be larger than milliseconds value

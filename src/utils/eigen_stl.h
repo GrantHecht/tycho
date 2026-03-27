@@ -17,7 +17,7 @@
 #include <Eigen/Core>
 #include <vector>
 
-namespace Tycho {
+namespace tycho::utils {
 
 template <class Scalar, int Size>
 std::vector<Scalar> eigenvector_to_stdvector(const Eigen::Matrix<Scalar, Size, 1> &eigvec) {
@@ -39,4 +39,4 @@ Eigen::Matrix<Scalar, -1, 1> stdvector_to_eigenvector(const std::vector<Scalar> 
     return eigvec;
 }
 
-} // namespace Tycho
+} // namespace tycho::utils

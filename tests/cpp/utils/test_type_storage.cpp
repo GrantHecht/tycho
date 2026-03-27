@@ -8,7 +8,7 @@
 #include "tycho/detail/utils/type_storage.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 // ---------------------------------------------------------------------------
 // Minimal test base/model types

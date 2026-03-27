@@ -11,7 +11,7 @@
 #include "tycho/detail/utils/type_name.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // TypeNameTest

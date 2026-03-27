@@ -56,7 +56,7 @@ static inline void rtrim(std::string &s) {
 //     rtrim(s);
 // }
 
-int Tycho::get_core_count() {
+int tycho::utils::get_core_count() {
 
     int tcount = std::thread::hardware_concurrency();
 

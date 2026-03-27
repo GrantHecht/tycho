@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace Tycho {
+namespace tycho::utils {
 
 template <typename Key, typename Value> class FlatMap {
     std::vector<std::pair<Key, Value>> data_;
@@ -84,4 +84,4 @@ template <typename Key, typename Value> class FlatMap {
     const_iterator end() const { return data_.end(); }
 };
 
-} // namespace Tycho
+} // namespace tycho::utils

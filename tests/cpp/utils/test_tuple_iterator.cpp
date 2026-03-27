@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(TupleIteratorTest, ForEachMixedTypes) {
     auto t = std::make_tuple(1, 2.0, std::string("three"));

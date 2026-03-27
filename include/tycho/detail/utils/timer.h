@@ -1,7 +1,7 @@
 #pragma once
 #include <chrono>
 /*
-Copyright (c) 2017 André L. Maravilha
+Copyright (c) 2017 AndrÃ© L. Maravilha
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -19,8 +19,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-namespace Tycho {
-namespace Utils {
+namespace tycho::utils {
 
 class Timer {
 
@@ -111,5 +110,4 @@ class Timer {
     std::chrono::duration<long double> accumulated_;
 };
 
-} // namespace Utils
-} // namespace Tycho
+} // namespace tycho::utils

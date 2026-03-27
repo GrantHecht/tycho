@@ -16,11 +16,11 @@
 
 #include "tycho/detail/utils/memory_management.h"
 
-namespace Tycho {
+namespace tycho::utils {
 
 thread_local BumpAllocator::SuperScalarStackType BumpAllocator::SuperScalarStack =
-    detail::BumpStack<DefaultSuperScalar>(TYCHO_DEFAULT_ARENA_SIZE);
+    detail::BumpStack<tycho::DefaultSuperScalar>(TYCHO_DEFAULT_ARENA_SIZE);
 thread_local BumpAllocator::ScalarStackType BumpAllocator::ScalarStack =
     detail::BumpStack<double>(TYCHO_DEFAULT_ARENA_SIZE);
 
-} // namespace Tycho
+} // namespace tycho::utils

@@ -34,7 +34,7 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/tuple_iterator.h"
 
-namespace Tycho {
+namespace tycho::utils {
 
 namespace detail {
 
@@ -212,7 +212,7 @@ template <class... T> struct TupleOfTempSpecs {
 
 struct BumpAllocator {
     using ScalarStackType = detail::BumpStack<double>;
-    using SuperScalarStackType = detail::BumpStack<DefaultSuperScalar>;
+    using SuperScalarStackType = detail::BumpStack<tycho::DefaultSuperScalar>;
 
     template <class Func, class... TempSpecs>
     static void allocate_run(Func &&f, const TempSpecs &...tspecs) {
@@ -266,7 +266,7 @@ struct BumpAllocator {
                     blksize += CalcSpecSize(tspec.tspec);
                 }
             } else if constexpr (type::IsTuple) {
-                Tycho::tuple_for_each(tspec.tspecs, [&](const auto &tspeci) {
+                tuple_for_each(tspec.tspecs, [&](const auto &tspeci) {
                     using S = typename std::remove_cvref_t<decltype(tspeci)>::Scalar;
                     blksize = detail::align_up<S>(blksize);
                     blksize += CalcSpecSize(tspeci);
@@ -345,4 +345,4 @@ struct BumpAllocator {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::utils

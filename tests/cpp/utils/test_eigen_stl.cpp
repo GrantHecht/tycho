@@ -8,7 +8,7 @@
 #include <Eigen/Core>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(EigenSTLTest, EigenToStdDynamic) {
     Eigen::VectorXd ev(3);

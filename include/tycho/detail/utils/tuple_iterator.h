@@ -19,7 +19,7 @@
 #include <tuple>      // std::tuple
 #include <type_traits>
 
-namespace Tycho {
+namespace tycho::utils {
 
 //////////////////////////////////////////////////////////////////////////////////
 template <typename TupleType, typename FunctionType>
@@ -163,4 +163,4 @@ constexpr auto make_array(Function f)
     return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
-} // namespace Tycho
+} // namespace tycho::utils

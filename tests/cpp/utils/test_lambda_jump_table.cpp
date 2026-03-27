@@ -7,7 +7,7 @@
 #include "tycho/detail/utils/lambda_jump_table.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(LambdaJumpTableTest, BelowFirstThreshold) {
     int dispatched = -99;

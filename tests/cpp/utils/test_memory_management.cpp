@@ -8,7 +8,7 @@
 #include <tycho/tycho.h>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(BumpAllocatorTest, ResizeAndQuery) {
     BumpAllocator::resize(128, 64);

@@ -20,10 +20,10 @@
 
 #include "fmtlib.h"
 
-namespace Tycho {
+namespace tycho::utils {
 
 struct ColorScheme {};
 
 void enable_color_console();
 
-} // namespace Tycho
+} // namespace tycho::utils

@@ -20,7 +20,7 @@ std::atomic<bool> g_pool_configuring{false};
 std::mutex g_set_threads_mutex;
 } // namespace
 
-namespace Tycho {
+namespace tycho::utils {
 
 ThreadPool &thread_pool() {
     static ThreadPool pool;
@@ -53,4 +53,4 @@ int get_num_threads() { return g_num_threads.load(std::memory_order_relaxed); }
 
 bool pool_configuring() { return g_pool_configuring.load(std::memory_order_acquire); }
 
-} // namespace Tycho
+} // namespace tycho::utils

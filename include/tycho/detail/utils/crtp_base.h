@@ -21,7 +21,7 @@
 
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::utils {
 
 /*!
  * @brief Curiosly Recurring Template Pattern base class.
@@ -79,4 +79,4 @@ template <class Derived, template <typename> class Mixin> struct CRTPMixin {
     friend Mixin<Derived>;
 };
 
-} // namespace Tycho
+} // namespace tycho::utils

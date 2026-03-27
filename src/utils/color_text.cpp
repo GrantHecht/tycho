@@ -36,7 +36,7 @@
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
 #endif // not ENABLE_VIRTUAL_TERMINAL_PROCESSING
 
-void Tycho::enable_color_console() {
+void tycho::utils::enable_color_console() {
 
     // Only neccessary on windows
 #if defined(_WIN32)

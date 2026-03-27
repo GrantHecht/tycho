@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::utils {
 
 template <int Arg> struct SZ_NEG {
     enum { value = ((Arg < 0) ? -1 : Arg) };
@@ -85,4 +85,4 @@ template <int... Args> using SZ_MAX = SZ_BINOP<SZ_MAXOP, Args...>;
 
 template <int... Args> using SZ_MIN = SZ_BINOP<SZ_MINOP, Args...>;
 
-} // namespace Tycho
+} // namespace tycho::utils

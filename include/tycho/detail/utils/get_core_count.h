@@ -14,7 +14,7 @@
 // =============================================================================
 
 #pragma once
-namespace Tycho {
+namespace tycho::utils {
 
 /// <summary>
 /// Attempts to calculate number of physical CPU cores
@@ -22,4 +22,4 @@ namespace Tycho {
 /// <returns></returns>
 int get_core_count();
 
-} // namespace Tycho
+} // namespace tycho::utils

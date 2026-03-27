@@ -149,7 +149,7 @@ BENCHMARK(BM_AllocateRun_Nested);
 #include "tycho/detail/utils/thread_pool.h"
 
 static void BM_ThreadPool_Dispatch(benchmark::State &state) {
-    Tycho::ThreadPool pool(1);
+    tycho::utils::ThreadPool pool(1);
     for (auto _ : state) {
         auto fut = pool.submit_task([] { return 42; });
         int val = fut.get();
@@ -160,7 +160,7 @@ BENCHMARK(BM_ThreadPool_Dispatch);
 
 static void BM_ThreadPool_BatchDispatch(benchmark::State &state) {
     int N = static_cast<int>(state.range(0));
-    Tycho::ThreadPool pool(4);
+    tycho::utils::ThreadPool pool(4);
     for (auto _ : state) {
         std::vector<std::future<int>> futures;
         futures.reserve(N);
@@ -178,13 +178,13 @@ BENCHMARK(BM_ThreadPool_BatchDispatch)->Arg(10)->Arg(100);
 
 static void BM_ThreadPool_ParallelSequence(benchmark::State &state) {
     int N = static_cast<int>(state.range(0));
-    int prev = Tycho::get_num_threads();
-    Tycho::set_num_threads(4);
+    int prev = tycho::utils::get_num_threads();
+    tycho::utils::set_num_threads(4);
     for (auto _ : state) {
         std::atomic<int> counter{0};
-        Tycho::parallel_sequence(N, [&counter](int) { counter.fetch_add(1); });
+        tycho::utils::parallel_sequence(N, [&counter](int) { counter.fetch_add(1); });
         benchmark::DoNotOptimize(counter.load());
     }
-    Tycho::set_num_threads(prev);
+    tycho::utils::set_num_threads(prev);
 }
 BENCHMARK(BM_ThreadPool_ParallelSequence)->Arg(10)->Arg(100);
