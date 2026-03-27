@@ -15,12 +15,12 @@
 
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
 
-#include "tycho/detail/vf/scaling/auto_scaling_utils.h"
+#include "PyDocString/OptimalControl/ode_phase_base_doc.h"
 #include "tycho/detail/optimal_control/transcription/lgl_control_splines.h"
 #include "tycho/detail/optimal_control/transcription/lgl_integrals.h"
 #include "tycho/detail/optimal_control/transcription/mesh_spacing_constraints.h"
-#include "PyDocString/OptimalControl/ode_phase_base_doc.h"
 #include "tycho/detail/vf/common/value_lock.h"
+#include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
 int Tycho::ODEPhaseBase::addBoundaryValue(RegionType reg, VarIndexType args,
                                           const std::variant<double, VectorXd> &value_t,

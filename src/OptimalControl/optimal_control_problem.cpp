@@ -15,8 +15,8 @@
 
 #include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 
-#include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 #include "PyDocString/OptimalControl/optimal_control_problem_doc.h"
+#include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
 Eigen::VectorXd Tycho::OptimalControlProblem::get_input_scale(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,

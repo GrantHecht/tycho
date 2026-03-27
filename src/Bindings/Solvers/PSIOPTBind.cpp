@@ -14,8 +14,8 @@
 // =============================================================================
 
 #include "PSIOPTBind.h"
-#include "tycho/detail/solvers/psiopt.h"
 #include "PyDocString/Solvers/psiopt_doc.h"
+#include "tycho/detail/solvers/psiopt.h"
 
 using namespace Tycho;
 

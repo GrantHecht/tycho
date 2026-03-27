@@ -13,9 +13,9 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "tycho_optimal_control.h"
 #include "MeshIterateInfoBind.h"
 #include "ODEArgumentsBind.h"
+#include "tycho_optimal_control.h"
 
 #include "tycho/detail/integrators/integrator.h"
 

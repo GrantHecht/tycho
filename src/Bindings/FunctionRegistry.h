@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "tycho/detail/vf/type_erasure/generic_function.h"
 #include "pch.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 
 namespace Tycho {
 

@@ -15,11 +15,11 @@
 
 #include "python_arg_parsing.h"
 
-#include "tycho/detail/vf/common/common_functions.h"
 #include "FunctionRegistry.h"
+#include "tycho/detail/vf/common/common_functions.h"
+#include "tycho/detail/vf/core/vector_function.h"
 #include "tycho/detail/vf/operators/math_overloads.h"
 #include "tycho/detail/vf/operators/operator_overloads.h"
-#include "tycho/detail/vf/core/vector_function.h"
 #include "tycho/detail/vf/type_erasure/generic_comparative.h"
 #include "tycho/detail/vf/type_erasure/generic_conditional.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"

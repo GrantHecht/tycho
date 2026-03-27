@@ -29,11 +29,11 @@ template <class Func> struct TychoBind<IOScaled<Func>> {
 };
 } // namespace Tycho
 
+#include "Utils/fmtlib.h"
 #include "tycho/detail/optimal_control/interp/interp_table_1d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_2d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_3d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_4d.h"
-#include "Utils/fmtlib.h"
 
 // Out-of-class definitions for InterpTable binding functions.
 // Included here after all InterpTable headers so all types are complete.
