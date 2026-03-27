@@ -670,7 +670,7 @@ For composite functions (`NestedFunction`, `StackedOutputs`, etc.), `IsVectoriza
 
 ## 8. Built-In Function Types
 
-Tycho provides a rich library of pre-built VectorFunction types. All live under `src/VectorFunctions/CommonFunctions/`.
+Tycho provides a rich library of pre-built VectorFunction types. They live under `include/tycho/detail/vf/` in the `expressions/`, `operators/`, `common/`, `scaling/`, and `type_erasure/` subdirectories.
 
 ### Fundamental Building Blocks
 
@@ -1407,51 +1407,65 @@ VectorFunction<Derived,IR,OR,Jm,Hm>         ** BASE FOR ALL USER TYPES **
 ### File Organization
 
 ```
+include/tycho/
+    vector_functions.h            Public API umbrella header (includes all detail/vf/ headers)
+    typedefs.h                    Eigen type aliases, SuperScalarType
+
+include/tycho/detail/vf/
+    core/                         Core VectorFunction infrastructure
+        vector_function.h         Top-level struct + VectorExpression + BUILD_* macros
+        computable_base.h         compute() dispatch, constraints() solver interface
+        computable.h              Minimal wrapper, OR=1 specialization
+        dense_function_base.h     Jacobian ops, indexing, math, KKT fill
+        dense_scalar_function_base.h  objective/gradient/hessian interface (OR=1)
+        dense_function.h          DenseFunction -> DenseScalarFunctionBase routing
+        function_domains.h        SingleDomain, CompositeDomain, DomainHolder
+        input_output_size.h       Static/dynamic size storage
+        functional_flags.h        ParsedIOFlags, VarTypes enums
+        assignment_types.h        DirectAssignment, PlusEqualsAssignment, etc.
+        dense_function_operations.h  right_jacobian_product implementations
+        dense_function_specs.h    Concepts for compute/jacobian interfaces
+    derivatives/
+        dense_derivatives.h       DenseDerivativeMode enum, derivative layer structs
+        detect_super_scalar.h     Is_SuperScalar<T> trait
+        dense_autodiff_fwd.h      Autodiff Jacobian/Hessian via dual numbers
+        dense_fdiff_fwd.h         Forward finite-difference derivatives
+        dense_fdiff_cent_array.h  Central finite-difference derivatives
+    expressions/
+        nested_function.h         Function composition (chain rule)
+        segment.h                 Segment, Arguments
+        stacked.h                 StackedOutputs (vertical concatenation)
+        summation.h               Sum across functions
+        parsed_input.h            ParsedInput expression
+        for.h                     For-loop expression
+        lambda_function.h         Lambda-wrapped VectorFunction
+        function_holder.h         Type-erased function holder
+    common/
+        constant.h                Constant value functions
+        elements.h                Extract non-contiguous elements
+        value.h                   Scalar value functions
+    operators/
+        operator_overloads.h      +, -, *, / on VectorFunctions
+        math_overloads.h          sin, cos, sqrt, etc. on scalar functions
+        cwise_operators.h         CwiseSin, CwiseCos, CwiseTan, etc.
+        norms.h                   Norm, SquaredNorm, InverseNorm, etc.
+        normalized.h              Normalized, NormalizedPower
+        binary_math.h             crossProduct, dotProduct, cwiseProduct
+        cwise_sum.h               Sum all outputs to a scalar
+        cwise_product.h           Element-wise function product
+        matrix_function.h         ColMatrix, RowMatrix, matrix operations
+    scaling/
+        scaled.h                  Scaled, RowScaled, StaticScaled, MatrixScaled
+        io_scaled.h               Input/output scaling wrappers
+        padded.h                  PaddedOutput
+        auto_scaling_utils.h      AutoScale utilities
+    type_erasure/
+        generic_function.h        GenericFunction<IR,OR> (type erasure wrapper)
+        gf_type_erasure.h         rubber_types concept implementations
+        conditional.h             Conditional/ifelse logic
+        comparative.h             Comparative/conditional dispatch
+
 src/VectorFunctions/
-    VectorFunction.h              Top-level struct + VectorExpression + BUILD_* macros
-    ComputableBase.h              compute() dispatch, constraints() solver interface
-    Computable.h                  Minimal wrapper, OR=1 specialization
-    DenseFunctionBase.h           ~1200 lines: Jacobian ops, indexing, math, KKT fill
-    DenseScalarFunctionBase.h     objective/gradient/hessian interface (OR=1)
-    DenseFunction.h               DenseFunction -> DenseScalarFunctionBase routing
-    DenseDerivatives.h            DenseDerivativeMode enum, derivative layer structs
-    InputOuputSize.h              Static/dynamic size storage
-    FunctionDomains.h             SingleDomain, CompositeDomain, DomainHolder
-    IndexingData.h                SolverIndexingData (Vindex, Cindex, KKT locations)
-    FunctionalFlags.h             ParsedIOFlags, VarTypes enums
-    AssigmentTypes.h              DirectAssignment, PlusEqualsAssignment, etc.
-    DetectSuperScalar.h           Is_SuperScalar<T> trait
-    OperatorOverloads.h           +, -, *, / on VectorFunctions
-    MathOverloads.h               sin, cos, sqrt, etc. on scalar functions
-    BinaryMath.h                  crossProduct, dotProduct, cwiseProduct
-    DenseFunctionOperations.h     right_jacobian_product implementations
-
-    DenseDifferentiation/
-        DenseAutodiffFwd.h        Autodiff Jacobian/Hessian via dual numbers
-        DenseFDiffFwd.h           Forward finite-difference derivatives
-        DenseFDiffCentArray.h     Central finite-difference derivatives
-
-    CommonFunctions/
-        Segment.h                 Segment, Arguments
-        Scaled.h                  Scaled, RowScaled, StaticScaled, MatrixScaled
-        NestedFunction.h          Function composition (chain rule)
-        Stacked.h                 StackedOutputs (vertical concatenation)
-        CwiseOperators.h          CwiseSin, CwiseCos, CwiseTan, etc.
-        Norms.h                   Norm, SquaredNorm, InverseNorm, etc.
-        Normalized.h              Normalized, NormalizedPower
-        Constant.h                Constant value functions
-        Elements.h                Extract non-contiguous elements
-        CwiseSum.h                Sum all outputs to a scalar
-        CwiseProduct.h            Element-wise function product
-        Conditional.h             Conditional/ifelse logic
-
-    VectorFunctionTypeErasure/
-        GenericFunction.h         GenericFunction<IR,OR> (type erasure wrapper)
-        DenseFunctionSpecs.h      rubber_types concept for compute/jacobian
-        SizingSpecs.h             rubber_types concept for IRows/ORows
-        SolverInterfaceSpecs.h    rubber_types concept for constraints/objective
-        DeepCopySpecs.h           rubber_types deep copy between GenericFunction variants
-
-src/TypeDefs/
-    EigenTypes.h                  SuperScalarType, DefaultSuperScalar definitions
+    tycho_vector_functions.h      Aggregate include (pulls in all detail/vf/ headers)
+    function_domains.cpp          FunctionDomains implementation
 ```
