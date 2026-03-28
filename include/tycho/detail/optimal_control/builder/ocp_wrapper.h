@@ -17,7 +17,7 @@
 namespace tycho {
 
 using oc::OptimalControlProblem;
-// Solvers types — will be tycho::solvers:: after Task 8
+// Solvers types
 using tycho::solvers::PSIOPT;
 
 /// Thin wrapper around OptimalControlProblem with Phase-aware overloads.

@@ -48,7 +48,7 @@
 
 namespace tycho::oc {
 
-// Solvers types — will be Tycho::solvers:: after Task 8
+// Solvers types
 using tycho::solvers::ConstraintInterface;
 using tycho::solvers::ObjectiveInterface;
 using tycho::solvers::NonLinearProgram;
