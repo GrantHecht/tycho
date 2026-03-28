@@ -74,9 +74,9 @@ class AirPlane(oc.ODEBase):
         XtU = oc.ODEArguments(4, 1)
 
         # Altitude,velocity,flight path angle, mass
-        h, v, fpa, mass = XtU.XVec().tolist()
+        h, v, fpa, mass = XtU.x_vec().tolist()
         # Angle of attack
-        alpha = XtU.UVar(0)
+        alpha = XtU.u_var(0)
 
         rho = rhoTab(h * Lstar) / Rhostar
         sos = sosTab(h * Lstar) / Vstar
@@ -192,25 +192,25 @@ if __name__ == "__main__":
     ode = AirPlane()
 
     phase = ode.phase("LGL5", Traj, 50)
-    phase.setControlMode("HighestOrderSpline")
-    phase.addBoundaryValue("First", range(0, 5), [ht0, vt0, fpat0, mass0, 0])
+    phase.set_control_mode("HighestOrderSpline")
+    phase.add_boundary_value("First", range(0, 5), [ht0, vt0, fpat0, mass0, 0])
 
-    phase.addLUVarBound("Path", 0, hmin, hmax)
-    phase.addLUVarBound("Path", 1, vmin, vmax)
-    phase.addLUVarBound("Path", 2, fpamin, fpamax)
-    phase.addLowerVarBound("Last", 3, massmin)
-    phase.addLUVarBound("Path", 5, alphamin, alphamax)
-    phase.addBoundaryValue("Last", range(0, 3), [htf, vtf, fpatf])
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_lu_var_bound("Path", 0, hmin, hmax)
+    phase.add_lu_var_bound("Path", 1, vmin, vmax)
+    phase.add_lu_var_bound("Path", 2, fpamin, fpamax)
+    phase.add_lower_var_bound("Last", 3, massmin)
+    phase.add_lu_var_bound("Path", 5, alphamin, alphamax)
+    phase.add_boundary_value("Last", range(0, 3), [htf, vtf, fpatf])
+    phase.add_delta_time_objective(1.0)
 
-    phase.setAdaptiveMesh(True)
-    phase.optimizer.PrintLevel = 1
-    phase.setNumPartitions(8, 8)
-    phase.setMeshTol(1.0e-7)
+    phase.set_adaptive_mesh(True)
+    phase.optimizer.print_level = 1
+    phase.set_num_partitions(8, 8)
+    phase.set_mesh_tol(1.0e-7)
     phase.optimize()
 
-    Traj = phase.returnTraj()
-    Tab = phase.returnTrajTable()
+    Traj = phase.return_traj()
+    Tab = phase.return_traj_table()
 
     print("Minimum Time to Climb:{0:.2f}s".format(Traj[-1][4] * Tstar))
 

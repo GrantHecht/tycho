@@ -70,9 +70,9 @@ class AirPlane(oc.ODEBase):
         XtU = oc.ODEArguments(4, 1)
 
         # Altitude,velocity,flight path angle, mass
-        h, v, fpa, mass = XtU.XVec().tolist()
+        h, v, fpa, mass = XtU.x_vec().tolist()
         # Angle of attack
-        alpha = XtU.UVar(0)
+        alpha = XtU.u_var(0)
 
         rho = rhoTab(h)
         sos = sosTab(h)
@@ -106,7 +106,7 @@ class AirPlane(oc.ODEBase):
         Vgroups["mass"] = mass
         Vgroups["fpa"] = fpa
         Vgroups[("alpha", "AoA")] = alpha
-        Vgroups[("t", "time")] = XtU.TVar()
+        Vgroups[("t", "time")] = XtU.t_var()
 
         super().__init__(ode, 4, 1, Vgroups=Vgroups)
 
@@ -196,30 +196,30 @@ if __name__ == "__main__":
     #########################
 
     phase = ode.phase("LGL3", Traj, 50)
-    phase.setAutoScaling(True)
-    phase.setUnits(h=Lstar, v=Vstar, mass=Mstar, t=Tstar)
+    phase.set_auto_scaling(True)
+    phase.set_units(h=Lstar, v=Vstar, mass=Mstar, t=Tstar)
 
-    phase.setControlMode("HighestOrderSpline")
-    phase.addBoundaryValue("First", range(0, 5), [ht0, vt0, fpat0, mass0, 0])
+    phase.set_control_mode("HighestOrderSpline")
+    phase.add_boundary_value("First", range(0, 5), [ht0, vt0, fpat0, mass0, 0])
 
-    phase.addLUVarBound("Path", "h", hmin, hmax)
-    phase.addLUVarBound("Path", "v", vmin, vmax)
-    phase.addLUVarBound("Path", "fpa", fpamin, fpamax)
-    phase.addLowerVarBound("Last", "mass", massmin)
-    phase.addLUVarBound("Path", "alpha", alphamin, alphamax)
-    phase.addBoundaryValue("Last", ["h", "v", "fpa"], [htf, vtf, fpatf])
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_lu_var_bound("Path", "h", hmin, hmax)
+    phase.add_lu_var_bound("Path", "v", vmin, vmax)
+    phase.add_lu_var_bound("Path", "fpa", fpamin, fpamax)
+    phase.add_lower_var_bound("Last", "mass", massmin)
+    phase.add_lu_var_bound("Path", "alpha", alphamin, alphamax)
+    phase.add_boundary_value("Last", ["h", "v", "fpa"], [htf, vtf, fpatf])
+    phase.add_delta_time_objective(1.0)
 
-    phase.optimizer.PrintLevel = 1
-    phase.setNumPartitions(8, 8)
+    phase.optimizer.print_level = 1
+    phase.set_num_partitions(8, 8)
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
-    phase.setAdaptiveMesh(True)
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
-    phase.setMeshTol(1.0e-7)
+    phase.set_adaptive_mesh(True)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_mesh_tol(1.0e-7)
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     print("Minimum Time to Climb:{0:.2f}s".format(Traj[-1][4]))
 

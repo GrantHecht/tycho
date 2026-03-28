@@ -67,9 +67,9 @@ class ShuttleReentry(oc.ODEBase):
         ############################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        h, theta, v, gamma, psi = XtU.XVec().tolist()
+        h, theta, v, gamma, psi = XtU.x_vec().tolist()
 
-        alpha, beta = XtU.UVec().tolist()
+        alpha, beta = XtU.u_vec().tolist()
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -110,7 +110,7 @@ class ShuttleReentry(oc.ODEBase):
         Vgroups["psi"] = psi
         Vgroups[("alpha", "AoA")] = alpha
         Vgroups["beta"] = beta
-        Vgroups[("t", "time")] = XtU.TVar()
+        Vgroups[("t", "time")] = XtU.t_var()
 
         ##############################################################
         super().__init__(ode, Xvars, Uvars, Vgroups=Vgroups)  ## Pass to CTor
@@ -223,49 +223,49 @@ if __name__ == "__main__":
     phase = ode.phase("LGL5", TrajIG, 40)
 
     ############################
-    phase.setAutoScaling(True)
+    phase.set_auto_scaling(True)
     ## Declare canonical units for state time, control, and parm variables
     ## All default to 1, which is fine for all of our angular variables
     ## Only need to scale altitude, velocity and time.
-    phase.setUnits(h=Lstar, v=Vstar, t=Tstar)
+    phase.set_units(h=Lstar, v=Vstar, t=Tstar)
     ###########################
 
-    phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
+    phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
 
-    phase.addLUVarBound("Path", "theta", np.deg2rad(-89.0), np.deg2rad(89.0))
-    phase.addLUVarBound("Path", "gamma", np.deg2rad(-89.0), np.deg2rad(89.0))
+    phase.add_lu_var_bound("Path", "theta", np.deg2rad(-89.0), np.deg2rad(89.0))
+    phase.add_lu_var_bound("Path", "gamma", np.deg2rad(-89.0), np.deg2rad(89.0))
 
-    phase.addLUVarBound("Path", "AoA", np.deg2rad(-90.0), np.deg2rad(90.0))
-    phase.addLUVarBound("Path", "beta", np.deg2rad(-90.0), np.deg2rad(1.0))
+    phase.add_lu_var_bound("Path", "AoA", np.deg2rad(-90.0), np.deg2rad(90.0))
+    phase.add_lu_var_bound("Path", "beta", np.deg2rad(-90.0), np.deg2rad(1.0))
 
-    phase.addUpperDeltaTimeBound(tmax, 1.0)
+    phase.add_upper_delta_time_bound(tmax, 1.0)
 
-    phase.addBoundaryValue("Back", ["h", "v", "gamma"], [htf, vtf, gammatf])
+    phase.add_boundary_value("Back", ["h", "v", "gamma"], [htf, vtf, gammatf])
 
-    phase.addDeltaVarObjective("theta", -1.0)
+    phase.add_delta_var_objective("theta", -1.0)
 
-    phase.setNumPartitions(8, 8)
+    phase.set_num_partitions(8, 8)
 
-    phase.optimizer.set_SoeLSMode("L1")
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_PrintLevel(1)
+    phase.optimizer.set_soe_ls_mode("L1")
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_print_level(1)
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
-    phase.setAdaptiveMesh(True)
-    phase.setMeshTol(1.0e-7)
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_adaptive_mesh(True)
+    phase.set_mesh_tol(1.0e-7)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     phase.solve_optimize()
 
     # Returns unscaled trajectory original units
-    Traj1 = phase.returnTraj()
+    Traj1 = phase.return_traj()
 
     ## Add in Heating Rate Constraint
-    phase.addUpperFuncBound("Path", QFunc(), ["h", "v", "alpha"], Qlimit)
+    phase.add_upper_func_bound("Path", QFunc(), ["h", "v", "alpha"], Qlimit)
 
     phase.optimize()
 
-    Traj2 = phase.returnTraj()
+    Traj2 = phase.return_traj()
 
     print(
         "Final Time:",

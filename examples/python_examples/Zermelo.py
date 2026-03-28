@@ -116,26 +116,26 @@ def navigate(A, B, vM=1, wF=uniformWind):
 
     # 2. Initialize phase
     phase = Zermelo(vM, wF).phase(tModes.LGL3)
-    phase.NumPartitions = 10
+    phase.num_partitions = 10
 
-    phase.setTraj(trajG, nSeg)
+    phase.set_traj(trajG, nSeg)
 
     # 3. Enforce start and end points
-    phase.addBoundaryValue("Front", [0, 1], A)
-    phase.addBoundaryValue("Front", [2], [0.0])
-    phase.addBoundaryValue("Back", [0, 1], B)
+    phase.add_boundary_value("Front", [0, 1], A)
+    phase.add_boundary_value("Front", [2], [0.0])
+    phase.add_boundary_value("Back", [0, 1], B)
 
-    phase.addLUVarBound("Path", 3, -np.pi, np.pi, 1)
+    phase.add_lu_var_bound("Path", 3, -np.pi, np.pi, 1)
 
     # 4. Add objective function
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_delta_time_objective(1.0)
 
     # 5. Optimize
-    phase.optimizer.set_EContol(tol)
-    phase.optimizer.set_KKTtol(tol)
+    phase.optimizer.set_eq_con_tol(tol)
+    phase.optimizer.set_kkt_tol(tol)
     phase.solve_optimize()
 
-    return phase.returnTraj()
+    return phase.return_traj()
 
 
 ################################################################################

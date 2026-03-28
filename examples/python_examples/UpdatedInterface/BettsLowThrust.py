@@ -440,15 +440,15 @@ class LTModel(oc.ODEBase):
         XtUP = oc.ODEArguments(7, 3, 1)
 
         ## MEEs and vehicle weight
-        MEEs = XtUP.XVec().head(6)
-        ww = XtUP.XVar(6)
+        MEEs = XtUP.x_vec().head(6)
+        ww = XtUP.x_var(6)
 
         p, f, g, h, k, L = MEEs.tolist()  # Assumed order
 
         ## Control Direction in RTN
-        U = XtUP.UVec().head3().normalized()
+        U = XtUP.u_vec().head3().normalized()
         ## Static throttle parameter
-        tau = XtUP.PVar(0)
+        tau = XtUP.p_var(0)
         wwdot = -T * (1 + 0.01 * tau) / (Isp)
         acc_T = gs * T * (1 + 0.01 * tau) * U / ww
 
@@ -469,9 +469,9 @@ class LTModel(oc.ODEBase):
         Vgroups["k"] = k
         Vgroups["L"] = L
         Vgroups["MEEs"] = MEEs
-        Vgroups["U"] = XtUP.UVec()
+        Vgroups["U"] = XtUP.u_vec()
         Vgroups["tau"] = tau
-        Vgroups["t"] = XtUP.TVar()
+        Vgroups["t"] = XtUP.t_var()
         Vgroups["w"] = ww
 
         #############################################################
@@ -518,52 +518,52 @@ if __name__ == "__main__":
     # integ = ode.integrator(1,MEEProgradeUlaw(),["p","f","g","h","k","L"])
     # integ = ode.integrator(1,MEEProgradeUlaw(),range(0,6))
 
-    integ.setAbsTol(1.0e-12)
-    integ.setRelTol(1.0e-5)
+    integ.set_abs_tol(1.0e-12)
+    integ.set_rel_tol(1.0e-5)
 
     IG = integ.integrate_dense(X0, tfig)
 
     #############################################
 
     phase = ode.phase("LGL5", IG, 16)
-    phase.setAutoScaling(True)
+    phase.set_auto_scaling(True)
 
     ## If you need to make units vector manually
     Units = np.ones((12))  # Size of ODE Input
     Units[0] = Lstar
     Units[6] = Fstar
     Units[7] = Tstar
-    phase.setUnits(Units)
+    phase.set_units(Units)
     ## Same as above
     # Units = ode.make_units(p=Lstar,w=Fstar,t=Tstar)
-    # phase.setUnits(Units)
+    # phase.set_units(Units)
     ## Or if you have named variables in your ODE
-    # phase.setUnits(p=Lstar,w=Fstar,t=Tstar)
+    # phase.set_units(p=Lstar,w=Fstar,t=Tstar)
 
-    phase.addBoundaryValue("Front", ["MEEs", "w", "t"], X0[0:8])
-    phase.addEqualCon("Path", Args(3).norm() - 1, "U")
+    phase.add_boundary_value("Front", ["MEEs", "w", "t"], X0[0:8])
+    phase.add_equal_con("Path", Args(3).norm() - 1, "U")
     # Dont use control splines when placing equality path constraints on controls
-    phase.setControlMode("NoSpline")
-    phase.addLUFuncBound("Path", RadFunc(mu), "MEEs", Re, 10 * Re)
+    phase.set_control_mode("NoSpline")
+    phase.add_lu_func_bound("Path", RadFunc(mu), "MEEs", Re, 10 * Re)
 
-    phase.addEqualCon("Back", EqBCon(), "MEEs")
-    phase.addInequalCon("Back", IqBCon(), "MEEs")
+    phase.add_equal_con("Back", EqBCon(), "MEEs")
+    phase.add_inequal_con("Back", IqBCon(), "MEEs")
 
-    phase.addLUVarBound("ODEParams", "tau", -50, 0)
-    phase.addLowerVarBound("Back", "w", 0.05)
-    phase.addValueObjective("Back", 6, -1.0)
-    phase.setNumPartitions(8, 8)
-    phase.optimizer.PrintLevel = 2
-    phase.optimizer.set_EContol(1.0e-9)
+    phase.add_lu_var_bound("ODEParams", "tau", -50, 0)
+    phase.add_lower_var_bound("Back", "w", 0.05)
+    phase.add_value_objective("Back", 6, -1.0)
+    phase.set_num_partitions(8, 8)
+    phase.optimizer.print_level = 2
+    phase.optimizer.set_eq_con_tol(1.0e-9)
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
-    phase.setAdaptiveMesh(True)
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
-    phase.setMeshTol(1.0e-7)
+    phase.set_adaptive_mesh(True)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_mesh_tol(1.0e-7)
 
     phase.optimize_solve()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     wf, tf, tauf = ode.get_vars(["w", "t", "tau"], Traj[-1])
 

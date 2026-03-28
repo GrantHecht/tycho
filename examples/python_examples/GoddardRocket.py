@@ -59,8 +59,8 @@ class GoddardRocket(oc.ODEBase):
     def __init__(self, sigma, c, h_ref, Tmag, g):
         ############################################################
         args = oc.ODEArguments(3, 1)
-        h, v, m = args.XVec().tolist()
-        u = args.UVar(0)
+        h, v, m = args.x_vec().tolist()
+        u = args.u_var(0)
 
         hdot = v
 
@@ -118,12 +118,12 @@ if __name__ == "__main__":
 
     ##############################################################################
     phase = ode.phase("LGL3", TrajIG, 128)
-    phase.addBoundaryValue("Front", range(0, 4), TrajIG[0][0:4])
-    phase.addLUVarBound("Path", 4, 0.0, 1.0, 1.0)
-    phase.addValueObjective("Back", 0, -1.0)
-    phase.addBoundaryValue("Back", [1, 2], [0, mf])
+    phase.add_boundary_value("Front", range(0, 4), TrajIG[0][0:4])
+    phase.add_lu_var_bound("Path", 4, 0.0, 1.0, 1.0)
+    phase.add_value_objective("Back", 0, -1.0)
+    phase.add_boundary_value("Back", [1, 2], [0, mf])
     phase.optimize()
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
     ###############################################################################
 
     """
@@ -138,36 +138,36 @@ if __name__ == "__main__":
     TrajIG3 = TrajIG[2 * n : -1]
 
     phase1 = ode.phase("LGL3", TrajIG1, 32)
-    phase1.addBoundaryValue("Front", range(0, 4), TrajIG[0][0:4])
-    phase1.addBoundaryValue("Path", [4], [1])
+    phase1.add_boundary_value("Front", range(0, 4), TrajIG[0][0:4])
+    phase1.add_boundary_value("Path", [4], [1])
 
     phase2 = ode.phase("LGL3", TrajIG2, 32)
     # PathCon makse Control splines redundant for LGL>3
-    phase2.setControlMode("NoSpline")
-    phase2.addLUVarBound("Path", 4, 0.0, 1.0, 1.0)
-    phase2.addEqualCon("Path", PathCon(sigma, c, h_ref, Tmag, g), [0, 1, 2, 4])
+    phase2.set_control_mode("NoSpline")
+    phase2.add_lu_var_bound("Path", 4, 0.0, 1.0, 1.0)
+    phase2.add_equal_con("Path", PathCon(sigma, c, h_ref, Tmag, g), [0, 1, 2, 4])
 
     phase3 = ode.phase("LGL3", TrajIG3, 32)
-    phase3.addBoundaryValue("Path", [4], [0])
-    phase3.addBoundaryValue("Back", [1, 2], [0, mf])
-    phase3.addValueObjective("Back", 0, -1.0)
+    phase3.add_boundary_value("Path", [4], [0])
+    phase3.add_boundary_value("Back", [1, 2], [0, mf])
+    phase3.add_value_objective("Back", 0, -1.0)
 
     ocp = oc.OptimalControlProblem()
-    ocp.addPhase(phase1)
-    ocp.addPhase(phase2)
-    ocp.addPhase(phase3)
+    ocp.add_phase(phase1)
+    ocp.add_phase(phase2)
+    ocp.add_phase(phase3)
 
-    ocp.addForwardLinkEqualCon(phase1, phase3, range(0, 4))
+    ocp.add_forward_link_equal_con(phase1, phase3, range(0, 4))
 
-    phase1.addLowerDeltaTimeBound(0)
-    phase2.addLowerDeltaTimeBound(0)
-    phase3.addLowerDeltaTimeBound(0)
+    phase1.add_lower_delta_time_bound(0)
+    phase2.add_lower_delta_time_bound(0)
+    phase3.add_lower_delta_time_bound(0)
 
     ocp.optimize()
 
     ##############################################################################
 
-    Traj2 = phase1.returnTraj() + phase2.returnTraj() + phase3.returnTraj()
+    Traj2 = phase1.return_traj() + phase2.return_traj() + phase3.return_traj()
 
     fig, axs = plt.subplots(4, 1)
 

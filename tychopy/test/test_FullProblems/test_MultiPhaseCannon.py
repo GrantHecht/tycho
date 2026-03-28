@@ -102,7 +102,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
 
         ode = Cannon(CD, RhoAir, RhoIron, h_scale, g)
         integ = ode.integrator(0.01)
-        integ.Adaptive = True
+        integ.adaptive = True
 
         IG = np.zeros((6))
         IG[0] = v0

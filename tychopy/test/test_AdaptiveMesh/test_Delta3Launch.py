@@ -103,8 +103,8 @@ class Delta3(oc.ODEBase):
         ####################################################
         args = oc.ODEArguments(7, 3)
 
-        r = args.XVec().head3()
-        v = args.XVec().segment3(3)
+        r = args.x_vec().head3()
+        v = args.x_vec().segment3(3)
         m = args.XVar(6)
         u = args.tail3().normalized()
 
@@ -267,11 +267,11 @@ class test_Delta3Launch(unittest.TestCase):
         for phase in ocp.Phases:
             phase.MeshErrorEstimator = errest
             phase.MeshErrFactor = 100
-            phase.MeshTol = 1.0e-6
+            phase.mesh_tol = 1.0e-6
 
         Flag = ocp.optimize()
 
-        Mconv = ocp.MeshConverged
+        Mconv = ocp.mesh_converged
 
         Phase4Traj = phase4.return_traj()
 

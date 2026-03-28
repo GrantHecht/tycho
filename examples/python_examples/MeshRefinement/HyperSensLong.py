@@ -36,8 +36,8 @@ class HyperSens(oc.ODEBase):
     def __init__(self, cubed=False):
         ################################
         XtU = oc.ODEArguments(1, 1)
-        x = XtU.XVar(0)
-        u = XtU.UVar(0)
+        x = XtU.x_var(0)
+        u = XtU.u_var(0)
 
         xdot = -(x) + u
         if cubed:
@@ -74,26 +74,26 @@ if __name__ == "__main__":
     phase = ode.phase("LGL7", TrajIG, nsegs)  # LGL7 recommended for cubed version
 
     # A knob to turn
-    phase.setControlMode("NoSpline")
+    phase.set_control_mode("NoSpline")
 
     # Boundary Conditions
-    phase.addBoundaryValue("First", [0, 1], [xt0, 0])
-    phase.addBoundaryValue("Last", [0, 1], [xtf, tf])
+    phase.add_boundary_value("First", [0, 1], [xt0, 0])
+    phase.add_boundary_value("Last", [0, 1], [xtf, tf])
 
     # Objective
-    phase.addIntegralObjective(Args(2).squared_norm() / 2, [0, 2])
+    phase.add_integral_objective(Args(2).squared_norm() / 2, [0, 2])
 
     # Some loose bounds on variables
-    phase.addLUVarBound("Path", 0, -50, 50)
-    phase.addLUVarBound("Path", 2, -50, 50)
+    phase.add_lu_var_bound("Path", 0, -50, 50)
+    phase.add_lu_var_bound("Path", 2, -50, 50)
 
     # Enable line searches
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_SoeLSMode("L1")
-    phase.optimizer.set_MaxLSIters(2)
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_soe_ls_mode("L1")
+    phase.optimizer.set_max_ls_iters(2)
 
-    phase.optimizer.PrintLevel = 2
-    phase.setNumPartitions(1, 1)
+    phase.optimizer.print_level = 2
+    phase.set_num_partitions(1, 1)
 
     """
     For tf=10000.0 this problem is so sensitve that the static pivoting order 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     Comment it out , enable console printing, and watch the number of peturbed pivots (PPS)
     and flying red colors to see what im talking about
     """
-    phase.optimizer.set_QPOrderingMode("MINDEG")
+    phase.optimizer.set_qp_ordering_mode("MINDEG")
 
     ###########################################################################
     ############# The New Adaptive Mesh Interface #############################
@@ -113,46 +113,46 @@ if __name__ == "__main__":
     behaves as it did before. When enabled, after solving the first mesh, we utilize an adaptive
     stragegy that calcuates the number and spacing segments to meet a specified toelrance
     """
-    phase.setAdaptiveMesh(True)
+    phase.set_adaptive_mesh(True)
 
     ## Set Error tolerance on mesh:
-    phase.setMeshTol(1.0e-7)  # default = 1.0e-6
+    phase.set_mesh_tol(1.0e-7)  # default = 1.0e-6
     ## Make sure to set optimizer Econtol to be the same as or smaller than MeshTol
-    phase.optimizer.set_EContol(1.0e-7)
+    phase.optimizer.set_eq_con_tol(1.0e-7)
 
     ## Set Max number of mesh iterations:
-    phase.setMaxMeshIters(10)  # default = 10
+    phase.set_max_mesh_iters(10)  # default = 10
 
     """
     Specify the method used to estimate the error in each segment of the current trajectory
     """
     ##Use the polynomial differencing scheme of deboor
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.DEBOOR)  # default
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.DEBOOR)  # default
 
     ##Use the phase's explicit integrator, set the phases integrator tolerances and step sizes appropraitely for good performance
-    # phase.setMeshErrorEstimator('integrator')
+    # phase.set_mesh_error_estimator('integrator')
 
     """
     # Specify which type of error must be less than MeshTol for the problem to be converged
     """
     ##'max' will make sure that the max error in any of the segments is less than MeshTol
-    phase.setMeshErrorCriteria(oc.MeshErrorAggregation.MAX)  # default
+    phase.set_mesh_error_criteria(oc.MeshErrorAggregation.MAX)  # default
 
     ##'avg' will make sure the average error accross all segments is less than MeshTol
-    # phase.setMeshErrorCriteria('avg')
+    # phase.set_mesh_error_criteria('avg')
 
     ## 'endtoend' will reininegrate the entire control history and make sure the max error between
     ## the collocated and integrated final states is less than MeshTol
-    # phase.setMeshErrorCriteria('endtoend')
+    # phase.set_mesh_error_criteria('endtoend')
 
     """
     Parameters controlling how quickly/agressively the mesh can change between iterates
     """
     ## Maximum multiple by which the # of segments can be increased between iterations
-    phase.setMeshIncFactor(5.0)  # default = 5
+    phase.set_mesh_inc_factor(5.0)  # default = 5
 
     ## Minimum multiple by which the # of segments can be reduced between iterations
-    phase.setMeshRedFactor(0.5)  # default = .5
+    phase.set_mesh_red_factor(0.5)  # default = .5
 
     """
     Factor by which we exagerate the error in each segment when calculating the needed number
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     overprovison the # of segments, When using endtoend convergance criteria and/or the low order collocation methods, be
     very agressive with this parameter (=100)
     """
-    phase.setMeshErrFactor(10.0)  # default = 10
+    phase.set_mesh_err_factor(10.0)  # default = 10
 
     """
     As before, flag returned indicates whether the last call to psipot converged or not, it does
@@ -168,13 +168,13 @@ if __name__ == "__main__":
     """
     flag = phase.optimize_solve()
 
-    if phase.MeshConverged:
+    if phase.mesh_converged:
         print("Fly it")
     else:
         print("Dont fly it")
 
     #######################################################
-    TT = np.array(phase.returnTraj()).T
+    TT = np.array(phase.return_traj()).T
 
     fig = plt.figure()
 

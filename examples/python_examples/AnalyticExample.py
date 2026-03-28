@@ -34,8 +34,8 @@ class ODE(oc.ODEBase):
         UVars = 1
 
         args = oc.ODEArguments(XVars, UVars)
-        x = args.XVar(0)
-        u = args.UVar(0)
+        x = args.x_var(0)
+        u = args.u_var(0)
         xdot = 0.5 * x + u
         super().__init__(xdot, XVars, UVars)
 
@@ -64,13 +64,13 @@ if __name__ == "__main__":
     TrajIG = [[x0, t, u0] for t in np.linspace(t0, tf, 100)]
 
     phase = ode.phase("LGL5", TrajIG, nsegs)
-    phase.addBoundaryValue("Front", [0, 1], [x0, t0])
-    phase.addBoundaryValue("Back", [1], [tf])
-    phase.addIntegralObjective(ODE.obj(), [0, 2])
+    phase.add_boundary_value("Front", [0, 1], [x0, t0])
+    phase.add_boundary_value("Back", [1], [tf])
+    phase.add_integral_objective(ODE.obj(), [0, 2])
     phase.optimize()
 
-    Traj = phase.returnTraj()
-    CTraj = phase.returnCostateTraj()
+    Traj = phase.return_traj()
+    CTraj = phase.return_costate_traj()
 
     ###########################################
     T = np.array(Traj).T

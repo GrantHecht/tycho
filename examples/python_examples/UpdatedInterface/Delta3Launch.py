@@ -104,11 +104,11 @@ class RocketODE(oc.ODEBase):
         ####################################################
         XtU = oc.ODEArguments(7, 3)
 
-        R = XtU.XVec().head(3)
-        V = XtU.XVec().segment(3, 3)
-        m = XtU.XVar(6)
+        R = XtU.x_vec().head(3)
+        V = XtU.x_vec().segment(3, 3)
+        m = XtU.x_var(6)
 
-        U = XtU.UVec()
+        U = XtU.u_vec()
 
         h = R.norm() - Re
         rho = RhoAir * vf.exp(-h / h_scale)
@@ -126,7 +126,7 @@ class RocketODE(oc.ODEBase):
         Vgroups[("R", "Position")] = R
         Vgroups[("V", "Velocity")] = V
         Vgroups["U"] = U
-        Vgroups[("t", "time")] = XtU.TVar()
+        Vgroups[("t", "time")] = XtU.t_var()
         Vgroups[("m", "mass")] = m
 
         Vgroups["RV"] = [0, 1, 2, 3, 4, 5]
@@ -351,10 +351,10 @@ if __name__ == "__main__":
 
     #########################################
     phase1 = ode1.phase(tmode, IG1, nsegs1)
-    phase1.setControlMode(cmode)
+    phase1.set_control_mode(cmode)
 
     ## Enable AutoScaling, off by default
-    phase1.setAutoScaling(True)
+    phase1.set_auto_scaling(True)
 
     units = np.ones((11))
     units[0:3] = Lstar
@@ -363,54 +363,54 @@ if __name__ == "__main__":
     units[7] = Tstar
     ## All others are one,i.e no auto-scaling
 
-    phase1.setUnits(units)  # As a single vector
+    phase1.set_units(units)  # As a single vector
     # Or
-    phase1.setUnits(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
+    phase1.set_units(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
 
-    phase1.addLUNormBound("Path", "U", 0.5, 1.5)
-    phase1.addBoundaryValue("Front", ["R", "V", "m", "t"], IG1[0][0:8])
+    phase1.add_lu_norm_bound("Path", "U", 0.5, 1.5)
+    phase1.add_boundary_value("Front", ["R", "V", "m", "t"], IG1[0][0:8])
 
     # Dont want our bound to interfere with initial condition which starts at Re
     # so i relax the Earth radius constraint slightly here
-    phase1.addLowerNormBound("Path", "R", Re * 0.999999)
+    phase1.add_lower_norm_bound("Path", "R", Re * 0.999999)
 
-    phase1.addBoundaryValue("Back", "time", tf_phase1)
+    phase1.add_boundary_value("Back", "time", tf_phase1)
 
     #########################################
     phase2 = ode2.phase(tmode, IG2, nsegs2)
-    phase2.setControlMode(cmode)
+    phase2.set_control_mode(cmode)
 
-    phase2.addLowerNormBound("Path", "R", Re)
-    phase2.addLUNormBound("Path", "U", 0.5, 1.5)
+    phase2.add_lower_norm_bound("Path", "R", Re)
+    phase2.add_lu_norm_bound("Path", "U", 0.5, 1.5)
 
     ## Fixing initial mass and final time on first 3 phases.
     ## Since the engine cant be throttled, constraining final mass
     ## as well would be redundant and overconstrained
-    phase2.addBoundaryValue("Front", "mass", m0_phase2)
-    phase2.addBoundaryValue("Back", "time", tf_phase2)
+    phase2.add_boundary_value("Front", "mass", m0_phase2)
+    phase2.add_boundary_value("Back", "time", tf_phase2)
 
     #########################################
     phase3 = ode3.phase(tmode, IG3, nsegs3)
-    phase3.setControlMode(cmode)
+    phase3.set_control_mode(cmode)
 
-    phase3.addLowerNormBound("Path", "R", Re)
-    phase3.addLUNormBound("Path", "U", 0.5, 1.5)
-    phase3.addBoundaryValue("Front", "mass", m0_phase3)
-    phase3.addBoundaryValue("Back", "time", tf_phase3)
+    phase3.add_lower_norm_bound("Path", "R", Re)
+    phase3.add_lu_norm_bound("Path", "U", 0.5, 1.5)
+    phase3.add_boundary_value("Front", "mass", m0_phase3)
+    phase3.add_boundary_value("Back", "time", tf_phase3)
 
     #########################################
     phase4 = ode4.phase(tmode, IG4, nsegs4)
-    phase4.setControlMode(cmode)
+    phase4.set_control_mode(cmode)
 
     ## AutoScale = "auto" if not specified
-    phase4.addBoundaryValue("Front", "mass", m0_phase4)
-    phase4.addUpperVarBound("Back", "time", tf_phase4)
+    phase4.add_boundary_value("Front", "mass", m0_phase4)
+    phase4.add_upper_var_bound("Back", "time", tf_phase4)
     # AutoScale=None, will turn it off for this constraint
-    phase4.addLUNormBound("Path", "U", 0.5, 1.5, AutoScale=None)
+    phase4.add_lu_norm_bound("Path", "U", 0.5, 1.5, AutoScale=None)
 
-    phase4.addLowerNormBound("Path", "R", Re, AutoScale=1 / Lstar)
+    phase4.add_lower_norm_bound("Path", "R", Re, AutoScale=1 / Lstar)
 
-    phase4.addEqualCon(
+    phase4.add_equal_con(
         "Back",
         TargetOrbit(at, et, istart, Ot, Wt),
         ["RV"],
@@ -418,41 +418,43 @@ if __name__ == "__main__":
     )
 
     # Maximize final mass
-    phase4.addValueObjective("Back", "mass", -1.0)
+    phase4.add_value_objective("Back", "mass", -1.0)
 
     #########################################
 
     ocp = oc.OptimalControlProblem()
-    ocp.addPhase(phase1)
-    ocp.addPhase(phase2)
-    ocp.addPhase(phase3)
-    ocp.addPhase(phase4)
+    ocp.add_phase(phase1)
+    ocp.add_phase(phase2)
+    ocp.add_phase(phase3)
+    ocp.add_phase(phase4)
 
-    ocp.setAutoScaling(True, True)
-    ocp.setAdaptiveMesh(True)
+    ocp.set_auto_scaling(True, True)
+    ocp.set_adaptive_mesh(True)
 
-    for phase in ocp.Phases:
-        phase.setUnits(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
-        phase.setMeshTol(1.0e-6)
-        phase.setMeshErrorCriteria(oc.MeshErrorAggregation.MAX)
-        phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
+    for phase in ocp.phases:
+        phase.set_units(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
+        phase.set_mesh_tol(1.0e-6)
+        phase.set_mesh_error_criteria(oc.MeshErrorAggregation.MAX)
+        phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     ## Each Phase does not have to have the same AutoScale units even if its the same ODE
-    phase4.setUnits(R=2 * Lstar, V=Vstar, t=0.8 * Tstar, m=Mstar)
+    phase4.set_units(R=2 * Lstar, V=Vstar, t=0.8 * Tstar, m=Mstar)
 
     ## Everything but mass
-    ocp.addForwardLinkEqualCon(phase1, phase4, ["R", "V", "t", "U"], AutoScale="auto")
+    ocp.add_forward_link_equal_con(
+        phase1, phase4, ["R", "V", "t", "U"], AutoScale="auto"
+    )
 
-    ocp.optimizer.set_OptLSMode("L1")
-    ocp.optimizer.set_SoeLSMode("L1")
-    ocp.optimizer.set_MaxLSIters(2)
-    ocp.optimizer.set_PrintLevel(0)
+    ocp.optimizer.set_opt_ls_mode("L1")
+    ocp.optimizer.set_soe_ls_mode("L1")
+    ocp.optimizer.set_max_ls_iters(2)
+    ocp.optimizer.set_print_level(0)
     ocp.solve_optimize()
 
-    Phase1Traj = phase1.returnTraj()  # or ocp.Phase(i).returnTraj()
-    Phase2Traj = phase2.returnTraj()
-    Phase3Traj = phase3.returnTraj()
-    Phase4Traj = phase4.returnTraj()
+    Phase1Traj = phase1.return_traj()  # or ocp.Phase(i).return_traj()
+    Phase2Traj = phase2.return_traj()
+    Phase3Traj = phase3.return_traj()
+    Phase4Traj = phase4.return_traj()
 
     ## retrieve vars from vectors or trajs by name using ode.get_vars
     mf = ode4.get_vars("mass", Phase4Traj[-1], retscalar=True)

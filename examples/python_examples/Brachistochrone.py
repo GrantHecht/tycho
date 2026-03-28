@@ -35,8 +35,8 @@ class Brachistochrone(oc.ODEBase):
 
         XtU = oc.ODEArguments(XVars, UVars)
 
-        x, y, v = XtU.XVec().tolist()
-        theta = XtU.UVar(0)
+        x, y, v = XtU.x_vec().tolist()
+        theta = XtU.u_var(0)
 
         xdot = vf.sin(theta) * v
         ydot = -1.0 * vf.cos(theta) * v
@@ -73,13 +73,13 @@ if __name__ == "__main__":
         Xs.append(X)
 
     phase = ode.phase("LGL3", Xs, 32)
-    phase.addBoundaryValue("Front", range(0, 4), [x0, y0, v0, 0])
-    phase.addLUVarBound("Path", 4, -0.1, 2.00)
-    phase.addBoundaryValue("Back", [0, 1], [xf, yf])
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+    phase.add_lu_var_bound("Path", 4, -0.1, 2.00)
+    phase.add_boundary_value("Back", [0, 1], [xf, yf])
+    phase.add_delta_time_objective(1.0)
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     TT = np.array(Traj).T
 

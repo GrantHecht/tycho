@@ -35,9 +35,9 @@ class Model(oc.ODEBase):
         Uvars = 1
         ############################################################
         args = oc.ODEArguments(Xvars, Uvars)
-        x = args.XVec()[0]
-        v = args.XVec()[1]
-        u = args.UVec()[0]
+        x = args.x_vec()[0]
+        v = args.x_vec()[1]
+        u = args.u_vec()[0]
         ode = vf.stack([v, u])
         #############################################################
         super().__init__(ode, Xvars, Uvars)
@@ -54,21 +54,21 @@ if __name__ == "__main__":
     ode = Model()
 
     phase = ode.phase("LGL5", IG, 32)
-    phase.addBoundaryValue("Front", range(0, 3), [0, 1, 0])
-    phase.addUpperVarBound("Path", 0, 1 / 9)
-    phase.addIntegralObjective((Args(1)[0] ** 2) / 2, [3])
-    phase.addBoundaryValue("Back", range(0, 3), [0, -1, 1])
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_KKTtol(1.0e-10)
-    phase.optimizer.set_PrintLevel(0)
-    phase.setNumPartitions(1, 1)
+    phase.add_boundary_value("Front", range(0, 3), [0, 1, 0])
+    phase.add_upper_var_bound("Path", 0, 1 / 9)
+    phase.add_integral_objective((Args(1)[0] ** 2) / 2, [3])
+    phase.add_boundary_value("Back", range(0, 3), [0, -1, 1])
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_kkt_tol(1.0e-10)
+    phase.optimizer.set_print_level(0)
+    phase.set_num_partitions(1, 1)
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     #############################################################################
 
-    TT = np.array(phase.returnTraj()).T
+    TT = np.array(phase.return_traj()).T
 
     fig, axs = plt.subplots(3, 1)
 

@@ -64,12 +64,12 @@ class Cannon(oc.ODEBase):
         ############################################################
         args = oc.ODEArguments(4, 0, 1)
 
-        v = args.XVar(0)
-        gamma = args.XVar(1)
-        h = args.XVar(2)
-        r = args.XVar(3)
+        v = args.x_var(0)
+        gamma = args.x_var(1)
+        h = args.x_var(2)
+        r = args.x_var(3)
 
-        rad = args.PVar(0)
+        rad = args.p_var(0)
 
         S = SFunc(rad)
         M = MFunc(rad, RhoIron)
@@ -92,7 +92,7 @@ class Cannon(oc.ODEBase):
         Vgroups["h"] = h
         Vgroups[("r", "range")] = r
         Vgroups["rad"] = rad
-        Vgroups["t"] = args.TVar()
+        Vgroups["t"] = args.t_var()
 
         super().__init__(ode, 4, 0, 1, Vgroups=Vgroups)
 
@@ -158,7 +158,7 @@ if __name__ == "__main__":
 
     ode = Cannon(CD, RhoAir, RhoIron, h_scale, g)
     integ = ode.integrator(0.01)
-    integ.setAbsTol(1.0e-12)
+    integ.set_abs_tol(1.0e-12)
 
     IG = np.zeros((6))
     IG[0] = v0
@@ -183,36 +183,36 @@ if __name__ == "__main__":
     units = ode.make_units(v=Vstar, h=Lstar, r=Lstar, rad=Lstar)
 
     aphase = ode.phase(tmode, AscentIG, nsegs)
-    aphase.setAutoScaling(True)
-    aphase.setUnits(units)
-    aphase.addLowerVarBound("ODEParams", "rad", 0.0)
-    aphase.addLowerVarBound("Front", "gamma", 0.0)
-    aphase.addBoundaryValue("Front", ["h", "r", "t"], [h0, r0, 0])
+    aphase.set_auto_scaling(True)
+    aphase.set_units(units)
+    aphase.add_lower_var_bound("ODEParams", "rad", 0.0)
+    aphase.add_lower_var_bound("Front", "gamma", 0.0)
+    aphase.add_boundary_value("Front", ["h", "r", "t"], [h0, r0, 0])
 
-    aphase.addInequalCon("Front", EFunc(), ["v"], ["rad"], [])
-    aphase.addBoundaryValue("Back", "gamma", 0.0)
+    aphase.add_inequal_con("Front", EFunc(), ["v"], ["rad"], [])
+    aphase.add_boundary_value("Back", "gamma", 0.0)
 
     dphase = ode.phase(tmode, DescentIG, nsegs)
-    dphase.setAutoScaling(True)
-    dphase.setUnits(units)
+    dphase.set_auto_scaling(True)
+    dphase.set_units(units)
 
-    dphase.addBoundaryValue("Back", "h", 0.0)
-    dphase.addValueObjective("Back", "r", -1.0)
+    dphase.add_boundary_value("Back", "h", 0.0)
+    dphase.add_value_objective("Back", "r", -1.0)
 
     ocp = oc.OptimalControlProblem()
-    ocp.setAutoScaling(True)
-    ocp.addPhase(aphase)
-    ocp.addPhase(dphase)
+    ocp.set_auto_scaling(True)
+    ocp.add_phase(aphase)
+    ocp.add_phase(dphase)
 
     # Enforce continuity in time dependent vars
-    ocp.addForwardLinkEqualCon(aphase, dphase, range(0, 5))
+    ocp.add_forward_link_equal_con(aphase, dphase, range(0, 5))
     # Enforce continuity in ODEParams
-    ocp.addParamLinkEqualCon(aphase, dphase, "ODEParams", "rad")
+    ocp.add_param_link_equal_con(aphase, dphase, "ODEParams", "rad")
 
     ocp.optimize()
 
-    Ascent = aphase.returnTraj()
-    Descent = dphase.returnTraj()
+    Ascent = aphase.return_traj()
+    Descent = dphase.return_traj()
 
     gammaopt = ode.get_vars("gamma", Ascent[0])[0]
     ropt, radopt = ode.get_vars(["r", "rad"], Descent[-1])

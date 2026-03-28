@@ -75,9 +75,9 @@ class ShuttleReentry(oc.ODEBase):
         ############################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        h, theta, v, gamma, psi = XtU.XVec().tolist()
+        h, theta, v, gamma, psi = XtU.x_vec().tolist()
 
-        alpha, beta = XtU.UVec().tolist()
+        alpha, beta = XtU.u_vec().tolist()
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -236,51 +236,51 @@ if __name__ == "__main__":
 
     phase = ode.phase("LGL5", TrajIG, 20)
 
-    phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
-    phase.addLUVarBounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
-    phase.addLUVarBound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
-    phase.addLUVarBound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
-    phase.addUpperDeltaTimeBound(tmax, 1.0)
-    phase.addBoundaryValue("Back", [0, 2, 3], [htf, vtf, gammatf])
-    phase.addDeltaVarObjective(1, -1.0)
-    phase.setNumPartitions(8, 8)
+    phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
+    phase.add_lu_var_bounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
+    phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
+    phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
+    phase.add_upper_delta_time_bound(tmax, 1.0)
+    phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
+    phase.add_delta_var_objective(1, -1.0)
+    phase.set_num_partitions(8, 8)
 
     ## Our IG is bad, so i turn on line search
-    phase.optimizer.set_SoeLSMode("L1")
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_PrintLevel(2)
+    phase.optimizer.set_soe_ls_mode("L1")
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_print_level(2)
 
     ###########################################################################
     ############# The New Adaptive Mesh Interface #############################
     ###########################################################################
 
-    phase.setAdaptiveMesh(True)
-    phase.setMeshTol(1.0e-7)
-    phase.optimizer.EContol = 1.0e-8  # Set EContol at least as tight as MeshTol
+    phase.set_adaptive_mesh(True)
+    phase.set_mesh_tol(1.0e-7)
+    phase.optimizer.eq_con_tol = 1.0e-8  # Set EContol at least as tight as MeshTol
 
     # The phase's default stepsizes work well for this problem, but you might need to modify for another!!
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
 
     ## If all you care about is how close the resintegrated solution is the the final state you can use this
     ## Recomended using LGL5 or LGL7 for endtoend tolerances tighter than 1.0e-6,
-    phase.setMeshErrorCriteria(oc.MeshErrorAggregation.ENDTOEND)
+    phase.set_mesh_error_criteria(oc.MeshErrorAggregation.ENDTOEND)
 
     ## When using endtoend, you might need to up the MeshErrFactor, esp for low order methods
-    phase.setMeshErrFactor(100.0)  # defaults to 10
+    phase.set_mesh_err_factor(100.0)  # defaults to 10
 
     ###########################################################################
 
     ## IG is bad, solve first before optimize
     phase.solve_optimize()
 
-    Traj1 = phase.returnTraj()
+    Traj1 = phase.return_traj()
     PhaseMeshErrorPlot(phase, show=False)
 
     ## Add in Heating Rate Constraint, scale so rhs is order 1
-    phase.addUpperFuncBound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
+    phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
 
     phase.optimize()
-    Traj2 = phase.returnTraj()
+    Traj2 = phase.return_traj()
     PhaseMeshErrorPlot(phase, show=True)
 
     print(

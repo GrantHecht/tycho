@@ -16,7 +16,7 @@ PhaseRegs = oc.PhaseRegionFlags
 class LorenzODE(oc.ode_x.ode):
     def __init__(self, sigma, rho, beta):
 
-        x, y, z = oc.ODEArguments(3).XVec().tolist()
+        x, y, z = oc.ODEArguments(3).x_vec().tolist()
 
         ode = vf.stack([sigma * (y - x), x * (rho - z) - y, x * y - beta * z])
 
@@ -145,7 +145,7 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(defstepsize)
         integ.set_abs_tol(abstol)
         integ.MinStepSize = minstepsize
-        integ.Adaptive = True
+        integ.adaptive = True
 
         Traj = integ.integrate_dense(X0, tf, n)
 
@@ -186,7 +186,7 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator("DOPRI54", defstepsize)
         integ.set_abs_tol(abstol)
         integ.MinStepSize = minstepsize
-        integ.Adaptive = True
+        integ.adaptive = True
 
         n = 100
 
@@ -230,7 +230,7 @@ class test_Integrators(unittest.TestCase):
 
         ode = QuatModel(Ivec)
         integ = ode.integrator(0.01, ode.DetumbleLaw(), range(4, 7))
-        integ.Adaptive = True
+        integ.adaptive = True
         integ.set_abs_tol(1.0e-14)
         tf = np.linalg.norm(W0 * Ivec)
 
@@ -267,7 +267,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
-        integ.Adaptive = True
+        integ.adaptive = True
         integ.FastAdaptiveSTM = False
 
         Xtol = 1.0e-10
@@ -348,7 +348,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
-        integ.Adaptive = True
+        integ.adaptive = True
         integ.FastAdaptiveSTM = False
 
         integ.EventTol = 1.0e-10

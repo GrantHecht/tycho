@@ -87,9 +87,9 @@ class CarODE(oc.ODEBase):
         #####################################################
         XtU = oc.ODEArguments(6, 2)
 
-        x, y, v, a, theta, phi = XtU.XVec().tolist()
+        x, y, v, a, theta, phi = XtU.x_vec().tolist()
 
-        u1, u2 = XtU.UVec().tolist()
+        u1, u2 = XtU.u_vec().tolist()
 
         xdot = v * vf.cos(theta)
         ydot = v * vf.sin(theta)
@@ -595,40 +595,40 @@ def Main():
     phase = ode.phase(
         "LGL5", TrajIG, nsegs1, True
     )  ## 5 and 7 work best for this problem
-    phase.setStaticParams([k1])
-    phase.setControlMode("BlockConstant")
-    phase.addBoundaryValue("First", range(0, 7), XtU0[0:7])
-    phase.addInequalCon("Path", ode.SlotBounds(SL, SW, CL), [0, 1, 4], [], [0])
+    phase.set_static_params([k1])
+    phase.set_control_mode("BlockConstant")
+    phase.add_boundary_value("First", range(0, 7), XtU0[0:7])
+    phase.add_inequal_con("Path", ode.SlotBounds(SL, SW, CL), [0, 1, 4], [], [0])
 
-    phase.addInequalCon("Last", ode.FinalYCon(), [1, 4])
-    phase.addBoundaryValue("Last", [2, 3], [0, 0])
-    phase.addLUVarBound("Path", 0, xmin, xmax)
-    phase.addLUVarBound("Path", 2, -v_max, v_max)
-    phase.addLUVarBound("Path", 3, -a_max, a_max)
-    phase.addLUVarBound("Path", 5, -phi_max, phi_max)
-    phase.addLUVarBound("Path", 7, -u1_max, u1_max)
+    phase.add_inequal_con("Last", ode.FinalYCon(), [1, 4])
+    phase.add_boundary_value("Last", [2, 3], [0, 0])
+    phase.add_lu_var_bound("Path", 0, xmin, xmax)
+    phase.add_lu_var_bound("Path", 2, -v_max, v_max)
+    phase.add_lu_var_bound("Path", 3, -a_max, a_max)
+    phase.add_lu_var_bound("Path", 5, -phi_max, phi_max)
+    phase.add_lu_var_bound("Path", 7, -u1_max, u1_max)
 
-    phase.addLUFuncBound(
+    phase.add_lu_func_bound(
         "Path", ode.CurvatureFunc(), [5, 8], -curvature_dot_max, curvature_dot_max
     )
-    phase.addInequalCon("Path", ode.CornerCon(SL), [0, 1, 4])
+    phase.add_inequal_con("Path", ode.CornerCon(SL), [0, 1, 4])
 
-    phase.addValueLock("StaticParams", [0])  # k is locked to its initial guess
+    phase.add_value_lock("StaticParams", [0])  # k is locked to its initial guess
 
-    phase.addDeltaTimeObjective(1)
-    phase.optimizer.set_BoundFraction(0.995)
-    phase.optimizer.set_MaxIters(2000)
-    phase.optimizer.set_PrintLevel(1)
+    phase.add_delta_time_objective(1)
+    phase.optimizer.set_bound_fraction(0.995)
+    phase.optimizer.set_max_iters(2000)
+    phase.optimizer.set_print_level(1)
 
     phase.solve_optimize()
-    phase.refineTrajManual(nsegs2)
-    phase.subVariable("StaticParams", 0, k2)  # Change k to higher value
-    phase.optimizer.set_KKTtol(1.0e-8)
+    phase.refine_traj_manual(nsegs2)
+    phase.sub_variable("StaticParams", 0, k2)  # Change k to higher value
+    phase.optimizer.set_kkt_tol(1.0e-8)
 
     phase.optimize()
 
-    Traj = phase.returnTraj()
-    Tab = phase.returnTrajTable()
+    Traj = phase.return_traj()
+    Tab = phase.return_traj_table()
 
     integ = ode.integrator(0.1, Tab)
     TrajReint = integ.integrate_dense(Traj[0], Traj[-1][6], 500)

@@ -62,7 +62,7 @@ class ShuttleReentry(oc.ode_x_u.ode):
         gamma = args.XVar(3)
         psi = args.XVar(4)
 
-        h, theta, v, gamma, psi = args.XVec().tolist()
+        h, theta, v, gamma, psi = args.x_vec().tolist()
 
         alpha = args.UVar(0)
         beta = args.UVar(1)

@@ -45,7 +45,7 @@ propagate_modified = _vec6_wrap(_tychopy.Astro.propagate_modified)
 
 lambert_izzo = _tychopy.Astro.lambert_izzo
 Kepler = _tychopy.Astro.Kepler
-ModifiedDynamics = _tychopy.Astro.ModifiedDynamics
+ModifiedDynamics = _tychopy.Astro.modified_dynamics
 
 
 from .AstroFrames import CR3BPFrame

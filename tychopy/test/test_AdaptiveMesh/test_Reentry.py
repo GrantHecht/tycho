@@ -62,7 +62,7 @@ class ShuttleReentry(oc.ode_x_u.ode):
         gamma = args.XVar(3)
         psi = args.XVar(4)
 
-        h, theta, v, gamma, psi = args.XVec().tolist()
+        h, theta, v, gamma, psi = args.x_vec().tolist()
 
         alpha = args.UVar(0)
         beta = args.UVar(1)
@@ -184,12 +184,12 @@ class test_Reentry(unittest.TestCase):
         phase.AdaptiveMesh = True
         phase.MeshErrorEstimator = errest
         phase.MeshIncFactor = 5
-        phase.MeshTol = 1.0e-7
+        phase.mesh_tol = 1.0e-7
         phase.PrintMeshInfo = False
         phase.set_num_partitions(1, 1)
         Flag1 = phase.solve_optimize()
 
-        Mconv1 = phase.MeshConverged
+        Mconv1 = phase.mesh_converged
 
         self.assertEqual(
             Flag1, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
@@ -213,7 +213,7 @@ class test_Reentry(unittest.TestCase):
 
         phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
         Flag2 = phase.optimize()
-        Mconv2 = phase.MeshConverged
+        Mconv2 = phase.mesh_converged
 
         self.assertEqual(
             Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"

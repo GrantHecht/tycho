@@ -20,7 +20,7 @@ class CartPole(oc.ode_x_u.ode):
         q1d = args.XVar(2)
         q2d = args.XVar(3)
 
-        q1, q2, q1d, q2d = args.XVec().tolist()
+        q1, q2, q1d, q2d = args.x_vec().tolist()
 
         u = args.UVar(0)
 
@@ -87,7 +87,7 @@ class test_CartPole(unittest.TestCase):
         Obj = phase.optimizer.LastObjVal
         ObjError = abs(Obj - self.FinalObj)
 
-        self.assertTrue(phase.MeshConverged, "Problem Meshs did not converge converge")
+        self.assertTrue(phase.mesh_converged, "Problem Meshs did not converge converge")
 
         self.assertLess(
             phase.optimizer.LastIterNum,

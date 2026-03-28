@@ -449,15 +449,15 @@ class LTModel(oc.ODEBase):
         XtUP = oc.ODEArguments(7, 3, 1)
 
         ## MEEs and vehicle weight
-        MEEs = XtUP.XVec().head(6)
-        ww = XtUP.XVar(6)
+        MEEs = XtUP.x_vec().head(6)
+        ww = XtUP.x_var(6)
 
         p, f, g, h, k, L = MEEs.tolist()  # Assumed order
 
         ## Control Direction in RTN
-        U = XtUP.UVec().head3().normalized()
+        U = XtUP.u_vec().head3().normalized()
         ## Static throttle parameter
-        tau = XtUP.PVar(0)
+        tau = XtUP.p_var(0)
         wwdot = -T * (1 + 0.01 * tau) / (Isp)
         acc_T = gs * T * (1 + 0.01 * tau) * U / ww
 
@@ -518,32 +518,32 @@ if __name__ == "__main__":
     IG = integ.integrate_dense(X0, tfig)
 
     phase = ode.phase("LGL5", IG, 16)
-    phase.integrator.setStepSizes(0.1, 0.001, 10)
-    phase.addBoundaryValue("Front", range(0, 8), X0[0:8])
-    phase.addEqualCon("Path", Args(3).norm() - 1, [8, 9, 10])
+    phase.integrator.set_step_sizes(0.1, 0.001, 10)
+    phase.add_boundary_value("Front", range(0, 8), X0[0:8])
+    phase.add_equal_con("Path", Args(3).norm() - 1, [8, 9, 10])
     # Dont use control splines when placing equality path constraints on controls
-    phase.setControlMode("NoSpline")
+    phase.set_control_mode("NoSpline")
 
     # Not stricly neccesary for this problem but a good idea
-    phase.addLUFuncBound("Path", RadFunc(mu), range(0, 6), Re, 10 * Re)
+    phase.add_lu_func_bound("Path", RadFunc(mu), range(0, 6), Re, 10 * Re)
 
-    phase.addEqualCon("Back", EqBCon(), range(0, 6))
-    phase.addInequalCon("Back", IqBCon(), range(0, 6))
-    phase.addLUVarBound("ODEParams", 0, -50, 0)
-    phase.addLowerVarBound("Back", 6, 0.05)
-    phase.addValueObjective("Back", 6, -1.0)
-    phase.setNumPartitions(8, 8)
-    phase.optimizer.PrintLevel = 1
-    phase.optimizer.set_EContol(1.0e-9)
-    # phase.optimizer.set_QPOrderingMode("MTMETIS")
+    phase.add_equal_con("Back", EqBCon(), range(0, 6))
+    phase.add_inequal_con("Back", IqBCon(), range(0, 6))
+    phase.add_lu_var_bound("ODEParams", 0, -50, 0)
+    phase.add_lower_var_bound("Back", 6, 0.05)
+    phase.add_value_objective("Back", 6, -1.0)
+    phase.set_num_partitions(8, 8)
+    phase.optimizer.print_level = 1
+    phase.optimizer.set_eq_con_tol(1.0e-9)
+    # phase.optimizer.set_qp_ordering_mode("MTMETIS")
 
-    phase.setAdaptiveMesh(True)
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
-    phase.setMeshTol(1.0e-7)
+    phase.set_adaptive_mesh(True)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_mesh_tol(1.0e-7)
 
     phase.optimize_solve()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     FinalWeight = Traj[-1][6] * Fstar
     FinalTime = Traj[-1][7] * Tstar

@@ -102,8 +102,8 @@ class Delta3(oc.ode_x_u.ode):
         ####################################################
         args = oc.ODEArguments(7, 3)
 
-        r = args.XVec().head3()
-        v = args.XVec().segment3(3)
+        r = args.x_vec().head3()
+        v = args.x_vec().segment3(3)
         m = args.XVar(6)
         u = args.tail3().normalized()
 
@@ -258,7 +258,7 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.optimizer.MaxLSIters = 2
         ocp.optimizer.PrintLevel = 3
 
-        ocp.NumPartitions = 8
+        ocp.num_partitions = 8
         ocp.optimizer.QPThreads = 8
 
         Flag = ocp.optimize()

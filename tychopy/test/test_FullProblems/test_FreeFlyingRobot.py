@@ -20,7 +20,7 @@ class FreeFlyingRobotODE(oc.ode_x_u.ode):
         args = oc.ODEArguments(6, 4)
         theta = args[4]
         omega = args[5]
-        u = args.UVec()
+        u = args.u_vec()
         xdot = args.segment2(2)
         vscale = vf.SumElems([u[0], u[1], u[2], u[3]], [1, -1, 1, -1])
 
