@@ -36,8 +36,8 @@ class test_RosenBrock(unittest.TestCase):
         prob.set_vars(Ipoint)
         prob.add_objective(RosenBrockObj(), [0, 1])
         prob.add_inequal_con(con, [0, 1])
-        prob.optimizer.set_OptLSMode(lsmode)
-        prob.optimizer.PrintLevel = 3
+        prob.optimizer.set_opt_ls_mode(lsmode)
+        prob.optimizer.print_level = 3
         Flag = prob.optimize()
         Fpoint = prob.return_vars()
 
@@ -48,7 +48,7 @@ class test_RosenBrock(unittest.TestCase):
         )
 
         self.assertLess(
-            prob.optimizer.LastIterNum,
+            prob.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

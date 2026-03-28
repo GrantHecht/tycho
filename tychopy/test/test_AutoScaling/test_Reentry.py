@@ -177,15 +177,15 @@ class test_Reentry(unittest.TestCase):
 
         phase.add_delta_var_objective("theta", -1.0)
 
-        phase.optimizer.set_SoeLSMode("L1")
-        phase.optimizer.set_OptLSMode("L1")
+        phase.optimizer.set_soe_ls_mode("L1")
+        phase.optimizer.set_opt_ls_mode("L1")
 
-        phase.optimizer.MaxLSIters = 2
-        phase.optimizer.MaxAccIters = 100
-        phase.optimizer.PrintLevel = 3
+        phase.optimizer.max_ls_iters = 2
+        phase.optimizer.max_acc_iters = 100
+        phase.optimizer.print_level = 3
         phase.set_num_partitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.PrintMeshInfo = False
+        phase.optimizer.cnr_mode = True
+        phase.print_mesh_info = False
         phase.set_mesh_tol(mtol)
 
         Flag1 = phase.solve_optimize()

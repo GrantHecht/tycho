@@ -73,24 +73,24 @@ class test_CartPole(unittest.TestCase):
         phase.add_lu_var_bound("Path", 5, -umax, umax, 1.0)
         phase.add_lu_var_bound("Path", 0, -dmax, dmax, 1.0)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
-        phase.optimizer.PrintLevel = 3
-        phase.optimizer.EContol = 1.0e-8
-        phase.AdaptiveMesh = True
+        phase.optimizer.print_level = 3
+        phase.optimizer.eq_con_tol = 1.0e-8
+        phase.adaptive_mesh = True
         phase.set_num_partitions(1, 1)
-        phase.MeshErrorEstimator = errest
-        phase.PrintMeshInfo = False
+        phase.mesh_error_estimator = errest
+        phase.print_mesh_info = False
 
-        phase.MeshErrFactor = 20
+        phase.mesh_err_factor = 20
 
         Flag = phase.optimize()
 
-        Obj = phase.optimizer.LastObjVal
+        Obj = phase.optimizer.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertTrue(phase.mesh_converged, "Problem Meshs did not converge converge")
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

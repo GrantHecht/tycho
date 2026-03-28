@@ -73,12 +73,12 @@ class test_ObjScaling(unittest.TestCase):
         phase.add_value_objective("Back", 0, vscale)
 
         phase.set_num_partitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
 
@@ -98,12 +98,12 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_auto_scaling(True)
         phase.set_num_partitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
         xf2 = phase.return_traj()[-1][0]
@@ -126,12 +126,12 @@ class test_ObjScaling(unittest.TestCase):
         phase.set_auto_scaling(True)
 
         phase.set_num_partitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
         xf3 = phase.return_traj()[-1][0]
@@ -154,12 +154,12 @@ class test_ObjScaling(unittest.TestCase):
         phase.set_auto_scaling(True)
 
         phase.set_num_partitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
         xf4 = phase.return_traj()[-1][0]
@@ -196,12 +196,12 @@ class test_ObjScaling(unittest.TestCase):
 
         ocp.set_auto_scaling(True, True)
         ocp.set_num_partitions(1, 1)
-        ocp.optimizer.CNRMode = True
-        ocp.optimizer.set_QPOrderingMode("MINDEG")
+        ocp.optimizer.cnr_mode = True
+        ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            ocp.optimizer.PrintLevel = 3
-            ocp.PrintMeshInfo = False
+            ocp.optimizer.print_level = 3
+            ocp.print_mesh_info = False
 
         ocp.optimize()
         xf5 = phase2.return_traj()[-1][0]

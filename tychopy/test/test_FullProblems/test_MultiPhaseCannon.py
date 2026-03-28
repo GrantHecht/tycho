@@ -141,18 +141,18 @@ class test_MultiPhaseCannon(unittest.TestCase):
             aphase, "ODEParams", [0], dphase, "ODEParams", [0]
         )
 
-        ocp.optimizer.set_OptLSMode("L1")
-        ocp.optimizer.MaxLSIters = 2
-        ocp.optimizer.PrintLevel = 3
+        ocp.optimizer.set_opt_ls_mode("L1")
+        ocp.optimizer.max_ls_iters = 2
+        ocp.optimizer.print_level = 3
         ocp.set_num_partitions(1, 1)
-        ocp.optimizer.set_QPOrderingMode("MINDEG")
+        ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
         Flag = ocp.optimize()
 
         Ascent = aphase.return_traj()
         Descent = dphase.return_traj()
 
-        Obj = ocp.optimizer.LastObjVal * Lstar
+        Obj = ocp.optimizer.last_obj_val * Lstar
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
@@ -160,7 +160,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
         )
 
         self.assertLess(
-            ocp.optimizer.LastIterNum,
+            ocp.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

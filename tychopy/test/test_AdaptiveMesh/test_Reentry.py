@@ -174,18 +174,18 @@ class test_Reentry(unittest.TestCase):
         phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
         phase.add_delta_var_objective(1, -1.0)
 
-        phase.optimizer.set_OptLSMode("L1")
-        phase.optimizer.set_SoeLSMode("L1")
-        phase.optimizer.MaxLSIters = 2
-        phase.optimizer.MaxAccIters = 100
-        phase.optimizer.PrintLevel = 3
+        phase.optimizer.set_opt_ls_mode("L1")
+        phase.optimizer.set_soe_ls_mode("L1")
+        phase.optimizer.max_ls_iters = 2
+        phase.optimizer.max_acc_iters = 100
+        phase.optimizer.print_level = 3
 
-        phase.optimizer.EContol = 1.0e-8
-        phase.AdaptiveMesh = True
-        phase.MeshErrorEstimator = errest
-        phase.MeshIncFactor = 5
+        phase.optimizer.eq_con_tol = 1.0e-8
+        phase.adaptive_mesh = True
+        phase.mesh_error_estimator = errest
+        phase.mesh_inc_factor = 5
         phase.mesh_tol = 1.0e-7
-        phase.PrintMeshInfo = False
+        phase.print_mesh_info = False
         phase.set_num_partitions(1, 1)
         Flag1 = phase.solve_optimize()
 
@@ -198,12 +198,12 @@ class test_Reentry(unittest.TestCase):
         self.assertTrue(Mconv1, "Problem Mesh did not converge converge")
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters1,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj1 = phase.optimizer.LastObjVal
+        Obj1 = phase.optimizer.last_obj_val
         ObjError1 = abs(Obj1 - self.FinalObj1)
         self.assertLess(
             ObjError1,
@@ -222,12 +222,12 @@ class test_Reentry(unittest.TestCase):
         self.assertTrue(Mconv2, "Problem Mesh did not converge converge")
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters2,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj2 = phase.optimizer.LastObjVal
+        Obj2 = phase.optimizer.last_obj_val
         ObjError2 = abs(Obj2 - self.FinalObj2)
         self.assertLess(
             ObjError2,

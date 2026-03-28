@@ -144,7 +144,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator(defstepsize)
         integ.set_abs_tol(abstol)
-        integ.MinStepSize = minstepsize
+        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         Traj = integ.integrate_dense(X0, tf, n)
@@ -185,7 +185,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator("DOPRI54", defstepsize)
         integ.set_abs_tol(abstol)
-        integ.MinStepSize = minstepsize
+        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         n = 100
@@ -268,7 +268,7 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.FastAdaptiveSTM = False
+        integ.fast_adaptive_stm = False
 
         Xtol = 1.0e-10
         Jtol = 1.0e-9
@@ -349,10 +349,10 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.FastAdaptiveSTM = False
+        integ.fast_adaptive_stm = False
 
-        integ.EventTol = 1.0e-10
-        integ.MaxEventIters = 12
+        integ.event_tol = 1.0e-10
+        integ.max_event_iters = 12
 
         Xf, EventLocs1 = integ.integrate(X0t0, tf, Events)
         Xf, EventLocs2 = integ.integrate(X0t0, tf, Events)
@@ -379,7 +379,7 @@ class test_Integrators(unittest.TestCase):
                 )
 
                 self.assertLess(
-                    Fxerr, integ.EventTol, "Event root error exceeds tolerance"
+                    Fxerr, integ.event_tol, "Event root error exceeds tolerance"
                 )
 
     def test_BatchCalls1(self):
@@ -403,7 +403,7 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator("DOPRI87", defstepsize)
         integ.set_abs_tol(abstol)
         integ.set_step_sizes(defstepsize, minstepsize, 10)
-        integ.VectorizeBatchCalls = True
+        integ.vectorize_batch_calls = True
 
         batchsizes = [1, 3, 4, 15, 100, 1003]
         X0 = [x0, xdot0, t0]
@@ -439,7 +439,7 @@ class test_Integrators(unittest.TestCase):
         for ode in [ode1, ode2, ode3, ode4, ode5]:
             integ = ode.integrator(0.001)
             integ.set_abs_tol(1.0e-13)
-            integ.VectorizeBatchCalls = True
+            integ.vectorize_batch_calls = True
 
             Xtol = 1.0e-11
             Jtol = 1.0e-10

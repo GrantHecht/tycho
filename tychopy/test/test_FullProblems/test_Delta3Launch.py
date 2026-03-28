@@ -254,12 +254,12 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.add_phase(phase4)
 
         ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
-        ocp.optimizer.set_OptLSMode("L1")
-        ocp.optimizer.MaxLSIters = 2
-        ocp.optimizer.PrintLevel = 3
+        ocp.optimizer.set_opt_ls_mode("L1")
+        ocp.optimizer.max_ls_iters = 2
+        ocp.optimizer.print_level = 3
 
         ocp.num_partitions = 8
-        ocp.optimizer.QPThreads = 8
+        ocp.optimizer.qp_threads = 8
 
         Flag = ocp.optimize()
 
@@ -277,7 +277,7 @@ class test_Delta3Launch(unittest.TestCase):
         )
 
         self.assertLess(
-            ocp.optimizer.LastIterNum,
+            ocp.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

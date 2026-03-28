@@ -73,14 +73,14 @@ class test_CartPole(unittest.TestCase):
         phase.add_lu_var_bound("Path", 5, -umax, umax, 1.0)
         phase.add_lu_var_bound("Path", 0, -dmax, dmax, 1.0)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
-        phase.optimizer.PrintLevel = 3
+        phase.optimizer.print_level = 3
         Flag = phase.optimize()
 
-        Obj = phase.optimizer.LastObjVal
+        Obj = phase.optimizer.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

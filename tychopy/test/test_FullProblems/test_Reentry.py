@@ -174,10 +174,10 @@ class test_Reentry(unittest.TestCase):
         phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
         phase.add_delta_var_objective(1, -1.0)
 
-        phase.optimizer.set_OptLSMode("AUGLANG")
-        phase.optimizer.MaxLSIters = 2
-        phase.optimizer.MaxAccIters = 100
-        phase.optimizer.PrintLevel = 3
+        phase.optimizer.set_opt_ls_mode("AUGLANG")
+        phase.optimizer.max_ls_iters = 2
+        phase.optimizer.max_acc_iters = 100
+        phase.optimizer.print_level = 3
 
         Flag1 = phase.solve_optimize()
 
@@ -186,7 +186,7 @@ class test_Reentry(unittest.TestCase):
         )
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters1,
             "Optimizer iterations exceeded expected maximum",
         )
@@ -194,7 +194,7 @@ class test_Reentry(unittest.TestCase):
         phase.refine_traj_manual(self.NumSegments2)
         phase.optimize()
 
-        Obj1 = phase.optimizer.LastObjVal
+        Obj1 = phase.optimizer.last_obj_val
         ObjError1 = abs(Obj1 - self.FinalObj1)
         self.assertLess(
             ObjError1,
@@ -209,12 +209,12 @@ class test_Reentry(unittest.TestCase):
             Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters2,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj2 = phase.optimizer.LastObjVal
+        Obj2 = phase.optimizer.last_obj_val
         ObjError2 = abs(Obj2 - self.FinalObj2)
         self.assertLess(
             ObjError2,

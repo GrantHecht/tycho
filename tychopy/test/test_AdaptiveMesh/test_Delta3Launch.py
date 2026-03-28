@@ -255,18 +255,18 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.add_phase(phase4)
 
         ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
-        ocp.optimizer.set_OptLSMode("L1")
-        ocp.optimizer.MaxLSIters = 2
-        ocp.optimizer.PrintLevel = 3
-        ocp.optimizer.EContol = 1.0e-8
+        ocp.optimizer.set_opt_ls_mode("L1")
+        ocp.optimizer.max_ls_iters = 2
+        ocp.optimizer.print_level = 3
+        ocp.optimizer.eq_con_tol = 1.0e-8
 
         ocp.set_num_partitions(1, 1)
         ocp.set_adaptive_mesh(True, True)
-        ocp.MaxMeshIters = 10
-        ocp.PrintMeshInfo = False
-        for phase in ocp.Phases:
-            phase.MeshErrorEstimator = errest
-            phase.MeshErrFactor = 100
+        ocp.max_mesh_iters = 10
+        ocp.print_mesh_info = False
+        for phase in ocp.phases:
+            phase.mesh_error_estimator = errest
+            phase.mesh_err_factor = 100
             phase.mesh_tol = 1.0e-6
 
         Flag = ocp.optimize()
@@ -286,7 +286,7 @@ class test_Delta3Launch(unittest.TestCase):
         self.assertTrue(Mconv, "Problem Meshs did not converge converge")
 
         self.assertLess(
-            ocp.optimizer.LastIterNum,
+            ocp.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )
