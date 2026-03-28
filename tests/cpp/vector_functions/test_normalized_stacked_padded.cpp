@@ -11,7 +11,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -62,8 +62,8 @@ TEST_F(CommonFunctionsTest, StackedDimensions) {
     auto a = args.template head<2>();
     auto b = args.template segment<3, 2>();
     auto stacked = StackedOutputs{a, b};
-    EXPECT_EQ(stacked.IRows(), 5);
-    EXPECT_EQ(stacked.ORows(), 5); // 2 + 3
+    EXPECT_EQ(stacked.input_rows(), 5);
+    EXPECT_EQ(stacked.output_rows(), 5); // 2 + 3
 }
 
 TEST_F(CommonFunctionsTest, StackedValues) {
@@ -89,7 +89,7 @@ TEST_F(CommonFunctionsTest, StackedAdjointConsistency) {
     auto b = args.template segment<2, 2>();
     auto c = args.template tail<2>();
     auto stacked = StackedOutputs{a, b, c};
-    EXPECT_EQ(stacked.ORows(), 6);
+    EXPECT_EQ(stacked.output_rows(), 6);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 60, 1.0, 10.0);
     Eigen::VectorXd lm = deterministic_random_vector(6, 61, -1.0, 1.0);
@@ -103,21 +103,21 @@ TEST_F(CommonFunctionsTest, StackedAdjointConsistency) {
 TEST_F(CommonFunctionsTest, PaddedUpperDimensions) {
     auto args = Arguments<3>();
     auto padded = args.padded_upper<2>();
-    EXPECT_EQ(padded.IRows(), 3);
-    EXPECT_EQ(padded.ORows(), 5); // 3 + 2 zeros on top
+    EXPECT_EQ(padded.input_rows(), 3);
+    EXPECT_EQ(padded.output_rows(), 5); // 3 + 2 zeros on top
 }
 
 TEST_F(CommonFunctionsTest, PaddedLowerDimensions) {
     auto args = Arguments<3>();
     auto padded = args.padded_lower<2>();
-    EXPECT_EQ(padded.IRows(), 3);
-    EXPECT_EQ(padded.ORows(), 5);
+    EXPECT_EQ(padded.input_rows(), 3);
+    EXPECT_EQ(padded.output_rows(), 5);
 }
 
 TEST_F(CommonFunctionsTest, PaddedAdjointConsistency) {
     auto args = Arguments<3>();
     auto padded = args.template padded<2, 3>();
-    EXPECT_EQ(padded.ORows(), 8); // 2 + 3 + 3
+    EXPECT_EQ(padded.output_rows(), 8); // 2 + 3 + 3
     Eigen::VectorXd x = deterministic_random_vector(3, 62, 1.0, 5.0);
     Eigen::VectorXd lm = deterministic_random_vector(8, 63, -1.0, 1.0);
     verify_adjoint_consistency(padded, x, lm);

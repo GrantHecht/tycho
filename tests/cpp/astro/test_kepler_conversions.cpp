@@ -9,7 +9,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST(KeplerConversions, ClassicToCartesianRoundTrip) {

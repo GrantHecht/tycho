@@ -12,7 +12,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -22,7 +22,7 @@ using namespace TychoTest;
 TEST_F(CommonFunctionsTest, ElementsExtraction) {
     auto args = Arguments<5>();
     auto elems = args.template elements<0, 2, 4>();
-    EXPECT_EQ(elems.ORows(), 3);
+    EXPECT_EQ(elems.output_rows(), 3);
     Eigen::VectorXd x(5);
     x << 10.0, 20.0, 30.0, 40.0, 50.0;
     Eigen::VectorXd fx(3);
@@ -52,7 +52,7 @@ TEST_F(CommonFunctionsTest, ElementsJacobian) {
 TEST_F(CommonFunctionsTest, CwiseSumValue) {
     auto args = Arguments<4>();
     auto s = args.sum();
-    EXPECT_EQ(s.ORows(), 1);
+    EXPECT_EQ(s.output_rows(), 1);
     Eigen::VectorXd x(4);
     x << 1.0, 2.0, 3.0, 4.0;
     Eigen::VectorXd fx(1);

@@ -36,7 +36,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Physical constants (non-dimensionalised)
@@ -398,14 +398,14 @@ int main() {
     // Optimal Control Problem — link phases
     ///////////////////////////////////////////////////////////////////////////
     OptimalControlProblem ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
-    ocp.addPhase(phase3);
-    ocp.addPhase(phase4);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
+    ocp.add_phase(phase3);
+    ocp.add_phase(phase4);
 
     // Continuity in everything except mass (var 6)
     auto link_vars = make_idx({0, 1, 2, 3, 4, 5, 7, 8, 9, 10});
-    ocp.addForwardLinkEqualCon(phase1, phase4, link_vars);
+    ocp.add_forward_link_equal_con(phase1, phase4, link_vars);
 
     ocp.optimizer->set_OptLSMode("L1");
     ocp.optimizer->set_SoeLSMode("L1");

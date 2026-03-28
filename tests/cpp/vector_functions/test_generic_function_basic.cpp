@@ -10,7 +10,7 @@
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -21,8 +21,8 @@ TEST_F(GenericFunctionTest, FixedSizeErase) {
     auto args = Arguments<3>();
     auto scaled = 2.0 * args;
     GenericFunction<3, 3> gf(scaled);
-    EXPECT_EQ(gf.IRows(), 3);
-    EXPECT_EQ(gf.ORows(), 3);
+    EXPECT_EQ(gf.input_rows(), 3);
+    EXPECT_EQ(gf.output_rows(), 3);
 
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 3.0;
@@ -37,8 +37,8 @@ TEST_F(GenericFunctionTest, FixedSizeErase) {
 TEST_F(GenericFunctionTest, DynamicErase) {
     BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
-    EXPECT_EQ(gf.IRows(), 5);
-    EXPECT_EQ(gf.ORows(), 3);
+    EXPECT_EQ(gf.input_rows(), 5);
+    EXPECT_EQ(gf.output_rows(), 3);
 }
 
 TEST_F(GenericFunctionTest, ComputeMatchesOriginal) {

@@ -28,7 +28,7 @@
 #endif
 
 int main() {
-    Tycho::Vector3<double> v;
+    tycho::Vector3<double> v;
     v << 1.0, 2.0, 3.0;
     std::cout << "Tycho " TYCHO_TEST_NAME " test: OK (norm=" << v.norm() << ")"
               << std::endl;

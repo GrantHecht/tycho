@@ -11,7 +11,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -28,8 +28,8 @@ TEST_F(VFCompositionTest, BrachistochroneAdjointConsistency) {
 TEST_F(VFCompositionTest, BrachistochroneGenericODEErasure) {
     BrachODE ode(9.81);
     GenericFunction<-1, -1> gf(ode);
-    EXPECT_EQ(gf.IRows(), 5);
-    EXPECT_EQ(gf.ORows(), 3);
+    EXPECT_EQ(gf.input_rows(), 5);
+    EXPECT_EQ(gf.output_rows(), 3);
 
     Eigen::VectorXd x(5);
     x << 0, 10, 5, 0, std::numbers::pi / 4.0;
@@ -46,8 +46,8 @@ TEST_F(VFCompositionTest, BrachistochroneGenericODEErasure) {
 
 TEST_F(VFCompositionTest, KeplerODEDimensions) {
     Kepler kep(398600.4418);
-    EXPECT_EQ(kep.IRows(), 7); // [x,y,z,vx,vy,vz,t]
-    EXPECT_EQ(kep.ORows(), 6); // [dx,dy,dz,dvx,dvy,dvz]
+    EXPECT_EQ(kep.input_rows(), 7); // [x,y,z,vx,vy,vz,t]
+    EXPECT_EQ(kep.output_rows(), 6); // [dx,dy,dz,dvx,dvy,dvz]
 }
 
 TEST_F(VFCompositionTest, KeplerODEAdjointConsistency) {
@@ -61,8 +61,8 @@ TEST_F(VFCompositionTest, KeplerODEAdjointConsistency) {
 TEST_F(VFCompositionTest, CR3BPODEAdjointConsistency) {
     double mu = 0.012150585; // Earth-Moon
     CR3BP cr3bp(mu);
-    EXPECT_EQ(cr3bp.IRows(), 7);
-    EXPECT_EQ(cr3bp.ORows(), 6);
+    EXPECT_EQ(cr3bp.input_rows(), 7);
+    EXPECT_EQ(cr3bp.output_rows(), 6);
 
     Eigen::VectorXd x(7);
     x << 0.5, 0.1, 0.0, 0.0, 0.5, 0.0, 0.0;

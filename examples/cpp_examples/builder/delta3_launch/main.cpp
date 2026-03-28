@@ -20,7 +20,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Physical constants (non-dimensionalised)
@@ -261,79 +261,79 @@ int main() {
     // Phase 1: 6 SRBs + core
     ///////////////////////////////////////////////////////////////////////////
     auto phase1 = ode1.phase(tmode, IG1, nSegs);
-    phase1.setControlMode(ControlModes::HighestOrderSpline);
+    phase1.set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase1.addLUNormBound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
+    phase1.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
 
     // Front BC: full state [R, V, m, t]
     Eigen::VectorXd front_val(8);
     front_val << y0[0], y0[1], y0[2], y0[3], y0[4], y0[5], m0_phase1, 0.0;
-    phase1.addBoundaryValue(PhaseRegionFlags::Front, {"R", "V", "m", "t"}, front_val);
+    phase1.add_boundary_value(PhaseRegionFlags::Front, {"R", "V", "m", "t"}, front_val);
 
     // Altitude constraint
-    phase1.addLowerNormBound(PhaseRegionFlags::Path, {"R"}, Re * 0.999999);
+    phase1.add_lower_norm_bound(PhaseRegionFlags::Path, {"R"}, Re * 0.999999);
 
     // Back BC: final time
-    phase1.addBoundaryValue(PhaseRegionFlags::Back, "t", tf_phase1);
+    phase1.add_boundary_value(PhaseRegionFlags::Back, "t", tf_phase1);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 2: 3 SRBs + core
     ///////////////////////////////////////////////////////////////////////////
     auto phase2 = ode2.phase(tmode, IG2, nSegs);
-    phase2.setControlMode(ControlModes::HighestOrderSpline);
+    phase2.set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase2.addLowerNormBound(PhaseRegionFlags::Path, {"R"}, Re);
-    phase2.addLUNormBound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
+    phase2.add_lower_norm_bound(PhaseRegionFlags::Path, {"R"}, Re);
+    phase2.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
 
-    phase2.addBoundaryValue(PhaseRegionFlags::Front, "m", m0_phase2);
-    phase2.addBoundaryValue(PhaseRegionFlags::Back, "t", tf_phase2);
+    phase2.add_boundary_value(PhaseRegionFlags::Front, "m", m0_phase2);
+    phase2.add_boundary_value(PhaseRegionFlags::Back, "t", tf_phase2);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 3: core only
     ///////////////////////////////////////////////////////////////////////////
     auto phase3 = ode3.phase(tmode, IG3, nSegs);
-    phase3.setControlMode(ControlModes::HighestOrderSpline);
+    phase3.set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase3.addLowerNormBound(PhaseRegionFlags::Path, {"R"}, Re);
-    phase3.addLUNormBound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
+    phase3.add_lower_norm_bound(PhaseRegionFlags::Path, {"R"}, Re);
+    phase3.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
 
-    phase3.addBoundaryValue(PhaseRegionFlags::Front, "m", m0_phase3);
-    phase3.addBoundaryValue(PhaseRegionFlags::Back, "t", tf_phase3);
+    phase3.add_boundary_value(PhaseRegionFlags::Front, "m", m0_phase3);
+    phase3.add_boundary_value(PhaseRegionFlags::Back, "t", tf_phase3);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 4: upper stage
     ///////////////////////////////////////////////////////////////////////////
     auto phase4 = ode4.phase(tmode, IG4, nSegs);
-    phase4.setControlMode(ControlModes::HighestOrderSpline);
+    phase4.set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase4.addLowerNormBound(PhaseRegionFlags::Path, {"R"}, Re);
-    phase4.addLUNormBound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
+    phase4.add_lower_norm_bound(PhaseRegionFlags::Path, {"R"}, Re);
+    phase4.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.5, 1.5);
 
-    phase4.addBoundaryValue(PhaseRegionFlags::Front, "m", m0_phase4);
+    phase4.add_boundary_value(PhaseRegionFlags::Front, "m", m0_phase4);
 
     // Upper bound on final time
-    phase4.addUpperVarBound(PhaseRegionFlags::Back, "t", tf_phase4);
+    phase4.add_upper_var_bound(PhaseRegionFlags::Back, "t", tf_phase4);
 
     // Terminal orbital element constraint
     auto target_orbit_fn = MakeTargetOrbit(at, et, istart, Ot, Wt);
-    phase4.addEqualCon(PhaseRegionFlags::Back, GenericFunction<-1, -1>(target_orbit_fn),
+    phase4.add_equal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(target_orbit_fn),
                        {"R", "V"});
 
     // Maximise final mass (minimise -m)
-    phase4.addValueObjective(PhaseRegionFlags::Back, "m", -1.0);
+    phase4.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
     ///////////////////////////////////////////////////////////////////////////
     // Optimal Control Problem — link phases via OCP wrapper
     ///////////////////////////////////////////////////////////////////////////
     OCP ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
-    ocp.addPhase(phase3);
-    ocp.addPhase(phase4);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
+    ocp.add_phase(phase3);
+    ocp.add_phase(phase4);
 
     // Continuity in R, V, t, u across consecutive phase pairs (1->2, 2->3, 3->4);
     // mass is discontinuous at staging events.
-    ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});
+    ocp.add_forward_link_equal_con(phase1, phase4, {"R", "V", "t", "u"});
 
     ocp.optimizer().set_OptLSMode("L1");
     ocp.optimizer().set_SoeLSMode("L1");
@@ -352,7 +352,7 @@ int main() {
         return 1;
     }
 
-    auto traj4 = phase4.returnTraj();
+    auto traj4 = phase4.return_traj();
     if (traj4.empty()) {
         std::cerr << "Delta3Launch (builder): solver converged but trajectory is empty\n";
         return 1;

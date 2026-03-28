@@ -8,7 +8,7 @@
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class ODEBuilderTest : public OptimalControlTest {};
@@ -296,8 +296,8 @@ TEST_F(ODEBuilderTest, TemplateXVecCrossProduct) {
 
     EXPECT_EQ(ode.xvars(), 7);
     EXPECT_EQ(ode.uvars(), 3);
-    EXPECT_EQ(ode.function().IRows(), 11);
-    EXPECT_EQ(ode.function().ORows(), 7);
+    EXPECT_EQ(ode.function().input_rows(), 11);
+    EXPECT_EQ(ode.function().output_rows(), 7);
 }
 
 TEST_F(ODEBuilderTest, TemplateXVecBoundsCheck) {

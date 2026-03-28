@@ -13,17 +13,17 @@ template <typename ODE> static void BM_GF_VJP(benchmark::State &state, ODE ode) 
     using Dspec = DenseFunctionSpec<-1, -1>;
 
     GenericFunction<-1, -1> gf(ode);
-    Eigen::VectorXd x_s(gf.IRows());
+    Eigen::VectorXd x_s(gf.input_rows());
     x_s.setRandom();
-    Eigen::VectorXd fx_s(gf.ORows());
+    Eigen::VectorXd fx_s(gf.output_rows());
     fx_s.setZero();
-    Eigen::MatrixXd jx_s(gf.ORows(), gf.IRows());
+    Eigen::MatrixXd jx_s(gf.output_rows(), gf.input_rows());
     jx_s.setZero();
-    Eigen::VectorXd gx_s(gf.IRows());
+    Eigen::VectorXd gx_s(gf.input_rows());
     gx_s.setZero();
-    Eigen::MatrixXd hx_s(gf.IRows(), gf.IRows());
+    Eigen::MatrixXd hx_s(gf.input_rows(), gf.input_rows());
     hx_s.setZero();
-    Eigen::VectorXd l_s(gf.ORows());
+    Eigen::VectorXd l_s(gf.output_rows());
     l_s.setOnes();
 
     for (auto _ : state) {

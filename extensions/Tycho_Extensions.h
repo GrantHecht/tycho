@@ -21,7 +21,7 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
 
 struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
                                 DenseDerivativeMode::AutodiffFwd> {
@@ -115,4 +115,4 @@ struct ModifiedDynamicsAD
     }
 };
 
-} // namespace Tycho
+} // namespace tycho

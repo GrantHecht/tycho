@@ -13,7 +13,7 @@
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class BuilderAPITest : public OptimalControlTest {};
@@ -50,24 +50,24 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // Front boundary: fix x, y, v, t
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
                            Eigen::Vector4d(0, 10, 0, 0));
 
     // Back boundary: fix x, y
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Objective: minimize time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     // Solve
     auto status = phase.solve_optimize();
     EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
 
     // Check optimal time
-    auto result = phase.returnTraj();
+    auto result = phase.return_traj();
     double tf = result.back()[3];
     EXPECT_NEAR(tf, 1.8013, 0.01);
 }
@@ -103,11 +103,11 @@ TEST_F(BuilderAPITest, OCPWrapperAddPhaseAndLink) {
 
     // Use OCP wrapper — no base_ptr() needed
     OCP ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
 
     // Named-variable forward link
-    ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y", "v", "t"});
+    ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y", "v", "t"});
 
     // Verify the phases were added (base() escape hatch)
     EXPECT_EQ(ocp.base().phases.size(), 2u);
@@ -144,24 +144,24 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // Named front boundary
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
                            Eigen::Vector4d(0, 10, 0, 0));
 
     // Index-based back boundary
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
-    phase.addBoundaryValue(PhaseRegionFlags::Back, back_idx, Eigen::Vector2d(10, 5));
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, Eigen::Vector2d(10, 5));
 
     // Index-based control bounds
-    phase.addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
     // Minimize final time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     auto status = phase.solve_optimize();
     EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
 
-    auto result = phase.returnTraj();
+    auto result = phase.return_traj();
     double tf = result.back()[3];
     EXPECT_NEAR(tf, 1.8013, 0.01);
 }
@@ -200,11 +200,11 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
     OCP ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
 
     EXPECT_THROW(
-        ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y", "v", "t"}),
+        ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y", "v", "t"}),
         std::invalid_argument);
 }
 
@@ -243,11 +243,11 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
     OCP ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
 
     EXPECT_THROW(
-        ocp.addForwardLinkEqualCon(phase1, phase2, {"x", "y"}),
+        ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y"}),
         std::invalid_argument);
 }
 
@@ -282,13 +282,13 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
     OCP ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
 
     // Index-based link — the escape hatch for heterogeneous phase layouts
     Eigen::VectorXi link_vars(4);
     link_vars << 0, 1, 2, 3;  // x, y, v, t
-    ocp.addForwardLinkEqualCon(phase1, phase2, link_vars);
+    ocp.add_forward_link_equal_con(phase1, phase2, link_vars);
 
     EXPECT_EQ(ocp.base().phases.size(), 2u);
 }

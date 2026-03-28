@@ -11,7 +11,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -22,8 +22,8 @@ TEST_F(CommonFunctionsTest, NestedComposition) {
     auto args = Arguments<3>();
     auto scaled = 2.0 * args;
     auto normed = scaled.norm();
-    EXPECT_EQ(normed.IRows(), 3);
-    EXPECT_EQ(normed.ORows(), 1);
+    EXPECT_EQ(normed.input_rows(), 3);
+    EXPECT_EQ(normed.output_rows(), 1);
 
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 2.0;

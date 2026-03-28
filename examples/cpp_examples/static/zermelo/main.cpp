@@ -37,7 +37,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definitions — one per wind model

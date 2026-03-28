@@ -24,7 +24,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition via the VectorFunction DSL

@@ -7,7 +7,7 @@
 #include <cmath>
 #include <numbers>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Runtime initialization (called once per executable via inline variable)
@@ -17,7 +17,7 @@ namespace TychoBench {
 inline void ensure_runtime_initialized() {
     static bool done = [] {
         BumpAllocator::resize(256, 256);
-        double init_ms = Tycho::ensure_solver_initialized();
+        double init_ms = tycho::ensure_solver_initialized();
 #ifdef USE_ACCELERATE_SPARSE
         fmt::print("Accelerate init: {:.3f} ms (VECLIB_MAXIMUM_THREADS={})\n", init_ms,
                    TYCHO_DEFAULT_QP_THREADS);

@@ -23,7 +23,7 @@ class VFCompositionTest : public VectorFunctionFixture {};
 /// Central-difference Jacobian approximation for any VectorFunction-like object.
 template <class Func>
 Eigen::MatrixXd fd_jacobian(Func &f, const Eigen::VectorXd &x, double eps = 1e-7) {
-    int nr = f.ORows(), nc = f.IRows();
+    int nr = f.output_rows(), nc = f.input_rows();
     Eigen::MatrixXd jac(nr, nc);
     Eigen::VectorXd xp = x, fp(nr), fm(nr);
     for (int j = 0; j < nc; ++j) {
@@ -40,7 +40,7 @@ Eigen::MatrixXd fd_jacobian(Func &f, const Eigen::VectorXd &x, double eps = 1e-7
 /// Verify compute_jacobian output matches finite-difference approximation.
 template <class Func>
 void verify_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    int nr = f.ORows(), nc = f.IRows();
+    int nr = f.output_rows(), nc = f.input_rows();
     Eigen::VectorXd fx(nr);
     Eigen::MatrixXd jx(nr, nc);
     fx.setZero();
@@ -56,11 +56,11 @@ void verify_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
 /// Same check but through GenericFunction (virtual dispatch path).
 template <int IR, int OR, class Func>
 void verify_gf_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5) {
-    Tycho::GenericFunction<IR, OR> gf(f);
+    tycho::vf::GenericFunction<IR, OR> gf(f);
     Eigen::MatrixXd jx = gf.jacobian(x);
     Eigen::MatrixXd jx_fd = fd_jacobian(gf, x);
-    for (int i = 0; i < gf.ORows(); ++i)
-        for (int j = 0; j < gf.IRows(); ++j)
+    for (int i = 0; i < gf.output_rows(); ++i)
+        for (int j = 0; j < gf.input_rows(); ++j)
             EXPECT_NEAR(jx(i, j), jx_fd(i, j), tol)
                 << "GF Jacobian mismatch at (" << i << "," << j << ")";
 }

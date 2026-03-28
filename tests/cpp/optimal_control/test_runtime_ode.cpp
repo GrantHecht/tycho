@@ -9,7 +9,7 @@
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class RuntimeODETest : public OptimalControlTest {};

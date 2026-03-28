@@ -9,7 +9,7 @@
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class PhaseWrapperTest : public OptimalControlTest {};
@@ -54,11 +54,11 @@ TEST_F(PhaseWrapperTest, NamedBoundaryValue) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // Named overload
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
                            Eigen::Vector4d(0, 10, 0, 0));
 
     // Named overload for back
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
 
     SUCCEED(); // Construction and constraint addition didn't throw
 }
@@ -71,11 +71,11 @@ TEST_F(PhaseWrapperTest, IndexBasedPassthrough) {
 
     // Index overload (direct passthrough)
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
-    phase.addBoundaryValue(PhaseRegionFlags::Front, front_idx, Eigen::Vector4d(0, 10, 0, 0));
+    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, Eigen::Vector4d(0, 10, 0, 0));
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
-    phase.addBoundaryValue(PhaseRegionFlags::Back, back_idx, Eigen::Vector2d(10, 5));
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, Eigen::Vector2d(10, 5));
 
     SUCCEED();
 }
@@ -87,10 +87,10 @@ TEST_F(PhaseWrapperTest, NamedLUVarBound) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // Named
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Index passthrough
-    phase.addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
     SUCCEED();
 }
@@ -100,7 +100,7 @@ TEST_F(PhaseWrapperTest, DeltaTimeObjective) {
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     SUCCEED();
 }
@@ -110,7 +110,7 @@ TEST_F(PhaseWrapperTest, SetUnitsNamed) {
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
-    phase.setUnits({{"x", 10.0}, {"y", 10.0}, {"v", 5.0}, {"t", 1.0}, {"theta", 1.0}});
+    phase.set_units({{"x", 10.0}, {"y", 10.0}, {"v", 5.0}, {"t", 1.0}, {"theta", 1.0}});
 
     SUCCEED();
 }
@@ -141,7 +141,7 @@ TEST_F(PhaseWrapperTest, LUVarBoundMultiIndexThrows) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // "pos" maps to 2 indices — addLUVarBound requires exactly 1
-    EXPECT_THROW(phase.addLUVarBound(PhaseRegionFlags::Path, "pos", -1.0, 1.0),
+    EXPECT_THROW(phase.add_luvar_bound(PhaseRegionFlags::Path, "pos", -1.0, 1.0),
                  std::invalid_argument);
 }
 
@@ -175,7 +175,7 @@ TEST_F(PhaseWrapperTest, ScalarBoundaryValueGroupThrows) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // "pos" maps to 2 indices — scalar addBoundaryValue requires exactly 1
-    EXPECT_THROW(phase.addBoundaryValue(PhaseRegionFlags::Front, "pos", 5.0),
+    EXPECT_THROW(phase.add_boundary_value(PhaseRegionFlags::Front, "pos", 5.0),
                  std::invalid_argument);
 }
 
@@ -212,7 +212,7 @@ TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // "pos" maps to 2 indices — addLowerVarBound requires exactly 1
-    EXPECT_THROW(phase.addLowerVarBound(PhaseRegionFlags::Path, "pos", -1.0),
+    EXPECT_THROW(phase.add_lower_var_bound(PhaseRegionFlags::Path, "pos", -1.0),
                  std::invalid_argument);
 }
 
@@ -231,7 +231,7 @@ TEST_F(PhaseWrapperTest, UpperVarBoundGroupThrows) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // "pos" maps to 2 indices — addUpperVarBound requires exactly 1
-    EXPECT_THROW(phase.addUpperVarBound(PhaseRegionFlags::Path, "pos", 1.0),
+    EXPECT_THROW(phase.add_upper_var_bound(PhaseRegionFlags::Path, "pos", 1.0),
                  std::invalid_argument);
 }
 
@@ -250,7 +250,7 @@ TEST_F(PhaseWrapperTest, ValueObjectiveGroupThrows) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // "pos" maps to 2 indices — addValueObjective requires exactly 1
-    EXPECT_THROW(phase.addValueObjective(PhaseRegionFlags::Front, "pos", 1.0),
+    EXPECT_THROW(phase.add_value_objective(PhaseRegionFlags::Front, "pos", 1.0),
                  std::invalid_argument);
 }
 
@@ -259,7 +259,7 @@ TEST_F(PhaseWrapperTest, NamedLowerVarBound) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    phase.addLowerVarBound(PhaseRegionFlags::Path, "theta", -0.1);
+    phase.add_lower_var_bound(PhaseRegionFlags::Path, "theta", -0.1);
     SUCCEED();
 }
 
@@ -268,7 +268,7 @@ TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    phase.addUpperVarBound(PhaseRegionFlags::Path, "theta", 2.0);
+    phase.add_upper_var_bound(PhaseRegionFlags::Path, "theta", 2.0);
     SUCCEED();
 }
 
@@ -277,7 +277,7 @@ TEST_F(PhaseWrapperTest, NamedValueObjective) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    phase.addValueObjective(PhaseRegionFlags::Front, "v", 1.0);
+    phase.add_value_objective(PhaseRegionFlags::Front, "v", 1.0);
     SUCCEED();
 }
 
@@ -288,7 +288,7 @@ TEST_F(PhaseWrapperTest, BoundaryValueSizeMismatchThrows) {
 
     // 3 names but 2 values
     EXPECT_THROW(
-        phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v"}, Eigen::Vector2d(0, 10)),
+        phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v"}, Eigen::Vector2d(0, 10)),
         std::invalid_argument);
 }
 
@@ -296,7 +296,7 @@ TEST_F(PhaseWrapperTest, NamedDeltaVarEqualCon) {
     auto ode = make_brach_runtime_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
-    phase.addDeltaVarEqualCon("v", 5.0);
+    phase.add_delta_var_equal_con("v", 5.0);
     SUCCEED();
 }
 
@@ -304,7 +304,7 @@ TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
     auto ode = make_brach_runtime_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
-    phase.addLowerDeltaVarBound("v", 0.0);
+    phase.add_lower_delta_var_bound("v", 0.0);
     SUCCEED();
 }
 
@@ -316,7 +316,7 @@ TEST_F(PhaseWrapperTest, NamedEqualCon) {
     // Constraint: identity function on "x" at the front
     auto args = Arguments<1>();
     GenericFunction<-1, -1> identity(args);
-    phase.addEqualCon(PhaseRegionFlags::Front, identity, {"x"});
+    phase.add_equal_con(PhaseRegionFlags::Front, identity, {"x"});
 
     SUCCEED();
 }

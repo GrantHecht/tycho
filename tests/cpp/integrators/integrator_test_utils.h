@@ -15,7 +15,7 @@
 
 namespace TychoTest {
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Simple Harmonic Oscillator ODE: x'' = -x

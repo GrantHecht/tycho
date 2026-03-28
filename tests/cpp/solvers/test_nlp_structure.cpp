@@ -5,7 +5,7 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(SolverTest, NLPDimensionsConsistency) {

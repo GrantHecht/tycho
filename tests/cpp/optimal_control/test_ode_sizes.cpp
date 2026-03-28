@@ -7,7 +7,7 @@
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 
 TEST(ODESizeTest, AddIdxSingleInt) {
     // Tests the bug fix: add_idx(string, int) previously dropped the name

@@ -18,7 +18,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 int main() {
     constexpr double g = 9.81;
@@ -61,23 +61,23 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
     // Front boundary: fix x, y, v, t
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
                            Eigen::Vector4d(x0, y0, v0, 0.0));
 
     // Back boundary: fix x, y
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Objective: minimise flight time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     // ── Solve ───────────────────────────────────────────────────────────
     const auto status = phase.solve_optimize();
 
     if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        const auto result = phase.returnTraj();
+        const auto result = phase.return_traj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone (builder): optimal solution found\n";
         std::cout << "  Optimal time : " << result.back()[3] << " s\n";

@@ -8,13 +8,13 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(CommonFunctionsTest, ArgumentsDimensions) {
     auto args = Arguments<5>();
-    EXPECT_EQ(args.IRows(), 5);
-    EXPECT_EQ(args.ORows(), 5);
+    EXPECT_EQ(args.input_rows(), 5);
+    EXPECT_EQ(args.output_rows(), 5);
 }
 
 TEST_F(CommonFunctionsTest, ArgumentsIdentityJacobian) {
@@ -28,8 +28,8 @@ TEST_F(CommonFunctionsTest, ArgumentsIdentityJacobian) {
 TEST_F(CommonFunctionsTest, SegmentDimensions) {
     auto args = Arguments<6>();
     auto seg = args.template segment<3, 2>(); // 3 elements starting at index 2
-    EXPECT_EQ(seg.IRows(), 6);
-    EXPECT_EQ(seg.ORows(), 3);
+    EXPECT_EQ(seg.input_rows(), 6);
+    EXPECT_EQ(seg.output_rows(), 3);
 }
 
 TEST_F(CommonFunctionsTest, SegmentValues) {

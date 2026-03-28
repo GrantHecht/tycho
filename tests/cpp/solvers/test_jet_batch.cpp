@@ -5,7 +5,7 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(SolverTest, JetMapPrebuiltProblems) {
@@ -49,7 +49,7 @@ TEST_F(SolverTest, JetMapSaturatedPool) {
     // Regression test: Jet.map must not deadlock when num_jobs >= pool threads.
     // Root cause: parallel_task() in NLP eval methods was submitting work to the
     // global pool while already running on a pool worker, saturating all threads.
-    int nt = Tycho::get_num_threads();
+    int nt = tycho::get_num_threads();
     int num_jobs = std::max(nt + 2, 6); // more jobs than pool threads
 
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;

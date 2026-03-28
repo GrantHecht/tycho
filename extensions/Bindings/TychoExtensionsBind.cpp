@@ -17,7 +17,7 @@
 
 #include "Tycho_Extensions.h"
 
-namespace Tycho {
+namespace tycho {
 
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod);
 
@@ -35,9 +35,9 @@ template <> struct TychoBind<ModifiedDynamicsAD> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
+void tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
 
     extmod.def("cpp_cr3bp", [](double mu) {
         // Example of how to write CR3BP dynamics as C++ vector function and bind it to python

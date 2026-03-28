@@ -5,7 +5,7 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
@@ -13,8 +13,8 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
     auto phase2 = make_brach_phase(50, 16);
 
     OptimalControlProblem ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
     // Should construct without error
     SUCCEED();
 }

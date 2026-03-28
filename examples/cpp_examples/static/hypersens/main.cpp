@@ -24,7 +24,7 @@
 // === PAIN POINTS (for Phase 7 static DSL improvements) ===
 // 1. Integral objectives require constructing a GenericFunction wrapper and
 //    manually specifying which phase variables map to the function's inputs.
-//    Python: phase.addIntegralObjective(Args(2).squared_norm()/2, [0, 2])
+//    Python: phase.add_integral_objective(Args(2).squared_norm()/2, [0, 2])
 //    C++:    GenericFunction<-1,1> + VectorXi index array
 // 2. Boundary conditions require manual VectorXi/VectorXd construction for
 //    index and value arrays — verbose compared to Python's list syntax.
@@ -37,7 +37,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition

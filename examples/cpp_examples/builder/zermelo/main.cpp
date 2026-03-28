@@ -21,7 +21,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // navigate() — not templated!  Works with any RuntimeODE.
@@ -49,18 +49,18 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
 
     // Construct phase with named variables
     auto phase = ode.phase(TranscriptionModes::LGL3, trajG, nSeg);
-    phase.setNumPartitions(10);
+    phase.set_num_partitions(10);
 
     // Boundary conditions — named variables
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y"}, A);
-    phase.addBoundaryValue(PhaseRegionFlags::Front, "t", 0.0);
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, B);
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"}, A);
+    phase.add_boundary_value(PhaseRegionFlags::Front, "t", 0.0);
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, B);
 
     // Control bounds
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
+    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
     // Minimise travel time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     // Solver settings
     phase.optimizer().set_EContol(tol);
@@ -72,7 +72,7 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
                   << ")\n";
         return {};
     }
-    return phase.returnTraj();
+    return phase.return_traj();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

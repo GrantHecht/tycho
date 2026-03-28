@@ -10,7 +10,7 @@
 #include "test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -28,8 +28,8 @@ class VectorFunctionTest : public ::testing::Test {
 
 TEST_F(VectorFunctionTest, BrachistochroneDimensions) {
     BrachODE ode(9.81);
-    EXPECT_EQ(ode.IRows(), 5);
-    EXPECT_EQ(ode.ORows(), 3);
+    EXPECT_EQ(ode.input_rows(), 5);
+    EXPECT_EQ(ode.output_rows(), 3);
 }
 
 TEST_F(VectorFunctionTest, BrachistochroneComputeKnownValues) {
@@ -104,8 +104,8 @@ TEST_F(VectorFunctionTest, GenericFunctionCopyEvaluate) {
 
     // Erase into GenericFunction<-1,-1>
     GenericFunction<-1, -1> gf(ode);
-    EXPECT_EQ(gf.IRows(), 5);
-    EXPECT_EQ(gf.ORows(), 3);
+    EXPECT_EQ(gf.input_rows(), 5);
+    EXPECT_EQ(gf.output_rows(), 3);
 
     // Copy the generic function
     GenericFunction<-1, -1> gf2(gf);
