@@ -21,8 +21,8 @@ using namespace TychoTest;
 TEST_F(VFCompositionTest, FiveNestingLevels) {
     auto args = Arguments<4>();
     auto l1 = 2.0 * args;
-    auto l2 = l1.Sin();
-    auto l3 = l2.Square();
+    auto l2 = l1.sin();
+    auto l3 = l2.square();
     auto l4 = l3.norm();
     auto l5 = 3.0 * l3;
 
@@ -39,7 +39,7 @@ TEST_F(VFCompositionTest, MixedArithmeticComposition) {
     auto args = Arguments<6>();
     auto a = args.template head<3>();
     auto b = args.template tail<3>();
-    auto cw = a.cwiseProduct(b); // element-wise
+    auto cw = a.cwise_product(b); // element-wise
     auto n = cw.norm();          // scalar
     auto dp = a.dot(b);          // scalar
 
@@ -52,7 +52,7 @@ TEST_F(VFCompositionTest, MixedArithmeticComposition) {
 
 TEST_F(VFCompositionTest, NormOfComposition) {
     auto args = Arguments<3>();
-    auto sq = args.Square();
+    auto sq = args.square();
     auto n = sq.norm();
     // ||x^2|| at x=[3,4,0]: ||[9,16,0]|| = sqrt(81+256) = sqrt(337)
     Eigen::VectorXd x(3);
@@ -65,8 +65,8 @@ TEST_F(VFCompositionTest, NormOfComposition) {
 
 TEST_F(VFCompositionTest, DotOfCompositions) {
     auto args = Arguments<6>();
-    auto a = args.template head<3>().Sin();
-    auto b = args.template tail<3>().Cos();
+    auto a = args.template head<3>().sin();
+    auto b = args.template tail<3>().cos();
     auto dp = a.dot(b);
     Eigen::VectorXd x = deterministic_random_vector(6, 221, 0.1, 3.0);
     Eigen::VectorXd lm(1);

@@ -134,7 +134,7 @@ TEST_F(GenericFunctionTest, SmallFunctionInline) {
 TEST_F(GenericFunctionTest, LargeFunctionHeap) {
     // Build a deeply nested expression that should exceed 128-byte SBO buffer
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf(f);
     EXPECT_EQ(gf.input_rows(), 3);
     EXPECT_EQ(gf.output_rows(), 1);
@@ -151,7 +151,7 @@ TEST_F(GenericFunctionTest, LargeFunctionHeap) {
 
 TEST_F(GenericFunctionTest, CopyLargeFunction) {
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf1(f);
     GenericFunction<-1, -1> gf2(gf1); // copy
 
@@ -167,7 +167,7 @@ TEST_F(GenericFunctionTest, CopyLargeFunction) {
 
 TEST_F(GenericFunctionTest, MoveLargeFunction) {
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf1(f);
 
     // Compute reference before move

@@ -82,21 +82,21 @@ int main() {
     phase->setTraj(trajIG, nSeg);
 
     // Control mode
-    phase->setControlMode(ControlModes::NoSpline);
+    phase->set_control_mode(ControlModes::NoSpline);
 
     // Boundary conditions
     Eigen::VectorXi front_idx(2);
     front_idx << 0, 1;
     Eigen::VectorXd front_val(2);
     front_val << xt0, 0.0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val,
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
                             ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xtf, tf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val,
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
                             ScaleModes::AUTO);
 
     // Integral objective: minimize integral of (x^2 + u^2) / 2
@@ -105,13 +105,13 @@ int main() {
         auto obj_expr = obj_args.squared_norm() / 2.0;
         Eigen::VectorXi obj_vars(2);
         obj_vars << 0, 2;
-        phase->addIntegralObjective(GenericFunction<-1, 1>(obj_expr), obj_vars,
+        phase->add_integral_objective(GenericFunction<-1, 1>(obj_expr), obj_vars,
                                     ScaleModes::AUTO);
     }
 
     // Variable bounds
-    phase->addLUVarBound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
-    phase->addLUVarBound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
 
     // Solver settings
     phase->optimizer->set_OptLSMode("L1");
@@ -154,7 +154,7 @@ int main() {
     }
 
     // Print trajectory summary
-    auto traj = phase->returnTraj();
+    auto traj = phase->return_traj();
     if (!traj.empty()) {
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "  x(0)  = " << traj.front()[0] << "\n";

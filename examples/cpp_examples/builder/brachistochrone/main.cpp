@@ -68,7 +68,7 @@ int main() {
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Objective: minimise flight time
     phase.add_delta_time_objective(1.0);

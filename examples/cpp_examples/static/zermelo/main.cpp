@@ -134,12 +134,12 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
     Eigen::VectorXd t0_val(1);
     t0_val << 0.0;
 
-    phase->addBoundaryValue(PhaseRegionFlags::Front, xy_idx, A, ScaleModes::AUTO);
-    phase->addBoundaryValue(PhaseRegionFlags::Front, t_idx, t0_val, ScaleModes::AUTO);
-    phase->addBoundaryValue(PhaseRegionFlags::Back, xy_idx, B, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, xy_idx, A, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, t_idx, t0_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, xy_idx, B, ScaleModes::AUTO);
 
     // Control bounds
-    phase->addLUVarBound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
 
     // Minimise travel time
     phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
@@ -154,7 +154,7 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
                   << static_cast<int>(status) << ")\n";
         return {};
     }
-    return phase->returnTraj();
+    return phase->return_traj();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

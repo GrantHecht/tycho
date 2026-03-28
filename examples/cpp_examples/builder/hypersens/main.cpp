@@ -62,8 +62,8 @@ int main() {
     }
 
     // Variable bounds
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "x", -50.0, 50.0);
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "u", -50.0, 50.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -50.0, 50.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -50.0, 50.0);
 
     // ── Solver settings ─────────────────────────────────────────────────
     phase.optimizer().set_OptLSMode("L1");

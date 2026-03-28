@@ -78,7 +78,7 @@ TEST_F(CommonFunctionsTest, CwiseSumJacobian) {
 
 TEST_F(CommonFunctionsTest, CwiseInverseAdjoint) {
     auto args = Arguments<3>();
-    auto inv = args.cwiseInverse();
+    auto inv = args.cwise_inverse();
     Eigen::VectorXd x(3);
     x << 2.0, 4.0, 5.0;
     Eigen::VectorXd lm = deterministic_random_vector(3, 90, -1.0, 1.0);
@@ -107,7 +107,7 @@ TEST_F(CommonFunctionsTest, ChainedArithmeticAdjointConsistency) {
 
 TEST_F(CommonFunctionsTest, NormOfCompositionAdjoint) {
     auto args = Arguments<4>();
-    auto sq = args.Square();
+    auto sq = args.square();
     auto n = sq.norm();
     Eigen::VectorXd x = deterministic_random_vector(4, 110, 0.5, 5.0);
     Eigen::VectorXd lm(1);
@@ -117,8 +117,8 @@ TEST_F(CommonFunctionsTest, NormOfCompositionAdjoint) {
 
 TEST_F(CommonFunctionsTest, DotOfCompositionsAdjoint) {
     auto args = Arguments<6>();
-    auto a = args.template head<3>().Sin();
-    auto b = args.template tail<3>().Cos();
+    auto a = args.template head<3>().sin();
+    auto b = args.template tail<3>().cos();
     auto dp = a.dot(b);
     Eigen::VectorXd x = deterministic_random_vector(6, 111, 0.1, 3.0);
     Eigen::VectorXd lm(1);
@@ -129,8 +129,8 @@ TEST_F(CommonFunctionsTest, DotOfCompositionsAdjoint) {
 TEST_F(CommonFunctionsTest, FiveNestedLevels) {
     auto args = Arguments<3>();
     auto step1 = 2.0 * args;
-    auto step2 = step1.Sin();
-    auto step3 = step2.Square();
+    auto step2 = step1.sin();
+    auto step3 = step2.square();
     auto step4 = step3.sum();
     auto step5 = 3.0 * step3;
 

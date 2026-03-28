@@ -57,7 +57,7 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Objective: minimize time
     phase.add_delta_time_objective(1.0);
@@ -153,7 +153,7 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, Eigen::Vector2d(10, 5));
 
     // Index-based control bounds
-    phase.add_luvar_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
     // Minimize final time
     phase.add_delta_time_objective(1.0);

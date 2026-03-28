@@ -87,10 +87,10 @@ TEST_F(PhaseWrapperTest, NamedLUVarBound) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     // Named
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Index passthrough
-    phase.add_luvar_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
     SUCCEED();
 }
@@ -140,8 +140,8 @@ TEST_F(PhaseWrapperTest, LUVarBoundMultiIndexThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — addLUVarBound requires exactly 1
-    EXPECT_THROW(phase.add_luvar_bound(PhaseRegionFlags::Path, "pos", -1.0, 1.0),
+    // "pos" maps to 2 indices — add_lu_var_bound requires exactly 1
+    EXPECT_THROW(phase.add_lu_var_bound(PhaseRegionFlags::Path, "pos", -1.0, 1.0),
                  std::invalid_argument);
 }
 
@@ -174,7 +174,7 @@ TEST_F(PhaseWrapperTest, ScalarBoundaryValueGroupThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — scalar addBoundaryValue requires exactly 1
+    // "pos" maps to 2 indices — scalar add_boundary_value requires exactly 1
     EXPECT_THROW(phase.add_boundary_value(PhaseRegionFlags::Front, "pos", 5.0),
                  std::invalid_argument);
 }
@@ -230,7 +230,7 @@ TEST_F(PhaseWrapperTest, UpperVarBoundGroupThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — addUpperVarBound requires exactly 1
+    // "pos" maps to 2 indices — add_upper_var_bound requires exactly 1
     EXPECT_THROW(phase.add_upper_var_bound(PhaseRegionFlags::Path, "pos", 1.0),
                  std::invalid_argument);
 }
@@ -249,7 +249,7 @@ TEST_F(PhaseWrapperTest, ValueObjectiveGroupThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — addValueObjective requires exactly 1
+    // "pos" maps to 2 indices — add_value_objective requires exactly 1
     EXPECT_THROW(phase.add_value_objective(PhaseRegionFlags::Front, "pos", 1.0),
                  std::invalid_argument);
 }

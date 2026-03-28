@@ -128,15 +128,15 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
-    phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
     phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
@@ -185,18 +185,18 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs, int
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(5, 0, 4);
     Eigen::VectorXd front_val(5);
     front_val << r0, theta0, vr0, vt0, t0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     // Back boundary: r, vr, vt (free theta, free time)
     Eigen::VectorXi back_idx(3);
     back_idx << 0, 2, 3;
     Eigen::VectorXd back_val(3);
     back_val << rf, vrf, vtf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds
-    phase->addLUVarBound(PhaseRegionFlags::Path, 5, 0.0, 1.0, 1.0);
-    phase->addLUVarBound(PhaseRegionFlags::Path, 6, -std::numbers::pi, std::numbers::pi, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 5, 0.0, 1.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 6, -std::numbers::pi, std::numbers::pi, 1.0);
 
     // Minimize transfer time
     phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
@@ -337,26 +337,26 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
 
     // Front boundary: MEEs + weight + time
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(8, 0, 7);
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, X0.head(8), ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, X0.head(8), ScaleModes::AUTO);
 
     // Back boundary: target semi-latus rectum
     Eigen::VectorXi back_p_idx(1);
     back_p_idx << 0;
     Eigen::VectorXd back_p_val(1);
     back_p_val << ptf_nd;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_p_idx, back_p_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_p_idx, back_p_val, ScaleModes::AUTO);
 
     // Lower bound on final weight
     phase->addLowerVarBound(PhaseRegionFlags::Back, 6, 0.05);
 
     // Throttle parameter bounds
-    phase->addLUVarBound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0);
 
     // Control unit vector constraint: ||u|| = 1
-    phase->setControlMode(ControlModes::NoSpline);
+    phase->set_control_mode(ControlModes::NoSpline);
 
     // Maximize final weight (minimize fuel)
-    phase->addValueObjective(PhaseRegionFlags::Back, 6, -1.0);
+    phase->add_value_objective(PhaseRegionFlags::Back, 6, -1.0);
 
     // Mesh refinement settings
     if (adaptive_mesh) {

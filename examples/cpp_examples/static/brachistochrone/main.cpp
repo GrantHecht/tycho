@@ -88,17 +88,17 @@ int main() {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     // Back boundary: x(tf)=xf, y(tf)=yf
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
 
     // ---- Objective ---------------------------------------------------------
     phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
@@ -107,7 +107,7 @@ int main() {
     const auto status = phase->solve_optimize();
 
     if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        const auto result = phase->returnTraj();
+        const auto result = phase->return_traj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone: optimal solution found\n";
         std::cout << "  Optimal time : " << result.back()[3] << " s\n";

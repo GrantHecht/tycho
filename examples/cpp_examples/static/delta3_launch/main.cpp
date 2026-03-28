@@ -25,7 +25,7 @@
 // 3. TargetOrbit constraint function requires manual construction of
 //    orbital elements from VF primitives (acos, cross, ifelse, normalized).
 //    Verbose but functional.
-// 4. Manual index arrays for every addBoundaryValue / addEqualCon call.
+// 4. Manual index arrays for every add_boundary_value / add_equal_con call.
 // 5. Arguments<11> is expensive to compile (~heavy template instantiation).
 // 6. No ODEArguments equivalent — must track [x,t,u] layout manually.
 ///////////////////////////////////////////////////////////////////////////////
@@ -304,20 +304,20 @@ int main() {
     ///////////////////////////////////////////////////////////////////////////
     auto phase1 = std::make_shared<ODEPhase<RocketODE>>(ode1, tmode);
     phase1->setTraj(IG1, nSegs);
-    phase1->setControlMode(ControlModes::HighestOrderSpline);
+    phase1->set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase1->addLUNormBound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
+    phase1->add_lu_norm_bound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
                            ScaleModes::AUTO);
 
     // Front BC: full state [R, V, m, t]
     auto front_idx_8 = make_idx({0, 1, 2, 3, 4, 5, 6, 7});
     Eigen::VectorXd front_val_8(8);
     front_val_8 << y0[0], y0[1], y0[2], y0[3], y0[4], y0[5], m0_phase1, 0.0;
-    phase1->addBoundaryValue(PhaseRegionFlags::Front, front_idx_8, front_val_8,
+    phase1->add_boundary_value(PhaseRegionFlags::Front, front_idx_8, front_val_8,
                              ScaleModes::AUTO);
 
     // Altitude above (slightly relaxed) Earth radius
-    phase1->addLowerNormBound(PhaseRegionFlags::Path, pos_idx, Re * 0.999999, 1.0,
+    phase1->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re * 0.999999, 1.0,
                               ScaleModes::AUTO);
 
     // Back BC: final time
@@ -325,74 +325,74 @@ int main() {
     t_idx << 7;
     Eigen::VectorXd tf1_val(1);
     tf1_val << tf_phase1;
-    phase1->addBoundaryValue(PhaseRegionFlags::Back, t_idx, tf1_val, ScaleModes::AUTO);
+    phase1->add_boundary_value(PhaseRegionFlags::Back, t_idx, tf1_val, ScaleModes::AUTO);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 2: 3 SRBs + core
     ///////////////////////////////////////////////////////////////////////////
     auto phase2 = std::make_shared<ODEPhase<RocketODE>>(ode2, tmode);
     phase2->setTraj(IG2, nSegs);
-    phase2->setControlMode(ControlModes::HighestOrderSpline);
+    phase2->set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase2->addLowerNormBound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
-    phase2->addLUNormBound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
+    phase2->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
+    phase2->add_lu_norm_bound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
                            ScaleModes::AUTO);
 
     Eigen::VectorXi m_idx(1);
     m_idx << 6;
     Eigen::VectorXd m0_p2_val(1);
     m0_p2_val << m0_phase2;
-    phase2->addBoundaryValue(PhaseRegionFlags::Front, m_idx, m0_p2_val, ScaleModes::AUTO);
+    phase2->add_boundary_value(PhaseRegionFlags::Front, m_idx, m0_p2_val, ScaleModes::AUTO);
 
     Eigen::VectorXd tf2_val(1);
     tf2_val << tf_phase2;
-    phase2->addBoundaryValue(PhaseRegionFlags::Back, t_idx, tf2_val, ScaleModes::AUTO);
+    phase2->add_boundary_value(PhaseRegionFlags::Back, t_idx, tf2_val, ScaleModes::AUTO);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 3: core only
     ///////////////////////////////////////////////////////////////////////////
     auto phase3 = std::make_shared<ODEPhase<RocketODE>>(ode3, tmode);
     phase3->setTraj(IG3, nSegs);
-    phase3->setControlMode(ControlModes::HighestOrderSpline);
+    phase3->set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase3->addLowerNormBound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
-    phase3->addLUNormBound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
+    phase3->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
+    phase3->add_lu_norm_bound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
                            ScaleModes::AUTO);
 
     Eigen::VectorXd m0_p3_val(1);
     m0_p3_val << m0_phase3;
-    phase3->addBoundaryValue(PhaseRegionFlags::Front, m_idx, m0_p3_val, ScaleModes::AUTO);
+    phase3->add_boundary_value(PhaseRegionFlags::Front, m_idx, m0_p3_val, ScaleModes::AUTO);
 
     Eigen::VectorXd tf3_val(1);
     tf3_val << tf_phase3;
-    phase3->addBoundaryValue(PhaseRegionFlags::Back, t_idx, tf3_val, ScaleModes::AUTO);
+    phase3->add_boundary_value(PhaseRegionFlags::Back, t_idx, tf3_val, ScaleModes::AUTO);
 
     ///////////////////////////////////////////////////////////////////////////
     // Phase 4: upper stage
     ///////////////////////////////////////////////////////////////////////////
     auto phase4 = std::make_shared<ODEPhase<RocketODE>>(ode4, tmode);
     phase4->setTraj(IG4, nSegs);
-    phase4->setControlMode(ControlModes::HighestOrderSpline);
+    phase4->set_control_mode(ControlModes::HighestOrderSpline);
 
-    phase4->addLowerNormBound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
-    phase4->addLUNormBound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
+    phase4->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
+    phase4->add_lu_norm_bound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
                            ScaleModes::AUTO);
 
     Eigen::VectorXd m0_p4_val(1);
     m0_p4_val << m0_phase4;
-    phase4->addBoundaryValue(PhaseRegionFlags::Front, m_idx, m0_p4_val, ScaleModes::AUTO);
+    phase4->add_boundary_value(PhaseRegionFlags::Front, m_idx, m0_p4_val, ScaleModes::AUTO);
 
     // Upper bound on final time
-    phase4->addUpperVarBound(PhaseRegionFlags::Back, 7, tf_phase4, 1.0, ScaleModes::AUTO);
+    phase4->add_upper_var_bound(PhaseRegionFlags::Back, 7, tf_phase4, 1.0, ScaleModes::AUTO);
 
     // Terminal orbital element constraint
     auto target_orbit_fn = MakeTargetOrbit(at, et, istart, Ot, Wt);
-    phase4->addEqualCon(PhaseRegionFlags::Back,
+    phase4->add_equal_con(PhaseRegionFlags::Back,
                         GenericFunction<-1, -1>(target_orbit_fn), rv_idx,
                         ScaleModes::AUTO);
 
     // Maximize final mass (minimise -m)
-    phase4->addValueObjective(PhaseRegionFlags::Back, 6, -1.0, ScaleModes::AUTO);
+    phase4->add_value_objective(PhaseRegionFlags::Back, 6, -1.0, ScaleModes::AUTO);
 
     ///////////////////////////////////////////////////////////////////////////
     // Optimal Control Problem — link phases
@@ -424,7 +424,7 @@ int main() {
         return 1;
     }
 
-    auto traj4 = phase4->returnTraj();
+    auto traj4 = phase4->return_traj();
     if (traj4.empty()) {
         std::cerr << "Delta3Launch: solver converged but trajectory is empty\n";
         return 1;

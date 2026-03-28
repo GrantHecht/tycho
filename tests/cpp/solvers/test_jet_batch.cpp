@@ -20,7 +20,7 @@ TEST_F(SolverTest, JetMapPrebuiltProblems) {
     auto results = Jet::map(phases, false);
     ASSERT_EQ(results.size(), 3u);
     for (int i = 0; i < 3; ++i) {
-        auto traj = results[i]->returnTraj();
+        auto traj = results[i]->return_traj();
         double tf = traj.back()[3];
         EXPECT_NEAR(tf, 1.8013, 0.02)
             << "Jet problem " << i << " did not converge to expected time";
@@ -39,7 +39,7 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     auto results = Jet::map(gen, args, false);
     ASSERT_EQ(results.size(), 2u);
     for (int i = 0; i < 2; ++i) {
-        auto traj = results[i]->returnTraj();
+        auto traj = results[i]->return_traj();
         double tf = traj.back()[3];
         EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet single-gen problem " << i << " did not converge";
     }
@@ -62,7 +62,7 @@ TEST_F(SolverTest, JetMapSaturatedPool) {
     auto results = Jet::map(phases, false);
     ASSERT_EQ(results.size(), static_cast<size_t>(num_jobs));
     for (int i = 0; i < num_jobs; ++i) {
-        auto traj = results[i]->returnTraj();
+        auto traj = results[i]->return_traj();
         double tf = traj.back()[3];
         EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet saturated-pool problem " << i << " did not converge";
     }
@@ -89,7 +89,7 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     auto results = Jet::map(genfuncs, args, genfidxes, false);
     ASSERT_EQ(results.size(), 3u);
     for (int i = 0; i < 3; ++i) {
-        auto traj = results[i]->returnTraj();
+        auto traj = results[i]->return_traj();
         double tf = traj.back()[3];
         EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet multi-gen problem " << i << " did not converge";
     }

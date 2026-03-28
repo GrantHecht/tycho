@@ -57,7 +57,7 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, B);
 
     // Control bounds
-    phase.add_luvar_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
     // Minimise travel time
     phase.add_delta_time_objective(1.0);

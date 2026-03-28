@@ -27,7 +27,7 @@ TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED)
         << "Brachistochrone should converge to optimal";
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     double tf = result.back()[3];
     // Known optimal time ~1.8013 s
     EXPECT_NEAR(tf, 1.8013, 0.01) << "Optimal time should be near 1.8013 s, got " << tf;
@@ -40,7 +40,7 @@ TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
     auto status = phase->solve_optimize();
     ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     // Check final boundary conditions: x(tf)=10, y(tf)=5
     EXPECT_NEAR(result.back()[0], 10.0, 1e-4);
     EXPECT_NEAR(result.back()[1], 5.0, 1e-4);

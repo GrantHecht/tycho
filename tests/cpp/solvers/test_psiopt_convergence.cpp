@@ -13,7 +13,7 @@ TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     double tf = result.back()[3];
     EXPECT_NEAR(tf, 1.8013, 0.01);
 }

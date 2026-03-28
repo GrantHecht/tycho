@@ -100,7 +100,7 @@ TEST_F(VFCompositionTest, BrachistochroneHessianSymmetry) {
 
 TEST_F(VFCompositionTest, NestedScalarHessianSymmetry) {
     auto args = Arguments<4>();
-    auto sq = args.Square();
+    auto sq = args.square();
     auto n = sq.norm(); // scalar
     Eigen::VectorXd x = deterministic_random_vector(4, 234, 0.5, 5.0);
     Eigen::VectorXd lm(1);
