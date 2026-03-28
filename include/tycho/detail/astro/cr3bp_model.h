@@ -18,7 +18,7 @@
 #include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 
 struct CR3BP_Impl : ODESize<6, 0, 0> {
     static auto Definition(double mu) {
@@ -57,4 +57,4 @@ struct CR3BP_Impl : ODESize<6, 0, 0> {
 
 BUILD_ODE_FROM_EXPRESSION(CR3BP, CR3BP_Impl, double);
 
-} // namespace Tycho
+} // namespace tycho::astro

@@ -1,4 +1,4 @@
 #pragma once
 #include "tycho/astro.h"
 
-namespace Tycho {}
+namespace tycho::astro {}

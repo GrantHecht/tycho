@@ -1,7 +1,7 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 
 /*
 Kepler propagator implementation is partly based on the implementation found at
@@ -539,4 +539,4 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     }*/
 };
 
-} // namespace Tycho
+} // namespace tycho::astro

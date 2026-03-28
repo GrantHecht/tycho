@@ -19,7 +19,7 @@
 #include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 
 struct Kepler_Impl : ODESize<6, 0, 0> {
     static auto Definition(double mu) {
@@ -67,4 +67,4 @@ struct KeplerPhase : ODEPhase<Kepler> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::astro

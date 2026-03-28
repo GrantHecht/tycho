@@ -16,7 +16,7 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 struct J2Cartesian_Impl {
     /// <summary>
     /// Computes J2 effect given position vector relative to body and the north pole vector of the
@@ -82,4 +82,4 @@ struct J2Modified_Impl {
 
 // BUILD_FROM_EXPRESSION(J2Modified, J2Modified_Impl, double, double,double );
 
-} // namespace Tycho
+} // namespace tycho::astro

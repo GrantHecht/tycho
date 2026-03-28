@@ -16,7 +16,7 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 
 struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Analytic,
                                     DenseDerivativeMode::Analytic> {
@@ -846,4 +846,4 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::astro
