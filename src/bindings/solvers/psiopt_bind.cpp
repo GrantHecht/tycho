@@ -74,37 +74,37 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     obj.def("get_convergence_flag", &PSIOPT::get_ConvergenceFlag);
 
-    obj.def_rw("kk_ttol", &PSIOPT::KKTtol, "");
-    obj.def_rw("bartol", &PSIOPT::Bartol, "");
-    obj.def_rw("e_contol", &PSIOPT::EContol, "");
-    obj.def_rw("i_contol", &PSIOPT::IContol, "");
+    obj.def_rw("kkt_tol", &PSIOPT::KKTtol, "");
+    obj.def_rw("bar_tol", &PSIOPT::Bartol, "");
+    obj.def_rw("eq_con_tol", &PSIOPT::EContol, "");
+    obj.def_rw("ineq_con_tol", &PSIOPT::IContol, "");
 
     obj.def("set_kkt_tol", &PSIOPT::set_KKTtol);
     obj.def("set_bar_tol", &PSIOPT::set_Bartol);
     obj.def("set_eq_con_tol", &PSIOPT::set_EContol);
     obj.def("set_ineq_con_tol", &PSIOPT::set_IContol);
 
-    obj.def("set_tols", &PSIOPT::set_tols, nb::arg("KKTtol") = 1.0e-6, nb::arg("EContol") = 1.0e-6,
-            nb::arg("IContol") = 1.0e-6, nb::arg("Bartol") = 1.0e-6);
+    obj.def("set_tols", &PSIOPT::set_tols, nb::arg("kkt_tol") = 1.0e-6, nb::arg("eq_con_tol") = 1.0e-6,
+            nb::arg("ineq_con_tol") = 1.0e-6, nb::arg("bar_tol") = 1.0e-6);
 
-    obj.def_rw("acc_kk_ttol", &PSIOPT::AccKKTtol, "");
-    obj.def_rw("acc_bartol", &PSIOPT::AccBartol, "");
-    obj.def_rw("acc_e_contol", &PSIOPT::AccEContol, "");
-    obj.def_rw("acc_i_contol", &PSIOPT::AccIContol, "");
+    obj.def_rw("acc_kkt_tol", &PSIOPT::AccKKTtol, "");
+    obj.def_rw("acc_bar_tol", &PSIOPT::AccBartol, "");
+    obj.def_rw("acc_eq_con_tol", &PSIOPT::AccEContol, "");
+    obj.def_rw("acc_ineq_con_tol", &PSIOPT::AccIContol, "");
 
     obj.def("set_acc_kkt_tol", &PSIOPT::set_AccKKTtol);
     obj.def("set_acc_bar_tol", &PSIOPT::set_AccBartol);
     obj.def("set_acc_eq_con_tol", &PSIOPT::set_AccEContol);
     obj.def("set_acc_ineq_con_tol", &PSIOPT::set_AccIContol);
 
-    obj.def("set_acc_tols", &PSIOPT::set_Acctols, nb::arg("AccKKTtol") = 1.0e-2,
-            nb::arg("AccEContol") = 1.0e-3, nb::arg("AccIContol") = 1.0e-3,
-            nb::arg("AccBartol") = 1.0e-3);
+    obj.def("set_acc_tols", &PSIOPT::set_Acctols, nb::arg("acc_kkt_tol") = 1.0e-2,
+            nb::arg("acc_eq_con_tol") = 1.0e-3, nb::arg("acc_ineq_con_tol") = 1.0e-3,
+            nb::arg("acc_bar_tol") = 1.0e-3);
 
-    obj.def_rw("div_kk_ttol", &PSIOPT::DivKKTtol, "");
-    obj.def_rw("div_bartol", &PSIOPT::DivBartol, "");
-    obj.def_rw("div_e_contol", &PSIOPT::DivEContol, "");
-    obj.def_rw("div_i_contol", &PSIOPT::DivIContol, "");
+    obj.def_rw("div_kkt_tol", &PSIOPT::DivKKTtol, "");
+    obj.def_rw("div_bar_tol", &PSIOPT::DivBartol, "");
+    obj.def_rw("div_eq_con_tol", &PSIOPT::DivEContol, "");
+    obj.def_rw("div_ineq_con_tol", &PSIOPT::DivIContol, "");
 
     obj.def("set_div_kkt_tol", &PSIOPT::set_DivKKTtol);
     obj.def("set_div_bar_tol", &PSIOPT::set_DivBartol);
@@ -128,8 +128,8 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_incr_h", &PSIOPT::set_incrH);
     obj.def("set_decr_h", &PSIOPT::set_decrH);
 
-    obj.def("set_hpert_params", &PSIOPT::set_HpertParams, nb::arg("deltaH"), nb::arg("incrH"),
-            nb::arg("decrH"));
+    obj.def("set_hpert_params", &PSIOPT::set_HpertParams, nb::arg("delta_h"), nb::arg("incr_h"),
+            nb::arg("decr_h"));
 
     /////////////////////////////////////////////////////////////
     obj.def_rw("init_mu", &PSIOPT::initMu, "");

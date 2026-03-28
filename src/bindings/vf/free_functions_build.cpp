@@ -154,7 +154,7 @@ void ProductBuild(nb::module_ &m) {
     auto cwiseProductOpLam = [](const auto &f1, const auto &f2) {
         nb::object fun1 = nb::cast(f1);
         nb::object fun2 = nb::cast(f2);
-        return fun1.attr("cwiseProduct")(fun2);
+        return fun1.attr("cwise_product")(fun2);
     };
 
     m.def("cwise_product", [cwiseProductOpLam](const SEG2 &f1, const Vector2<double> &f2) {
@@ -224,7 +224,7 @@ void ProductBuild(nb::module_ &m) {
     auto cwiseQuotientOpLam = [](const auto &f1, const auto &f2) {
         nb::object fun1 = nb::cast(f1);
         nb::object fun2 = nb::cast(f2);
-        return fun1.attr("cwiseQuotient")(fun2);
+        return fun1.attr("cwise_quotient")(fun2);
     };
 
     m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG2 &f1, const Vector2<double> &f2) {

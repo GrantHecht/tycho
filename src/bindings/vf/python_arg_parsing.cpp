@@ -102,7 +102,7 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
         if (xi.type().is(vftype) || xi.type().is(sftype) || xi.type().is(elemtype) ||
             xi.type().is(segtype) || xi.type().is(seg2type) || xi.type().is(seg3type) ||
             xi.type().is(argtype)) {
-            int irowstmp = nb::cast<int>(xi.attr("IRows")());
+            int irowstmp = nb::cast<int>(xi.attr("input_rows")());
             if (irows == 0) {
                 irows = irowstmp;
             } else if (irowstmp != irows) {
@@ -223,7 +223,7 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
     int i = 0;
     for (nb::handle xi : x) {
         if (xi.type().is(sftype) || xi.type().is(elemtype)) {
-            int irowstmp = nb::cast<int>(xi.attr("IRows")());
+            int irowstmp = nb::cast<int>(xi.attr("input_rows")());
             if (irows == 0) {
                 irows = irowstmp;
             } else if (irowstmp != irows) {
