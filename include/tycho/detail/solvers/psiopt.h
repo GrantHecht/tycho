@@ -450,9 +450,9 @@ struct PSIOPT {
 
     ////////////////////////////////////////////////////////////////////
 
-    PSIOPT() { this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count()); }
+    PSIOPT() { this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()); }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
+        this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
         this->setNLP(np);
     }
 
