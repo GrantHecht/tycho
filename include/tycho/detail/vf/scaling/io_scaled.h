@@ -44,7 +44,7 @@ struct IOScaled
         this->input_scales = input_scales;
         this->output_scales = output_scales;
 
-        this->EnableVectorization = this->func.EnableVectorization;
+        this->enable_vectorization_ = this->func.enable_vectorization_;
     }
 
     template <class InType, class OutType>

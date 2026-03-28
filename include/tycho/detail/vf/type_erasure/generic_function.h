@@ -86,7 +86,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     inline bool is_linear() const { return this->islinear; }
     void enable_vectorization(bool b) const {
         this->func.get().enable_vectorization(b);
-        this->EnableVectorization = b;
+        this->enable_vectorization_ = b;
     }
 
     // The virtual dispatch on GFConcept requires explicit Eigen::Ref arguments.

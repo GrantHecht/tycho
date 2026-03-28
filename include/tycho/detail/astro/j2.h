@@ -37,7 +37,7 @@ struct J2Cartesian_Impl {
 
         double Scale = 0.5 * (mu)*J2 * Rb * Rb;
 
-        auto dotterm = r.normalized().dot(p).Square();
+        auto dotterm = r.normalized().dot(p).square();
 
         auto term1 = (15.0 * dotterm - 3.0) * rn5;
 

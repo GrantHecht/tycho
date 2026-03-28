@@ -32,8 +32,8 @@ enum class ConditionalFlags {
 template <class LHS, class RHS> struct ConditionalStatement {
 
     static const int IRC = SZ_MAX<LHS::IRC, RHS::IRC>::value;
-    static const bool IsConditional = true;
-    static const bool MetaConditional = LHS::IsConditional && RHS::IsConditional;
+    static const bool is_conditional = true;
+    static const bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
 
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IRC, 1>;
     template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
@@ -46,7 +46,7 @@ template <class LHS, class RHS> struct ConditionalStatement {
             throw std::invalid_argument(
                 "LHS and RHS of conditional statement must have same input rows");
         }
-        if constexpr (!MetaConditional) {
+        if constexpr (!meta_conditional) {
             if (lhs.output_rows() > 1 || rhs.output_rows() > 1) {
                 throw std::invalid_argument(
                     "LHS and RHS of conditional statement must be scalar functions");
@@ -63,7 +63,7 @@ template <class LHS, class RHS> struct ConditionalStatement {
 
     template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
-        if constexpr (MetaConditional) {
+        if constexpr (meta_conditional) {
             bool left = this->lhs.compute(x);
             bool right = this->rhs.compute(x);
             bool result = false;

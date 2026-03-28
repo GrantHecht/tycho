@@ -70,7 +70,7 @@ template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
 
     inline void set_axis_id(int i) { this->axis = i; }
 
-    inline void setData(std::vector<Eigen::MatrixBase<DType>> d) {
+    inline void set_data(std::vector<Eigen::MatrixBase<DType>> d) {
         if (d.size() < this->fb_sten_size) {
             std::cout << "ERROR: Not enough data for desired derivative/accuracy" << std::endl;
             return;

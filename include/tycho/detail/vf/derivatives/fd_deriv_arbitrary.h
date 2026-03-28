@@ -82,7 +82,7 @@ template <class DType> struct FDDerivArbitrary {
 
     inline void set_axis(int i) { this->axis = i; }
 
-    inline void setData(const std::vector<DType> &d) {
+    inline void set_data(const std::vector<DType> &d) {
         this->data = d;
         this->length = d.size();
     }
@@ -90,7 +90,7 @@ template <class DType> struct FDDerivArbitrary {
     FDDerivArbitrary() {};
     FDDerivArbitrary(int i, const std::vector<DType> &d) {
         this->set_axis(i);
-        this->setData(d);
+        this->set_data(d);
     }
 
     /*!

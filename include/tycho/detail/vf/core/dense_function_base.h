@@ -225,14 +225,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    auto Sin() const { return CwiseSin<Derived>(this->derived()); }
-    auto Cos() const { return CwiseCos<Derived>(this->derived()); }
+    auto sin() const { return CwiseSin<Derived>(this->derived()); }
+    auto cos() const { return CwiseCos<Derived>(this->derived()); }
     auto arc_sin() const { return CwiseArcSin<Derived>(this->derived()); }
     auto arc_cos() const { return CwiseArcCos<Derived>(this->derived()); }
-    auto Tan() const { return CwiseTan<Derived>(this->derived()); }
-    auto Square() const { return CwiseSquare<Derived>(this->derived()); }
-    auto Sqrt() const { return CwiseSqrt<Derived>(this->derived()); }
-    auto Exp() const { return CwiseExp<Derived>(this->derived()); }
+    auto tan() const { return CwiseTan<Derived>(this->derived()); }
+    auto square() const { return CwiseSquare<Derived>(this->derived()); }
+    auto sqrt() const { return CwiseSqrt<Derived>(this->derived()); }
+    auto exp() const { return CwiseExp<Derived>(this->derived()); }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1048,7 +1048,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             };
 
             if constexpr (Derived::is_vectorizable) {
-                if (this->derived().EnableVectorization) {
+                if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
                     ScalarImpl(0, data.NumAppl());
@@ -1216,7 +1216,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             };
 
             if constexpr (Derived::is_vectorizable) {
-                if (this->derived().EnableVectorization) {
+                if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
                     ScalarImpl(0, data.NumAppl());

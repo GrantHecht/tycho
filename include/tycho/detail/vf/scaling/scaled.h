@@ -162,7 +162,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
-    double Scale_value = 1.0;
+    double scale_value_ = 1.0;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
@@ -170,7 +170,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     static const bool is_vectorizable = Func::is_vectorizable;
 
     Scaled_Impl() {}
-    Scaled_Impl(Func f, double s) : func(std::move(f)), Scale_value(s) {
+    Scaled_Impl(Func f, double s) : func(std::move(f)), scale_value_(s) {
         this->set_io_rows(this->func.input_rows(), this->func.output_rows());
         this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
@@ -182,7 +182,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         this->func.compute(x, fx_);
-        fx *= Scalar(this->Scale_value);
+        fx *= Scalar(this->scale_value_);
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -191,8 +191,8 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
         this->func.compute_jacobian(x, fx_, jx_);
-        fx *= Scalar(this->Scale_value);
-        this->func.scale_jacobian(jx, Scalar(this->Scale_value));
+        fx *= Scalar(this->scale_value_);
+        this->func.scale_jacobian(jx, Scalar(this->scale_value_));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -204,11 +204,11 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &adjv_scaled) {
-            adjv_scaled = adjvars * Scalar(this->Scale_value);
+            adjv_scaled = adjvars * Scalar(this->scale_value_);
             this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                        adjhess_, adjv_scaled);
-            fx *= Scalar(this->Scale_value);
-            this->func.scale_jacobian(jx_, Scalar(this->Scale_value));
+            fx *= Scalar(this->scale_value_);
+            this->func.scale_jacobian(jx_, Scalar(this->scale_value_));
         };
 
         const int orows = this->func.output_rows();
@@ -275,16 +275,16 @@ struct RowScaled_Impl
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
-    Output<double> RowScale_values;
+    Output<double> row_scale_values_;
     static const bool is_linear_function = Func::is_linear_function;
     static const bool is_vectorizable = Func::is_vectorizable;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
-    RowScaled_Impl() { this->RowScale_values.setOnes(); }
+    RowScaled_Impl() { this->row_scale_values_.setOnes(); }
 
     template <class OutType>
     RowScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func(std::move(f)) {
-        this->RowScale_values = s;
+        this->row_scale_values_ = s;
         this->set_io_rows(this->func.input_rows(), this->func.output_rows());
         this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
@@ -296,7 +296,7 @@ struct RowScaled_Impl
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &scales) {
-            scales = this->RowScale_values.template cast<Scalar>();
+            scales = this->row_scale_values_.template cast<Scalar>();
             this->func.compute(x, fx_);
             fx = fx.cwiseProduct(scales);
         };
@@ -312,7 +312,7 @@ struct RowScaled_Impl
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &scales) {
-            scales = this->RowScale_values.template cast<Scalar>();
+            scales = this->row_scale_values_.template cast<Scalar>();
 
             this->func.compute_jacobian(x, fx_, jx_);
             fx = fx.cwiseProduct(scales);
@@ -336,7 +336,7 @@ struct RowScaled_Impl
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &scales, auto &adjv_scaled) {
-            scales = this->RowScale_values.template cast<Scalar>();
+            scales = this->row_scale_values_.template cast<Scalar>();
             adjv_scaled = adjvars.cwiseProduct(scales);
 
             this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,

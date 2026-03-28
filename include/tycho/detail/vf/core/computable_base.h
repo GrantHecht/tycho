@@ -102,14 +102,14 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     static const bool is_vectorizable = false;
     static const bool is_linear_function = false;
     static const bool has_diagonal_jacobian = false;
-    static const bool HasDiagonalHessian = false;
-    static const bool IsCwiseOperator = false;
+    static const bool has_diagonal_hessian = false;
+    static const bool is_cwise_operator = false;
     static const bool is_generic_function = false;
-    static const bool IsConditional = false;
+    static const bool is_conditional = false;
 
-    mutable bool EnableVectorization = false;
+    mutable bool enable_vectorization_ = false;
 
-    void enable_vectorization(bool b) const { this->EnableVectorization = b; }
+    void enable_vectorization(bool b) const { this->enable_vectorization_ = b; }
 
     [[nodiscard]] constexpr bool is_linear() const { return Derived::is_linear_function; }
 
@@ -305,7 +305,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
 
             // Only try vectorized impl if Derived allows and it is enabled
             if constexpr (Vectorizable<Derived>) {
-                if (this->derived().EnableVectorization) {
+                if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
                     ScalarImpl(0, data.NumAppl());
