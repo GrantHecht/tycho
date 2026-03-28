@@ -55,8 +55,8 @@ def cross(a, b):
     return _cross_cpp(a, b)
 
 
-cwiseProduct = _tychopy.VectorFunctions.cwiseProduct
-cwiseQuotient = _tychopy.VectorFunctions.cwiseQuotient
+cwise_product = _tychopy.VectorFunctions.cwise_product
+cwise_quotient = _tychopy.VectorFunctions.cwise_quotient
 dot = _tychopy.VectorFunctions.dot
 doublecross = _tychopy.VectorFunctions.doublecross
 exp = _tychopy.VectorFunctions.exp
@@ -67,7 +67,7 @@ matmul = _tychopy.VectorFunctions.matmul
 norm = _tychopy.VectorFunctions.norm
 normalize = _tychopy.VectorFunctions.normalize
 pow = _tychopy.VectorFunctions.pow
-quatProduct = _tychopy.VectorFunctions.quatProduct
+quat_product = _tychopy.VectorFunctions.quat_product
 sin = _tychopy.VectorFunctions.sin
 sinh = _tychopy.VectorFunctions.sinh
 sqrt = _tychopy.VectorFunctions.sqrt
