@@ -32,7 +32,7 @@ def PhaseMeshErrorPlot(phase, show=True):
     axs[1].grid(True)
     axs[2].grid(True)
 
-    Miters = phase.getMeshIters()
+    Miters = phase.get_mesh_iters()
 
     cols = sns.color_palette("plasma", len(Miters))
 

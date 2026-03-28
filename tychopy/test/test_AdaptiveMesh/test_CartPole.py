@@ -67,16 +67,16 @@ class test_CartPole(unittest.TestCase):
         ode = CartPole(l, m1, m2, g)
 
         phase = ode.phase(tmode, IG, nsegs)
-        phase.setControlMode(cmode)
-        phase.addBoundaryValue("Front", range(0, 5), [0, 0, 0, 0, 0])
-        phase.addBoundaryValue("Back", range(0, 5), [d, np.pi, 0, 0, tf])
-        phase.addLUVarBound("Path", 5, -umax, umax, 1.0)
-        phase.addLUVarBound("Path", 0, -dmax, dmax, 1.0)
-        phase.addIntegralObjective(Args(1)[0] ** 2, [5])
+        phase.set_control_mode(cmode)
+        phase.add_boundary_value("Front", range(0, 5), [0, 0, 0, 0, 0])
+        phase.add_boundary_value("Back", range(0, 5), [d, np.pi, 0, 0, tf])
+        phase.add_lu_var_bound("Path", 5, -umax, umax, 1.0)
+        phase.add_lu_var_bound("Path", 0, -dmax, dmax, 1.0)
+        phase.add_integral_objective(Args(1)[0] ** 2, [5])
         phase.optimizer.PrintLevel = 3
         phase.optimizer.EContol = 1.0e-8
         phase.AdaptiveMesh = True
-        phase.setNumPartitions(1, 1)
+        phase.set_num_partitions(1, 1)
         phase.MeshErrorEstimator = errest
         phase.PrintMeshInfo = False
 

@@ -108,10 +108,10 @@ class QuatModel(oc.ode_7_3.ode):
         w = args.segment3(4)
         T = args.tail3()
 
-        qdot = vf.quatProduct(q, w.padded_lower(1)) / 2.0
+        qdot = vf.quat_product(q, w.padded_lower(1)) / 2.0
 
-        L = w.cwiseProduct(I)
-        wdot = (L.cross(w) + T).cwiseQuotient(I)
+        L = w.cwise_product(I)
+        wdot = (L.cross(w) + T).cwise_quotient(I)
         ode = vf.stack(qdot, wdot)
 
         ##############################################################
@@ -119,7 +119,7 @@ class QuatModel(oc.ode_7_3.ode):
 
     def DetumbleLaw(self):
         w = Args(3).head3()
-        Lhat = w.cwiseProduct(self.Ivec).normalized()
+        Lhat = w.cwise_product(self.Ivec).normalized()
         return -Lhat
 
 
@@ -143,7 +143,7 @@ class test_Integrators(unittest.TestCase):
         ode = LorenzODE(sigma, rho, beta)
 
         integ = ode.integrator(defstepsize)
-        integ.setAbsTol(abstol)
+        integ.set_abs_tol(abstol)
         integ.MinStepSize = minstepsize
         integ.Adaptive = True
 
@@ -184,7 +184,7 @@ class test_Integrators(unittest.TestCase):
         ode = CauchyEulerODE(a, b)
 
         integ = ode.integrator("DOPRI54", defstepsize)
-        integ.setAbsTol(abstol)
+        integ.set_abs_tol(abstol)
         integ.MinStepSize = minstepsize
         integ.Adaptive = True
 
@@ -231,7 +231,7 @@ class test_Integrators(unittest.TestCase):
         ode = QuatModel(Ivec)
         integ = ode.integrator(0.01, ode.DetumbleLaw(), range(4, 7))
         integ.Adaptive = True
-        integ.setAbsTol(1.0e-14)
+        integ.set_abs_tol(1.0e-14)
         tf = np.linalg.norm(W0 * Ivec)
 
         n = 1000
@@ -266,7 +266,7 @@ class test_Integrators(unittest.TestCase):
         kprop = ast.Astro.Kepler.KeplerPropagator(1.0)  # Ground Truth
 
         integ = ode.integrator(0.01)
-        integ.setAbsTol(1.0e-13)
+        integ.set_abs_tol(1.0e-13)
         integ.Adaptive = True
         integ.FastAdaptiveSTM = False
 
@@ -347,7 +347,7 @@ class test_Integrators(unittest.TestCase):
         ode = ast.Astro.Kepler.ode(1)
 
         integ = ode.integrator(0.01)
-        integ.setAbsTol(1.0e-13)
+        integ.set_abs_tol(1.0e-13)
         integ.Adaptive = True
         integ.FastAdaptiveSTM = False
 
@@ -401,8 +401,8 @@ class test_Integrators(unittest.TestCase):
         ode = CauchyEulerODE(a, b)
 
         integ = ode.integrator("DOPRI87", defstepsize)
-        integ.setAbsTol(abstol)
-        integ.setStepSizes(defstepsize, minstepsize, 10)
+        integ.set_abs_tol(abstol)
+        integ.set_step_sizes(defstepsize, minstepsize, 10)
         integ.VectorizeBatchCalls = True
 
         batchsizes = [1, 3, 4, 15, 100, 1003]
@@ -438,7 +438,7 @@ class test_Integrators(unittest.TestCase):
 
         for ode in [ode1, ode2, ode3, ode4, ode5]:
             integ = ode.integrator(0.001)
-            integ.setAbsTol(1.0e-13)
+            integ.set_abs_tol(1.0e-13)
             integ.VectorizeBatchCalls = True
 
             Xtol = 1.0e-11

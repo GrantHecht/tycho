@@ -162,15 +162,17 @@ class test_Reentry(unittest.TestCase):
         ode = ShuttleReentry()
 
         phase = ode.phase(tmode, TrajIG, self.NumSegments1)
-        phase.setControlMode(cmode)
+        phase.set_control_mode(cmode)
 
-        phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
-        phase.addLUVarBounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
-        phase.addLUVarBound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
-        phase.addLUVarBound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
-        phase.addUpperDeltaTimeBound(tmax, 1.0)
-        phase.addBoundaryValue("Back", [0, 2, 3], [htf, vtf, gammatf])
-        phase.addDeltaVarObjective(1, -1.0)
+        phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
+        phase.add_lu_var_bounds(
+            "Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0
+        )
+        phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
+        phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
+        phase.add_upper_delta_time_bound(tmax, 1.0)
+        phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
+        phase.add_delta_var_objective(1, -1.0)
 
         phase.optimizer.set_OptLSMode("AUGLANG")
         phase.optimizer.MaxLSIters = 2
@@ -189,7 +191,7 @@ class test_Reentry(unittest.TestCase):
             "Optimizer iterations exceeded expected maximum",
         )
 
-        phase.refineTrajManual(self.NumSegments2)
+        phase.refine_traj_manual(self.NumSegments2)
         phase.optimize()
 
         Obj1 = phase.optimizer.LastObjVal
@@ -200,7 +202,7 @@ class test_Reentry(unittest.TestCase):
             "Final objective significantly differs from known answer",
         )
 
-        phase.addUpperFuncBound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
+        phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
         Flag2 = phase.optimize()
 
         self.assertEqual(

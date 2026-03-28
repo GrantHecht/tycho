@@ -214,54 +214,54 @@ class test_Delta3Launch(unittest.TestCase):
         ode4 = Delta3(T_phase4, mdot_phase4)
 
         phase1 = ode1.phase(tmode, IG1, nsegs)
-        phase1.setControlMode(cmode)
-        phase1.addLUNormBound("Path", [8, 9, 10], 0.9, 1.1)
+        phase1.set_control_mode(cmode)
+        phase1.add_lu_norm_bound("Path", [8, 9, 10], 0.9, 1.1)
 
-        phase1.addBoundaryValue("Front", range(0, 8), IG1[0][0:8])
-        phase1.addBoundaryValue("Back", [7], [tf_phase1])
+        phase1.add_boundary_value("Front", range(0, 8), IG1[0][0:8])
+        phase1.add_boundary_value("Back", [7], [tf_phase1])
 
         phase2 = ode2.phase(tmode, IG2, nsegs)
-        phase2.setControlMode(cmode)
+        phase2.set_control_mode(cmode)
 
-        phase2.addLUNormBound("Path", [8, 9, 10], 0.9, 1.1)
-        phase2.addBoundaryValue("Front", [6], [m0_phase2])
-        phase2.addBoundaryValue("Back", [7], [tf_phase2])
+        phase2.add_lu_norm_bound("Path", [8, 9, 10], 0.9, 1.1)
+        phase2.add_boundary_value("Front", [6], [m0_phase2])
+        phase2.add_boundary_value("Back", [7], [tf_phase2])
 
         phase3 = ode3.phase(tmode, IG3, nsegs)
-        phase3.setControlMode(cmode)
+        phase3.set_control_mode(cmode)
 
-        phase3.addLUNormBound("Path", [8, 9, 10], 0.9, 1.1)
-        phase3.addBoundaryValue("Front", [6], [m0_phase3])
-        phase3.addBoundaryValue("Back", [7], [tf_phase3])
+        phase3.add_lu_norm_bound("Path", [8, 9, 10], 0.9, 1.1)
+        phase3.add_boundary_value("Front", [6], [m0_phase3])
+        phase3.add_boundary_value("Back", [7], [tf_phase3])
 
         phase4 = ode4.phase(tmode, IG4, nsegs)
-        phase4.setControlMode(cmode)
+        phase4.set_control_mode(cmode)
 
-        phase4.addLUNormBound("Path", [8, 9, 10], 0.9, 1.1)
-        phase4.addBoundaryValue("Front", [6], [m0_phase4])
-        phase4.addValueObjective("Back", 6, -1.0)
-        phase4.addUpperVarBound("Back", 7, tf_phase4, 1.0)
-        phase4.addEqualCon("Back", TargetOrbit(at, et, istart, Ot, Wt), range(0, 6))
+        phase4.add_lu_norm_bound("Path", [8, 9, 10], 0.9, 1.1)
+        phase4.add_boundary_value("Front", [6], [m0_phase4])
+        phase4.add_value_objective("Back", 6, -1.0)
+        phase4.add_upper_var_bound("Back", 7, tf_phase4, 1.0)
+        phase4.add_equal_con("Back", TargetOrbit(at, et, istart, Ot, Wt), range(0, 6))
 
-        phase1.addLowerNormBound("Path", [0, 1, 2], Re * 0.999999)
-        phase2.addLowerNormBound("Path", [0, 1, 2], Re * 0.999999)
-        phase3.addLowerNormBound("Path", [0, 1, 2], Re * 0.999999)
-        phase4.addLowerNormBound("Path", [0, 1, 2], Re * 0.999999)
+        phase1.add_lower_norm_bound("Path", [0, 1, 2], Re * 0.999999)
+        phase2.add_lower_norm_bound("Path", [0, 1, 2], Re * 0.999999)
+        phase3.add_lower_norm_bound("Path", [0, 1, 2], Re * 0.999999)
+        phase4.add_lower_norm_bound("Path", [0, 1, 2], Re * 0.999999)
 
         ocp = oc.OptimalControlProblem()
-        ocp.addPhase(phase1)
-        ocp.addPhase(phase2)
-        ocp.addPhase(phase3)
-        ocp.addPhase(phase4)
+        ocp.add_phase(phase1)
+        ocp.add_phase(phase2)
+        ocp.add_phase(phase3)
+        ocp.add_phase(phase4)
 
-        ocp.addForwardLinkEqualCon(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+        ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
         ocp.optimizer.set_OptLSMode("L1")
         ocp.optimizer.MaxLSIters = 2
         ocp.optimizer.PrintLevel = 3
         ocp.optimizer.EContol = 1.0e-8
 
-        ocp.setNumPartitions(1, 1)
-        ocp.setAdaptiveMesh(True, True)
+        ocp.set_num_partitions(1, 1)
+        ocp.set_adaptive_mesh(True, True)
         ocp.MaxMeshIters = 10
         ocp.PrintMeshInfo = False
         for phase in ocp.Phases:
@@ -273,7 +273,7 @@ class test_Delta3Launch(unittest.TestCase):
 
         Mconv = ocp.MeshConverged
 
-        Phase4Traj = phase4.returnTraj()
+        Phase4Traj = phase4.return_traj()
 
         FinalMassKg = Phase4Traj[-1][6] * Mstar
 

@@ -121,34 +121,36 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ##########################################################################
 
         aphase = ode.phase(tmode, AscentIG, nsegs)
-        aphase.addLowerVarBound("ODEParams", 0, 0.01 / Lstar, 1)
-        aphase.addLowerVarBound("Front", 1, 0.0, 1.0)
-        aphase.addBoundaryValue("Front", [2, 3, 4], [h0, r0, 0])
+        aphase.add_lower_var_bound("ODEParams", 0, 0.01 / Lstar, 1)
+        aphase.add_lower_var_bound("Front", 1, 0.0, 1.0)
+        aphase.add_boundary_value("Front", [2, 3, 4], [h0, r0, 0])
 
-        aphase.addInequalCon("Front", EFunc() * 0.01, [0], [0], [])
-        aphase.addBoundaryValue("Back", [1], [0.0])
+        aphase.add_inequal_con("Front", EFunc() * 0.01, [0], [0], [])
+        aphase.add_boundary_value("Back", [1], [0.0])
 
         dphase = ode.phase(tmode, DescentIG, nsegs)
-        dphase.addBoundaryValue("Back", [2], [0.0])
-        dphase.addValueObjective("Back", 3, -1.0)
+        dphase.add_boundary_value("Back", [2], [0.0])
+        dphase.add_value_objective("Back", 3, -1.0)
 
         ocp = oc.OptimalControlProblem()
-        ocp.addPhase(aphase)
-        ocp.addPhase(dphase)
+        ocp.add_phase(aphase)
+        ocp.add_phase(dphase)
 
-        ocp.addForwardLinkEqualCon(aphase, dphase, [0, 1, 2, 3, 4])
-        ocp.addDirectLinkEqualCon(aphase, "ODEParams", [0], dphase, "ODEParams", [0])
+        ocp.add_forward_link_equal_con(aphase, dphase, [0, 1, 2, 3, 4])
+        ocp.add_direct_link_equal_con(
+            aphase, "ODEParams", [0], dphase, "ODEParams", [0]
+        )
 
         ocp.optimizer.set_OptLSMode("L1")
         ocp.optimizer.MaxLSIters = 2
         ocp.optimizer.PrintLevel = 3
-        ocp.setNumPartitions(1, 1)
+        ocp.set_num_partitions(1, 1)
         ocp.optimizer.set_QPOrderingMode("MINDEG")
 
         Flag = ocp.optimize()
 
-        Ascent = aphase.returnTraj()
-        Descent = dphase.returnTraj()
+        Ascent = aphase.return_traj()
+        Descent = dphase.return_traj()
 
         Obj = ocp.optimizer.LastObjVal * Lstar
         ObjError = abs(Obj - self.FinalObj)

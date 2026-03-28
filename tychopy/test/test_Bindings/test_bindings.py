@@ -86,8 +86,8 @@ class TestPyVectorFunction(unittest.TestCase):
             self.f.thread_safe = True
 
     def test_irows_orows(self):
-        self.assertEqual(self.f.IRows(), 3)
-        self.assertEqual(self.f.ORows(), 2)
+        self.assertEqual(self.f.input_rows(), 3)
+        self.assertEqual(self.f.output_rows(), 2)
 
     def test_jacobian_numpy(self):
         jac = self.f.jacobian(self.x)
@@ -256,8 +256,8 @@ class TestTypeCasters(unittest.TestCase):
             # via variable indexing if accessible.
             oc = ast.OptimalControl
             phase = oc.LGLPhase(Args(2), 10)
-            phase.setControlBounds([0.0, 0.0], [1.0, 1.0])
-            idx = phase.returnControlVars(0)
+            phase.set_control_bounds([0.0, 0.0], [1.0, 1.0])
+            idx = phase.return_control_vars(0)
             self.assertEqual(
                 idx.dtype, np.int32, "VectorXi::from_cpp should emit np.int32"
             )
@@ -269,15 +269,15 @@ class TestTypeCasters(unittest.TestCase):
         f = Args(2)
         result = vf.stack(f, [1.0, 2.0])
         self.assertIsNotNone(result)
-        self.assertEqual(result.IRows(), 2)
-        self.assertEqual(result.ORows(), 4)
+        self.assertEqual(result.input_rows(), 2)
+        self.assertEqual(result.output_rows(), 4)
 
     def test_stack_numpy_arg(self):
         """ParsePythonArgs must accept a numpy array as a constant vector."""
         f = Args(2)
         result = vf.stack(f, np.array([1.0, 2.0]))
         self.assertIsNotNone(result)
-        self.assertEqual(result.ORows(), 4)
+        self.assertEqual(result.output_rows(), 4)
 
 
 # ---------------------------------------------------------------------------
@@ -294,8 +294,8 @@ class TestParsePythonArgs(unittest.TestCase):
         f = Args(3)
         for _ in range(100):
             result = vf.stack(f, Args(3))
-            self.assertEqual(result.IRows(), 3)
-            self.assertEqual(result.ORows(), 6)
+            self.assertEqual(result.input_rows(), 3)
+            self.assertEqual(result.output_rows(), 6)
 
     def test_sum_functions(self):
         """vf.sum of two scalar functions returns a scalar function."""
@@ -313,8 +313,8 @@ class TestParsePythonArgs(unittest.TestCase):
         result = vf.stack(1.0, f)
         self.assertIsNotNone(result)
         # 1.0 becomes Constant<-1,1>(3, [1.0]) (1-output) + f (3-output) → 4-output
-        self.assertEqual(result.IRows(), 3)
-        self.assertEqual(result.ORows(), 4)
+        self.assertEqual(result.input_rows(), 3)
+        self.assertEqual(result.output_rows(), 4)
 
 
 if __name__ == "__main__":
