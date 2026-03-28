@@ -13,7 +13,7 @@ namespace nb = nanobind;
 // Explicit specialisations must be visible before the STL casters implicitly
 // instantiate the corresponding partial Eigen specialisations; otherwise the
 // program is ill-formed (C++14 [temp.expl.spec]/6).
-#include "TypeCasters.h"
+#include "type_casters.h"
 
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/shared_ptr.h>
@@ -25,8 +25,8 @@ namespace nb = nanobind;
 // FunctionRegistry.h: TychoBind<T> primary template + FunctionRegistry struct.
 // Must come before tycho_vector_functions.h in PCH so all binding TUs see the
 // primary template before any specializations are instantiated.
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 
 // JetBind.h: JetInvoker partial spec for nb::args must be visible in every
 // binding TU that could instantiate Jet::map<T, Args1, nb::args>.
-#include "Solvers/JetBind.h"
+#include "solvers/jet_bind.h"
