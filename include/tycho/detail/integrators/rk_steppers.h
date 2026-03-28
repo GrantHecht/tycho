@@ -18,7 +18,7 @@
 #include "tycho/detail/integrators/rk_coeffs.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::integrators {
 
 template <class DODE, RKOptions RKOp>
 struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
@@ -40,7 +40,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
     DODE ode;
 
     RKStepper() {}
-    RKStepper(DODE ode) : ode(ode) { this->setIORows(this->ode.IRows() + 1, this->ode.IRows()); }
+    RKStepper(DODE ode) : ode(ode) { this->set_io_rows(this->ode.IRows() + 1, this->ode.IRows()); }
 
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
@@ -769,9 +769,9 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
 
     RKStepper2() {}
     RKStepper2(DODE ode) : ode(ode) {
-        this->setIORows(this->ode.IRows() + 1, this->ode.IRows());
-        this->setJacFDSteps(1.0e-6);
-        this->setHessFDSteps(1.0e-6);
+        this->set_io_rows(this->ode.IRows() + 1, this->ode.IRows());
+        this->set_jac_fd_steps(1.0e-6);
+        this->set_hess_fd_steps(1.0e-6);
     }
 
     template <class InType, class OutType>
@@ -891,4 +891,4 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::integrators

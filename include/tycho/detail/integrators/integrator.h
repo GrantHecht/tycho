@@ -51,7 +51,7 @@
 
 #include "tycho/detail/utils/memory_management.h"
 
-namespace Tycho {
+namespace tycho::integrators {
 
 template <class BaseType, int _XV, int _UV, int _PV> struct GenericODE;
 template <int OR> struct InterpFunction;
@@ -112,18 +112,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // Use in_place_type to sidestep MSVC variant overload-resolution
         // ambiguity between the int and Eigen::VectorXi alternatives.
         ControlIndexType empty_ci{std::in_place_type<Eigen::VectorXi>};
-        this->setMethod(meth, dode, defstep, false, ControllerType{}, empty_ci);
-        this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
-        this->setRelTol(0);       // Must Be called after setMethod!!!
+        this->set_method(meth, dode, defstep, false, ControllerType{}, empty_ci);
+        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
+        this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, double defstep) : Integrator(dode, "DOPRI87", defstep) {}
     Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
         : Integrator() {
 
-        this->setMethod(meth, dode, defstep, true, ucon, varlocs_t);
-        this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
-        this->setRelTol(0);       // Must Be called after setMethod!!!
+        this->set_method(meth, dode, defstep, true, ucon, varlocs_t);
+        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
+        this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     // VectorXi overloads: explicitly wrap into ControlIndexType to avoid MSVC
     // variant implicit-conversion ambiguity (int vs VectorXi alternatives).
@@ -143,9 +143,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         Eigen::VectorXi tloc(1);
         tloc[0] = dode.TVar();
         GenericFunction<-1, -1> ucon = Constant<-1, -1>(1, v);
-        this->setMethod("DOPRI87", dode, defstep, true, ucon, tloc);
-        this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
-        this->setRelTol(0);       // Must Be called after setMethod!!!
+        this->set_method("DOPRI87", dode, defstep, true, ucon, tloc);
+        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
+        this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, std::string meth, double defstep,
                std::shared_ptr<LGLInterpTable> tab, const Eigen::VectorXi &ulocs)
@@ -154,9 +154,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         Eigen::VectorXi varlocs(1);
         varlocs[0] = dode.TVar();
         ControllerType ucon = InterpFunction<-1>(tab, ulocs);
-        this->setMethod(meth, dode, defstep, true, ucon, varlocs);
-        this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
-        this->setRelTol(0);       // Must Be called after setMethod!!!
+        this->set_method(meth, dode, defstep, true, ucon, varlocs);
+        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
+        this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab,
                const Eigen::VectorXi &ulocs)
@@ -178,40 +178,40 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         Eigen::VectorXi varlocs(1);
         varlocs[0] = dode.TVar();
         ControllerType ucon = InterpFunction<-1>(tab, ulocs);
-        this->setMethod(meth, dode, defstep, true, ucon, varlocs);
-        this->setAbsTol(1.0e-12); // Must Be called after setMethod!!!
-        this->setRelTol(0);       // Must Be called after setMethod!!!
+        this->set_method(meth, dode, defstep, true, ucon, varlocs);
+        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
+        this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator(dode, "DOPRI87", defstep, tab) {}
 
-    void setMethod(std::string str, const DODE &dode, double defstep, bool usecontrol,
+    void set_method(std::string str, const DODE &dode, double defstep, bool usecontrol,
                    const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
-        this->setStepSizes(defstep, defstep / 10000, defstep * 10000);
+        this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
 
         if (str == "DOPRI54" || str == "DP54") {
             this->RKMethod = RKOptions::DOPRI54;
             this->ErrorOrder = 4;
             // Using DOPRI5 rather than DOPRI54 here is not a mistake
-            this->initStepperAndController<RKOptions::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<RKOptions::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
         } else if (str == "DOPRI87" || str == "DP87") {
             this->RKMethod = RKOptions::DOPRI87;
             this->ErrorOrder = 7;
-            this->initStepperAndController<RKOptions::DOPRI87>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<RKOptions::DOPRI87>(dode, usecontrol, ucon, varlocs_t);
         } else {
             throw std::invalid_argument("Invalid integration method '{0:}'.");
         }
     }
 
     template <RKOptions RKOp>
-    void initStepperAndController(const DODE &odet, bool usecontrol,
+    void init_stepper_and_controller(const DODE &odet, bool usecontrol,
                                   const GenericFunction<-1, -1> &ucon,
                                   const ControlIndexType &varlocs_t) {
 
         this->ode = odet;
-        Eigen::VectorXi varlocs = this->getvarlocs(varlocs_t);
-        this->setIORows(this->ode.IRows() + 1, this->ode.IRows());
+        Eigen::VectorXi varlocs = this->get_var_locs(varlocs_t);
+        this->set_io_rows(this->ode.IRows() + 1, this->ode.IRows());
 
         this->usecontroller = usecontrol;
 
@@ -269,9 +269,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /////////////////////////////////////////////////////////////////////////////////////
 
-    GenericFunction<-1, -1> getstepper() { return this->stepper; }
+    GenericFunction<-1, -1> get_stepper() { return this->stepper; }
 
-    Eigen::VectorXi getvarlocs(const ControlIndexType &varlocs_t) {
+    Eigen::VectorXi get_var_locs(const ControlIndexType &varlocs_t) {
 
         Eigen::VectorXi varlocs;
 
@@ -322,26 +322,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ODEDeriv<double> AbsTols;
     ODEDeriv<double> RelTols;
 
-    void setAbsTol(double tol) { this->AbsTols.setConstant(this->ode.XVars(), abs(tol)); }
-    void setRelTol(double tol) { this->RelTols.setConstant(this->ode.XVars(), abs(tol)); }
+    void set_abs_tol(double tol) { this->AbsTols.setConstant(this->ode.XVars(), abs(tol)); }
+    void set_rel_tol(double tol) { this->RelTols.setConstant(this->ode.XVars(), abs(tol)); }
 
-    void setAbsTols(ODEDeriv<double> tol) {
+    void set_abs_tols(ODEDeriv<double> tol) {
         if (tol.size() != this->ode.XVars()) {
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
         this->AbsTols = tol;
     }
-    void setRelTols(ODEDeriv<double> tol) {
+    void set_rel_tols(ODEDeriv<double> tol) {
         if (tol.size() != this->ode.XVars()) {
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
         this->RelTols = tol;
     }
 
-    ODEDeriv<double> getAbsTols() const { return this->AbsTols; }
-    ODEDeriv<double> getRelTols() const { return this->RelTols; }
+    ODEDeriv<double> get_abs_tols() const { return this->AbsTols; }
+    ODEDeriv<double> get_rel_tols() const { return this->RelTols; }
 
-    void setStepSizes(double defstep, double minstep, double maxstep) {
+    void set_step_sizes(double defstep, double minstep, double maxstep) {
         if (defstep < minstep) {
             throw ::std::invalid_argument(
                 "Default integrator stepsize must be greater than minimum stepsize.");
@@ -425,7 +425,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                 const int tvar = this->ode.TVar();
 
-                Tycho::constexpr_for_loop(
+                tycho::utils::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, Stgsm1>(),
                     [&](auto i) {
                         Scalar ti = t0 + RKData::Times[i.value] * h;
@@ -434,7 +434,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         constexpr int ip1 = i.value + 1;
                         const int js = isDiag ? i.value : 0;
 
-                        Tycho::constexpr_for_loop(
+                        tycho::utils::constexpr_for_loop(
                             std::integral_constant<int, 0>(), std::integral_constant<int, ip1>(),
                             [&](auto j) {
                                 if constexpr (RKData::ACoeffs[i.value][j.value] != 0.0) {
@@ -790,7 +790,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         }
 
-        using SuperScalar = Tycho::DefaultSuperScalar;
+        using SuperScalar = tycho::DefaultSuperScalar;
 
         ODEState<double> xnext(this->ode.IRows());
         ODEState<double> xnext_est(this->ode.IRows());
@@ -1163,13 +1163,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<Jacobian<double>>
     calculate_jacobians(const std::vector<std::vector<ODEState<double>>> &Xs_S) const {
 
-        constexpr int vsize = DefaultSuperScalar::SizeAtCompileTime;
+        constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Jacobian<DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
-        Hessian<DefaultSuperScalar> jxallSS(this->IRows(), this->IRows());
-        Jacobian<DefaultSuperScalar> jactmpSS(this->ORows(), this->IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
+        Hessian<tycho::DefaultSuperScalar> jxallSS(this->IRows(), this->IRows());
+        Jacobian<tycho::DefaultSuperScalar> jactmpSS(this->ORows(), this->IRows());
 
         int ntrajs = Xs_S.size();
 
@@ -1188,9 +1188,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<Hessian<double>> jxalls(ntrajs);
         std::vector<Jacobian<double>> jxs(ntrajs);
 
-        if (ntrajs < DefaultSuperScalar::SizeAtCompileTime) {
+        if (ntrajs < tycho::DefaultSuperScalar::SizeAtCompileTime) {
             // Pad out inputs to prevent junk data being given to stepper
-            for (int v = 0; v < DefaultSuperScalar::SizeAtCompileTime; v++) {
+            for (int v = 0; v < tycho::DefaultSuperScalar::SizeAtCompileTime; v++) {
                 for (int j = 0; j < this->ode.IRows(); j++) {
                     stepper_inputSS[j][v] = Xs_S[0][0][j];
                 }
@@ -1274,11 +1274,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         int n = Xs.size();
         int numsteps = Xs.size() - 1;
 
-        constexpr int vsize = DefaultSuperScalar::SizeAtCompileTime;
+        constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Jacobian<DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
 
         auto ScalarImpl = [&](int i) {
             stepper_input.head(this->ode.IRows()) = Xs[i];
@@ -1393,18 +1393,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     calculate_jacobians_hessians(const std::vector<std::vector<ODEState<double>>> &Xs_S,
                                  const std::vector<ODEState<double>> &Lf_S) const {
 
-        constexpr int vsize = DefaultSuperScalar::SizeAtCompileTime;
+        constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Input<DefaultSuperScalar> stepper_gradSS(this->IRows());
-        Jacobian<DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
-        Hessian<DefaultSuperScalar> stepper_hessianSS(this->IRows(), this->IRows());
-        ODEState<DefaultSuperScalar> stepper_adjvarsSS(this->ode.IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
+        Input<tycho::DefaultSuperScalar> stepper_gradSS(this->IRows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
+        Hessian<tycho::DefaultSuperScalar> stepper_hessianSS(this->IRows(), this->IRows());
+        ODEState<tycho::DefaultSuperScalar> stepper_adjvarsSS(this->ode.IRows());
 
-        Jacobian<DefaultSuperScalar> jxallSS(this->ORows(), this->IRows());
-        Hessian<DefaultSuperScalar> jtwistSS(this->IRows(), this->IRows());
-        Hessian<DefaultSuperScalar> hxallSS(this->IRows(), this->IRows());
+        Jacobian<tycho::DefaultSuperScalar> jxallSS(this->ORows(), this->IRows());
+        Hessian<tycho::DefaultSuperScalar> jtwistSS(this->IRows(), this->IRows());
+        Hessian<tycho::DefaultSuperScalar> hxallSS(this->IRows(), this->IRows());
 
         Jacobian<double> jxall(this->ORows(), this->IRows());
         Hessian<double> jtwist(this->IRows(), this->IRows());
@@ -1433,9 +1433,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         std::vector<std::tuple<Jacobian<double>, Hessian<double>>> hjxs(ntrajs);
 
-        if (ntrajs < DefaultSuperScalar::SizeAtCompileTime) {
+        if (ntrajs < tycho::DefaultSuperScalar::SizeAtCompileTime) {
             // Pad out inputs to prevent junk data being given to stepper
-            for (int v = 0; v < DefaultSuperScalar::SizeAtCompileTime; v++) {
+            for (int v = 0; v < tycho::DefaultSuperScalar::SizeAtCompileTime; v++) {
                 for (int j = 0; j < this->ode.IRows(); j++) {
                     stepper_inputSS[j][v] = Xs_S[0][0][j];
                 }
@@ -1461,7 +1461,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             hxallSS.setZero();
 
             jtwistSS.setZero();
-            jtwistSS(this->IRows() - 1, this->IRows() - 1) = DefaultSuperScalar(1.0);
+            jtwistSS(this->IRows() - 1, this->IRows() - 1) = tycho::DefaultSuperScalar(1.0);
 
             for (int i = 0; i < ncalls; i++) {
 
@@ -1720,7 +1720,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, n_parts);
+        tycho::utils::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -1881,7 +1881,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, n_parts);
+        tycho::utils::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -1924,7 +1924,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, n_parts);
+        tycho::utils::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -1976,7 +1976,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         };
 
-        Tycho::parallel_blocks(n, job, n_parts);
+        tycho::utils::parallel_blocks(n, job, n_parts);
         return results;
     }
 
@@ -2007,12 +2007,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return this->integrate_stm(xi, tf1);
         };
 
-        if (n_parts > 1 && Tycho::use_thread_pool()) {
+        if (n_parts > 1 && tycho::utils::use_thread_pool()) {
             int submitted = 0;
             try {
                 for (int i = 0; i < n_parts; i++) {
                     results[i] =
-                        Tycho::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
+                        tycho::utils::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
                     submitted = i + 1;
                     if (i < (n_parts - 1))
                         Xs[i + 1] = this->integrate(Xs[i], ts[i + 1]);
@@ -2134,4 +2134,4 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::integrators

@@ -17,7 +17,7 @@
 
 #include <array>
 
-namespace Tycho {
+namespace tycho::integrators {
 
 enum class RKOptions {
     RK4Classic,
@@ -189,4 +189,4 @@ template <> struct RKCoeffs<RKOptions::DOPRI87> {
         0.0138169474640115,  -0.0276768086980947};
 };
 
-} // namespace Tycho
+} // namespace tycho::integrators
