@@ -15,7 +15,10 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 void ArgsSegBuildPart3(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
@@ -27,4 +30,4 @@ void ArgsSegBuildPart3(FunctionRegistry &reg, nb::module_ &m) {
     reg.Build_Register<Arguments<-1>>(m, "Arguments");
 }
 
-} // namespace Tycho
+} // namespace tycho

@@ -16,14 +16,12 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/solvers/jet.h"
-
-namespace Tycho {
 
 // Partial specialisation: when Arg = nb::args, dereference via args_proxy so
 // the genfunc receives nb::detail::args_proxy (the unpacked argument sequence).
-namespace detail {
+namespace tycho::solvers::detail {
 template <class T>
 struct JetInvoker<T, std::function<std::shared_ptr<T>(nb::detail::args_proxy)>, nb::args> {
     static inline std::shared_ptr<T>
@@ -31,12 +29,16 @@ struct JetInvoker<T, std::function<std::shared_ptr<T>(nb::detail::args_proxy)>, 
         return f(*a);
     }
 };
-} // namespace detail
+} // namespace tycho::solvers::detail
+
+namespace tycho {
+
+using namespace tycho::solvers;
 
 template <> struct TychoBind<Jet> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

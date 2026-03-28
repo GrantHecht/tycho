@@ -17,31 +17,38 @@
 
 #include "tycho/detail/vf/scaling/io_scaled.h"
 
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
+
 // TychoBind<IOScaled<Func>> specialization — must come after IOScaled.h
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
-namespace Tycho {
+namespace tycho {
 template <class Func> struct TychoBind<IOScaled<Func>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<IOScaled<Func>>(m, name);
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());
-        Bind::DenseBaseBuild<IOScaled<Func>>(obj);
+        bind::DenseBaseBuild<IOScaled<Func>>(obj);
     }
 };
-} // namespace Tycho
+} // namespace tycho
 
-#include "Utils/fmtlib.h"
 #include "tycho/detail/optimal_control/interp/interp_table_1d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_2d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_3d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_4d.h"
+#include "utils/fmtlib.h"
 
 // Out-of-class definitions for InterpTable binding functions.
 // Included here after all InterpTable headers so all types are complete.
 #ifdef TYCHO_PYTHON_BINDINGS
-#include "InterpTableBind.h"
+#include "interp_table_bind.h"
 #endif
 
-namespace Tycho {
+namespace tycho {
 void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
 void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m);
 void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m);
@@ -53,9 +60,9 @@ void ArgsSegBuildPart5(FunctionRegistry &reg, nb::module_ &m);
 void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
 void FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m);
 void MatrixFunctionBuild(nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &mod = reg.getVectorFunctionsModule();
 
     using Gen = GenericFunction<-1, -1>;
@@ -66,8 +73,8 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     using ELEM = Segment<-1, 1, -1>;
 
     //////////////////////////////////
-    Bind::GenericBuild<Gen>(reg.vfuncx);
-    Bind::GenericBuild<GenS>(reg.sfuncx);
+    bind::GenericBuild<Gen>(reg.vfuncx);
+    bind::GenericBuild<GenS>(reg.sfuncx);
     nb::implicitly_convertible<GenS, Gen>();
     VectorFunctionBuildPart1(reg, mod);
     VectorFunctionBuildPart2(reg, mod);
@@ -82,8 +89,8 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     BulkOperationsBuild(reg, mod);
     FreeFunctionsBuild(reg, mod);
     MatrixFunctionBuild(mod);
-    Bind::ConditionalBuild(mod);
-    Bind::ComparativeBuild(mod);
+    bind::ConditionalBuild(mod);
+    bind::ComparativeBuild(mod);
 
     reg.Build_Register<PyVectorFunction<-1, -1>>(mod, "PyVectorFunction");
     reg.Build_Register<PyVectorFunction<-1, 1>>(mod, "PyScalarFunction");
@@ -100,11 +107,11 @@ void Tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     InterpTable3DBuild(mod);
     InterpTable4DBuild(mod);
 
-    mod.def("ScalarDynamicStackTest", [](const std::vector<GenericFunction<-1, 1>> &funcs) {
+    mod.def("scalar_dynamic_stack_test", [](const std::vector<GenericFunction<-1, 1>> &funcs) {
         return GenericFunction<-1, -1>(DynamicStackedOutputs<GenericFunction<-1, 1>>{funcs});
     });
 
-    mod.def("DynamicStackTest", [](const std::vector<GenericFunction<-1, -1>> &funcs) {
+    mod.def("dynamic_stack_test", [](const std::vector<GenericFunction<-1, -1>> &funcs) {
         return GenericFunction<-1, -1>(DynamicStackedOutputs<GenericFunction<-1, -1>>{funcs});
     });
 }

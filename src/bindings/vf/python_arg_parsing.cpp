@@ -15,7 +15,7 @@
 
 #include "python_arg_parsing.h"
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/vf/common/common_functions.h"
 #include "tycho/detail/vf/core/vector_function.h"
 #include "tycho/detail/vf/operators/math_overloads.h"
@@ -24,7 +24,7 @@
 #include "tycho/detail/vf/type_erasure/generic_conditional.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
-namespace Tycho {
+namespace tycho {
 
 std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
 
@@ -263,4 +263,4 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
 
     return funs;
 }
-} // namespace Tycho
+} // namespace tycho

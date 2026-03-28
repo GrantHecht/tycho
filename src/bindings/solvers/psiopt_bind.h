@@ -16,15 +16,17 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/solvers/psiopt.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::solvers;
 
 template <> struct TychoBind<PSIOPT> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

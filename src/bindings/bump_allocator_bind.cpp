@@ -13,10 +13,15 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "BumpAllocatorBind.h"
+#include "bump_allocator_bind.h"
 #include "tycho/detail/utils/memory_management.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 void TychoBind<BumpAllocator>::Build(nb::module_ &m) {
     auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator");

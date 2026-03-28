@@ -13,20 +13,22 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Solvers/tycho_solvers.h"
-#include "JetBind.h"
-#include "OptimizationProblemBind.h"
-#include "PSIOPTBind.h"
+#include "solvers/tycho_solvers.h"
+#include "jet_bind.h"
+#include "optimization_problem_bind.h"
+#include "psiopt_bind.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::solvers;
 
 void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
-    Tycho::ensure_solver_initialized();
+    ensure_solver_initialized();
     TychoBind<PSIOPT>::Build(sol);
     TychoBind<OptimizationProblemBase>::Build(sol);
     TychoBind<Jet>::Build(sol);
     TychoBind<OptimizationProblem>::Build(sol);
 }
 
-} // namespace Tycho
+} // namespace tycho

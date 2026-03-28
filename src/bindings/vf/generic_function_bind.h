@@ -16,15 +16,18 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Free function templates in namespace Tycho::Bind for GenericFunction,
+// Free function templates in namespace tycho::bind for GenericFunction,
 // GenericComparative, and GenericConditional binding methods.
 // Included from tycho_vector_functions.h under TYCHO_PYTHON_BINDINGS,
 // after all three type definitions are complete.
 
-#include "DenseFunctionBaseBind.h"
+#include "dense_function_base_bind.h"
 
-namespace Tycho {
-namespace Bind {
+namespace tycho {
+
+using namespace tycho::vf;
+
+namespace bind {
 
 // ── GenericBuild
 // ──────────────────────────────────────────────────────────────────────────────────
@@ -46,7 +49,7 @@ template <class Derived, class PYClass> void GenericBuild(PYClass &obj) {
         });
     }
 
-    Bind::DenseBaseBuild<Derived>(obj);
+    bind::DenseBaseBuild<Derived>(obj);
 }
 
 // ── MinMaxBuild
@@ -136,7 +139,7 @@ inline void ComparativeBuild(nb::module_ &m) {
     obj.def("compute",
             [](const GenComp &a, ConstEigenRef<Eigen::VectorXd> x) { return a.compute(x); });
 
-    Bind::MinMaxBuild(obj);
+    bind::MinMaxBuild(obj);
 }
 
 // ── IfElseBuild
@@ -217,10 +220,10 @@ inline void ConditionalBuild(nb::module_ &m) {
         },
         nb::is_operator());
 
-    Bind::IfElseBuild(obj);
+    bind::IfElseBuild(obj);
 }
 
-} // namespace Bind
-} // namespace Tycho
+} // namespace bind
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

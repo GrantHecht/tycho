@@ -13,17 +13,21 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/tycho_astro.h"
+#include "astro/tycho_astro.h"
 #include "tycho/detail/astro/cr3bp_model.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
 void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
 void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
 void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto mod = m.def_submodule("Astro");
 
     BuildKeplerMod(reg, mod);
@@ -34,13 +38,14 @@ void Tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     //////////// Binding Misc CPP Functions here for now ////////
     /////////////////////////////////////////////////////////////
 
-    mod.def("ModifiedDynamics", [](double mu) { return GenericFunction<-1, -1>(MEEDynamics(mu)); });
+    mod.def("modified_dynamics",
+            [](double mu) { return GenericFunction<-1, -1>(MEEDynamics(mu)); });
 
-    mod.def("J2Cartesian", [](double mu, double J2, double Rb) {
+    mod.def("j2_cartesian", [](double mu, double J2, double Rb) {
         return GenericFunction<-1, -1>(J2Cartesian_Impl::Definition(mu, J2, Rb));
     });
 
-    mod.def("NonIdealSolarSail", [](double mu, double beta, double n1, double n2, double t1) {
+    mod.def("non_ideal_solar_sail", [](double mu, double beta, double n1, double n2, double t1) {
         return GenericFunction<-1, -1>(NonIdealSolarSail_Impl::Definition(mu, beta, n1, n2, t1));
     });
 }

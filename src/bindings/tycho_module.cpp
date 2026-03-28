@@ -15,23 +15,28 @@
 
 #include <signal.h>
 
-#include "Astro/tycho_astro.h"
-#include "OptimalControl/tycho_optimal_control.h"
-#include "Solvers/tycho_solvers.h"
-#include "Utils/tycho_utils.h"
-#include "VectorFunctions/tycho_vector_functions.h"
+#include "astro/tycho_astro.h"
+#include "optimal_control/tycho_optimal_control.h"
 #include "pch.h"
+#include "solvers/tycho_solvers.h"
+#include "utils/tycho_utils.h"
+#include "vf/tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
 void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
 void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
 void UtilsBuild(nb::module_ &m);
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -153,8 +158,8 @@ NB_MODULE(_tychopy, m) {
     signal(SIGINT, signal_callback);
 
     m.doc() = "Tycho"; // optional module docstring
-    m.def("PyMain", &main);
-    m.def("SoftwareInfo", &SoftwareInfo);
+    m.def("py_main", &main);
+    m.def("software_info", &SoftwareInfo);
 
     FunctionRegistry reg(m);     // Must be built first
     VectorFunctionBuild(reg, m); // Must be built second

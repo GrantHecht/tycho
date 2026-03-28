@@ -15,7 +15,10 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 GenericFunction<-1, -1> DynamicStack(const std::vector<GenericFunction<-1, -1>> &elems) {
     using Gen = GenericFunction<-1, -1>;
@@ -37,9 +40,9 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
 }
 
 void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
     using SEG = Segment<-1, -1, -1>;
@@ -131,16 +134,16 @@ void Tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     //////////////////////////////////////////////////////////
 
-    m.def("Stack", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
-    m.def("StackScalar", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
-    m.def("Stack", [](const std::vector<Gen> &elems) { return DynamicStack(elems); });
+    m.def("stack", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
+    m.def("stack_scalar", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
+    m.def("stack", [](const std::vector<Gen> &elems) { return DynamicStack(elems); });
 
-    m.def("Sum", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
-    m.def("SumScalar", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
-    m.def("Sum", [](const std::vector<Gen> &elems) { return DynamicSum(elems); });
+    m.def("sum", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
+    m.def("sum_scalar", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
+    m.def("sum", [](const std::vector<Gen> &elems) { return DynamicSum(elems); });
 
-    m.def("SumElems", &make_dynamic_sum<GenS, ELEM>);
-    m.def("SumElems", [](const std::vector<ELEM> &elems, const std::vector<double> &scales) {
+    m.def("sum_elems", &make_dynamic_sum<GenS, ELEM>);
+    m.def("sum_elems", [](const std::vector<ELEM> &elems, const std::vector<double> &scales) {
         std::vector<Scaled<ELEM>> selems;
         for (int i = 0; i < elems.size(); i++) {
             selems.emplace_back(elems[i] * scales[i]);

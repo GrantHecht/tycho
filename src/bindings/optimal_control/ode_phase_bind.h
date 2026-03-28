@@ -27,9 +27,12 @@
 #include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
 #include "tycho/detail/vf/derivatives/fd_deriv_arbitrary.h"
 
-namespace Tycho {
+namespace tycho {
 
-namespace Bind {
+using namespace tycho::vf;
+using namespace tycho::oc;
+
+namespace bind {
 
 template <class DODE, class PyClass> void ODEPhaseBuildImpl(PyClass &phase) {
     phase.def(nb::init<DODE, TranscriptionModes>());
@@ -44,16 +47,16 @@ template <class DODE, class PyClass> void ODEPhaseBuildImpl(PyClass &phase) {
     phase.def(nb::init<DODE, std::string, const std::vector<Eigen::VectorXd> &, int, bool>());
 }
 
-} // namespace Bind
+} // namespace bind
 
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
     static void Build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
 
-        Bind::ODEPhaseBuildImpl<DODE>(phase);
+        bind::ODEPhaseBuildImpl<DODE>(phase);
         phase.def_rw("integrator", &ODEPhase<DODE>::integrator);
-        phase.def_rw("EnableHessianSparsity", &ODEPhase<DODE>::EnableHessianSparsity);
-        phase.def_rw("OldShootingDefect", &ODEPhase<DODE>::OldShootingDefect);
+        phase.def_rw("enable_hessian_sparsity", &ODEPhase<DODE>::EnableHessianSparsity);
+        phase.def_rw("old_shooting_defect", &ODEPhase<DODE>::OldShootingDefect);
 
         phase.def("get_input_scale", &ODEPhase<DODE>::get_input_scale);
         phase.def("get_defect", &ODEPhase<DODE>::get_defect);
@@ -107,6 +110,6 @@ template <> struct TychoBind<OptimalControlProblem> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

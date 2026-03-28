@@ -19,33 +19,34 @@
 // Free-function binding helper for ODESize member definitions.
 // Used by ODEBind.h and any other code that needs to expose ODE size members.
 
-namespace Tycho::Bind {
+namespace tycho::bind {
+
+using namespace tycho::utils;
 
 template <int XV, int UV, int PV, class Derived, class Obj> void ODESizeBuild(Obj &obj) {
-    obj.def("XVars", &Derived::XVars);
-    obj.def("UVars", &Derived::UVars);
-    obj.def("PVars", &Derived::PVars);
-    obj.def("TVar", &Derived::TVar);
-    obj.def("tVar", &Derived::TVar); // Capital is inconsistent in hindsight
+    obj.def("x_vars", &Derived::XVars);
+    obj.def("u_vars", &Derived::UVars);
+    obj.def("p_vars", &Derived::PVars);
+    obj.def("t_var", &Derived::TVar);
 
-    obj.def("XtVars", &Derived::XtVars);
-    obj.def("XtUVars", &Derived::XtUVars);
-    obj.def("XtUPVars", &Derived::XtUPVars);
+    obj.def("xt_vars", &Derived::XtVars);
+    obj.def("xtu_vars", &Derived::XtUVars);
+    obj.def("xtup_vars", &Derived::XtUPVars);
 
-    obj.def("Xidxs", nb::overload_cast<>(&Derived::Xidxs, nb::const_));
-    obj.def("Xidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xidxs, nb::const_));
+    obj.def("x_idxs", nb::overload_cast<>(&Derived::Xidxs, nb::const_));
+    obj.def("x_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xidxs, nb::const_));
 
-    obj.def("Xtidxs", nb::overload_cast<>(&Derived::Xtidxs, nb::const_));
-    obj.def("Xtidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xtidxs, nb::const_));
+    obj.def("xt_idxs", nb::overload_cast<>(&Derived::Xtidxs, nb::const_));
+    obj.def("xt_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xtidxs, nb::const_));
 
-    obj.def("XtUidxs", nb::overload_cast<>(&Derived::XtUidxs, nb::const_));
-    obj.def("XtUidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, nb::const_));
+    obj.def("xtu_idxs", nb::overload_cast<>(&Derived::XtUidxs, nb::const_));
+    obj.def("xtu_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, nb::const_));
 
-    obj.def("Uidxs", nb::overload_cast<>(&Derived::Uidxs, nb::const_));
-    obj.def("Uidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, nb::const_));
+    obj.def("u_idxs", nb::overload_cast<>(&Derived::Uidxs, nb::const_));
+    obj.def("u_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, nb::const_));
 
-    obj.def("Pidxs", nb::overload_cast<>(&Derived::Pidxs, nb::const_));
-    obj.def("Pidxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Pidxs, nb::const_));
+    obj.def("p_idxs", nb::overload_cast<>(&Derived::Pidxs, nb::const_));
+    obj.def("p_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Pidxs, nb::const_));
 
     obj.def("add_idx",
             nb::overload_cast<const std::string &, const Eigen::VectorXi &>(&Derived::add_idx));
@@ -66,6 +67,6 @@ template <int XV, int UV, int PV, class Derived, class Obj> void ODESizeBuild(Ob
     obj.def("idx", &Derived::idx);
 }
 
-} // namespace Tycho::Bind
+} // namespace tycho::bind
 
 #endif // TYCHO_PYTHON_BINDINGS

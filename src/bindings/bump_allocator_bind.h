@@ -16,15 +16,17 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/utils/memory_management.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::utils;
 
 template <> struct TychoBind<BumpAllocator> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

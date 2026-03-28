@@ -16,11 +16,14 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "DenseFunctionBaseBind.h"
-#include "FunctionRegistry.h"
+#include "dense_function_base_bind.h"
+#include "function_registry.h"
 #include "tycho/detail/optimal_control/core/ode_arguments.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
+using namespace tycho::oc;
 
 template <int _XV, int _UV, int _PV> struct TychoBind<ODEArguments<_XV, _UV, _PV>> {
     using Derived = ODEArguments<_XV, _UV, _PV>;
@@ -31,21 +34,21 @@ template <int _XV, int _UV, int _PV> struct TychoBind<ODEArguments<_XV, _UV, _PV
         obj.def(nb::init<int, int>());
         obj.def(nb::init<int>());
 
-        Bind::DenseBaseBuild<Derived>(obj);
+        bind::DenseBaseBuild<Derived>(obj);
 
-        obj.def("XVec", [](const Derived &a) { return a.segment(0, a.XVars()); });
-        obj.def("XVar", [](const Derived &a, int i) { return a.segment(0, a.XVars()).coeff(i); });
-        obj.def("XtVec", [](const Derived &a) { return a.segment(0, a.XtVars()); });
-        obj.def("TVar", [](const Derived &a) { return a.coeff(a.TVar()); });
-        obj.def("UVec", [](const Derived &a) { return a.segment(a.XtVars(), a.UVars()); });
-        obj.def("UVar",
+        obj.def("x_vec", [](const Derived &a) { return a.segment(0, a.XVars()); });
+        obj.def("x_var", [](const Derived &a, int i) { return a.segment(0, a.XVars()).coeff(i); });
+        obj.def("xt_vec", [](const Derived &a) { return a.segment(0, a.XtVars()); });
+        obj.def("t_var", [](const Derived &a) { return a.coeff(a.TVar()); });
+        obj.def("u_vec", [](const Derived &a) { return a.segment(a.XtVars(), a.UVars()); });
+        obj.def("u_var",
                 [](const Derived &a, int i) { return a.segment(a.XtVars(), a.UVars()).coeff(i); });
-        obj.def("PVec", [](const Derived &a) { return a.segment(a.XtUVars(), a.PVars()); });
-        obj.def("PVar",
+        obj.def("p_vec", [](const Derived &a) { return a.segment(a.XtUVars(), a.PVars()); });
+        obj.def("p_var",
                 [](const Derived &a, int i) { return a.segment(a.XtUVars(), a.PVars()).coeff(i); });
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

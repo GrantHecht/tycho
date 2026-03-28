@@ -17,10 +17,12 @@
 
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "DenseFunctionBaseBind.h"
+#include "dense_function_base_bind.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
 
 template <int IRR, int ORR>
 struct PyVectorFunction
@@ -138,7 +140,7 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
                     nb::arg("args") = nb::tuple());
         }
 
-        Bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
+        bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
         obj.def_prop_rw(
             "thread_safe", [](const PyVectorFunction<IRR, ORR> &self) { return self.threadSafe; },
             [](PyVectorFunction<IRR, ORR> &, bool val) {
@@ -171,10 +173,10 @@ template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
             obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
         obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::threadSafe);
-        Bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
+        bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

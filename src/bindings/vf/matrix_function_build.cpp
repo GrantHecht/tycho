@@ -15,7 +15,10 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 void MatrixFunctionBuild(nb::module_ &m) {
 
@@ -272,4 +275,4 @@ void MatrixFunctionBuild(nb::module_ &m) {
     });
 }
 
-} // namespace Tycho
+} // namespace tycho

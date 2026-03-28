@@ -20,10 +20,14 @@
 // Replaces the out-of-class ODE_Expression::Build(), ODEBase::BuildODEModule(), and
 // GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
-#include "DenseFunctionBaseBind.h"
-#include "ODESizesBind.h"
+#include "dense_function_base_bind.h"
+#include "ode_sizes_bind.h"
 
-namespace Tycho::Bind {
+namespace tycho::bind {
+
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 template <class Derived, class ExprImpl, class... Ts>
 void ODE_ExpressionBuild(nb::module_ &m, const char *name) {
@@ -104,9 +108,12 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
     });
 }
 
-} // namespace Tycho::Bind
+} // namespace tycho::bind
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
+using namespace tycho::oc;
 
 template <int OR> struct TychoBind<InterpFunction<OR>> {
     static void Build(nb::module_ &m, const char *name) {
@@ -116,7 +123,7 @@ template <int OR> struct TychoBind<InterpFunction<OR>> {
         } else {
             obj.def(nb::init<std::shared_ptr<LGLInterpTable>>());
         }
-        Bind::DenseBaseBuild<InterpFunction<OR>>(obj);
+        bind::DenseBaseBuild<InterpFunction<OR>>(obj);
         obj.def("__call__", [](const InterpFunction<OR> &self, const GenericFunction<-1, 1> &t) {
             return GenericFunction<-1, -1>(self.eval(t));
         });
@@ -126,6 +133,6 @@ template <int OR> struct TychoBind<InterpFunction<OR>> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

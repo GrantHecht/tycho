@@ -15,13 +15,16 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 
-    Bind::UnaryMathBuild<Gen>(reg.vfuncx);
-    Bind::BinaryMathBuild<Gen>(reg.vfuncx);
+    bind::UnaryMathBuild<Gen>(reg.vfuncx);
+    bind::BinaryMathBuild<Gen>(reg.vfuncx);
 }
 
-} // namespace Tycho
+} // namespace tycho

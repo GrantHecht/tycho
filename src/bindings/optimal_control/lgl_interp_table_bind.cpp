@@ -13,9 +13,14 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "ODEPhaseBind.h"
+#include "ode_phase_bind.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 using VectorFunctionalX = GenericFunction<-1, -1>;
 
 void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
@@ -38,25 +43,25 @@ void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
     obj.def(nb::init<VectorFunctionalX, int, int, TranscriptionModes>());
 
     obj.def(nb::init<int, int, TranscriptionModes>());
-    obj.def("loadEvenData", &LGLInterpTable::loadEvenData);
-    obj.def("getTablePtr", &LGLInterpTable::getTablePtr);
-    obj.def("loadUnevenData", &LGLInterpTable::loadUnevenData);
-    obj.def("Interpolate", &LGLInterpTable::Interpolate<double>);
+    obj.def("load_even_data", &LGLInterpTable::loadEvenData);
+    obj.def("get_table_ptr", &LGLInterpTable::getTablePtr);
+    obj.def("load_uneven_data", &LGLInterpTable::loadUnevenData);
+    obj.def("interpolate", &LGLInterpTable::Interpolate<double>);
 
-    obj.def("NewErrorIntegral", &LGLInterpTable::NewErrorIntegral);
+    obj.def("new_error_integral", &LGLInterpTable::NewErrorIntegral);
 
     obj.def("__call__", nb::overload_cast<double>(&LGLInterpTable::Interpolate<double>, nb::const_),
             nb::is_operator());
 
-    obj.def("InterpolateDeriv", &LGLInterpTable::InterpolateDeriv<double>);
-    obj.def("makePeriodic", &LGLInterpTable::makePeriodic);
+    obj.def("interpolate_deriv", &LGLInterpTable::InterpolateDeriv<double>);
+    obj.def("make_periodic", &LGLInterpTable::makePeriodic);
 
-    obj.def("InterpRange", &LGLInterpTable::InterpRange);
-    obj.def("InterpWholeRange", &LGLInterpTable::InterpWholeRange);
-    obj.def("ErrorIntegral", &LGLInterpTable::ErrorIntegral);
+    obj.def("interp_range", &LGLInterpTable::InterpRange);
+    obj.def("interp_whole_range", &LGLInterpTable::InterpWholeRange);
+    obj.def("error_integral", &LGLInterpTable::ErrorIntegral);
 
-    obj.def_ro("T0", &LGLInterpTable::T0);
-    obj.def_ro("TF", &LGLInterpTable::TF);
+    obj.def_ro("t0", &LGLInterpTable::T0);
+    obj.def_ro("tf", &LGLInterpTable::TF);
 
-    obj.def("InterpNonDim", nb::overload_cast<int, double, double>(&LGLInterpTable::NDequidist));
+    obj.def("interp_non_dim", nb::overload_cast<int, double, double>(&LGLInterpTable::NDequidist));
 }

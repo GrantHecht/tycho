@@ -15,7 +15,10 @@
 
 #include "tycho_vector_functions.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 template <class FType> void DefineListEval(nb::class_<FType> &obj) {
     using Gen = GenericFunction<-1, -1>;
@@ -59,21 +62,21 @@ void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 
-    Bind::DoubleMathBuild<GenS>(reg.sfuncx);
-    Bind::UnaryMathBuild<GenS>(reg.sfuncx);
-    Bind::BinaryMathBuild<GenS>(reg.sfuncx);
-    Bind::BinaryOperatorsBuild<GenS>(reg.sfuncx);
-    Bind::FunctionIndexingBuild<GenS>(reg.sfuncx);
-    Bind::ConditionalOperatorsBuild<GenS>(reg.sfuncx);
+    bind::DoubleMathBuild<GenS>(reg.sfuncx);
+    bind::UnaryMathBuild<GenS>(reg.sfuncx);
+    bind::BinaryMathBuild<GenS>(reg.sfuncx);
+    bind::BinaryOperatorsBuild<GenS>(reg.sfuncx);
+    bind::FunctionIndexingBuild<GenS>(reg.sfuncx);
+    bind::ConditionalOperatorsBuild<GenS>(reg.sfuncx);
 
     ///////////////////////////////////////
-    Bind::DoubleMathBuild<Gen>(reg.vfuncx);
-    Bind::FunctionIndexingBuild<Gen>(reg.vfuncx);
-    Bind::BinaryOperatorsBuild<Gen>(reg.vfuncx);
+    bind::DoubleMathBuild<Gen>(reg.vfuncx);
+    bind::FunctionIndexingBuild<Gen>(reg.vfuncx);
+    bind::BinaryOperatorsBuild<Gen>(reg.vfuncx);
     ///////////////////////////////////////
 
     DefineListEval(reg.vfuncx);
     DefineListEval(reg.sfuncx);
 }
 
-} // namespace Tycho
+} // namespace tycho

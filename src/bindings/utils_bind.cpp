@@ -13,10 +13,11 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "BumpAllocatorBind.h"
-#include "Utils/tycho_utils.h"
+#include "bump_allocator_bind.h"
+#include "utils/tycho_utils.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::utils;
 
 void UtilsBuild(nb::module_ &m) {
     auto um = m.def_submodule("Utils", "Contains miscilanaeous utilities");
@@ -29,4 +30,4 @@ void UtilsBuild(nb::module_ &m) {
     TychoBind<BumpAllocator>::Build(um);
 }
 
-} // namespace Tycho
+} // namespace tycho

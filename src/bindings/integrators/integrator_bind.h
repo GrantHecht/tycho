@@ -20,11 +20,14 @@
 // Replaces the out-of-class Integrator<DODE>::Build() and BuildConstructors() definitions
 // that were previously included from Integrator.h.
 
-#include "DenseFunctionBaseBind.h"
+#include "dense_function_base_bind.h"
 
-namespace Tycho {
+namespace tycho {
 
-namespace Bind {
+using namespace tycho::vf;
+using namespace tycho::integrators;
+
+namespace bind {
 
 template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj) {
     obj.def("integrator", [](const DODE &od, double ds) { return Integrator<DODE>(od, ds); });
@@ -62,7 +65,7 @@ template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj
     }
 }
 
-} // namespace Bind
+} // namespace bind
 
 template <class DODE> struct TychoBind<Integrator<DODE>> {
     static void Build(nb::module_ &m, const char *name) {
@@ -241,39 +244,39 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         /////////////////////////////////////////////////////
 
-        Bind::DenseBaseBuild<Integrator<DODE>>(obj);
+        bind::DenseBaseBuild<Integrator<DODE>>(obj);
 
-        obj.def_rw("EnableVectorization", &Integrator<DODE>::EnableVectorization);
+        obj.def_rw("enable_vectorization", &Integrator<DODE>::EnableVectorization);
 
-        obj.def_rw("DefStepSize", &Integrator<DODE>::DefStepSize);
-        obj.def_rw("MaxStepSize", &Integrator<DODE>::MaxStepSize);
-        obj.def_rw("MinStepSize", &Integrator<DODE>::MinStepSize);
-        obj.def_rw("MaxStepChange", &Integrator<DODE>::MaxStepChange);
-        obj.def_rw("FastAdaptiveSTM", &Integrator<DODE>::FastAdaptiveSTM);
+        obj.def_rw("def_step_size", &Integrator<DODE>::DefStepSize);
+        obj.def_rw("max_step_size", &Integrator<DODE>::MaxStepSize);
+        obj.def_rw("min_step_size", &Integrator<DODE>::MinStepSize);
+        obj.def_rw("max_step_change", &Integrator<DODE>::MaxStepChange);
+        obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::FastAdaptiveSTM);
 
-        obj.def_rw("StepFrac", &Integrator<DODE>::StepFrac);
-        obj.def_rw("ErrPowFac", &Integrator<DODE>::ErrPowFac);
+        obj.def_rw("step_frac", &Integrator<DODE>::StepFrac);
+        obj.def_rw("err_pow_fac", &Integrator<DODE>::ErrPowFac);
 
-        obj.def_rw("Adaptive", &Integrator<DODE>::Adaptive);
-        obj.def_rw("AbsTols", &Integrator<DODE>::AbsTols);
+        obj.def_rw("adaptive", &Integrator<DODE>::Adaptive);
+        obj.def_rw("abs_tols", &Integrator<DODE>::AbsTols);
 
-        obj.def("setAbsTol", &Integrator<DODE>::setAbsTol);
-        obj.def("setAbsTols", &Integrator<DODE>::setAbsTols);
-        obj.def("getAbsTols", &Integrator<DODE>::getAbsTols);
+        obj.def("set_abs_tol", &Integrator<DODE>::setAbsTol);
+        obj.def("set_abs_tols", &Integrator<DODE>::setAbsTols);
+        obj.def("get_abs_tols", &Integrator<DODE>::getAbsTols);
 
-        obj.def("setRelTol", &Integrator<DODE>::setRelTol);
-        obj.def("setRelTols", &Integrator<DODE>::setRelTols);
-        obj.def("getRelTols", &Integrator<DODE>::getRelTols);
+        obj.def("set_rel_tol", &Integrator<DODE>::setRelTol);
+        obj.def("set_rel_tols", &Integrator<DODE>::setRelTols);
+        obj.def("get_rel_tols", &Integrator<DODE>::getRelTols);
 
-        obj.def("setStepSizes", &Integrator<DODE>::setStepSizes, nb::arg("DefStepSize"),
+        obj.def("set_step_sizes", &Integrator<DODE>::setStepSizes, nb::arg("DefStepSize"),
                 nb::arg("MinStepSize"), nb::arg("MaxStepSize"));
 
-        obj.def_rw("EventTol", &Integrator<DODE>::EventTol);
-        obj.def_rw("MaxEventIters", &Integrator<DODE>::MaxEventIters);
-        obj.def_rw("VectorizeBatchCalls", &Integrator<DODE>::VectorizeBatchCalls);
+        obj.def_rw("event_tol", &Integrator<DODE>::EventTol);
+        obj.def_rw("max_event_iters", &Integrator<DODE>::MaxEventIters);
+        obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::VectorizeBatchCalls);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

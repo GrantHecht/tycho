@@ -20,14 +20,16 @@
 // These replace the out-of-class member function definitions that previously
 // lived in DenseFunctionBase.h under TYCHO_PYTHON_BINDINGS.
 
-namespace Tycho::Bind {
+namespace tycho::bind {
+
+using namespace tycho::vf;
 
 template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
 
     using Gen = GenericFunction<-1, -1>;
 
-    obj.def("IRows", &Derived::IRows);
-    obj.def("ORows", &Derived::ORows);
+    obj.def("input_rows", &Derived::IRows);
+    obj.def("output_rows", &Derived::ORows);
     obj.def("name", &Derived::name);
 
     obj.def("input_domain", &Derived::input_domain);
@@ -577,11 +579,11 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
         ///////////////////////////////////////////////////////////////////////
 
         if constexpr (!is_seg)
-            obj.def("cwiseProduct", [](const Derived &seg1, const SEG &seg2) {
+            obj.def("cwise_product", [](const Derived &seg1, const SEG &seg2) {
                 return Gen(CwiseFunctionProduct<Derived, SEG>(seg1, seg2));
             });
         if constexpr (!is_gen)
-            obj.def("cwiseProduct", [](const Derived &seg1, const Gen &seg2) {
+            obj.def("cwise_product", [](const Derived &seg1, const Gen &seg2) {
                 return Gen(CwiseFunctionProduct<Derived, Gen>(seg1, seg2));
             });
 
@@ -589,22 +591,22 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
         ///////////////////////////////////////////////////////////////////////////
 
         if constexpr (!is_seg)
-            obj.def("cwiseQuotient", [](const Derived &seg1, const SEG &seg2) {
+            obj.def("cwise_quotient", [](const Derived &seg1, const SEG &seg2) {
                 return Gen(cwiseQuotient(seg1, seg2));
             });
         if constexpr (!is_gen)
-            obj.def("cwiseQuotient", [](const Derived &seg1, const Gen &seg2) {
+            obj.def("cwise_quotient", [](const Derived &seg1, const Gen &seg2) {
                 return Gen(cwiseQuotient(seg1, seg2));
             });
     }
 
     obj.def("dot",
             [](const Derived &seg1, const Derived &seg2) { return GenS(dotProduct(seg1, seg2)); });
-    obj.def("cwiseProduct", [](const Derived &seg1, const Derived &seg2) {
+    obj.def("cwise_product", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));
     });
 
-    obj.def("cwiseQuotient", [](const Derived &seg1, const Derived &seg2) {
+    obj.def("cwise_quotient", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(cwiseQuotient(seg1, seg2));
     });
 
@@ -613,11 +615,11 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
         return GenS(dotProduct(seg1, Constant<-1, Derived::ORC>(seg1.IRows(), seg2)));
     });
 
-    obj.def("cwiseProduct", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
+    obj.def("cwise_product", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         return BinGen(RowScaled<Derived>(seg1, seg2));
     });
 
-    obj.def("cwiseQuotient", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
+    obj.def("cwise_quotient", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         Eigen::VectorXd seg2i = seg2.cwiseInverse();
         return BinGen(RowScaled<Derived>(seg1, seg2i));
     });
@@ -792,6 +794,6 @@ template <class Derived, class PYClass> void ConditionalOperatorsBuild(PYClass &
     }
 }
 
-} // namespace Tycho::Bind
+} // namespace tycho::bind
 
 #endif // TYCHO_PYTHON_BINDINGS

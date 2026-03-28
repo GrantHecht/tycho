@@ -205,8 +205,8 @@ template <> struct type_caster<Eigen::VectorXi> {
 // Python list of str -> std::vector<std::string>
 // Python sequence of int (list, range, tuple, numpy int array) -> Eigen::VectorXi
 // ---------------------------------------------------------------------------
-template <> struct type_caster<Tycho::VarIndexType> {
-    NB_TYPE_CASTER(Tycho::VarIndexType, const_name("int | Sequence[int] | str | list[str]"))
+template <> struct type_caster<tycho::oc::VarIndexType> {
+    NB_TYPE_CASTER(tycho::oc::VarIndexType, const_name("int | Sequence[int] | str | list[str]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         // int
@@ -294,7 +294,7 @@ template <> struct type_caster<Tycho::VarIndexType> {
         return false;
     }
 
-    static handle from_cpp(const Tycho::VarIndexType &src, rv_policy policy,
+    static handle from_cpp(const tycho::oc::VarIndexType &src, rv_policy policy,
                            cleanup_list *cleanup) {
         return std::visit(
             [&](const auto &v) -> handle {
@@ -454,26 +454,26 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 };
 
 // ---------------------------------------------------------------------------
-// ScaleType  =  std::variant<double, Eigen::VectorXd, Tycho::ScaleModes, std::string>
+// ScaleType  =  std::variant<double, Eigen::VectorXd, tycho::oc::ScaleModes, std::string>
 //
-// Python  None         -> Tycho::ScaleModes::NONE
-// Python  ScaleModes   -> Tycho::ScaleModes (enum value)
+// Python  None         -> tycho::oc::ScaleModes::NONE
+// Python  ScaleModes   -> tycho::oc::ScaleModes (enum value)
 // Python  str          -> std::string
 // Python  float        -> double
 // Python  array        -> Eigen::VectorXd
 // ---------------------------------------------------------------------------
-template <> struct type_caster<Tycho::ScaleType> {
-    NB_TYPE_CASTER(Tycho::ScaleType,
+template <> struct type_caster<tycho::oc::ScaleType> {
+    NB_TYPE_CASTER(tycho::oc::ScaleType,
                    const_name("Union[float, numpy.ndarray, OptimalControl.ScaleModes, str, None]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {
-            value = Tycho::ScaleModes::NONE;
+            value = tycho::oc::ScaleModes::NONE;
             return true;
         }
         // ScaleModes enum (nb::enum_<ScaleModes>)
         {
-            auto sc = make_caster<Tycho::ScaleModes>();
+            auto sc = make_caster<tycho::oc::ScaleModes>();
             if (sc.from_python(src, flags, cleanup)) {
                 value = sc.value;
                 return true;
@@ -497,7 +497,7 @@ template <> struct type_caster<Tycho::ScaleType> {
         return false;
     }
 
-    static handle from_cpp(Tycho::ScaleType src, rv_policy policy, cleanup_list *cleanup) {
+    static handle from_cpp(tycho::oc::ScaleType src, rv_policy policy, cleanup_list *cleanup) {
         return std::visit(
             [&](auto &&v) -> handle {
                 using T = std::decay_t<decltype(v)>;

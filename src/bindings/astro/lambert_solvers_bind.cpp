@@ -13,14 +13,18 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/astro/lambert_solvers.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     m.def("lambert_izzo",
           [](const Vector3<double> &R1, const Vector3<double> &R2, double dt, double mu,

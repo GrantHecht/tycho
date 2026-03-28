@@ -16,11 +16,13 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/solvers/optimization_problem.h"
 #include "tycho/detail/solvers/optimization_problem_base.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::solvers;
 
 template <> struct TychoBind<OptimizationProblemBase> {
     static void Build(nb::module_ &m);
@@ -30,6 +32,6 @@ template <> struct TychoBind<OptimizationProblem> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

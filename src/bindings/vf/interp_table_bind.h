@@ -20,7 +20,10 @@
 // Included from src/Bindings/Tycho_VectorFunctions.cpp after all InterpTable
 // headers have been included so all types are complete.
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
+using namespace tycho::oc;
 
 // ── InterpTable1D
 // ─────────────────────────────────────────────────────────────────────────────────
@@ -77,8 +80,8 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     obj.def("interp_deriv1", &InterpTable1D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable1D::interp_deriv2);
 
-    obj.def_rw("WarnOutOfBounds", &InterpTable1D::WarnOutOfBounds);
-    obj.def_rw("ThrowOutOfBounds", &InterpTable1D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable1D::WarnOutOfBounds);
+    obj.def_rw("throw_out_of_bounds", &InterpTable1D::ThrowOutOfBounds);
 
     obj.def("sf", [](std::shared_ptr<InterpTable1D> &self) {
         if (self->vlen != 1) {
@@ -106,8 +109,8 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_));
 
-    obj.def_rw("WarnOutOfBounds", &InterpTable2D::WarnOutOfBounds);
-    obj.def_rw("ThrowOutOfBounds", &InterpTable2D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable2D::WarnOutOfBounds);
+    obj.def_rw("throw_out_of_bounds", &InterpTable2D::ThrowOutOfBounds);
 
     obj.def("interp_deriv1", &InterpTable2D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable2D::interp_deriv2);
@@ -165,8 +168,8 @@ inline void InterpTable3DBuild(nb::module_ &m) {
     obj.def("interp_deriv2",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp_deriv2, nb::const_));
 
-    obj.def_rw("WarnOutOfBounds", &InterpTable3D::WarnOutOfBounds);
-    obj.def_rw("ThrowOutOfBounds", &InterpTable3D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable3D::WarnOutOfBounds);
+    obj.def_rw("throw_out_of_bounds", &InterpTable3D::ThrowOutOfBounds);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_),
@@ -218,8 +221,8 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     obj.def("interp_deriv2", nb::overload_cast<double, double, double, double>(
                                  &InterpTable4D::interp_deriv2, nb::const_));
 
-    obj.def_rw("WarnOutOfBounds", &InterpTable4D::WarnOutOfBounds);
-    obj.def_rw("ThrowOutOfBounds", &InterpTable4D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable4D::WarnOutOfBounds);
+    obj.def_rw("throw_out_of_bounds", &InterpTable4D::ThrowOutOfBounds);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_),
@@ -254,6 +257,6 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     });
 }
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

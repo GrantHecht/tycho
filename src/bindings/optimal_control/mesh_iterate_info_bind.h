@@ -16,15 +16,17 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-#include "FunctionRegistry.h"
+#include "function_registry.h"
 #include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::oc;
 
 template <> struct TychoBind<MeshIterateInfo> {
     static void Build(nb::module_ &m);
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

@@ -15,7 +15,10 @@
 
 #include "tycho/detail/vf/operators/root_finder.h"
 #include "tycho_vector_functions.h"
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 template <class T> void UnaryVectorOpBuild(nb::module_ &m) {
 
@@ -154,64 +157,64 @@ void ProductBuild(nb::module_ &m) {
         return fun1.attr("cwiseProduct")(fun2);
     };
 
-    m.def("cwiseProduct", [cwiseProductOpLam](const SEG2 &f1, const Vector2<double> &f2) {
+    m.def("cwise_product", [cwiseProductOpLam](const SEG2 &f1, const Vector2<double> &f2) {
         return cwiseProductOpLam(f1, f2);
     });
-    m.def("cwiseProduct", [cwiseProductOpLam](const SEG3 &f1, const Vector3<double> &f2) {
+    m.def("cwise_product", [cwiseProductOpLam](const SEG3 &f1, const Vector3<double> &f2) {
         return cwiseProductOpLam(f1, f2);
     });
-    m.def("cwiseProduct", [cwiseProductOpLam](const SEG &f1, const Vector3<double> &f2) {
+    m.def("cwise_product", [cwiseProductOpLam](const SEG &f1, const Vector3<double> &f2) {
         return cwiseProductOpLam(f1, f2);
     });
-    m.def("cwiseProduct", [cwiseProductOpLam](const Gen &f1, const Vector3<double> &f2) {
-        return cwiseProductOpLam(f1, f2);
-    });
-
-    m.def("cwiseProduct", [cwiseProductOpLam](const Vector2<double> &f2, const SEG2 &f1) {
-        return cwiseProductOpLam(f1, f2);
-    });
-    m.def("cwiseProduct", [cwiseProductOpLam](const Vector3<double> &f2, const SEG3 &f1) {
-        return cwiseProductOpLam(f1, f2);
-    });
-    m.def("cwiseProduct", [cwiseProductOpLam](const VectorX<double> &f2, const SEG &f1) {
-        return cwiseProductOpLam(f1, f2);
-    });
-    m.def("cwiseProduct", [cwiseProductOpLam](const VectorX<double> &f2, const Gen &f1) {
+    m.def("cwise_product", [cwiseProductOpLam](const Gen &f1, const Vector3<double> &f2) {
         return cwiseProductOpLam(f1, f2);
     });
 
-    m.def("cwiseProduct", [cwiseProductOpLam](const SEG2 &f1, const SEG2 &f2) {
+    m.def("cwise_product", [cwiseProductOpLam](const Vector2<double> &f2, const SEG2 &f1) {
         return cwiseProductOpLam(f1, f2);
     });
-    m.def("cwiseProduct",
+    m.def("cwise_product", [cwiseProductOpLam](const Vector3<double> &f2, const SEG3 &f1) {
+        return cwiseProductOpLam(f1, f2);
+    });
+    m.def("cwise_product", [cwiseProductOpLam](const VectorX<double> &f2, const SEG &f1) {
+        return cwiseProductOpLam(f1, f2);
+    });
+    m.def("cwise_product", [cwiseProductOpLam](const VectorX<double> &f2, const Gen &f1) {
+        return cwiseProductOpLam(f1, f2);
+    });
+
+    m.def("cwise_product", [cwiseProductOpLam](const SEG2 &f1, const SEG2 &f2) {
+        return cwiseProductOpLam(f1, f2);
+    });
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG2 &f1, const SEG &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG2 &f1, const Gen &f2) { return cwiseProductOpLam(f1, f2); });
 
-    m.def("cwiseProduct", [cwiseProductOpLam](const SEG3 &f1, const SEG3 &f2) {
+    m.def("cwise_product", [cwiseProductOpLam](const SEG3 &f1, const SEG3 &f2) {
         return cwiseProductOpLam(f1, f2);
     });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG3 &f1, const SEG &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG3 &f1, const Gen &f2) { return cwiseProductOpLam(f1, f2); });
 
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG &f1, const SEG &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG &f1, const SEG2 &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG &f1, const SEG3 &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const SEG &f1, const Gen &f2) { return cwiseProductOpLam(f1, f2); });
 
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const Gen &f1, const SEG2 &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const Gen &f1, const SEG3 &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const Gen &f1, const SEG &f2) { return cwiseProductOpLam(f1, f2); });
-    m.def("cwiseProduct",
+    m.def("cwise_product",
           [cwiseProductOpLam](const Gen &f1, const Gen &f2) { return cwiseProductOpLam(f1, f2); });
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,79 +227,79 @@ void ProductBuild(nb::module_ &m) {
         return fun1.attr("cwiseQuotient")(fun2);
     };
 
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG2 &f1, const Vector2<double> &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG2 &f1, const Vector2<double> &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG3 &f1, const Vector3<double> &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG3 &f1, const Vector3<double> &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG &f1, const Vector3<double> &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG &f1, const Vector3<double> &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Gen &f1, const Vector3<double> &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Gen &f1, const Vector3<double> &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
 
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Vector2<double> &f1, const SEG2 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Vector2<double> &f1, const SEG2 &f2) {
         Constant<-1, -1> f1tmp(f2.IRows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Vector3<double> &f1, const SEG3 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Vector3<double> &f1, const SEG3 &f2) {
         Constant<-1, -1> f1tmp(f2.IRows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const SEG &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const SEG &f2) {
         Constant<-1, -1> f1tmp(f2.IRows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const Gen &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const Gen &f2) {
         Constant<-1, -1> f1tmp(f2.IRows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
 
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG2 &f1, const SEG2 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG2 &f1, const SEG2 &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG2 &f1, const SEG &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG2 &f1, const SEG &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG2 &f1, const Gen &f2) {
-        return cwiseQuotientOpLam(f1, f2);
-    });
-
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG3 &f1, const SEG3 &f2) {
-        return cwiseQuotientOpLam(f1, f2);
-    });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG3 &f1, const SEG &f2) {
-        return cwiseQuotientOpLam(f1, f2);
-    });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG3 &f1, const Gen &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG2 &f1, const Gen &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
 
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG &f1, const SEG &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG3 &f1, const SEG3 &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG &f1, const SEG2 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG3 &f1, const SEG &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG &f1, const SEG3 &f2) {
-        return cwiseQuotientOpLam(f1, f2);
-    });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const SEG &f1, const Gen &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG3 &f1, const Gen &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
 
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Gen &f1, const SEG2 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG &f1, const SEG &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Gen &f1, const SEG3 &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG &f1, const SEG2 &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Gen &f1, const SEG &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG &f1, const SEG3 &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
-    m.def("cwiseQuotient", [cwiseQuotientOpLam](const Gen &f1, const Gen &f2) {
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const SEG &f1, const Gen &f2) {
+        return cwiseQuotientOpLam(f1, f2);
+    });
+
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Gen &f1, const SEG2 &f2) {
+        return cwiseQuotientOpLam(f1, f2);
+    });
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Gen &f1, const SEG3 &f2) {
+        return cwiseQuotientOpLam(f1, f2);
+    });
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Gen &f1, const SEG &f2) {
+        return cwiseQuotientOpLam(f1, f2);
+    });
+    m.def("cwise_quotient", [cwiseQuotientOpLam](const Gen &f1, const Gen &f2) {
         return cwiseQuotientOpLam(f1, f2);
     });
 
@@ -358,9 +361,9 @@ struct QuatRotation {
 };
 
 void FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
     using Gen = GenericFunction<-1, -1>;
     using GenS = GenericFunction<-1, 1>;
 
@@ -392,37 +395,37 @@ void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     ////////////////////////////////////////////////////////////////////////
 
-    m.def("ScalarRootFinder", [](const GenS &fx, const GenS &dfx, int iter, double tol) {
+    m.def("scalar_root_finder", [](const GenS &fx, const GenS &dfx, int iter, double tol) {
         return GenS(ScalarRootFinder<GenS, GenS>{fx, dfx, iter, tol});
     });
-    m.def("ScalarRootFinder", [](const GenS &fx, int iter, double tol) {
+    m.def("scalar_root_finder", [](const GenS &fx, int iter, double tol) {
         return GenS(ScalarRootFinder<GenS, std::false_type>{fx, std::false_type(), iter, tol});
     });
     ////////////////////////////////////////////////////////////////////////
 
-    m.def("quatProduct", [](const SEG &seg1, const SEG &seg2) {
+    m.def("quat_product", [](const SEG &seg1, const SEG &seg2) {
         return Gen(FunctionQuatProduct<SEG, SEG>(seg1, seg2));
     });
-    m.def("quatProduct", [](const SEG &seg1, const Gen &seg2) {
+    m.def("quat_product", [](const SEG &seg1, const Gen &seg2) {
         return Gen(FunctionQuatProduct<SEG, Gen>(seg1, seg2));
     });
-    m.def("quatProduct", [](const Gen &seg1, const SEG &seg2) {
+    m.def("quat_product", [](const Gen &seg1, const SEG &seg2) {
         return Gen(FunctionQuatProduct<Gen, SEG>(seg1, seg2));
     });
-    m.def("quatProduct", [](const Gen &seg1, const Gen &seg2) {
+    m.def("quat_product", [](const Gen &seg1, const Gen &seg2) {
         return Gen(FunctionQuatProduct<Gen, Gen>(seg1, seg2));
     });
 
-    m.def("quatRotate", [](const Gen &q, const Gen &v) {
+    m.def("quat_rotate", [](const Gen &q, const Gen &v) {
         return Gen(QuatRotation::Definition().eval(stack(q, v)));
     });
-    m.def("quatRotate", [](const Gen &q, const SEG3 &v) {
+    m.def("quat_rotate", [](const Gen &q, const SEG3 &v) {
         return Gen(QuatRotation::Definition().eval(stack(q, v)));
     });
-    m.def("quatRotate", [](const Gen &q, const SEG &v) {
+    m.def("quat_rotate", [](const Gen &q, const SEG &v) {
         return Gen(QuatRotation::Definition().eval(stack(q, v)));
     });
-    m.def("quatRotate", [](const Gen &q, const Vector3<double> &vec) {
+    m.def("quat_rotate", [](const Gen &q, const Vector3<double> &vec) {
         return Gen(QuatRotation::Definition().eval(stack(q, Constant<-1, 3>(q.IRows(), vec))));
     });
 
@@ -433,7 +436,7 @@ void Tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
     UnaryScalarOpBuild<ELEM>(m);
     UnaryScalarOpBuild<GenS>(m);
 
-    Bind::IfElseBuild(m);
+    bind::IfElseBuild(m);
 
     m.def("arctan2", [](const GenS &y, const GenS &x) {
         return GenS(ArcTan2Op().eval(StackedOutputs{y, x}));

@@ -17,24 +17,26 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 // TychoBind<T> specializations for CommonFunctions types.
-// Also provides Bind::SegBuild<Derived, PyClass> free function.
+// Also provides bind::SegBuild<Derived, PyClass> free function.
 // Included from CommonFunctions/CommonFunctions.h under TYCHO_PYTHON_BINDINGS.
 
-#include "DenseFunctionBaseBind.h"
+#include "dense_function_base_bind.h"
 
-namespace Tycho {
+namespace tycho {
 
-// ── Bind::SegBuild
+using namespace tycho::vf;
+
+// ── bind::SegBuild
 // ────────────────────────────────────────────────────────────────────────────────
-namespace Bind {
+namespace bind {
 
 template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
-    Bind::DoubleMathBuild<Derived>(obj);
-    Bind::UnaryMathBuild<Derived>(obj);
-    Bind::BinaryMathBuild<Derived>(obj);
-    Bind::BinaryOperatorsBuild<Derived>(obj);
-    Bind::FunctionIndexingBuild<Derived>(obj);
-    Bind::ConditionalOperatorsBuild<Derived>(obj);
+    bind::DoubleMathBuild<Derived>(obj);
+    bind::UnaryMathBuild<Derived>(obj);
+    bind::BinaryMathBuild<Derived>(obj);
+    bind::BinaryOperatorsBuild<Derived>(obj);
+    bind::FunctionIndexingBuild<Derived>(obj);
+    bind::ConditionalOperatorsBuild<Derived>(obj);
 
     obj.def("tolist", [](const Derived &func) {
         using ELEM = Segment<-1, 1, -1>;
@@ -86,7 +88,7 @@ template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
     });
 }
 
-} // namespace Bind
+} // namespace bind
 
 // ── Constant
 // ──────────────────────────────────────────────────────────────────────────────────────
@@ -94,7 +96,7 @@ template <int IR, int OR> struct TychoBind<Constant<IR, OR>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Constant<IR, OR>>(m, name);
         obj.def(nb::init<int, Eigen::VectorXd>());
-        Bind::DenseBaseBuild<Constant<IR, OR>>(obj);
+        bind::DenseBaseBuild<Constant<IR, OR>>(obj);
     }
 };
 
@@ -105,7 +107,7 @@ struct TychoBind<FunctionDotProduct_Impl<Derived, Func1, Func2>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Derived>(m, name);
         obj.def(nb::init<Func1, Func2>());
-        Bind::DenseBaseBuild<Derived>(obj);
+        bind::DenseBaseBuild<Derived>(obj);
     }
 };
 
@@ -116,7 +118,7 @@ template <class OuterFunc, class InnerFunc> struct TychoBind<NestedFunction<Oute
         auto obj = nb::class_<NestedFunction<OuterFunc, InnerFunc>>(m, name);
         obj.def(nb::init<>());
         obj.def(nb::init<OuterFunc, InnerFunc>());
-        Bind::DenseBaseBuild<NestedFunction<OuterFunc, InnerFunc>>(obj);
+        bind::DenseBaseBuild<NestedFunction<OuterFunc, InnerFunc>>(obj);
     }
 };
 
@@ -129,7 +131,7 @@ template <class Derived, int IR, int PW> struct TychoBind<NormalizedPower_Impl<D
         if constexpr (IR > 0) {
             obj.def(nb::init<>());
         }
-        Bind::DenseBaseBuild<Derived>(obj);
+        bind::DenseBaseBuild<Derived>(obj);
     }
 };
 
@@ -143,7 +145,7 @@ struct TychoBind<IntegralNorm_Impl<Derived, USZ, Power>> {
         if constexpr (USZ > 0) {
             obj.def(nb::init<>());
         }
-        Bind::DenseBaseBuild<Derived>(obj);
+        bind::DenseBaseBuild<Derived>(obj);
     }
 };
 
@@ -153,7 +155,7 @@ template <class Func, int IRC, int ORC> struct TychoBind<ParsedInput<Func, IRC, 
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ParsedInput<Func, IRC, ORC>>(m, name);
         obj.def(nb::init<Func, const Eigen::VectorXi &, int>());
-        Bind::DenseBaseBuild<ParsedInput<Func, IRC, ORC>>(obj);
+        bind::DenseBaseBuild<ParsedInput<Func, IRC, ORC>>(obj);
     }
 };
 
@@ -163,16 +165,16 @@ template <int IR_OR> struct TychoBind<Arguments<IR_OR>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Arguments<IR_OR>>(m, name);
         obj.def(nb::init<int>());
-        obj.def("Constant", [](const Arguments<IR_OR> &a, Eigen::VectorXd v) {
+        obj.def("constant", [](const Arguments<IR_OR> &a, Eigen::VectorXd v) {
             return GenericFunction<-1, -1>(Constant<-1, -1>(a.IRows(), v));
         });
-        obj.def("Constant", [](const Arguments<IR_OR> &a, double v) {
+        obj.def("constant", [](const Arguments<IR_OR> &a, double v) {
             Eigen::Matrix<double, 1, 1> vv;
             vv[0] = v;
             return GenericFunction<-1, 1>(Constant<-1, 1>(a.IRows(), vv));
         });
-        Bind::DenseBaseBuild<Arguments<IR_OR>>(obj);
-        Bind::SegBuild<Arguments<IR_OR>>(obj);
+        bind::DenseBaseBuild<Arguments<IR_OR>>(obj);
+        bind::SegBuild<Arguments<IR_OR>>(obj);
     }
 };
 
@@ -182,8 +184,8 @@ template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
         obj.def(nb::init<int, int, int>());
-        Bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
-        Bind::SegBuild<Segment<IR, OR, ST>>(obj);
+        bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
+        bind::SegBuild<Segment<IR, OR, ST>>(obj);
     }
 };
 
@@ -194,10 +196,10 @@ struct TychoBind<TwoFunctionSum_Impl<Derived, Func1, Func2, DoDifference>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Derived>(m, name);
         obj.def(nb::init<Func1, Func2>());
-        Bind::DenseBaseBuild<Derived>(obj);
+        bind::DenseBaseBuild<Derived>(obj);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

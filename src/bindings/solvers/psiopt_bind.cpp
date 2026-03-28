@@ -13,10 +13,15 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "PSIOPTBind.h"
+#include "psiopt_bind.h"
 #include "tycho/detail/solvers/psiopt.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     using BarrierModes = PSIOPT::BarrierModes;
@@ -34,161 +39,162 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("optimize", &PSIOPT::optimize, "");
     obj.def("solve_optimize", &PSIOPT::solve_optimize, "");
     obj.def("solve", &PSIOPT::solve, "");
-    obj.def("setQPParams", &PSIOPT::setQPParams);
+    obj.def("set_qp_params", &PSIOPT::setQPParams);
 
-    obj.def_rw("MaxIters", &PSIOPT::MaxIters, "");
-    obj.def_rw("MaxAccIters", &PSIOPT::MaxAccIters, "");
-    obj.def_rw("MaxLSIters", &PSIOPT::MaxLSIters, "");
+    obj.def_rw("max_iters", &PSIOPT::MaxIters, "");
+    obj.def_rw("max_acc_iters", &PSIOPT::MaxAccIters, "");
+    obj.def_rw("max_ls_iters", &PSIOPT::MaxLSIters, "");
 
-    obj.def("set_MaxIters", &PSIOPT::set_MaxIters);
-    obj.def("set_MaxAccIters", &PSIOPT::set_MaxAccIters);
-    obj.def("set_MaxLSIters", &PSIOPT::set_MaxLSIters);
+    obj.def("set_max_iters", &PSIOPT::set_MaxIters);
+    obj.def("set_max_acc_iters", &PSIOPT::set_MaxAccIters);
+    obj.def("set_max_ls_iters", &PSIOPT::set_MaxLSIters);
 
-    obj.def_rw("alphaRed", &PSIOPT::alphaRed, "");
-    obj.def("set_alphaRed", &PSIOPT::set_alphaRed);
+    obj.def_rw("alpha_red", &PSIOPT::alphaRed, "");
+    obj.def("set_alpha_red", &PSIOPT::set_alphaRed);
 
-    obj.def_rw("WideConsole", &PSIOPT::WideConsole);
+    obj.def_rw("wide_console", &PSIOPT::WideConsole);
 
-    obj.def_rw("FastFactorAlg", &PSIOPT::FastFactorAlg, "");
+    obj.def_rw("fast_factor_alg", &PSIOPT::FastFactorAlg, "");
 
-    obj.def_rw("LastTotalTime", &PSIOPT::LastTotalTime, "");
-    obj.def_rw("LastPreTime", &PSIOPT::LastPreTime, "");
-    obj.def_rw("LastFuncTime", &PSIOPT::LastFuncTime, "");
-    obj.def_rw("LastKKTTime", &PSIOPT::LastKKTTime, "");
-    obj.def_rw("LastMiscTime", &PSIOPT::LastMiscTime, "");
-    obj.def_rw("LastPrintTime", &PSIOPT::LastPrintTime, "");
-    obj.def_rw("LastSolverInitTime", &PSIOPT::LastSolverInitTime, "");
-    obj.def_rw("LastIterNum", &PSIOPT::LastIterNum, "");
-    obj.def_rw("LastObjVal", &PSIOPT::LastObjVal);
+    obj.def_rw("last_total_time", &PSIOPT::LastTotalTime, "");
+    obj.def_rw("last_pre_time", &PSIOPT::LastPreTime, "");
+    obj.def_rw("last_func_time", &PSIOPT::LastFuncTime, "");
+    obj.def_rw("last_kkt_time", &PSIOPT::LastKKTTime, "");
+    obj.def_rw("last_misc_time", &PSIOPT::LastMiscTime, "");
+    obj.def_rw("last_print_time", &PSIOPT::LastPrintTime, "");
+    obj.def_rw("last_solver_init_time", &PSIOPT::LastSolverInitTime, "");
+    obj.def_rw("last_iter_num", &PSIOPT::LastIterNum, "");
+    obj.def_rw("last_obj_val", &PSIOPT::LastObjVal);
 
-    obj.def_rw("ObjScale", &PSIOPT::ObjScale, "");
-    obj.def_rw("PrintLevel", &PSIOPT::PrintLevel, "");
-    obj.def("set_PrintLevel", &PSIOPT::set_PrintLevel);
+    obj.def_rw("obj_scale", &PSIOPT::ObjScale, "");
+    obj.def_rw("print_level", &PSIOPT::PrintLevel, "");
+    obj.def("set_print_level", &PSIOPT::set_PrintLevel);
 
-    obj.def_rw("ConvergeFlag", &PSIOPT::ConvergeFlag);
+    obj.def_rw("converge_flag", &PSIOPT::ConvergeFlag);
 
-    obj.def("get_ConvergenceFlag", &PSIOPT::get_ConvergenceFlag);
+    obj.def("get_convergence_flag", &PSIOPT::get_ConvergenceFlag);
 
-    obj.def_rw("KKTtol", &PSIOPT::KKTtol, "");
-    obj.def_rw("Bartol", &PSIOPT::Bartol, "");
-    obj.def_rw("EContol", &PSIOPT::EContol, "");
-    obj.def_rw("IContol", &PSIOPT::IContol, "");
+    obj.def_rw("kk_ttol", &PSIOPT::KKTtol, "");
+    obj.def_rw("bartol", &PSIOPT::Bartol, "");
+    obj.def_rw("e_contol", &PSIOPT::EContol, "");
+    obj.def_rw("i_contol", &PSIOPT::IContol, "");
 
-    obj.def("set_KKTtol", &PSIOPT::set_KKTtol);
-    obj.def("set_Bartol", &PSIOPT::set_Bartol);
-    obj.def("set_EContol", &PSIOPT::set_EContol);
-    obj.def("set_IContol", &PSIOPT::set_IContol);
+    obj.def("set_kkt_tol", &PSIOPT::set_KKTtol);
+    obj.def("set_bar_tol", &PSIOPT::set_Bartol);
+    obj.def("set_eq_con_tol", &PSIOPT::set_EContol);
+    obj.def("set_ineq_con_tol", &PSIOPT::set_IContol);
 
     obj.def("set_tols", &PSIOPT::set_tols, nb::arg("KKTtol") = 1.0e-6, nb::arg("EContol") = 1.0e-6,
             nb::arg("IContol") = 1.0e-6, nb::arg("Bartol") = 1.0e-6);
 
-    obj.def_rw("AccKKTtol", &PSIOPT::AccKKTtol, "");
-    obj.def_rw("AccBartol", &PSIOPT::AccBartol, "");
-    obj.def_rw("AccEContol", &PSIOPT::AccEContol, "");
-    obj.def_rw("AccIContol", &PSIOPT::AccIContol, "");
+    obj.def_rw("acc_kk_ttol", &PSIOPT::AccKKTtol, "");
+    obj.def_rw("acc_bartol", &PSIOPT::AccBartol, "");
+    obj.def_rw("acc_e_contol", &PSIOPT::AccEContol, "");
+    obj.def_rw("acc_i_contol", &PSIOPT::AccIContol, "");
 
-    obj.def("set_AccKKTtol", &PSIOPT::set_AccKKTtol);
-    obj.def("set_AccBartol", &PSIOPT::set_AccBartol);
-    obj.def("set_AccEContol", &PSIOPT::set_AccEContol);
-    obj.def("set_AccIContol", &PSIOPT::set_AccIContol);
+    obj.def("set_acc_kkt_tol", &PSIOPT::set_AccKKTtol);
+    obj.def("set_acc_bar_tol", &PSIOPT::set_AccBartol);
+    obj.def("set_acc_eq_con_tol", &PSIOPT::set_AccEContol);
+    obj.def("set_acc_ineq_con_tol", &PSIOPT::set_AccIContol);
 
-    obj.def("set_Acctols", &PSIOPT::set_Acctols, nb::arg("AccKKTtol") = 1.0e-2,
+    obj.def("set_acc_tols", &PSIOPT::set_Acctols, nb::arg("AccKKTtol") = 1.0e-2,
             nb::arg("AccEContol") = 1.0e-3, nb::arg("AccIContol") = 1.0e-3,
             nb::arg("AccBartol") = 1.0e-3);
 
-    obj.def_rw("DivKKTtol", &PSIOPT::DivKKTtol, "");
-    obj.def_rw("DivBartol", &PSIOPT::DivBartol, "");
-    obj.def_rw("DivEContol", &PSIOPT::DivEContol, "");
-    obj.def_rw("DivIContol", &PSIOPT::DivIContol, "");
+    obj.def_rw("div_kk_ttol", &PSIOPT::DivKKTtol, "");
+    obj.def_rw("div_bartol", &PSIOPT::DivBartol, "");
+    obj.def_rw("div_e_contol", &PSIOPT::DivEContol, "");
+    obj.def_rw("div_i_contol", &PSIOPT::DivIContol, "");
 
-    obj.def("set_DivKKTtol", &PSIOPT::set_DivKKTtol);
-    obj.def("set_DivBartol", &PSIOPT::set_DivBartol);
-    obj.def("set_DivEContol", &PSIOPT::set_DivEContol);
-    obj.def("set_DivIContol", &PSIOPT::set_DivIContol);
+    obj.def("set_div_kkt_tol", &PSIOPT::set_DivKKTtol);
+    obj.def("set_div_bar_tol", &PSIOPT::set_DivBartol);
+    obj.def("set_div_eq_con_tol", &PSIOPT::set_DivEContol);
+    obj.def("set_div_ineq_con_tol", &PSIOPT::set_DivIContol);
 
-    obj.def_rw("NegSlackReset", &PSIOPT::NegSlackReset, "");
+    obj.def_rw("neg_slack_reset", &PSIOPT::NegSlackReset, "");
 
-    obj.def_rw("BoundFraction", &PSIOPT::BoundFraction, "");
-    obj.def("set_BoundFraction", &PSIOPT::set_BoundFraction);
+    obj.def_rw("bound_fraction", &PSIOPT::BoundFraction, "");
+    obj.def("set_bound_fraction", &PSIOPT::set_BoundFraction);
 
-    obj.def_rw("BoundPush", &PSIOPT::BoundPush, "");
+    obj.def_rw("bound_push", &PSIOPT::BoundPush, "");
 
     /////////////////////////////////////////////////////////////
 
-    obj.def_rw("deltaH", &PSIOPT::deltaH, "");
-    obj.def_rw("incrH", &PSIOPT::incrH, "");
-    obj.def_rw("decrH", &PSIOPT::decrH, "");
+    obj.def_rw("delta_h", &PSIOPT::deltaH, "");
+    obj.def_rw("incr_h", &PSIOPT::incrH, "");
+    obj.def_rw("decr_h", &PSIOPT::decrH, "");
 
-    obj.def("set_deltaH", &PSIOPT::set_deltaH);
-    obj.def("set_incrH", &PSIOPT::set_incrH);
-    obj.def("set_decrH", &PSIOPT::set_decrH);
+    obj.def("set_delta_h", &PSIOPT::set_deltaH);
+    obj.def("set_incr_h", &PSIOPT::set_incrH);
+    obj.def("set_decr_h", &PSIOPT::set_decrH);
 
-    obj.def("set_HpertParams", &PSIOPT::set_HpertParams, nb::arg("deltaH"), nb::arg("incrH"),
+    obj.def("set_hpert_params", &PSIOPT::set_HpertParams, nb::arg("deltaH"), nb::arg("incrH"),
             nb::arg("decrH"));
 
     /////////////////////////////////////////////////////////////
-    obj.def_rw("initMu", &PSIOPT::initMu, "");
-    obj.def_rw("MinMu", &PSIOPT::MinMu, "");
-    obj.def_rw("MaxMu", &PSIOPT::MaxMu, "");
+    obj.def_rw("init_mu", &PSIOPT::initMu, "");
+    obj.def_rw("min_mu", &PSIOPT::MinMu, "");
+    obj.def_rw("max_mu", &PSIOPT::MaxMu, "");
 
-    obj.def_rw("MaxSOC", &PSIOPT::MaxSOC, "");
+    obj.def_rw("max_soc", &PSIOPT::MaxSOC, "");
 
-    obj.def_rw("PDStepStrategy", &PSIOPT::PDStepStrategy, "");
-    obj.def_rw("SOEboundRelax", &PSIOPT::SOEboundRelax, "");
-    obj.def_rw("QPParSolve", &PSIOPT::QPParSolve, "");
+    obj.def_rw("pd_step_strategy", &PSIOPT::PDStepStrategy, "");
+    obj.def_rw("so_ebound_relax", &PSIOPT::SOEboundRelax, "");
+    obj.def_rw("qp_par_solve", &PSIOPT::QPParSolve, "");
 
-    obj.def_rw("SoeMode", &PSIOPT::SoeMode, "");
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-
-    obj.def_rw("OptBarMode", &PSIOPT::OptBarMode, "");
-    obj.def_rw("SoeBarMode", &PSIOPT::SoeBarMode, "");
-
-    obj.def("set_OptBarMode", nb::overload_cast<BarrierModes>(&PSIOPT::set_OptBarMode));
-    obj.def("set_OptBarMode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptBarMode));
-    obj.def("set_SoeBarMode", nb::overload_cast<BarrierModes>(&PSIOPT::set_SoeBarMode));
-    obj.def("set_SoeBarMode", nb::overload_cast<const std::string &>(&PSIOPT::set_SoeBarMode));
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    obj.def_rw("OptLSMode", &PSIOPT::OptLSMode, "");
-    obj.def_rw("SoeLSMode", &PSIOPT::SoeLSMode, "");
-
-    obj.def("set_OptLSMode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_OptLSMode));
-    obj.def("set_OptLSMode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptLSMode));
-    obj.def("set_SoeLSMode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_SoeLSMode));
-    obj.def("set_SoeLSMode", nb::overload_cast<const std::string &>(&PSIOPT::set_SoeLSMode));
+    obj.def_rw("soe_mode", &PSIOPT::SoeMode, "");
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    obj.def_rw("ForceQPanalysis", &PSIOPT::ForceQPanalysis, "");
-    obj.def_rw("QPRefSteps", &PSIOPT::QPRefSteps, "");
+    obj.def_rw("opt_bar_mode", &PSIOPT::OptBarMode, "");
+    obj.def_rw("soe_bar_mode", &PSIOPT::SoeBarMode, "");
 
-    obj.def_rw("QPPivotPerturb", &PSIOPT::QPPivotPerturb, "");
-    obj.def_rw("QPThreads", &PSIOPT::QPThreads, "");
-    obj.def_rw("QPPivotStrategy", &PSIOPT::QPPivotStrategy, "");
+    obj.def("set_opt_bar_mode", nb::overload_cast<BarrierModes>(&PSIOPT::set_OptBarMode));
+    obj.def("set_opt_bar_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptBarMode));
+    obj.def("set_soe_bar_mode", nb::overload_cast<BarrierModes>(&PSIOPT::set_SoeBarMode));
+    obj.def("set_soe_bar_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_SoeBarMode));
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    obj.def_rw("QPOrderingMode", &PSIOPT::QPOrd, "");
+    obj.def_rw("opt_ls_mode", &PSIOPT::OptLSMode, "");
+    obj.def_rw("soe_ls_mode", &PSIOPT::SoeLSMode, "");
 
-    obj.def("set_QPOrderingMode", nb::overload_cast<QPOrderingModes>(&PSIOPT::set_QPOrderingMode));
-    obj.def("set_QPOrderingMode",
+    obj.def("set_opt_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_OptLSMode));
+    obj.def("set_opt_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_OptLSMode));
+    obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_SoeLSMode));
+    obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_SoeLSMode));
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    obj.def_rw("force_q_panalysis", &PSIOPT::ForceQPanalysis, "");
+    obj.def_rw("qp_ref_steps", &PSIOPT::QPRefSteps, "");
+
+    obj.def_rw("qp_pivot_perturb", &PSIOPT::QPPivotPerturb, "");
+    obj.def_rw("qp_threads", &PSIOPT::QPThreads, "");
+    obj.def_rw("qp_pivot_strategy", &PSIOPT::QPPivotStrategy, "");
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    obj.def_rw("qp_ordering_mode", &PSIOPT::QPOrd, "");
+
+    obj.def("set_qp_ordering_mode",
+            nb::overload_cast<QPOrderingModes>(&PSIOPT::set_QPOrderingMode));
+    obj.def("set_qp_ordering_mode",
             nb::overload_cast<const std::string &>(&PSIOPT::set_QPOrderingMode));
 
 #ifdef USE_ACCELERATE_SPARSE
-    obj.def_rw("AccelPivotTolerance", &PSIOPT::AccelPivotTolerance);
-    obj.def_rw("AccelZeroTolerance", &PSIOPT::AccelZeroTolerance);
-    obj.def("set_AccelPivotTolerance", &PSIOPT::set_AccelPivotTolerance);
-    obj.def("set_AccelZeroTolerance", &PSIOPT::set_AccelZeroTolerance);
+    obj.def_rw("accel_pivot_tolerance", &PSIOPT::AccelPivotTolerance);
+    obj.def_rw("accel_zero_tolerance", &PSIOPT::AccelZeroTolerance);
+    obj.def("set_accel_pivot_tolerance", &PSIOPT::set_AccelPivotTolerance);
+    obj.def("set_accel_zero_tolerance", &PSIOPT::set_AccelZeroTolerance);
 #endif
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    obj.def_rw("QPPrint", &PSIOPT::QPPrint);
+    obj.def_rw("qp_print", &PSIOPT::QPPrint);
 
-    obj.def_rw("Diagnostic", &PSIOPT::Diagnostic);
+    obj.def_rw("diagnostic", &PSIOPT::Diagnostic);
 
-    obj.def_rw("ReturnBest", &PSIOPT::ReturnBest);
+    obj.def_rw("return_best", &PSIOPT::ReturnBest);
     obj.def_prop_rw(
-        "BestCriteria", [](const PSIOPT &self) { return self.BestCriteria; },
+        "best_criteria", [](const PSIOPT &self) { return self.BestCriteria; },
         [](PSIOPT &self, nb::object val) {
             if (nb::isinstance<BestCriteriaModes>(val))
                 self.BestCriteria = nb::cast<BestCriteriaModes>(val);
@@ -197,14 +203,14 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             else
                 throw nb::type_error("expected BestCriteriaModes enum or str");
         });
-    obj.def("set_BestCriteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_BestCriteria));
-    obj.def("set_BestCriteria", nb::overload_cast<const std::string &>(&PSIOPT::set_BestCriteria));
+    obj.def("set_best_criteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_BestCriteria));
+    obj.def("set_best_criteria", nb::overload_cast<const std::string &>(&PSIOPT::set_BestCriteria));
 
     obj.def_rw("storespmat", &PSIOPT::storespmat, "");
-    obj.def("getSPmat", &PSIOPT::getSPmat, "");
-    obj.def("getSPmat2", &PSIOPT::getSPmat2, "");
+    obj.def("get_sp_mat", &PSIOPT::getSPmat, "");
+    obj.def("get_sp_mat2", &PSIOPT::getSPmat2, "");
 
-    obj.def_rw("CNRMode", &PSIOPT::CNRMode, "");
+    obj.def_rw("cnr_mode", &PSIOPT::CNRMode, "");
 
     nb::enum_<BarrierModes>(m, "BarrierModes")
         .value("PROBE", BarrierModes::PROBE)

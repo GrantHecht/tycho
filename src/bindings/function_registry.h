@@ -18,7 +18,13 @@
 #include "pch.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 // Primary template — undefined; specializations in *Bind.h files
 template <class T> struct TychoBind;
@@ -100,4 +106,4 @@ struct FunctionRegistry {
 
 #endif // TYCHO_PYTHON_BINDINGS
 
-} // namespace Tycho
+} // namespace tycho

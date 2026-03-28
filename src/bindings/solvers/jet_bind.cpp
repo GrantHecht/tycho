@@ -10,14 +10,19 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
-//   - Removed `nt` parameter: parallelism controlled by Tycho::set_num_threads()
+//   - Removed `nt` parameter: parallelism controlled by tycho::set_num_threads()
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "JetBind.h"
+#include "jet_bind.h"
 #include "tycho/detail/solvers/jet.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 void TychoBind<Jet>::Build(nb::module_ &m) {
     auto obj = nb::class_<Jet>(m, "Jet");

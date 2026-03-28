@@ -46,7 +46,9 @@
 
 #ifdef TYCHO_PYTHON_BINDINGS
 
-namespace Tycho {
+namespace tycho {
+
+using namespace tycho::vf;
 
 /*
  * Converts list of python objects into a vector of dynamically sized GenericFunctions.
@@ -62,6 +64,6 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows = 0);
  */
 std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows = 0);
 
-} // namespace Tycho
+} // namespace tycho
 
 #endif // TYCHO_PYTHON_BINDINGS

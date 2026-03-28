@@ -13,30 +13,34 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/tycho_astro.h"
+#include "astro/tycho_astro.h"
 
 #include "tycho/detail/vf/operators/root_finder.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 
 template <> struct TychoBind<ModifiedToCartesian> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ModifiedToCartesian>(m, name).def(nb::init<double>());
-        Bind::DenseBaseBuild<ModifiedToCartesian>(obj);
+        bind::DenseBaseBuild<ModifiedToCartesian>(obj);
     }
 };
 
 template <> struct TychoBind<CartesianToClassic> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CartesianToClassic>(m, name).def(nb::init<double>());
-        Bind::DenseBaseBuild<CartesianToClassic>(obj);
+        bind::DenseBaseBuild<CartesianToClassic>(obj);
     }
 };
 
 void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////              Conversions                  /////////////////////////

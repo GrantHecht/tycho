@@ -15,7 +15,9 @@
 
 #include "tycho/detail/integrators/rk_coeffs.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::integrators;
 
 void RKFlagsBuild(nb::module_ &m) {
     nb::enum_<RKOptions>(m, "RKOptions")
@@ -24,4 +26,4 @@ void RKFlagsBuild(nb::module_ &m) {
         .value("DOPRI87", RKOptions::DOPRI87);
 }
 
-} // namespace Tycho
+} // namespace tycho

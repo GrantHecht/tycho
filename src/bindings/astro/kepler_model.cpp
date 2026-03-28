@@ -13,38 +13,50 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "Astro/tycho_astro.h"
-#include "OptimalControl/tycho_optimal_control.h"
+#include "astro/tycho_astro.h"
+#include "optimal_control/tycho_optimal_control.h"
 
 // TychoBind<KeplerPropagator> — defined here since KeplerPropagator.h's inline Build was removed.
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 template <> struct TychoBind<KeplerPropagator> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<KeplerPropagator>(m, name);
         obj.def(nb::init<double>());
-        Bind::DenseBaseBuild<KeplerPropagator>(obj);
+        bind::DenseBaseBuild<KeplerPropagator>(obj);
     }
 };
-} // namespace Tycho
+} // namespace tycho
 
 // TychoBind<KeplerPhase> — KeplerPhase is a subclass of ODEPhase<Kepler> with extra members.
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 template <> struct TychoBind<KeplerPhase> {
     static void Build(nb::module_ &m) {
         auto phase = nb::class_<KeplerPhase, ODEPhaseBase>(m, "phase");
-        Bind::ODEPhaseBuildImpl<Kepler>(phase);
+        bind::ODEPhaseBuildImpl<Kepler>(phase);
         phase.def_rw("integrator", &KeplerPhase::integrator);
-        phase.def_rw("UseKeplerPropagator", &KeplerPhase::UseKeplerPropagator);
+        phase.def_rw("use_kepler_propagator", &KeplerPhase::UseKeplerPropagator);
     }
 };
-} // namespace Tycho
+} // namespace tycho
 
 // TychoBind<Kepler> — the Kepler ODE type.
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
 template <> struct TychoBind<Kepler> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Kepler>(m, name).def(nb::init<double>());
-        Bind::DenseBaseBuild<Kepler>(obj);
+        bind::DenseBaseBuild<Kepler>(obj);
         obj.def("phase", [](const Kepler &od, TranscriptionModes Tmode) {
             return std::make_shared<KeplerPhase>(od, Tmode);
         });
@@ -60,13 +72,13 @@ template <> struct TychoBind<Kepler> {
                 [](const Kepler &od, std::string Tmode, const std::vector<Eigen::VectorXd> &Traj,
                    int numdef) { return std::make_shared<KeplerPhase>(od, Tmode, Traj, numdef); });
 
-        Bind::IntegratorBuildConstructors<Kepler>(obj);
+        bind::IntegratorBuildConstructors<Kepler>(obj);
     }
 };
 void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
-} // namespace Tycho
+} // namespace tycho
 
-void Tycho::BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m) {
     auto odemod = m.def_submodule("Kepler");
     reg.template Build_Register<Kepler>(odemod, "ode");
     reg.template Build_Register<Integrator<Kepler>>(odemod, "integrator");

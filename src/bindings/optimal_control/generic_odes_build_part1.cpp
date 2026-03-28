@@ -15,12 +15,15 @@
 
 #include "tycho_optimal_control.h"
 
-namespace Tycho {
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 void GenericODESBuildPart1(FunctionRegistry &reg, nb::module_ &m) {
 
-    Bind::BuildGenODEModule<GenericFunction<-1, -1>, -1, 0, 0>("ode_x", m, reg);
-    Bind::BuildGenODEModule<GenericFunction<-1, -1>, -1, -1, 0>("ode_x_u", m, reg);
+    bind::BuildGenODEModule<GenericFunction<-1, -1>, -1, 0, 0>("ode_x", m, reg);
+    bind::BuildGenODEModule<GenericFunction<-1, -1>, -1, -1, 0>("ode_x_u", m, reg);
 }
 
-} // namespace Tycho
+} // namespace tycho

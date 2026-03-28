@@ -13,9 +13,14 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "MeshIterateInfoBind.h"
+#include "mesh_iterate_info_bind.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 void TychoBind<MeshIterateInfo>::Build(nb::module_ &m) {
     auto obj = nb::class_<MeshIterateInfo>(m, "MeshIterateInfo");

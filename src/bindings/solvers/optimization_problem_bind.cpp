@@ -13,10 +13,15 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "OptimizationProblemBind.h"
+#include "optimization_problem_bind.h"
 #include "tycho/detail/solvers/optimization_problem.h"
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 void TychoBind<OptimizationProblem>::Build(nb::module_ &m) {
     using VectorFunctionalX = OptimizationProblem::VectorFunctionalX;
@@ -27,24 +32,24 @@ void TychoBind<OptimizationProblem>::Build(nb::module_ &m) {
 
     obj.def(nb::init<>());
 
-    obj.def("setVars", &OptimizationProblem::setVars);
-    obj.def("returnVars", &OptimizationProblem::returnVars);
+    obj.def("set_vars", &OptimizationProblem::setVars);
+    obj.def("return_vars", &OptimizationProblem::returnVars);
 
-    obj.def("addEqualCon", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
-                               &OptimizationProblem::addEqualCon));
+    obj.def("add_equal_con", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
+                                 &OptimizationProblem::addEqualCon));
 
-    obj.def("addEqualCon",
+    obj.def("add_equal_con",
             nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::addEqualCon));
 
-    obj.def("addInequalCon", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
-                                 &OptimizationProblem::addInequalCon));
+    obj.def("add_inequal_con", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
+                                   &OptimizationProblem::addInequalCon));
 
-    obj.def("addInequalCon",
+    obj.def("add_inequal_con",
             nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::addInequalCon));
 
-    obj.def("addObjective", nb::overload_cast<ScalarFunctionalX, const std::vector<VectorXi> &>(
-                                &OptimizationProblem::addObjective));
+    obj.def("add_objective", nb::overload_cast<ScalarFunctionalX, const std::vector<VectorXi> &>(
+                                 &OptimizationProblem::addObjective));
 
-    obj.def("addObjective",
+    obj.def("add_objective",
             nb::overload_cast<ScalarFunctionalX, VectorXi>(&OptimizationProblem::addObjective));
 }

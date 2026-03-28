@@ -13,13 +13,13 @@
 //   - Namespace: Tycho
 // =============================================================================
 
-#include "MeshIterateInfoBind.h"
-#include "ODEArgumentsBind.h"
 #include "tycho_optimal_control.h"
+#include "mesh_iterate_info_bind.h"
+#include "ode_arguments_bind.h"
 
 #include "tycho/detail/integrators/integrator.h"
 
-namespace Tycho {
+namespace tycho {
 
 // Forward declarations for builders defined in separate .cpp files.
 void GenericODESBuildPart1(FunctionRegistry &reg, nb::module_ &m);
@@ -88,8 +88,8 @@ static void OCPFlagsBuild(nb::module_ &m) {
         .value("GEOMETRIC", MeshErrorAggregation::GEOMETRIC)
         .value("ENDTOEND", MeshErrorAggregation::ENDTOEND);
 
-    m.def("strto_PhaseRegionFlag",
-          nb::overload_cast<const std::string &>(&Tycho::strto_PhaseRegionFlag));
+    m.def("strto_phase_region_flag",
+          nb::overload_cast<const std::string &>(&tycho::oc::strto_PhaseRegionFlag));
 }
 
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
@@ -124,4 +124,4 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     GenericODESBuildPart6(reg, oc);
 }
 
-} // namespace Tycho
+} // namespace tycho
