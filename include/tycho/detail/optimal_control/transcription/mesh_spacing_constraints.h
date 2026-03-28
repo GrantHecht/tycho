@@ -20,6 +20,16 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+
 struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     using Base = VectorFunction<SingleMeshSpacing, 3, 1>;
     template <class Scalar> using Output = typename Base::template Output<Scalar>;

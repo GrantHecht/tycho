@@ -21,9 +21,14 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+using tycho::vf::Arguments;
+using tycho::vf::IOScaled;
+using tycho::vf::LockArgs;
+using tycho::vf::StackedOutputs;
+
 int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType args,
-                                          const std::variant<double, VectorXd> &value_t,
-                                          ScaleType scale_t) {
+                                                const std::variant<double, VectorXd> &value_t,
+                                                ScaleType scale_t) {
     Eigen::VectorXd value;
     if (std::holds_alternative<double>(value_t)) {
         value.resize(1);
@@ -36,7 +41,7 @@ int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType arg
 }
 
 int tycho::oc::ODEPhaseBase::add_delta_var_equal_con(VarIndexType var, double value, double scale,
-                                             ScaleType scale_t) {
+                                                     ScaleType scale_t) {
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
     auto x1 = args.coeff<1>();
@@ -58,8 +63,8 @@ int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType sc
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
-                                       double upperbound, double lbscale, double ubscale,
-                                       ScaleType scale_t) {
+                                              double upperbound, double lbscale, double ubscale,
+                                              ScaleType scale_t) {
     if (lowerbound > upperbound) {
         fmt::print(fmt::fg(fmt::color::red),
                    "Transcription Error!!!\n"
@@ -78,7 +83,7 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, 
     return this->add_inequal_con(reg, lubound, var, scale_t);
 }
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound,
-                                       double upperbound, double lbscale, double ubscale) {
+                                              double upperbound, double lbscale, double ubscale) {
 
     if (lowerbound > upperbound) {
         fmt::print(fmt::fg(fmt::color::red),
@@ -100,8 +105,9 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, dou
     return this->add_inequal_con(StateConstraint(lubound, reg, v));
 }
 
-int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound,
-                                          double lbscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var,
+                                                 double lowerbound, double lbscale,
+                                                 ScaleType scale_t) {
     check_lbscale(lbscale);
     auto x = Arguments<1>();
     auto lbound = (lowerbound - x) * lbscale;
@@ -109,8 +115,9 @@ int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType va
     return this->add_inequal_con(reg, lbound, var, scale_t);
 }
 
-int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound,
-                                          double ubscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var,
+                                                 double upperbound, double ubscale,
+                                                 ScaleType scale_t) {
     check_ubscale(ubscale);
     auto x = Arguments<1>();
     auto ubound = (x - upperbound) * ubscale;
@@ -118,9 +125,10 @@ int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType va
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
-                                        VarIndexType XtUPvars, VarIndexType OPvars,
-                                        VarIndexType SPvars, double lowerbound, double upperbound,
-                                        double lbscale, double ubscale, ScaleType scale_t) {
+                                               VarIndexType XtUPvars, VarIndexType OPvars,
+                                               VarIndexType SPvars, double lowerbound,
+                                               double upperbound, double lbscale, double ubscale,
+                                               ScaleType scale_t) {
 
     if (lowerbound > upperbound) {
         fmt::print(fmt::fg(fmt::color::red),
@@ -138,9 +146,9 @@ int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX
 }
 
 int tycho::oc::ODEPhaseBase::add_lower_func_bound(RegionType reg, ScalarFunctionalX func,
-                                           VarIndexType XtUPvars, VarIndexType OPvars,
-                                           VarIndexType SPvars, double lowerbound, double lbscale,
-                                           ScaleType scale_t) {
+                                                  VarIndexType XtUPvars, VarIndexType OPvars,
+                                                  VarIndexType SPvars, double lowerbound,
+                                                  double lbscale, ScaleType scale_t) {
     check_lbscale(lbscale);
 
     Vector1<double> rhs;
@@ -151,9 +159,9 @@ int tycho::oc::ODEPhaseBase::add_lower_func_bound(RegionType reg, ScalarFunction
 }
 
 int tycho::oc::ODEPhaseBase::add_upper_func_bound(RegionType reg, ScalarFunctionalX func,
-                                           VarIndexType XtUPvars, VarIndexType OPvars,
-                                           VarIndexType SPvars, double upperbound, double ubscale,
-                                           ScaleType scale_t) {
+                                                  VarIndexType XtUPvars, VarIndexType OPvars,
+                                                  VarIndexType SPvars, double upperbound,
+                                                  double ubscale, ScaleType scale_t) {
 
     check_ubscale(ubscale);
 
@@ -163,9 +171,9 @@ int tycho::oc::ODEPhaseBase::add_upper_func_bound(RegionType reg, ScalarFunction
     return this->add_inequal_con(reg, ubfun, XtUPvars, OPvars, SPvars, scale_t);
 }
 
-int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
-                                        double upperbound, double lbscale, double ubscale,
-                                        ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars,
+                                               double lowerbound, double upperbound, double lbscale,
+                                               double ubscale, ScaleType scale_t) {
     if (lowerbound > upperbound) {
         fmt::print(fmt::fg(fmt::color::red),
                    "Transcription Error!!!\n"
@@ -199,8 +207,9 @@ int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUP
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
-                                               double lowerbound, double upperbound, double lbscale,
-                                               double ubscale, ScaleType scale_t) {
+                                                       double lowerbound, double upperbound,
+                                                       double lbscale, double ubscale,
+                                                       ScaleType scale_t) {
     if (lowerbound > upperbound) {
         fmt::print(fmt::fg(fmt::color::red),
                    "Transcription Error!!!\n"
@@ -233,8 +242,9 @@ int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexT
     return 0;
 }
 
-int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
-                                           double lbscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType XtUPvars,
+                                                  double lowerbound, double lbscale,
+                                                  ScaleType scale_t) {
     check_lbscale(lbscale);
 
     int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
@@ -256,8 +266,8 @@ int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType X
 }
 
 int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
-                                                  double lowerbound, double lbscale,
-                                                  ScaleType scale_t) {
+                                                          double lowerbound, double lbscale,
+                                                          ScaleType scale_t) {
     check_lbscale(lbscale);
 
     int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
@@ -278,8 +288,9 @@ int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarInd
     }
 }
 
-int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType XtUPvars, double upperbound,
-                                           double ubscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType XtUPvars,
+                                                  double upperbound, double ubscale,
+                                                  ScaleType scale_t) {
     check_ubscale(ubscale);
 
     int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
@@ -302,8 +313,8 @@ int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType X
 }
 
 int tycho::oc::ODEPhaseBase::add_upper_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
-                                                  double upperbound, double ubscale,
-                                                  ScaleType scale_t) {
+                                                          double upperbound, double ubscale,
+                                                          ScaleType scale_t) {
     check_ubscale(ubscale);
 
     int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
@@ -325,8 +336,9 @@ int tycho::oc::ODEPhaseBase::add_upper_squared_norm_bound(RegionType reg, VarInd
     return 0;
 }
 
-int tycho::oc::ODEPhaseBase::add_lower_delta_var_bound(RegionType reg, VarIndexType var, double lowerbound,
-                                               double lbscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_lower_delta_var_bound(RegionType reg, VarIndexType var,
+                                                       double lowerbound, double lbscale,
+                                                       ScaleType scale_t) {
     check_lbscale(lbscale);
 
     auto args = Arguments<2>();
@@ -337,8 +349,9 @@ int tycho::oc::ODEPhaseBase::add_lower_delta_var_bound(RegionType reg, VarIndexT
     return this->add_inequal_con(reg, func, var, scale_t);
 }
 
-int tycho::oc::ODEPhaseBase::add_upper_delta_var_bound(RegionType reg, VarIndexType var, double upperbound,
-                                               double ubscale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_upper_delta_var_bound(RegionType reg, VarIndexType var,
+                                                       double upperbound, double ubscale,
+                                                       ScaleType scale_t) {
     check_ubscale(ubscale);
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
@@ -350,12 +363,13 @@ int tycho::oc::ODEPhaseBase::add_upper_delta_var_bound(RegionType reg, VarIndexT
 //////////////////////////////
 
 int tycho::oc::ODEPhaseBase::add_value_objective(RegionType reg, VarIndexType var, double scale,
-                                           ScaleType scale_t) {
+                                                 ScaleType scale_t) {
     auto obj = Arguments<1>() * scale;
     return this->add_state_objective(reg, obj, var, scale_t);
 }
 
-int tycho::oc::ODEPhaseBase::add_delta_var_objective(VarIndexType var, double scale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_delta_var_objective(VarIndexType var, double scale,
+                                                     ScaleType scale_t) {
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
     auto x1 = args.coeff<1>();
@@ -470,8 +484,8 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_traj_error() const 
     return ErrTraj;
 }
 
-void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh, Eigen::VectorXd DBS,
-                                  Eigen::VectorXi DPB, bool LerpTraj) {
+void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh,
+                                       Eigen::VectorXd DBS, Eigen::VectorXi DPB, bool LerpTraj) {
 
     if (mesh.size() == 0) {
         throw std::invalid_argument("Input trajectory is empty");
@@ -681,7 +695,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
                        int pvv) {
         auto integral =
             LGLIntegral<ScalarFunctionalX, cs.value, xv.value, pv.value>{integrand, xvv, pvv};
-        integral.EnableVectorization = this->EnableVectorization;
+        integral.enable_vectorization_ = this->EnableVectorization;
 
         return ObjectiveInterface(integral);
     };
@@ -823,7 +837,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         auto AccFunc = Arguments<1>() * -AccScale;
 
         int Gindex = this->indexer.add_accumulation(obj, PhaseReg, xtrap, ob.OPVars, ob.SPVars,
-                                                   AccFunc, ob.EXTVars, ThreadMode);
+                                                    AccFunc, ob.EXTVars, ThreadMode);
 
         int PLindex = Gindex - this->indexer.StartObj;
         ob.GlobalIndex = Gindex;
@@ -849,7 +863,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         }
 
         int Gindex = this->indexer.add_equality(Func, eq.RegionFlag, eq.XtUVars, eq.OPVars,
-                                               eq.SPVars, ThreadMode);
+                                                eq.SPVars, ThreadMode);
 
         int PLindex = Gindex - this->indexer.StartEq;
         eq.GlobalIndex = Gindex;
@@ -876,7 +890,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         }
 
         int Gindex = this->indexer.add_inequality(Func, iq.RegionFlag, iq.XtUVars, iq.OPVars,
-                                                 iq.SPVars, ThreadMode);
+                                                  iq.SPVars, ThreadMode);
         int PLindex = Gindex - this->indexer.StartIq;
         iq.GlobalIndex = Gindex;
         iq.PhaseLocalIndex = PLindex;
@@ -900,7 +914,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         }
 
         int Gindex = this->indexer.add_objective(Func, ob.RegionFlag, ob.XtUVars, ob.OPVars,
-                                                ob.SPVars, ThreadMode);
+                                                 ob.SPVars, ThreadMode);
         int PLindex = Gindex - this->indexer.StartObj;
         ob.GlobalIndex = Gindex;
         ob.PhaseLocalIndex = PLindex;
@@ -940,15 +954,15 @@ void tycho::oc::ODEPhaseBase::transcribe_axis_funcs() {
     if (this->TranscriptionMode == TranscriptionModes::LGL7) {
         LGLMeshSpacing<4> axcon7;
         this->indexer.add_equality(axcon7, PhaseRegionFlags::DefectPath, tloc, empty, empty,
-                                  ThreadingFlags::ByApplication);
+                                   ThreadingFlags::ByApplication);
     } else if (this->TranscriptionMode == TranscriptionModes::LGL5) {
         LGLMeshSpacing<3> axcon5;
         this->indexer.add_equality(axcon5, PhaseRegionFlags::DefectPath, tloc, empty, empty,
-                                  ThreadingFlags::ByApplication);
+                                   ThreadingFlags::ByApplication);
     }
 
     this->indexer.add_partitioned_equality(AxisFuncs, PhaseRegionFlags::FrontNodalBackPath, tloc,
-                                         empty, empty, Tmodes);
+                                           empty, empty, Tmodes);
 }
 
 void tycho::oc::ODEPhaseBase::transcribe_control_funcs() {
@@ -974,14 +988,14 @@ void tycho::oc::ODEPhaseBase::transcribe_control_funcs() {
 
                 this->ControlFuncsIndex =
                     this->indexer.add_equality(lgl7spln2, PhaseRegionFlags::DefectPairWisePath,
-                                              TUvarT, empty, empty, ThreadingFlags::ByApplication);
+                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
 
             } else if (this->ControlMode == ControlModes::FirstOrderSpline) {
                 LGLControlSpline<4, -1, 1> lgl7spln1(this->UVars());
 
                 this->ControlFuncsIndex =
                     this->indexer.add_equality(lgl7spln1, PhaseRegionFlags::DefectPairWisePath,
-                                              TUvarT, empty, empty, ThreadingFlags::ByApplication);
+                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
             }
         }
     } else if (this->TranscriptionMode == TranscriptionModes::LGL5) {
@@ -992,7 +1006,7 @@ void tycho::oc::ODEPhaseBase::transcribe_control_funcs() {
 
                 this->ControlFuncsIndex =
                     this->indexer.add_equality(lgl5spln1, PhaseRegionFlags::DefectPairWisePath,
-                                              TUvarT, empty, empty, ThreadingFlags::ByApplication);
+                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
             }
         }
     }
@@ -1077,7 +1091,7 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
 }
 
 Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
-                                                     VectorXi OPV, VectorXi SPV) const {
+                                                         VectorXi OPV, VectorXi SPV) const {
 
     int nloops;
     switch (flag) {
@@ -1126,8 +1140,8 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, 
 }
 
 std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::get_test_inputs(PhaseRegionFlags flag,
-                                                                  VectorXi XtUV, VectorXi OPV,
-                                                                  VectorXi SPV) const {
+                                                                      VectorXi XtUV, VectorXi OPV,
+                                                                      VectorXi SPV) const {
 
     std::vector<std::vector<int>> test_states;
 
@@ -1277,7 +1291,7 @@ void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
 }
 
 void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
-                                           std::shared_ptr<NonLinearProgram> np, int pnum)
+                                               std::shared_ptr<NonLinearProgram> np, int pnum)
 
 {
     this->indexer.begin_indexing(np, vo, eqo, iqo);
@@ -1498,7 +1512,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calcSwitches() {
         }
     }
 
-    return stdvector_to_eigenvector(switches);
+    return utils::stdvector_to_eigenvector(switches);
 }
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
@@ -1530,7 +1544,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
     this->collect_solver_output(Output);
 
     this->collect_post_opt_info(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
-                             this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
+                                this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
 
     return this->optimizer->ConvergeFlag;
 }
@@ -1545,7 +1559,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
         fmt::print("\n");
     }
 
-    Utils::Timer Runtimer;
+    utils::Timer Runtimer;
 
     Runtimer.start();
 

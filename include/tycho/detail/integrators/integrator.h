@@ -51,12 +51,32 @@
 
 #include "tycho/detail/utils/memory_management.h"
 
+// Forward-declare GenericODE in its home namespace (tycho::oc) so that
+// the integrators namespace can reference it before ode.h is included.
+namespace tycho::oc {
+template <class BaseType, int _XV, int _UV, int _PV> struct GenericODE;
+template <class DODE, class Integrator> struct CentralShootingDefect;
+} // namespace tycho::oc
+
 namespace tycho::integrators {
 
-template <class BaseType, int _XV, int _UV, int _PV> struct GenericODE;
-template <int OR> struct InterpFunction;
+// Import cross-namespace types from vf, utils, and oc.
+using utils::BumpAllocator;
+using utils::SZ_SUM;
+using utils::TempSpec;
+using oc::GenericODE;
+using oc::InterpFunction;
+using oc::LGLInterpTable;
+using vf::Arguments;
+using vf::Constant;
+using vf::GenericConditional;
+using vf::GenericFunction;
+using vf::ParsedInput;
+using vf::NestedFunction;
+using vf::StackedOutputs;
+using vf::VectorFunction;
 
-template <class DODE, class Integrator> struct CentralShootingDefect;
+// CentralShootingDefect lives in tycho::oc; use the qualified friend below.
 
 template <class DODE>
 struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
@@ -94,9 +114,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     using ControlIndexType =
         std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
-    ;
 
-    friend CentralShootingDefect<DODE, Integrator>;
+    friend oc::CentralShootingDefect<DODE, Integrator>;
 
   protected:
     DODE ode;
@@ -106,7 +125,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     RKOptions RKMethod = RKOptions::DOPRI54;
 
   public:
-    Integrator() { this->EnableVectorization = true; }
+    Integrator() { this->enable_vectorization_ = true; }
 
     Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
         // Use in_place_type to sidestep MSVC variant overload-resolution
@@ -167,7 +186,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         : Integrator() {
 
         // Bug waiting to happen when LGL interp table is re-factored
-        if (dode.IRows() != tab->XtUVars || dode.XVars() != tab->XVars) {
+        if (dode.input_rows() != tab->XtUVars || dode.XVars() != tab->XVars) {
             throw std::invalid_argument("Table data does not match expected dimension of ODE."
                                         " Please provide the indices variables in the table you "
                                         "want to interpret as controls.\n");
@@ -211,7 +230,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         this->ode = odet;
         Eigen::VectorXi varlocs = this->get_var_locs(varlocs_t);
-        this->set_io_rows(this->ode.IRows() + 1, this->ode.IRows());
+        this->set_io_rows(this->ode.input_rows() + 1, this->ode.input_rows());
 
         this->usecontroller = usecontrol;
 
@@ -228,19 +247,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             } else {
 
-                if (ucon.ORows() != ode.UVars()) {
+                if (ucon.output_rows() != ode.UVars()) {
                     throw std::invalid_argument(
                         "Controller output size does not match number of ode control variables");
                 }
 
-                if (ucon.IRows() != varlocs.size()) {
+                if (ucon.input_rows() != varlocs.size()) {
                     throw std::invalid_argument("Controller input size is inconsistent with "
                                                 "specified number of input state variables");
                 }
 
-                Arguments<DODE::IRC> odeargs(ode.IRows());
+                Arguments<DODE::IRC> odeargs(ode.input_rows());
                 ParsedInput<GenericFunction<-1, -1>, DODE::IRC, DUV> controllerfunc(ucon, varlocs,
-                                                                                    ode.IRows());
+                                                                                    ode.input_rows());
                 this->controller = controllerfunc;
 
                 if constexpr (DODE::PV == 0) {
@@ -501,8 +520,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         };
 
         BumpAllocator::allocate_run(
-            Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.ORows(), 1),
-            TempSpec<ODEState<Scalar>>(this->ode.IRows(), 1));
+            Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.output_rows(), 1),
+            TempSpec<ODEState<Scalar>>(this->ode.input_rows(), 1));
     }
 
     template <class Scalar>
@@ -531,7 +550,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                   std::vector<ODEState<double>> &states,
                                   std::vector<ODEDeriv<double>> &derivs) const {
 
-        if (x.size() != this->ode.IRows()) {
+        if (x.size() != this->ode.input_rows()) {
             throw std::invalid_argument("Incorrectly sized input state.");
         }
 
@@ -547,7 +566,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         ODEState<double> xnext_est = xi;
         ODEState<double> xnext_mid = xi;
 
-        ODEDeriv<double> xdoti(this->ode.ORows());
+        ODEDeriv<double> xdoti(this->ode.output_rows());
         xdoti.setZero();
         this->ode.compute(xi, xdoti);
         ODEDeriv<double> xdotnext = xdoti;
@@ -559,7 +578,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             prev_event_vals[j].setZero();
             next_event_vals[j].setZero();
 
-            if (std::get<0>(events[j]).IRows() != this->ode.IRows()) {
+            if (std::get<0>(events[j]).input_rows() != this->ode.input_rows()) {
                 throw std::invalid_argument(
                     "Input size of event function must equal input size of ode.");
             }
@@ -740,7 +759,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<std::vector<Vector1<double>>> next_event_vals_s(ntrajs);
 
         for (int i = 0; i < ntrajs; i++) {
-            if (xis[i].size() != this->ode.IRows()) {
+            if (xis[i].size() != this->ode.input_rows()) {
                 throw std::invalid_argument("Incorrectly sized input state.");
             }
             this->update_control(xis[i]);
@@ -750,7 +769,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             int numsteps = int(abs(Hs[i] / this->DefStepSize)) + 1;
             hs[i] = .9 * (Hs[i] / double(numsteps));
 
-            xdotis[i].resize(this->ode.ORows());
+            xdotis[i].resize(this->ode.output_rows());
             xdotis[i].setZero();
             this->ode.compute(xis[i], xdotis[i]);
 
@@ -761,7 +780,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 prev_event_vals_s[i][j].setZero();
                 next_event_vals_s[i][j].setZero();
 
-                if (std::get<0>(events[j]).IRows() != this->ode.IRows()) {
+                if (std::get<0>(events[j]).input_rows() != this->ode.input_rows()) {
                     throw std::invalid_argument(
                         "Input size of event function must equal input size of ode.");
                 }
@@ -792,19 +811,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         using SuperScalar = tycho::DefaultSuperScalar;
 
-        ODEState<double> xnext(this->ode.IRows());
-        ODEState<double> xnext_est(this->ode.IRows());
-        ODEState<double> xnext_mid(this->ode.IRows());
-        ODEDeriv<double> xdotnext(this->ode.ORows());
+        ODEState<double> xnext(this->ode.input_rows());
+        ODEState<double> xnext_est(this->ode.input_rows());
+        ODEState<double> xnext_mid(this->ode.input_rows());
+        ODEDeriv<double> xdotnext(this->ode.output_rows());
 
-        ODEState<double> xi(this->ode.IRows());
+        ODEState<double> xi(this->ode.input_rows());
 
-        ODEState<SuperScalar> xi_SS(this->ode.IRows());
+        ODEState<SuperScalar> xi_SS(this->ode.input_rows());
 
-        ODEState<SuperScalar> xnext_SS(this->ode.IRows());
-        ODEState<SuperScalar> xnext_est_SS(this->ode.IRows());
-        ODEState<SuperScalar> xnext_mid_SS(this->ode.IRows());
-        ODEDeriv<SuperScalar> xdotnext_SS(this->ode.ORows());
+        ODEState<SuperScalar> xnext_SS(this->ode.input_rows());
+        ODEState<SuperScalar> xnext_est_SS(this->ode.input_rows());
+        ODEState<SuperScalar> xnext_mid_SS(this->ode.input_rows());
+        ODEDeriv<SuperScalar> xdotnext_SS(this->ode.output_rows());
         SuperScalar tnext_SS;
 
         ODEDeriv<double> Abserror(ode.XVars());
@@ -821,10 +840,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (ntrajs < SuperScalar::SizeAtCompileTime) {
 
             for (int V = 0; V < SuperScalar::SizeAtCompileTime; V++) {
-                for (int k = 0; k < this->ode.IRows(); k++) {
+                for (int k = 0; k < this->ode.input_rows(); k++) {
                     xi_SS[k][V] = xis[0][k];
                 }
-                for (int k = 0; k < this->ode.ORows(); k++) {
+                for (int k = 0; k < this->ode.output_rows(); k++) {
                     xdotnext_SS[k][V] = xdotis[0][k];
                 }
             }
@@ -854,10 +873,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         }
                     }
 
-                    for (int k = 0; k < this->ode.IRows(); k++) {
+                    for (int k = 0; k < this->ode.input_rows(); k++) {
                         xi_SS[k][V] = xis[i][k];
                     }
-                    for (int k = 0; k < this->ode.ORows(); k++) {
+                    for (int k = 0; k < this->ode.output_rows(); k++) {
                         xdotnext_SS[k][V] = xdotis[i][k];
                     }
 
@@ -886,11 +905,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                             int itmp = idxs[V];
 
-                            for (int k = 0; k < this->ode.IRows(); k++) {
+                            for (int k = 0; k < this->ode.input_rows(); k++) {
                                 xnext[k] = xnext_SS[k][V];
                                 xnext_mid[k] = xnext_mid_SS[k][V];
                             }
-                            for (int k = 0; k < this->ode.ORows(); k++) {
+                            for (int k = 0; k < this->ode.output_rows(); k++) {
                                 xdotnext[k] = xdotnext_SS[k][V];
                                 Abserror[k] = Abserror_SS[k][V];
                             }
@@ -1008,7 +1027,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
 
         Eigen::VectorXi vars;
-        vars.setLinSpaced(this->ode.IRows(), 0, this->ode.IRows() - 1);
+        vars.setLinSpaced(this->ode.input_rows(), 0, this->ode.input_rows() - 1);
 
         InterpFunction<-1> tabfunc(tab, vars);
 
@@ -1086,7 +1105,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     double tevent = newton(tig);
 
                     if (tevent > tlow && tevent < thigh) {
-                        ODEState<double> ei(this->ode.IRows());
+                        ODEState<double> ei(this->ode.input_rows());
                         ei.setZero();
                         tab->InterpolateRef(tevent, ei);
                         eventstates[i].push_back(ei);
@@ -1097,7 +1116,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         tevent = newton(tig);
 
                         if (tevent > tlow && tevent < thigh) {
-                            ODEState<double> ei(this->ode.IRows());
+                            ODEState<double> ei(this->ode.input_rows());
                             ei.setZero();
                             tab->InterpolateRef(tevent, ei);
                             eventstates[i].push_back(ei);
@@ -1127,7 +1146,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::shared_ptr<LGLInterpTable> tab = std::make_shared<LGLInterpTable>(
             odetemp, this->ode.XVars(), this->ode.UVars() + this->ode.PVars(), m);
 
-        tab->loadExactData(Xsin);
+        tab->load_exact_data(Xsin);
 
         return tab;
     }
@@ -1146,7 +1165,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::shared_ptr<LGLInterpTable> tab = std::make_shared<LGLInterpTable>(
             odetemp, this->ode.XVars(), this->ode.UVars() + this->ode.PVars(), m);
 
-        tab->loadExactData(Xs, dXs);
+        tab->load_exact_data(Xs, dXs);
 
         return tab;
     }
@@ -1165,11 +1184,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
-        Hessian<tycho::DefaultSuperScalar> jxallSS(this->IRows(), this->IRows());
-        Jacobian<tycho::DefaultSuperScalar> jactmpSS(this->ORows(), this->IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->input_rows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.input_rows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->output_rows(), this->input_rows());
+        Hessian<tycho::DefaultSuperScalar> jxallSS(this->input_rows(), this->input_rows());
+        Jacobian<tycho::DefaultSuperScalar> jactmpSS(this->output_rows(), this->input_rows());
 
         int ntrajs = Xs_S.size();
 
@@ -1191,7 +1210,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (ntrajs < tycho::DefaultSuperScalar::SizeAtCompileTime) {
             // Pad out inputs to prevent junk data being given to stepper
             for (int v = 0; v < tycho::DefaultSuperScalar::SizeAtCompileTime; v++) {
-                for (int j = 0; j < this->ode.IRows(); j++) {
+                for (int j = 0; j < this->ode.input_rows(); j++) {
                     stepper_inputSS[j][v] = Xs_S[0][0][j];
                 }
             }
@@ -1203,7 +1222,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             for (int v = 0; v < vmax; v++) {
                 int idx = idxs[n * vsize + v];
-                for (int j = 0; j < this->ode.IRows(); j++) {
+                for (int j = 0; j < this->ode.input_rows(); j++) {
                     stepper_inputSS[j][v] = Xs_S[idx][0][j];
                 }
             }
@@ -1216,10 +1235,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                 for (int v = 0; v < vmax; v++) {
                     int idx = idxs[n * vsize + v];
-                    for (int j = 0; j < this->ode.IRows(); j++) {
+                    for (int j = 0; j < this->ode.input_rows(); j++) {
                         stepper_inputSS[j][v] = Xs_S[idx][i][j];
                     }
-                    stepper_inputSS[this->ode.IRows()][v] = Xs_S[idx][i + 1][this->ode.TVar()];
+                    stepper_inputSS[this->ode.input_rows()][v] = Xs_S[idx][i + 1][this->ode.TVar()];
                 }
 
                 stepper_outputSS.setZero();
@@ -1227,24 +1246,24 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 this->stepper.compute_jacobian(stepper_inputSS, stepper_outputSS,
                                                stepper_jacobianSS);
                 jactmpSS.noalias() = stepper_jacobianSS * jxallSS;
-                jxallSS.template topRows<Base::ORC>(this->ORows()) = jactmpSS;
-                stepper_inputSS.head(this->ode.IRows()) = stepper_outputSS;
+                jxallSS.template topRows<Base::ORC>(this->output_rows()) = jactmpSS;
+                stepper_inputSS.head(this->ode.input_rows()) = stepper_outputSS;
             }
 
             for (int v = 0; v < vmax; v++) {
 
                 int idx = idxs[n * vsize + v];
 
-                jxalls[idx].resize(this->IRows(), this->IRows());
+                jxalls[idx].resize(this->input_rows(), this->input_rows());
 
-                for (int k = 0; k < this->IRows(); k++) {
-                    for (int l = 0; l < this->IRows(); l++) {
+                for (int k = 0; k < this->input_rows(); k++) {
+                    for (int l = 0; l < this->input_rows(); l++) {
                         jxalls[idx](l, k) = jxallSS(l, k)[v];
                     }
                 }
 
                 if (ncalls == Xs_S[idx].size() - 1) {
-                    jxs[idx] = jxalls[idx].template topRows<Base::ORC>(this->ORows());
+                    jxs[idx] = jxalls[idx].template topRows<Base::ORC>(this->output_rows());
                 } else {
                     std::vector<ODEState<double>> Xstmp(Xs_S[idx].begin() + ncalls,
                                                         Xs_S[idx].end());
@@ -1261,35 +1280,35 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     Jacobian<double> calculate_jacobian(const std::vector<ODEState<double>> &Xs) const {
 
-        Jacobian<double> jx(this->ORows(), this->IRows());
+        Jacobian<double> jx(this->output_rows(), this->input_rows());
         jx.setZero();
-        Hessian<double> jxall(this->IRows(), this->IRows());
+        Hessian<double> jxall(this->input_rows(), this->input_rows());
         jxall.setIdentity();
 
-        Input<double> stepper_input(this->IRows());
-        ODEState<double> stepper_output(this->ode.IRows());
-        Jacobian<double> stepper_jacobian(this->ORows(), this->IRows());
-        Jacobian<double> jactmp(this->ORows(), this->IRows());
+        Input<double> stepper_input(this->input_rows());
+        ODEState<double> stepper_output(this->ode.input_rows());
+        Jacobian<double> stepper_jacobian(this->output_rows(), this->input_rows());
+        Jacobian<double> jactmp(this->output_rows(), this->input_rows());
 
         int n = Xs.size();
         int numsteps = Xs.size() - 1;
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->input_rows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.input_rows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->output_rows(), this->input_rows());
 
         auto ScalarImpl = [&](int i) {
-            stepper_input.head(this->ode.IRows()) = Xs[i];
-            stepper_input[this->ode.IRows()] = Xs[i + 1][this->ode.TVar()];
+            stepper_input.head(this->ode.input_rows()) = Xs[i];
+            stepper_input[this->ode.input_rows()] = Xs[i + 1][this->ode.TVar()];
 
             stepper_output.setZero();
             stepper_jacobian.setZero();
 
             this->stepper.compute_jacobian(stepper_input, stepper_output, stepper_jacobian);
             jactmp.noalias() = stepper_jacobian * jxall;
-            jxall.template topRows<Base::ORC>(this->ORows()) = jactmp;
+            jxall.template topRows<Base::ORC>(this->output_rows()) = jactmp;
         };
 
         auto VectorImpl = [&](int i) {
@@ -1297,25 +1316,25 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             stepper_jacobianSS.setZero();
 
             for (int j = 0; j < vsize; j++) {
-                for (int k = 0; k < this->ode.IRows(); k++) {
-                    stepper_inputSS.head(this->ode.IRows())[k][j] = Xs[i + j][k];
+                for (int k = 0; k < this->ode.input_rows(); k++) {
+                    stepper_inputSS.head(this->ode.input_rows())[k][j] = Xs[i + j][k];
                 }
-                stepper_inputSS[this->ode.IRows()][j] = Xs[i + j + 1][this->ode.TVar()];
+                stepper_inputSS[this->ode.input_rows()][j] = Xs[i + j + 1][this->ode.TVar()];
             }
             this->stepper.compute_jacobian(stepper_inputSS, stepper_outputSS, stepper_jacobianSS);
 
             for (int j = 0; j < vsize; j++) {
-                for (int k = 0; k < this->IRows(); k++) {
-                    for (int l = 0; l < this->ORows(); l++) {
+                for (int k = 0; k < this->input_rows(); k++) {
+                    for (int l = 0; l < this->output_rows(); l++) {
                         stepper_jacobian(l, k) = stepper_jacobianSS(l, k)[j];
                     }
                 }
                 jactmp.noalias() = stepper_jacobian * jxall;
-                jxall.template topRows<Base::ORC>(this->ORows()) = jactmp;
+                jxall.template topRows<Base::ORC>(this->output_rows()) = jactmp;
             }
         };
 
-        int Packs = (this->EnableVectorization) ? numsteps / vsize : 0;
+        int Packs = (this->enable_vectorization_) ? numsteps / vsize : 0;
 
         for (int i = 0; i < Packs; i++) {
             VectorImpl(i * vsize);
@@ -1324,7 +1343,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             ScalarImpl(i);
         }
 
-        jx = jxall.template topRows<Base::ORC>(this->ORows());
+        jx = jxall.template topRows<Base::ORC>(this->output_rows());
 
         return jx;
     }
@@ -1332,37 +1351,37 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::tuple<Jacobian<double>, Hessian<double>>
     calculate_jacobian_hessian(const std::vector<ODEState<double>> &Xs,
                                const ODEState<double> &lf) const {
-        ODEState<double> xf(this->ode.IRows());
+        ODEState<double> xf(this->ode.input_rows());
         xf.setZero();
 
-        Jacobian<double> jx(this->ORows(), this->IRows());
+        Jacobian<double> jx(this->output_rows(), this->input_rows());
         jx.setZero();
 
-        Jacobian<double> jxall(this->ORows(), this->IRows());
+        Jacobian<double> jxall(this->output_rows(), this->input_rows());
         jxall.setZero();
-        jxall.leftCols(this->ORows()).setIdentity();
+        jxall.leftCols(this->output_rows()).setIdentity();
 
-        Hessian<double> hxall(this->IRows(), this->IRows());
+        Hessian<double> hxall(this->input_rows(), this->input_rows());
         hxall.setZero();
 
-        Input<double> stepper_input(this->IRows());
-        Input<double> stepper_grad(this->IRows());
+        Input<double> stepper_input(this->input_rows());
+        Input<double> stepper_grad(this->input_rows());
 
-        ODEState<double> stepper_output(this->ode.IRows());
-        Jacobian<double> stepper_jacobian(this->ORows(), this->IRows());
-        Hessian<double> stepper_hessian(this->IRows(), this->IRows());
+        ODEState<double> stepper_output(this->ode.input_rows());
+        Jacobian<double> stepper_jacobian(this->output_rows(), this->input_rows());
+        Hessian<double> stepper_hessian(this->input_rows(), this->input_rows());
 
         ODEState<double> stepper_adjvars = lf;
 
-        Hessian<double> jtwist(this->IRows(), this->IRows());
+        Hessian<double> jtwist(this->input_rows(), this->input_rows());
         jtwist.setZero();
-        jtwist(this->IRows() - 1, this->IRows() - 1) = 1.0;
+        jtwist(this->input_rows() - 1, this->input_rows() - 1) = 1.0;
 
         int numsteps = Xs.size() - 1;
 
         for (int i = 0; i < numsteps; i++) {
-            stepper_input.head(this->ode.IRows()) = Xs[numsteps - i - 1];
-            stepper_input[this->ode.IRows()] = Xs[numsteps - i][this->ode.TVar()];
+            stepper_input.head(this->ode.input_rows()) = Xs[numsteps - i - 1];
+            stepper_input[this->ode.input_rows()] = Xs[numsteps - i][this->ode.TVar()];
 
             stepper_output.setZero();
             stepper_jacobian.setZero();
@@ -1373,7 +1392,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 stepper_input, stepper_output, stepper_jacobian, stepper_grad, stepper_hessian,
                 stepper_adjvars);
 
-            jtwist.topRows(this->ORows()) = stepper_jacobian;
+            jtwist.topRows(this->output_rows()) = stepper_jacobian;
             jxall = jxall * jtwist;
             if (i == 0) {
                 jxall.rightCols(1) = stepper_jacobian.rightCols(1);
@@ -1381,10 +1400,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             hxall = jtwist.transpose() * hxall * jtwist;
             hxall += stepper_hessian;
-            stepper_adjvars = stepper_grad.head(this->ORows());
+            stepper_adjvars = stepper_grad.head(this->output_rows());
         }
 
-        jx = jxall.template topRows<Base::ORC>(this->ORows());
+        jx = jxall.template topRows<Base::ORC>(this->output_rows());
 
         return std::tuple<Jacobian<double>, Hessian<double>>{jx, hxall};
     }
@@ -1395,20 +1414,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->IRows());
-        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.IRows());
-        Input<tycho::DefaultSuperScalar> stepper_gradSS(this->IRows());
-        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->ORows(), this->IRows());
-        Hessian<tycho::DefaultSuperScalar> stepper_hessianSS(this->IRows(), this->IRows());
-        ODEState<tycho::DefaultSuperScalar> stepper_adjvarsSS(this->ode.IRows());
+        Input<tycho::DefaultSuperScalar> stepper_inputSS(this->input_rows());
+        ODEState<tycho::DefaultSuperScalar> stepper_outputSS(this->ode.input_rows());
+        Input<tycho::DefaultSuperScalar> stepper_gradSS(this->input_rows());
+        Jacobian<tycho::DefaultSuperScalar> stepper_jacobianSS(this->output_rows(), this->input_rows());
+        Hessian<tycho::DefaultSuperScalar> stepper_hessianSS(this->input_rows(), this->input_rows());
+        ODEState<tycho::DefaultSuperScalar> stepper_adjvarsSS(this->ode.input_rows());
 
-        Jacobian<tycho::DefaultSuperScalar> jxallSS(this->ORows(), this->IRows());
-        Hessian<tycho::DefaultSuperScalar> jtwistSS(this->IRows(), this->IRows());
-        Hessian<tycho::DefaultSuperScalar> hxallSS(this->IRows(), this->IRows());
+        Jacobian<tycho::DefaultSuperScalar> jxallSS(this->output_rows(), this->input_rows());
+        Hessian<tycho::DefaultSuperScalar> jtwistSS(this->input_rows(), this->input_rows());
+        Hessian<tycho::DefaultSuperScalar> hxallSS(this->input_rows(), this->input_rows());
 
-        Jacobian<double> jxall(this->ORows(), this->IRows());
-        Hessian<double> jtwist(this->IRows(), this->IRows());
-        Hessian<double> hxall(this->IRows(), this->IRows());
+        Jacobian<double> jxall(this->output_rows(), this->input_rows());
+        Hessian<double> jtwist(this->input_rows(), this->input_rows());
+        Hessian<double> hxall(this->input_rows(), this->input_rows());
 
         jxall.setZero();
         jtwist.setZero();
@@ -1436,7 +1455,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (ntrajs < tycho::DefaultSuperScalar::SizeAtCompileTime) {
             // Pad out inputs to prevent junk data being given to stepper
             for (int v = 0; v < tycho::DefaultSuperScalar::SizeAtCompileTime; v++) {
-                for (int j = 0; j < this->ode.IRows(); j++) {
+                for (int j = 0; j < this->ode.input_rows(); j++) {
                     stepper_inputSS[j][v] = Xs_S[0][0][j];
                 }
             }
@@ -1449,7 +1468,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             for (int v = 0; v < vmax; v++) {
                 int idx = idxs[n * vsize + v];
-                for (int j = 0; j < this->ode.ORows(); j++) {
+                for (int j = 0; j < this->ode.output_rows(); j++) {
                     stepper_adjvarsSS[j][v] = Lf_S[idx][j];
                 }
             }
@@ -1457,20 +1476,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             int ncalls = Xs_S[idxs[n * vsize]].size() - 1;
 
             jxallSS.setZero();
-            jxallSS.leftCols(this->ORows()).setIdentity();
+            jxallSS.leftCols(this->output_rows()).setIdentity();
             hxallSS.setZero();
 
             jtwistSS.setZero();
-            jtwistSS(this->IRows() - 1, this->IRows() - 1) = tycho::DefaultSuperScalar(1.0);
+            jtwistSS(this->input_rows() - 1, this->input_rows() - 1) = tycho::DefaultSuperScalar(1.0);
 
             for (int i = 0; i < ncalls; i++) {
 
                 for (int v = 0; v < vmax; v++) {
                     int idx = idxs[n * vsize + v];
-                    for (int j = 0; j < this->ode.IRows(); j++) {
+                    for (int j = 0; j < this->ode.input_rows(); j++) {
                         stepper_inputSS[j][v] = (*(Xs_S[idx].end() - i - 2))[j];
                     }
-                    stepper_inputSS[this->ode.IRows()][v] =
+                    stepper_inputSS[this->ode.input_rows()][v] =
                         (*(Xs_S[idx].end() - i - 1))[this->ode.TVar()];
                 }
 
@@ -1484,7 +1503,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     stepper_inputSS, stepper_outputSS, stepper_jacobianSS, stepper_gradSS,
                     stepper_hessianSS, stepper_adjvarsSS);
 
-                jtwistSS.topRows(this->ORows()) = stepper_jacobianSS;
+                jtwistSS.topRows(this->output_rows()) = stepper_jacobianSS;
                 jxallSS = jxallSS * jtwistSS;
                 if (i == 0) {
                     jxallSS.rightCols(1) = stepper_jacobianSS.rightCols(1);
@@ -1492,22 +1511,22 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                 hxallSS = jtwistSS.transpose() * hxallSS * jtwistSS;
                 hxallSS += stepper_hessianSS;
-                stepper_adjvarsSS = stepper_gradSS.head(this->ORows());
+                stepper_adjvarsSS = stepper_gradSS.head(this->output_rows());
             }
 
             for (int v = 0; v < vmax; v++) {
                 int idx = idxs[n * vsize + v];
-                jxs[idx].resize(this->ORows(), this->IRows());
-                hxs[idx].resize(this->IRows(), this->IRows());
+                jxs[idx].resize(this->output_rows(), this->input_rows());
+                hxs[idx].resize(this->input_rows(), this->input_rows());
 
-                for (int k = 0; k < this->IRows(); k++) {
-                    for (int l = 0; l < this->ORows(); l++) {
+                for (int k = 0; k < this->input_rows(); k++) {
+                    for (int l = 0; l < this->output_rows(); l++) {
                         jxs[idx](l, k) = jxallSS(l, k)[v];
                     }
                 }
 
-                for (int k = 0; k < this->IRows(); k++) {
-                    for (int l = 0; l < this->IRows(); l++) {
+                for (int k = 0; k < this->input_rows(); k++) {
+                    for (int l = 0; l < this->input_rows(); l++) {
                         hxs[idx](l, k) = hxallSS(l, k)[v];
                     }
                 }
@@ -1518,16 +1537,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     std::vector<ODEState<double>> Xstmp(Xs_S[idx].begin(),
                                                         Xs_S[idx].end() - ncalls);
 
-                    ODEState<double> lf(this->ode.IRows());
+                    ODEState<double> lf(this->ode.input_rows());
 
-                    for (int l = 0; l < this->ORows(); l++) {
+                    for (int l = 0; l < this->output_rows(); l++) {
                         lf[l] = stepper_adjvarsSS[l][v];
                     }
 
                     auto [jtmp, htmp] = calculate_jacobian_hessian(Xstmp, lf);
 
-                    jtwist.topRows(this->ORows()) = jtmp;
-                    jtwist(this->IRows() - 1, this->IRows() - 1) = (1.0);
+                    jtwist.topRows(this->output_rows()) = jtmp;
+                    jtwist(this->input_rows() - 1, this->input_rows() - 1) = (1.0);
 
                     jxs[idx] = jxs[idx] * jtwist;
                     hxs[idx] = jtwist.transpose() * hxs[idx] * jtwist;
@@ -1807,7 +1826,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<ODEState<double>> Xinterp(n);
 
         for (int i = 0; i < n; i++) {
-            Xinterp[i].resize(this->ode.IRows());
+            Xinterp[i].resize(this->ode.input_rows());
             tab->InterpolateRef(ts[i], Xinterp[i]);
         }
 
@@ -1837,7 +1856,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<ODEState<double>> Xinterp(n);
 
         for (int i = 0; i < n; i++) {
-            Xinterp[i].resize(this->ode.IRows());
+            Xinterp[i].resize(this->ode.input_rows());
             tab->InterpolateRef(ts[i], Xinterp[i]);
         }
 
@@ -1998,7 +2017,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         std::vector<std::future<STMRet>> results(n_parts);
 
-        Eigen::MatrixXd jxall(this->IRows(), this->IRows());
+        Eigen::MatrixXd jxall(this->input_rows(), this->input_rows());
         jxall.setIdentity();
 
         auto stm_op = [&](int i) {
@@ -2035,7 +2054,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             for (int i = 0; i < n_parts; i++) {
                 try {
                     auto [xf, jx] = results[i].get();
-                    jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                    jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                     if (i == (n_parts - 1))
                         Xs[i + 1] = xf;
                 } catch (...) {
@@ -2069,14 +2088,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } else {
             for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);
-                jxall.topRows(this->ORows()) = (jx * jxall).eval();
+                jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                 Xs[i + 1] = (i < n_parts - 1) ? this->integrate(Xs[i], ts[i + 1]) : xf;
             }
         }
 
         STMRet tup_final;
         std::get<0>(tup_final) = Xs.back();
-        std::get<1>(tup_final) = jxall.topRows(this->ORows());
+        std::get<1>(tup_final) = jxall.topRows(this->output_rows());
         return tup_final;
     }
 
@@ -2087,8 +2106,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        ODEState<Scalar> x0 = x.head(this->ode.IRows());
-        Scalar tf = x[this->ode.IRows()];
+        ODEState<Scalar> x0 = x.head(this->ode.input_rows());
+        Scalar tf = x[this->ode.input_rows()];
         fx = this->integrate(x0, tf);
     }
     template <class InType, class OutType, class JacType>
@@ -2098,8 +2117,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        ODEState<Scalar> x0 = x.head(this->ode.IRows());
-        Scalar tf = x[this->ode.IRows()];
+        ODEState<Scalar> x0 = x.head(this->ode.input_rows());
+        Scalar tf = x[this->ode.input_rows()];
         auto Xs = this->integrate_dense(x0, tf);
         fx = Xs.back();
         jx = this->calculate_jacobian(Xs);
@@ -2116,9 +2135,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        ODEState<Scalar> x0 = x.head(this->ode.IRows());
+        ODEState<Scalar> x0 = x.head(this->ode.input_rows());
         ODEState<Scalar> lf = adjvars;
-        Scalar tf = x[this->ode.IRows()];
+        Scalar tf = x[this->ode.input_rows()];
 
         auto Xs = this->integrate_dense(x0, tf);
         fx = Xs.back();

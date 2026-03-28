@@ -23,7 +23,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
 using Clock = std::chrono::high_resolution_clock;
 
 ///////////////////////////////////////////////////////////////////////////////

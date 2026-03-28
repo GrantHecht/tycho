@@ -33,7 +33,7 @@ template <class FType> void DefineListEval(nb::class_<FType> &obj) {
 
     obj.def("__call__", [](const FType &fun, const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
-        auto funcsrest = ParsePythonArgs(x, first.IRows());
+        auto funcsrest = ParsePythonArgs(x, first.input_rows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));
@@ -43,7 +43,7 @@ template <class FType> void DefineListEval(nb::class_<FType> &obj) {
         auto funcsrest = ParsePythonArgs(x);
         Vector1<double> val;
         val[0] = first;
-        auto funcs = std::vector{Gen(Constant<-1, 1>(funcsrest[0].IRows(), val))};
+        auto funcs = std::vector{Gen(Constant<-1, 1>(funcsrest[0].input_rows(), val))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));
@@ -51,7 +51,7 @@ template <class FType> void DefineListEval(nb::class_<FType> &obj) {
 
     obj.def("__call__", [](const FType &fun, Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
-        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
+        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].input_rows(), first))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));

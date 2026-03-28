@@ -71,13 +71,13 @@ template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
     obj.def("max", [](double v1, const GenS &f2) {
         Vector1<double> v;
         v[0] = v1;
-        Constant<-1, 1> f1(f2.IRows(), v);
+        Constant<-1, 1> f1(f2.input_rows(), v);
         return GenS(ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MaxFlag, f1, f2));
     });
     obj.def("max", [](const GenS &f1, double v2) {
         Vector1<double> v;
         v[0] = v2;
-        Constant<-1, 1> f2(f1.IRows(), v);
+        Constant<-1, 1> f2(f1.input_rows(), v);
         return GenS(ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MaxFlag, f1, f2));
     });
 
@@ -86,11 +86,11 @@ template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
         return Gen(ComparativeFunction<Gen, Gen>(ComparativeFlags::MaxFlag, f1, f2));
     });
     obj.def("max", [](Eigen::VectorXd v1, const Gen &f2) {
-        Constant<-1, -1> f1(f2.IRows(), v1);
+        Constant<-1, -1> f1(f2.input_rows(), v1);
         return Gen(ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MaxFlag, f1, f2));
     });
     obj.def("max", [](const Gen &f1, Eigen::VectorXd v2) {
-        Constant<-1, -1> f2(f1.IRows(), v2);
+        Constant<-1, -1> f2(f1.input_rows(), v2);
         return Gen(ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MaxFlag, f1, f2));
     });
 
@@ -101,13 +101,13 @@ template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
     obj.def("min", [](double v1, const GenS &f2) {
         Vector1<double> v;
         v[0] = v1;
-        Constant<-1, 1> f1(f2.IRows(), v);
+        Constant<-1, 1> f1(f2.input_rows(), v);
         return GenS(ComparativeFunction<Constant<-1, 1>, GenS>(ComparativeFlags::MinFlag, f1, f2));
     });
     obj.def("min", [](const GenS &f1, double v2) {
         Vector1<double> v;
         v[0] = v2;
-        Constant<-1, 1> f2(f1.IRows(), v);
+        Constant<-1, 1> f2(f1.input_rows(), v);
         return GenS(ComparativeFunction<GenS, Constant<-1, 1>>(ComparativeFlags::MinFlag, f1, f2));
     });
 
@@ -116,11 +116,11 @@ template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
         return Gen(ComparativeFunction<Gen, Gen>(ComparativeFlags::MinFlag, f1, f2));
     });
     obj.def("min", [](Eigen::VectorXd v1, const Gen &f2) {
-        Constant<-1, -1> f1(f2.IRows(), v1);
+        Constant<-1, -1> f1(f2.input_rows(), v1);
         return Gen(ComparativeFunction<Constant<-1, -1>, Gen>(ComparativeFlags::MinFlag, f1, f2));
     });
     obj.def("min", [](const Gen &f1, Eigen::VectorXd v2) {
-        Constant<-1, -1> f2(f1.IRows(), v2);
+        Constant<-1, -1> f2(f1.input_rows(), v2);
         return Gen(ComparativeFunction<Gen, Constant<-1, -1>>(ComparativeFlags::MinFlag, f1, f2));
     });
 
@@ -157,22 +157,22 @@ template <class PYCLASS> void IfElseBuild(PYCLASS &obj) {
     obj.def("ifelse", [](const GenCon &test, double tfv, const GenS &ff) {
         Vector1<double> v;
         v[0] = tfv;
-        Constant<-1, 1> tf(test.IRows(), v);
+        Constant<-1, 1> tf(test.input_rows(), v);
         return GenS(IfElseFunction{test, tf, ff});
     });
     obj.def("ifelse", [](const GenCon &test, const GenS &tf, double ffv) {
         Vector1<double> v;
         v[0] = ffv;
-        Constant<-1, 1> ff(test.IRows(), v);
+        Constant<-1, 1> ff(test.input_rows(), v);
         return GenS(IfElseFunction{test, tf, ff});
     });
     obj.def("ifelse", [](const GenCon &test, double tfv, double ffv) {
         Vector1<double> v1;
         v1[0] = tfv;
-        Constant<-1, 1> tf(test.IRows(), v1);
+        Constant<-1, 1> tf(test.input_rows(), v1);
         Vector1<double> v2;
         v2[0] = ffv;
-        Constant<-1, 1> ff(test.IRows(), v2);
+        Constant<-1, 1> ff(test.input_rows(), v2);
         return GenS(IfElseFunction{test, tf, ff});
     });
 
@@ -181,17 +181,17 @@ template <class PYCLASS> void IfElseBuild(PYCLASS &obj) {
     });
 
     obj.def("ifelse", [](const GenCon &test, Eigen::VectorXd v, const Gen &ff) {
-        Constant<-1, -1> tf(test.IRows(), v);
+        Constant<-1, -1> tf(test.input_rows(), v);
         return Gen(IfElseFunction{test, tf, ff});
     });
     obj.def("ifelse", [](const GenCon &test, const Gen &tf, Eigen::VectorXd v) {
-        Constant<-1, -1> ff(test.IRows(), v);
+        Constant<-1, -1> ff(test.input_rows(), v);
         return Gen(IfElseFunction{test, tf, ff});
     });
 
     obj.def("ifelse", [](const GenCon &test, Eigen::VectorXd v1, Eigen::VectorXd v2) {
-        Constant<-1, -1> tf(test.IRows(), v1);
-        Constant<-1, -1> ff(test.IRows(), v2);
+        Constant<-1, -1> tf(test.input_rows(), v1);
+        Constant<-1, -1> ff(test.input_rows(), v2);
         return Gen(IfElseFunction{test, tf, ff});
     });
 }

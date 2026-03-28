@@ -30,10 +30,17 @@
 
 namespace tycho::vf {
 
-// Forward declarations (full definitions provided by included headers above,
-// or lazily at instantiation time for GenericFunction-dependent bodies)
-struct ConstraintInterface;
-struct ObjectiveInterface;
+// Import solver types used by GFConcept / GFModel.
+using solvers::ConstraintBase;
+using solvers::ConstraintInterface;
+using solvers::ConstraintModel;
+using solvers::ObjectiveBase;
+using solvers::ObjectiveInterface;
+using solvers::ObjectiveModel;
+using solvers::SizableSpec;
+using solvers::SolverConstraintSpec;
+using solvers::SolverObjectiveSpec;
+
 template <int IR, int OR> class GFStorage;
 
 // ==========================================================================

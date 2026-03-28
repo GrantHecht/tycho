@@ -17,6 +17,10 @@
 
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+using tycho::solvers::ConstraintFunction;
+using tycho::solvers::ObjectiveFunction;
+using tycho::vf::IOScaled;
+
 Eigen::VectorXd tycho::oc::OptimalControlProblem::get_input_scale(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,
     std::vector<VectorXi> XtUVars, std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
@@ -457,7 +461,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
     this->collect_solver_output(Output);
 
     this->collect_post_opt_info(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
-                             this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
+                                this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
 
     return this->optimizer->ConvergeFlag;
 }
@@ -471,7 +475,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobMo
         fmt::print("\n");
     }
 
-    Utils::Timer Runtimer;
+    utils::Timer Runtimer;
     Runtimer.start();
 
     PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);

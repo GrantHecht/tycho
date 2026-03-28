@@ -57,6 +57,16 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+
 // Solvers types
 using tycho::solvers::OptimizationProblemBase;
 using tycho::solvers::NonLinearProgram;
@@ -1156,7 +1166,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void test_partitions(int i, int j, int n);
 
     void jet_initialize() {
-        this->set_num_partitions(1, 1);
+        this->setNumPartitions(1, 1);
         this->optimizer->PrintLevel = 10;
         this->PrintMeshInfo = false;
 
@@ -1165,7 +1175,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void jet_release() {
         this->indexer = PhaseIndexer();
         this->optimizer->release();
-        this->init_partitions();
+        this->initPartitions();
         this->optimizer->PrintLevel = 0;
         this->PrintMeshInfo = true;
         this->nlp = std::shared_ptr<NonLinearProgram>();

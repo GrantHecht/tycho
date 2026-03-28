@@ -69,11 +69,11 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     using NAME = Derived;
 
     template <class Func>
-    using EVALOP = typename NestedFunctionSelector<Derived, Func>;
+    using EVALOP = NestedFunctionSelector<Derived, Func>;
     template <class Func>
-    using FWDOP = typename NestedFunctionSelector<Func, Derived>;
+    using FWDOP = NestedFunctionSelector<Func, Derived>;
     template <int SZ, int ST>
-    using SEGMENTOP = typename NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
+    using SEGMENTOP = NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
 
     void set_io_rows(int inputrows, int outputrows) {
         Base::set_io_rows(inputrows, outputrows);

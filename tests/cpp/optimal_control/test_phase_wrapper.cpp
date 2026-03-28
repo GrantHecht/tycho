@@ -193,8 +193,8 @@ TEST_F(PhaseWrapperTest, DeltaVarObjectiveGroupThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — addDeltaVarObjective requires exactly 1
-    EXPECT_THROW(phase.addDeltaVarObjective("pos", 1.0), std::invalid_argument);
+    // "pos" maps to 2 indices — add_delta_var_objective requires exactly 1
+    EXPECT_THROW(phase.add_delta_var_objective("pos", 1.0), std::invalid_argument);
 }
 
 TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {

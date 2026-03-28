@@ -40,7 +40,7 @@ struct PyVectorFunction
 
     PyVectorFunction(int irr, int orr, nb::object f, Input<double> js, Input<double> hs,
                      nb::tuple p) {
-        this->setIORows(irr, orr);
+        this->set_io_rows(irr, orr);
         this->pyfun = f;
         this->pyargs = p;
 
@@ -48,16 +48,16 @@ struct PyVectorFunction
             throw std::invalid_argument("Incorrectly sized FD Step Sizes");
         }
 
-        this->setJacFDSteps(js);
-        this->setHessFDSteps(hs);
+        this->set_jac_fd_steps(js);
+        this->set_hess_fd_steps(hs);
     }
 
     PyVectorFunction(int irr, int orr, nb::object f, double js, double hs, nb::tuple p) {
-        this->setIORows(irr, orr);
+        this->set_io_rows(irr, orr);
         this->pyfun = f;
         this->pyargs = p;
-        this->setJacFDSteps(js);
-        this->setHessFDSteps(hs);
+        this->set_jac_fd_steps(js);
+        this->set_hess_fd_steps(hs);
     }
 
     PyVectorFunction(int irr, nb::object f, Input<double> js, Input<double> hs, nb::tuple p)
@@ -101,16 +101,16 @@ struct NumbaVectorFunction
 
         Input<double> xt = x;
         Output<double> fxt;
-        fxt.resize(this->ORows()); // allocate before passing pointer to Numba
+        fxt.resize(this->output_rows()); // allocate before passing pointer to Numba
 
-        this->fun(xt.data(), fxt.data(), this->IRows(), this->ORows());
+        this->fun(xt.data(), fxt.data(), this->input_rows(), this->output_rows());
         fx = fxt;
     }
     NumbaVectorFunction(int irr, int orr, const FType &f, double js, double hs) {
-        this->setIORows(irr, orr);
+        this->set_io_rows(irr, orr);
         this->fun = (FPtr)f;
-        this->setJacFDSteps(js);
-        this->setHessFDSteps(hs);
+        this->set_jac_fd_steps(js);
+        this->set_hess_fd_steps(hs);
     }
     NumbaVectorFunction(int irr, int orr, const FType &f)
         : NumbaVectorFunction(irr, orr, f, 1.0e-6, 1.0e-6) {}

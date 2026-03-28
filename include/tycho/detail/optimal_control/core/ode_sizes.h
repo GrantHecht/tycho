@@ -42,6 +42,10 @@
 
 namespace tycho::oc {
 
+// Import commonly-used types from vf and utils namespaces.
+using utils::FlatMap;
+using utils::SZ_SUM;
+
 template <int _XV, int _UV, int _PV> struct ODEConstSizes {
     static const int XV = _XV;
     static const int UV = _UV;

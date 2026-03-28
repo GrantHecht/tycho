@@ -20,6 +20,17 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::LambdaJumpTable;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+
 template <int OR>
 struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
                                        DenseDerivativeMode::Analytic> {

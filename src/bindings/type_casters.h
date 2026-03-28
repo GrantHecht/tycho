@@ -454,10 +454,10 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 };
 
 // ---------------------------------------------------------------------------
-// ScaleType  =  std::variant<double, Eigen::VectorXd, tycho::oc::ScaleModes, std::string>
+// ScaleType  =  std::variant<double, Eigen::VectorXd, tycho::ScaleModes, std::string>
 //
-// Python  None         -> tycho::oc::ScaleModes::NONE
-// Python  ScaleModes   -> tycho::oc::ScaleModes (enum value)
+// Python  None         -> tycho::ScaleModes::NONE
+// Python  ScaleModes   -> tycho::ScaleModes (enum value)
 // Python  str          -> std::string
 // Python  float        -> double
 // Python  array        -> Eigen::VectorXd
@@ -468,12 +468,12 @@ template <> struct type_caster<tycho::oc::ScaleType> {
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {
-            value = tycho::oc::ScaleModes::NONE;
+            value = tycho::ScaleModes::NONE;
             return true;
         }
         // ScaleModes enum (nb::enum_<ScaleModes>)
         {
-            auto sc = make_caster<tycho::oc::ScaleModes>();
+            auto sc = make_caster<tycho::ScaleModes>();
             if (sc.from_python(src, flags, cleanup)) {
                 value = sc.value;
                 return true;

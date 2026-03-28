@@ -3,6 +3,18 @@
 
 namespace tycho::astro {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using vf::Arguments;
+using vf::Constant;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::IfElseFunction;
+using vf::ScalarRootFinder;
+using vf::SignFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+
 /*
 Kepler propagator implementation is partly based on the implementation found at
 https://www.mathworks.com/matlabcentral/fileexchange/35566-vectorized-analytic-two-body-propagator-kepler-universal-variables
@@ -245,7 +257,7 @@ struct KeperPropagator_Impl {
 
         auto FG = FGs(mu, conictol).eval(XF);
 
-        constexpr bool d = FG.IsVectorizable;
+        constexpr bool d = FG.is_vectorizable;
 
         return ApplyRVFG().eval(stack(RVdt.head<6>(), FG));
     }
@@ -266,7 +278,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     const double Pi = 3.14159265358979;
     double t0 = 0.0;
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     KeplerPropagator(double m) {
         this->mu = m;

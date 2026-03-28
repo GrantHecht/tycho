@@ -246,7 +246,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         bind::DenseBaseBuild<Integrator<DODE>>(obj);
 
-        obj.def_rw("enable_vectorization", &Integrator<DODE>::EnableVectorization);
+        obj.def_rw("enable_vectorization", &Integrator<DODE>::enable_vectorization_);
 
         obj.def_rw("def_step_size", &Integrator<DODE>::DefStepSize);
         obj.def_rw("max_step_size", &Integrator<DODE>::MaxStepSize);
@@ -260,15 +260,15 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def_rw("adaptive", &Integrator<DODE>::Adaptive);
         obj.def_rw("abs_tols", &Integrator<DODE>::AbsTols);
 
-        obj.def("set_abs_tol", &Integrator<DODE>::setAbsTol);
-        obj.def("set_abs_tols", &Integrator<DODE>::setAbsTols);
-        obj.def("get_abs_tols", &Integrator<DODE>::getAbsTols);
+        obj.def("set_abs_tol", &Integrator<DODE>::set_abs_tol);
+        obj.def("set_abs_tols", &Integrator<DODE>::set_abs_tols);
+        obj.def("get_abs_tols", &Integrator<DODE>::get_abs_tols);
 
-        obj.def("set_rel_tol", &Integrator<DODE>::setRelTol);
-        obj.def("set_rel_tols", &Integrator<DODE>::setRelTols);
-        obj.def("get_rel_tols", &Integrator<DODE>::getRelTols);
+        obj.def("set_rel_tol", &Integrator<DODE>::set_rel_tol);
+        obj.def("set_rel_tols", &Integrator<DODE>::set_rel_tols);
+        obj.def("get_rel_tols", &Integrator<DODE>::get_rel_tols);
 
-        obj.def("set_step_sizes", &Integrator<DODE>::setStepSizes, nb::arg("DefStepSize"),
+        obj.def("set_step_sizes", &Integrator<DODE>::set_step_sizes, nb::arg("DefStepSize"),
                 nb::arg("MinStepSize"), nb::arg("MaxStepSize"));
 
         obj.def_rw("event_tol", &Integrator<DODE>::EventTol);

@@ -41,7 +41,7 @@ template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
     obj.def("tolist", [](const Derived &func) {
         using ELEM = Segment<-1, 1, -1>;
         std::vector<ELEM> elems;
-        for (int i = 0; i < func.ORows(); i++) {
+        for (int i = 0; i < func.output_rows(); i++) {
             elems.push_back(func.coeff(i));
         }
         return elems;
@@ -166,12 +166,12 @@ template <int IR_OR> struct TychoBind<Arguments<IR_OR>> {
         auto obj = nb::class_<Arguments<IR_OR>>(m, name);
         obj.def(nb::init<int>());
         obj.def("constant", [](const Arguments<IR_OR> &a, Eigen::VectorXd v) {
-            return GenericFunction<-1, -1>(Constant<-1, -1>(a.IRows(), v));
+            return GenericFunction<-1, -1>(Constant<-1, -1>(a.input_rows(), v));
         });
         obj.def("constant", [](const Arguments<IR_OR> &a, double v) {
             Eigen::Matrix<double, 1, 1> vv;
             vv[0] = v;
-            return GenericFunction<-1, 1>(Constant<-1, 1>(a.IRows(), vv));
+            return GenericFunction<-1, 1>(Constant<-1, 1>(a.input_rows(), vv));
         });
         bind::DenseBaseBuild<Arguments<IR_OR>>(obj);
         bind::SegBuild<Arguments<IR_OR>>(obj);

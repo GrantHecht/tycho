@@ -15,14 +15,10 @@
 
 #include "tycho_vector_functions.h"
 
-namespace tycho {
-using namespace tycho::vf;
-using namespace tycho::oc;
-using namespace tycho::integrators;
+namespace tycho::vf {
 
 GenericFunction<-1, -1> DynamicStack(const std::vector<GenericFunction<-1, -1>> &elems) {
     using Gen = GenericFunction<-1, -1>;
-    using GenS = GenericFunction<-1, 1>;
     return make_dynamic_stack<Gen, Gen>(elems);
 }
 GenericFunction<-1, -1> DynamicStack(const std::vector<GenericFunction<-1, 1>> &elems) {
@@ -38,6 +34,13 @@ GenericFunction<-1, 1> DynamicSum(const std::vector<GenericFunction<-1, 1>> &ele
     using GenS = GenericFunction<-1, 1>;
     return make_dynamic_sum<GenS, GenS>(elems);
 }
+
+} // namespace tycho::vf
+
+namespace tycho {
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
 
 void BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
@@ -55,7 +58,7 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
     m.def("stack", [](const std::vector<Gen> &elems) { return DynamicStack(elems); });
     m.def("stack", [](const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
-        auto funcsrest = ParsePythonArgs(x, first.IRows());
+        auto funcsrest = ParsePythonArgs(x, first.input_rows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
@@ -64,14 +67,14 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
         auto funcsrest = ParsePythonArgs(x);
         Vector1<double> val;
         val[0] = first;
-        auto funcs = std::vector{Gen(Constant<-1, 1>(funcsrest[0].IRows(), val))};
+        auto funcs = std::vector{Gen(Constant<-1, 1>(funcsrest[0].input_rows(), val))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
     });
     m.def("stack", [](Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
-        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
+        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].input_rows(), first))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
@@ -80,7 +83,7 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
     m.def("stack_scalar", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
     m.def("stack_scalar", [](const GenS &first, nb::args x) {
         auto funcs = std::vector{first};
-        auto funcsrest = ParsePythonArgsScalar(x, first.IRows());
+        auto funcsrest = ParsePythonArgsScalar(x, first.input_rows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
@@ -89,7 +92,7 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
         auto funcsrest = ParsePythonArgsScalar(x);
         Vector1<double> val;
         val[0] = first;
-        auto funcs = std::vector{GenS(Constant<-1, 1>(funcsrest[0].IRows(), val))};
+        auto funcs = std::vector{GenS(Constant<-1, 1>(funcsrest[0].input_rows(), val))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicStack(funcs);
@@ -110,7 +113,7 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
         auto funcsrest = ParsePythonArgsScalar(x);
         Vector1<double> val;
         val[0] = first;
-        auto funcs = std::vector{GenS(Constant<-1, 1>(funcsrest[0].IRows(), val))};
+        auto funcs = std::vector{GenS(Constant<-1, 1>(funcsrest[0].input_rows(), val))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicSum(funcs);
@@ -126,7 +129,7 @@ void tycho::BulkOperationsBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     m.def("sum", [](Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
-        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].IRows(), first))};
+        auto funcs = std::vector{Gen(Constant<-1, -1>(funcsrest[0].input_rows(), first))};
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicSum(funcs);

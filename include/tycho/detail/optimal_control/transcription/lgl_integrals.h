@@ -21,6 +21,20 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using utils::constexpr_forwarding_loop;
+using vf::Arguments;
+using vf::StackedOutputs;
+using vf::ThreadingFlags;
+using vf::StaticScaleBase;
+
 template <class Integrand, int CS, int XV, int PV> struct LGLReducedInteg_Impl {
     template <int V> using int_const = std::integral_constant<int, V>;
 
@@ -73,7 +87,7 @@ struct LGLIntegral
     using Base =
         VectorExpression<LGLIntegral<Integrand, CS, XV, PV>,
                          LGLReducedInteg_Impl<Integrand, CS, XV, PV>, const Integrand &, int, int>;
-    using Base::EnableVectorization;
+    using Base::enable_vectorization_;
     LGLIntegral() {}
     LGLIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };

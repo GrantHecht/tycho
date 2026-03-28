@@ -89,7 +89,7 @@ static void OCPFlagsBuild(nb::module_ &m) {
         .value("ENDTOEND", MeshErrorAggregation::ENDTOEND);
 
     m.def("strto_phase_region_flag",
-          nb::overload_cast<const std::string &>(&tycho::oc::strto_PhaseRegionFlag));
+          nb::overload_cast<const std::string &>(&strto_PhaseRegionFlag));
 }
 
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {

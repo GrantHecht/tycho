@@ -15,6 +15,9 @@
 
 #include "tycho/detail/solvers/optimization_problem.h"
 
+using tycho::solvers::ConstraintFunction;
+using tycho::solvers::ObjectiveFunction;
+
 void tycho::solvers::OptimizationProblem::transcribe() {
     this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
@@ -30,8 +33,8 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     int numIqCons = 0;
 
     for (auto &func : this->userEqualities) {
-        int irows = func.func.IRows();
-        int orows = func.func.ORows();
+        int irows = func.func.input_rows();
+        int orows = func.func.output_rows();
         int numappl = func.indices.size();
 
         MatrixXi vindex(irows, numappl);
@@ -62,8 +65,8 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     }
 
     for (auto &func : this->userInequalities) {
-        int irows = func.func.IRows();
-        int orows = func.func.ORows();
+        int irows = func.func.input_rows();
+        int orows = func.func.output_rows();
         int numappl = func.indices.size();
 
         MatrixXi vindex(irows, numappl);
@@ -95,7 +98,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     }
 
     for (auto &func : this->userObjectives) {
-        int irows = func.func.IRows();
+        int irows = func.func.input_rows();
         int numappl = func.indices.size();
 
         MatrixXi vindex(irows, numappl);

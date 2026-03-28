@@ -42,7 +42,7 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     ConstraintFunction(const ConstraintInterface &f, const MatrixXi &vindex,
                        const MatrixXi &cindex) {
         this->function = f;
-        this->index_data = SolverIndexingData(f.IRows(), f.ORows(), vindex, cindex);
+        this->index_data = SolverIndexingData(f.input_rows(), f.output_rows(), vindex, cindex);
     }
 
     ConstraintFunction(const ConstraintInterface &f, const SolverIndexingData &data) {

@@ -19,6 +19,12 @@
 #include <vector>
 
 using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 int main() {
     constexpr double g = 9.81;

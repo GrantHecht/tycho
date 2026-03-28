@@ -25,6 +25,12 @@
 #include <vector>
 
 using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition via the VectorFunction DSL
@@ -101,7 +107,7 @@ int main() {
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
 
     // ---- Objective ---------------------------------------------------------
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // ---- Solve -------------------------------------------------------------
     const auto status = phase->solve_optimize();

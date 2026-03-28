@@ -8,6 +8,8 @@
 #include <gtest/gtest.h>
 
 using namespace tycho;
+using namespace tycho::oc;
+using namespace tycho::utils;
 
 TEST(ODESizeTest, AddIdxSingleInt) {
     // Tests the bug fix: add_idx(string, int) previously dropped the name

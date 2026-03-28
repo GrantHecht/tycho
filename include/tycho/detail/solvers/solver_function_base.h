@@ -34,6 +34,9 @@
 
 namespace tycho::solvers {
 
+// Import cross-namespace types used by the solver function base.
+using vf::ThreadingFlags;
+
 template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
@@ -49,8 +52,8 @@ template <class FuncType> struct SolverFunctionBase {
         using std::endl;
 
         cout << "Name: " << this->function.name() << endl << endl;
-        cout << "Input  Rows:" << this->function.IRows() << endl << endl;
-        cout << "Output Rows:" << this->function.ORows() << endl << endl;
+        cout << "Input  Rows:" << this->function.input_rows() << endl << endl;
+        cout << "Output Rows:" << this->function.output_rows() << endl << endl;
         cout << "Thread Policy:" << static_cast<int>(ThreadMode) << endl << endl;
 
         cout << "Vindex: " << endl << this->index_data.getVindex() << endl << endl;
@@ -59,15 +62,15 @@ template <class FuncType> struct SolverFunctionBase {
         }
     }
 
-    int numKKTEles(bool dojac, bool dohess) {
-        return this->function.numKKTEles(dojac, dohess) * this->index_data.NumAppl();
+    int num_kkt_elements(bool dojac, bool dohess) {
+        return this->function.num_kkt_elements(dojac, dohess) * this->index_data.NumAppl();
     }
-    int numConEles() const { return this->function.ORows() * this->index_data.NumAppl(); }
-    int numGradEles() const { return this->function.IRows() * this->index_data.NumAppl(); }
+    int numConEles() const { return this->function.output_rows() * this->index_data.NumAppl(); }
+    int numGradEles() const { return this->function.input_rows() * this->index_data.NumAppl(); }
     ThreadingFlags getThreadMode() const { return this->ThreadMode; }
-    void getKKTSpace(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
+    void get_kkt_space(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
                      int conoffset, bool dojac, bool dohess) {
-        this->function.getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
+        this->function.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
                                    this->index_data);
     }
     void getGradientSpace(EigenRef<VectorXi> GXrows, int &freeloc) {

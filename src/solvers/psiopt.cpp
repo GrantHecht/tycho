@@ -22,7 +22,6 @@
 #include <mkl.h>
 #endif
 
-
 void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
@@ -77,8 +76,8 @@ void tycho::solvers::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
 }
 
 void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
-                                         Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
-                                         double &alphap, double &alphad) {
+                                                  Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
+                                                  double &alphap, double &alphad) {
     double Smax = this->max_step_to_boundary(this->getSlacks(XSL), this->getSlacks(DXSL), bfrac);
     double Lmax =
         this->max_step_to_boundary(this->getIqLmults(XSL), this->getIqLmults(DXSL), bfrac);
@@ -113,8 +112,9 @@ void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XS
     alphad = Lmax;
 }
 
-void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
-                                   double pobj, double bobj, double mu, IterateInfo &iter) const {
+void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL,
+                                            Eigen::Ref<Eigen::VectorXd> RHS, double pobj,
+                                            double bobj, double mu, IterateInfo &iter) const {
 
     iter.PrimObj = pobj;
     iter.BarrObj = bobj;
@@ -147,9 +147,10 @@ void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eig
         iter.AllConNormErr = this->getAllCons(RHS).norm();
 }
 
-void tycho::solvers::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL,
-                            double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                            Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale,
+                                     ConstEigenRef<VectorXd> XSL, double &val,
+                                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
     switch (algmode) {
@@ -373,9 +374,9 @@ void tycho::solvers::PSIOPT::print_Finished(std::string msg) const {
     fmt::print("\n");
 }
 
-void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                                    double tottime, double nlptime, double qptime,
-                                    double printtime) {
+void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last,
+                                             int iternum, double tottime, double nlptime,
+                                             double qptime, double printtime) {
     fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
     fmt::text_style Bcol = calculate_color(last.BarrInf, this->Bartol, this->AccBartol);
     fmt::text_style Ecol = calculate_color(last.EConInf, this->EContol, this->AccEContol);
@@ -449,7 +450,7 @@ fmt::text_style tycho::solvers::PSIOPT::calculate_color(double val, double targ,
 }
 
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
-                               double incpurt, double &finalpert) {
+                                        double incpurt, double &finalpert) {
     auto Inertia = [&]() { return this->KKTSol.neigs() - (this->EqualCons + this->InequalCons); };
     auto RankDef = [&]() {
         if ((this->KKTSol.neigs() + this->KKTSol.peigs() - this->KKTdim) != 0) {
@@ -493,8 +494,8 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
-                                        LineSearchModes lsmode, double ObjScale, double MuI,
-                                        Eigen::Ref<Eigen::VectorXd> xsl) {
+                                                 LineSearchModes lsmode, double ObjScale,
+                                                 double MuI, Eigen::Ref<Eigen::VectorXd> xsl) {
     Eigen::VectorXd XSL = xsl;
     Eigen::VectorXd RHS(this->KKTdim);
     Eigen::VectorXd DXSL(this->KKTdim);
@@ -515,7 +516,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     tycho::utils::Timer Funtimer;
     tycho::utils::Timer LStimer;
     tycho::utils::Timer QPtimer;
-    tycho::utils::Timer CBtimer; // Callback time is included in LastMiscTime (not separately reported)
+    tycho::utils::Timer
+        CBtimer; // Callback time is included in LastMiscTime (not separately reported)
     tycho::utils::Timer Printtimer;
 
     double Hpert0 = this->deltaH;
@@ -749,7 +751,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     return XSL;
 }
 
-Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bool docompute) {
+Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu,
+                                                  bool docompute) {
 
     tycho::utils::Timer kktt;
     kktt.start();
@@ -827,11 +830,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
-double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
-                              double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
-                              EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS,
-                              EigenRef<VectorXd> RHS2, IterateInfo &Citer,
-                              const std::vector<IterateInfo> &iters) {
+double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu,
+                                       double PrimObj, double BarrObj, EigenRef<VectorXd> XSL,
+                                       EigenRef<VectorXd> DXSL, EigenRef<VectorXd> XSL2,
+                                       EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
+                                       IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
 
     // Do not modify RHS,XSL,DXSL. EigenRef<VectorXd> doesnt like to be explicitly const in this
     // instance, I will fix this later in refactor

@@ -16,6 +16,8 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+using namespace tycho::solvers;
+
 namespace TychoTest {
 
 using namespace tycho;

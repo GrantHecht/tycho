@@ -21,6 +21,13 @@
 
 namespace tycho::astro {
 
+// Import cross-namespace types from vf and oc.
+using vf::Arguments;
+using vf::StackedOutputs;
+using oc::ODEPhase;
+using oc::ODESize;
+using oc::ODE_Expression;
+
 struct Kepler_Impl : ODESize<6, 0, 0> {
     static auto Definition(double mu) {
         auto args = Arguments<7>();

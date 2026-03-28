@@ -48,6 +48,10 @@
 #include "tycho/detail/utils/crtp_base.h"
 
 namespace tycho::oc {
+
+using vf::FDDerivArbitrary;
+using vf::GenericFunction;
+
 struct LGLInterpTable {
     using VectorFunctionalX = GenericFunction<-1, -1>;
 

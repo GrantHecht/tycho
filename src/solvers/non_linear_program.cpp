@@ -54,16 +54,16 @@ void tycho::solvers::NonLinearProgram::countElems() {
     int nic = 0;
 
     for (auto &obj : this->Objectives) {
-        nkkt += obj.numKKTEles(false, true);
+        nkkt += obj.num_kkt_elements(false, true);
         npgx += obj.numGradEles();
     }
     for (auto &eq : this->EqualityConstraints) {
-        nkkt += eq.numKKTEles(true, true);
+        nkkt += eq.num_kkt_elements(true, true);
         nagx += eq.numGradEles();
         nec += eq.numConEles();
     }
     for (auto &ineq : this->InequalityConstraints) {
-        nkkt += ineq.numKKTEles(true, true);
+        nkkt += ineq.num_kkt_elements(true, true);
         nagx += ineq.numGradEles();
         nic += ineq.numConEles();
     }
@@ -139,17 +139,17 @@ void tycho::solvers::NonLinearProgram::getMATSpace() {
         int kkstart = KKTfreeloc;
 
         for (auto &obj : this->PartObj[i])
-            obj.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
-                            this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, 0, false,
-                            true);
+            obj.get_kkt_space(this->KKTcoeffRows.head(this->numUserKKTElems),
+                              this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, 0, false,
+                              true);
         for (auto &eq : this->PartEq[i])
-            eq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
-                           this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, eqoffset,
-                           true, true);
-        for (auto &ineq : this->PartIq[i])
-            ineq.getKKTSpace(this->KKTcoeffRows.head(this->numUserKKTElems),
-                             this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, iqoffset,
+            eq.get_kkt_space(this->KKTcoeffRows.head(this->numUserKKTElems),
+                             this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, eqoffset,
                              true, true);
+        for (auto &ineq : this->PartIq[i])
+            ineq.get_kkt_space(this->KKTcoeffRows.head(this->numUserKKTElems),
+                               this->KKTcoeffCols.head(this->numUserKKTElems), KKTfreeloc, iqoffset,
+                               true, true);
 
         int kklen = KKTfreeloc - kkstart;
 
@@ -334,9 +334,10 @@ void tycho::solvers::NonLinearProgram::analyzeSparsity(
 }
 
 void tycho::solvers::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X,
-                                      ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
-                                      double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
-                                      EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
+                                               ConstEigenRef<VectorXd> LE,
+                                               ConstEigenRef<VectorXd> LI, double &val,
+                                               EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
+                                               EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
@@ -359,9 +360,9 @@ void tycho::solvers::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<Ve
     this->fillRHS(PGX, AGX, FXE, FXI);
 }
 
-void tycho::solvers::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
-                                      EigenRef<VectorXd> PGX, EigenRef<VectorXd> FXE,
-                                      EigenRef<VectorXd> FXI) {
+void tycho::solvers::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X,
+                                               double &val, EigenRef<VectorXd> PGX,
+                                               EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
@@ -386,8 +387,9 @@ void tycho::solvers::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<Ve
     this->fillFXI(FXI);
 }
 
-void tycho::solvers::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
-                                      EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
+void tycho::solvers::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X,
+                                               double &val, EigenRef<VectorXd> FXE,
+                                               EigenRef<VectorXd> FXI) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setConCoeffsZero();
@@ -410,7 +412,8 @@ void tycho::solvers::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<Ve
     this->fillFXI(FXI);
 }
 
-void tycho::solvers::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
+void tycho::solvers::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X,
+                                               double &val) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
 
@@ -426,11 +429,11 @@ void tycho::solvers::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<Ve
         val += Vals[i];
 }
 
-void tycho::solvers::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X,
-                                      ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
-                                      double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
-                                      EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
-                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::NonLinearProgram::evalKKT(
+    double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
+    ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
+    EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
+    Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
 
@@ -466,11 +469,11 @@ void tycho::solvers::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<Ve
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
 
-void tycho::solvers::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
-                                        ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
-                                        double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
-                                        EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
-                                        Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::NonLinearProgram::evalKKTNO(
+    double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
+    ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
+    EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
+    Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     // No-objective mode: ObjScale and val are unused but kept in the signature
     // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
     (void)ObjScale;
@@ -496,11 +499,11 @@ void tycho::solvers::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
-void tycho::solvers::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
-                                      ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
-                                      double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
-                                      EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
-                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::NonLinearProgram::evalSOE(
+    double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
+    ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
+    EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
+    Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     // Constraint-only mode: ObjScale and val are unused but kept in the signature
     // for API consistency with evalKKT/evalAUG (polymorphic dispatch via evalNLP).
     (void)ObjScale;
@@ -524,11 +527,11 @@ void tycho::solvers::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<Ve
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
-void tycho::solvers::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
-                                      ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
-                                      double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
-                                      EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
-                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::NonLinearProgram::evalAUG(
+    double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
+    ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
+    EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
+    Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
     this->setRHSCoeffsZero();
@@ -559,8 +562,8 @@ void tycho::solvers::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<Ve
 }
 
 void tycho::solvers::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
-                                      std::shared_ptr<NonLinearProgram> nlp1,
-                                      std::shared_ptr<NonLinearProgram> nlp2) {
+                                               std::shared_ptr<NonLinearProgram> nlp1,
+                                               std::shared_ptr<NonLinearProgram> nlp2) {
     using std::cout;
     using std::endl;
 

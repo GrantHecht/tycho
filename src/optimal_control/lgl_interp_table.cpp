@@ -175,7 +175,7 @@ std::vector<Eigen::VectorXd> tycho::oc::LGLInterpTable::NewErrorIntegral() {
 }
 
 void tycho::oc::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
-                                            Eigen::MatrixXd &mesh_dist) const {
+                                                Eigen::MatrixXd &mesh_dist) const {
 
     auto factorial = [](int n) {
         double fact = 1;

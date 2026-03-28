@@ -54,6 +54,10 @@
 
 namespace tycho::solvers {
 
+// Import cross-namespace types used throughout the solver layer.
+using utils::TypeStorage;
+using vf::GenericFunction;
+
 /*
  * Spec for vector function that can be used as a constraint inside of PSIOPT.
  */
@@ -93,11 +97,11 @@ struct SolverConstraintSpec {
             Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
             std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const = 0;
 
-        virtual void getKKTSpace(Eigen::Ref<Eigen::VectorXi> KKTrows,
+        virtual void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows,
                                  Eigen::Ref<Eigen::VectorXi> KKTcols, int &freeloc, int conoffset,
                                  bool dojac, bool dohess, SolverIndexingData &data) = 0;
 
-        virtual int numKKTEles(bool dojac, bool dohess) const = 0;
+        virtual int num_kkt_elements(bool dojac, bool dohess) const = 0;
     };
 };
 
@@ -137,8 +141,8 @@ template <typename T> struct ConstraintModel final : ConstraintBase {
 
     // ---- SizableSpec::Concept ----
     std::string name() const override { return data_.name(); }
-    int IRows() const override { return data_.IRows(); }
-    int ORows() const override { return data_.ORows(); }
+    int input_rows() const override { return data_.input_rows(); }
+    int output_rows() const override { return data_.output_rows(); }
     bool thread_safe() const override { return data_.thread_safe(); }
 
     // ---- SolverConstraintSpec::Concept ----
@@ -180,13 +184,13 @@ template <typename T> struct ConstraintModel final : ConstraintBase {
         data_.constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
-    void getKKTSpace(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
+    void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
                      SolverIndexingData &data) override {
-        data_.getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        data_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
-    int numKKTEles(bool dojac, bool dohess) const override {
-        return data_.numKKTEles(dojac, dohess);
+    int num_kkt_elements(bool dojac, bool dohess) const override {
+        return data_.num_kkt_elements(dojac, dohess);
     }
 
     void clone_into(TypeStorage<ConstraintBase> &s) const override {
@@ -216,8 +220,8 @@ struct ConstraintInterface {
 
     // ---- Forwarding methods ----
     std::string name() const { return storage.get().name(); }
-    int IRows() const { return storage.get().IRows(); }
-    int ORows() const { return storage.get().ORows(); }
+    int input_rows() const { return storage.get().input_rows(); }
+    int output_rows() const { return storage.get().output_rows(); }
     bool thread_safe() const { return storage.get().thread_safe(); }
 
     void constraints(const Eigen::Ref<const Eigen::VectorXd> &X, Eigen::Ref<Eigen::VectorXd> FX,
@@ -258,13 +262,13 @@ struct ConstraintInterface {
         storage.get().constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
-    void getKKTSpace(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
+    void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
                      SolverIndexingData &data) {
-        storage.get().getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
-    int numKKTEles(bool dojac, bool dohess) const {
-        return storage.get().numKKTEles(dojac, dohess);
+    int num_kkt_elements(bool dojac, bool dohess) const {
+        return storage.get().num_kkt_elements(dojac, dohess);
     }
 };
 
@@ -284,8 +288,8 @@ template <typename T> struct ObjectiveModel final : ObjectiveBase {
 
     // ---- SizableSpec::Concept ----
     std::string name() const override { return data_.name(); }
-    int IRows() const override { return data_.IRows(); }
-    int ORows() const override { return data_.ORows(); }
+    int input_rows() const override { return data_.input_rows(); }
+    int output_rows() const override { return data_.output_rows(); }
     bool thread_safe() const override { return data_.thread_safe(); }
 
     // ---- SolverConstraintSpec::Concept ----
@@ -327,13 +331,13 @@ template <typename T> struct ObjectiveModel final : ObjectiveBase {
         data_.constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
-    void getKKTSpace(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
+    void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
                      SolverIndexingData &data) override {
-        data_.getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        data_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
-    int numKKTEles(bool dojac, bool dohess) const override {
-        return data_.numKKTEles(dojac, dohess);
+    int num_kkt_elements(bool dojac, bool dohess) const override {
+        return data_.num_kkt_elements(dojac, dohess);
     }
 
     // ---- SolverObjectiveSpec::Concept ----
@@ -381,8 +385,8 @@ struct ObjectiveInterface {
 
     // ---- Forwarding methods ----
     std::string name() const { return storage.get().name(); }
-    int IRows() const { return storage.get().IRows(); }
-    int ORows() const { return storage.get().ORows(); }
+    int input_rows() const { return storage.get().input_rows(); }
+    int output_rows() const { return storage.get().output_rows(); }
     bool thread_safe() const { return storage.get().thread_safe(); }
 
     void constraints(const Eigen::Ref<const Eigen::VectorXd> &X, Eigen::Ref<Eigen::VectorXd> FX,
@@ -423,13 +427,13 @@ struct ObjectiveInterface {
         storage.get().constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
-    void getKKTSpace(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
+    void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
                      SolverIndexingData &data) {
-        storage.get().getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
-    int numKKTEles(bool dojac, bool dohess) const {
-        return storage.get().numKKTEles(dojac, dohess);
+    int num_kkt_elements(bool dojac, bool dohess) const {
+        return storage.get().num_kkt_elements(dojac, dohess);
     }
 
     void objective(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X, double &Val,

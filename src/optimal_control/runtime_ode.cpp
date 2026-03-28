@@ -43,7 +43,7 @@ Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::Vector
         }
     }
 
-    auto phase_ptr = std::make_shared<ODEPhase<DynODE>>(ode, mode, traj, num_segments);
+    auto phase_ptr = std::make_shared<oc::ODEPhase<DynODE>>(ode, mode, traj, num_segments);
 
     if (registry_) {
         return Phase(phase_ptr, *registry_);

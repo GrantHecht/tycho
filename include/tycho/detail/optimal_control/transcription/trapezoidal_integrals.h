@@ -20,6 +20,18 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+using vf::Arguments;
+using vf::StackedOutputs;
+
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     static auto Definition(const Integrand &integ, int xv, int pv) {
         constexpr int IRC = SZ_SUM<SZ_PROD<2, XV>::value, 2, PV>::value;

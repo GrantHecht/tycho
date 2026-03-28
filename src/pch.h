@@ -36,8 +36,8 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 
 // Real private headers (no detail/ counterpart)
-#include "Utils/eigen_stl.h"
-#include "Utils/fmtlib.h"
+#include "utils/eigen_stl.h"
+#include "utils/fmtlib.h"
 
 // Utils
 #include "tycho/detail/utils/get_core_count.h"

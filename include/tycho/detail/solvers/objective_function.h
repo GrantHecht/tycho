@@ -35,7 +35,7 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
 
     ObjectiveFunction(const ObjectiveInterface &f, const MatrixXi &vindex) {
         this->function = f;
-        this->index_data = SolverIndexingData(f.IRows(), vindex);
+        this->index_data = SolverIndexingData(f.input_rows(), vindex);
     }
     ObjectiveFunction(const ObjectiveInterface &f, const SolverIndexingData &data) {
         this->function = f;

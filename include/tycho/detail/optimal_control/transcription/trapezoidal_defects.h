@@ -20,6 +20,18 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+using utils::BumpAllocator;
+using utils::TempSpec;
+
 template <class DODE>
 struct TrapezoidalDefects
     : VectorFunction<TrapezoidalDefects<DODE>,
@@ -44,7 +56,7 @@ struct TrapezoidalDefects
     DODE ode;
     bool EnableHessianSparsity = false;
     Eigen::MatrixXi nzlocs;
-    static const bool IsVectorizable = DODE::IsVectorizable;
+    static const bool is_vectorizable = DODE::is_vectorizable;
 
     void exactHessianSparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
 

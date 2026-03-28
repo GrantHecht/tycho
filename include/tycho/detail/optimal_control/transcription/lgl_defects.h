@@ -20,6 +20,19 @@
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+using utils::ArrayOfTempSpecs;
+using utils::BumpAllocator;
+using utils::TempSpec;
 template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
@@ -47,7 +60,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
     using Coeffs = LGLCoeffs<CS>;
     /////////////////////////////////////////////////////////////////////////////
     DODE ode;
-    static const bool IsVectorizable = DODE::IsVectorizable;
+    static const bool is_vectorizable = DODE::is_vectorizable;
 
     LGLDefects(const DODE &od) { this->set_ode(od); }
     void set_ode(const DODE &od) {

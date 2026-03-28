@@ -21,6 +21,15 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types used by ODE definitions.
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::FunctionHolder;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using integrators::Integrator;
+
 template <class BaseType, class Derived, int _XV, int _UV, int _PV> struct ODEBase;
 
 template <class Derived, int _XV, int _UV, int _PV,

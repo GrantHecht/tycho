@@ -47,74 +47,76 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
 
     obj.def("add_link_param_equal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkParamEqualCon),
+                &OptimalControlProblem::add_link_param_equal_con),
             "");
     obj.def("add_link_param_equal_con",
             nb::overload_cast<VectorFunctionalX, VectorXi>(
-                &OptimalControlProblem::addLinkParamEqualCon),
+                &OptimalControlProblem::add_link_param_equal_con),
             "");
     obj.def("add_link_param_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkParamInequalCon),
+                &OptimalControlProblem::add_link_param_inequal_con),
             "");
     obj.def("add_link_param_inequal_con",
             nb::overload_cast<VectorFunctionalX, VectorXi>(
-                &OptimalControlProblem::addLinkParamInequalCon),
+                &OptimalControlProblem::add_link_param_inequal_con),
             "");
     obj.def("add_link_param_objective",
             nb::overload_cast<ScalarFunctionalX, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkParamObjective),
+                &OptimalControlProblem::add_link_param_objective),
             "");
     obj.def("add_link_param_objective",
             nb::overload_cast<ScalarFunctionalX, VectorXi>(
-                &OptimalControlProblem::addLinkParamObjective),
+                &OptimalControlProblem::add_link_param_objective),
             "");
 
     //////////////////////////////////////////////////////////////////////////////
 
-    obj.def("remove_link_equal_con", &OptimalControlProblem::removeLinkEqualCon, "");
-    obj.def("remove_link_inequal_con", &OptimalControlProblem::removeLinkInequalCon, "");
-    obj.def("remove_link_objective", &OptimalControlProblem::removeLinkObjective, "");
+    obj.def("remove_link_equal_con", &OptimalControlProblem::remove_link_equal_con, "");
+    obj.def("remove_link_inequal_con", &OptimalControlProblem::remove_link_inequal_con, "");
+    obj.def("remove_link_objective", &OptimalControlProblem::remove_link_objective, "");
 
-    obj.def("add_phase", nb::overload_cast<PhasePtr>(&OptimalControlProblem::addPhase), "");
+    obj.def("add_phase", nb::overload_cast<PhasePtr>(&OptimalControlProblem::add_phase), "");
 
-    obj.def("add_phases", &OptimalControlProblem::addPhases);
+    obj.def("add_phases", &OptimalControlProblem::add_phases);
 
-    obj.def("get_phase_num", nb::overload_cast<PhasePtr>(&OptimalControlProblem::getPhaseNum));
+    obj.def("get_phase_num", nb::overload_cast<PhasePtr>(&OptimalControlProblem::get_phase_num));
 
-    obj.def("remove_phase", &OptimalControlProblem::removePhase, "");
+    obj.def("remove_phase", &OptimalControlProblem::remove_phase, "");
     obj.def("phase", &OptimalControlProblem::Phase, "");
 
     obj.def("set_link_params",
-            nb::overload_cast<VectorXd, VectorXd>(&OptimalControlProblem::setLinkParams));
-    obj.def("set_link_params", nb::overload_cast<VectorXd>(&OptimalControlProblem::setLinkParams),
+            nb::overload_cast<VectorXd, VectorXd>(&OptimalControlProblem::set_link_params));
+    obj.def("set_link_params", nb::overload_cast<VectorXd>(&OptimalControlProblem::set_link_params),
             "");
 
     obj.def("add_link_param_vgroups", nb::overload_cast<std::map<std::string, Eigen::VectorXi>>(
-                                          &OptimalControlProblem::addLinkParamVgroups));
+                                          &OptimalControlProblem::add_link_param_vgroups));
     obj.def("set_link_param_vgroups", nb::overload_cast<std::map<std::string, Eigen::VectorXi>>(
-                                          &OptimalControlProblem::setLinkParamVgroups));
+                                          &OptimalControlProblem::set_link_param_vgroups));
     obj.def("add_link_param_vgroup", nb::overload_cast<Eigen::VectorXi, std::string>(
-                                         &OptimalControlProblem::addLinkParamVgroup));
+                                         &OptimalControlProblem::add_link_param_vgroup));
     obj.def("add_link_param_vgroup",
-            nb::overload_cast<int, std::string>(&OptimalControlProblem::addLinkParamVgroup));
+            nb::overload_cast<int, std::string>(&OptimalControlProblem::add_link_param_vgroup));
 
-    obj.def("return_link_params", &OptimalControlProblem::returnLinkParams, "");
+    obj.def("return_link_params", &OptimalControlProblem::return_link_params, "");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&OptimalControlProblem::transcribe), "");
 
     obj.def_ro("phases", &OptimalControlProblem::phases, "");
 
     ///////////////////////
-    obj.def("return_link_equal_con_vals", &OptimalControlProblem::returnLinkEqualConVals);
-    obj.def("return_link_equal_con_lmults", &OptimalControlProblem::returnLinkEqualConLmults);
+    obj.def("return_link_equal_con_vals", &OptimalControlProblem::return_link_equal_con_vals);
+    obj.def("return_link_equal_con_lmults", &OptimalControlProblem::return_link_equal_con_lmults);
 
-    obj.def("return_link_inequal_con_vals", &OptimalControlProblem::returnLinkInequalConVals);
-    obj.def("return_link_inequal_con_lmults", &OptimalControlProblem::returnLinkInequalConLmults);
+    obj.def("return_link_inequal_con_vals", &OptimalControlProblem::return_link_inequal_con_vals);
+    obj.def("return_link_inequal_con_lmults",
+            &OptimalControlProblem::return_link_inequal_con_lmults);
 
-    obj.def("return_link_equal_con_scales", &OptimalControlProblem::returnLinkEqualConScales);
-    obj.def("return_link_inequal_con_scales", &OptimalControlProblem::returnLinkInequalConScales);
-    obj.def("return_link_objective_scales", &OptimalControlProblem::returnLinkObjectiveScales);
+    obj.def("return_link_equal_con_scales", &OptimalControlProblem::return_link_equal_con_scales);
+    obj.def("return_link_inequal_con_scales",
+            &OptimalControlProblem::return_link_inequal_con_scales);
+    obj.def("return_link_objective_scales", &OptimalControlProblem::return_link_objective_scales);
 
     ///////////////////////
 
@@ -129,30 +131,30 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
 
     obj.def_rw("mesh_abort_flag", &OptimalControlProblem::MeshAbortFlag);
 
-    obj.def("set_adaptive_mesh", &OptimalControlProblem::setAdaptiveMesh,
+    obj.def("set_adaptive_mesh", &OptimalControlProblem::set_adaptive_mesh,
             nb::arg("AdaptiveMesh") = true, nb::arg("ApplyToPhases") = true);
-    obj.def("set_auto_scaling", &OptimalControlProblem::setAutoScaling,
+    obj.def("set_auto_scaling", &OptimalControlProblem::set_auto_scaling,
             nb::arg("AutoScaling") = true, nb::arg("ApplyToPhases") = true);
 
-    obj.def("set_mesh_tol", &OptimalControlProblem::setMeshTol);
-    obj.def("set_mesh_red_factor", &OptimalControlProblem::setMeshRedFactor);
-    obj.def("set_mesh_inc_factor", &OptimalControlProblem::setMeshIncFactor);
-    obj.def("set_mesh_err_factor", &OptimalControlProblem::setMeshErrFactor);
-    obj.def("set_max_mesh_iters", &OptimalControlProblem::setMaxMeshIters);
-    obj.def("set_min_segments", &OptimalControlProblem::setMinSegments);
-    obj.def("set_max_segments", &OptimalControlProblem::setMaxSegments);
-    obj.def("set_mesh_error_criteria",
-            nb::overload_cast<MeshErrorAggregation>(&OptimalControlProblem::setMeshErrorCriteria));
-    obj.def("set_mesh_error_criteria",
-            nb::overload_cast<const std::string &>(&OptimalControlProblem::setMeshErrorCriteria));
-    obj.def("set_mesh_error_estimator",
-            nb::overload_cast<MeshErrorEstimators>(&OptimalControlProblem::setMeshErrorEstimator));
-    obj.def("set_mesh_error_estimator",
-            nb::overload_cast<const std::string &>(&OptimalControlProblem::setMeshErrorEstimator));
+    obj.def("set_mesh_tol", &OptimalControlProblem::set_mesh_tol);
+    obj.def("set_mesh_red_factor", &OptimalControlProblem::set_mesh_red_factor);
+    obj.def("set_mesh_inc_factor", &OptimalControlProblem::set_mesh_inc_factor);
+    obj.def("set_mesh_err_factor", &OptimalControlProblem::set_mesh_err_factor);
+    obj.def("set_max_mesh_iters", &OptimalControlProblem::set_max_mesh_iters);
+    obj.def("set_min_segments", &OptimalControlProblem::set_min_segments);
+    obj.def("set_max_segments", &OptimalControlProblem::set_max_segments);
+    obj.def("set_mesh_error_criteria", nb::overload_cast<MeshErrorAggregation>(
+                                           &OptimalControlProblem::set_mesh_error_criteria));
+    obj.def("set_mesh_error_criteria", nb::overload_cast<const std::string &>(
+                                           &OptimalControlProblem::set_mesh_error_criteria));
+    obj.def("set_mesh_error_estimator", nb::overload_cast<MeshErrorEstimators>(
+                                            &OptimalControlProblem::set_mesh_error_estimator));
+    obj.def("set_mesh_error_estimator", nb::overload_cast<const std::string &>(
+                                            &OptimalControlProblem::set_mesh_error_estimator));
     obj.def("set_mesh_error_distributor", nb::overload_cast<MeshErrorAggregation>(
-                                              &OptimalControlProblem::setMeshErrorDistributor));
+                                              &OptimalControlProblem::set_mesh_error_distributor));
     obj.def("set_mesh_error_distributor", nb::overload_cast<const std::string &>(
-                                              &OptimalControlProblem::setMeshErrorDistributor));
+                                              &OptimalControlProblem::set_mesh_error_distributor));
 }
 
 static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
@@ -162,7 +164,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkEqualCon),
+                &OptimalControlProblem::add_link_equal_con),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
             nb::arg("AutoScale").none() = std::string("auto"));
 
@@ -171,7 +173,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkEqualCon),
+                &OptimalControlProblem::add_link_equal_con),
             nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
             nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
             nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
@@ -180,7 +182,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
                                   PhaseRefType, RegionType, VarIndexType, VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addLinkEqualCon),
+                    &OptimalControlProblem::add_link_equal_con),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
@@ -188,31 +190,31 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
 
         obj.def("add_link_param_equal_con",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
-                    &OptimalControlProblem::addLinkParamEqualCon),
+                    &OptimalControlProblem::add_link_param_equal_con),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("add_link_param_equal_con",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
-                    &OptimalControlProblem::addLinkParamEqualCon),
+                    &OptimalControlProblem::add_link_param_equal_con),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("add_forward_link_equal_con",
                 nb::overload_cast<PhaseRefType, PhaseRefType, VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addForwardLinkEqualCon),
+                    &OptimalControlProblem::add_forward_link_equal_con),
                 nb::arg("phase0"), nb::arg("phase1"), nb::arg("vars"),
                 nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("add_param_link_equal_con",
                 nb::overload_cast<PhaseRefType, PhaseRefType, RegionType, VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addParamLinkEqualCon),
+                    &OptimalControlProblem::add_param_link_equal_con),
                 nb::arg("phase0"), nb::arg("phase1"), nb::arg("reg0"), nb::arg("vars"),
                 nb::arg("AutoScale").none() = std::string("auto"));
 
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<PhaseRefType, RegionType, VarIndexType, PhaseRefType, RegionType,
                                   VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addDirectLinkEqualCon),
+                    &OptimalControlProblem::add_direct_link_equal_con),
                 nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"), nb::arg("phase1"),
                 nb::arg("reg1"), nb::arg("v1"), nb::arg("AutoScale").none() = std::string("auto"));
     }
@@ -222,7 +224,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkInequalCon),
+                &OptimalControlProblem::add_link_inequal_con),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
             nb::arg("AutoScale").none() = std::string("auto"));
 
@@ -231,7 +233,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkInequalCon),
+                &OptimalControlProblem::add_link_inequal_con),
             nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
             nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
             nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
@@ -240,7 +242,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
                                   PhaseRefType, RegionType, VarIndexType, VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addLinkInequalCon),
+                    &OptimalControlProblem::add_link_inequal_con),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
@@ -248,12 +250,12 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
 
         obj.def("add_link_param_inequal_con",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
-                    &OptimalControlProblem::addLinkParamInequalCon),
+                    &OptimalControlProblem::add_link_param_inequal_con),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("add_link_param_inequal_con",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
-                    &OptimalControlProblem::addLinkParamInequalCon),
+                    &OptimalControlProblem::add_link_param_inequal_con),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
     }
@@ -262,7 +264,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkObjective),
+                &OptimalControlProblem::add_link_objective),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
             nb::arg("AutoScale").none() = std::string("auto"));
 
@@ -271,7 +273,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<ScalarFunctionalX, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
-                &OptimalControlProblem::addLinkObjective),
+                &OptimalControlProblem::add_link_objective),
             nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
             nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
             nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
@@ -280,7 +282,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, PhaseRefType, RegionType, VarIndexType,
                                   PhaseRefType, RegionType, VarIndexType, VarIndexType, ScaleType>(
-                    &OptimalControlProblem::addLinkObjective),
+                    &OptimalControlProblem::add_link_objective),
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
@@ -288,12 +290,12 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
 
         obj.def("add_link_param_objective",
                 nb::overload_cast<ScalarFunctionalX, std::vector<VectorXi>, ScaleType>(
-                    &OptimalControlProblem::addLinkParamObjective),
+                    &OptimalControlProblem::add_link_param_objective),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
         obj.def("add_link_param_objective",
                 nb::overload_cast<ScalarFunctionalX, VectorXi, ScaleType>(
-                    &OptimalControlProblem::addLinkParamObjective),
+                    &OptimalControlProblem::add_link_param_objective),
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
     }
@@ -303,133 +305,134 @@ static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
     {
         ////////////////// Legacy EqualCons//////////
         obj.def("add_link_equal_con",
-                nb::overload_cast<LinkConstraint>(&OptimalControlProblem::addLinkEqualCon), "");
+                nb::overload_cast<LinkConstraint>(&OptimalControlProblem::add_link_equal_con), "");
 
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, RegVec, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<std::string>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
 
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
 
         /// ///
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, RegVec, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<std::string>,
                               std::vector<std::vector<PhasePtr>>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkEqualCon));
+                &OptimalControlProblem::add_link_equal_con));
 
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkEqualCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_equal_con));
 
         ////////////////////////////
 
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, RegVec, std::vector<VectorXi>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkEqualCon),
+                    &OptimalControlProblem::add_link_equal_con),
                 "");
 
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, RegVec,
                                   std::vector<std::vector<std::shared_ptr<ODEPhaseBase>>>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkEqualCon),
+                    &OptimalControlProblem::add_link_equal_con),
                 "");
 
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkEqualCon),
+                    &OptimalControlProblem::add_link_equal_con),
                 "");
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
-                                  VectorXi>(&OptimalControlProblem::addLinkEqualCon),
+                                  VectorXi>(&OptimalControlProblem::add_link_equal_con),
                 "");
 
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, std::string, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkEqualCon),
+                    &OptimalControlProblem::add_link_equal_con),
                 "");
         obj.def(
             "add_link_equal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
-                              VectorXi>(&OptimalControlProblem::addLinkEqualCon),
-            "");
-
-        obj.def(
-            "add_forward_link_equal_con",
-            nb::overload_cast<int, int, VectorXi>(&OptimalControlProblem::addForwardLinkEqualCon),
+                              VectorXi>(&OptimalControlProblem::add_link_equal_con),
             "");
 
         obj.def("add_forward_link_equal_con",
+                nb::overload_cast<int, int, VectorXi>(
+                    &OptimalControlProblem::add_forward_link_equal_con),
+                "");
+
+        obj.def("add_forward_link_equal_con",
                 nb::overload_cast<PhasePtr, PhasePtr, VectorXi>(
-                    &OptimalControlProblem::addForwardLinkEqualCon),
+                    &OptimalControlProblem::add_forward_link_equal_con),
                 "");
 
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<LinkFlags, int, VectorXi, int, VectorXi>(
-                    &OptimalControlProblem::addDirectLinkEqualCon),
+                    &OptimalControlProblem::add_direct_link_equal_con),
                 "");
 
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, int, PhaseRegionFlags, VectorXi, int,
                                   PhaseRegionFlags, VectorXi>(
-                    &OptimalControlProblem::addDirectLinkEqualCon),
+                    &OptimalControlProblem::add_direct_link_equal_con),
                 "");
 
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, PhasePtr, PhaseRegionFlags, VectorXi, PhasePtr,
                                   PhaseRegionFlags, VectorXi>(
-                    &OptimalControlProblem::addDirectLinkEqualCon),
+                    &OptimalControlProblem::add_direct_link_equal_con),
                 "");
 
         //
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, int, std::string, VectorXi, int, std::string,
-                                  VectorXi>(&OptimalControlProblem::addDirectLinkEqualCon),
+                                  VectorXi>(&OptimalControlProblem::add_direct_link_equal_con),
                 "");
 
-        obj.def(
-            "add_direct_link_equal_con",
-            nb::overload_cast<VectorFunctionalX, PhasePtr, std::string, VectorXi, PhasePtr,
-                              std::string, VectorXi>(&OptimalControlProblem::addDirectLinkEqualCon),
-            "");
+        obj.def("add_direct_link_equal_con",
+                nb::overload_cast<VectorFunctionalX, PhasePtr, std::string, VectorXi, PhasePtr,
+                                  std::string, VectorXi>(
+                    &OptimalControlProblem::add_direct_link_equal_con),
+                "");
     }
 
     //////////////////Legacy  InequalCons//////////
     {
 
         obj.def("add_link_inequal_con",
-                nb::overload_cast<LinkConstraint>(&OptimalControlProblem::addLinkInequalCon), "");
+                nb::overload_cast<LinkConstraint>(&OptimalControlProblem::add_link_inequal_con),
+                "");
 
         ////////////////////////////
 
@@ -437,84 +440,84 @@ static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, RegVec, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<std::string>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
 
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
 
         /// ///
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, RegVec, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::vector<std::string>,
                               std::vector<std::vector<PhasePtr>>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkInequalCon));
+                &OptimalControlProblem::add_link_inequal_con));
 
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkInequalCon));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_inequal_con));
 
         ////////////////////////////
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkInequalCon),
+                    &OptimalControlProblem::add_link_inequal_con),
                 "");
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
-                                  VectorXi>(&OptimalControlProblem::addLinkInequalCon),
+                                  VectorXi>(&OptimalControlProblem::add_link_inequal_con),
                 "");
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, std::string, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkInequalCon),
+                    &OptimalControlProblem::add_link_inequal_con),
                 "");
 
         obj.def(
             "add_link_inequal_con",
             nb::overload_cast<VectorFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
-                              VectorXi>(&OptimalControlProblem::addLinkInequalCon),
+                              VectorXi>(&OptimalControlProblem::add_link_inequal_con),
             "");
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, RegVec, std::vector<VectorXi>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkInequalCon));
+                    &OptimalControlProblem::add_link_inequal_con));
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, RegVec, std::vector<std::vector<PhasePtr>>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkInequalCon));
+                    &OptimalControlProblem::add_link_inequal_con));
 
         ////////////////////////////////////////
         obj.def("add_link_objective",
-                nb::overload_cast<LinkObjective>(&OptimalControlProblem::addLinkObjective), "");
+                nb::overload_cast<LinkObjective>(&OptimalControlProblem::add_link_objective), "");
     }
 
     {
@@ -524,79 +527,79 @@ static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, RegVec, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::vector<std::string>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
 
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, LinkFlags, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::string, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
 
         /// ///
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, RegVec, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::vector<std::string>,
                               std::vector<std::vector<PhasePtr>>, std::vector<VectorXi>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>>(
-                &OptimalControlProblem::addLinkObjective));
+                &OptimalControlProblem::add_link_objective));
 
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
                               std::vector<VectorXi>, std::vector<VectorXi>, std::vector<VectorXi>,
-                              std::vector<VectorXi>>(&OptimalControlProblem::addLinkObjective));
+                              std::vector<VectorXi>>(&OptimalControlProblem::add_link_objective));
 
         ////////////////////////////
 
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, LinkFlags, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkObjective),
+                    &OptimalControlProblem::add_link_objective),
                 "");
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, LinkFlags, std::vector<std::vector<PhasePtr>>,
-                                  VectorXi>(&OptimalControlProblem::addLinkObjective),
+                                  VectorXi>(&OptimalControlProblem::add_link_objective),
                 "");
 
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, std::string, std::vector<VectorXi>, VectorXi>(
-                    &OptimalControlProblem::addLinkObjective),
+                    &OptimalControlProblem::add_link_objective),
                 "");
         obj.def(
             "add_link_objective",
             nb::overload_cast<ScalarFunctionalX, std::string, std::vector<std::vector<PhasePtr>>,
-                              VectorXi>(&OptimalControlProblem::addLinkObjective),
+                              VectorXi>(&OptimalControlProblem::add_link_objective),
             "");
 
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, RegVec, std::vector<VectorXi>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkObjective),
+                    &OptimalControlProblem::add_link_objective),
                 "");
 
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, RegVec, std::vector<std::vector<PhasePtr>>,
                                   std::vector<VectorXi>, std::vector<VectorXi>>(
-                    &OptimalControlProblem::addLinkObjective),
+                    &OptimalControlProblem::add_link_objective),
                 "");
     }
 }

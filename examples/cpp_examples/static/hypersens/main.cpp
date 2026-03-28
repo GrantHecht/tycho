@@ -38,6 +38,12 @@
 #include <vector>
 
 using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition
@@ -79,7 +85,7 @@ int main() {
     HyperSens ode(0.0); // dummy parameter (macro requires >=1 type arg)
 
     auto phase = std::make_shared<ODEPhase<HyperSens>>(ode, TranscriptionModes::LGL7);
-    phase->setTraj(trajIG, nSeg);
+    phase->set_traj(trajIG, nSeg);
 
     // Control mode
     phase->set_control_mode(ControlModes::NoSpline);
@@ -124,15 +130,15 @@ int main() {
     phase->optimizer->set_QPOrderingMode("MINDEG");
 
     // Adaptive mesh refinement
-    phase->setAdaptiveMesh(true);
-    phase->setMeshTol(1.0e-7);
+    phase->set_adaptive_mesh(true);
+    phase->set_mesh_tol(1.0e-7);
     phase->optimizer->set_EContol(1.0e-7);
-    phase->setMaxMeshIters(10);
-    phase->setMeshErrorEstimator(MeshErrorEstimators::DEBOOR);
-    phase->setMeshErrorCriteria(MeshErrorAggregation::MAX);
-    phase->setMeshIncFactor(5.0);
-    phase->setMeshRedFactor(0.5);
-    phase->setMeshErrFactor(10.0);
+    phase->set_max_mesh_iters(10);
+    phase->set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
+    phase->set_mesh_error_criteria(MeshErrorAggregation::MAX);
+    phase->set_mesh_inc_factor(5.0);
+    phase->set_mesh_red_factor(0.5);
+    phase->set_mesh_err_factor(10.0);
 
     // Solve
     std::cout << "Solving HyperSensitive problem (tf=" << std::fixed

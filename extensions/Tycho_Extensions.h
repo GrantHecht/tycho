@@ -23,6 +23,9 @@
 
 namespace tycho {
 
+using vf::DenseDerivativeMode;
+using vf::VectorFunction;
+
 struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
                                 DenseDerivativeMode::AutodiffFwd> {
     using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
@@ -71,10 +74,13 @@ struct ModifiedDynamicsAD
     double mu = 1.00;
     double sqm = 1.0;
 
-    ModifiedDynamicsAD(double mu) : mu(mu), sqm(sqrt(mu)) {}
+    ModifiedDynamicsAD(double mu) : mu(mu), sqm(std::sqrt(mu)) {}
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
 
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();

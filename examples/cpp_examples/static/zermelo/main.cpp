@@ -38,6 +38,12 @@
 #include <vector>
 
 using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definitions — one per wind model
@@ -123,7 +129,7 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
 
     // Phase
     auto phase = std::make_shared<ODEPhase<ODE>>(ode, TranscriptionModes::LGL3);
-    phase->setTraj(trajG, nSeg);
+    phase->set_traj(trajG, nSeg);
     phase->setNumPartitions(10);
 
     // Boundary conditions
@@ -142,7 +148,7 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
 
     // Minimise travel time
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Solver settings (match Python: only tolerances)
     phase->optimizer->set_EContol(tol);

@@ -68,7 +68,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_pts = 100, int
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
 
     // Objective
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     return phase;
 }

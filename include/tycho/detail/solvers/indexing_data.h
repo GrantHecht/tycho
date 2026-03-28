@@ -77,13 +77,13 @@ struct SolverIndexingData {
     /// Each element indicates whether the corresponding indices in Vindex are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<ParsedIOFlags> VindexContinuity;
+    std::vector<vf::ParsedIOFlags> VindexContinuity;
 
     /// <summary>
     /// Each element indicates whether the corresponding indices in Cindex are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<ParsedIOFlags> CindexContinuity;
+    std::vector<vf::ParsedIOFlags> CindexContinuity;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to sum the
@@ -209,14 +209,14 @@ struct SolverIndexingData {
     inline int CLoc(int loc, int col) const { return this->Cindex(loc, col); }
     inline int VLoc(int loc, int col) const { return this->Vindex(loc, col); }
 
-    static ParsedIOFlags checkContinuity(const Eigen::VectorXi &ix) {
+    static vf::ParsedIOFlags checkContinuity(const Eigen::VectorXi &ix) {
         int s = 0;
         for (int i = 0; i < (ix.size() - 1); i++) {
             s = ix[i + 1] - ix[i] - 1;
             if (s != 0)
-                return ParsedIOFlags::NotContiguous;
+                return vf::ParsedIOFlags::NotContiguous;
         }
-        return ParsedIOFlags::Contiguous;
+        return vf::ParsedIOFlags::Contiguous;
     }
 };
 

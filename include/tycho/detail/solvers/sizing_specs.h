@@ -57,8 +57,8 @@ struct SizableSpec {
         // Your (internal) interface goes here.
         virtual std::string name() const = 0;
 
-        virtual int IRows() const = 0;
-        virtual int ORows() const = 0;
+        virtual int input_rows() const = 0;
+        virtual int output_rows() const = 0;
         virtual bool thread_safe() const = 0;
     };
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

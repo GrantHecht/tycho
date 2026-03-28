@@ -53,6 +53,9 @@ using tycho::solvers::ConstraintInterface;
 using tycho::solvers::ObjectiveInterface;
 using tycho::solvers::NonLinearProgram;
 
+// VF types
+using vf::ThreadingFlags;
+
 struct PhaseIndexer : ODESize<-1, -1, -1> {
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;

@@ -45,6 +45,9 @@
 
 namespace tycho::vf {
 
+using utils::const_tuple_for_each;
+using utils::make_array;
+
 template <int IR, int Start, int Size> struct SingleDomain {
     static const int DomainSize = IR;
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {
@@ -82,7 +85,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         return maxx;
     }
     static constexpr std::array<int, IR> dmn = {make_array<IR>(max_range)};
-    static constexpr int sub_domains(std::array<int, IR> v) {
+    static constexpr int count_sub_domains(std::array<int, IR> v) {
         int sr = 0;
         int i = 0;
         while (i < IR) {
@@ -95,7 +98,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return sr;
     }
-    static const int NumSubDomains = sub_domains(dmn);
+    static const int NumSubDomains = count_sub_domains(dmn);
     static constexpr std::array<int, 2> calc_sub_domains(int sd) {
         std::array<int, 2> v = {0, 0};
         int sr = 0;

@@ -10,6 +10,9 @@
 #include <cmath>
 #include <numbers>
 
+using namespace tycho;
+using namespace tycho::astro;
+
 namespace TychoTest {
 
 // Standard gravitational parameter for Earth (km^3/s^2)

@@ -241,19 +241,19 @@ void ProductBuild(nb::module_ &m) {
     });
 
     m.def("cwise_quotient", [cwiseQuotientOpLam](const Vector2<double> &f1, const SEG2 &f2) {
-        Constant<-1, -1> f1tmp(f2.IRows(), f1);
+        Constant<-1, -1> f1tmp(f2.input_rows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
     m.def("cwise_quotient", [cwiseQuotientOpLam](const Vector3<double> &f1, const SEG3 &f2) {
-        Constant<-1, -1> f1tmp(f2.IRows(), f1);
+        Constant<-1, -1> f1tmp(f2.input_rows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
     m.def("cwise_quotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const SEG &f2) {
-        Constant<-1, -1> f1tmp(f2.IRows(), f1);
+        Constant<-1, -1> f1tmp(f2.input_rows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
     m.def("cwise_quotient", [cwiseQuotientOpLam](const VectorX<double> &f1, const Gen &f2) {
-        Constant<-1, -1> f1tmp(f2.IRows(), f1);
+        Constant<-1, -1> f1tmp(f2.input_rows(), f1);
         return cwiseQuotientOpLam(f1tmp, f2);
     });
 
@@ -426,7 +426,7 @@ void tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
         return Gen(QuatRotation::Definition().eval(stack(q, v)));
     });
     m.def("quat_rotate", [](const Gen &q, const Vector3<double> &vec) {
-        return Gen(QuatRotation::Definition().eval(stack(q, Constant<-1, 3>(q.IRows(), vec))));
+        return Gen(QuatRotation::Definition().eval(stack(q, Constant<-1, 3>(q.input_rows(), vec))));
     });
 
     /////////////////////////////////////////////////////////////////////////

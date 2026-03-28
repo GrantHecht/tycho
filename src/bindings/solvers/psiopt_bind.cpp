@@ -84,8 +84,9 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_eq_con_tol", &PSIOPT::set_EContol);
     obj.def("set_ineq_con_tol", &PSIOPT::set_IContol);
 
-    obj.def("set_tols", &PSIOPT::set_tols, nb::arg("kkt_tol") = 1.0e-6, nb::arg("eq_con_tol") = 1.0e-6,
-            nb::arg("ineq_con_tol") = 1.0e-6, nb::arg("bar_tol") = 1.0e-6);
+    obj.def("set_tols", &PSIOPT::set_tols, nb::arg("kkt_tol") = 1.0e-6,
+            nb::arg("eq_con_tol") = 1.0e-6, nb::arg("ineq_con_tol") = 1.0e-6,
+            nb::arg("bar_tol") = 1.0e-6);
 
     obj.def_rw("acc_kkt_tol", &PSIOPT::AccKKTtol, "");
     obj.def_rw("acc_bar_tol", &PSIOPT::AccBartol, "");

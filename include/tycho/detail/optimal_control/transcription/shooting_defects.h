@@ -47,6 +47,19 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+using vf::Arguments;
+using vf::Is_SuperScalar;
+using vf::StackedOutputs;
+
 // Solvers types
 using tycho::solvers::SolverIndexingData;
 
@@ -112,7 +125,7 @@ struct CentralShootingDefect
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
     template <class Scalar> using IntegJac = typename Integrator::template Jacobian<Scalar>;
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
     bool EnableHessianSparsity = false;
 
     DODE ode;

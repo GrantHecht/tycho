@@ -18,6 +18,13 @@
 
 namespace tycho::astro {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+
 struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Analytic,
                                     DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Analytic,
@@ -28,13 +35,16 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
 
     double mu = 1.0;
     double sqm = 1.0;
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
-    MEEDynamics() { this->setIORows(9, 6); }
-    MEEDynamics(double mu) : mu(mu), sqm(sqrt(mu)) { this->setIORows(9, 6); }
+    MEEDynamics() { this->set_io_rows(9, 6); }
+    MEEDynamics(double mu) : mu(mu), sqm(std::sqrt(mu)) { this->set_io_rows(9, 6); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x_, ConstVectorBaseRef<OutType> fx_) const {
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
 
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> _fx_ = fx_.const_cast_derived();
@@ -78,6 +88,9 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x_,
                                       ConstVectorBaseRef<OutType> fx_,
                                       ConstMatrixBaseRef<JacType> jx_) const {
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
 
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> _fx_ = fx_.const_cast_derived();
@@ -240,6 +253,9 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
         ConstVectorBaseRef<InType> x_, ConstVectorBaseRef<OutType> fx_,
         ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> _fx_ = fx_.const_cast_derived();
         MatrixBaseRef<JacType> _jx_ = jx_.const_cast_derived();

@@ -37,6 +37,12 @@
 #include <vector>
 
 using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Physical constants (non-dimensionalised)
@@ -303,7 +309,7 @@ int main() {
     // Phase 1: 6 SRBs + core
     ///////////////////////////////////////////////////////////////////////////
     auto phase1 = std::make_shared<ODEPhase<RocketODE>>(ode1, tmode);
-    phase1->setTraj(IG1, nSegs);
+    phase1->set_traj(IG1, nSegs);
     phase1->set_control_mode(ControlModes::HighestOrderSpline);
 
     phase1->add_lu_norm_bound(PhaseRegionFlags::Path, ctrl_idx, 0.5, 1.5, 1.0,
@@ -331,7 +337,7 @@ int main() {
     // Phase 2: 3 SRBs + core
     ///////////////////////////////////////////////////////////////////////////
     auto phase2 = std::make_shared<ODEPhase<RocketODE>>(ode2, tmode);
-    phase2->setTraj(IG2, nSegs);
+    phase2->set_traj(IG2, nSegs);
     phase2->set_control_mode(ControlModes::HighestOrderSpline);
 
     phase2->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
@@ -352,7 +358,7 @@ int main() {
     // Phase 3: core only
     ///////////////////////////////////////////////////////////////////////////
     auto phase3 = std::make_shared<ODEPhase<RocketODE>>(ode3, tmode);
-    phase3->setTraj(IG3, nSegs);
+    phase3->set_traj(IG3, nSegs);
     phase3->set_control_mode(ControlModes::HighestOrderSpline);
 
     phase3->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);
@@ -371,7 +377,7 @@ int main() {
     // Phase 4: upper stage
     ///////////////////////////////////////////////////////////////////////////
     auto phase4 = std::make_shared<ODEPhase<RocketODE>>(ode4, tmode);
-    phase4->setTraj(IG4, nSegs);
+    phase4->set_traj(IG4, nSegs);
     phase4->set_control_mode(ControlModes::HighestOrderSpline);
 
     phase4->add_lower_norm_bound(PhaseRegionFlags::Path, pos_idx, Re, 1.0, ScaleModes::AUTO);

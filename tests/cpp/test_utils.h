@@ -13,9 +13,15 @@
 #include <numbers>
 #include <random>
 
-namespace TychoTest {
-
+// Bring all sub-namespaces into file scope so every test translation unit
+// that includes this header can use unqualified names.
 using namespace tycho;
+using namespace tycho::utils;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+
+namespace TychoTest {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Deterministic pseudo-random vector
@@ -47,10 +53,10 @@ class VectorFunctionFixture : public ::testing::Test {
 
 struct ScopedThreadCount {
     int prev;
-    explicit ScopedThreadCount(int n) : prev(tycho::get_num_threads()) {
-        tycho::set_num_threads(n);
+    explicit ScopedThreadCount(int n) : prev(tycho::utils::get_num_threads()) {
+        tycho::utils::set_num_threads(n);
     }
-    ~ScopedThreadCount() { tycho::set_num_threads(prev); }
+    ~ScopedThreadCount() { tycho::utils::set_num_threads(prev); }
     ScopedThreadCount(const ScopedThreadCount &) = delete;
     ScopedThreadCount &operator=(const ScopedThreadCount &) = delete;
 };

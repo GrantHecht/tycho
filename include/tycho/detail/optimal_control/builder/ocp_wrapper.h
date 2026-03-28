@@ -110,8 +110,8 @@ class OCP {
         ocp_.set_adaptive_mesh(amesh, applytophases);
     }
     void set_mesh_tol(double t) { ocp_.set_mesh_tol(t); }
-    void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
-    void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
+    void set_num_partitions(int n) { ocp_.setNumPartitions(n); }
+    void set_num_partitions(int n, int qp_threads) { ocp_.setNumPartitions(n, qp_threads); }
 
     // ── Optimizer / base access ─────────────────────────────────────────
 

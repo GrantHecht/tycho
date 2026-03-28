@@ -40,6 +40,20 @@
 
 namespace tycho::vf {
 
+// Import commonly-used utils helpers so that downstream vf headers can reference
+// them without the utils:: prefix (they lived in the same flat namespace before
+// the migration).
+using utils::SZ_BINOP;
+using utils::SZ_MAX;
+using utils::SZ_MAXOP;
+using utils::SZ_MIN;
+using utils::SZ_MINOP;
+using utils::SZ_PROD;
+using utils::SZ_PRODOP;
+using utils::SZ_SUM;
+using utils::SZ_SUMOP;
+using utils::return_type_t;
+
 namespace detail {
 
 template <class T> struct IsSuperScalarImpl : std::false_type {};

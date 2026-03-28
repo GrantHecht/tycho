@@ -18,12 +18,22 @@
 #include "pch.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
+// Forward-declare sub-namespaces so that the using-directives below compile
+// even before the module aggregate headers are included (e.g. in the bindings PCH).
+namespace tycho::vf {}
+namespace tycho::oc {}
+namespace tycho::solvers {}
+namespace tycho::astro {}
+namespace tycho::integrators {}
+namespace tycho::utils {}
+
 namespace tycho {
 
 using namespace tycho::vf;
 using namespace tycho::oc;
 using namespace tycho::solvers;
 using namespace tycho::astro;
+using namespace tycho::integrators;
 using namespace tycho::utils;
 
 // Primary template — undefined; specializations in *Bind.h files

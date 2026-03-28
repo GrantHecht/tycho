@@ -43,9 +43,9 @@ void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
     obj.def(nb::init<VectorFunctionalX, int, int, TranscriptionModes>());
 
     obj.def(nb::init<int, int, TranscriptionModes>());
-    obj.def("load_even_data", &LGLInterpTable::loadEvenData);
+    obj.def("load_even_data", &LGLInterpTable::load_even_data);
     obj.def("get_table_ptr", &LGLInterpTable::getTablePtr);
-    obj.def("load_uneven_data", &LGLInterpTable::loadUnevenData);
+    obj.def("load_uneven_data", &LGLInterpTable::load_uneven_data);
     obj.def("interpolate", &LGLInterpTable::Interpolate<double>);
 
     obj.def("new_error_integral", &LGLInterpTable::NewErrorIntegral);
@@ -54,7 +54,7 @@ void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
             nb::is_operator());
 
     obj.def("interpolate_deriv", &LGLInterpTable::InterpolateDeriv<double>);
-    obj.def("make_periodic", &LGLInterpTable::makePeriodic);
+    obj.def("make_periodic", &LGLInterpTable::make_periodic);
 
     obj.def("interp_range", &LGLInterpTable::InterpRange);
     obj.def("interp_whole_range", &LGLInterpTable::InterpWholeRange);

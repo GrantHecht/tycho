@@ -56,111 +56,113 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def(
         "set_traj",
         nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd, Eigen::VectorXi>(
-            &ODEPhaseBase::setTraj),
+            &ODEPhaseBase::set_traj),
         "");
 
     obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
-                                          Eigen::VectorXi, bool>(&ODEPhaseBase::setTraj));
+                                          Eigen::VectorXi, bool>(&ODEPhaseBase::set_traj));
 
     obj.def("set_traj",
-            nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::setTraj),
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::set_traj),
             "");
 
     obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
-                            &ODEPhaseBase::setTraj));
+                            &ODEPhaseBase::set_traj));
 
     obj.def("set_traj",
-            nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::setTraj));
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj));
 
     obj.def("switch_transcription_mode",
             nb::overload_cast<TranscriptionModes, VectorXd, VectorXi>(
-                &ODEPhaseBase::switchTranscriptionMode),
+                &ODEPhaseBase::switch_transcription_mode),
             "");
     obj.def("switch_transcription_mode",
-            nb::overload_cast<TranscriptionModes>(&ODEPhaseBase::switchTranscriptionMode), "");
+            nb::overload_cast<TranscriptionModes>(&ODEPhaseBase::switch_transcription_mode), "");
 
-    obj.def(
-        "switch_transcription_mode",
-        nb::overload_cast<std::string, VectorXd, VectorXi>(&ODEPhaseBase::switchTranscriptionMode),
-        "");
     obj.def("switch_transcription_mode",
-            nb::overload_cast<std::string>(&ODEPhaseBase::switchTranscriptionMode), "");
+            nb::overload_cast<std::string, VectorXd, VectorXi>(
+                &ODEPhaseBase::switch_transcription_mode),
+            "");
+    obj.def("switch_transcription_mode",
+            nb::overload_cast<std::string>(&ODEPhaseBase::switch_transcription_mode), "");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe), "");
 
-    obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refineTrajManual), "");
+    obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refine_traj_manual), "");
     obj.def("refine_traj_manual",
-            nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refineTrajManual), "");
-    obj.def("refine_traj_equal", &ODEPhaseBase::refineTrajEqual, "");
+            nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refine_traj_manual), "");
+    obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal, "");
 
     obj.def("set_static_params",
-            nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::setStaticParams), "");
-    obj.def("set_static_params", nb::overload_cast<VectorXd>(&ODEPhaseBase::setStaticParams), "");
+            nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::set_static_params), "");
+    obj.def("set_static_params", nb::overload_cast<VectorXd>(&ODEPhaseBase::set_static_params), "");
 
     obj.def("add_static_params",
-            nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::addStaticParams));
-    obj.def("add_static_params", nb::overload_cast<VectorXd>(&ODEPhaseBase::addStaticParams));
+            nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::add_static_params));
+    obj.def("add_static_params", nb::overload_cast<VectorXd>(&ODEPhaseBase::add_static_params));
     obj.def("add_static_param_vgroups", nb::overload_cast<std::map<std::string, Eigen::VectorXi>>(
-                                            &ODEPhaseBase::addStaticParamVgroups));
+                                            &ODEPhaseBase::add_static_param_vgroups));
     obj.def("set_static_param_vgroups", nb::overload_cast<std::map<std::string, Eigen::VectorXi>>(
-                                            &ODEPhaseBase::setStaticParamVgroups));
+                                            &ODEPhaseBase::set_static_param_vgroups));
+    obj.def("add_static_param_vgroup", nb::overload_cast<Eigen::VectorXi, std::string>(
+                                           &ODEPhaseBase::add_static_param_vgroup));
     obj.def("add_static_param_vgroup",
-            nb::overload_cast<Eigen::VectorXi, std::string>(&ODEPhaseBase::addStaticParamVgroup));
-    obj.def("add_static_param_vgroup",
-            nb::overload_cast<int, std::string>(&ODEPhaseBase::addStaticParamVgroup));
+            nb::overload_cast<int, std::string>(&ODEPhaseBase::add_static_param_vgroup));
 
-    obj.def("set_control_mode", nb::overload_cast<ControlModes>(&ODEPhaseBase::setControlMode), "");
-    obj.def("set_control_mode", nb::overload_cast<std::string>(&ODEPhaseBase::setControlMode), "");
+    obj.def("set_control_mode", nb::overload_cast<ControlModes>(&ODEPhaseBase::set_control_mode),
+            "");
+    obj.def("set_control_mode", nb::overload_cast<std::string>(&ODEPhaseBase::set_control_mode),
+            "");
 
-    obj.def("set_integral_mode", &ODEPhaseBase::setIntegralMode, "");
+    obj.def("set_integral_mode", &ODEPhaseBase::set_integral_mode, "");
 
-    obj.def("sub_static_params", &ODEPhaseBase::subStaticParams, "");
+    obj.def("sub_static_params", &ODEPhaseBase::sub_static_params, "");
 
     obj.def("sub_variables",
-            nb::overload_cast<PhaseRegionFlags, VectorXi, VectorXd>(&ODEPhaseBase::subVariables),
+            nb::overload_cast<PhaseRegionFlags, VectorXi, VectorXd>(&ODEPhaseBase::sub_variables),
             "");
     obj.def("sub_variable",
-            nb::overload_cast<PhaseRegionFlags, int, double>(&ODEPhaseBase::subVariable), "");
+            nb::overload_cast<PhaseRegionFlags, int, double>(&ODEPhaseBase::sub_variable), "");
 
     obj.def("sub_variables",
-            nb::overload_cast<std::string, VectorXi, VectorXd>(&ODEPhaseBase::subVariables), "");
-    obj.def("sub_variable", nb::overload_cast<std::string, int, double>(&ODEPhaseBase::subVariable),
-            "");
+            nb::overload_cast<std::string, VectorXi, VectorXd>(&ODEPhaseBase::sub_variables), "");
+    obj.def("sub_variable",
+            nb::overload_cast<std::string, int, double>(&ODEPhaseBase::sub_variable), "");
 
-    obj.def("return_traj", &ODEPhaseBase::returnTraj, "");
-    obj.def("return_traj_range", &ODEPhaseBase::returnTrajRange, "");
-    obj.def("return_traj_range_nd", &ODEPhaseBase::returnTrajRangeND, "");
-    obj.def("return_traj_table", &ODEPhaseBase::returnTrajTable);
+    obj.def("return_traj", &ODEPhaseBase::return_traj, "");
+    obj.def("return_traj_range", &ODEPhaseBase::return_traj_range, "");
+    obj.def("return_traj_range_nd", &ODEPhaseBase::return_traj_range_nd, "");
+    obj.def("return_traj_table", &ODEPhaseBase::return_traj_table);
 
-    obj.def("return_costate_traj", &ODEPhaseBase::returnCostateTraj, "");
-    obj.def("return_traj_error", &ODEPhaseBase::returnTrajError);
+    obj.def("return_costate_traj", &ODEPhaseBase::return_costate_traj, "");
+    obj.def("return_traj_error", &ODEPhaseBase::return_traj_error);
 
-    obj.def("return_u_spline_con_lmults", &ODEPhaseBase::returnUSplineConLmults);
-    obj.def("return_u_spline_con_vals", &ODEPhaseBase::returnUSplineConVals);
+    obj.def("return_u_spline_con_lmults", &ODEPhaseBase::return_u_spline_con_lmults);
+    obj.def("return_u_spline_con_vals", &ODEPhaseBase::return_u_spline_con_vals);
 
-    obj.def("return_equal_con_lmults", &ODEPhaseBase::returnEqualConLmults, "");
-    obj.def("return_equal_con_vals", &ODEPhaseBase::returnEqualConVals);
-    obj.def("return_equal_con_scales", &ODEPhaseBase::returnEqualConScales);
+    obj.def("return_equal_con_lmults", &ODEPhaseBase::return_equal_con_lmults, "");
+    obj.def("return_equal_con_vals", &ODEPhaseBase::return_equal_con_vals);
+    obj.def("return_equal_con_scales", &ODEPhaseBase::return_equal_con_scales);
 
-    obj.def("return_inequal_con_lmults", &ODEPhaseBase::returnInequalConLmults, "");
-    obj.def("return_inequal_con_vals", &ODEPhaseBase::returnInequalConVals);
-    obj.def("return_inequal_con_scales", &ODEPhaseBase::returnInequalConScales);
+    obj.def("return_inequal_con_lmults", &ODEPhaseBase::return_inequal_con_lmults, "");
+    obj.def("return_inequal_con_vals", &ODEPhaseBase::return_inequal_con_vals);
+    obj.def("return_inequal_con_scales", &ODEPhaseBase::return_inequal_con_scales);
 
-    obj.def("return_integral_objective_scales", &ODEPhaseBase::returnIntegralObjectiveScales);
+    obj.def("return_integral_objective_scales", &ODEPhaseBase::return_integral_objective_scales);
     obj.def("return_integral_param_function_scales",
-            &ODEPhaseBase::returnIntegralParamFunctionScales);
-    obj.def("return_state_objective_scales", &ODEPhaseBase::returnStateObjectiveScales);
-    obj.def("return_ode_output_scales", &ODEPhaseBase::returnODEOutputScales);
+            &ODEPhaseBase::return_integral_param_function_scales);
+    obj.def("return_state_objective_scales", &ODEPhaseBase::return_state_objective_scales);
+    obj.def("return_ode_output_scales", &ODEPhaseBase::return_ode_output_scales);
 
-    obj.def("return_static_params", &ODEPhaseBase::returnStaticParams, "");
+    obj.def("return_static_params", &ODEPhaseBase::return_static_params, "");
 
     obj.def("test_partitions", &ODEPhaseBase::test_partitions);
 
-    obj.def("remove_equal_con", &ODEPhaseBase::removeEqualCon, "");
-    obj.def("remove_inequal_con", &ODEPhaseBase::removeInequalCon, "");
-    obj.def("remove_state_objective", &ODEPhaseBase::removeStateObjective, "");
-    obj.def("remove_integral_objective", &ODEPhaseBase::removeIntegralObjective, "");
-    obj.def("remove_integral_param_function", &ODEPhaseBase::removeIntegralParamFunction, "");
+    obj.def("remove_equal_con", &ODEPhaseBase::remove_equal_con, "");
+    obj.def("remove_inequal_con", &ODEPhaseBase::remove_inequal_con, "");
+    obj.def("remove_state_objective", &ODEPhaseBase::remove_state_objective, "");
+    obj.def("remove_integral_objective", &ODEPhaseBase::remove_integral_objective, "");
+    obj.def("remove_integral_param_function", &ODEPhaseBase::remove_integral_param_function, "");
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /////////////////////////////////////////////
@@ -168,83 +170,83 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
 
     obj.def("add_equal_con",
             nb::overload_cast<RegionType, VectorFunctionalX, VarIndexType, VarIndexType,
-                              VarIndexType, ScaleType>(&ODEPhaseBase::addEqualCon),
+                              VarIndexType, ScaleType>(&ODEPhaseBase::add_equal_con),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
             nb::arg("SPVars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_equal_con",
             nb::overload_cast<RegionType, VectorFunctionalX, VarIndexType, ScaleType>(
-                &ODEPhaseBase::addEqualCon),
+                &ODEPhaseBase::add_equal_con),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("InputIndex"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_boundary_value",
             nb::overload_cast<RegionType, VarIndexType, const std::variant<double, VectorXd> &,
-                              ScaleType>(&ODEPhaseBase::addBoundaryValue),
+                              ScaleType>(&ODEPhaseBase::add_boundary_value),
             nb::arg("PhaseRegion"), nb::arg("Index"), nb::arg("Value"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_delta_var_equal_con",
             nb::overload_cast<VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addDeltaVarEqualCon),
+                &ODEPhaseBase::add_delta_var_equal_con),
             nb::arg("var"), nb::arg("value"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_delta_time_equal_con",
-            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::addDeltaTimeEqualCon),
+            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::add_delta_time_equal_con),
             nb::arg("value"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_value_lock",
-            nb::overload_cast<RegionType, VarIndexType, ScaleType>(&ODEPhaseBase::addValueLock),
+            nb::overload_cast<RegionType, VarIndexType, ScaleType>(&ODEPhaseBase::add_value_lock),
             nb::arg("reg"), nb::arg("vars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_periodicity_con",
-            nb::overload_cast<VarIndexType, ScaleType>(&ODEPhaseBase::addPeriodicityCon),
+            nb::overload_cast<VarIndexType, ScaleType>(&ODEPhaseBase::add_periodicity_con),
             nb::arg("vars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     //////////////////////////////////
     /////// InequalCons
     obj.def("add_inequal_con",
             nb::overload_cast<RegionType, VectorFunctionalX, VarIndexType, VarIndexType,
-                              VarIndexType, ScaleType>(&ODEPhaseBase::addInequalCon),
+                              VarIndexType, ScaleType>(&ODEPhaseBase::add_inequal_con),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
             nb::arg("SPVars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_inequal_con",
             nb::overload_cast<RegionType, VectorFunctionalX, VarIndexType, ScaleType>(
-                &ODEPhaseBase::addInequalCon),
+                &ODEPhaseBase::add_inequal_con),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("InputIndex"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_lu_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, double, ScaleType>(
-                &ODEPhaseBase::addLUVarBound),
+                &ODEPhaseBase::add_lu_var_bound),
             nb::arg("PhaseRegion"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("upperbound"),
             nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
     obj.def("add_lower_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addLowerVarBound),
+                &ODEPhaseBase::add_lower_var_bound),
             nb::arg("PhaseRegion"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_upper_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addUpperVarBound),
+                &ODEPhaseBase::add_upper_var_bound),
             nb::arg("PhaseRegion"), nb::arg("var"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def(
         "add_lu_func_bound",
         nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, VarIndexType, VarIndexType,
-                          double, double, double, ScaleType>(&ODEPhaseBase::addLUFuncBound),
+                          double, double, double, ScaleType>(&ODEPhaseBase::add_lu_func_bound),
         nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
         nb::arg("SPVars"), nb::arg("lowerbound"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
         nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_lu_func_bound",
             nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, double, double, double,
-                              ScaleType>(&ODEPhaseBase::addLUFuncBound),
+                              ScaleType>(&ODEPhaseBase::add_lu_func_bound),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
             nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
@@ -252,7 +254,7 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def(
         "add_lower_func_bound",
         nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, VarIndexType, VarIndexType,
-                          double, double, ScaleType>(&ODEPhaseBase::addLowerFuncBound),
+                          double, double, ScaleType>(&ODEPhaseBase::add_lower_func_bound),
         nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
         nb::arg("SPVars"), nb::arg("lowerbound"), nb::arg("scale") = 1.0,
         nb::arg("AutoScale").none() = std::string("auto"));
@@ -260,14 +262,14 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def(
         "add_lower_func_bound",
         nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, double, double, ScaleType>(
-            &ODEPhaseBase::addLowerFuncBound),
+            &ODEPhaseBase::add_lower_func_bound),
         nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
         nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def(
         "add_upper_func_bound",
         nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, VarIndexType, VarIndexType,
-                          double, double, ScaleType>(&ODEPhaseBase::addUpperFuncBound),
+                          double, double, ScaleType>(&ODEPhaseBase::add_upper_func_bound),
         nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
         nb::arg("SPVars"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
         nb::arg("AutoScale").none() = std::string("auto"));
@@ -275,20 +277,20 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def(
         "add_upper_func_bound",
         nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, double, double, ScaleType>(
-            &ODEPhaseBase::addUpperFuncBound),
+            &ODEPhaseBase::add_upper_func_bound),
         nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUPVars"), nb::arg("upperbound"),
         nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_lu_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, double, ScaleType>(
-                &ODEPhaseBase::addLUNormBound),
+                &ODEPhaseBase::add_lu_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
             nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_lu_squared_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, double, ScaleType>(
-                &ODEPhaseBase::addLUSquaredNormBound),
+                &ODEPhaseBase::add_lu_squared_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
             nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
@@ -296,145 +298,146 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     //
     obj.def("add_lower_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addLowerNormBound),
+                &ODEPhaseBase::add_lower_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
             nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_lower_squared_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addLowerSquaredNormBound),
+                &ODEPhaseBase::add_lower_squared_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("lowerbound"),
             nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
     //
     obj.def("add_upper_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addUpperNormBound),
+                &ODEPhaseBase::add_upper_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("upperbound"),
             nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_upper_squared_norm_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addUpperSquaredNormBound),
+                &ODEPhaseBase::add_upper_squared_norm_bound),
             nb::arg("PhaseRegion"), nb::arg("XtUPVars"), nb::arg("upperbound"),
             nb::arg("scale") = 1.0, nb::arg("AutoScale").none() = std::string("auto"));
     //
     obj.def("add_lower_delta_var_bound",
             nb::overload_cast<VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addLowerDeltaVarBound),
+                &ODEPhaseBase::add_lower_delta_var_bound),
             nb::arg("Var"), nb::arg("lowerbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
     obj.def("add_lower_delta_time_bound",
-            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::addLowerDeltaTimeBound),
+            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::add_lower_delta_time_bound),
             nb::arg("lowerbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
     //
     obj.def("add_upper_delta_var_bound",
             nb::overload_cast<VarIndexType, double, double, ScaleType>(
-                &ODEPhaseBase::addUpperDeltaVarBound),
+                &ODEPhaseBase::add_upper_delta_var_bound),
             nb::arg("Var"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
     obj.def("add_upper_delta_time_bound",
-            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::addUpperDeltaTimeBound),
+            nb::overload_cast<double, double, ScaleType>(&ODEPhaseBase::add_upper_delta_time_bound),
             nb::arg("upperbound"), nb::arg("scale") = 1.0,
             nb::arg("AutoScale").none() = std::string("auto"));
     //////////////////////////////////
     /////// StateObjectives /////////
     obj.def("add_state_objective",
             nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, VarIndexType,
-                              VarIndexType, ScaleType>(&ODEPhaseBase::addStateObjective),
+                              VarIndexType, ScaleType>(&ODEPhaseBase::add_state_objective),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"),
             nb::arg("SPVars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_state_objective",
             nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, ScaleType>(
-                &ODEPhaseBase::addStateObjective),
+                &ODEPhaseBase::add_state_objective),
             nb::arg("PhaseRegion"), nb::arg("Func"), nb::arg("InputIndex"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_value_objective",
             nb::overload_cast<RegionType, VarIndexType, double, ScaleType>(
-                &ODEPhaseBase::addValueObjective),
+                &ODEPhaseBase::add_value_objective),
             nb::arg("PhaseRegion"), nb::arg("Var"), nb::arg("scale"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
-    obj.def("add_delta_var_objective",
-            nb::overload_cast<VarIndexType, double, ScaleType>(&ODEPhaseBase::addDeltaVarObjective),
-            nb::arg("Var"), nb::arg("scale"), nb::arg("AutoScale").none() = std::string("auto"));
+    obj.def(
+        "add_delta_var_objective",
+        nb::overload_cast<VarIndexType, double, ScaleType>(&ODEPhaseBase::add_delta_var_objective),
+        nb::arg("Var"), nb::arg("scale"), nb::arg("AutoScale").none() = std::string("auto"));
     obj.def("add_delta_time_objective",
-            nb::overload_cast<double, ScaleType>(&ODEPhaseBase::addDeltaTimeObjective),
+            nb::overload_cast<double, ScaleType>(&ODEPhaseBase::add_delta_time_objective),
             nb::arg("Var"), nb::arg("AutoScale").none() = std::string("auto"));
     //////////////////////////////////
     /////// IntegralObjectives /////////
     obj.def(
         "add_integral_objective",
         nb::overload_cast<ScalarFunctionalX, VarIndexType, VarIndexType, VarIndexType, ScaleType>(
-            &ODEPhaseBase::addIntegralObjective),
+            &ODEPhaseBase::add_integral_objective),
         nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"), nb::arg("SPVars"),
         nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_integral_objective",
             nb::overload_cast<ScalarFunctionalX, VarIndexType, ScaleType>(
-                &ODEPhaseBase::addIntegralObjective),
+                &ODEPhaseBase::add_integral_objective),
             nb::arg("Func"), nb::arg("InputIndex"),
             nb::arg("AutoScale").none() = std::string("auto"));
     //////////////////////////////////
     /////// IntegralParamFunction /////////
     obj.def("add_integral_param_function",
             nb::overload_cast<ScalarFunctionalX, VarIndexType, VarIndexType, VarIndexType, int,
-                              ScaleType>(&ODEPhaseBase::addIntegralParamFunction),
+                              ScaleType>(&ODEPhaseBase::add_integral_param_function),
             nb::arg("Func"), nb::arg("XtUVars"), nb::arg("OPVars"), nb::arg("SPVars"),
             nb::arg("IntParam"), nb::arg("AutoScale").none() = std::string("auto"));
 
     obj.def("add_integral_param_function",
             nb::overload_cast<ScalarFunctionalX, VarIndexType, int, ScaleType>(
-                &ODEPhaseBase::addIntegralParamFunction),
+                &ODEPhaseBase::add_integral_param_function),
             nb::arg("Func"), nb::arg("InputIndex"), nb::arg("IntParam"),
             nb::arg("AutoScale").none() = std::string("auto"));
 
     ///////////////////////////////////////////////////////////////////
 
-    obj.def("add_equal_con", nb::overload_cast<StateConstraint>(&ODEPhaseBase::addEqualCon), "");
+    obj.def("add_equal_con", nb::overload_cast<StateConstraint>(&ODEPhaseBase::add_equal_con), "");
 
     ///////////////////////////////////////////////////////////////////////////////
 
-    obj.def("add_inequal_con", nb::overload_cast<StateConstraint>(&ODEPhaseBase::addInequalCon),
+    obj.def("add_inequal_con", nb::overload_cast<StateConstraint>(&ODEPhaseBase::add_inequal_con),
             "");
     ////////////////////////////////////////////////////////////////////////////
     obj.def("add_lu_var_bounds",
             nb::overload_cast<PhaseRegionFlags, Eigen::VectorXi, double, double, double>(
-                &ODEPhaseBase::addLUVarBounds),
+                &ODEPhaseBase::add_lu_var_bounds),
             "");
     obj.def("add_lu_var_bounds",
             nb::overload_cast<std::string, Eigen::VectorXi, double, double, double>(
-                &ODEPhaseBase::addLUVarBounds),
+                &ODEPhaseBase::add_lu_var_bounds),
             "");
 
     ////////////////////////////////////////////////////////////////////////////
     obj.def("add_state_objective",
-            nb::overload_cast<StateObjective>(&ODEPhaseBase::addStateObjective), "");
+            nb::overload_cast<StateObjective>(&ODEPhaseBase::add_state_objective), "");
 
     ////////////////////////////////////////////////////////////////////////////
 
     obj.def("add_integral_objective",
-            nb::overload_cast<StateObjective>(&ODEPhaseBase::addIntegralObjective), "");
+            nb::overload_cast<StateObjective>(&ODEPhaseBase::add_integral_objective), "");
 
     ///////////////////////////////////////////////////////////////////////////////
     obj.def("add_integral_param_function",
-            nb::overload_cast<StateObjective, int>(&ODEPhaseBase::addIntegralParamFunction), "");
+            nb::overload_cast<StateObjective, int>(&ODEPhaseBase::add_integral_param_function), "");
 
     ////////////////////////////////////////////////////
-    obj.def("get_mesh_info", &ODEPhaseBase::getMeshInfo);
-    obj.def("refine_traj_auto", &ODEPhaseBase::refineTrajAuto);
+    obj.def("get_mesh_info", &ODEPhaseBase::get_mesh_info);
+    obj.def("refine_traj_auto", &ODEPhaseBase::refine_traj_auto);
     obj.def("calc_global_error", &ODEPhaseBase::calc_global_error);
-    obj.def("get_mesh_iters", &ODEPhaseBase::getMeshIters);
+    obj.def("get_mesh_iters", &ODEPhaseBase::get_mesh_iters);
 
     obj.def_rw("adaptive_mesh", &ODEPhaseBase::AdaptiveMesh);
     obj.def_rw("auto_scaling", &ODEPhaseBase::AutoScaling);
     obj.def_rw("sync_objective_scales", &ODEPhaseBase::SyncObjectiveScales);
 
-    obj.def("set_auto_scaling", &ODEPhaseBase::setAutoScaling, nb::arg("AutoScaling") = true);
+    obj.def("set_auto_scaling", &ODEPhaseBase::set_auto_scaling, nb::arg("AutoScaling") = true);
 
-    obj.def("set_adaptive_mesh", &ODEPhaseBase::setAdaptiveMesh, nb::arg("AdaptiveMesh") = true);
+    obj.def("set_adaptive_mesh", &ODEPhaseBase::set_adaptive_mesh, nb::arg("AdaptiveMesh") = true);
 
     obj.def("set_units", [](ODEPhaseBase &self, nb::kwargs kwargs) {
         nb::module_ builtins = nb::module_::import_("builtins");
@@ -482,29 +485,29 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
                 Units[idxs[i]] = units[i];
             }
         }
-        self.setUnits(Units);
+        self.set_units(Units);
     });
-    obj.def("set_units", nb::overload_cast<const Eigen::VectorXd &>(&ODEPhaseBase::setUnits));
+    obj.def("set_units", nb::overload_cast<const Eigen::VectorXd &>(&ODEPhaseBase::set_units));
 
-    obj.def("set_mesh_tol", &ODEPhaseBase::setMeshTol);
-    obj.def("set_mesh_red_factor", &ODEPhaseBase::setMeshRedFactor);
-    obj.def("set_mesh_inc_factor", &ODEPhaseBase::setMeshIncFactor);
-    obj.def("set_mesh_err_factor", &ODEPhaseBase::setMeshErrFactor);
-    obj.def("set_max_mesh_iters", &ODEPhaseBase::setMaxMeshIters);
-    obj.def("set_min_segments", &ODEPhaseBase::setMinSegments);
-    obj.def("set_max_segments", &ODEPhaseBase::setMaxSegments);
+    obj.def("set_mesh_tol", &ODEPhaseBase::set_mesh_tol);
+    obj.def("set_mesh_red_factor", &ODEPhaseBase::set_mesh_red_factor);
+    obj.def("set_mesh_inc_factor", &ODEPhaseBase::set_mesh_inc_factor);
+    obj.def("set_mesh_err_factor", &ODEPhaseBase::set_mesh_err_factor);
+    obj.def("set_max_mesh_iters", &ODEPhaseBase::set_max_mesh_iters);
+    obj.def("set_min_segments", &ODEPhaseBase::set_min_segments);
+    obj.def("set_max_segments", &ODEPhaseBase::set_max_segments);
     obj.def("set_mesh_error_criteria",
-            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::setMeshErrorCriteria));
+            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::set_mesh_error_criteria));
     obj.def("set_mesh_error_criteria",
-            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorCriteria));
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::set_mesh_error_criteria));
     obj.def("set_mesh_error_estimator",
-            nb::overload_cast<MeshErrorEstimators>(&ODEPhaseBase::setMeshErrorEstimator));
+            nb::overload_cast<MeshErrorEstimators>(&ODEPhaseBase::set_mesh_error_estimator));
     obj.def("set_mesh_error_estimator",
-            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorEstimator));
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::set_mesh_error_estimator));
     obj.def("set_mesh_error_distributor",
-            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::setMeshErrorDistributor));
+            nb::overload_cast<MeshErrorAggregation>(&ODEPhaseBase::set_mesh_error_distributor));
     obj.def("set_mesh_error_distributor",
-            nb::overload_cast<const std::string &>(&ODEPhaseBase::setMeshErrorDistributor));
+            nb::overload_cast<const std::string &>(&ODEPhaseBase::set_mesh_error_distributor));
 
     obj.def_rw("print_mesh_info", &ODEPhaseBase::PrintMeshInfo);
     obj.def_rw("max_mesh_iters", &ODEPhaseBase::MaxMeshIters);

@@ -44,6 +44,16 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+
 template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     static const int UV = 0;
     static const int PV = SZ_SUM<DODE::PV, DODE::UV>::value;

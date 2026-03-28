@@ -38,9 +38,9 @@ void MatrixFunctionBuild(nb::module_ &m) {
         if (cols == 0) {
             throw std::invalid_argument("List must contain at least one function.");
         }
-        int rows = colfuns[0].ORows();
+        int rows = colfuns[0].output_rows();
         for (auto &fun : colfuns)
-            if (fun.ORows() != rows)
+            if (fun.output_rows() != rows)
                 throw std::invalid_argument("Column Functions must have same output size");
         auto tmp = DynamicStack(colfuns);
         new (self) colmattype(tmp, rows, cols);
@@ -124,9 +124,9 @@ void MatrixFunctionBuild(nb::module_ &m) {
         if (rows == 0) {
             throw std::invalid_argument("List must contain at least one function.");
         }
-        int cols = rowfuns[0].ORows();
+        int cols = rowfuns[0].output_rows();
         for (auto &fun : rowfuns)
-            if (fun.ORows() != cols)
+            if (fun.output_rows() != cols)
                 throw std::invalid_argument("Row Functions must have same output size");
         auto tmp = DynamicStack(rowfuns);
         new (self) rowmattype(tmp, rows, cols);
@@ -208,12 +208,14 @@ void MatrixFunctionBuild(nb::module_ &m) {
     */
 
     ColMat.def("__mul__", [](const colmattype &m1, const Func &m2) {
-        auto tmp = MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto tmp =
+            MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp); // Result must be vector
     });
 
     RowMat.def("__mul__", [](const rowmattype &m1, const Func &m2) {
-        auto tmp = MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto tmp =
+            MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp);
     });
 
@@ -231,13 +233,15 @@ void MatrixFunctionBuild(nb::module_ &m) {
     });
 
     m.def("matmul", [](const colmattype &m1, const Func &m2) {
-        auto tmp = MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto tmp =
+            MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp);
     });
 
     m.def("matmul", [](const colmattype &m1, const Eigen::VectorXd &v) {
-        auto m2 = Constant<-1, -1>(m1.IRows(), v);
-        auto tmp = MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto m2 = Constant<-1, -1>(m1.input_rows(), v);
+        auto tmp =
+            MatrixFunctionProduct<colmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp);
     });
 
@@ -252,13 +256,15 @@ void MatrixFunctionBuild(nb::module_ &m) {
     });
 
     m.def("matmul", [](const rowmattype &m1, const Func &m2) {
-        auto tmp = MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto tmp =
+            MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp);
     });
 
     m.def("matmul", [](const rowmattype &m1, const Eigen::VectorXd &v) {
-        auto m2 = Constant<-1, -1>(m1.IRows(), v);
-        auto tmp = MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.ORows(), 1));
+        auto m2 = Constant<-1, -1>(m1.input_rows(), v);
+        auto tmp =
+            MatrixFunctionProduct<rowmattype, colvectype>(m1, colvectype(m2, m2.output_rows(), 1));
         return GenericFunction<-1, -1>(tmp);
     });
 

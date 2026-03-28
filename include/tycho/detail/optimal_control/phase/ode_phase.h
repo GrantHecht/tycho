@@ -51,6 +51,20 @@
 
 namespace tycho::oc {
 
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
+using vf::ThreadingFlags;
+using vf::Arguments;
+using vf::IOScaled;
+using vf::RowScaled;
+using integrators::Integrator;
+
 template <class DODE> struct ODEPhase : ODEPhaseBase {
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;
@@ -160,7 +174,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         Integ.RelTols = this->integrator.RelTols;
         Integ.MinStepSize = this->integrator.MinStepSize;
         Integ.MaxStepSize = this->integrator.MaxStepSize;
-        Integ.EnableVectorization = this->EnableVectorization;
+        Integ.enable_vectorization_ = this->EnableVectorization;
 
         return Integ;
     }
@@ -181,7 +195,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         Integ.RelTols = this->integrator.RelTols;
         Integ.MinStepSize = this->integrator.MinStepSize;
         Integ.MaxStepSize = this->integrator.MaxStepSize;
-        Integ.EnableVectorization = this->EnableVectorization;
+        Integ.enable_vectorization_ = this->EnableVectorization;
 
         return Integ;
     }
@@ -254,7 +268,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     LGLType<decltype(ode_t), cs.value> lgl(ode_t);
-                    lgl.EnableVectorization = this->EnableVectorization;
+                    lgl.enable_vectorization_ = this->EnableVectorization;
                     this->DynamicsFuncIndex =
                         this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
                                                   empty, ThreadingFlags::ByApplication);
@@ -263,14 +277,14 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     using BlockedODE = Blocked_ODE_Wrapper<decltype(ode_t)>;
 
                     auto lgl = LGLDefects<BlockedODE, cs.value>(BlockedODE(ode_t));
-                    lgl.EnableVectorization = this->EnableVectorization;
+                    lgl.enable_vectorization_ = this->EnableVectorization;
                     this->DynamicsFuncIndex =
                         this->indexer.add_equality(lgl, PhaseRegionFlags::BlockDefectPath, StateT,
                                                   OParT, empty, ThreadingFlags::ByApplication);
                 }
             } else {
                 LGLType<decltype(ode_t), cs.value> lgl(ode_t);
-                lgl.EnableVectorization = this->EnableVectorization;
+                lgl.enable_vectorization_ = this->EnableVectorization;
                 this->DynamicsFuncIndex =
                     this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
                                               empty, ThreadingFlags::ByApplication);
@@ -282,7 +296,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
-                    trap.EnableVectorization = this->EnableVectorization;
+                    trap.enable_vectorization_ = this->EnableVectorization;
                     this->DynamicsFuncIndex =
                         this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
                                                   empty, ThreadingFlags::ByApplication);
@@ -290,7 +304,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     using BlockedODE = Blocked_ODE_Wrapper<decltype(ode_t)>;
 
                     auto trap = TrapezoidalDefects<BlockedODE>(BlockedODE(ode_t));
-                    trap.EnableVectorization = this->EnableVectorization;
+                    trap.enable_vectorization_ = this->EnableVectorization;
                     // trap.EnableHessianSparsity = this->EnableHessianSparsity;
                     this->DynamicsFuncIndex =
                         this->indexer.add_equality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
@@ -299,7 +313,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
             } else {
                 TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
-                trap.EnableVectorization = this->EnableVectorization;
+                trap.enable_vectorization_ = this->EnableVectorization;
                 this->DynamicsFuncIndex =
                     this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
                                               empty, ThreadingFlags::ByApplication);
@@ -364,7 +378,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.AbsTols = this->integrator.AbsTols;
             Integ.MinStepSize = this->integrator.MinStepSize;
             Integ.MaxStepSize = this->integrator.MaxStepSize;
-            Integ.EnableVectorization = this->EnableVectorization;
+            Integ.enable_vectorization_ = this->EnableVectorization;
             Integ.VectorizeBatchCalls = this->integrator.VectorizeBatchCalls;
 
             if (OldShootingDefect) {
@@ -374,7 +388,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             } else {
                 auto shooter = CentralShootingDefect{this->ode_scaled, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                shooter.EnableVectorization = this->EnableVectorization;
+                shooter.enable_vectorization_ = this->EnableVectorization;
                 return tycho::solvers::ConstraintInterface(shooter);
             }
         }
@@ -386,7 +400,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.AbsTols = this->integrator.AbsTols;
             Integ.MinStepSize = this->integrator.MinStepSize;
             Integ.MaxStepSize = this->integrator.MaxStepSize;
-            Integ.EnableVectorization = this->EnableVectorization;
+            Integ.enable_vectorization_ = this->EnableVectorization;
             Integ.VectorizeBatchCalls = this->integrator.VectorizeBatchCalls;
 
             if (OldShootingDefect) {
@@ -396,7 +410,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             } else {
                 auto shooter = CentralShootingDefect{this->ode, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                shooter.EnableVectorization = this->EnableVectorization;
+                shooter.enable_vectorization_ = this->EnableVectorization;
                 return tycho::solvers::ConstraintInterface(shooter);
             }
         }

@@ -31,6 +31,9 @@
 
 namespace tycho::solvers {
 
+// Import cross-namespace types used by OptimizationProblem.
+using vf::GenericFunction;
+
 struct OptimizationProblem : OptimizationProblemBase {
 
     using VectorXi = Eigen::VectorXi;
@@ -71,7 +74,7 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     template <class T> static void check_function_size(const T &func, std::string ftype) {
-        int irows = func.func.IRows();
+        int irows = func.func.input_rows();
         for (auto &index : func.indices) {
             int isize = index.size();
             if (irows != isize) {

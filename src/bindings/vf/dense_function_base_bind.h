@@ -28,8 +28,8 @@ template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
 
     using Gen = GenericFunction<-1, -1>;
 
-    obj.def("input_rows", &Derived::IRows);
-    obj.def("output_rows", &Derived::ORows);
+    obj.def("input_rows", &Derived::input_rows);
+    obj.def("output_rows", &Derived::output_rows);
     obj.def("name", &Derived::name);
 
     obj.def("input_domain", &Derived::input_domain);
@@ -38,64 +38,64 @@ template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
     // Generic lambda bodies — defined once, called from both the zero-copy
     // (ConstEigenRef/numpy) and the sequence-fallback (VectorXd) overloads.
     auto compute_body = [](const Derived &func, const auto &x) -> Eigen::VectorXd {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Eigen::VectorXd fx(func.ORows());
+        Eigen::VectorXd fx(func.output_rows());
         fx.setZero();
         func.derived().compute(x, fx);
         return fx;
     };
     auto jacobian_body = [](const Derived &func, const auto &x) -> Eigen::MatrixXd {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Eigen::MatrixXd jx(func.ORows(), func.IRows());
+        Eigen::MatrixXd jx(func.output_rows(), func.input_rows());
         jx.setZero();
         func.derived().jacobian(x, jx);
         return jx;
     };
     auto compute_jacobian_body = [](const Derived &func,
                                     const auto &x) -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd> {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        Eigen::VectorXd fx(func.ORows());
+        Eigen::VectorXd fx(func.output_rows());
         fx.setZero();
-        Eigen::MatrixXd jx(func.ORows(), func.IRows());
+        Eigen::MatrixXd jx(func.output_rows(), func.input_rows());
         jx.setZero();
         func.derived().compute_jacobian(x, fx, jx);
         return std::tuple{fx, jx};
     };
     auto adjointgradient_body = [](const Derived &func, const auto &x,
                                    const auto &lm) -> Eigen::VectorXd {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        if ((int)lm.size() != func.ORows())
+        if ((int)lm.size() != func.output_rows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Eigen::VectorXd ax(func.IRows());
+        Eigen::VectorXd ax(func.input_rows());
         ax.setZero();
         func.derived().adjointgradient(x, ax, lm);
         return ax;
     };
     auto adjointhessian_body = [](const Derived &func, const auto &x,
                                   const auto &lm) -> Eigen::MatrixXd {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        if ((int)lm.size() != func.ORows())
+        if ((int)lm.size() != func.output_rows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Eigen::MatrixXd hx(func.IRows(), func.IRows());
+        Eigen::MatrixXd hx(func.input_rows(), func.input_rows());
         hx.setZero();
         func.derived().adjointhessian(x, hx, lm);
         return hx;
     };
     auto computeall_body = [](const Derived &func, const auto &x, const auto &lm)
         -> std::tuple<Eigen::VectorXd, Eigen::MatrixXd, Eigen::VectorXd, Eigen::MatrixXd> {
-        if ((int)x.size() != func.IRows())
+        if ((int)x.size() != func.input_rows())
             throw std::invalid_argument("Incorrectly sized input to function");
-        if ((int)lm.size() != func.ORows())
+        if ((int)lm.size() != func.output_rows())
             throw std::invalid_argument("Incorrectly sized multiplier input to function");
-        Eigen::VectorXd fx(func.ORows());
-        Eigen::MatrixXd jx(func.ORows(), func.IRows());
-        Eigen::VectorXd gx(func.IRows());
-        Eigen::MatrixXd hx(func.IRows(), func.IRows());
+        Eigen::VectorXd fx(func.output_rows());
+        Eigen::MatrixXd jx(func.output_rows(), func.input_rows());
+        Eigen::VectorXd gx(func.input_rows());
+        Eigen::MatrixXd hx(func.input_rows(), func.input_rows());
         fx.setZero();
         jx.setZero();
         gx.setZero();
@@ -150,11 +150,11 @@ template <class Derived, class PYClass> void DenseBaseBuild(PYClass &obj) {
         return computeall_body(f, x, lm);
     });
 
-    obj.def("vf", &Derived::template MakeGeneric<GenericFunction<-1, -1>>);
+    obj.def("vf", &Derived::template make_generic<GenericFunction<-1, -1>>);
 
     constexpr int OR = Derived::ORC;
     if constexpr (OR == 1) {
-        obj.def("sf", &Derived::template MakeGeneric<GenericFunction<-1, 1>>);
+        obj.def("sf", &Derived::template make_generic<GenericFunction<-1, 1>>);
     }
 }
 
@@ -287,7 +287,7 @@ template <class Derived, class PYClass> void UnaryMathBuild(PYClass &obj) {
             /// Try to fit these to constant size 2,3 if possible
 
             auto SizeSwitch = [](const auto &fun, auto Lam) {
-                int orr = fun.ORows();
+                int orr = fun.output_rows();
                 // if (orr == 2)     return Lam(fun, std::integral_constant<int, 2>());
                 // else
                 if (orr == 3)
@@ -297,73 +297,73 @@ template <class Derived, class PYClass> void UnaryMathBuild(PYClass &obj) {
 
             obj.def("norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(Norm<size.value>(funt.ORows()).eval(funt));
+                    return GenS(Norm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("squared_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(SquaredNorm<size.value>(funt.ORows()).eval(funt));
+                    return GenS(SquaredNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("cubed_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(NormPower<size.value, 3>(funt.ORows()).eval(funt));
+                    return GenS(NormPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("inverse_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(InverseNorm<size.value>(funt.ORows()).eval(funt));
+                    return GenS(InverseNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("inverse_squared_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(InverseSquaredNorm<size.value>(funt.ORows()).eval(funt));
+                    return GenS(InverseSquaredNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("inverse_cubed_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(InverseNormPower<size.value, 3>(funt.ORows()).eval(funt));
+                    return GenS(InverseNormPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("inverse_four_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return GenS(InverseNormPower<size.value, 4>(funt.ORows()).eval(funt));
+                    return GenS(InverseNormPower<size.value, 4>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("normalized", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return Gen(Normalized<size.value>(funt.ORows()).eval(funt));
+                    return Gen(Normalized<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("normalized_power2", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return Gen(NormalizedPower<size.value, 2>(funt.ORows()).eval(funt));
+                    return Gen(NormalizedPower<size.value, 2>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("normalized_power3", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return Gen(NormalizedPower<size.value, 3>(funt.ORows()).eval(funt));
+                    return Gen(NormalizedPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("normalized_power4", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return Gen(NormalizedPower<size.value, 4>(funt.ORows()).eval(funt));
+                    return Gen(NormalizedPower<size.value, 4>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
             obj.def("normalized_power5", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
-                    return Gen(NormalizedPower<size.value, 5>(funt.ORows()).eval(funt));
+                    return Gen(NormalizedPower<size.value, 5>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
             });
@@ -372,13 +372,13 @@ template <class Derived, class PYClass> void UnaryMathBuild(PYClass &obj) {
 
     if constexpr (OR == 1) {
 
-        obj.def("sin", [](const Derived &a) { return GenS(a.Sin()); });
-        obj.def("cos", [](const Derived &a) { return GenS(a.Cos()); });
-        obj.def("tan", [](const Derived &a) { return GenS(a.Tan()); });
-        obj.def("sqrt", [](const Derived &a) { return GenS(a.Sqrt()); });
-        obj.def("exp", [](const Derived &a) { return GenS(a.Exp()); });
+        obj.def("sin", [](const Derived &a) { return GenS(a.sin()); });
+        obj.def("cos", [](const Derived &a) { return GenS(a.cos()); });
+        obj.def("tan", [](const Derived &a) { return GenS(a.tan()); });
+        obj.def("sqrt", [](const Derived &a) { return GenS(a.sqrt()); });
+        obj.def("exp", [](const Derived &a) { return GenS(a.exp()); });
         obj.def("log", [](const Derived &e) { return GenS(CwiseLog<Derived>(e)); });
-        obj.def("squared", [](const Derived &a) { return GenS(a.Square()); });
+        obj.def("squared", [](const Derived &a) { return GenS(a.square()); });
         obj.def("arcsin", [](const Derived &e) { return GenS(CwiseArcSin<Derived>(e)); });
         obj.def("arccos", [](const Derived &e) { return GenS(CwiseArcCos<Derived>(e)); });
         obj.def("arctan", [](const Derived &e) { return GenS(CwiseArcTan<Derived>(e)); });
@@ -407,7 +407,7 @@ template <class Derived, class PYClass> void UnaryMathBuild(PYClass &obj) {
                     if (b == 1)
                         return GenS(a);
                     else if (b == 2)
-                        return GenS(a.Square());
+                        return GenS(a.square());
                     return GenS(CwisePow<Derived>(a, b));
                 },
                 nb::is_operator());
@@ -450,12 +450,12 @@ template <class Derived, class PYClass> void FunctionIndexingBuild(PYClass &obj)
     obj.def(
         "__getitem__",
         [](const Derived &a, const nb::slice &slice) {
-            auto [start, stop, step, slicelength] = slice.compute(a.ORows());
+            auto [start, stop, step, slicelength] = slice.compute(a.output_rows());
 
             if (step != 1) {
                 throw std::invalid_argument("Non continous slices not supported");
             }
-            if (start >= a.ORows()) {
+            if (start >= a.output_rows()) {
                 throw std::invalid_argument("Segment index out of bounds.");
             }
             if (start > stop) {
@@ -491,7 +491,7 @@ template <class Derived, class PYClass> void FunctionIndexingBuild(PYClass &obj)
         };
         auto head2 = [](const Derived &a) { return Seg2RetType(a.template segment<2>(0)); };
         auto tail2 = [](const Derived &a) {
-            return Seg2RetType(a.template segment<2>(a.ORows() - 2));
+            return Seg2RetType(a.template segment<2>(a.output_rows() - 2));
         };
 
         obj.def("segment_2", seg2);
@@ -508,7 +508,7 @@ template <class Derived, class PYClass> void FunctionIndexingBuild(PYClass &obj)
         };
         auto head3 = [](const Derived &a) { return Seg3RetType(a.template segment<3>(0)); };
         auto tail3 = [](const Derived &a) {
-            return Seg3RetType(a.template segment<3>(a.ORows() - 3));
+            return Seg3RetType(a.template segment<3>(a.output_rows() - 3));
         };
         obj.def("segment_3", seg3);
         obj.def("head_3", head3);
@@ -543,36 +543,36 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
 
         if constexpr (!is_seg)
             obj.def("cross", [](const Derived &seg1, const SEG &seg2) {
-                return Gen(crossProduct(seg1, seg2));
+                return Gen(cross_product(seg1, seg2));
             });
 
         if constexpr (!is_seg3)
             obj.def("cross", [](const Derived &seg1, const SEG3 &seg2) {
-                return Gen(crossProduct(seg1, seg2));
+                return Gen(cross_product(seg1, seg2));
             });
         if constexpr (!is_gen)
             obj.def("cross", [](const Derived &seg1, const Gen &seg2) {
-                return Gen(crossProduct(seg1, seg2));
+                return Gen(cross_product(seg1, seg2));
             });
 
         obj.def("cross", [](const Derived &seg1, const Vector3<double> &seg2) {
-            return Gen(crossProduct(seg1, Constant<-1, 3>(seg1.IRows(), seg2)));
+            return Gen(cross_product(seg1, Constant<-1, 3>(seg1.input_rows(), seg2)));
         });
 
         obj.def("cross", [](const Derived &seg1, const Derived &seg2) {
-            return Gen(crossProduct(seg1, seg2));
+            return Gen(cross_product(seg1, seg2));
         });
     }
 
     if constexpr (OR != 1) {
         if constexpr (!is_seg)
             obj.def("dot", [](const Derived &seg1, const SEG &seg2) {
-                return GenS(dotProduct(seg1, seg2));
+                return GenS(dot_product(seg1, seg2));
             });
 
         if constexpr (!is_gen)
             obj.def("dot", [](const Derived &seg1, const Gen &seg2) {
-                return GenS(dotProduct(seg1, seg2));
+                return GenS(dot_product(seg1, seg2));
             });
 
         ///////////////////////////////////////////////////////////////////////
@@ -592,27 +592,27 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
 
         if constexpr (!is_seg)
             obj.def("cwise_quotient", [](const Derived &seg1, const SEG &seg2) {
-                return Gen(cwiseQuotient(seg1, seg2));
+                return Gen(cwise_quotient(seg1, seg2));
             });
         if constexpr (!is_gen)
             obj.def("cwise_quotient", [](const Derived &seg1, const Gen &seg2) {
-                return Gen(cwiseQuotient(seg1, seg2));
+                return Gen(cwise_quotient(seg1, seg2));
             });
     }
 
     obj.def("dot",
-            [](const Derived &seg1, const Derived &seg2) { return GenS(dotProduct(seg1, seg2)); });
+            [](const Derived &seg1, const Derived &seg2) { return GenS(dot_product(seg1, seg2)); });
     obj.def("cwise_product", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));
     });
 
     obj.def("cwise_quotient", [](const Derived &seg1, const Derived &seg2) {
-        return BinGen(cwiseQuotient(seg1, seg2));
+        return BinGen(cwise_quotient(seg1, seg2));
     });
 
     //////////////////////////////////////
     obj.def("dot", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
-        return GenS(dotProduct(seg1, Constant<-1, Derived::ORC>(seg1.IRows(), seg2)));
+        return GenS(dot_product(seg1, Constant<-1, Derived::ORC>(seg1.input_rows(), seg2)));
     });
 
     obj.def("cwise_product", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
