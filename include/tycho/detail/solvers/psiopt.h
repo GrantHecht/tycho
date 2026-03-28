@@ -64,6 +64,12 @@ constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
 
 namespace tycho::solvers {
 
+// Pull root-namespace Eigen type aliases into tycho::solvers so that PSIOPT
+// member declarations (EigenRef<VectorXd>, ConstEigenRef<VectorXd>, …) resolve
+// without full qualification inside this namespace.
+using tycho::EigenRef;
+using tycho::ConstEigenRef;
+
 struct IterateInfo;
 
 struct PSIOPT {

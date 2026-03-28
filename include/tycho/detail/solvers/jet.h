@@ -163,20 +163,20 @@ struct Jet {
             print_beginning();
         t.start();
 
-        auto track = [&](PSIOPT::ConvergenceFlags flag, int i) {
+        auto track = [&](tycho::ConvergenceFlags flag, int i) {
             if (!verbose)
                 return;
             switch (flag) {
-            case PSIOPT::ConvergenceFlags::CONVERGED:
+            case tycho::ConvergenceFlags::CONVERGED:
                 NumConv++;
                 break;
-            case PSIOPT::ConvergenceFlags::ACCEPTABLE:
+            case tycho::ConvergenceFlags::ACCEPTABLE:
                 NumAcc++;
                 break;
-            case PSIOPT::ConvergenceFlags::NOTCONVERGED:
+            case tycho::ConvergenceFlags::NOTCONVERGED:
                 NumNoConv++;
                 break;
-            case PSIOPT::ConvergenceFlags::DIVERGING:
+            case tycho::ConvergenceFlags::DIVERGING:
                 NumDiv++;
                 break;
             }
@@ -185,7 +185,7 @@ struct Jet {
         };
 
         if (tycho::utils::use_thread_pool()) {
-            std::vector<std::future<PSIOPT::ConvergenceFlags>> results;
+            std::vector<std::future<tycho::ConvergenceFlags>> results;
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
                 results.push_back(tycho::utils::thread_pool().submit_task([&Job, i] { return Job(i); }));
