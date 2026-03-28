@@ -210,7 +210,7 @@ Concrete types would simplify from `VectorFunction<Norm<IR>, IR, 1>` to `VectorF
 | -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Readability**      | Simpler class declarations; no `CRTPBase`/`derived()` boilerplate | Class-scope type aliases must become local computations                                             |
 | **Compilation**      | Marginally fewer template parameters per class                    | Expression type nesting still dominates compile time                                                |
-| **Refactor scope**   | N/A                                                               | Massive refactor touching every file in `include/tycho/detail/vf/` and `src/Bindings/`              |
+| **Refactor scope**   | N/A                                                               | Massive refactor touching every file in `include/tycho/detail/vf/` and `src/bindings/`              |
 | **Compatibility**    | N/A                                                               | Requires C++23; must verify Clang/LLVM, GCC, and MSVC support                                       |
 | **Performance**      | Identical runtime performance (same inlining guarantees)          | N/A                                                                                                 |
 | **Correctness risk** | N/A                                                               | Subtle behavioral differences in overload resolution between CRTP hiding and deducing this dispatch |
@@ -297,7 +297,7 @@ Here's a complete C++ VectorFunction that computes `f(x) = [x_0^2, x_1^2, ..., x
 ```cpp
 #include "VectorFunction.h"
 
-namespace Tycho {
+namespace tycho {
 
 // Square each element of the input vector
 template <int IR>
@@ -354,7 +354,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 ```
 
 ### Using AutodiffFwd Instead of Manual Derivatives
@@ -620,7 +620,7 @@ The `constraints()` method in `ComputableBase` implements the batch loop:
 void constraints(X, FX, data) const {
     // ...
     auto VectorImpl = [&]() {
-        using SuperScalar = Tycho::DefaultSuperScalar;
+        using SuperScalar = tycho::DefaultSuperScalar;
         constexpr int vsize = SuperScalar::SizeAtCompileTime;  // 2 on ARM, 4 on x86
         int Packs = data.NumAppl() / vsize;
 
@@ -1263,7 +1263,7 @@ phase.addIntegralObjective(LowThrust.effort_obj(), [7, 8, 9])
 
 ```cpp
 #include <tycho/tycho.h>
-using namespace Tycho;
+using namespace tycho;
 
 // Define ODE dynamics as a VectorFunction expression
 struct Brach_Impl : ODESize<3, 1, 0> {
@@ -1495,7 +1495,7 @@ include/tycho/detail/vf/
         generic_comparative.h     GenericComparative (type-erased comparisons)
         generic_conditional.h     GenericConditional (type-erased conditionals)
 
-src/VectorFunctions/
+src/vf/
     tycho_vector_functions.h      Aggregate include (pulls in all detail/vf/ headers)
     function_domains.cpp          FunctionDomains implementation
 ```

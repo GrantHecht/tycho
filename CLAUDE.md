@@ -9,7 +9,7 @@ and space trajectory optimization. The built-in optimizer is called **PSIOPT**
 (a high-performance interior-point solver).
 
 The Python-facing module is `_tychopy` (nanobind extension) imported via the `tychopy` package.
-The C++ namespace is `Tycho`.
+The top-level C++ namespace is `tycho`.
 
 ## A Word of Caution for Multi-Agent Workloads
 Compiling tycho is very computationally expensive, and you MUST therefore be careful about 
@@ -51,17 +51,16 @@ include/                Public C++ API headers
 src/                    C++ source code (private implementation)
   tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
   pch.h / pch.cpp       Precompiled header
-  Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
-                          headers, FunctionRegistry.h (TychoBind<T> trait),
-                          TypeCasters.h, TychoModule.cpp
-  VectorFunctions/      tycho_vector_functions.h aggregate + function_domains.cpp
-  OptimalControl/       tycho_optimal_control.h aggregate + snake_case .cpp files
-  Solvers/              tycho_solvers.h aggregate + snake_case .cpp files
-  Astro/                tycho_astro.h aggregate + snake_case .cpp files
-  Integrators/          tycho_integrators.h aggregate (header-only)
-  Utils/                tycho_utils.h aggregate + private utility .cpp files
-  TypeDefs/             tycho_typedefs.h aggregate (header-only)
-  PyDocString/          C++-side Python docstring literals
+  bindings/             ALL Python binding code — nanobind .cpp files, *_bind.h
+                          headers, function_registry.h (TychoBind<T> trait),
+                          type_casters.h, tycho_module.cpp
+  vf/                   tycho_vector_functions.h aggregate + function_domains.cpp
+  optimal_control/      tycho_optimal_control.h aggregate + snake_case .cpp files
+  solvers/              tycho_solvers.h aggregate + snake_case .cpp files
+  astro/                tycho_astro.h aggregate + snake_case .cpp files
+  integrators/          tycho_integrators.h aggregate (header-only)
+  utils/                tycho_utils.h aggregate + private utility .cpp files
+  typedefs/             tycho_typedefs.h aggregate (header-only)
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
   __init__.py           Package entry point
@@ -258,16 +257,16 @@ cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
 
 ## Binding Architecture
 
-All Python binding code lives exclusively in `src/Bindings/`. Core C++ source under
-`src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, etc.
+All Python binding code lives exclusively in `src/bindings/`. Core C++ source under
+`src/vf/`, `src/optimal_control/`, `src/integrators/`, `src/astro/`, etc.
 contains no nanobind code.
 
 **`TychoBind<T>` trait pattern** — the central dispatch mechanism:
-- Primary template declared in `src/Bindings/FunctionRegistry.h`
+- Primary template declared in `src/bindings/function_registry.h`
 - `FunctionRegistry::Build_Register<T>(m, name)` calls `TychoBind<T>::Build(m, name)`
-- Full/partial specializations defined in `*Bind.h` headers or binding `.cpp` files
+- Full/partial specializations defined in `*_bind.h` headers or binding `.cpp` files
 
-**`Bind::` free-function helpers** (in `src/Bindings/*Bind.h`):
+**`tycho::bind::` free-function helpers** (in `src/bindings/*_bind.h`):
 - `DenseBaseBuild<T>(obj)` — registers standard VectorFunction methods
 - `IntegratorBuildConstructors<DODE>(obj)` — registers integrator constructors
 - `ODEPhaseBuildImpl<DODE>(phase)` — registers phase constraints/objectives
@@ -281,11 +280,11 @@ contains no nanobind code.
 - `TYCHO_PYTHON_BINDINGS` is defined only for `_tychopy` and `tycho_extensions` targets
   (scoped via `pch_bindings` precompiled header), not globally
 
-**`*Bind.h` files** (included from aggregate headers):
-- `DenseFunctionBaseBind.h`, `VectorFunctionBind.h`, `CommonFunctionsBind.h`
-- `InterpTableBind.h`, `GenericFunctionBind.h`
-- `IntegratorBind.h`, `ODEPhaseBind.h`, `ODEBind.h`, `ODESizesBind.h`
-- `PythonFunctions.h`, `python_arg_parsing.h` (moved from core headers)
+**`*_bind.h` files** (included from aggregate headers):
+- `dense_function_base_bind.h`, `vector_function_bind.h`, `common_functions_bind.h`
+- `interp_table_bind.h`, `generic_function_bind.h`
+- `integrator_bind.h`, `ode_phase_bind.h`, `ode_bind.h`, `ode_sizes_bind.h`
+- `python_functions.h`, `python_arg_parsing.h`
 
 ## Third-Party Dependencies and License Obligations
 
@@ -306,7 +305,7 @@ If a new dependency is added, its license notice must be added to `notices/` as 
 
 The naming migration is substantially complete:
 - Repository: `tycho` ✅
-- C++ namespace: `Tycho` ✅
+- C++ namespace: `tycho` ✅
 - Python extension module: `_tychopy` ✅
 - Python package: `tychopy` ✅
 - PyPI package: not yet published
