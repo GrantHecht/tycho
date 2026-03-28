@@ -30,14 +30,6 @@ Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CM
 ```
 include/                Public C++ API headers
   tycho/
-    tycho.h             Umbrella header — includes all public modules
-    typedefs.h          Eigen type aliases and SIMD detection
-    utils.h             Thread pool, type storage, sizing helpers, CRTP base
-    vector_functions.h  Core VectorFunction DSL
-    integrators.h       Runge-Kutta steppers and coefficients
-    optimal_control.h   Phase/ODE transcription, collocation, mesh refinement
-    solvers.h           PSIOPT optimizer, NLP layer
-    astro.h             Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
     detail/             Template implementation bodies (included automatically)
       utils/            Threading, math helpers, type utilities, CRTP base
       typedefs/         Eigen type aliases
@@ -64,7 +56,6 @@ src/                    C++ source code (private implementation)
   typedefs/             tycho_typedefs.h aggregate (header-only)
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
-  __init__.py           Package entry point
   VectorFunctions/      Python-side VectorFunction utilities
   OptimalControl/       Pure-Python ODE base class, mesh-error plotting
   Solvers/              Python solver helpers
@@ -80,16 +71,7 @@ dep/                    Vendored submodule dependencies
   fmt/                  {fmt} (MIT)
   nanobind/             nanobind (BSD)
 
-cmake/                  CMake helper modules
-tests/                  C++ test suite (Google Test)
-  cpp/                  Test source files organised by subsystem
-    astro/              Kepler, Lambert, CR3BP tests
-    integrators/        RK stepper, STM, dense output tests
-    optimal_control/    Phase construction, collocation, mesh refinement tests
-    solvers/            PSIOPT convergence, NLP structure, Jet tests
-    utils/              TypeStorage, ThreadPool, BumpAllocator tests
-    vector_functions/   VF DSL, composition, Hessian, generic function tests
-
+tests/                  C++ unit tests (Google Test, organised by subsystem)
 bench/                  Benchmark suite and tracking
   MACBENCH.md           macOS benchmarking procedure
   WINBENCH.md           Windows benchmarking procedure
@@ -100,8 +82,6 @@ extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Example programs
   cpp_examples/         C++ example programs
   python_examples/      Python example scripts (38 examples)
-scripts/                Build, test, and packaging helper scripts
-doc/                    Sphinx + Doxygen documentation source
 notices/                Third-party license notices — DO NOT modify or delete
 ```
 
@@ -147,65 +127,43 @@ preset for your platform** — do not configure manually.
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
-### macOS (Apple Silicon)
-
-**System tools required (install once via Homebrew):**
-```bash
-brew install llvm ninja ccache jq
-```
-
-**Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
-
-**Python environment — conda env named `tycho` (Python 3.13):**
+**Python environment (all platforms) — conda env named `tycho`:**
 ```bash
 conda create -n tycho python=3.13
 conda activate tycho
 pip install numpy scipy matplotlib spiceypy
 ```
 
+### macOS (Apple Silicon)
+
+**System tools:** `brew install llvm ninja ccache jq`
+
+**Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
+
 **First-time build:**
 ```bash
-mkdir build
-conda activate tycho
+mkdir build && conda activate tycho
 cmake --preset macos-llvm-release
 cd build && ninja -j2 all
 ```
 
-**Note:** The macOS preset uses the stable Homebrew symlink `/opt/homebrew/opt/llvm`
-for the compiler. The libomp paths in `CMakeLists.txt` also use the stable symlink
-`/opt/homebrew/opt/libomp`.
-
 ### Linux / WSL2 (Ubuntu)
 
-**System tools required:**
-```bash
-sudo apt install clang llvm llvm-dev libomp-dev lld ninja-build ccache
-```
+**System tools:** `sudo apt install clang llvm llvm-dev libomp-dev lld ninja-build ccache`
 
 **Sparse solver — Intel MKL (via oneAPI):**
 ```bash
-# Add Intel APT repository
 wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
   | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-sudo apt update
-sudo apt install intel-oneapi-mkl-devel
-
-# Set MKLROOT (add to ~/.bashrc)
-source /opt/intel/oneapi/setvars.sh
-```
-
-**Python environment — conda env named `tycho`:**
-```bash
-conda create -n tycho python=3.13
-conda activate tycho
-pip install numpy scipy matplotlib spiceypy
+echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+  | sudo tee /etc/apt/sources.list.d/oneAPI.list
+sudo apt update && sudo apt install intel-oneapi-mkl-devel
+source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
 ```
 
 **First-time build:**
 ```bash
-mkdir build
-conda activate tycho
+mkdir build && conda activate tycho
 cmake --preset linux-clang-release
 cd build && ninja -j6 all
 ```
@@ -217,7 +175,6 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 
 ### Subsequent builds (all platforms)
 
-After C++ source changes, rebuild from the `build` directory:
 ```bash
 cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
 ```
@@ -317,10 +274,7 @@ Key obligations:
 ### C++ unit tests (Google Test)
 
 ```bash
-# Reconfigure with tests enabled (one-time)
-cmake --preset <preset> -DBUILD_CPP_TESTS=ON
-
-# Build and run
+cmake --preset <preset> -DBUILD_CPP_TESTS=ON   # one-time reconfigure
 cd build && ninja -j<N> tycho_tests
 ctest --output-on-failure
 ```
@@ -336,14 +290,11 @@ conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
 
 Options: `--timeout SECONDS`, `--filter SUBSTRING`.
 
-Required conda packages for all 38 examples to run (none skipped):
-
-| Package                  | Install                                        |
-| ------------------------ | ---------------------------------------------- |
-| numpy, scipy, matplotlib | `conda run -n tycho pip install numpy scipy matplotlib` |
-| seaborn                  | `conda run -n tycho pip install seaborn`        |
-| spiceypy                 | `conda run -n tycho pip install spiceypy`       |
-| basemap                  | `conda install -n tycho -c conda-forge basemap` |
+Required packages for all 38 examples to run (none skipped):
+```bash
+conda run -n tycho pip install numpy scipy matplotlib seaborn spiceypy
+conda install -n tycho -c conda-forge basemap
+```
 
 ### C++ brachistochrone example
 
@@ -363,16 +314,10 @@ or justify benchmark regressions in the same PR.
 ## Benchmarking
 
 ```bash
-# Reconfigure with benchmarks enabled (one-time)
-cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON
-
-# Build (-j2 required for benchmark builds)
-cd build && ninja -j2 bench_all
-
-# Run
+cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
+cd build && ninja -j2 bench_all                      # -j2 required for benchmark builds
 ./bench/cpp/bench_all
 
-# Track performance across commits
 bench/bench_track.sh baseline   # record baseline
 bench/bench_track.sh record     # record after changes
 bench/bench_track.sh compare    # compare HEAD vs baseline
