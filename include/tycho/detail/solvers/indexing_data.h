@@ -47,7 +47,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct SolverIndexingData {
     using MatrixXi = Eigen::MatrixXi;
@@ -220,4 +220,4 @@ struct SolverIndexingData {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

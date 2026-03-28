@@ -11,7 +11,7 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 header references removed
-//   - Thread pool replaced with global Tycho::thread_pool() singleton
+//   - Thread pool replaced with global tycho::utils::thread_pool() singleton
 //   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
 // =============================================================================
 
@@ -37,7 +37,7 @@
 #include "mkl.h"
 #endif
 
-namespace Tycho {
+namespace tycho::solvers {
 
 namespace detail {
 
@@ -140,7 +140,7 @@ struct Jet {
         int NumDiv = 0;
 
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        Utils::Timer t;
+        tycho::utils::Timer t;
 
         auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
@@ -184,11 +184,11 @@ struct Jet {
             print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
         };
 
-        if (Tycho::use_thread_pool()) {
+        if (tycho::utils::use_thread_pool()) {
             std::vector<std::future<PSIOPT::ConvergenceFlags>> results;
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
-                results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
+                results.push_back(tycho::utils::thread_pool().submit_task([&Job, i] { return Job(i); }));
             // track() mutates local counters — must be called sequentially.
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&Job, etc.).
@@ -256,4 +256,4 @@ struct Jet {
     ////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

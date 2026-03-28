@@ -22,4 +22,4 @@
 #include "mkl.h"
 #endif
 
-namespace Tycho {} // namespace Tycho
+namespace tycho::solvers {} // namespace tycho::solvers

@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct IterateInfo {
 
@@ -52,4 +52,4 @@ struct IterateInfo {
     double MeritVal = 0.0;
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

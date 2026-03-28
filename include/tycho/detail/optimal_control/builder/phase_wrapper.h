@@ -29,7 +29,7 @@ using oc::ScaleType;
 using oc::VarIndexType;
 using vf::GenericFunction;
 // Solvers types — will be tycho::solvers:: after Task 8
-using Tycho::PSIOPT;
+using tycho::solvers::PSIOPT;
 
 /// High-level Phase wrapper with named-variable overloads.
 ///

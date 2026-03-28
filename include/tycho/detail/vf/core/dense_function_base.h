@@ -934,7 +934,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     void get_kkt_space(EigenRef<Eigen::VectorXi> KKTrows, EigenRef<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
-                     Tycho::SolverIndexingData &data) {
+                     tycho::solvers::SolverIndexingData &data) {
         data.InnerKKTStarts.resize(data.NumAppl());
 
         for (int V = 0; V < data.NumAppl(); V++) {
@@ -982,7 +982,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                               Eigen::Ref<Eigen::VectorXi> KKTLocations,
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
-                              const Tycho::SolverIndexingData &data) const {
+                              const tycho::solvers::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &jx) {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
@@ -1067,7 +1067,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         Eigen::Ref<Eigen::VectorXd> FX, Eigen::Ref<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const {
+        std::vector<std::mutex> &KKTLocks, const tycho::solvers::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l, auto &jx) {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
@@ -1118,7 +1118,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         EigenRef<Eigen::VectorXd> FX, EigenRef<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const {
+        std::vector<std::mutex> &KKTLocks, const tycho::solvers::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l, auto &jx, auto &hx) {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
@@ -1256,7 +1256,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     void kkt_fill_all(int Apl, const JacType &jx, const HessType &hx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
-                    std::vector<std::mutex> &ClashLocks, const Tycho::SolverIndexingData &data) const {
+                    std::vector<std::mutex> &ClashLocks, const tycho::solvers::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
@@ -1307,7 +1307,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     void kkt_fill_jac(int Apl, const JacType &jx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     Eigen::Ref<Eigen::VectorXi> KKTLocs, Eigen::Ref<Eigen::VectorXi> VarClashes,
-                    std::vector<std::mutex> &ClashLocks, const Tycho::SolverIndexingData &data) const {
+                    std::vector<std::mutex> &ClashLocks, const tycho::solvers::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();

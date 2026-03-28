@@ -426,7 +426,7 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->do_transcription = false;
 }
 
-Tycho::PSIOPT::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJobModes mode) {
 
     this->check_transcriptions();
     if (this->do_transcription)
@@ -462,7 +462,7 @@ Tycho::PSIOPT::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_im
     return this->optimizer->ConvergeFlag;
 }
 
-Tycho::PSIOPT::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");

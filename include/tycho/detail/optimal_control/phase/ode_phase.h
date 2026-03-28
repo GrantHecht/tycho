@@ -355,7 +355,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
-    virtual Tycho::ConstraintInterface make_shooter() {
+    virtual tycho::solvers::ConstraintInterface make_shooter() {
 
         if (this->AutoScaling) {
             auto Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize};
@@ -370,12 +370,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode_scaled, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                return Tycho::ConstraintInterface(shooter);
+                return tycho::solvers::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode_scaled, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
                 shooter.EnableVectorization = this->EnableVectorization;
-                return Tycho::ConstraintInterface(shooter);
+                return tycho::solvers::ConstraintInterface(shooter);
             }
         }
         {
@@ -392,12 +392,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                return Tycho::ConstraintInterface(shooter);
+                return tycho::solvers::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode, Integ};
                 shooter.EnableHessianSparsity = this->EnableHessianSparsity;
                 shooter.EnableVectorization = this->EnableVectorization;
-                return Tycho::ConstraintInterface(shooter);
+                return tycho::solvers::ConstraintInterface(shooter);
             }
         }
     }

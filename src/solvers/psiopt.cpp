@@ -23,8 +23,8 @@
 #endif
 
 
-void Tycho::PSIOPT::ensure_solver_initialized() {
-    double initMs = ::Tycho::ensure_solver_initialized();
+void tycho::solvers::PSIOPT::ensure_solver_initialized() {
+    double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
         this->LastSolverInitTime = initMs / 1000.0;
         // Suppress the init line when init was trivially fast (< 0.5 ms),
@@ -37,7 +37,7 @@ void Tycho::PSIOPT::ensure_solver_initialized() {
     }
 }
 
-void Tycho::PSIOPT::print_timing_summary() {
+void tycho::solvers::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");
     fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPreTime * 1000.0);
@@ -51,7 +51,7 @@ void Tycho::PSIOPT::print_timing_summary() {
     fmt::print(cyan, "{0:>10.3f} ms\n", this->LastMiscTime * 1000.0);
 }
 
-void Tycho::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
+void tycho::solvers::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
     this->nlp = np;
     this->PrimalVars = this->nlp->PrimalVars;
     this->EqualCons = this->nlp->EqualCons;
@@ -76,7 +76,7 @@ void Tycho::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
     this->QPanalyzed = false;
 }
 
-void Tycho::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
+void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
                                          Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
                                          double &alphap, double &alphad) {
     double Smax = this->max_step_to_boundary(this->getSlacks(XSL), this->getSlacks(DXSL), bfrac);
@@ -113,7 +113,7 @@ void Tycho::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
     alphad = Lmax;
 }
 
-void Tycho::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
+void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
                                    double pobj, double bobj, double mu, IterateInfo &iter) const {
 
     iter.PrimObj = pobj;
@@ -147,7 +147,7 @@ void Tycho::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<E
         iter.AllConNormErr = this->getAllCons(RHS).norm();
 }
 
-void Tycho::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL,
+void tycho::solvers::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL,
                             double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                             Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
@@ -175,7 +175,7 @@ void Tycho::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenR
     }
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
+tycho::ConvergenceFlags tycho::solvers::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
     IterateInfo last = iters.back();
     bool KKTFeas = (last.KKTInf < this->KKTtol);
@@ -216,7 +216,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::PSIOPT::convergeCheck(std::vector<Iterate
     return Flag;
 }
 
-void Tycho::PSIOPT::printPSIOPT() {
+void tycho::solvers::PSIOPT::printPSIOPT() {
 
     constexpr const char *PsioptStr =
         "       ____    _____    ____          ____     ____   ______\n"
@@ -231,7 +231,7 @@ void Tycho::PSIOPT::printPSIOPT() {
     print_Header();
 }
 
-void Tycho::PSIOPT::print_settings() {
+void tycho::solvers::PSIOPT::print_settings() {
     using std::cout;
     using std::endl;
 
@@ -252,9 +252,9 @@ void Tycho::PSIOPT::print_settings() {
                this->DivIContol);
 }
 
-void Tycho::PSIOPT::print_matrixinfo() {}
+void tycho::solvers::PSIOPT::print_matrixinfo() {}
 
-void Tycho::PSIOPT::print_stats() {
+void tycho::solvers::PSIOPT::print_stats() {
     printPSIOPT();
 
     auto cyan = fmt::fg(fmt::color::cyan);
@@ -280,7 +280,7 @@ void Tycho::PSIOPT::print_stats() {
     fmt::print("\n");
 }
 
-void Tycho::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
+void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     auto last = iters.back();
     bool wide = false;
 
@@ -358,14 +358,14 @@ void Tycho::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     }
 }
 
-void Tycho::PSIOPT::print_Beginning(std::string msg) const {
+void tycho::solvers::PSIOPT::print_Beginning(std::string msg) const {
     fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
     fmt::print(": ");
     fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
     fmt::print("\n");
 }
 
-void Tycho::PSIOPT::print_Finished(std::string msg) const {
+void tycho::solvers::PSIOPT::print_Finished(std::string msg) const {
 
     fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
     fmt::print(": ");
@@ -373,7 +373,7 @@ void Tycho::PSIOPT::print_Finished(std::string msg) const {
     fmt::print("\n");
 }
 
-void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
+void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
                                     double tottime, double nlptime, double qptime,
                                     double printtime) {
     fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
@@ -425,7 +425,7 @@ void Tycho::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo
     }
 }
 
-fmt::text_style Tycho::PSIOPT::calculate_color(double val, double targ, double acc) {
+fmt::text_style tycho::solvers::PSIOPT::calculate_color(double val, double targ, double acc) {
     auto level1 = std::log(targ);
     auto level3 = std::log(acc);
     auto level5 = std::log(acc * 1000.0);
@@ -448,7 +448,7 @@ fmt::text_style Tycho::PSIOPT::calculate_color(double val, double targ, double a
     return fmt::fg(c);
 }
 
-int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
+int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                double incpurt, double &finalpert) {
     auto Inertia = [&]() { return this->KKTSol.neigs() - (this->EqualCons + this->InequalCons); };
     auto RankDef = [&]() {
@@ -492,7 +492,7 @@ int Tycho::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double i
     return this->MaxRefac;
 }
 
-Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
+Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
                                         LineSearchModes lsmode, double ObjScale, double MuI,
                                         Eigen::Ref<Eigen::VectorXd> xsl) {
     Eigen::VectorXd XSL = xsl;
@@ -511,12 +511,12 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
 
     double Mu = MuI;
 
-    Utils::Timer Runtimer;
-    Utils::Timer Funtimer;
-    Utils::Timer LStimer;
-    Utils::Timer QPtimer;
-    Utils::Timer CBtimer; // Callback time is included in LastMiscTime (not separately reported)
-    Utils::Timer Printtimer;
+    tycho::utils::Timer Runtimer;
+    tycho::utils::Timer Funtimer;
+    tycho::utils::Timer LStimer;
+    tycho::utils::Timer QPtimer;
+    tycho::utils::Timer CBtimer; // Callback time is included in LastMiscTime (not separately reported)
+    tycho::utils::Timer Printtimer;
 
     double Hpert0 = this->deltaH;
     std::vector<IterateInfo> iters;
@@ -749,9 +749,9 @@ Eigen::VectorXd Tycho::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes bar
     return XSL;
 }
 
-Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bool docompute) {
+Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bool docompute) {
 
-    Utils::Timer kktt;
+    tycho::utils::Timer kktt;
     kktt.start();
 
     Eigen::VectorXd XSL(this->KKTdim);
@@ -827,7 +827,7 @@ Eigen::VectorXd Tycho::PSIOPT::init_impl(const Eigen::VectorXd &x, double Mu, bo
     return XSL;
 }
 
-double Tycho::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
+double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
                               double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                               EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS,
                               EigenRef<VectorXd> RHS2, IterateInfo &Citer,
@@ -981,7 +981,7 @@ double Tycho::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu
     return alpha;
 }
 
-Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
+Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
 
@@ -992,7 +992,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
         print_Beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
-    Utils::Timer t;
+    tycho::utils::Timer t;
     t.start();
 
     bool docompute = analyze_KKT_Matrix();
@@ -1026,7 +1026,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
@@ -1036,7 +1036,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
         print_Beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
-    Utils::Timer t;
+    tycho::utils::Timer t;
     t.start();
 
     bool docompute = analyze_KKT_Matrix();
@@ -1081,7 +1081,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
         print_stats();
@@ -1090,7 +1090,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
         print_Beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
-    Utils::Timer t;
+    tycho::utils::Timer t;
     t.start();
 
     bool docompute = analyze_KKT_Matrix();
@@ -1152,7 +1152,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
         print_stats();
@@ -1161,7 +1161,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
         print_Beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
-    Utils::Timer t;
+    tycho::utils::Timer t;
     t.start();
 
     bool docompute = analyze_KKT_Matrix();
@@ -1213,7 +1213,7 @@ Eigen::VectorXd Tycho::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     return this->getPrimals(XSLans);
 }
 
-Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
+Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
     if (this->PrintLevel == 0)
@@ -1223,7 +1223,7 @@ Eigen::VectorXd Tycho::PSIOPT::solve(const Eigen::VectorXd &x) {
         print_Beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
-    Utils::Timer t;
+    tycho::utils::Timer t;
     t.start();
     bool docompute = analyze_KKT_Matrix();
 

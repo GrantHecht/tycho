@@ -1501,7 +1501,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calcSwitches() {
     return stdvector_to_eigenvector(switches);
 }
 
-Tycho::PSIOPT::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
     if (this->do_transcription)
         this->transcribe();
     VectorXd Input = this->make_solver_input();
@@ -1535,7 +1535,7 @@ Tycho::PSIOPT::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJob
     return this->optimizer->ConvergeFlag;
 }
 
-Tycho::PSIOPT::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
 
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);

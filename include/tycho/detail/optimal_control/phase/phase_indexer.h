@@ -49,9 +49,9 @@
 namespace tycho::oc {
 
 // Solvers types — will be Tycho::solvers:: after Task 8
-using Tycho::ConstraintInterface;
-using Tycho::ObjectiveInterface;
-using Tycho::NonLinearProgram;
+using tycho::solvers::ConstraintInterface;
+using tycho::solvers::ObjectiveInterface;
+using tycho::solvers::NonLinearProgram;
 
 struct PhaseIndexer : ODESize<-1, -1, -1> {
     using VectorXi = Eigen::VectorXi;

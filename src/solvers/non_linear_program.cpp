@@ -16,7 +16,7 @@
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/utils/timer.h"
 
-void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
+void tycho::solvers::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->PrimalVars = PV;
     this->EqualCons = EQ;
     this->InequalCons = IQ;
@@ -45,7 +45,7 @@ void Tycho::NonLinearProgram::make_NLP(int PV, int EQ, int IQ) {
     this->finalizeData();
 }
 
-void Tycho::NonLinearProgram::countElems() {
+void tycho::solvers::NonLinearProgram::countElems() {
     int nkkt = 0;
 
     int npgx = 0;
@@ -75,7 +75,7 @@ void Tycho::NonLinearProgram::countElems() {
     this->numEConElems = nec;
 }
 
-void Tycho::NonLinearProgram::analyzePartitioning() {
+void tycho::solvers::NonLinearProgram::analyzePartitioning() {
     /*
     This function loops over the master list of objectives and constraints and assigns them
     to NumPartitions work partitions. Each partition's work is dispatched as a single task
@@ -122,7 +122,7 @@ void Tycho::NonLinearProgram::analyzePartitioning() {
     analyzeOP(this->InequalityConstraints, this->PartIq);
 }
 
-void Tycho::NonLinearProgram::getMATSpace() {
+void tycho::solvers::NonLinearProgram::getMATSpace() {
     /*
      * Loops over all constraints and objectives on each partition and has each claim its
      * own portion of KKTcoeffCols,KKTcoeffRows. Tags each element with the partition that will be
@@ -180,7 +180,7 @@ void Tycho::NonLinearProgram::getMATSpace() {
     this->KKTLocks.swap(kktemp);
 }
 
-void Tycho::NonLinearProgram::getRHSSpace() {
+void tycho::solvers::NonLinearProgram::getRHSSpace() {
     int PGXfreeloc = 0;
     int AGXfreeloc = 0;
     int FXEfreeloc = 0;
@@ -201,7 +201,7 @@ void Tycho::NonLinearProgram::getRHSSpace() {
     }
 }
 
-void Tycho::NonLinearProgram::setMATDimensions() {
+void tycho::solvers::NonLinearProgram::setMATDimensions() {
     this->KKTdim = this->PrimalVars + this->SlackVars + this->EqualCons + this->InequalCons;
 
     ////////////////// This is the storage order of Solver data/////////////////
@@ -235,7 +235,7 @@ void Tycho::NonLinearProgram::setMATDimensions() {
     ///////////////////////////////////////////////////////////////////////////////////
 }
 
-void Tycho::NonLinearProgram::setRHSDimensions() {
+void tycho::solvers::NonLinearProgram::setRHSDimensions() {
     this->numRHSElems =
         this->numPGXElems + this->numAGXElems + this->numEConElems + this->numIConElems;
 
@@ -248,7 +248,7 @@ void Tycho::NonLinearProgram::setRHSDimensions() {
     this->RHScoeffRows = Eigen::VectorXi::Constant(this->numRHSElems, -1);
 }
 
-void Tycho::NonLinearProgram::finalizeData() {
+void tycho::solvers::NonLinearProgram::finalizeData() {
     for (int i = 0; i < this->PrimalVars; i++) {
         this->PrimalDiagCoeffCols()[i] = i;
         this->PrimalDiagCoeffRows()[i] = i;
@@ -271,7 +271,7 @@ void Tycho::NonLinearProgram::finalizeData() {
     }
 }
 
-void Tycho::NonLinearProgram::analyzeSparsity(
+void tycho::solvers::NonLinearProgram::analyzeSparsity(
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     /*
     Calculates Sparsity Pattern of NLP. PSIOPT requires that only the upper triangular part of a CSR
@@ -301,7 +301,7 @@ void Tycho::NonLinearProgram::analyzeSparsity(
             }
         }
     };
-    Tycho::parallel_blocks(this->numKKTElems, TripFillOP, this->NumPartitions);
+    tycho::utils::parallel_blocks(this->numKKTElems, TripFillOP, this->NumPartitions);
 
     KKTmat.setFromTriplets(kktvec.begin(), kktvec.end());
     KKTmat.makeCompressed();
@@ -329,11 +329,11 @@ void Tycho::NonLinearProgram::analyzeSparsity(
         }
     };
 
-    Tycho::parallel_blocks(this->numKKTElems, FindOP, this->NumPartitions);
+    tycho::utils::parallel_blocks(this->numKKTElems, FindOP, this->NumPartitions);
     /////////////////////////////////////////////////////////////
 }
 
-void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X,
+void tycho::solvers::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
@@ -352,14 +352,14 @@ void Tycho::NonLinearProgram::evalRHS(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, RHSevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, RHSevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
     this->fillRHS(PGX, AGX, FXE, FXI);
 }
 
-void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
+void tycho::solvers::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> PGX, EigenRef<VectorXd> FXE,
                                       EigenRef<VectorXd> FXI) {
 
@@ -377,7 +377,7 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, OGCevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
@@ -386,7 +386,7 @@ void Tycho::NonLinearProgram::evalOGC(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillFXI(FXI);
 }
 
-void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
+void tycho::solvers::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X, double &val,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
@@ -402,7 +402,7 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, OGCevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
@@ -410,7 +410,7 @@ void Tycho::NonLinearProgram::evalOCC(double ObjScale, ConstEigenRef<VectorXd> X
     this->fillFXI(FXI);
 }
 
-void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
+void tycho::solvers::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X, double &val) {
 
     std::vector<double> Vals(this->NumPartitions, 0.0);
 
@@ -421,12 +421,12 @@ void Tycho::NonLinearProgram::evalOBJ(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, OGCevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, OGCevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 }
 
-void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X,
+void tycho::solvers::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -452,7 +452,7 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, KKTevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
@@ -461,12 +461,12 @@ void Tycho::NonLinearProgram::evalKKT(double ObjScale, ConstEigenRef<VectorXd> X
     // thread (not a pool worker), so the pool absorbs all tasks without deadlock, and
     // (2) fillRHS and fillSolverCoeffs operate on disjoint data (RHS vectors vs. KKT
     // matrix entries), so concurrent execution requires no synchronization.
-    Tycho::parallel_task(
+    tycho::utils::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
 
-void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
+void tycho::solvers::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> X,
                                         ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                         double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                         EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -489,14 +489,14 @@ void Tycho::NonLinearProgram::evalKKTNO(double ObjScale, ConstEigenRef<VectorXd>
                 this->KKTClashes, this->KKTLocks);
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, KKTevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, KKTevalOP);
 
     // NOTE: nested dispatch from inline arm — see comment in evalKKT.
-    Tycho::parallel_task(
+    tycho::utils::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
-void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
+void tycho::solvers::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -517,14 +517,14 @@ void Tycho::NonLinearProgram::evalSOE(double ObjScale, ConstEigenRef<VectorXd> X
                                      this->KKTClashes, this->KKTLocks);
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, SOEevalOP);
 
     // NOTE: nested dispatch from inline arm — see comment in evalKKT.
-    Tycho::parallel_task(
+    tycho::utils::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
-void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
+void tycho::solvers::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X,
                                       ConstEigenRef<VectorXd> LE, ConstEigenRef<VectorXd> LI,
                                       double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                       EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
@@ -548,17 +548,17 @@ void Tycho::NonLinearProgram::evalAUG(double ObjScale, ConstEigenRef<VectorXd> X
         Vals[thrnum] = localVal;
     };
 
-    Tycho::parallel_sequence(this->NumPartitions, SOEevalOP);
+    tycho::utils::parallel_sequence(this->NumPartitions, SOEevalOP);
     for (int i = 0; i < this->NumPartitions; i++)
         val += Vals[i];
 
     // NOTE: nested dispatch from inline arm — see comment in evalKKT.
-    Tycho::parallel_task(
+    tycho::utils::parallel_task(
         this->NumPartitions, [&] { this->fillRHS(PGX, AGX, FXE, FXI); },
         [&] { this->fillSolverCoeffs(KKTmat); });
 }
 
-void Tycho::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
+void tycho::solvers::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
                                       std::shared_ptr<NonLinearProgram> nlp1,
                                       std::shared_ptr<NonLinearProgram> nlp2) {
     using std::cout;
@@ -604,11 +604,11 @@ void Tycho::NonLinearProgram::NLPTest(const Eigen::VectorXd &x, int n,
     double v1 = 0;
     double v2 = 0;
 
-    Utils::Timer t1;
-    Utils::Timer t2;
+    tycho::utils::Timer t1;
+    tycho::utils::Timer t2;
 
-    Utils::Timer t3;
-    Utils::Timer t4;
+    tycho::utils::Timer t3;
+    tycho::utils::Timer t4;
 
     cout << nlp1->KKTLocations.minCoeff() << endl;
     // nlp2->KKTClashes.setConstant(-1);

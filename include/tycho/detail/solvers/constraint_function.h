@@ -28,7 +28,7 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/solvers/solver_function_base.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     using Base = SolverFunctionBase<ConstraintInterface>;
@@ -130,4 +130,4 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

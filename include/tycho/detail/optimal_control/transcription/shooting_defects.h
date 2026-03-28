@@ -48,7 +48,7 @@
 namespace tycho::oc {
 
 // Solvers types — will be tycho::solvers:: after Task 8
-using Tycho::SolverIndexingData;
+using tycho::solvers::SolverIndexingData;
 
 template <class DODE, class Integrator> struct ShootingDefect_Impl {
     static auto Definition(const DODE &ode, const Integrator &integ) {

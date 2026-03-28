@@ -15,7 +15,7 @@
 
 #include "tycho/detail/solvers/optimization_problem.h"
 
-void Tycho::OptimizationProblem::transcribe() {
+void tycho::solvers::OptimizationProblem::transcribe() {
     this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
     int numVars = this->ActiveVariables.size();

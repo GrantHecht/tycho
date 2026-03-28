@@ -44,7 +44,25 @@
 #endif
 
 
-namespace Tycho {
+namespace tycho {
+
+/// Optimizer convergence status — extracted to root namespace so that callers
+/// outside tycho::solvers can reference it without a full PSIOPT qualification.
+enum class ConvergenceFlags {
+    CONVERGED,
+    ACCEPTABLE,
+    NOTCONVERGED,
+    DIVERGING,
+};
+
+// Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
+constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
+    return static_cast<int>(a) <=> static_cast<int>(b);
+}
+
+} // namespace tycho
+
+namespace tycho::solvers {
 
 struct IterateInfo;
 
@@ -53,17 +71,9 @@ struct PSIOPT {
     enum class BarrierModes { PROBE, LOQO, FIACCO, BARDISABLED };
     enum class LineSearchModes { AUGLANG, LANG, L1, L2, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
-    enum class ConvergenceFlags {
-        CONVERGED,
-        ACCEPTABLE,
-        NOTCONVERGED,
-        DIVERGING,
-    };
 
-    // Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
-    friend constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
-        return static_cast<int>(a) <=> static_cast<int>(b);
-    }
+    /// Alias so existing callers using PSIOPT::ConvergenceFlags continue to work.
+    using ConvergenceFlags = tycho::ConvergenceFlags;
 
     enum class QPAlgModes {
         Classic = 0,
@@ -737,4 +747,4 @@ struct PSIOPT {
     Eigen::VectorXd solve(const Eigen::VectorXd &x);
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

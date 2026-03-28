@@ -29,7 +29,7 @@
 #include "tycho/detail/solvers/psiopt.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct OptimizationProblem : OptimizationProblemBase {
 
@@ -203,4 +203,4 @@ struct OptimizationProblem : OptimizationProblemBase {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

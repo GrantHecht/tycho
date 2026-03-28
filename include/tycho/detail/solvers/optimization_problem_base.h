@@ -29,7 +29,7 @@
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/psiopt.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct OptimizationProblemBase {
 
@@ -67,7 +67,7 @@ struct OptimizationProblemBase {
     /// unequal partition costs. make_NLP() further caps this via
     /// MIN_NNZ_PER_PARTITION on small problems.
     static int default_num_partitions() {
-        int nt = Tycho::get_num_threads();
+        int nt = tycho::utils::get_num_threads();
         if (nt <= 1)
             return 1;
         return nt * 4;
@@ -162,4 +162,4 @@ struct OptimizationProblemBase {
     void setJetJobMode(const std::string &str) { this->setJetJobMode(strto_JetJobMode(str)); }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

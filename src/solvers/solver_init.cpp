@@ -10,13 +10,13 @@
 #include <mkl.h>
 #endif
 
-namespace Tycho {
+namespace tycho::solvers {
 
 double ensure_solver_initialized() {
     static std::once_flag flag;
     static double time_ms = 0.0;
     std::call_once(flag, []() {
-        Utils::Timer t;
+        tycho::utils::Timer t;
         t.start();
 #ifdef USE_ACCELERATE_SPARSE
         ensure_accelerate_initialized(TYCHO_DEFAULT_QP_THREADS);
@@ -29,4 +29,4 @@ double ensure_solver_initialized() {
     return time_ms;
 }
 
-} // namespace Tycho
+} // namespace tycho::solvers

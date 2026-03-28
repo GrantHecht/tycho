@@ -15,4 +15,4 @@
 
 #pragma once
 
-namespace Tycho {}
+namespace tycho::solvers {}

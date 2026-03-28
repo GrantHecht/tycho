@@ -37,7 +37,7 @@
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;
@@ -262,7 +262,7 @@ struct NonLinearProgram {
             }
         };
 
-        Tycho::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumPartitions);
+        tycho::utils::parallel_blocks(this->numSolverKKTElems, FillOp, this->NumPartitions);
     }
 
     void assignKKTSlackHessian(const Eigen::Ref<const Eigen::VectorXd> &slhs,
@@ -385,4 +385,4 @@ struct NonLinearProgram {
                         std::shared_ptr<NonLinearProgram> nlp2);
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

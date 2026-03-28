@@ -46,7 +46,7 @@ struct KeplerPhase : ODEPhase<Kepler> {
     using Base::Base;
     bool UseKeplerPropagator = true;
 
-    Tycho::ConstraintInterface make_shooter() {
+    tycho::solvers::ConstraintInterface make_shooter() {
         if (UseKeplerPropagator) {
             auto kprop = KeplerPropagator(this->ode.mu);
             auto Args = Arguments<14>();
@@ -60,7 +60,7 @@ struct KeplerPhase : ODEPhase<Kepler> {
 
             auto shooter = kprop.eval(Xk1) - kprop.eval(Xk2);
 
-            return Tycho::ConstraintInterface(shooter);
+            return tycho::solvers::ConstraintInterface(shooter);
         } else {
             return Base::make_shooter();
         }

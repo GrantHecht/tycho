@@ -58,9 +58,9 @@
 namespace tycho::oc {
 
 // Solvers types — will be tycho::solvers:: after Task 8
-using Tycho::OptimizationProblemBase;
-using Tycho::NonLinearProgram;
-using Tycho::PSIOPT;
+using tycho::solvers::OptimizationProblemBase;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::PSIOPT;
 
 struct OptimalControlProblem;
 

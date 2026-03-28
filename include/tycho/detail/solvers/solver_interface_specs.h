@@ -52,7 +52,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 /*
  * Spec for vector function that can be used as a constraint inside of PSIOPT.
@@ -453,4 +453,4 @@ struct ObjectiveInterface {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

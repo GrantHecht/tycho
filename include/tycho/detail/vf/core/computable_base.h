@@ -244,11 +244,11 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     * Vector X is the total variables vector for the full optimization problem, and FX is the total
     equality or inequality constraints vector for the problem. Data pertaining to the location of the
     input variables in X for each distinct call as well as the target location for the output
-    variables in FX is stored in the Tycho::SolverIndexingData object. In general users should not directly
+    variables in FX is stored in the tycho::solvers::SolverIndexingData object. In general users should not directly
     overload this function unless they have a very good reason.
     */
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
-                     const Tycho::SolverIndexingData &data) const {
+                     const tycho::solvers::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x) {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
@@ -321,7 +321,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
                                      ConstEigenRef<Eigen::VectorXd> L, EigenRef<Eigen::VectorXd> FX,
                                      EigenRef<Eigen::VectorXd> AGX,
-                                     const Tycho::SolverIndexingData &data) const {
+                                     const tycho::solvers::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l) {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
@@ -362,7 +362,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
         requires std::derived_from<std::remove_cvref_t<XtType>,
                                    Eigen::EigenBase<std::remove_cvref_t<XtType>>>
     inline void gather_input(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
-                            const Tycho::SolverIndexingData &data) const {
+                            const tycho::solvers::SolverIndexingData &data) const {
         if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
             xt = X.template segment<IR>(data.VLoc(0, V), this->input_rows());
         } else {
@@ -380,7 +380,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
         requires std::derived_from<std::remove_cvref_t<LType>,
                                    Eigen::EigenBase<std::remove_cvref_t<LType>>>
     inline void gather_mult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
-                           const Tycho::SolverIndexingData &data) const {
+                           const tycho::solvers::SolverIndexingData &data) const {
         if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {
             l = L.template segment<OR>(data.CLoc(0, V), this->output_rows());
         } else {

@@ -231,14 +231,14 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
     // ---- SolverConstraintSpec overrides (see SolverInterfaceSpecs.h) ----
 
     void constraints(const Eigen::Ref<const Eigen::VectorXd> &X, Eigen::Ref<Eigen::VectorXd> FX,
-                     const Tycho::SolverIndexingData &data) const override {
+                     const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.constraints(X, FX, data);
     }
     void constraints_adjointgradient(const Eigen::Ref<const Eigen::VectorXd> &X,
                                      const Eigen::Ref<const Eigen::VectorXd> &L,
                                      Eigen::Ref<Eigen::VectorXd> FX,
                                      Eigen::Ref<Eigen::VectorXd> AGX,
-                                     const Tycho::SolverIndexingData &data) const override {
+                                     const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.constraints_adjointgradient(X, L, FX, AGX, data);
     }
     void constraints_jacobian(const Eigen::Ref<const Eigen::VectorXd> &X,
@@ -247,7 +247,7 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
                               Eigen::Ref<Eigen::VectorXi> KKTLocations,
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
-                              const Tycho::SolverIndexingData &data) const override {
+                              const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void constraints_jacobian_adjointgradient(
@@ -255,7 +255,7 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
         Eigen::Ref<Eigen::VectorXd> FX, Eigen::Ref<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const override {
+        std::vector<std::mutex> &KKTLocks, const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
                                                          KKTClashes, KKTLocks, data);
     }
@@ -264,13 +264,13 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
         Eigen::Ref<Eigen::VectorXd> FX, Eigen::Ref<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const override {
+        std::vector<std::mutex> &KKTLocks, const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
-                     Tycho::SolverIndexingData &data) override {
+                     tycho::solvers::SolverIndexingData &data) override {
         this->data_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const override {
@@ -308,12 +308,12 @@ template <int IR, GFStorable<IR, 1> T> struct GFModel<IR, 1, T> final : GFModelC
     // ---- SolverObjectiveSpec overrides (see SolverInterfaceSpecs.h) ----
 
     void objective(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X, double &Val,
-                   const Tycho::SolverIndexingData &data) const override {
+                   const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.objective(ObjScale, X, Val, data);
     }
     void objective_gradient(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X,
                             double &Val, Eigen::Ref<Eigen::VectorXd> GX,
-                            const Tycho::SolverIndexingData &data) const override {
+                            const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.objective_gradient(ObjScale, X, Val, GX, data);
     }
     void objective_gradient_hessian(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X,
@@ -322,7 +322,7 @@ template <int IR, GFStorable<IR, 1> T> struct GFModel<IR, 1, T> final : GFModelC
                                     Eigen::Ref<Eigen::VectorXi> KKTLocations,
                                     Eigen::Ref<Eigen::VectorXi> KKTClashes,
                                     std::vector<std::mutex> &KKTLocks,
-                                    const Tycho::SolverIndexingData &data) const override {
+                                    const tycho::solvers::SolverIndexingData &data) const override {
         this->data_.objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
                                                KKTClashes, KKTLocks, data);
     }

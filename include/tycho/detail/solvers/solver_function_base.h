@@ -32,7 +32,7 @@
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/solver_interface_specs.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;
@@ -78,4 +78,4 @@ template <class FuncType> struct SolverFunctionBase {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers
