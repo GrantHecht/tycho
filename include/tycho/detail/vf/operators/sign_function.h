@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func>
 struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
@@ -30,17 +30,17 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
 
     SignFunction() {}
     SignFunction(Func func) : func(std::move(func)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = 0;
-        this->set_input_domain(this->IRows(), {dmn});
+        this->set_input_domain(this->input_rows(), {dmn});
     }
 
     template <class OutType> void sign_impl(OutType &fx) const {
         typedef typename OutType::Scalar Scalar;
         if constexpr (Is_SuperScalar<Scalar>::value) {
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = fx[i].sign();
             }
         } else {
@@ -83,4 +83,4 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

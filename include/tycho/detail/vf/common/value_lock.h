@@ -16,14 +16,14 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     using Base = VectorFunction<LockArgs<USZ>, USZ, USZ>;
 
-    static const bool IsLinearFunction = true;
+    static const bool is_linear_function = true;
 
-    LockArgs(int usz) { this->setIORows(usz, usz); }
+    LockArgs(int usz) { this->set_io_rows(usz, usz); }
     LockArgs() {}
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
@@ -57,4 +57,4 @@ template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

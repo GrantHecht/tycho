@@ -15,10 +15,10 @@
 
 #include "tycho/detail/vf/core/function_domains.h"
 
-// void Tycho::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>&
+// void tycho::vf::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>&
 // sub_domains) {
 //     if (sub_domains.size() == 1) {
-//         this->SubDomains = sub_domains[0];
+//         this->sub_domains = sub_domains[0];
 //         return;
 //     }
 //     Eigen::VectorXi full(irr);
@@ -29,9 +29,9 @@
 //             full.segment(dmn(0, i), dmn(1, i)).setOnes();
 //         }
 //         if (full.sum() == irr) {
-//             this->SubDomains.resize(2, 1);
-//             this->SubDomains(0, 0) = 0;
-//             this->SubDomains(1, 0) = irr;
+//             this->sub_domains.resize(2, 1);
+//             this->sub_domains(0, 0) = 0;
+//             this->sub_domains(1, 0) = irr;
 //
 //             return;
 //         }
@@ -52,9 +52,9 @@
 //             find = true;
 //     }
 //
-//     this->SubDomains.resize(2, sds.size());
+//     this->sub_domains.resize(2, sds.size());
 //     for (int i = 0; i < sds.size(); i++) {
-//         this->SubDomains(0, i) = sds[i][0];
-//         this->SubDomains(1, i) = sds[i][1];
+//         this->sub_domains(0, i) = sds[i][0];
+//         this->sub_domains(1, i) = sds[i][1];
 //     }
 // }

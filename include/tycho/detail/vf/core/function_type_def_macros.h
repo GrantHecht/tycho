@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 #define DENSE_FUNCTION_BASE_TYPES(Base)                                                            \
     template <class Scalar> using Output = typename Base::template Output<Scalar>;                 \
@@ -39,4 +39,4 @@ namespace Tycho {
     template <class Scalar> using Func##_jacobian = typename Func::template Jacobian<Scalar>;      \
     template <class Scalar> using Func##_hessian = typename Func::template Hessian<Scalar>;
 
-} // namespace Tycho
+} // namespace tycho::vf

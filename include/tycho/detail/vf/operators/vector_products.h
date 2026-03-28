@@ -16,7 +16,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func1, class Func2, int Vsize> struct FunctionVectorProduct_Impl;
 
@@ -141,38 +141,38 @@ struct FunctionVectorProduct_Impl
 
     static const bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
 
-    static const bool IsVectorizable = Func1::IsVectorizable && Func2::IsVectorizable;
+    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     FunctionVectorProduct_Impl() {}
     FunctionVectorProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
-        this->setIORows(irtemp, Vsize);
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
+        this->set_io_rows(irtemp, Vsize);
 
-        this->set_input_domain(this->IRows(),
+        this->set_input_domain(this->input_rows(),
                                {this->func1.input_domain(), this->func2.input_domain()});
 
-        if (this->func1.ORows() != Vsize) {
+        if (this->func1.output_rows() != Vsize) {
 
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
                        "Output Size of Func1 (ORows = {0:})  must equal {1:}.\n",
-                       this->func1.ORows(), Vsize);
+                       this->func1.output_rows(), Vsize);
             throw std::invalid_argument("");
         }
-        if (this->func2.ORows() != Vsize) {
+        if (this->func2.output_rows() != Vsize) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
                        "Output Size of Func2 (ORows = {0:})  must equal {1:}.\n",
-                       this->func2.ORows(), Vsize);
+                       this->func2.output_rows(), Vsize);
             throw std::invalid_argument("");
         }
-        if (this->func1.IRows() != this->func2.IRows()) {
+        if (this->func1.input_rows() != this->func2.input_rows()) {
 
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in FunctionVectorProduct (VectorSize = {2:}) !!!\n"
                        "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
                        "(IRows = {1:}).\n",
-                       this->func1.IRows(), this->func2.IRows(), Vsize);
+                       this->func1.input_rows(), this->func2.input_rows(), Vsize);
             throw std::invalid_argument("");
 
             // throw std::invalid_argument("Functions 1,2 in vector product must have same numer of
@@ -317,9 +317,9 @@ struct FunctionVectorProduct_Impl
             this->func1.compute(x, fx1);
             this->func2.compute(x, fx2);
             fx = this->vecprodimpl(Scalar(1.0), fx1, fx2);
-            this->fillprodmatrix(fx2, jx.template middleCols<Vsize>(this->func1.SegStart, Vsize),
+            this->fillprodmatrix(fx2, jx.template middleCols<Vsize>(this->func1.seg_start, Vsize),
                                  fsign1);
-            this->fillprodmatrix(fx1, jx.template middleCols<Vsize>(this->func2.SegStart, Vsize),
+            this->fillprodmatrix(fx1, jx.template middleCols<Vsize>(this->func2.seg_start, Vsize),
                                  fsign2);
         } else {
 
@@ -341,9 +341,9 @@ struct FunctionVectorProduct_Impl
             };
 
             using JType = Eigen::Matrix<Scalar, Vsize, Base::IRC>;
-            const int irows = this->IRows();
-            BumpAllocator::allocate_run(Impl, TempSpec<JType>(Vsize, irows),
-                                        TempSpec<JType>(Vsize, irows));
+            const int irows = this->input_rows();
+            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(Vsize, irows),
+                                        tycho::utils::TempSpec<JType>(Vsize, irows));
         }
     }
 
@@ -422,14 +422,14 @@ struct FunctionVectorProduct_Impl
         using JType = Eigen::Matrix<Scalar, Vsize, Base::IRC>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        const int irows = this->IRows();
+        const int irows = this->input_rows();
 
-        BumpAllocator::allocate_run(Impl, TempSpec<JType>(Vsize, irows),
-                                    TempSpec<JType>(Vsize, irows), TempSpec<JType>(Vsize, irows),
-                                    TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(Vsize, irows),
+                                    tycho::utils::TempSpec<JType>(Vsize, irows), tycho::utils::TempSpec<JType>(Vsize, irows),
+                                    tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<HType>(irows, irows));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

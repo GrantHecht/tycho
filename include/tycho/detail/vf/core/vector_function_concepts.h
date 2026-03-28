@@ -38,7 +38,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 namespace detail {
 
@@ -59,19 +59,19 @@ concept IsDoubleScalar = std::same_as<detail::VectorFunctionType<T>, double>;
 
 template <typename T>
 concept Vectorizable =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsVectorizable); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_vectorizable); };
 
 template <typename T>
 concept LinearVF =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsLinearFunction); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_linear_function); };
 
 template <typename T>
 concept HasDiagonalJac =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::HasDiagonalJacobian); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::has_diagonal_jacobian); };
 
 template <typename T>
 concept IsGenericVF =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsGenericFunction); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_generic_function); };
 
 template <typename T>
 concept StaticallySized = requires {
@@ -86,8 +86,8 @@ concept DynamicallySized = requires {
 
 template <typename T>
 concept VFSized = requires(const detail::VectorFunctionType<T> &t) {
-    { t.IRows() } -> std::same_as<int>;
-    { t.ORows() } -> std::same_as<int>;
+    { t.input_rows() } -> std::same_as<int>;
+    { t.output_rows() } -> std::same_as<int>;
 };
 
 template <typename Inner, typename Outer>
@@ -126,4 +126,4 @@ struct AllPairsStackableHelper<Head, Tail...>
 template <class... Fs>
 concept MutuallyStackable = detail::AllPairsStackableHelper<Fs...>::value;
 
-} // namespace Tycho
+} // namespace tycho::vf

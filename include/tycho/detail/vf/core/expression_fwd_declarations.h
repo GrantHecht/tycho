@@ -44,7 +44,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR> struct DenseFunctionBase;
 
@@ -99,8 +99,8 @@ template <class InnerFunc, int IR> struct NestedFunctionSelector<Arguments<IR>, 
 template <int IR, int OR, int ST, int OR2, int ST2>
 struct NestedFunctionSelector<Segment<OR, OR2, ST2>, Segment<IR, OR, ST>> {
     static decltype(auto) make_nested(Segment<OR, OR2, ST2> ofunc, Segment<IR, OR, ST> ifunc) {
-        return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.IRows(), ofunc.ORows(),
-                                                        ifunc.SegStart + ofunc.SegStart);
+        return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.input_rows(), ofunc.output_rows(),
+                                                        ifunc.seg_start + ofunc.seg_start);
     }
 };
 
@@ -108,7 +108,7 @@ template <int IR, int OR, int ST, int EL1, int... ELS>
 struct NestedFunctionSelector<Elements<OR, EL1, ELS...>, Segment<IR, OR, ST>> {
     static decltype(auto) make_nested(Elements<OR, EL1, ELS...> ofunc, Segment<IR, OR, ST> ifunc) {
         if constexpr (IR >= 0 && OR >= 0 && ST >= 0 && EL1 >= 0) {
-            return Elements<IR, EL1 + ST, ELS + ST...>(ifunc.IRows());
+            return Elements<IR, EL1 + ST, ELS + ST...>(ifunc.input_rows());
         } else {
             return NestedFunction<decltype(ofunc), decltype(ifunc)>(ofunc, ifunc);
         }
@@ -247,4 +247,4 @@ template <class Func1, class Func2> struct CwiseFunctionProduct;
 
 template <class Func> struct CallAndAppend;
 
-} // namespace Tycho
+} // namespace tycho::vf

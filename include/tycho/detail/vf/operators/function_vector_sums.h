@@ -18,7 +18,7 @@
 #include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func, bool NegateFunction> struct FunctionVectorSum_Impl;
 
@@ -42,15 +42,15 @@ struct FunctionVectorSum_Impl
     Func func;
     Output<double> offset_vector;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
 
     FunctionVectorSum_Impl() {}
     template <class OutType>
     FunctionVectorSum_Impl(Func f, ConstVectorBaseRef<OutType> v) : func(std::move(f)) {
         this->offset_vector = v;
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -134,4 +134,4 @@ struct FunctionVectorSum_Impl
         this->func.scale_hessian(target_, s);
     }
 };
-} // namespace Tycho
+} // namespace tycho::vf

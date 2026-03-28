@@ -27,14 +27,14 @@
 #include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
 #include "tycho/detail/vf/common/common_functions.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunction<IR, OR>, IR, OR> {
     using Base = VectorFunction<GenericFunction<IR, OR>, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsGenericFunction = true;
-    static const bool IsVectorizable = true;
+    static const bool is_generic_function = true;
+    static const bool is_vectorizable = true;
 
     using Dspec = DenseFunctionSpec<IR, OR>;
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
@@ -77,8 +77,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     void cachedata() {
-        this->setIORows(this->func.get().IRows(), this->func.get().ORows());
-        this->set_input_domain(this->IRows(), {this->func.get().input_domain()});
+        this->set_io_rows(this->func.get().input_rows(), this->func.get().output_rows());
+        this->set_input_domain(this->input_rows(), {this->func.get().input_domain()});
         this->islinear = this->func.get().is_linear();
     }
 
@@ -214,7 +214,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     ////////////////////////////////////////////////////////////////////////////////
     template <class JacTypeTT, class Scalar>
     void scale_jacobian(ConstMatrixBaseRef<JacTypeTT> target_, Scalar s) const {
-        if constexpr (std::is_same_v<Scalar, Tycho::DefaultSuperScalar>) {
+        if constexpr (std::is_same_v<Scalar, tycho::DefaultSuperScalar>) {
             Base::scale_jacobian(target_, s);
         } else {
             typename Dspec::JacType jxt(target_.const_cast_derived());
@@ -235,4 +235,4 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

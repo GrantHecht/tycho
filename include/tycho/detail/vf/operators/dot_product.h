@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func1, class Func2> struct FunctionDotProduct_Impl;
 
@@ -39,7 +39,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
     using Base::compute;
 
     static const bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
-    static const bool IsVectorizable = Func1::IsVectorizable && Func2::IsVectorizable;
+    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
@@ -49,27 +49,27 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
     FunctionDotProduct_Impl() {}
     FunctionDotProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
-        if (this->func1.ORows() != this->func2.ORows()) {
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
+        if (this->func1.output_rows() != this->func2.output_rows()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in FunctionDotProduct/.dot method !!!\n"
                        "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
                        "(ORows = {1:}).\n",
-                       this->func1.ORows(), this->func2.ORows());
+                       this->func1.output_rows(), this->func2.output_rows());
 
             throw std::invalid_argument("");
         }
-        if (this->func1.IRows() != this->func2.IRows()) {
+        if (this->func1.input_rows() != this->func2.input_rows()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in FunctionDotProduct/.dot method !!!\n"
                        "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
                        "(IRows = {1:}).\n",
-                       this->func1.IRows(), this->func2.IRows());
+                       this->func1.input_rows(), this->func2.input_rows());
             throw std::invalid_argument("");
         }
 
-        this->setIORows(irtemp, 1);
-        this->set_input_domain(this->IRows(),
+        this->set_io_rows(irtemp, 1);
+        this->set_input_domain(this->input_rows(),
                                {this->func1.input_domain(), this->func2.input_domain()});
     }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -81,8 +81,8 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows()));
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
         } else {
 
             auto Impl = [&](auto &fx1, auto &fx2) {
@@ -91,13 +91,13 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                 fx[0] = fx1.dot(fx2);
             };
 
-            const int orows = this->func1.ORows();
+            const int orows = this->func1.output_rows();
 
             using FType1 = Func1_Output<Scalar>;
             using FType2 = Func2_Output<Scalar>;
 
-            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
-                                        TempSpec<FType2>(orows, 1));
+            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
+                                        tycho::utils::TempSpec<FType2>(orows, 1));
         }
     }
 
@@ -110,15 +110,15 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows()));
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.SegStart, 1, this->func1.ORows()) +=
-                x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows())
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1, this->func1.output_rows()) +=
+                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.SegStart, 1, this->func2.ORows()) +=
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows())
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1, this->func2.output_rows()) +=
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
                     .transpose();
 
         } else {
@@ -134,8 +134,8 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                     jx_, fx1.transpose(), jx2, PlusEqualsAssignment(), std::bool_constant<false>());
             };
 
-            const int orows = this->func1.ORows();
-            const int irows = this->func1.IRows();
+            const int orows = this->func1.output_rows();
+            const int irows = this->func1.input_rows();
 
             using FType1 = Func1_Output<Scalar>;
             using JType1 = Func2_jacobian<Scalar>;
@@ -143,9 +143,9 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using FType2 = Func2_Output<Scalar>;
             using JType2 = Func2_jacobian<Scalar>;
 
-            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
-                                        TempSpec<FType2>(orows, 1), TempSpec<JType1>(orows, irows),
-                                        TempSpec<JType2>(orows, irows));
+            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
+                                        tycho::utils::TempSpec<FType2>(orows, 1), tycho::utils::TempSpec<JType1>(orows, irows),
+                                        tycho::utils::TempSpec<JType2>(orows, irows));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -162,28 +162,28 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows()));
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.SegStart, 1, this->func1.ORows()) +=
-                x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows())
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1, this->func1.output_rows()) +=
+                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.SegStart, 1, this->func2.ORows()) +=
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows())
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1, this->func2.output_rows()) +=
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
                     .transpose();
 
-            adjgrad.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows()) +=
-                x.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows()) *
+            adjgrad.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows()) +=
+                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()) *
                 adjvars[0];
 
-            adjgrad.template segment<Func2::ORC>(this->func2.SegStart, this->func2.ORows()) +=
-                x.template segment<Func1::ORC>(this->func1.SegStart, this->func1.ORows()) *
+            adjgrad.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()) +=
+                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows()) *
                 adjvars[0];
 
-            for (int i = 0; i < this->func1.ORows(); i++) {
-                adjhess(this->func1.SegStart + i, this->func2.SegStart + i) += adjvars[0];
-                adjhess(this->func2.SegStart + i, this->func1.SegStart + i) += adjvars[0];
+            for (int i = 0; i < this->func1.output_rows(); i++) {
+                adjhess(this->func1.seg_start + i, this->func2.seg_start + i) += adjvars[0];
+                adjhess(this->func2.seg_start + i, this->func1.seg_start + i) += adjvars[0];
             }
 
         } else {
@@ -203,7 +203,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                                                                             adjtemp);
 
                 fx[0] = fx1.dot(fx2);
-                if constexpr (!Func2::IsLinearFunction) {
+                if constexpr (!Func2::is_linear_function) {
                     this->func2.accumulate_hessian(adjhess, hx2, PlusEqualsAssignment());
                     this->func2.zero_matrix_domain(hx2);
                 }
@@ -214,13 +214,13 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                                                    std::bool_constant<false>());
 
                 if constexpr (Func1::InputIsDynamic) {
-                    const int sds = this->func1.SubDomains.cols();
+                    const int sds = this->func1.sub_domains.cols();
                     if (sds == 0) {
                         adjhess += hx2 + hx2.transpose();
                     } else {
                         for (int i = 0; i < sds; i++) {
-                            int start = this->func1.SubDomains(0, i);
-                            int size = this->func1.SubDomains(1, i);
+                            int start = this->func1.sub_domains(0, i);
+                            int size = this->func1.sub_domains(1, i);
                             adjhess.middleCols(start, size) +=
                                 hx2.middleCols(start, size) * adjvars[0];
                             adjhess.middleRows(start, size) +=
@@ -228,12 +228,12 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                         }
                     }
                 } else {
-                    constexpr int sds = Func1::INPUT_DOMAIN::SubDomains.size();
-                    Tycho::constexpr_for_loop(
+                    constexpr int sds = Func1::INPUT_DOMAIN::sub_domains.size();
+                    tycho::utils::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
-                            constexpr int start = Func1::INPUT_DOMAIN::SubDomains[i.value][0];
-                            constexpr int size = Func1::INPUT_DOMAIN::SubDomains[i.value][1];
+                            constexpr int start = Func1::INPUT_DOMAIN::sub_domains[i.value][0];
+                            constexpr int size = Func1::INPUT_DOMAIN::sub_domains[i.value][1];
 
                             adjhess.template middleCols<size>(start, size) +=
                                 hx2.template middleCols<size>(start, size) * adjvars[0];
@@ -248,8 +248,8 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                     jx_, fx1.transpose(), jx2, PlusEqualsAssignment(), std::bool_constant<false>());
             };
 
-            const int orows = this->func1.ORows();
-            const int irows = this->func1.IRows();
+            const int orows = this->func1.output_rows();
+            const int irows = this->func1.input_rows();
 
             using FType1 = Func1_Output<Scalar>;
             using JType1 = Func2_jacobian<Scalar>;
@@ -259,13 +259,13 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using GType2 = Func2_gradient<Scalar>;
             using HType2 = Func2_hessian<Scalar>;
 
-            BumpAllocator::allocate_run(Impl, TempSpec<FType1>(orows, 1),
-                                        TempSpec<FType2>(orows, 1), TempSpec<JType1>(orows, irows),
-                                        TempSpec<JType2>(orows, irows), TempSpec<GType2>(irows, 1),
-                                        TempSpec<HType2>(irows, irows), TempSpec<FType1>(orows, 1));
+            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
+                                        tycho::utils::TempSpec<FType2>(orows, 1), tycho::utils::TempSpec<JType1>(orows, irows),
+                                        tycho::utils::TempSpec<JType2>(orows, irows), tycho::utils::TempSpec<GType2>(irows, 1),
+                                        tycho::utils::TempSpec<HType2>(irows, irows), tycho::utils::TempSpec<FType1>(orows, 1));
         }
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -43,7 +43,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class T> struct Is_EigenDiagonalMatrix : std::false_type {};
 
@@ -54,4 +54,4 @@ template <class T> struct Is_EigenDiagonalMatrix<Eigen::DiagonalWrapper<T>> : st
 template <class T>
 struct Is_EigenDiagonalMatrix<const Eigen::DiagonalWrapper<T>> : std::true_type {};
 
-} // namespace Tycho
+} // namespace tycho::vf

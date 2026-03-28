@@ -39,7 +39,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 enum class FDCoeffType { Backwards, Central, Forwards };
 
@@ -305,4 +305,4 @@ template <> struct FDCoeffs<4, 6, FDCoeffType::Central, 0> {
                                        -122 / 15.0, 169 / 60.0, -2 / 5.0,   7 / 240.0};
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

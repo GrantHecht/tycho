@@ -37,15 +37,15 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR> struct ConditionalBase {
     using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
     virtual ~ConditionalBase() = default;
-    virtual int IRows() const = 0;
+    virtual int input_rows() const = 0;
     virtual bool compute(const Eigen::MatrixBase<InType> &x) const = 0;
-    virtual void clone_into(TypeStorage<ConditionalBase<IR>> &s) const = 0;
+    virtual void clone_into(tycho::utils::TypeStorage<ConditionalBase<IR>> &s) const = 0;
 };
 
 template <int IR, typename T> struct ConditionalModel final : ConditionalBase<IR> {
@@ -54,11 +54,11 @@ template <int IR, typename T> struct ConditionalModel final : ConditionalBase<IR
     T data_;
     explicit ConditionalModel(T t) : data_(std::move(t)) {}
 
-    int IRows() const override { return data_.IRows(); }
+    int input_rows() const override { return data_.input_rows(); }
     bool compute(const Eigen::MatrixBase<InType> &x) const override { return data_.compute(x); }
-    void clone_into(TypeStorage<ConditionalBase<IR>> &s) const override {
+    void clone_into(tycho::utils::TypeStorage<ConditionalBase<IR>> &s) const override {
         s.template emplace<ConditionalModel<IR, T>>(data_);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

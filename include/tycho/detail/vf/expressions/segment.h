@@ -20,7 +20,7 @@
 #include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR, int ST> struct Segment_Impl;
 
@@ -47,43 +47,43 @@ template <int IR, int OR, int ST, class VALUE>
 struct Is_ScaledSegment<StaticScaled<Segment<IR, OR, ST>, VALUE>> : std::true_type {};
 
 template <int ST> struct SegStartHolder {
-    static const int SegStart = ST;
-    void setSegStart(int st) {};
+    static const int seg_start = ST;
+    void set_seg_start(int st) {};
 };
 template <> struct SegStartHolder<-1> {
-    int SegStart = -1;
-    void setSegStart(int st) { this->SegStart = st; };
+    int seg_start = -1;
+    void set_seg_start(int st) { this->seg_start = st; };
 };
 
 template <class Derived, int IR, int OR, int ST>
 struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     using INPUT_DOMAIN = SingleDomain<IR, ST, OR>;
     using Base = VectorFunction<Derived, IR, OR>;
-    // using SegStartHolder<ST>::SegStart;
+    // using SegStartHolder<ST>::seg_start;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     Segment_Impl() {}
     Segment_Impl(int irows, int orows, int start) {
-        this->setIORows(irows, orows);
-        this->setSegStart(start);
+        this->set_io_rows(irows, orows);
+        this->set_seg_start(start);
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = start;
         dmn(1, 0) = orows;
 
         this->set_input_domain(irows, {dmn});
 
-        if (start + orows > this->IRows() || start < 0) {
+        if (start + orows > this->input_rows() || start < 0) {
             throw std::invalid_argument("Segment/Element Index Out of Bounds");
         }
     }
 
-    static const bool IsLinearFunction = true;
-    static const bool IsVectorizable = true;
+    static const bool is_linear_function = true;
+    static const bool is_vectorizable = true;
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.template segment<OR>(this->SegStart, this->ORows());
+        fx = x.template segment<OR>(this->seg_start, this->output_rows());
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -91,10 +91,10 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        const int OROWS = this->ORows();
+        const int OROWS = this->output_rows();
         Scalar ONE = Scalar(1.0);
-        fx = x.template segment<OR>(this->SegStart, OROWS);
-        jx.template middleCols<OR>(this->SegStart, OROWS).diagonal().setConstant(ONE);
+        fx = x.template segment<OR>(this->seg_start, OROWS);
+        jx.template middleCols<OR>(this->seg_start, OROWS).diagonal().setConstant(ONE);
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -109,12 +109,12 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         //  MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        const int OROWS = this->ORows();
+        const int OROWS = this->output_rows();
         Scalar ONE = Scalar(1.0);
 
-        fx = x.template segment<OR>(this->SegStart, OROWS);
-        jx.template middleCols<OR>(this->SegStart, OROWS).diagonal().setConstant(ONE);
-        adjgrad.template segment<OR>(this->SegStart, OROWS) = adjvars;
+        fx = x.template segment<OR>(this->seg_start, OROWS);
+        jx.template middleCols<OR>(this->seg_start, OROWS).diagonal().setConstant(ONE);
+        adjgrad.template segment<OR>(this->seg_start, OROWS) = adjvars;
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
@@ -127,33 +127,33 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
 
         auto Impl = [&](auto &diag) {
             diag =
-                right.derived().template middleCols<OR>(this->SegStart, this->ORows()).diagonal();
+                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
 
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() =
+                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() =
                         left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
-                        target.template middleCols<OR>(this->SegStart, this->ORows()) =
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()) =
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->SegStart, this->ORows()).noalias() =
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() =
                             left.derived() * diag.asDiagonal();
                 }
 
             } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() +=
+                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() +=
                         left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
-                        target.template middleCols<OR>(this->SegStart, this->ORows()) +=
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()) +=
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->SegStart, this->ORows()).noalias() +=
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() +=
                             left.derived() * diag.asDiagonal();
                 }
 
@@ -161,23 +161,23 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
 
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() -=
+                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() -=
                         left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
-                        target.template middleCols<OR>(this->SegStart, this->ORows()) -=
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()) -=
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->SegStart, this->ORows()).noalias() -=
+                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() -=
                             left.derived() * diag.asDiagonal();
                 }
 
             } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->SegStart, this->ORows()).noalias() =
+                target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() =
                     assign.value * left.derived() * diag.asDiagonal();
             } else if constexpr (std::is_same<Assignment,
                                               ScaledPlusEqualsAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->SegStart, this->ORows()).noalias() +=
+                target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() +=
                     assign.value * left.derived() * diag.asDiagonal();
             } else {
                 std::cout << "right_jacobian_product has not been implemented for: " << this->name
@@ -186,8 +186,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
             }
         };
 
-        const int orows = this->ORows();
-        BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        const int orows = this->output_rows();
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
@@ -200,42 +200,42 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
 
         Eigen::DiagonalMatrix<Scalar, OR> diag;
         diag.diagonal() =
-            right.derived().template middleCols<OR>(this->SegStart, this->ORows()).diagonal();
+            right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
         diag.diagonal() = diag.diagonal().cwiseProduct(diag.diagonal());
 
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target
-                .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                        this->ORows())
+                .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                        this->output_rows())
                 .noalias() = left.derived() * diag;
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
             if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                               decltype(left.derived())>::type>::value) {
                 target
-                    .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                            this->ORows())
+                    .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                            this->output_rows())
                     .diagonal() += left.derived().diagonal().cwiseProduct(diag.diagonal());
             } else {
                 target
-                    .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                            this->ORows())
+                    .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                            this->output_rows())
                     .noalias() += left.derived() * diag;
             }
 
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
             target
-                .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                        this->ORows())
+                .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                        this->output_rows())
                 .noalias() -= left.derived() * diag;
         } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
             target
-                .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                        this->ORows())
+                .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                        this->output_rows())
                 .noalias() = assign.value * left.derived() * diag;
         } else if constexpr (std::is_same<Assignment, ScaledPlusEqualsAssignment<Scalar>>::value) {
             target
-                .template block<OR, OR>(this->SegStart, this->SegStart, this->ORows(),
-                                        this->ORows())
+                .template block<OR, OR>(this->seg_start, this->seg_start, this->output_rows(),
+                                        this->output_rows())
                 .noalias() += assign.value * left.derived() * diag;
         } else {
             std::cout << "symetric_jacobian_product has not been implemented for: " << this->name
@@ -249,14 +249,14 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                     ConstEigenBaseRef<JacType> right, Assignment assign) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-            target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() =
-                right.derived().template middleCols<OR>(this->SegStart, this->ORows()).diagonal();
+            target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() =
+                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-            target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() +=
-                right.derived().template middleCols<OR>(this->SegStart, this->ORows()).diagonal();
+            target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() +=
+                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
-            target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() -=
-                right.derived().template middleCols<OR>(this->SegStart, this->ORows()).diagonal();
+            target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() -=
+                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
         } else {
         }
     }
@@ -265,26 +265,26 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                     ConstEigenBaseRef<JacType> right, Assignment assign) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-            target.template segment<OR>(this->SegStart, this->ORows()) =
-                right.derived().template segment<OR>(this->SegStart, this->ORows());
+            target.template segment<OR>(this->seg_start, this->output_rows()) =
+                right.derived().template segment<OR>(this->seg_start, this->output_rows());
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-            target.template segment<OR>(this->SegStart, this->ORows()) +=
-                right.derived().template segment<OR>(this->SegStart, this->ORows());
+            target.template segment<OR>(this->seg_start, this->output_rows()) +=
+                right.derived().template segment<OR>(this->seg_start, this->output_rows());
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
-            target.template segment<OR>(this->SegStart, this->ORows()) -=
-                right.derived().template segment<OR>(this->SegStart, this->ORows());
+            target.template segment<OR>(this->seg_start, this->output_rows()) -=
+                right.derived().template segment<OR>(this->seg_start, this->output_rows());
         } else {
         }
     }
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
-        target.template middleCols<OR>(this->SegStart, this->ORows()).diagonal() *= s;
+        target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() *= s;
     }
     template <class Target, class Scalar>
     inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
-        target.template segment<OR>(this->SegStart, this->ORows()) *= s;
+        target.template segment<OR>(this->seg_start, this->output_rows()) *= s;
     }
     template <class Func, int FuncIRC>
     decltype(auto) rearged(const DenseFunctionBase<Func, FuncIRC, IR> &f) const {
@@ -292,4 +292,4 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

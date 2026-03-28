@@ -41,7 +41,7 @@
 #include "tycho/detail/vf/core/function_domains.h"
 #include "tycho/detail/vf/core/function_type_def_macros.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR>
 struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
@@ -69,14 +69,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     using NAME = Derived;
 
     template <class Func>
-    using EVALOP = typename Tycho::template NestedFunctionSelector<Derived, Func>;
+    using EVALOP = typename NestedFunctionSelector<Derived, Func>;
     template <class Func>
-    using FWDOP = typename Tycho::template NestedFunctionSelector<Func, Derived>;
+    using FWDOP = typename NestedFunctionSelector<Func, Derived>;
     template <int SZ, int ST>
-    using SEGMENTOP = typename Tycho::template NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
+    using SEGMENTOP = typename NestedFunctionSelector<Segment<OR, SZ, ST>, Derived>;
 
-    void setIORows(int inputrows, int outputrows) {
-        Base::setIORows(inputrows, outputrows);
+    void set_io_rows(int inputrows, int outputrows) {
+        Base::set_io_rows(inputrows, outputrows);
         if constexpr (IR < 0) {
             DomainMatrix dmn(2, 1);
             dmn(0, 0) = 0;
@@ -97,105 +97,105 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <int SZ, int ST> auto segment() const {
-        return SEGMENTOP<SZ, ST>::make_nested(Segment<OR, SZ, ST>(this->ORows(), SZ, ST),
+        return SEGMENTOP<SZ, ST>::make_nested(Segment<OR, SZ, ST>(this->output_rows(), SZ, ST),
                                               this->derived());
     }
 
     template <int SZ, int ST> auto segment(int start, int size) const {
-        return SEGMENTOP<SZ, ST>::make_nested(Segment<OR, SZ, ST>(this->ORows(), size, start),
+        return SEGMENTOP<SZ, ST>::make_nested(Segment<OR, SZ, ST>(this->output_rows(), size, start),
                                               this->derived());
     }
 
     auto segment(int start, int size) const {
-        return SEGMENTOP<-1, -1>::make_nested(Segment<OR, -1, -1>(this->ORows(), size, start),
+        return SEGMENTOP<-1, -1>::make_nested(Segment<OR, -1, -1>(this->output_rows(), size, start),
                                               this->derived());
     }
 
     template <int SZ> auto segment(int start) const {
-        return SEGMENTOP<SZ, -1>::make_nested(Segment<OR, SZ, -1>(this->ORows(), SZ, start),
+        return SEGMENTOP<SZ, -1>::make_nested(Segment<OR, SZ, -1>(this->output_rows(), SZ, start),
                                               this->derived());
     }
     template <int SZ> auto head() const {
-        return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->ORows(), SZ, 0),
+        return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->output_rows(), SZ, 0),
                                              this->derived());
     }
     template <int SZ> auto head(int sz) const {
-        return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->ORows(), sz, 0),
+        return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->output_rows(), sz, 0),
                                              this->derived());
     }
 
     auto head(int sz) const {
-        return SEGMENTOP<-1, -1>::make_nested(Segment<OR, -1, -1>(this->ORows(), sz, 0),
+        return SEGMENTOP<-1, -1>::make_nested(Segment<OR, -1, -1>(this->output_rows(), sz, 0),
                                               this->derived());
     }
 
     template <int SZ> auto tail() const {
-        return SEGMENTOP<SZ, SZ_DIFF<OR, SZ>::value>::make_nested(
-            Segment<OR, SZ, SZ_DIFF<OR, SZ>::value>(this->ORows(), SZ, this->ORows() - SZ),
+        return SEGMENTOP<SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>::make_nested(
+            Segment<OR, SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>(this->output_rows(), SZ, this->output_rows() - SZ),
             this->derived());
     }
     template <int SZ> decltype(auto) tail(int sz) const {
-        return SEGMENTOP<SZ, SZ_DIFF<OR, SZ>::value>::make_nested(
-            Segment<OR, SZ, SZ_DIFF<OR, SZ>::value>(this->ORows(), sz, this->ORows() - sz),
+        return SEGMENTOP<SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>::make_nested(
+            Segment<OR, SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>(this->output_rows(), sz, this->output_rows() - sz),
             this->derived());
     }
 
     decltype(auto) tail(int sz) const {
         return SEGMENTOP<-1, -1>::make_nested(
-            Segment<OR, -1, -1>(this->ORows(), sz, this->ORows() - sz), this->derived());
+            Segment<OR, -1, -1>(this->output_rows(), sz, this->output_rows() - sz), this->derived());
     }
 
     template <int ELE> decltype(auto) coeff() const {
-        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->ORows(), 1, ELE),
+        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ELE),
                                               this->derived());
     }
     template <int ELE> decltype(auto) coeff(int ele) const {
-        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->ORows(), 1, ele),
+        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ele),
                                               this->derived());
     }
 
     auto coeff(int ele) const {
-        return SEGMENTOP<1, -1>::make_nested(Segment<OR, 1, -1>(this->ORows(), 1, ele),
+        return SEGMENTOP<1, -1>::make_nested(Segment<OR, 1, -1>(this->output_rows(), 1, ele),
                                              this->derived());
     }
 
     template <int ELE> decltype(auto) operator[](std::integral_constant<int, ELE> ele) const {
-        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->ORows(), 1, ELE),
+        return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ELE),
                                               this->derived());
     }
 
     template <int EL1, int... ELS> decltype(auto) elements() const {
         return FWDOP<Elements<OR, EL1, ELS...>>::make_nested(
-            Elements<OR, EL1, ELS...>(this->ORows()), this->derived());
+            Elements<OR, EL1, ELS...>(this->output_rows()), this->derived());
     }
 
     decltype(auto) normalized() const {
-        return FWDOP<Normalized<OR>>::make_nested(Normalized<OR>(this->ORows()), this->derived());
+        return FWDOP<Normalized<OR>>::make_nested(Normalized<OR>(this->output_rows()), this->derived());
     }
     template <int PW> decltype(auto) normalized_power() const {
-        return FWDOP<NormalizedPower<OR, PW>>::make_nested(NormalizedPower<OR, PW>(this->ORows()),
+        return FWDOP<NormalizedPower<OR, PW>>::make_nested(NormalizedPower<OR, PW>(this->output_rows()),
                                                            this->derived());
     }
 
     decltype(auto) norm() const {
-        return FWDOP<Norm<OR>>::make_nested(Norm<OR>(this->ORows()), this->derived());
+        return FWDOP<Norm<OR>>::make_nested(Norm<OR>(this->output_rows()), this->derived());
     }
     decltype(auto) squared_norm() const {
-        return FWDOP<SquaredNorm<OR>>::make_nested(SquaredNorm<OR>(this->ORows()), this->derived());
+        return FWDOP<SquaredNorm<OR>>::make_nested(SquaredNorm<OR>(this->output_rows()), this->derived());
     }
     decltype(auto) inverse_norm() const {
-        return FWDOP<InverseNorm<OR>>::make_nested(InverseNorm<OR>(this->ORows()), this->derived());
+        return FWDOP<InverseNorm<OR>>::make_nested(InverseNorm<OR>(this->output_rows()), this->derived());
     }
     decltype(auto) inverse_squared_norm() const {
-        return FWDOP<InverseSquaredNorm<OR>>::make_nested(InverseSquaredNorm<OR>(this->ORows()),
+        return FWDOP<InverseSquaredNorm<OR>>::make_nested(InverseSquaredNorm<OR>(this->output_rows()),
                                                           this->derived());
     }
     template <int PW> decltype(auto) norm_power() const {
-        return FWDOP<NormPower<OR, PW>>::make_nested(NormPower<OR, PW>(this->ORows()),
+        return FWDOP<NormPower<OR, PW>>::make_nested(NormPower<OR, PW>(this->output_rows()),
                                                      this->derived());
     }
     template <int PW> decltype(auto) inverse_norm_power() const {
-        return FWDOP<InverseNormPower<OR, PW>>::make_nested(InverseNormPower<OR, PW>(this->ORows()),
+        return FWDOP<InverseNormPower<OR, PW>>::make_nested(InverseNormPower<OR, PW>(this->output_rows()),
                                                             this->derived());
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -216,19 +216,19 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         return MatrixFunctionView<Derived, MRows, MCols, MMajor>(this->derived(), MRows, MCols);
     }
     auto colvector() const {
-        return MatrixFunctionView<Derived, OR, 1, Eigen::ColMajor>(this->derived(), this->ORows(),
+        return MatrixFunctionView<Derived, OR, 1, Eigen::ColMajor>(this->derived(), this->output_rows(),
                                                                    1);
     }
     auto rowvector() const {
         return MatrixFunctionView<Derived, 1, OR, Eigen::ColMajor>(this->derived(), 1,
-                                                                   this->ORows());
+                                                                   this->output_rows());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     auto Sin() const { return CwiseSin<Derived>(this->derived()); }
     auto Cos() const { return CwiseCos<Derived>(this->derived()); }
-    auto ArcSin() const { return CwiseArcSin<Derived>(this->derived()); }
-    auto ArcCos() const { return CwiseArcCos<Derived>(this->derived()); }
+    auto arc_sin() const { return CwiseArcSin<Derived>(this->derived()); }
+    auto arc_cos() const { return CwiseArcCos<Derived>(this->derived()); }
     auto Tan() const { return CwiseTan<Derived>(this->derived()); }
     auto Square() const { return CwiseSquare<Derived>(this->derived()); }
     auto Sqrt() const { return CwiseSqrt<Derived>(this->derived()); }
@@ -254,10 +254,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Func>
-    decltype(auto) cwiseProduct(const DenseFunctionBase<Func, IR, OR> &f) const {
+    decltype(auto) cwise_product(const DenseFunctionBase<Func, IR, OR> &f) const {
         return CwiseFunctionProduct<Derived, Func>(this->derived(), f.derived());
     }
-    decltype(auto) cwiseInverse() const { return CwiseInverse<Derived>(this->derived()); }
+    decltype(auto) cwise_inverse() const { return CwiseInverse<Derived>(this->derived()); }
     decltype(auto) sum() const {
         if constexpr (OR == 1)
             return Derived(this->derived());
@@ -285,7 +285,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     inline void compute_jacobian(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
                                  ConstMatrixBaseRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        if constexpr (!Derived::IsVectorizable) {
+        if constexpr (!Derived::is_vectorizable) {
             if constexpr (Is_SuperScalar<Scalar>::value) {
                 VectorBaseRef<OutType> fx = fx_.const_cast_derived();
                 VectorBaseRef<JacType> jx = jx_.const_cast_derived();
@@ -296,8 +296,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 Output<RealScalar> fx_r;
                 Jacobian<RealScalar> jx_r;
 
-                const int IRR = this->IRows();
-                const int ORR = this->ORows();
+                const int IRR = this->input_rows();
+                const int ORR = this->output_rows();
 
                 if constexpr (Base::InputIsDynamic)
                     x_r.resize(IRR);
@@ -332,7 +332,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     template <class InType, class JacType>
     inline void jacobian(ConstVectorBaseRef<InType> x, ConstMatrixBaseRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        Output<Scalar> fx_(this->ORows());
+        Output<Scalar> fx_(this->output_rows());
         fx_.setZero();
         this->derived().compute_jacobian(x, fx_, jx_);
     }
@@ -340,14 +340,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     template <class InType>
     inline Jacobian<typename InType::Scalar> jacobian(ConstVectorBaseRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
-        Jacobian<Scalar> jx(this->ORows(), this->IRows());
+        Jacobian<Scalar> jx(this->output_rows(), this->input_rows());
         jx.setZero();
         this->derived().jacobian(x, jx);
         return jx;
     }
 
     template <class JacType, class AdjGradType, class AdjVarType>
-    inline void jacobianXadjoint(ConstMatrixBaseRef<JacType> jx_,
+    inline void jacobian_x_adjoint(ConstMatrixBaseRef<JacType> jx_,
                                  ConstVectorBaseRef<AdjGradType> adjgrad_,
                                  ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename JacType::Scalar JScalar;
@@ -357,8 +357,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (std::is_same<JScalar, AScalar>::value) {
             adjgrad.noalias() = (adjvars.transpose() * jx_).transpose();
         } else {
-            for (int i = 0; i < this->IRows(); i++) {
-                for (int j = 0; j < this->ORows(); j++) {
+            for (int i = 0; i < this->input_rows(); i++) {
+                for (int j = 0; j < this->output_rows(); j++) {
                     adjgrad[i] += adjvars[j] * jx_(j, i);
                 }
             }
@@ -372,10 +372,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                         ConstVectorBaseRef<AdjGradType> adjgrad_,
                                         ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        Jacobian<Scalar> jx(this->ORows(), this->IRows());
+        Jacobian<Scalar> jx(this->output_rows(), this->input_rows());
         jx.setZero();
         this->derived().compute_jacobian(x, fx_, jx);
-        this->jacobianXadjoint(jx, adjgrad_, adjvars);
+        this->jacobian_x_adjoint(jx, adjgrad_, adjvars);
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
@@ -385,7 +385,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                                  ConstVectorBaseRef<AdjGradType> adjgrad_,
                                                  ConstVectorBaseRef<AdjVarType> adjvars) const {
         this->derived().compute_jacobian(x, fx_, jx_);
-        this->jacobianXadjoint(jx_, adjgrad_, adjvars);
+        this->jacobian_x_adjoint(jx_, adjgrad_, adjvars);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -397,7 +397,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
 
         typedef typename InType::Scalar Scalar;
-        if constexpr (!Derived::IsVectorizable) {
+        if constexpr (!Derived::is_vectorizable) {
 
             if constexpr (Is_SuperScalar<Scalar>::value) {
                 VectorBaseRef<OutType> fx = fx_.const_cast_derived();
@@ -414,8 +414,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 Hessian<RealScalar> hx_r;
                 Output<RealScalar> l_r;
 
-                const int IRR = this->IRows();
-                const int ORR = this->ORows();
+                const int IRR = this->input_rows();
+                const int ORR = this->output_rows();
 
                 if constexpr (Base::InputIsDynamic)
                     x_r.resize(IRR);
@@ -474,9 +474,9 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                ConstMatrixBaseRef<AdjHessType> adjhess_,
                                ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        Output<Scalar> fx(this->ORows());
-        Input<Scalar> adjgrad(this->IRows());
-        Jacobian<Scalar> jx(this->ORows(), this->IRows());
+        Output<Scalar> fx(this->output_rows());
+        Input<Scalar> adjgrad(this->input_rows());
+        Jacobian<Scalar> jx(this->output_rows(), this->input_rows());
         fx.setZero();
         jx.setZero();
         adjgrad.setZero();
@@ -489,7 +489,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     inline Hessian<typename InType::Scalar>
     adjointhessian(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        Hessian<Scalar> adjhess(this->IRows(), this->IRows());
+        Hessian<Scalar> adjhess(this->input_rows(), this->input_rows());
         adjhess.setZero();
         this->derived().adjointhessian(x, adjhess, adjvars);
         return adjhess;
@@ -499,7 +499,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    template <class GenType> GenType MakeGeneric() const { return GenType(this->derived()); }
+    template <class GenType> GenType make_generic() const { return GenType(this->derived()); }
 
     /// Type-erase this expression into a GenericFunction.  Similar in spirit
     /// to Eigen's .eval() in that it breaks expression template chains, but
@@ -536,17 +536,17 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
 
             if constexpr (Base::InputIsDynamic) {
-                Tycho::right_jacobian_product_dynamic_impl(this->SubDomains, target_, left, right,
+                right_jacobian_product_dynamic_impl(this->sub_domains, target_, left, right,
                                                            assign, aliased);
             } else {
-                Tycho::right_jacobian_product_impl(target_, left, right, assign, aliased);
+                right_jacobian_product_impl(target_, left, right, assign, aliased);
             }
 
         } else {
 
             // Compile Time Input Domain
             using DMN = typename Derived::INPUT_DOMAIN;
-            Tycho::right_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
+            right_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
                                                         aliased);
         }
     }
@@ -582,15 +582,15 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::symetric_jacobian_product_dynamic_impl(this->SubDomains, target_, left,
+                symetric_jacobian_product_dynamic_impl(this->sub_domains, target_, left,
                                                               right, assign, aliased);
             } else {
-                Tycho::symetric_jacobian_product_impl(target_, left, right, assign, aliased);
+                symetric_jacobian_product_impl(target_, left, right, assign, aliased);
             }
 
         } else {
             using DMN = typename Derived::INPUT_DOMAIN;
-            Tycho::symetric_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
+            symetric_jacobian_product_constant_impl(DMN(), target_, left, right, assign,
                                                            aliased);
         }
     }
@@ -605,22 +605,22 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
+                accumulate_matrix_dynamic_domain_impl(this->sub_domains, target_, right,
                                                              assign);
 
             } else {
-                Tycho::accumulate_impl(target_, right, assign);
+                accumulate_impl(target_, right, assign);
             }
 
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
+                    accumulate_impl(target_ref.template middleCols<size>(start, size),
                                            right_ref.template middleCols<size>(start, size),
                                            assign);
                 });
@@ -636,20 +636,20 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::accumulate_vector_dynamic_domain_impl(this->SubDomains, target_, right,
+                accumulate_vector_dynamic_domain_impl(this->sub_domains, target_, right,
                                                              assign);
             } else {
-                Tycho::accumulate_impl(target_, right, assign);
+                accumulate_impl(target_, right, assign);
             }
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    Tycho::accumulate_impl(target_ref.template segment<size>(start, size),
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
+                    accumulate_impl(target_ref.template segment<size>(start, size),
                                            right_ref.template segment<size>(start, size), assign);
                 });
         }
@@ -663,59 +663,59 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        if constexpr (Derived::IsLinearFunction) {
+        if constexpr (Derived::is_linear_function) {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::accumulate_symetric_matrix_dynamic_domain_impl(this->SubDomains, target_,
+                accumulate_symetric_matrix_dynamic_domain_impl(this->sub_domains, target_,
                                                                       right, assign);
             } else {
-                Tycho::accumulate_impl(target_, right, assign);
+                accumulate_impl(target_, right, assign);
             }
 
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
 
             if constexpr (sds == 1) {
-                constexpr int start = Derived::INPUT_DOMAIN::SubDomains[0][0];
-                constexpr int size = Derived::INPUT_DOMAIN::SubDomains[0][1];
+                constexpr int start = Derived::INPUT_DOMAIN::sub_domains[0][0];
+                constexpr int size = Derived::INPUT_DOMAIN::sub_domains[0][1];
 
-                Tycho::accumulate_impl(
+                accumulate_impl(
                     target_ref.template block<size, size>(start, start, size, size),
                     right_ref.template block<size, size>(start, start, size, size), assign);
 
             } else if constexpr (sds == 2) {
-                constexpr int Start1 = Derived::INPUT_DOMAIN::SubDomains[0][0];
-                constexpr int Size1 = Derived::INPUT_DOMAIN::SubDomains[0][1];
+                constexpr int Start1 = Derived::INPUT_DOMAIN::sub_domains[0][0];
+                constexpr int Size1 = Derived::INPUT_DOMAIN::sub_domains[0][1];
 
-                constexpr int Start2 = Derived::INPUT_DOMAIN::SubDomains[1][0];
-                constexpr int Size2 = Derived::INPUT_DOMAIN::SubDomains[1][1];
+                constexpr int Start2 = Derived::INPUT_DOMAIN::sub_domains[1][0];
+                constexpr int Size2 = Derived::INPUT_DOMAIN::sub_domains[1][1];
 
-                Tycho::accumulate_impl(
+                accumulate_impl(
                     target_ref.template block<Size1, Size1>(Start1, Start1, Size1, Size1),
                     right_ref.template block<Size1, Size1>(Start1, Start1, Size1, Size1), assign);
 
-                Tycho::accumulate_impl(
+                accumulate_impl(
                     target_ref.template block<Size2, Size2>(Start2, Start2, Size2, Size2),
                     right_ref.template block<Size2, Size2>(Start2, Start2, Size2, Size2), assign);
 
-                Tycho::accumulate_impl(
+                accumulate_impl(
                     target_ref.template block<Size1, Size2>(Start1, Start2, Size1, Size2),
                     right_ref.template block<Size1, Size2>(Start1, Start2, Size1, Size2), assign);
 
-                Tycho::accumulate_impl(
+                accumulate_impl(
                     target_ref.template block<Size2, Size1>(Start2, Start1, Size2, Size1),
                     right_ref.template block<Size2, Size1>(Start2, Start1, Size2, Size1), assign);
 
             } else {
-                Tycho::constexpr_for_loop(
+                tycho::utils::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
-                        constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                        constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                        Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                        constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
+                        accumulate_impl(target_ref.template middleCols<size>(start, size),
                                                right_ref.template middleCols<size>(start, size),
                                                assign);
                     });
@@ -734,22 +734,22 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::accumulate_matrix_dynamic_domain_impl(this->SubDomains, target_, right,
+                accumulate_matrix_dynamic_domain_impl(this->sub_domains, target_, right,
                                                              assign);
             } else {
-                Tycho::accumulate_impl(target_, right, assign);
+                accumulate_impl(target_, right, assign);
             }
 
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             ConstMatrixBaseRef<JacType> right_ref(right.derived());
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
 
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
-                    Tycho::accumulate_impl(target_ref.template middleCols<size>(start, size),
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
+                    accumulate_impl(target_ref.template middleCols<size>(start, size),
                                            right_ref.template middleCols<size>(start, size),
                                            assign);
                 });
@@ -762,23 +762,23 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
 
         if constexpr (Derived::InputIsDynamic) {
-            const int sds = this->SubDomains.cols();
+            const int sds = this->sub_domains.cols();
             if (sds == 0) {
                 target_ref += right + right.transpose();
             } else {
                 for (int i = 0; i < sds; i++) {
-                    int start = this->SubDomains(0, i);
-                    int size = this->SubDomains(1, i);
+                    int start = this->sub_domains(0, i);
+                    int size = this->sub_domains(1, i);
                     target_ref.middleCols(start, size) += right.middleCols(start, size);
                     target_ref.middleRows(start, size) += right.middleCols(start, size).transpose();
                 }
             }
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
-            Tycho::constexpr_for_loop(
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
                     target_ref.template middleCols<size>(start, size) +=
                         right.template middleCols<size>(start, size);
                     target_ref.template middleRows<size>(start, size) +=
@@ -798,19 +798,19 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
+                scale_matrix_dynamic_domain_impl(this->sub_domains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
             }
 
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
                     this->scale_impl(target_ref.template middleCols<size>(start, size), s);
                 });
         }
@@ -820,40 +820,40 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::scale_vector_dynamic_domain_impl(this->SubDomains, target_, s);
+                scale_vector_dynamic_domain_impl(this->sub_domains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
             }
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
                     this->scale_impl(target_ref.template segment<size>(start, size), s);
                 });
         }
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        if constexpr (Derived::IsLinearFunction) {
+        if constexpr (Derived::is_linear_function) {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                Tycho::scale_matrix_dynamic_domain_impl(this->SubDomains, target_, s);
+                scale_matrix_dynamic_domain_impl(this->sub_domains, target_, s);
 
             } else {
                 this->scale_impl(target_, s);
             }
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
             MatrixBaseRef<Target> target_ref(target_.const_cast_derived());
-            Tycho::constexpr_for_loop(
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
                     this->scale_impl(target_ref.template middleCols<size>(start, size), s);
                 });
         }
@@ -870,13 +870,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
-                const int sds = this->SubDomains.cols();
+                const int sds = this->sub_domains.cols();
                 if (sds == 0) {
                     target_ref.setZero();
                 } else {
                     for (int i = 0; i < sds; i++) {
-                        int start = this->SubDomains(0, i);
-                        int size = this->SubDomains(1, i);
+                        int start = this->sub_domains(0, i);
+                        int size = this->sub_domains(1, i);
                         target_ref.middleCols(start, size).setZero();
                     }
                 }
@@ -885,11 +885,11 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
 
         } else {
-            constexpr int sds = Derived::INPUT_DOMAIN::SubDomains.size();
-            Tycho::constexpr_for_loop(
+            constexpr int sds = Derived::INPUT_DOMAIN::sub_domains.size();
+            tycho::utils::constexpr_for_loop(
                 std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
-                    constexpr int start = Derived::INPUT_DOMAIN::SubDomains[i.value][0];
-                    constexpr int size = Derived::INPUT_DOMAIN::SubDomains[i.value][1];
+                    constexpr int start = Derived::INPUT_DOMAIN::sub_domains[i.value][0];
+                    constexpr int size = Derived::INPUT_DOMAIN::sub_domains[i.value][1];
                     target_ref.template middleCols<size>(start, size).setZero();
                 });
         }
@@ -900,24 +900,24 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
      * the Jacobian of derived and represents the number of elements that will be explicilty
      * scattered into the KKT matrix of an optimization problem on each function call. For dense
      * functions, in almost all cases they are all non-zero, or are assumed non-zero even if they
-     * are not. However, this method will account for explicit non-zeros if the HessianElemIsNonZero
+     * are not. However, this method will account for explicit non-zeros if the hessian_elem_is_nonzero
      * ex. is explicitly overloaded by derived. The sum of the non-zeros here is used when
      * interfacing whith the optimizer throutght the wrapper classes ConstraintFunction and
      * ObjectiveFunction.
      */
-    int numKKTEles(bool dojac, bool dohess) const {
+    int num_kkt_elements(bool dojac, bool dohess) const {
         int hesselems = 0;
         int jacelems = 0;
-        for (int i = 0; i < this->IRows(); i++) {
+        for (int i = 0; i < this->input_rows(); i++) {
             if (dohess) {
-                for (int j = i; j < this->IRows(); j++) {
-                    if (this->derived().HessianElemIsNonZero(j, i))
+                for (int j = i; j < this->input_rows(); j++) {
+                    if (this->derived().hessian_elem_is_nonzero(j, i))
                         hesselems++;
                 }
             }
             if (dojac) {
-                for (int j = 0; j < this->ORows(); j++) {
-                    if (this->derived().JacobianElemIsNonZero(j, i))
+                for (int j = 0; j < this->output_rows(); j++) {
+                    if (this->derived().jacobian_elem_is_nonzero(j, i))
                         jacelems++;
                 }
             }
@@ -932,17 +932,17 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
      * each call of derived are held in the Solver indexing data struct.
      */
 
-    void getKKTSpace(EigenRef<Eigen::VectorXi> KKTrows, EigenRef<Eigen::VectorXi> KKTcols,
+    void get_kkt_space(EigenRef<Eigen::VectorXi> KKTrows, EigenRef<Eigen::VectorXi> KKTcols,
                      int &freeloc, int conoffset, bool dojac, bool dohess,
-                     SolverIndexingData &data) {
+                     Tycho::SolverIndexingData &data) {
         data.InnerKKTStarts.resize(data.NumAppl());
 
         for (int V = 0; V < data.NumAppl(); V++) {
             data.InnerKKTStarts[V] = freeloc;
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 if (dohess) {
-                    for (int j = i; j < this->IRows(); j++) {
-                        if (this->derived().HessianElemIsNonZero(j, i)) {
+                    for (int j = i; j < this->input_rows(); j++) {
+                        if (this->derived().hessian_elem_is_nonzero(j, i)) {
                             KKTrows[freeloc] = data.VLoc(j, V);
                             KKTcols[freeloc] = data.VLoc(i, V);
                             freeloc++;
@@ -950,8 +950,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     }
                 }
                 if (dojac) {
-                    for (int j = 0; j < this->ORows(); j++) {
-                        if (this->derived().JacobianElemIsNonZero(j, i)) {
+                    for (int j = 0; j < this->output_rows(); j++) {
+                        if (this->derived().jacobian_elem_is_nonzero(j, i)) {
                             KKTrows[freeloc] = data.CLoc(j, V) + conoffset;
                             KKTcols[freeloc] = data.VLoc(i, V);
                             freeloc++;
@@ -973,7 +973,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     contains a flag (-1) indicating if we can sum into the corresponding column without clashing
     with the work of another function on another thread. If the flag is greater than zero, the
     element of KKTClash is the index of the mutex in KKTLocks, which derived should lock when
-    summing into the column and then release. This logic is controlled by KKTFillAll and KKTFillJac.
+    summing into the column and then release. This logic is controlled by kkt_fill_all and kkt_fill_jac.
     Do not overload these functions unless you really know what you are doing.
     */
 
@@ -982,40 +982,40 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                               Eigen::Ref<Eigen::VectorXi> KKTLocations,
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
-                              const SolverIndexingData &data) const {
+                              const Tycho::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &jx) {
-            Eigen::Map<Output<double>> fx(NULL, this->ORows());
+            Eigen::Map<Output<double>> fx(NULL, this->output_rows());
 
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
-                    this->gatherInput(X, x, V, data);
+                    this->gather_input(X, x, V, data);
 
                     new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->ORows());
+                                                         this->output_rows());
                     fx.setZero();
                     jx.setZero();
                     this->derived().compute_jacobian(x, fx, jx);
 
-                    this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks,
+                    this->derived().kkt_fill_jac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks,
                                                data);
                 }
             };
-            const int IRR = this->IRows();
-            const int ORR = this->ORows();
+            const int IRR = this->input_rows();
+            const int ORR = this->output_rows();
             auto VectorImpl = [&]() {
-                using SuperScalar = Tycho::DefaultSuperScalar;
+                using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
                 int Packs = data.NumAppl() / vsize;
 
-                Input<SuperScalar> x_vect(this->IRows());
-                Output<SuperScalar> fx_vect(this->ORows());
-                Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
+                Input<SuperScalar> x_vect(this->input_rows());
+                Output<SuperScalar> fx_vect(this->output_rows());
+                Jacobian<SuperScalar> jx_vect(this->output_rows(), this->input_rows());
 
                 for (int i = 0; i < Packs; i++) {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
-                        this->gatherInput(X, x, V, data);
+                        this->gather_input(X, x, V, data);
                         for (int k = 0; k < IRR; k++) {
                             x_vect[k][j] = x[k];
                         }
@@ -1031,13 +1031,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                 jx(l, k) = jx_vect(l, k)[j];
                             }
                         }
-                        this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes,
+                        this->derived().kkt_fill_jac(V, jx, KKTmat, KKTLocations, KKTClashes,
                                                    KKTLocks, data);
                     }
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
@@ -1047,7 +1047,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 ScalarImpl(Packs * vsize, data.NumAppl());
             };
 
-            if constexpr (Derived::IsVectorizable) {
+            if constexpr (Derived::is_vectorizable) {
                 if (this->derived().EnableVectorization) {
                     VectorImpl();
                 } else {
@@ -1058,8 +1058,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
-                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
+                                    tycho::utils::TempSpec<Jacobian<double>>(this->output_rows(), this->input_rows()));
     }
 
     void constraints_jacobian_adjointgradient(
@@ -1067,20 +1067,20 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         Eigen::Ref<Eigen::VectorXd> FX, Eigen::Ref<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
+        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l, auto &jx) {
-            Eigen::Map<Output<double>> fx(NULL, this->ORows());
-            Eigen::Map<Input<double>> agx(NULL, this->IRows());
+            Eigen::Map<Output<double>> fx(NULL, this->output_rows());
+            Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
             for (int V = 0; V < data.NumAppl(); V++) {
-                this->gatherInput(X, x, V, data);
-                this->gatherMult(L, l, V, data);
+                this->gather_input(X, x, V, data);
+                this->gather_mult(L, l, V, data);
 
                 new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                     this->ORows());
+                                                     this->output_rows());
                 new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                     this->IRows());
+                                                     this->input_rows());
 
                 fx.setZero();
                 agx.setZero();
@@ -1088,13 +1088,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
                 this->derived().compute_jacobian_adjointgradient(x, fx, jx, agx, l);
 
-                this->derived().KKTFillJac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
+                this->derived().kkt_fill_jac(V, jx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
-                                    TempSpec<Output<double>>(this->ORows(), 1),
-                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
+                                    tycho::utils::TempSpec<Output<double>>(this->output_rows(), 1),
+                                    tycho::utils::TempSpec<Jacobian<double>>(this->output_rows(), this->input_rows()));
     }
 
     /*
@@ -1109,7 +1109,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     KKTClashes contains a flag (-1) indicating if we can sum into the corresponding column without
     clashing with the work of another function on another thread. If the flag is greater than zero,
     the element of KKTClash is the index of the mutex in KKTLocks, which derived should lock when
-    summing into the column and then release. This logic is controlled by KKTFillAll and KKTFillJac.
+    summing into the column and then release. This logic is controlled by kkt_fill_all and kkt_fill_jac.
     Do not overload these functions unless you really know what you are doing.
     */
 
@@ -1118,21 +1118,21 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         EigenRef<Eigen::VectorXd> FX, EigenRef<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
-        std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
+        std::vector<std::mutex> &KKTLocks, const Tycho::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l, auto &jx, auto &hx) {
-            Eigen::Map<Output<double>> fx(NULL, this->ORows());
-            Eigen::Map<Input<double>> agx(NULL, this->IRows());
+            Eigen::Map<Output<double>> fx(NULL, this->output_rows());
+            Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
-                    this->gatherInput(X, x, V, data);
-                    this->gatherMult(L, l, V, data);
+                    this->gather_input(X, x, V, data);
+                    this->gather_mult(L, l, V, data);
 
                     new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->ORows());
+                                                         this->output_rows());
                     new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                         this->IRows());
+                                                         this->input_rows());
 
                     fx.setZero();
                     agx.setZero();
@@ -1142,30 +1142,30 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     this->derived().compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, agx,
                                                                                     hx, l);
 
-                    this->derived().KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
+                    this->derived().kkt_fill_all(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
                                                KKTLocks, data);
                 }
             };
 
-            const int IRR = this->IRows();
-            const int ORR = this->ORows();
+            const int IRR = this->input_rows();
+            const int ORR = this->output_rows();
             auto VectorImpl = [&]() {
-                using SuperScalar = Tycho::DefaultSuperScalar;
+                using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
                 int Packs = data.NumAppl() / vsize;
 
-                Input<SuperScalar> x_vect(this->IRows());
-                Output<SuperScalar> fx_vect(this->ORows());
-                Jacobian<SuperScalar> jx_vect(this->ORows(), this->IRows());
-                Gradient<SuperScalar> agx_vect(this->IRows());
-                Hessian<SuperScalar> hx_vect(this->IRows(), this->IRows());
-                Output<SuperScalar> l_vect(this->ORows());
+                Input<SuperScalar> x_vect(this->input_rows());
+                Output<SuperScalar> fx_vect(this->output_rows());
+                Jacobian<SuperScalar> jx_vect(this->output_rows(), this->input_rows());
+                Gradient<SuperScalar> agx_vect(this->input_rows());
+                Hessian<SuperScalar> hx_vect(this->input_rows(), this->input_rows());
+                Output<SuperScalar> l_vect(this->output_rows());
 
                 for (int i = 0; i < Packs; i++) {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
-                        this->gatherInput(X, x, V, data);
-                        this->gatherMult(L, l, V, data);
+                        this->gather_input(X, x, V, data);
+                        this->gather_mult(L, l, V, data);
 
                         for (int k = 0; k < IRR; k++) {
                             x_vect[k][j] = x[k];
@@ -1194,18 +1194,18 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                 hx(l, k) = hx_vect(l, k)[j];
                             }
                         }
-                        this->derived().KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
+                        this->derived().kkt_fill_all(V, jx, hx, KKTmat, KKTLocations, KKTClashes,
                                                    KKTLocks, data);
                     }
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
                         new (&agx) Eigen::Map<Input<double>>(
-                            AGX.data() + data.InnerGradientStarts[V], this->IRows());
+                            AGX.data() + data.InnerGradientStarts[V], this->input_rows());
                         for (int l = 0; l < IRR; l++) {
                             agx[l] = agx_vect[l][j];
                         }
@@ -1215,7 +1215,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 ScalarImpl(Packs * vsize, data.NumAppl());
             };
 
-            if constexpr (Derived::IsVectorizable) {
+            if constexpr (Derived::is_vectorizable) {
                 if (this->derived().EnableVectorization) {
                     VectorImpl();
                 } else {
@@ -1226,43 +1226,43 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
-                                    TempSpec<Output<double>>(this->ORows(), 1),
-                                    TempSpec<Jacobian<double>>(this->ORows(), this->IRows()),
-                                    TempSpec<Hessian<double>>(this->IRows(), this->IRows()));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
+                                    tycho::utils::TempSpec<Output<double>>(this->output_rows(), 1),
+                                    tycho::utils::TempSpec<Jacobian<double>>(this->output_rows(), this->input_rows()),
+                                    tycho::utils::TempSpec<Hessian<double>>(this->input_rows(), this->input_rows()));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   protected:
-    inline constexpr bool JacobianElemIsNonZero(int row, int col) const { return true; }
-    inline constexpr bool HessianElemIsNonZero(int row, int col) const {
-        return !Derived::IsLinearFunction;
+    inline constexpr bool jacobian_elem_is_nonzero(int row, int col) const { return true; }
+    inline constexpr bool hessian_elem_is_nonzero(int row, int col) const {
+        return !Derived::is_linear_function;
     }
-    inline void AddHessianElem(double v, int row, int col, double *mpt, const int *lpt,
+    inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                int &freeloc) const {
-        if constexpr (!Derived::IsLinearFunction) {
+        if constexpr (!Derived::is_linear_function) {
             mpt[lpt[freeloc]] += v;
             freeloc++;
         }
     }
-    inline void AddJacobianElem(double v, int row, int col, double *mpt, const int *lpt,
+    inline void add_jacobian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                 int &freeloc) const {
         mpt[lpt[freeloc]] += v;
         freeloc++;
     }
 
     template <class JacType, class HessType>
-    void KKTFillAll(int Apl, const JacType &jx, const HessType &hx,
+    void kkt_fill_all(int Apl, const JacType &jx, const HessType &hx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
-                    std::vector<std::mutex> &ClashLocks, const SolverIndexingData &data) const {
+                    std::vector<std::mutex> &ClashLocks, const Tycho::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
-        const int IRR = (Base::IRC > 0) ? Base::IRC : this->IRows();
-        const int ORR = (Base::ORC > 0) ? Base::ORC : this->ORows();
+        const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
+        const int ORR = (Base::ORC > 0) ? Base::ORC : this->output_rows();
 
         auto Lock = [&](int var) {
             if (VarClashes[var] == -1) {
@@ -1289,13 +1289,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             Lock(ActiveVar);
             ///// insert hessian column symetrically
             for (int j = i; j < IRR; j++) {
-                this->derived().AddHessianElem(hx(j, i), j, i, mpt, lpt, freeloc);
+                this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
             }
             if (uniquecon)
                 UnLock(ActiveVar);
             ///// insert jacobian column
             for (int j = 0; j < ORR; j++) {
-                this->derived().AddJacobianElem(jx(j, i), j, i, mpt, lpt, freeloc);
+                this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
             }
             ///////////////////////////////////////////////////////////////////////////////
             if (!uniquecon)
@@ -1304,28 +1304,28 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class JacType>
-    void KKTFillJac(int Apl, const JacType &jx,
+    void kkt_fill_jac(int Apl, const JacType &jx,
                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                     Eigen::Ref<Eigen::VectorXi> KKTLocs, Eigen::Ref<Eigen::VectorXi> VarClashes,
-                    std::vector<std::mutex> &ClashLocks, const SolverIndexingData &data) const {
+                    std::vector<std::mutex> &ClashLocks, const Tycho::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
 
         if (data.unique_constraints) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 ActiveVar = data.VLoc(i, Apl);
-                for (int j = i; j < this->IRows(); j++) {
-                    if (this->derived().HessianElemIsNonZero(j, i))
+                for (int j = i; j < this->input_rows(); j++) {
+                    if (this->derived().hessian_elem_is_nonzero(j, i))
                         freeloc++;
                 }
-                for (int j = 0; j < this->ORows(); j++) {
-                    this->derived().AddJacobianElem(jx(j, i), j, i, mpt, lpt, freeloc);
+                for (int j = 0; j < this->output_rows(); j++) {
+                    this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
                 }
             }
         } else {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 ActiveVar = data.VLoc(i, Apl);
                 if (VarClashes[ActiveVar] == -1) {
                     //// uncontested
@@ -1338,14 +1338,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 /// Locked////////////////////////////////////////
                 //////////////////////////////////////////////////////////////////////////////
                 ///// insert hessian column symetrically
-                for (int j = i; j < this->IRows(); j++) {
-                    if (this->derived().HessianElemIsNonZero(j, i))
+                for (int j = i; j < this->input_rows(); j++) {
+                    if (this->derived().hessian_elem_is_nonzero(j, i))
                         freeloc++;
                 }
                 ///// insert jacobian column
 
-                for (int j = 0; j < this->ORows(); j++) {
-                    this->derived().AddJacobianElem(jx(j, i), j, i, mpt, lpt, freeloc);
+                for (int j = 0; j < this->output_rows(); j++) {
+                    this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
                 }
                 ///////////////////////////////////////////////////////////////////////////////
                 if (VarClashes[ActiveVar] == -1) {
@@ -1361,4 +1361,4 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

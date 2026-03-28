@@ -17,25 +17,25 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR, OR> {
     using Base = VectorFunction<Constant<IR, OR>, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    static const bool IsLinearFunction = true;
-    static const bool IsVectorizable = true;
+    static const bool is_linear_function = true;
+    static const bool is_vectorizable = true;
 
     Output<double> value;
 
     Constant(int ir, Output<double> val) {
-        this->setIORows(ir, val.size());
+        this->set_io_rows(ir, val.size());
         value = val;
 
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = 0;
-        this->set_input_domain(this->IRows(), {dmn});
+        this->set_input_domain(this->input_rows(), {dmn});
     }
 
     Constant() {}
@@ -66,4 +66,4 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

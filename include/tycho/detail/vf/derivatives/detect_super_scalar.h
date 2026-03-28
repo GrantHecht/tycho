@@ -17,8 +17,8 @@
 
 #include "tycho/detail/vf/core/vector_function_concepts.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class T> struct Is_SuperScalar : std::bool_constant<IsSuperScalar<T>> {};
 
-} // namespace Tycho
+} // namespace tycho::vf

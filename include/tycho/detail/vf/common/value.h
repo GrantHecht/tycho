@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     using Base = VectorFunction<Value<OSZ>, OSZ, OSZ>;
@@ -49,4 +49,4 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

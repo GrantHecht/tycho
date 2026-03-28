@@ -19,7 +19,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func> struct CwiseFunctionOperator;
 
@@ -131,7 +131,7 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
     using Base = CwiseFunctionOperator<CwiseArcSin<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -170,7 +170,7 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
     using Base = CwiseFunctionOperator<CwiseArcCos<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -210,7 +210,7 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
     using Base = CwiseFunctionOperator<CwiseArcTan<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -678,7 +678,7 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -748,7 +748,7 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
     double power = 1;
 
     CwisePow(Func f, double power) : Base(f), power(power) {}
@@ -856,11 +856,11 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
     Func func;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_vectorizable = Func::is_vectorizable;
     CwiseFunctionOperator() {}
     CwiseFunctionOperator(Func f) : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
 
     template <class InType, class OutType>
@@ -869,7 +869,7 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> fxt;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
+            fxt.resize(this->func.output_rows());
         }
 
         this->func.compute(x, fxt);
@@ -884,8 +884,8 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> jxdiag;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
-            jxdiag.resize(this->func.ORows());
+            fxt.resize(this->func.output_rows());
+            jxdiag.resize(this->func.output_rows());
         }
 
         this->func.compute_jacobian(x, fxt, jx_);
@@ -914,9 +914,9 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> hxdiag;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
-            jxdiag.resize(this->func.ORows());
-            hxdiag.resize(this->func.ORows());
+            fxt.resize(this->func.output_rows());
+            jxdiag.resize(this->func.output_rows());
+            hxdiag.resize(this->func.output_rows());
         }
 
         this->func.compute(x, fxt);
@@ -977,4 +977,4 @@ template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, 
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

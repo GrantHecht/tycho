@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func> struct CwiseSum_Impl;
 
@@ -35,7 +35,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     template <class... OtherFunc> using DerivedTemplate = CwiseSum<OtherFunc...>;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool IsLinearFunction = Func::IsLinearFunction;
+    static const bool is_linear_function = Func::is_linear_function;
     static const bool IsSegmentOp = Is_Segment<Func>::value || Is_Arguments<Func>::value;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
@@ -44,8 +44,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     Func func;
     CwiseSum_Impl() {}
     CwiseSum_Impl(Func f) : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), 1);
-        this->set_input_domain(this->IRows(), {this->func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), 1);
+        this->set_input_domain(this->input_rows(), {this->func.input_domain()});
     }
 
     template <class InType, class OutType>
@@ -53,11 +53,11 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func::ORC>(this->func.SegStart, this->func.ORows()).sum();
+            fx[0] = x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
         } else {
             Func_Output<Scalar> fxv;
             if constexpr (Func::OutputIsDynamic) {
-                fxv.resize(this->func.ORows());
+                fxv.resize(this->func.output_rows());
             }
 
             this->func.compute(x, fxv);
@@ -72,8 +72,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func::ORC>(this->func.SegStart, this->func.ORows()).sum();
-            jx.template middleCols<Func::ORC>(this->func.SegStart, this->func.ORows()).setOnes();
+            fx[0] = x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
+            jx.template middleCols<Func::ORC>(this->func.seg_start, this->func.output_rows()).setOnes();
         } else {
 
             auto Impl = [&](auto &fxv, auto &jxv) {
@@ -81,34 +81,34 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {
-                    if (this->SubDomains.size() == 0) {
+                    if (this->sub_domains.size() == 0) {
                         jx = jxv.colwise().sum();
                     } else {
-                        for (int i = 0; i < this->SubDomains.size(); i++) {
-                            int start = this->SubDomains(i, 0);
-                            int size = this->SubDomains(i, 1);
+                        for (int i = 0; i < this->sub_domains.size(); i++) {
+                            int start = this->sub_domains(i, 0);
+                            int size = this->sub_domains(i, 1);
                             jx.middleCols(start, size) =
                                 jxv.middleCols(start, size).colwise().sum().transpose();
                         }
                     }
                 } else {
 
-                    constexpr int sds = Func::INPUT_DOMAIN::SubDomains.size();
+                    constexpr int sds = Func::INPUT_DOMAIN::sub_domains.size();
 
-                    Tycho::constexpr_for_loop(
+                    tycho::utils::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
-                            constexpr int start = Func::INPUT_DOMAIN::SubDomains[i.value][0];
-                            constexpr int size = Func::INPUT_DOMAIN::SubDomains[i.value][1];
+                            constexpr int start = Func::INPUT_DOMAIN::sub_domains[i.value][0];
+                            constexpr int size = Func::INPUT_DOMAIN::sub_domains[i.value][1];
                             jx.middleCols(start, size) =
                                 jxv.middleCols(start, size).colwise().sum().transpose();
                         });
                 }
             };
 
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
-                TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -124,9 +124,9 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func::ORC>(this->func.SegStart, this->func.ORows()).sum();
-            jx.template middleCols<Func::ORC>(this->func.SegStart, this->func.ORows()).setOnes();
-            adjgrad.template segment<Func::ORC>(this->func.SegStart, this->func.ORows())
+            fx[0] = x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
+            jx.template middleCols<Func::ORC>(this->func.seg_start, this->func.output_rows()).setOnes();
+            adjgrad.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows())
                 .setConstant(adjvars[0]);
         } else {
 
@@ -138,35 +138,35 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {
-                    if (this->SubDomains.size() == 0) {
+                    if (this->sub_domains.size() == 0) {
                         jx = jxv.colwise().sum();
                     } else {
-                        for (int i = 0; i < this->SubDomains.size(); i++) {
-                            int start = this->SubDomains(i, 0);
-                            int size = this->SubDomains(i, 1);
+                        for (int i = 0; i < this->sub_domains.size(); i++) {
+                            int start = this->sub_domains(i, 0);
+                            int size = this->sub_domains(i, 1);
                             jx.middleCols(start, size) =
                                 jxv.middleCols(start, size).colwise().sum().transpose();
                         }
                     }
                 } else {
-                    constexpr int sds = Func::INPUT_DOMAIN::SubDomains.size();
-                    Tycho::constexpr_for_loop(
+                    constexpr int sds = Func::INPUT_DOMAIN::sub_domains.size();
+                    tycho::utils::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
-                            constexpr int start = Func::INPUT_DOMAIN::SubDomains[i.value][0];
-                            constexpr int size = Func::INPUT_DOMAIN::SubDomains[i.value][1];
+                            constexpr int start = Func::INPUT_DOMAIN::sub_domains[i.value][0];
+                            constexpr int size = Func::INPUT_DOMAIN::sub_domains[i.value][1];
                             jx.middleCols(start, size) =
                                 jxv.middleCols(start, size).colwise().sum().transpose();
                         });
                 }
             };
 
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
-                TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

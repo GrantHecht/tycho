@@ -15,7 +15,7 @@
 // for dynamic sized functions (IR=OR=-1).
 //
 // Defines the default set of constexpr boolean info about functions that are used by the expression
-// system, such as IsVectorizable. Derived classes are intended to override these as necessary.
+// system, such as is_vectorizable. Derived classes are intended to override these as necessary.
 //
 //
 // Adds functions for getting and setting the input and output rows.
@@ -70,7 +70,7 @@
 
 #include "tycho/detail/utils/memory_management.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 /*!
  * @brief A computable is anything with a \code compute \endcode function
@@ -80,7 +80,7 @@ namespace Tycho {
  * @tparam OR Output Rows
  */
 template <class Derived, int IR, int OR>
-struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
+struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR> {
     ///////////////////////TypeDefs////////////////////////////////////////////
     template <class Scalar> using Output = Eigen::Matrix<Scalar, OR, 1>;
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IR, 1>;
@@ -99,44 +99,44 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     static const bool JacobianIsDynamic = (IR < 0 || OR < 0);
     static const bool FullyDynamic = (IR < 0 && OR < 0);
 
-    static const bool IsVectorizable = false;
-    static const bool IsLinearFunction = false;
-    static const bool HasDiagonalJacobian = false;
+    static const bool is_vectorizable = false;
+    static const bool is_linear_function = false;
+    static const bool has_diagonal_jacobian = false;
     static const bool HasDiagonalHessian = false;
     static const bool IsCwiseOperator = false;
-    static const bool IsGenericFunction = false;
+    static const bool is_generic_function = false;
     static const bool IsConditional = false;
 
     mutable bool EnableVectorization = false;
 
     void enable_vectorization(bool b) const { this->EnableVectorization = b; }
 
-    [[nodiscard]] constexpr bool is_linear() const { return Derived::IsLinearFunction; }
+    [[nodiscard]] constexpr bool is_linear() const { return Derived::is_linear_function; }
 
-    void setInputRows(int inputrows) {
+    void set_input_rows(int inputrows) {
         if constexpr (IR < 0) {
-            this->InputRows = inputrows;
+            this->input_rows_val = inputrows;
         }
     }
-    void setOutputRows(int outputrows) {
+    void set_output_rows(int outputrows) {
         if constexpr (OR < 0) {
-            this->OutputRows = outputrows;
+            this->output_rows_val = outputrows;
         }
     }
-    void setIORows(int inputrows, int outputrows) {
-        this->setInputRows(inputrows);
-        this->setOutputRows(outputrows);
+    void set_io_rows(int inputrows, int outputrows) {
+        this->set_input_rows(inputrows);
+        this->set_output_rows(outputrows);
     }
-    [[nodiscard]] inline int IRows() const {
+    [[nodiscard]] inline int input_rows() const {
         if constexpr (IR < 0) {
-            return this->InputRows;
+            return this->input_rows_val;
         } else {
             return IR;
         }
     }
-    [[nodiscard]] inline int ORows() const {
+    [[nodiscard]] inline int output_rows() const {
         if constexpr (OR < 0) {
-            return this->OutputRows;
+            return this->output_rows_val;
         } else {
             return OR;
         }
@@ -145,7 +145,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     [[nodiscard]] bool thread_safe() const { return true; }
     //////////////////////////////////////////////////////////////////////////////
     ComputableBase() {}
-    ComputableBase(int inputrows, int outputrows) { this->setIORows(inputrows, outputrows); }
+    ComputableBase(int inputrows, int outputrows) { this->set_io_rows(inputrows, outputrows); }
 
     /*!
      * @brief Calls compute on the derived class.
@@ -167,8 +167,8 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
                 Input<RealScalar> x_r;
                 Output<RealScalar> fx_r;
 
-                const int IRR = this->IRows();
-                const int ORR = this->ORows();
+                const int IRR = this->input_rows();
+                const int ORR = this->output_rows();
 
                 if constexpr (InputIsDynamic)
                     x_r.resize(IRR);
@@ -202,7 +202,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     template <class InType>
     inline Output<typename InType::Scalar> compute(ConstVectorBaseRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
-        Output<Scalar> fx(this->ORows());
+        Output<Scalar> fx(this->output_rows());
         fx.setZero();
         this->derived().compute(x, fx);
         return fx;
@@ -221,7 +221,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
                                 ConstVectorBaseRef<AdjGradType> adjgrad_,
                                 ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        Output<Scalar> fx(this->ORows());
+        Output<Scalar> fx(this->output_rows());
         fx.setZero();
         this->derived().compute_adjointgradient(x, fx, adjgrad_, adjvars);
     }
@@ -230,7 +230,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     inline Gradient<typename InType::Scalar>
     adjointgradient(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        Gradient<Scalar> adjgrad(this->IRows());
+        Gradient<Scalar> adjgrad(this->input_rows());
         adjgrad.setZero();
         this->derived().adjointgradient(x, adjgrad, adjvars);
         return adjgrad;
@@ -244,24 +244,24 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     * Vector X is the total variables vector for the full optimization problem, and FX is the total
     equality or inequality constraints vector for the problem. Data pertaining to the location of the
     input variables in X for each distinct call as well as the target location for the output
-    variables in FX is stored in the SolverIndexingData object. In general users should not directly
+    variables in FX is stored in the Tycho::SolverIndexingData object. In general users should not directly
     overload this function unless they have a very good reason.
     */
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
-                     const SolverIndexingData &data) const {
+                     const Tycho::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x) {
-            Eigen::Map<Output<double>> fx(NULL, this->ORows());
+            Eigen::Map<Output<double>> fx(NULL, this->output_rows());
 
-            const int IRR = this->IRows();
-            const int ORR = this->ORows();
+            const int IRR = this->input_rows();
+            const int ORR = this->output_rows();
 
             // Scalar non-vectorized call to the function
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
-                    this->gatherInput(X, x, V, data);
+                    this->gather_input(X, x, V, data);
                     new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->ORows());
+                                                         this->output_rows());
                     fx.setZero();
                     this->derived().compute(x, fx);
                 }
@@ -274,17 +274,17 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             */
 
             auto VectorImpl = [&]() {
-                using SuperScalar = Tycho::DefaultSuperScalar;
+                using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
                 int Packs = data.NumAppl() / vsize;
 
-                Input<SuperScalar> x_vect(this->IRows());
-                Output<SuperScalar> fx_vect(this->ORows());
+                Input<SuperScalar> x_vect(this->input_rows());
+                Output<SuperScalar> fx_vect(this->output_rows());
 
                 for (int i = 0; i < Packs; i++) {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
-                        this->gatherInput(X, x, V, data);
+                        this->gather_input(X, x, V, data);
                         for (int k = 0; k < IRR; k++) {
                             x_vect[k][j] = x[k];
                         }
@@ -294,7 +294,7 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->ORows());
+                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
@@ -315,33 +315,33 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1));
     }
 
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
                                      ConstEigenRef<Eigen::VectorXd> L, EigenRef<Eigen::VectorXd> FX,
                                      EigenRef<Eigen::VectorXd> AGX,
-                                     const SolverIndexingData &data) const {
+                                     const Tycho::SolverIndexingData &data) const {
 
         auto Impl = [&](auto &x, auto &l) {
-            Eigen::Map<Output<double>> fx(NULL, this->ORows());
-            Eigen::Map<Input<double>> agx(NULL, this->IRows());
+            Eigen::Map<Output<double>> fx(NULL, this->output_rows());
+            Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
             for (int V = 0; V < data.NumAppl(); V++) {
-                this->gatherInput(X, x, V, data);
-                this->gatherMult(L, l, V, data);
+                this->gather_input(X, x, V, data);
+                this->gather_mult(L, l, V, data);
                 new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                     this->ORows());
+                                                     this->output_rows());
                 new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                     this->IRows());
+                                                     this->input_rows());
                 fx.setZero();
                 agx.setZero();
                 this->derived().compute_adjointgradient(x, fx, agx, l);
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<double>>(this->IRows(), 1),
-                                    TempSpec<Output<double>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
+                                    tycho::utils::TempSpec<Output<double>>(this->output_rows(), 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -361,12 +361,12 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     template <class XtType>
         requires std::derived_from<std::remove_cvref_t<XtType>,
                                    Eigen::EigenBase<std::remove_cvref_t<XtType>>>
-    inline void gatherInput(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
-                            const SolverIndexingData &data) const {
+    inline void gather_input(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
+                            const Tycho::SolverIndexingData &data) const {
         if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
-            xt = X.template segment<IR>(data.VLoc(0, V), this->IRows());
+            xt = X.template segment<IR>(data.VLoc(0, V), this->input_rows());
         } else {
-            for (int i = 0; i < this->IRows(); i++)
+            for (int i = 0; i < this->input_rows(); i++)
                 xt(i) = X(data.VLoc(i, V));
         }
     }
@@ -379,15 +379,15 @@ struct ComputableBase : CRTPBase<Derived>, InputOutputSize<IR, OR> {
     template <class LType>
         requires std::derived_from<std::remove_cvref_t<LType>,
                                    Eigen::EigenBase<std::remove_cvref_t<LType>>>
-    inline void gatherMult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
-                           const SolverIndexingData &data) const {
+    inline void gather_mult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
+                           const Tycho::SolverIndexingData &data) const {
         if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {
-            l = L.template segment<OR>(data.CLoc(0, V), this->ORows());
+            l = L.template segment<OR>(data.CLoc(0, V), this->output_rows());
         } else {
-            for (int i = 0; i < this->ORows(); i++)
+            for (int i = 0; i < this->output_rows(); i++)
                 l(i) = L(data.CLoc(i, V));
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

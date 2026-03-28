@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 enum class ConditionalFlags {
     LessThanFlag,
@@ -41,13 +41,13 @@ template <class LHS, class RHS> struct ConditionalStatement {
     ConditionalStatement() {}
     ConditionalStatement(LHS lhss, ConditionalFlags flagss, RHS rhss)
         : lhs(std::move(lhss)), flag(flagss), rhs(std::move(rhss)) {
-        this->InputRows = lhs.IRows();
-        if (lhs.IRows() != rhs.IRows()) {
+        this->input_rows_val = lhs.input_rows();
+        if (lhs.input_rows() != rhs.input_rows()) {
             throw std::invalid_argument(
                 "LHS and RHS of conditional statement must have same input rows");
         }
         if constexpr (!MetaConditional) {
-            if (lhs.ORows() > 1 || rhs.ORows() > 1) {
+            if (lhs.output_rows() > 1 || rhs.output_rows() > 1) {
                 throw std::invalid_argument(
                     "LHS and RHS of conditional statement must be scalar functions");
             }
@@ -109,13 +109,13 @@ template <class LHS, class RHS> struct ConditionalStatement {
         }
     }
 
-    int IRows() const { return this->InputRows; }
+    int input_rows() const { return this->input_rows_val; }
 
   protected:
     ConditionalFlags flag;
     LHS lhs;
     RHS rhs;
-    int InputRows = 0;
+    int input_rows_val = 0;
 };
 
 struct ConstantConditional {
@@ -123,17 +123,17 @@ struct ConstantConditional {
     template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
 
     ConstantConditional() {}
-    ConstantConditional(int irows, bool value) : InputRows(irows), value(value) {}
+    ConstantConditional(int irows, bool value) : input_rows_val(irows), value(value) {}
     ConstantConditional(bool value) : value(value) {}
     template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
         return this->value;
     }
 
-    int IRows() const { return this->InputRows; }
+    int input_rows() const { return this->input_rows_val; }
 
   protected:
     bool value;
-    int InputRows = 0;
+    int input_rows_val = 0;
 };
 
 template <class TestFunc, class TrueFunc, class FalseFunc>
@@ -147,7 +147,7 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
                                          typename FalseFunc::INPUT_DOMAIN>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
     TestFunc test_func;
     TrueFunc true_func;
@@ -156,19 +156,19 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
 
     IfElseFunction(TestFunc test, TrueFunc _true, FalseFunc _false)
         : test_func(std::move(test)), true_func(std::move(_true)), false_func(std::move(_false)) {
-        this->setIORows(this->true_func.IRows(), this->true_func.ORows());
+        this->set_io_rows(this->true_func.input_rows(), this->true_func.output_rows());
 
-        this->set_input_domain(this->IRows(),
+        this->set_input_domain(this->input_rows(),
                                {this->true_func.input_domain(), this->false_func.input_domain()});
-        if (this->true_func.ORows() != this->false_func.ORows()) {
+        if (this->true_func.output_rows() != this->false_func.output_rows()) {
             throw std::invalid_argument("True and false functions in conditional statement must "
                                         "have same number of outputrows.");
         }
-        if (this->true_func.IRows() != this->false_func.IRows()) {
+        if (this->true_func.input_rows() != this->false_func.input_rows()) {
             throw std::invalid_argument("True and false functions in conditional statement must "
                                         "have same number of inputrows.");
         }
-        if (this->test_func.IRows() != this->false_func.IRows()) {
+        if (this->test_func.input_rows() != this->false_func.input_rows()) {
 
             throw std::invalid_argument("Test,True,and False functions in conditional statement "
                                         "must have same number of inputrows.");
@@ -211,4 +211,4 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

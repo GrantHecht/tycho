@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 //! First derivatives using forward finite difference
 /*!
@@ -30,14 +30,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    DenseFirstDerivatives() { this->setJacFDSteps(1.0e-7); }
+    DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-7); }
 
     //! Set step size for each input dimension
-    void setJacFDSteps(const Input<double> &steps) { this->jacFDSteps = steps; }
+    void set_jac_fd_steps(const Input<double> &steps) { this->jac_fd_steps = steps; }
     //! Set step size for all input dimensions
-    void setJacFDSteps(double step) {
-        this->jacFDSteps.resize(this->IRows());
-        this->jacFDSteps.setConstant(step);
+    void set_jac_fd_steps(double step) {
+        this->jac_fd_steps.resize(this->input_rows());
+        this->jac_fd_steps.setConstant(step);
     }
 
     //! Jacobian implementation
@@ -60,13 +60,13 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
 
         this->derived().compute(x, fx_);
         Input<Scalar> xi = x;
-        Output<Scalar> fi(this->ORows());
+        Output<Scalar> fi(this->output_rows());
         fi.setZero();
-        for (int i = 0; i < this->IRows(); i++) {
-            xi[i] += this->jacFDSteps[i];
+        for (int i = 0; i < this->input_rows(); i++) {
+            xi[i] += this->jac_fd_steps[i];
             this->derived().compute(xi, fi);
 
-            jx.col(i) = (fi - fx) / Scalar(this->jacFDSteps[i]);
+            jx.col(i) = (fi - fx) / Scalar(this->jac_fd_steps[i]);
 
             fi.setZero();
             xi[i] = x[i];
@@ -74,7 +74,7 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     }
 
   protected:
-    Eigen::VectorXd jacFDSteps;
+    Eigen::VectorXd jac_fd_steps;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,13 +91,13 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    DenseSecondDerivatives() { this->setHessFDSteps(1.0e-7); }
+    DenseSecondDerivatives() { this->set_hess_fd_steps(1.0e-7); }
     using Base::adjointhessian;
     //! Set step size for each input dimension
-    void setHessFDSteps(const Input<double> &steps) { this->hessFDSteps = steps; }
+    void set_hess_fd_steps(const Input<double> &steps) { this->hess_fd_steps = steps; }
     //! Set step size for all input dimensions
-    void setHessFDSteps(double step) {
-        this->hessFDSteps = Input<double>::Constant(this->IRows(), step);
+    void set_hess_fd_steps(double step) {
+        this->hess_fd_steps = Input<double>::Constant(this->input_rows(), step);
     }
 
     //! Adjoint hessian implementation
@@ -118,24 +118,24 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
         typedef typename InType::Scalar Scalar;
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        Gradient<Scalar> ag(this->IRows());
-        Gradient<Scalar> agi(this->IRows());
+        Gradient<Scalar> ag(this->input_rows());
+        Gradient<Scalar> agi(this->input_rows());
         ag.setZero();
         agi.setZero();
         this->adjointgradient(x, ag, adjvars);
 
         Input<Scalar> xi = x;
-        for (int i = 0; i < this->IRows(); i++) {
+        for (int i = 0; i < this->input_rows(); i++) {
             // if (this->VariableTypes[i] == VarTypes::Linear) {
             if (false) {
-                for (int j = 0; j < this->IRows(); j++) {
+                for (int j = 0; j < this->input_rows(); j++) {
                     adjhess(j, i) = Scalar(0.0);
                 }
             } else {
-                xi[i] += this->hessFDSteps[i];
+                xi[i] += this->hess_fd_steps[i];
                 this->adjointgradient(xi, agi, adjvars);
-                for (int j = 0; j < this->IRows(); j++) {
-                    adjhess(j, i) = (agi[j] - ag[j]) / Scalar(this->hessFDSteps[i]);
+                for (int j = 0; j < this->input_rows(); j++) {
+                    adjhess(j, i) = (agi[j] - ag[j]) / Scalar(this->hess_fd_steps[i]);
                 }
                 agi.setZero();
                 xi[i] = x[i];
@@ -155,7 +155,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     }
 
   protected:
-    Input<double> hessFDSteps;
+    Input<double> hess_fd_steps;
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

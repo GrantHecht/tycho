@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int USZ, int Power> struct IntegralNorm_Impl;
 
@@ -64,10 +64,10 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     static constexpr int pp4 = power - 4;
     static constexpr int ppm2 = power * (power - 2);
     // double IntegralNorm_Scale = 1.0;
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     IntegralNorm_Impl() {}
-    IntegralNorm_Impl(int ir) { this->setIORows(ir, 1); }
+    IntegralNorm_Impl(int ir) { this->set_io_rows(ir, 1); }
 
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;
@@ -167,7 +167,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         adjhess.diagonal().setConstant(npd * adjvars[0]);
 
         if constexpr (InType::RowsAtCompileTime == Eigen::Dynamic) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 adjhess.col(i) += x * (npdd * x[i]);
             }
         } else {
@@ -176,4 +176,4 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

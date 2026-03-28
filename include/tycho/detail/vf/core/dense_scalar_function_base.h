@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/dense_function_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR>
 struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
@@ -25,28 +25,28 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
-                   const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
+                   const Tycho::SolverIndexingData &data) const {
+        Input<double> x(this->input_rows());
         Output<double> fx(1);
 
         for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
+            this->gather_input(X, x, V, data);
             fx.setZero();
             this->derived().compute(x, fx);
             Val += fx[0] * ObjScale;
         }
     }
     void objective_gradient(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
-                            EigenRef<Eigen::VectorXd> GX, const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
+                            EigenRef<Eigen::VectorXd> GX, const Tycho::SolverIndexingData &data) const {
+        Input<double> x(this->input_rows());
         Output<double> fx(1);
-        Jacobian<double> jx(1, this->IRows());
-        Eigen::Map<Input<double>> gx(NULL, this->IRows());
+        Jacobian<double> jx(1, this->input_rows());
+        Eigen::Map<Input<double>> gx(NULL, this->input_rows());
 
         for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
+            this->gather_input(X, x, V, data);
             new (&gx)
-                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->IRows());
+                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->input_rows());
             fx.setZero();
             jx.setZero();
             gx.setZero();
@@ -62,19 +62,19 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
                                     EigenRef<Eigen::VectorXi> KKTLocations,
                                     EigenRef<Eigen::VectorXi> KKTClashes,
                                     std::vector<std::mutex> &KKTLocks,
-                                    const SolverIndexingData &data) const {
-        Input<double> x(this->IRows());
+                                    const Tycho::SolverIndexingData &data) const {
+        Input<double> x(this->input_rows());
         Output<double> fx(1);
-        Jacobian<double> jx(1, this->IRows());
-        Eigen::Map<Input<double>> gx(NULL, this->IRows());
-        Hessian<double> hx(this->IRows(), this->IRows());
+        Jacobian<double> jx(1, this->input_rows());
+        Eigen::Map<Input<double>> gx(NULL, this->input_rows());
+        Hessian<double> hx(this->input_rows(), this->input_rows());
         Output<double> lm(1);
         lm[0] = ObjScale;
 
         for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
+            this->gather_input(X, x, V, data);
             new (&gx)
-                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->IRows());
+                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->input_rows());
 
             fx.setZero();
             jx.setZero();
@@ -84,7 +84,7 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
             this->derived().compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, lm);
 
             Val += fx[0] * ObjScale;
-            this->KKTFillHess(V, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
+            this->kkt_fill_hess(V, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
         }
     }
     //////////////////////////////////////////////////////////////////////////////
@@ -92,10 +92,10 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
 
   protected:
     // double Scale = 1.0;
-    void KKTFillHess(int Apl, const Hessian<double> &hx,
+    void kkt_fill_hess(int Apl, const Hessian<double> &hx,
                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                      EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
-                     std::vector<std::mutex> &ClashLocks, const SolverIndexingData &data) const {
+                     std::vector<std::mutex> &ClashLocks, const Tycho::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
@@ -118,18 +118,18 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
             }
         };
 
-        const int IRR = (Base::IRC > 0) ? Base::IRC : this->IRows();
+        const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
 
         for (int i = 0; i < IRR; i++) {
             ActiveVar = data.VLoc(i, Apl);
             Lock(ActiveVar);
             ///// insert hessian column symetrically
             for (int j = i; j < IRR; j++) {
-                this->derived().AddHessianElem(hx(j, i), j, i, mpt, lpt, freeloc);
+                this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
             }
             ///////////////////////////////////////////////////////////////////////////////
             UnLock(ActiveVar);
         }
     }
 };
-} // namespace Tycho
+} // namespace tycho::vf

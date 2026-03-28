@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 #define CREATE_MEMBER_DETECTOR(X)                                                                  \
     template <typename T> class Detect_##X {                                                       \
@@ -37,4 +37,4 @@ namespace Tycho {
         enum { value = sizeof(func<Derived>(0)) == 2 };                                            \
     };
 
-} // namespace Tycho
+} // namespace tycho::vf

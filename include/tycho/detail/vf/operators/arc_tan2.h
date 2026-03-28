@@ -16,7 +16,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic,
                                   DenseDerivativeMode::Analytic> {
@@ -24,9 +24,9 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
     using Base = VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
-    template <class Scalar> static Scalar calcArcTan2(Scalar yy, Scalar xx) {
+    template <class Scalar> static Scalar calc_arc_tan2(Scalar yy, Scalar xx) {
         Scalar fx;
         if constexpr (Is_SuperScalar<Scalar>::value) {
             for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
@@ -45,7 +45,7 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
 
         Scalar yy = x[0];
         Scalar xx = x[1];
-        fx[0] = calcArcTan2(yy, xx);
+        fx[0] = calc_arc_tan2(yy, xx);
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -56,7 +56,7 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
 
         Scalar yy = x[0];
         Scalar xx = x[1];
-        fx[0] = calcArcTan2(yy, xx);
+        fx[0] = calc_arc_tan2(yy, xx);
 
         Scalar denom = xx * xx + yy * yy;
 
@@ -77,7 +77,7 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
 
         Scalar yy = x[0];
         Scalar xx = x[1];
-        fx[0] = calcArcTan2(yy, xx);
+        fx[0] = calc_arc_tan2(yy, xx);
 
         Scalar denom = xx * xx + yy * yy;
 
@@ -101,4 +101,4 @@ template <class YFunc, class XFunc> struct ArcTan2Impl {
     static auto Definition(YFunc yf, XFunc xf) { return ArcTan2Op().eval(StackedOutputs{yf, xf}); }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

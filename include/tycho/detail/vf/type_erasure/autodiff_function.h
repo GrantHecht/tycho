@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func>
 struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
@@ -27,7 +27,7 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     Func func;
-    ADFun(Func f) : func(std::move(f)) { this->setIORows(this->func.IRows(), this->func.ORows()); }
+    ADFun(Func f) : func(std::move(f)) { this->set_io_rows(this->func.input_rows(), this->func.output_rows()); }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         this->func.compute(x, fx_);
@@ -36,10 +36,10 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
     void test() {
         Input<double> x;
         x.setRandom();
-        return TestDerivs(x);
+        return test_derivs(x);
     };
-    void test(Input<double> x) { return TestDerivs(x); };
-    void TestDerivs(Input<double> x) {
+    void test(Input<double> x) { return test_derivs(x); };
+    void test_derivs(Input<double> x) {
         Output<double> l;
         l.setOnes();
 
@@ -53,4 +53,4 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

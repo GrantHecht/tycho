@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int MRows, int MCols> struct MatrixRowsCols;
 
@@ -39,7 +39,7 @@ struct ColMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func
     using Base = MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func1::ORC,
                                     1 + sizeof...(Funcs), Eigen::ColMajor>;
     ColMajorMatrix(Func1 f1, Funcs... fs)
-        : Base(StackedOutputs{f1, fs...}, f1.ORows(), 1 + sizeof...(Funcs)) {}
+        : Base(StackedOutputs{f1, fs...}, f1.output_rows(), 1 + sizeof...(Funcs)) {}
 };
 
 template <class Func1, class... Funcs>
@@ -48,7 +48,7 @@ struct RowMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + 
     using Base = MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + sizeof...(Funcs),
                                     Func1::ORC, Eigen::RowMajor>;
     RowMajorMatrix(Func1 f1, Funcs... fs)
-        : Base(StackedOutputs{f1, fs...}, 1 + sizeof...(Funcs), f1.ORows()) {}
+        : Base(StackedOutputs{f1, fs...}, 1 + sizeof...(Funcs), f1.output_rows()) {}
 };
 
 template <int MRows, int MCols> struct MatrixRowsCols {
@@ -77,4 +77,4 @@ template <int MRows> struct MatrixRowsCols<MRows, -1> {
     MatrixRowsCols(int rows, int cols) : MatrixCols(cols) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

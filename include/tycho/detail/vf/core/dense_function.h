@@ -18,7 +18,7 @@
 #include "tycho/detail/vf/core/dense_function_base.h"
 #include "tycho/detail/vf/core/dense_scalar_function_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR> struct DenseFunction : DenseFunctionBase<Derived, IR, OR> {
     using Base = DenseFunctionBase<Derived, IR, OR>;
@@ -28,4 +28,4 @@ template <class Derived, int IR>
 struct DenseFunction<Derived, IR, 1> : DenseScalarFunctionBase<Derived, IR> {
     using Base = DenseScalarFunctionBase<Derived, IR>;
 };
-} // namespace Tycho
+} // namespace tycho::vf

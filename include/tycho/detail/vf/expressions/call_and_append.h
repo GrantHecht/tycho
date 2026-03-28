@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class OuterFunc, class InnerFunc1, class... InnerFuncs>
 struct NestedCallAndAppendChain2
@@ -38,7 +38,7 @@ struct NestedCallAndAppendChain2
 
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
-    static const bool IsVectorizable = InnerFunc1::IsVectorizable && OuterFunc::IsVectorizable;
+    static const bool is_vectorizable = InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
 
     static const int SizeInnerFuncs = sizeof...(InnerFuncs);
 
@@ -48,13 +48,13 @@ struct NestedCallAndAppendChain2
                               std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func(std::move(outer_func)) {
         this->inner_func1 = std::get<0>(inner_funct);
-        Tycho::constexpr_for_loop(
+        tycho::utils::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(InnerFuncs)>(),
             [&](auto i) {
                 std::get<i.value>(this->inner_funcs) = std::get<i.value + 1>(inner_funct);
             });
 
-        this->setIORows(this->inner_func1.IRows(), this->outer_func.ORows());
+        this->set_io_rows(this->inner_func1.input_rows(), this->outer_func.output_rows());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,20 +63,20 @@ struct NestedCallAndAppendChain2
         typedef typename InType::Scalar Scalar;
 
         auto Impl = [&](auto &xchain) {
-            xchain.template head<Base::IRC>(this->IRows()) = x;
+            xchain.template head<Base::IRC>(this->input_rows()) = x;
             this->inner_func1.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                             this->IRows(), this->inner_func1.ORows()));
-            Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+                                             this->input_rows(), this->inner_func1.output_rows()));
+            tycho::utils::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute(
-                    xchain.template head<FTtype::IRC>(func_i.IRows()),
-                    xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+                    xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                    xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
             });
             this->outer_func.compute(xchain, fx_);
         };
-        BumpAllocator::allocate_run(Impl,
-                                    TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                    tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.input_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -85,46 +85,46 @@ struct NestedCallAndAppendChain2
         // VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        // OuterFunc_Input<Scalar> xchain(this->outer_func.IRows());
+        // OuterFunc_Input<Scalar> xchain(this->outer_func.input_rows());
         // InnerFunc1_jacobian<Scalar> jx1;
         // std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
-        // OuterFunc_jacobian<Scalar> jxO;
+        // OuterFunc_jacobian<Scalar> jx_o;
 
-        auto Impl = [&](auto &xchain, auto &jx1, auto &jxi, auto &jxO) {
-            xchain.template head<Base::IRC>(this->IRows()) = x;
+        auto Impl = [&](auto &xchain, auto &jx1, auto &jxi, auto &jx_o) {
+            xchain.template head<Base::IRC>(this->input_rows()) = x;
             this->inner_func1.compute_jacobian(
                 x,
-                xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()),
+                xchain.template segment<InnerFunc1::ORC>(this->input_rows(), this->inner_func1.output_rows()),
                 jx1);
 
-            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute_jacobian(
-                    xchain.template head<FTtype::IRC>(func_i.IRows()),
-                    xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                    xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                    xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                     std::get<i.value>(jxi));
             });
 
-            this->outer_func.compute_jacobian(xchain, fx_, jxO);
+            this->outer_func.compute_jacobian(xchain, fx_, jx_o);
 
-            Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.right_jacobian_product(
-                    jxO.template leftCols<FTtype::IRC>(func_i.IRows()),
-                    jxO.template middleCols<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                    jx_o.template leftCols<FTtype::IRC>(func_i.input_rows()),
+                    jx_o.template middleCols<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                     std::get<i.value>(jxi), PlusEqualsAssignment(), std::bool_constant<false>());
             });
 
             this->inner_func1.right_jacobian_product(
-                jxO.template leftCols<InnerFunc1::IRC>(this->inner_func1.IRows()),
-                jxO.template middleCols<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                         this->inner_func1.ORows()),
+                jx_o.template leftCols<InnerFunc1::IRC>(this->inner_func1.input_rows()),
+                jx_o.template middleCols<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                         this->inner_func1.output_rows()),
                 jx1, PlusEqualsAssignment(), std::bool_constant<false>());
 
-            jx.template leftCols<Base::IRC>(this->IRows()) =
-                jxO.template leftCols<Base::IRC>(this->IRows());
+            jx.template leftCols<Base::IRC>(this->input_rows()) =
+                jx_o.template leftCols<Base::IRC>(this->input_rows());
         };
 
         auto make_temp_tuple = [&](auto f) {
@@ -135,17 +135,17 @@ struct NestedCallAndAppendChain2
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             using JType = typename FTtype::template Jacobian<Scalar>;
-            return TempSpec<JType>(func_i.ORows(), func_i.IRows());
+            return tycho::utils::TempSpec<JType>(func_i.output_rows(), func_i.input_rows());
         };
-        auto JITemps = TupleOfTempSpecs<typename InnerFuncs::template Jacobian<Scalar>...>{
+        auto JITemps = tycho::utils::TupleOfTempSpecs<typename InnerFuncs::template Jacobian<Scalar>...>{
             make_temp_tuple(jis)};
 
-        BumpAllocator::allocate_run(
-            Impl, TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1),
-            TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.ORows(),
-                                                  this->inner_func1.IRows()),
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.input_rows(), 1),
+            tycho::utils::TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.output_rows(),
+                                                  this->inner_func1.input_rows()),
             JITemps,
-            TempSpec<OuterFunc_jacobian<Scalar>>(this->outer_func.ORows(), this->outer_func.IRows())
+            tycho::utils::TempSpec<OuterFunc_jacobian<Scalar>>(this->outer_func.output_rows(), this->outer_func.input_rows())
 
         );
     }
@@ -162,11 +162,11 @@ struct NestedCallAndAppendChain2
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        // OuterFunc_Input<Scalar> xchain(this->outer_func.IRows());
+        // OuterFunc_Input<Scalar> xchain(this->outer_func.input_rows());
 
-        // OuterFunc_jacobian<Scalar> jxO;  // = OuterFunc_jacobian<Scalar>::Zero();
-        // OuterFunc_hessian<Scalar> hxO;   // = OuterFunc_hessian <Scalar>::Zero();
-        // OuterFunc_gradient<Scalar> gxO;  // = OuterFunc_gradient<Scalar>::Zero();
+        // OuterFunc_jacobian<Scalar> jx_o;  // = OuterFunc_jacobian<Scalar>::Zero();
+        // OuterFunc_hessian<Scalar> hx_o;   // = OuterFunc_hessian <Scalar>::Zero();
+        // OuterFunc_gradient<Scalar> gx_o;  // = OuterFunc_gradient<Scalar>::Zero();
 
         // InnerFunc1_jacobian<Scalar> jx1;  // = InnerFunc1_jacobian<Scalar>::Zero();
         // InnerFunc1_gradient<Scalar> gx1;  // = InnerFunc1_gradient<Scalar>::Zero();
@@ -182,38 +182,38 @@ struct NestedCallAndAppendChain2
         // xchain.template head<Base::IRC>() = x;
 
         auto Impl = [&](auto &xchain, auto &jx1, auto &gx1, auto &hx1, auto &jxi, auto &gxi,
-                        auto &hxi, auto &jxO, auto &gxO, auto &hxO, auto &j0s) {
-            xchain.template head<Base::IRC>(this->IRows()) = x;
+                        auto &hxi, auto &jx_o, auto &gx_o, auto &hx_o, auto &j0s) {
+            xchain.template head<Base::IRC>(this->input_rows()) = x;
             this->inner_func1.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                             this->IRows(), this->inner_func1.ORows()));
+                                             this->input_rows(), this->inner_func1.output_rows()));
 
-            Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+            tycho::utils::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.compute(
-                    xchain.template head<FTtype::IRC>(func_i.IRows()),
-                    xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+                    xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                    xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
             });
 
-            this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jxO, gxO,
-                                                                             hxO, adjvars);
+            this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jx_o, gx_o,
+                                                                             hx_o, adjvars);
 
-            Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
                 func_i.compute_jacobian_adjointgradient_adjointhessian(
-                    xchain.template head<FTtype::IRC>(func_i.IRows()),
-                    xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                    xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                    xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                     std::get<i.value>(jxi), std::get<i.value>(gxi), std::get<i.value>(hxi),
-                    gxO.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+                    gx_o.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
 
-                func_i.accumulate_gradient(gxO.template head<FTtype::IRC>(func_i.IRows()),
+                func_i.accumulate_gradient(gx_o.template head<FTtype::IRC>(func_i.input_rows()),
                                            std::get<i.value>(gxi), PlusEqualsAssignment());
 
                 func_i.right_jacobian_product(
-                    jxO.template leftCols<FTtype::IRC>(func_i.IRows()),
-                    jxO.template middleCols<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                    jx_o.template leftCols<FTtype::IRC>(func_i.input_rows()),
+                    jx_o.template middleCols<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                     std::get<i.value>(jxi), PlusEqualsAssignment(), std::bool_constant<false>());
             });
 
@@ -221,69 +221,69 @@ struct NestedCallAndAppendChain2
 
             this->inner_func1.compute_jacobian_adjointgradient_adjointhessian(
                 x,
-                xchain.template segment<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                         this->inner_func1.ORows()),
+                xchain.template segment<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                         this->inner_func1.output_rows()),
                 jx1, adjgrad, adjhess,
-                gxO.template segment<InnerFunc1::ORC>(this->inner_func1.IRows()));
+                gx_o.template segment<InnerFunc1::ORC>(this->inner_func1.input_rows()));
 
             this->inner_func1.right_jacobian_product(
-                jxO.template leftCols<InnerFunc1::IRC>(this->inner_func1.IRows()),
-                jxO.template middleCols<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                         this->inner_func1.ORows()),
+                jx_o.template leftCols<InnerFunc1::IRC>(this->inner_func1.input_rows()),
+                jx_o.template middleCols<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                         this->inner_func1.output_rows()),
                 jx1, PlusEqualsAssignment(), std::bool_constant<false>());
 
-            jx.template leftCols<Base::IRC>(this->IRows()) =
-                jxO.template leftCols<Base::IRC>(this->IRows());
-            adjgrad += gxO.template head<InnerFunc1::IRC>(this->inner_func1.IRows());
+            jx.template leftCols<Base::IRC>(this->input_rows()) =
+                jx_o.template leftCols<Base::IRC>(this->input_rows());
+            adjgrad += gx_o.template head<InnerFunc1::IRC>(this->inner_func1.input_rows());
 
             /////////////////////
 
             //////////////////////
 
-            j0s.template topRows<Base::IRC>(this->IRows()).setIdentity();
-            j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                     this->inner_func1.ORows()) = jx1;
+            j0s.template topRows<Base::IRC>(this->input_rows()).setIdentity();
+            j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                     this->inner_func1.output_rows()) = jx1;
 
-            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
                 constexpr int Ev =
-                    SZ_DIFF<FTtype::IRC, Base::IRC>::value; // FTtype::IRC - Base::IRC
-                const int ev = func_i.IRows() - this->IRows();
+                    tycho::utils::SZ_DIFF<FTtype::IRC, Base::IRC>::value; // FTtype::IRC - Base::IRC
+                const int ev = func_i.input_rows() - this->input_rows();
 
-                j0s.template middleRows<FTtype::ORC>(func_i.IRows(), func_i.ORows()) =
-                    std::get<i.value>(jxi).template leftCols<Base::IRC>(this->IRows()) +
-                    std::get<i.value>(jxi).template rightCols<Ev>(func_i.IRows() - this->IRows()) *
-                        j0s.template middleRows<Ev>(this->IRows(), func_i.IRows() - this->IRows());
+                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()) =
+                    std::get<i.value>(jxi).template leftCols<Base::IRC>(this->input_rows()) +
+                    std::get<i.value>(jxi).template rightCols<Ev>(func_i.input_rows() - this->input_rows()) *
+                        j0s.template middleRows<Ev>(this->input_rows(), func_i.input_rows() - this->input_rows());
             });
 
-            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
-                func_i.accumulate_hessian(hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
-                                              func_i.IRows(), func_i.IRows()),
+                func_i.accumulate_hessian(hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
+                                              func_i.input_rows(), func_i.input_rows()),
                                           std::get<i.value>(hxi), PlusEqualsAssignment());
             });
 
-            adjhess.template topLeftCorner<Base::IRC, Base::IRC>(this->IRows(), this->IRows()) +=
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>(this->IRows(), this->IRows());
+            adjhess.template topLeftCorner<Base::IRC, Base::IRC>(this->input_rows(), this->input_rows()) +=
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>(this->input_rows(), this->input_rows());
 
             constexpr int Ev =
-                SZ_DIFF<OuterFunc::IRC, Base::IRC>::value; // OuterFunc::IRC - Base::IRC;
-            const int ev = this->outer_func.IRows() - this->IRows();
-            hxO.template leftCols<Base::IRC>(this->IRows()).noalias() =
-                hxO.template rightCols<Ev>(ev) * j0s.template bottomRows<Ev>(ev);
+                tycho::utils::SZ_DIFF<OuterFunc::IRC, Base::IRC>::value; // OuterFunc::IRC - Base::IRC;
+            const int ev = this->outer_func.input_rows() - this->input_rows();
+            hx_o.template leftCols<Base::IRC>(this->input_rows()).noalias() =
+                hx_o.template rightCols<Ev>(ev) * j0s.template bottomRows<Ev>(ev);
 
-            adjhess.template topLeftCorner<Base::IRC, Base::IRC>(this->IRows(), this->IRows()) +=
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>(this->IRows(), this->IRows()) +
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>(this->IRows(), this->IRows())
+            adjhess.template topLeftCorner<Base::IRC, Base::IRC>(this->input_rows(), this->input_rows()) +=
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>(this->input_rows(), this->input_rows()) +
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>(this->input_rows(), this->input_rows())
                     .transpose();
 
             adjhess.noalias() +=
                 j0s.template bottomRows<Ev>(ev).transpose() *
-                hxO.template leftCols<Base::IRC>(this->IRows()).template bottomRows<Ev>(ev);
+                hx_o.template leftCols<Base::IRC>(this->input_rows()).template bottomRows<Ev>(ev);
         };
 
         auto make_temp_tuple = [&](auto f) {
@@ -295,42 +295,42 @@ struct NestedCallAndAppendChain2
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             using JType = typename FTtype::template Jacobian<Scalar>;
-            return TempSpec<JType>(func_i.ORows(), func_i.IRows());
+            return tycho::utils::TempSpec<JType>(func_i.output_rows(), func_i.input_rows());
         };
         auto gis = [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             using GType = typename FTtype::template Gradient<Scalar>;
-            return TempSpec<GType>(func_i.IRows(), 1);
+            return tycho::utils::TempSpec<GType>(func_i.input_rows(), 1);
         };
         auto his = [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             using HType = typename FTtype::template Hessian<Scalar>;
-            return TempSpec<HType>(func_i.IRows(), func_i.IRows());
+            return tycho::utils::TempSpec<HType>(func_i.input_rows(), func_i.input_rows());
         };
 
-        auto JITemps = TupleOfTempSpecs<typename InnerFuncs::template Jacobian<Scalar>...>{
+        auto JITemps = tycho::utils::TupleOfTempSpecs<typename InnerFuncs::template Jacobian<Scalar>...>{
             make_temp_tuple(jis)};
-        auto GITemps = TupleOfTempSpecs<typename InnerFuncs::template Gradient<Scalar>...>{
+        auto GITemps = tycho::utils::TupleOfTempSpecs<typename InnerFuncs::template Gradient<Scalar>...>{
             make_temp_tuple(gis)};
-        auto HITemps = TupleOfTempSpecs<typename InnerFuncs::template Hessian<Scalar>...>{
+        auto HITemps = tycho::utils::TupleOfTempSpecs<typename InnerFuncs::template Hessian<Scalar>...>{
             make_temp_tuple(his)};
 
-        BumpAllocator::allocate_run(
-            Impl, TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.IRows(), 1),
-            TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.ORows(),
-                                                  this->inner_func1.IRows()),
-            TempSpec<InnerFunc1_gradient<Scalar>>(this->inner_func1.IRows(), 1),
-            TempSpec<InnerFunc1_hessian<Scalar>>(this->inner_func1.IRows(),
-                                                 this->inner_func1.IRows()),
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func.input_rows(), 1),
+            tycho::utils::TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1.output_rows(),
+                                                  this->inner_func1.input_rows()),
+            tycho::utils::TempSpec<InnerFunc1_gradient<Scalar>>(this->inner_func1.input_rows(), 1),
+            tycho::utils::TempSpec<InnerFunc1_hessian<Scalar>>(this->inner_func1.input_rows(),
+                                                 this->inner_func1.input_rows()),
             JITemps, GITemps, HITemps,
-            TempSpec<OuterFunc_jacobian<Scalar>>(this->outer_func.ORows(),
-                                                 this->outer_func.IRows()),
-            TempSpec<OuterFunc_gradient<Scalar>>(this->outer_func.IRows(), 1),
-            TempSpec<OuterFunc_hessian<Scalar>>(this->outer_func.IRows(), this->outer_func.IRows()),
-            TempSpec<Eigen::Matrix<Scalar, OuterFunc::IRC, Base::IRC>>(this->outer_func.IRows(),
-                                                                       this->IRows()));
+            tycho::utils::TempSpec<OuterFunc_jacobian<Scalar>>(this->outer_func.output_rows(),
+                                                 this->outer_func.input_rows()),
+            tycho::utils::TempSpec<OuterFunc_gradient<Scalar>>(this->outer_func.input_rows(), 1),
+            tycho::utils::TempSpec<OuterFunc_hessian<Scalar>>(this->outer_func.input_rows(), this->outer_func.input_rows()),
+            tycho::utils::TempSpec<Eigen::Matrix<Scalar, OuterFunc::IRC, Base::IRC>>(this->outer_func.input_rows(),
+                                                                       this->input_rows()));
     }
 };
 
@@ -370,7 +370,7 @@ struct NestedCallAndAppendChain
                              std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func(std::move(outer_func)) {
         this->inner_func1 = std::get<0>(inner_funct);
-        Tycho::constexpr_for_loop(
+        tycho::utils::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(InnerFuncs)>(),
             [&](auto i) {
                 std::get<i.value>(this->inner_funcs) = std::get<i.value + 1>(inner_funct);
@@ -383,19 +383,19 @@ struct NestedCallAndAppendChain
         typedef typename InType::Scalar Scalar;
         // VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        OuterFunc_Input<Scalar> xchain(this->outer_func.IRows());
+        OuterFunc_Input<Scalar> xchain(this->outer_func.input_rows());
         xchain.setZero();
         xchain.template head<Base::IRC>() = x;
-        // int start = this->IRows();
+        // int start = this->input_rows();
 
         this->inner_func1.compute(
-            x, xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()));
+            x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(), this->inner_func1.output_rows()));
 
-        Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+        tycho::utils::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
-            func_i.compute(xchain.template head<FTtype::IRC>(func_i.IRows()),
-                           xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+            func_i.compute(xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                           xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
         });
 
         this->outer_func.compute(xchain, fx_);
@@ -407,7 +407,7 @@ struct NestedCallAndAppendChain
         // VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        OuterFunc_Input<Scalar> xchain(this->outer_func.IRows());
+        OuterFunc_Input<Scalar> xchain(this->outer_func.input_rows());
 
         xchain.setZero();
         xchain.template head<Base::IRC>() = x;
@@ -415,51 +415,51 @@ struct NestedCallAndAppendChain
         InnerFunc1_jacobian<Scalar> jx1; // jx1.setZero();
 
         this->inner_func1.compute_jacobian(
-            x, xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()),
+            x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(), this->inner_func1.output_rows()),
             jx1);
 
         std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
 
-        Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             // std::get<i.value>(jxi).setZero();
             func_i.compute_jacobian(
-                xchain.template head<FTtype::IRC>(func_i.IRows()),
-                xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                 std::get<i.value>(jxi));
         });
 
-        OuterFunc_jacobian<Scalar> jxO;
+        OuterFunc_jacobian<Scalar> jx_o;
 
-        // Eigen::Matrix<Scalar, -1, -1> jxO;
-        // jxO.resize(this->outer_func.ORows(), this->outer_func.IRows());
+        // Eigen::Matrix<Scalar, -1, -1> jx_o;
+        // jx_o.resize(this->outer_func.output_rows(), this->outer_func.input_rows());
         // std::vector<OuterFunc_jacobian<Scalar>> jxtt(1);
-        // Eigen::Ref< Eigen::Matrix<Scalar,-1,-1>> jxO(jxOt);
-        // Eigen::Ref< OuterFunc_jacobian<Scalar>> jxO(jxOt);
-        // Eigen::Map<OuterFunc_jacobian<Scalar>> jxO(jxOt.data());
-        // Eigen::Map<OuterFunc_jacobian<Scalar>> jxO(jxtt[0].data(),
-        // this->outer_func.ORows(), this->outer_func.IRows());
+        // Eigen::Ref< Eigen::Matrix<Scalar,-1,-1>> jx_o(jx_ot);
+        // Eigen::Ref< OuterFunc_jacobian<Scalar>> jx_o(jx_ot);
+        // Eigen::Map<OuterFunc_jacobian<Scalar>> jx_o(jx_ot.data());
+        // Eigen::Map<OuterFunc_jacobian<Scalar>> jx_o(jxtt[0].data(),
+        // this->outer_func.output_rows(), this->outer_func.input_rows());
 
-        this->outer_func.compute_jacobian(xchain, fx_, jxO);
+        this->outer_func.compute_jacobian(xchain, fx_, jx_o);
 
-        Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        tycho::utils::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
             func_i.right_jacobian_product(
-                jxO.template leftCols<FTtype::IRC>(func_i.IRows()),
-                jxO.template middleCols<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                jx_o.template leftCols<FTtype::IRC>(func_i.input_rows()),
+                jx_o.template middleCols<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                 std::get<i.value>(jxi), PlusEqualsAssignment(), std::bool_constant<false>());
         });
 
         this->inner_func1.right_jacobian_product(
-            jxO.template leftCols<InnerFunc1::IRC>(this->inner_func1.IRows()),
-            jxO.template middleCols<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                     this->inner_func1.ORows()),
+            jx_o.template leftCols<InnerFunc1::IRC>(this->inner_func1.input_rows()),
+            jx_o.template middleCols<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                     this->inner_func1.output_rows()),
             jx1, PlusEqualsAssignment(), std::bool_constant<false>());
 
-        jx.template leftCols<Base::IRC>(this->IRows()) =
-            jxO.template leftCols<Base::IRC>(this->IRows());
+        jx.template leftCols<Base::IRC>(this->input_rows()) =
+            jx_o.template leftCols<Base::IRC>(this->input_rows());
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -474,24 +474,24 @@ struct NestedCallAndAppendChain
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        OuterFunc_Input<Scalar> xchain(this->outer_func.IRows());
+        OuterFunc_Input<Scalar> xchain(this->outer_func.input_rows());
         xchain.setZero();
         xchain.template head<Base::IRC>() = x;
-        int start = this->IRows();
+        int start = this->input_rows();
 
         this->inner_func1.compute(
-            x, xchain.template segment<InnerFunc1::ORC>(this->IRows(), this->inner_func1.ORows()));
+            x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(), this->inner_func1.output_rows()));
 
-        Tycho::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
+        tycho::utils::tuple_for_each(this->inner_funcs, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
-            func_i.compute(xchain.template head<FTtype::IRC>(func_i.IRows()),
-                           xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+            func_i.compute(xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                           xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
         });
 
-        OuterFunc_jacobian<Scalar> jxO; // = OuterFunc_jacobian<Scalar>::Zero();
-        OuterFunc_hessian<Scalar> hxO;  // = OuterFunc_hessian <Scalar>::Zero();
-        OuterFunc_gradient<Scalar> gxO; // = OuterFunc_gradient<Scalar>::Zero();
+        OuterFunc_jacobian<Scalar> jx_o; // = OuterFunc_jacobian<Scalar>::Zero();
+        OuterFunc_hessian<Scalar> hx_o;  // = OuterFunc_hessian <Scalar>::Zero();
+        OuterFunc_gradient<Scalar> gx_o; // = OuterFunc_gradient<Scalar>::Zero();
 
         InnerFunc1_jacobian<Scalar> jx1; // = InnerFunc1_jacobian<Scalar>::Zero();
         InnerFunc1_gradient<Scalar> gx1; // = InnerFunc1_gradient<Scalar>::Zero();
@@ -501,10 +501,10 @@ struct NestedCallAndAppendChain
         std::tuple<typename InnerFuncs::template Hessian<Scalar>...> hxi;
         std::tuple<typename InnerFuncs::template Gradient<Scalar>...> gxi;
 
-        this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jxO, gxO, hxO,
+        this->outer_func.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jx_o, gx_o, hx_o,
                                                                          adjvars);
 
-        Tycho::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+        tycho::utils::reverse_tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<
                 typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -513,24 +513,24 @@ struct NestedCallAndAppendChain
             // std::get<i.value>(jxi).setZero();
 
             func_i.compute_jacobian_adjointgradient_adjointhessian(
-                xchain.template head<FTtype::IRC>(func_i.IRows()),
-                xchain.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                xchain.template head<FTtype::IRC>(func_i.input_rows()),
+                xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                 std::get<i.value>(jxi), std::get<i.value>(gxi), std::get<i.value>(hxi),
-                gxO.template segment<FTtype::ORC>(func_i.IRows(), func_i.ORows()));
+                gx_o.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
 
-            func_i.accumulate_gradient(gxO.template head<FTtype::IRC>(func_i.IRows()),
+            func_i.accumulate_gradient(gx_o.template head<FTtype::IRC>(func_i.input_rows()),
                                        std::get<i.value>(gxi), PlusEqualsAssignment());
 
             func_i.right_jacobian_product(
-                jxO.template leftCols<FTtype::IRC>(func_i.IRows()),
-                jxO.template middleCols<FTtype::ORC>(func_i.IRows(), func_i.ORows()),
+                jx_o.template leftCols<FTtype::IRC>(func_i.input_rows()),
+                jx_o.template middleCols<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()),
                 std::get<i.value>(jxi), PlusEqualsAssignment(), std::bool_constant<false>());
 
             ///////////
-            // hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(func_i.IRows(),
-            // func_i.IRows())
-            //	+= std::get<i.value>(jxi).transpose()*hxO.template
-            // block<FTtype::ORC,FTtype::ORC>(func_i.IRows(), func_i.IRows()) *
+            // hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(func_i.input_rows(),
+            // func_i.input_rows())
+            //	+= std::get<i.value>(jxi).transpose()*hx_o.template
+            // block<FTtype::ORC,FTtype::ORC>(func_i.input_rows(), func_i.input_rows()) *
             // std::get<i.value>(jxi);
 
             if constexpr (ReverseAlg) {
@@ -538,27 +538,27 @@ struct NestedCallAndAppendChain
 
                 func_i.right_jacobian_product(
                     jt,
-                    hxO.template block<FTtype::ORC, FTtype::ORC>(func_i.IRows(), func_i.IRows()),
+                    hx_o.template block<FTtype::ORC, FTtype::ORC>(func_i.input_rows(), func_i.input_rows()),
                     std::get<i.value>(jxi), DirectAssignment(), std::bool_constant<false>());
 
-                func_i.right_jacobian_product(hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
-                                                  func_i.IRows(), func_i.IRows()),
+                func_i.right_jacobian_product(hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
+                                                  func_i.input_rows(), func_i.input_rows()),
                                               jt.transpose(), std::get<i.value>(jxi),
                                               PlusEqualsAssignment(), std::bool_constant<false>());
 
-                func_i.accumulate_hessian(hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
-                                              func_i.IRows(), func_i.IRows()),
+                func_i.accumulate_hessian(hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
+                                              func_i.input_rows(), func_i.input_rows()),
                                           std::get<i.value>(hxi), PlusEqualsAssignment());
 
                 std::get<i.value>(hxi).setZero();
 
                 func_i.right_jacobian_product(
                     std::get<i.value>(hxi),
-                    hxO.template block<FTtype::IRC, FTtype::ORC>(0, func_i.IRows()),
+                    hx_o.template block<FTtype::IRC, FTtype::ORC>(0, func_i.input_rows()),
                     std::get<i.value>(jxi), DirectAssignment(), std::bool_constant<false>());
 
-                hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(func_i.IRows(),
-                                                                     func_i.IRows()) +=
+                hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(func_i.input_rows(),
+                                                                     func_i.input_rows()) +=
                     std::get<i.value>(hxi) + std::get<i.value>(hxi).transpose();
             }
 
@@ -569,107 +569,107 @@ struct NestedCallAndAppendChain
 
         this->inner_func1.compute_jacobian_adjointgradient_adjointhessian(
             x,
-            xchain.template segment<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                     this->inner_func1.ORows()),
+            xchain.template segment<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                     this->inner_func1.output_rows()),
             jx1, adjgrad, adjhess,
-            gxO.template segment<InnerFunc1::ORC>(this->inner_func1.IRows()));
+            gx_o.template segment<InnerFunc1::ORC>(this->inner_func1.input_rows()));
 
         this->inner_func1.right_jacobian_product(
-            jxO.template leftCols<InnerFunc1::IRC>(this->inner_func1.IRows()),
-            jxO.template middleCols<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                     this->inner_func1.ORows()),
+            jx_o.template leftCols<InnerFunc1::IRC>(this->inner_func1.input_rows()),
+            jx_o.template middleCols<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                     this->inner_func1.output_rows()),
             jx1, PlusEqualsAssignment(), std::bool_constant<false>());
 
-        jx.template leftCols<Base::IRC>(this->IRows()) =
-            jxO.template leftCols<Base::IRC>(this->IRows());
-        adjgrad += gxO.template head<InnerFunc1::IRC>(this->inner_func1.IRows());
+        jx.template leftCols<Base::IRC>(this->input_rows()) =
+            jx_o.template leftCols<Base::IRC>(this->input_rows());
+        adjgrad += gx_o.template head<InnerFunc1::IRC>(this->inner_func1.input_rows());
 
         ///////////////
         if constexpr (ReverseAlg) {
-            //  hxO.template topLeftCorner<InnerFunc1::IRC, InnerFunc1::IRC>(
-            //      inner_func1.IRows(), inner_func1.IRows()) +=
+            //  hx_o.template topLeftCorner<InnerFunc1::IRC, InnerFunc1::IRC>(
+            //      inner_func1.input_rows(), inner_func1.input_rows()) +=
             //     jx1.transpose() *
-            //     hxO.template block<InnerFunc1::ORC, InnerFunc1::ORC>(
-            //         inner_func1.IRows(), inner_func1.IRows()) *
+            //     hx_o.template block<InnerFunc1::ORC, InnerFunc1::ORC>(
+            //         inner_func1.input_rows(), inner_func1.input_rows()) *
             //     jx1;
 
             using FTtype = InnerFunc1;
             typename FTtype::template Jacobian<Scalar> jt;
 
             inner_func1.right_jacobian_product(jt,
-                                               hxO.template block<FTtype::ORC, FTtype::ORC>(
-                                                   inner_func1.IRows(), inner_func1.IRows()),
+                                               hx_o.template block<FTtype::ORC, FTtype::ORC>(
+                                                   inner_func1.input_rows(), inner_func1.input_rows()),
                                                jx1, DirectAssignment(),
                                                std::bool_constant<false>());
 
-            inner_func1.right_jacobian_product(hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
-                                                   inner_func1.IRows(), inner_func1.IRows()),
+            inner_func1.right_jacobian_product(hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
+                                                   inner_func1.input_rows(), inner_func1.input_rows()),
                                                jt.transpose(), jx1, PlusEqualsAssignment(),
                                                std::bool_constant<false>());
 
             this->inner_func1.right_jacobian_product(
-                hx1, hxO.template block<InnerFunc1::IRC, InnerFunc1::ORC>(0, inner_func1.IRows()),
+                hx1, hx_o.template block<InnerFunc1::IRC, InnerFunc1::ORC>(0, inner_func1.input_rows()),
                 jx1, DirectAssignment(), std::bool_constant<false>());
 
-            adjhess += hxO.template topLeftCorner<InnerFunc1::IRC, InnerFunc1::IRC>(
-                           inner_func1.IRows(), inner_func1.IRows()) +
+            adjhess += hx_o.template topLeftCorner<InnerFunc1::IRC, InnerFunc1::IRC>(
+                           inner_func1.input_rows(), inner_func1.input_rows()) +
                        hx1 + hx1.transpose();
 
         } else {
             //////////////////////
             Eigen::Matrix<Scalar, OuterFunc::IRC, Base::IRC> j0s;
 
-            j0s.template topRows<Base::IRC>(this->IRows()).setIdentity();
+            j0s.template topRows<Base::IRC>(this->input_rows()).setIdentity();
 
-            j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.IRows(),
-                                                     this->inner_func1.ORows()) = jx1;
+            j0s.template middleRows<InnerFunc1::ORC>(this->inner_func1.input_rows(),
+                                                     this->inner_func1.output_rows()) = jx1;
 
-            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
-                j0s.template middleRows<FTtype::ORC>(func_i.IRows(), func_i.ORows()) =
-                    std::get<i.value>(jxi).template leftCols<Base::IRC>(this->IRows()) +
+                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()) =
+                    std::get<i.value>(jxi).template leftCols<Base::IRC>(this->input_rows()) +
                     std::get<i.value>(jxi).template rightCols<FTtype::IRC - Base::IRC>(
-                        func_i.IRows() - this->IRows()) *
+                        func_i.input_rows() - this->input_rows()) *
                         j0s.template middleRows<FTtype::IRC - Base::IRC>(
-                            this->IRows(), func_i.IRows() - this->IRows());
+                            this->input_rows(), func_i.input_rows() - this->input_rows());
             });
 
-            Tycho::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
+            tycho::utils::tuple_for_loop(this->inner_funcs, [&](const auto &func_i, auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
-                // if constexpr (!FTtype::IsLinearFunction) adjhess.noalias() +=
-                // j0s.template topRows<FTtype::IRC>(func_i.IRows()).transpose() *
+                // if constexpr (!FTtype::is_linear_function) adjhess.noalias() +=
+                // j0s.template topRows<FTtype::IRC>(func_i.input_rows()).transpose() *
                 // std::get<i.value>(hxi) * j0s.template
-                // topRows<FTtype::IRC>(func_i.IRows());
-                func_i.accumulate_hessian(hxO.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
-                                              func_i.IRows(), func_i.IRows()),
+                // topRows<FTtype::IRC>(func_i.input_rows());
+                func_i.accumulate_hessian(hx_o.template topLeftCorner<FTtype::IRC, FTtype::IRC>(
+                                              func_i.input_rows(), func_i.input_rows()),
                                           std::get<i.value>(hxi), PlusEqualsAssignment());
             });
 
-            // std::cout << std::setprecision(4)<< hxO << std::endl << std::endl;
+            // std::cout << std::setprecision(4)<< hx_o << std::endl << std::endl;
 
-            // adjhess.noalias() += j0s.transpose() * hxO * j0s;
+            // adjhess.noalias() += j0s.transpose() * hx_o * j0s;
 
             adjhess.template topLeftCorner<Base::IRC, Base::IRC>() +=
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>();
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>();
 
             constexpr int Ev = OuterFunc::IRC - Base::IRC;
             // Eigen::Matrix<Scalar, Ev, Base::IRC> j0s2 = j0s.template
             // bottomRows<Ev>();
 
-            hxO.template leftCols<Base::IRC>().noalias() =
-                hxO.template rightCols<Ev>() * j0s.template bottomRows<Ev>();
+            hx_o.template leftCols<Base::IRC>().noalias() =
+                hx_o.template rightCols<Ev>() * j0s.template bottomRows<Ev>();
 
             adjhess.template topLeftCorner<Base::IRC, Base::IRC>() +=
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>() +
-                hxO.template topLeftCorner<Base::IRC, Base::IRC>().transpose();
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>() +
+                hx_o.template topLeftCorner<Base::IRC, Base::IRC>().transpose();
 
             adjhess.noalias() += j0s.template bottomRows<Ev>().transpose() *
-                                 hxO.template leftCols<Base::IRC>().template bottomRows<Ev>();
+                                 hx_o.template leftCols<Base::IRC>().template bottomRows<Ev>();
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

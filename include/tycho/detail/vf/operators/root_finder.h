@@ -19,7 +19,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class FX, class DFX> struct ScalarRootFinder_Impl;
 
@@ -58,12 +58,12 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         : fxfunc(f), dfxfunc(df), MaxIters(iter), tol(tol) {
 
         if constexpr (!std::is_same<DFX, std::false_type>::value) {
-            if (f.IRows() != df.IRows()) {
+            if (f.input_rows() != df.input_rows()) {
                 throw std::invalid_argument(
                     "Root and First Derivative functions must have same number of Input Rows");
             }
         }
-        this->setIORows(f.IRows(), 1);
+        this->set_io_rows(f.input_rows(), 1);
     }
 
     template <class VecType, class JacType> void find_root(VecType &x, JacType &jx) const {
@@ -97,7 +97,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        const int irows = this->IRows();
+        const int irows = this->input_rows();
 
         auto Impl = [&](auto &xtmp, auto &jtmp) {
             xtmp = x;
@@ -105,8 +105,8 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             fx[0] = xtmp[0];
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
-                                    TempSpec<Jacobian<Scalar>>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
 
     template <class InType, class OutType, class JacType>
@@ -116,7 +116,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        const int irows = this->IRows();
+        const int irows = this->input_rows();
 
         auto Impl = [&](auto &xtmp, auto &jtmp) {
             xtmp = x;
@@ -129,8 +129,8 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             jx(0, 0) = 0;
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
-                                    TempSpec<Jacobian<Scalar>>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -144,7 +144,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        const int irows = this->IRows();
+        const int irows = this->input_rows();
 
         auto Impl = [&](auto &xtmp, auto &jtmp, auto &htmp) {
             xtmp = x;
@@ -167,10 +167,10 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             adjhess.col(0).setZero();
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(irows, 1),
-                                    TempSpec<Jacobian<Scalar>>(1, irows),
-                                    TempSpec<Hessian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows),
+                                    tycho::utils::TempSpec<Hessian<Scalar>>(irows, irows));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

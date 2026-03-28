@@ -18,7 +18,7 @@
 #include "tycho/detail/vf/common/common_functions.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 /////////////////////// Scalar Multiplication and
 /// Division//////////////////////////////////////
@@ -303,7 +303,7 @@ template <class Func1, int IR>
 auto operator<(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::LessThanFlag, rhs.derived());
 }
@@ -311,7 +311,7 @@ template <class Func1, int IR>
 auto operator<=(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::LessThanEqualToFlag, rhs.derived());
 }
@@ -319,7 +319,7 @@ template <class Func1, int IR>
 auto operator>(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::GreaterThanFlag, rhs.derived());
 }
@@ -327,7 +327,7 @@ template <class Func1, int IR>
 auto operator>=(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::GreaterThanEqualToFlag, rhs.derived());
 }
@@ -335,7 +335,7 @@ template <class Func1, int IR>
 auto operator==(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::EqualToFlag, rhs.derived());
 }
@@ -384,4 +384,4 @@ GenericFunction<IR, OR> DenseFunctionBase<Derived, IR, OR>::pack() const {
     return GenericFunction<IR, OR>(this->derived());
 }
 
-} // namespace Tycho
+} // namespace tycho::vf

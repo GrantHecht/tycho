@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 enum class ParsedIOFlags {
     HiddenInput = -2,
@@ -67,4 +67,4 @@ enum class VarTypes {
     Inactive = 3,
     BiLinear = 4,
 };
-} // namespace Tycho
+} // namespace tycho::vf

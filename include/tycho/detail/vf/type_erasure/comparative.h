@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/type_erasure/conditional.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 // Enum
 enum class ComparativeFlags {
@@ -71,4 +71,4 @@ struct ComparativeFunction<First, Second>
                first, second) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

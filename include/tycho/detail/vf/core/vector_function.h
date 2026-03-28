@@ -21,7 +21,7 @@
 #include "tycho/detail/vf/derivatives/dense_fdiff_fwd.h"
 #include "tycho/detail/utils/function_return_type.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
@@ -41,7 +41,7 @@ struct VectorExpression
     VectorExpression() {};
 
     /////////////////////////////////////
-    void InitExpression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
+    void init_expression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
 };
 
 template <class Derived, class ExprImpl>
@@ -54,7 +54,7 @@ struct VectorExpression<Derived, ExprImpl>
     VectorExpression() : Base(ExprImpl::Definition()) {}
 
     /////////////////////////////////////
-    void InitExpression() { *this = Base(ExprImpl::Definition()); }
+    void init_expression() { *this = Base(ExprImpl::Definition()); }
 };
 
 #define BUILD_FROM_EXPRESSION(NAME, IMPL, ...)                                                     \
@@ -63,4 +63,4 @@ struct VectorExpression<Derived, ExprImpl>
         using Base::Base;                                                                          \
     };
 
-} // namespace Tycho
+} // namespace tycho::vf

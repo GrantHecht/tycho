@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int EL1, int... ELS>
 struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(ELS)> {
@@ -29,13 +29,13 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     static const int num_elements = 1 + sizeof...(ELS);
 
     Elements() {}
-    Elements(int irows) { this->setIORows(irows, num_elements); }
+    Elements(int irows) { this->set_io_rows(irows, num_elements); }
 
-    static const bool IsLinearFunction = true;
+    static const bool is_linear_function = true;
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        Tycho::tuple_for_loop(elements, [&](const auto &ele, auto i) { fx[i] = x[ele.value]; });
+        tycho::utils::tuple_for_loop(elements, [&](const auto &ele, auto i) { fx[i] = x[ele.value]; });
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -43,7 +43,7 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        Tycho::tuple_for_loop(elements, [&](const auto &ele, int i) {
+        tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
         });
@@ -60,7 +60,7 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        Tycho::tuple_for_loop(elements, [&](const auto &ele, int i) {
+        tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
             adjgrad[ele.value] = adjvars[i];
@@ -68,4 +68,4 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func, int IR, int OR>
 struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Analytic> {
@@ -26,18 +26,18 @@ struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Ana
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
 
     FunctionHolder() {}
     FunctionHolder(Func f) : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
     void set_function(Func f) {
         this->func = f;
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -103,4 +103,4 @@ struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Ana
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

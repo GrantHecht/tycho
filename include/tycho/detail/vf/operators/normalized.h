@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 //! Declaration of \struct NormalizedPower_Impl
 template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
@@ -46,10 +46,10 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     static constexpr int pp4 = power + 4;
 
     using Base::compute;
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     NormalizedPower_Impl() {}
-    NormalizedPower_Impl(int irows) { this->setIORows(irows, irows); }
+    NormalizedPower_Impl(int irows) { this->set_io_rows(irows, irows); }
 
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;
@@ -111,7 +111,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         jx.diagonal().setConstant(np);
 
         if constexpr (InType::RowsAtCompileTime == Eigen::Dynamic) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 jx.col(i) += x * (npd * x[i]);
             }
         } else {
@@ -133,7 +133,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        const int irows = this->IRows();
+        const int irows = this->input_rows();
         auto Impl = [&](auto &xxt) {
             using std::sqrt;
             Scalar n;
@@ -180,8 +180,8 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
             }
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Jacobian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Jacobian<Scalar>>(irows, irows));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

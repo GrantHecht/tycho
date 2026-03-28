@@ -19,7 +19,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func, class Value> struct StaticScaled_Impl;
 
@@ -67,11 +67,11 @@ struct StaticScaled_Impl
     Func func;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
-    static const bool IsLinearFunction = Func::IsLinearFunction;
+    static const bool is_linear_function = Func::is_linear_function;
 
     StaticScaled_Impl() {}
     StaticScaled_Impl(Func f) : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -166,13 +166,13 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
 
     Scaled_Impl() {}
     Scaled_Impl(Func f, double s) : func(std::move(f)), Scale_value(s) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
 
     bool is_linear() const { return func.is_linear(); }
@@ -211,8 +211,8 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
             this->func.scale_jacobian(jx_, Scalar(this->Scale_value));
         };
 
-        const int orows = this->func.ORows();
-        BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        const int orows = this->func.output_rows();
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,8 +276,8 @@ struct RowScaled_Impl
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func;
     Output<double> RowScale_values;
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
     RowScaled_Impl() { this->RowScale_values.setOnes(); }
@@ -285,8 +285,8 @@ struct RowScaled_Impl
     template <class OutType>
     RowScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func(std::move(f)) {
         this->RowScale_values = s;
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+        this->set_input_domain(this->input_rows(), {func.input_domain()});
     }
     bool is_linear() const { return func.is_linear(); }
 
@@ -301,8 +301,8 @@ struct RowScaled_Impl
             fx = fx.cwiseProduct(scales);
         };
 
-        const int orows = this->ORows();
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        const int orows = this->output_rows();
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -320,8 +320,8 @@ struct RowScaled_Impl
                                               std::bool_constant<true>());
         };
 
-        const int orows = this->ORows();
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1));
+        const int orows = this->output_rows();
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -346,9 +346,9 @@ struct RowScaled_Impl
                                               std::bool_constant<true>());
         };
 
-        const int orows = this->ORows();
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(orows, 1),
-                                           TempSpec<Output<Scalar>>(orows, 1));
+        const int orows = this->output_rows();
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+                                           tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -421,8 +421,8 @@ struct MatrixScaled_Impl
     MatType<double> mat;
     bool NoTemp = false;
 
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
     MatrixScaled_Impl() {}
@@ -430,10 +430,10 @@ struct MatrixScaled_Impl
     template <class OutType>
     MatrixScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func(std::move(f)) {
         this->mat = s;
-        this->setIORows(this->func.IRows(), this->mat.rows());
-        this->set_input_domain(this->IRows(), {this->func.input_domain()});
+        this->set_io_rows(this->func.input_rows(), this->mat.rows());
+        this->set_input_domain(this->input_rows(), {this->func.input_domain()});
 
-        if (mat.cols() != func.ORows()) {
+        if (mat.cols() != func.output_rows()) {
             throw std::invalid_argument(
                 "Matrix Must have same number of cols as RHS vector function.");
         }
@@ -455,8 +455,8 @@ struct MatrixScaled_Impl
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fx).eval();
             };
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp) {
@@ -465,9 +465,9 @@ struct MatrixScaled_Impl
                 fx = (mattmp * fxtmp);
             };
 
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
         }
     }
     template <class InType, class OutType, class JacType>
@@ -485,8 +485,8 @@ struct MatrixScaled_Impl
                 this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp) {
@@ -497,10 +497,10 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<false>());
             };
 
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
-                TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -526,9 +526,9 @@ struct MatrixScaled_Impl
                 this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1)
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1)
 
             );
         } else {
@@ -543,13 +543,13 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<false>());
             };
 
-            Tycho::BumpAllocator::allocate_run(
-                Impl, TempSpec<MatType<Scalar>>(this->ORows(), this->func.ORows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1),
-                TempSpec<Func_jacobian<Scalar>>(this->func.ORows(), this->func.IRows()),
-                TempSpec<Func_Output<Scalar>>(this->func.ORows(), 1));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

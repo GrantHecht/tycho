@@ -15,7 +15,7 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 struct DirectAssignment {};
 struct PlusEqualsAssignment {};
@@ -32,4 +32,4 @@ template <class Scalar> struct ScaledPlusEqualsAssignment {
     ScaledPlusEqualsAssignment(Scalar v) : value(v) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

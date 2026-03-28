@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 //! First derivatives using forward finite difference
 /*!
@@ -30,14 +30,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
     using Base = DenseFunction<Derived, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    DenseFirstDerivatives() { this->setJacFDSteps(1.0e-5); }
+    DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-5); }
 
     //! Set step size for each input dimension
-    void setJacFDSteps(const Input<double> &steps) { this->jacFDSteps = steps; }
+    void set_jac_fd_steps(const Input<double> &steps) { this->jac_fd_steps = steps; }
     //! Set step size for all input dimensions
-    void setJacFDSteps(double step) {
-        this->jacFDSteps.resize(this->IRows());
-        this->jacFDSteps.setConstant(step);
+    void set_jac_fd_steps(double step) {
+        this->jac_fd_steps.resize(this->input_rows());
+        this->jac_fd_steps.setConstant(step);
     }
 
     template <class InType, class OutType, class JacType>
@@ -50,14 +50,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
         this->derived().compute(x, fx_);
         using ScalArray = Eigen::Array<Scalar, 2, 1>;
         Input<Eigen::Array<Scalar, 2, 1>> xi = x.template cast<Eigen::Array<Scalar, 2, 1>>();
-        Output<Eigen::Array<Scalar, 2, 1>> fi(this->ORows());
+        Output<Eigen::Array<Scalar, 2, 1>> fi(this->output_rows());
         fi.setZero();
-        for (int i = 0; i < this->IRows(); i++) {
-            xi[i][0] += this->jacFDSteps[i];
-            xi[i][1] -= this->jacFDSteps[i];
+        for (int i = 0; i < this->input_rows(); i++) {
+            xi[i][0] += this->jac_fd_steps[i];
+            xi[i][1] -= this->jac_fd_steps[i];
             this->derived().compute(xi, fi);
-            for (int j = 0; j < this->ORows(); j++) {
-                jx(j, i) = (fi[j][0] - fi[j][1]) / (2.0 * jacFDSteps[i]);
+            for (int j = 0; j < this->output_rows(); j++) {
+                jx(j, i) = (fi[j][0] - fi[j][1]) / (2.0 * jac_fd_steps[i]);
             }
             fi.setZero();
             xi[i] = x[i];
@@ -65,6 +65,6 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
     }
 
   protected:
-    Eigen::VectorXd jacFDSteps;
+    Eigen::VectorXd jac_fd_steps;
 };
-} // namespace Tycho
+} // namespace tycho::vf

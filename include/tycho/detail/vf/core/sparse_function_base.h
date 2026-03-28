@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/computable_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR>
 struct SparseFunctionBase : ComputableBase<Derived, IR, OR> {
@@ -39,4 +39,4 @@ struct SparseFunctionBase : ComputableBase<Derived, IR, OR> {
     mutable Hessian<double> HessianTemplate;
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

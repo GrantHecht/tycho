@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/dense_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 enum class DenseDerivativeMode {
     Analytic,
@@ -42,4 +42,4 @@ struct DenseDerivatives : DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode> 
     DENSE_FUNCTION_BASE_TYPES(Base)
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

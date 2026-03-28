@@ -17,7 +17,7 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR, class Func, class Data = std::integral_constant<bool, false>>
 struct LambdaFunction
@@ -32,11 +32,11 @@ struct LambdaFunction
     std::shared_ptr<Func> compute_func;
     // LambdaFunction() = default;
     LambdaFunction(InputOutputSize<IR, OR> io, Func f) : compute_func(std::make_shared<Func>(f)) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     LambdaFunction(Data dat, InputOutputSize<IR, OR> io, Func f)
         : compute_func(std::make_shared<Func>(f)), Data(dat) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
 
     template <class InType, class OutType>
@@ -64,12 +64,12 @@ struct LambdaFunction2
     LambdaFunction2(InputOutputSize<IR, OR> io, Func f, JacFunc jf)
         : compute_func(std::make_shared<Func>(f)),
           compute_jacobian_func(std::make_shared<JacFunc>(jf)) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     LambdaFunction2(Data dat, InputOutputSize<IR, OR> io, Func f, JacFunc jf)
         : compute_func(std::make_shared<Func>(f)),
           compute_jacobian_func(std::make_shared<JacFunc>(jf)), Data(dat) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -103,4 +103,4 @@ auto make_lambda_func(Data dat, InputOutputSize<IR, OR> io, Func f, JacFunc jf) 
     return LambdaFunction2{dat, io, f, jf};
 }
 
-} // namespace Tycho
+} // namespace tycho::vf

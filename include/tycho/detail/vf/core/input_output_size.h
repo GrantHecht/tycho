@@ -15,26 +15,26 @@
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR> struct InputOutputSize {
-    static const int InputRows = IR;
-    static const int OutputRows = OR;
+    static const int input_rows_val = IR;
+    static const int output_rows_val = OR;
 };
 
 template <> struct InputOutputSize<-1, -1> {
-    int InputRows = 0;
-    int OutputRows = 0;
+    int input_rows_val = 0;
+    int output_rows_val = 0;
 };
 
 template <int OR> struct InputOutputSize<-1, OR> {
-    int InputRows = 0;
-    static const int OutputRows = OR;
+    int input_rows_val = 0;
+    static const int output_rows_val = OR;
 };
 
 template <int IR> struct InputOutputSize<IR, -1> {
-    static const int InputRows = IR;
-    int OutputRows = 0;
+    static const int input_rows_val = IR;
+    int output_rows_val = 0;
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

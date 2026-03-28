@@ -43,11 +43,11 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int Start, int Size> struct SingleDomain {
     static const int DomainSize = IR;
-    static constexpr std::array<std::array<int, 2>, 1> SubDomains = {
+    static constexpr std::array<std::array<int, 2>, 1> sub_domains = {
         std::array<int, 2>{Start, Size}};
     static const int start = Start;
     static const int size = Size;
@@ -61,9 +61,9 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         bool t = false;
         const_tuple_for_each(ts, [&](const auto &func_i) {
             if (!t) {
-                for (int i = 0; i < func_i.SubDomains.size(); i++) {
-                    int start = func_i.SubDomains[i][0];
-                    int size = func_i.SubDomains[i][1];
+                for (int i = 0; i < func_i.sub_domains.size(); i++) {
+                    int start = func_i.sub_domains[i][0];
+                    int size = func_i.sub_domains[i][1];
                     if (n >= start && n < (start + size))
                         t = true;
                 }
@@ -96,7 +96,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         return sr;
     }
     static const int NumSubDomains = sub_domains(dmn);
-    static constexpr std::array<int, 2> calcSubDomains(int sd) {
+    static constexpr std::array<int, 2> calc_sub_domains(int sd) {
         std::array<int, 2> v = {0, 0};
         int sr = 0;
         int i = 0;
@@ -115,8 +115,8 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return v;
     }
-    static constexpr std::array<std::array<int, 2>, NumSubDomains> SubDomains = {
-        make_array<NumSubDomains>(calcSubDomains)};
+    static constexpr std::array<std::array<int, 2>, NumSubDomains> sub_domains = {
+        make_array<NumSubDomains>(calc_sub_domains)};
 
     // CompositeDomain(int ir, T b, Ts... a) {}
     // CompositeDomain() = default;
@@ -125,7 +125,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
 template <class T, class... Ts> struct CompositeDomain<-1, T, Ts...> {
 
     static const int DomainSize = -1;
-    static constexpr std::array<std::array<int, 2>, 1> SubDomains = {std::array<int, 2>{-1, -1}};
+    static constexpr std::array<std::array<int, 2>, 1> sub_domains = {std::array<int, 2>{-1, -1}};
     static const int start = -1;
     static const int size = -1;
 
@@ -144,12 +144,12 @@ template <int IR> struct DomainHolder {
 };
 
 template <> struct DomainHolder<-1> {
-    DomainMatrix SubDomains;
+    DomainMatrix sub_domains;
 
-    [[nodiscard]] DomainMatrix input_domain() const { return SubDomains; }
+    [[nodiscard]] DomainMatrix input_domain() const { return sub_domains; }
     void set_input_domain(int irr, const std::vector<DomainMatrix> &sub_domains) {
         if (sub_domains.size() == 1) {
-            this->SubDomains = sub_domains[0];
+            this->sub_domains = sub_domains[0];
             return;
         }
         Eigen::VectorXi full(irr);
@@ -160,9 +160,9 @@ template <> struct DomainHolder<-1> {
                 full.segment(dmn(0, i), dmn(1, i)).setOnes();
             }
             if (full.sum() == irr) {
-                this->SubDomains.resize(2, 1);
-                this->SubDomains(0, 0) = 0;
-                this->SubDomains(1, 0) = irr;
+                this->sub_domains.resize(2, 1);
+                this->sub_domains(0, 0) = 0;
+                this->sub_domains(1, 0) = irr;
 
                 return;
             }
@@ -181,12 +181,12 @@ template <> struct DomainHolder<-1> {
                 find = true;
         }
 
-        this->SubDomains.resize(2, sds.size());
+        this->sub_domains.resize(2, sds.size());
         for (int i = 0; i < sds.size(); i++) {
-            this->SubDomains(0, i) = sds[i][0];
-            this->SubDomains(1, i) = sds[i][1];
+            this->sub_domains(0, i) = sds[i][0];
+            this->sub_domains(1, i) = sds[i][1];
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

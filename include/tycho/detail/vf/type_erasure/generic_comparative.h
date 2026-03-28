@@ -11,7 +11,7 @@
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
 //   - pybind11 header references removed
-//   - PR 9: Replaced rubber_types with TypeStorage<ConditionalBase<IR>>
+//   - PR 9: Replaced rubber_types with tycho::utils::TypeStorage<ConditionalBase<IR>>
 // =============================================================================
 
 #pragma once
@@ -47,7 +47,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 // GenericComparative<IR> has the same interface as GenericConditional<IR>
 // but is a distinct type so that Python bindings register "Comparative"
@@ -58,7 +58,7 @@ template <int IR> struct GenericComparative {
     static const bool IsConditional = true;
     static const int IRC = IR;
 
-    TypeStorage<ConditionalBase<IR>> storage;
+    tycho::utils::TypeStorage<ConditionalBase<IR>> storage;
 
     GenericComparative() = default;
 
@@ -71,7 +71,7 @@ template <int IR> struct GenericComparative {
     GenericComparative &operator=(const GenericComparative &) = default;
     GenericComparative &operator=(GenericComparative &&) noexcept = default;
 
-    int IRows() const { return storage.get().IRows(); }
+    int input_rows() const { return storage.get().input_rows(); }
 
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
         InType xt(x.derived());
@@ -79,4 +79,4 @@ template <int IR> struct GenericComparative {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf
