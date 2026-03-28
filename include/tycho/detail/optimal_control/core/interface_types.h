@@ -40,7 +40,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
 using ScaleType = std::variant<double, Eigen::VectorXd, ScaleModes, std::string>;
@@ -96,4 +96,4 @@ static std::tuple<ScaleModes, bool, Eigen::VectorXd> get_scale_info(int orows, S
     return std::tuple{ScaleMode, ScalesSet, OutputScales};
 }
 
-} // namespace Tycho
+} // namespace tycho::oc

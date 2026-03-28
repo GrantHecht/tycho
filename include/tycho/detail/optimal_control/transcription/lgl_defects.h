@@ -19,7 +19,7 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
@@ -49,11 +49,11 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
     DODE ode;
     static const bool IsVectorizable = DODE::IsVectorizable;
 
-    LGLDefects(const DODE &od) { this->setODE(od); }
-    void setODE(const DODE &od) {
+    LGLDefects(const DODE &od) { this->set_ode(od); }
+    void set_ode(const DODE &od) {
         this->ode = od;
-        this->setOutputRows(this->ode.ORows() * (CS - 1));
-        this->setInputRows(CS * this->ode.XtUVars() + this->ode.PVars());
+        this->set_output_rows(this->ode.output_rows() * (CS - 1));
+        this->set_input_rows(CS * this->ode.XtUVars() + this->ode.PVars());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -112,8 +112,8 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         using XType = ODEInput<Scalar>;
         using FXType = ODEOutput<Scalar>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode.input_rows();
+        const int orowsode = this->ode.output_rows();
 
         BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
@@ -268,8 +268,8 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
 
         using DIType = Eigen::Matrix<Scalar, DODE::IRC, Base::IRC>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode.input_rows();
+        const int orowsode = this->ode.output_rows();
 
         BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
@@ -277,7 +277,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1),
                                     ArrayOfTempSpecs<JXType, Interiors>(orowsode, irowsode),
-                                    TempSpec<DIType>(irowsode, this->IRows()));
+                                    TempSpec<DIType>(irowsode, this->input_rows()));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -512,8 +512,8 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         using DIType = Eigen::Matrix<Scalar, DODE::IRC, Base::IRC>;
         using HTParType = Input<Scalar>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode.input_rows();
+        const int orowsode = this->ode.output_rows();
 
         BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
@@ -528,9 +528,9 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             ArrayOfTempSpecs<AVType, Interiors>(orowsode, 1),
             ArrayOfTempSpecs<HType, Interiors>(irowsode, irowsode),
 
-            TempSpec<DIType>(irowsode, this->IRows()), TempSpec<HTParType>(this->IRows(), 1));
+            TempSpec<DIType>(irowsode, this->input_rows()), TempSpec<HTParType>(this->input_rows(), 1));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

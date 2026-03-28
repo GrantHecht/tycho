@@ -39,7 +39,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho {
 
 enum class PhaseRegionFlags {
     NotSet,
@@ -239,4 +239,4 @@ inline ControlModes strto_ControlMode(const std::string &str) {
     }
 }
 
-} // namespace Tycho
+} // namespace tycho

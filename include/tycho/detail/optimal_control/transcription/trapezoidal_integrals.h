@@ -18,7 +18,7 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     static auto Definition(const Integrand &integ, int xv, int pv) {
@@ -64,5 +64,5 @@ struct TrapezoidalIntegral
     TrapezoidalIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

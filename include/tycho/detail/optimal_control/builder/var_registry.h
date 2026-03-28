@@ -16,7 +16,7 @@
 #include <Eigen/Core>
 #include <fmt/format.h>
 
-namespace Tycho {
+namespace tycho {
 
 /// Maps string variable names to XtUP-space indices.
 ///
@@ -217,4 +217,4 @@ class VarRegistry {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho

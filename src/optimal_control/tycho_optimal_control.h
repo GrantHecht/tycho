@@ -6,9 +6,9 @@
 #include "tycho/detail/vf/derivatives/fd_deriv_uniform.h"
 
 // Binding headers (guarded by #ifdef TYCHO_PYTHON_BINDINGS, defined on binding CMake targets)
-#include "Bindings/Integrators/IntegratorBind.h"
-#include "Bindings/OptimalControl/ODEBind.h"
-#include "Bindings/OptimalControl/ODEPhaseBind.h"
-#include "Bindings/OptimalControl/ODESizesBind.h"
+#include "bindings/integrators/integrator_bind.h"
+#include "bindings/optimal_control/ode_bind.h"
+#include "bindings/optimal_control/ode_phase_bind.h"
+#include "bindings/optimal_control/ode_sizes_bind.h"
 
-namespace Tycho {} // namespace Tycho
+namespace tycho {} // namespace tycho

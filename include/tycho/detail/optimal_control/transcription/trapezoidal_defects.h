@@ -18,7 +18,7 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class DODE>
 struct TrapezoidalDefects
@@ -48,24 +48,24 @@ struct TrapezoidalDefects
 
     void exactHessianSparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
 
-        Input<double> xin(this->IRows());
+        Input<double> xin(this->input_rows());
         xin.head(this->ode.XtUVars()) = xtup1.head(this->ode.XtUVars());
         xin.segment(this->ode.XtUVars(), this->ode.XtUVars()) = xtup2.head(this->ode.XtUVars());
         xin.tail(this->ode.PVars()) = xtup2.tail(this->ode.PVars());
 
-        Eigen::VectorXd ran(this->IRows());
+        Eigen::VectorXd ran(this->input_rows());
         ran.setRandom();
         ran *= 1.0e-10;
 
         xin += ran;
 
-        Output<double> lm(this->ORows());
+        Output<double> lm(this->output_rows());
         lm.setRandom();
 
         Hessian<double> hess = this->adjointhessian(xin, lm);
 
-        for (int i = 0; i < this->IRows(); i++) {
-            for (int j = 0; j < this->IRows(); j++) {
+        for (int i = 0; i < this->input_rows(); i++) {
+            for (int j = 0; j < this->input_rows(); j++) {
                 if (nzlocs(i, j) == 1) {
                     if (abs(hess(i, j)) == 0.0) {
                         nzlocs(i, j) = 0;
@@ -75,13 +75,13 @@ struct TrapezoidalDefects
         }
     }
 
-    TrapezoidalDefects(const DODE &od) { this->setODE(od); }
-    void setODE(const DODE &od) {
+    TrapezoidalDefects(const DODE &od) { this->set_ode(od); }
+    void set_ode(const DODE &od) {
         this->ode = od;
-        this->setOutputRows(this->ode.ORows() * (CS - 1));
-        this->setInputRows(CS * this->ode.XtUVars() + this->ode.PVars());
+        this->set_output_rows(this->ode.output_rows() * (CS - 1));
+        this->set_input_rows(CS * this->ode.XtUVars() + this->ode.PVars());
 
-        nzlocs.resize(this->IRows(), this->IRows());
+        nzlocs.resize(this->input_rows(), this->input_rows());
         nzlocs.setZero();
 
         int xtu = this->ode.XtUVars();
@@ -160,8 +160,8 @@ struct TrapezoidalDefects
                   X0.template segment<DODE::XV>(0, this->ode.XVars())) -
                  (h / 2.0) * (FX0 + FX1);
         };
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode.input_rows();
+        const int orows = this->ode.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
@@ -227,8 +227,8 @@ struct TrapezoidalDefects
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         };
 
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode.input_rows();
+        const int orows = this->ode.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
@@ -327,7 +327,7 @@ struct TrapezoidalDefects
 
             int j = 0;
             constexpr int Cardinals = 2;
-            Input<Scalar> HTpar(this->IRows());
+            Input<Scalar> HTpar(this->input_rows());
             HTpar.setZero();
 
             adjhess.template block<DODE::XtUV, DODE::PV>(j * this->ode.XtUVars(),
@@ -365,8 +365,8 @@ struct TrapezoidalDefects
             adjhess.row(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)) += HTpar;
         };
 
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode.input_rows();
+        const int orows = this->ode.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
@@ -391,5 +391,5 @@ struct TrapezoidalDefects
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

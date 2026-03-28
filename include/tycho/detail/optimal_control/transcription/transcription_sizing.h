@@ -17,7 +17,7 @@
 
 #include "tycho/detail/utils/sizing_helpers.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
     static const int CS = _CS;
@@ -27,4 +27,4 @@ template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
     static const int DefORC = SZ_PROD<IS, ODEXV>::value;
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

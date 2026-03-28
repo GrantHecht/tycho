@@ -46,7 +46,12 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Solvers types — will be Tycho::solvers:: after Task 8
+using Tycho::ConstraintInterface;
+using Tycho::ObjectiveInterface;
+using Tycho::NonLinearProgram;
 
 struct PhaseIndexer : ODESize<-1, -1, -1> {
     using VectorXi = Eigen::VectorXi;
@@ -62,21 +67,21 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     VectorXi ODEParamLocs;
     VectorXi StaticParamLocs;
 
-    int numDefects;
-    int numStates;
-    int numControls;
+    int num_defects;
+    int num_states;
+    int num_controls;
 
     bool BlockedControls = false;
     int BlockedControlStart;
 
     int DefectCardinalStates;
-    int numNodalStates;
+    int num_nodal_states;
 
-    int numPhaseVars;
-    int numPhaseEqCons = 0;
-    int numPhaseIqCons = 0;
-    int nextPhaseEqCon = 0;
-    int nextPhaseIqCon = 0;
+    int num_phase_vars;
+    int num_phase_eq_cons = 0;
+    int num_phase_iq_cons = 0;
+    int next_phase_eq_con = 0;
+    int next_phase_iq_con = 0;
 
     int StartObj = 0;
     int StartEq = 0;
@@ -85,72 +90,72 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int StartEqCons = 0;
     int StartIqCons = 0;
 
-    int numObjFuns = 0;
-    int numEqFuns = 0;
-    int numIqFuns = 0;
+    int num_obj_funs = 0;
+    int num_eq_funs = 0;
+    int num_iq_funs = 0;
 
     PhaseIndexer() {}
     PhaseIndexer(int Xv, int Uv, int OPv, int SPv) {
-        this->setXVars(Xv);
-        this->setUVars(Uv);
-        this->setPVars(OPv);
+        this->set_xvars(Xv);
+        this->set_uvars(Uv);
+        this->set_pvars(OPv);
         this->StaticPVars = SPv;
     }
 
     void set_dimensions(int DCS, int Dnum, bool BlockCon) {
-        this->numDefects = Dnum;
+        this->num_defects = Dnum;
         this->DefectCardinalStates = DCS;
-        this->numStates = (this->DefectCardinalStates - 1) * this->numDefects + 1;
-        this->numNodalStates = this->numDefects + 1;
+        this->num_states = (this->DefectCardinalStates - 1) * this->num_defects + 1;
+        this->num_nodal_states = this->num_defects + 1;
 
         this->BlockedControls = BlockCon;
 
         if (this->BlockedControls) {
-            this->numPhaseVars = this->numStates * this->XtVars() +
-                                 this->numDefects * this->UVars() + this->PVars() +
+            this->num_phase_vars = this->num_states * this->XtVars() +
+                                 this->num_defects * this->UVars() + this->PVars() +
                                  this->StatPVars();
 
             ODEFirstStateLocs.setLinSpaced(this->XtUVars(), 0, this->XtUVars() - 1);
             ODEFirstStateLocs.tail(this->UVars()) += VectorXi::Constant(
-                this->UVars(), this->XtVars() * (this->numStates) - this->XtVars());
+                this->UVars(), this->XtVars() * (this->num_states) - this->XtVars());
 
             ODELastStateLocs =
                 ODEFirstStateLocs +
-                VectorXi::Constant(this->XtUVars(), this->XtVars() * (this->numStates - 1));
+                VectorXi::Constant(this->XtUVars(), this->XtVars() * (this->num_states - 1));
             ODELastStateLocs.tail(this->UVars()) =
                 ODEFirstStateLocs.tail(this->UVars()) +
-                VectorXi::Constant(this->UVars(), this->UVars() * (this->numDefects - 1));
+                VectorXi::Constant(this->UVars(), this->UVars() * (this->num_defects - 1));
 
         } else {
-            this->numPhaseVars =
-                this->numStates * this->XtUVars() + this->PVars() + this->StatPVars();
+            this->num_phase_vars =
+                this->num_states * this->XtUVars() + this->PVars() + this->StatPVars();
 
             ODEFirstStateLocs.setLinSpaced(this->XtUVars(), 0, this->XtUVars() - 1);
             ODELastStateLocs =
                 ODEFirstStateLocs +
-                VectorXi::Constant(this->XtUVars(), this->XtUVars() * (this->numStates - 1));
+                VectorXi::Constant(this->XtUVars(), this->XtUVars() * (this->num_states - 1));
         }
 
         ODEParamLocs.setLinSpaced(this->PVars(), 0, this->PVars() - 1);
         ODEParamLocs += Eigen::VectorXi::Constant(
-            this->PVars(), this->numPhaseVars - this->PVars() - this->StatPVars());
+            this->PVars(), this->num_phase_vars - this->PVars() - this->StatPVars());
 
         StaticParamLocs.setLinSpaced(this->StatPVars(), 0, this->StatPVars() - 1);
         StaticParamLocs +=
-            Eigen::VectorXi::Constant(this->StatPVars(), this->numPhaseVars - this->StatPVars());
+            Eigen::VectorXi::Constant(this->StatPVars(), this->num_phase_vars - this->StatPVars());
     }
     void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
         this->nlp = np;
 
-        this->numPhaseEqCons = 0;
-        this->numPhaseIqCons = 0;
+        this->num_phase_eq_cons = 0;
+        this->num_phase_iq_cons = 0;
 
         this->ODEFirstStateLocs += Eigen::VectorXi::Constant(this->ODEFirstStateLocs.size(), n);
         this->ODELastStateLocs += Eigen::VectorXi::Constant(this->ODELastStateLocs.size(), n);
         this->ODEParamLocs += Eigen::VectorXi::Constant(this->ODEParamLocs.size(), n);
         this->StaticParamLocs += Eigen::VectorXi::Constant(this->StaticParamLocs.size(), n);
-        this->nextPhaseEqCon = ep;
-        this->nextPhaseIqCon = ip;
+        this->next_phase_eq_con = ep;
+        this->next_phase_iq_con = ip;
 
         this->StartEqCons = ep;
         this->StartIqCons = ip;
@@ -159,46 +164,46 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->StartEq = this->nlp->EqualityConstraints.size();
         this->StartIq = this->nlp->InequalityConstraints.size();
 
-        this->numObjFuns = 0;
-        this->numEqFuns = 0;
-        this->numIqFuns = 0;
+        this->num_obj_funs = 0;
+        this->num_eq_funs = 0;
+        this->num_iq_funs = 0;
     }
 
-    int addEquality(ConstraintInterface eqfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
+    int add_equality(ConstraintInterface eqfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                     const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
                     ThreadingFlags Tmode);
-    void addPartitionedEquality(const std::vector<ConstraintInterface> &eqfuns,
+    void add_partitioned_equality(const std::vector<ConstraintInterface> &eqfuns,
                                 PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                                 const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
                                 const std::vector<ThreadingFlags> &Tmodes);
 
-    int addAccumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
+    int add_accumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
                         const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
                         const Eigen::VectorXi &rstatpv, ConstraintInterface accfun,
                         const Eigen::VectorXi &accpv, ThreadingFlags Tmode);
 
-    int addInequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
+    int add_inequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
                       const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
                       const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode);
 
-    void addPartitionedInequality(const std::vector<ConstraintInterface> &iqfuns,
+    void add_partitioned_inequality(const std::vector<ConstraintInterface> &iqfuns,
                                   PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                                   const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
                                   const std::vector<ThreadingFlags> &Tmodes);
 
-    int addObjective(ObjectiveInterface objfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
+    int add_objective(ObjectiveInterface objfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                      const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
                      ThreadingFlags Tmode);
 
-    int getXTUVarLoc(int vloc, int State) const {
+    int get_xtu_var_loc(int vloc, int State) const {
         int v = 0;
         if (this->BlockedControls) {
             if (vloc < XtVars()) {
                 v = this->ODEFirstStateLocs[vloc] + State * this->XtVars();
             } else {
                 int unum = State / (this->DefectCardinalStates - 1);
-                if (unum > (this->numDefects - 1))
-                    unum = this->numDefects - 1;
+                if (unum > (this->num_defects - 1))
+                    unum = this->num_defects - 1;
                 v = this->ODEFirstStateLocs[vloc] + unum * this->UVars();
             }
         } else {
@@ -207,7 +212,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         return v;
     }
 
-    int getXTUVarLoc(int vloc, int State, int Defect) const {
+    int get_xtu_var_loc(int vloc, int State, int Defect) const {
         int v = 0;
         if (this->BlockedControls) {
             if (vloc < XtVars()) {
@@ -233,15 +238,15 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         return this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, orows, dummy);
     }
 
-    Eigen::VectorXd makeSolverInput(const std::vector<Eigen::VectorXd> &ActiveTraj,
+    Eigen::VectorXd make_solver_input(const std::vector<Eigen::VectorXd> &ActiveTraj,
                                     const Eigen::VectorXd &ActiveStaticParams) const;
-    void collectSolverOutput(const Eigen::VectorXd &Vars, std::vector<Eigen::VectorXd> &ActiveTraj,
+    void collect_solver_output(const Eigen::VectorXd &Vars, std::vector<Eigen::VectorXd> &ActiveTraj,
                              Eigen::VectorXd &ActiveStaticParams) const;
 
-    std::vector<Eigen::VectorXd> getFuncEqMultipliers(int Gindex,
+    std::vector<Eigen::VectorXd> get_func_eq_multipliers(int Gindex,
                                                       const Eigen::VectorXd &EMultphase) const;
 
-    std::vector<Eigen::VectorXd> getFuncIqMultipliers(int Gindex,
+    std::vector<Eigen::VectorXd> get_func_iq_multipliers(int Gindex,
                                                       const Eigen::VectorXd &IMultphase) const;
 
     void print_stats(bool showfuns) const;
@@ -249,5 +254,5 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     static void Test();
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

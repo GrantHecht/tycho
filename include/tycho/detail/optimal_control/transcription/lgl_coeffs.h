@@ -17,7 +17,7 @@
 
 #include <array>
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <int CS> struct LGLCoeffs {
     /// implement general algorithm for deteriming coefficients
@@ -355,4 +355,4 @@ template <> struct LGLCoeffs<4> {
 
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
-} // namespace Tycho
+} // namespace tycho::oc

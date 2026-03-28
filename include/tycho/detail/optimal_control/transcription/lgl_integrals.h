@@ -19,7 +19,7 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class Integrand, int CS, int XV, int PV> struct LGLReducedInteg_Impl {
     template <int V> using int_const = std::integral_constant<int, V>;
@@ -78,5 +78,5 @@ struct LGLIntegral
     LGLIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

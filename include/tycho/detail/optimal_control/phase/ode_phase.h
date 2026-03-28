@@ -49,7 +49,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class DODE> struct ODEPhase : ODEPhaseBase {
     using VectorXi = Eigen::VectorXi;
@@ -83,22 +83,22 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         this->ode = ode;
         this->integrator = Integrator<DODE>(ode, .01);
         this->set_idxs(this->ode.get_idxs());
-        this->setTranscriptionMode(Tmode);
-        this->setUnits(Eigen::VectorXd::Ones(this->XtUPVars()));
+        this->set_transcription_mode(Tmode);
+        this->set_units(Eigen::VectorXd::Ones(this->XtUPVars()));
     }
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef)
         : ODEPhase(ode, Tmode) {
-        this->setTraj(Traj, numdef);
+        this->set_traj(Traj, numdef);
     }
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef, bool LerpIG)
         : ODEPhase(ode, Tmode) {
-        this->setTraj(Traj, numdef, LerpIG);
+        this->set_traj(Traj, numdef, LerpIG);
     }
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj)
         : ODEPhase(ode, Tmode) {
-        this->setTraj(Traj);
+        this->set_traj(Traj);
     }
 
     ODEPhase(const DODE &ode, std::string Tmode) : ODEPhase(ode, strto_TranscriptionMode(Tmode)) {}
@@ -111,7 +111,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
              int numdef, bool LerpIG)
         : ODEPhase(ode, strto_TranscriptionMode(Tmode), Traj, numdef, LerpIG) {}
 
-    void setUnits(const Eigen::VectorXd &XtUPUnits_) {
+    void set_units(const Eigen::VectorXd &XtUPUnits_) {
 
         if (XtUPUnits_.size() != this->XtUPVars()) {
             throw std::invalid_argument("Incorrect size for input units vector");
@@ -186,8 +186,8 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         return Integ;
     }
 
-    virtual void setTranscriptionMode(TranscriptionModes m) {
-        this->resetTranscription();
+    virtual void set_transcription_mode(TranscriptionModes m) {
+        this->reset_transcription();
 
         this->TranscriptionMode = m;
 
@@ -203,33 +203,33 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         case TranscriptionModes::LGL7:
             this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
             this->Order = 7.0;
-            this->numTranCardStates = 4;
+            this->num_tran_card_states = 4;
             break;
         case TranscriptionModes::LGL5:
             this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
             this->Order = 5.0;
-            this->numTranCardStates = 3;
+            this->num_tran_card_states = 3;
             break;
         case TranscriptionModes::LGL3:
             this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
 
             this->Order = 3.0;
-            this->numTranCardStates = 2;
+            this->num_tran_card_states = 2;
             break;
         case TranscriptionModes::Trapezoidal:
             this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(),
                                          TranscriptionModes::LGL3);
 
             this->Order = 2.0;
-            this->numTranCardStates = 2;
+            this->num_tran_card_states = 2;
             break;
         case TranscriptionModes::CentralShooting:
             this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(),
                                          TranscriptionModes::LGL3);
             this->Order = 7.0;
-            this->numTranCardStates = 2;
+            this->num_tran_card_states = 2;
             // Default Central Shooting to BlockConstant!!!
-            this->setControlMode(ControlModes::BlockConstant);
+            this->set_control_mode(ControlModes::BlockConstant);
 
             break;
         default: {
@@ -256,7 +256,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     LGLType<decltype(ode_t), cs.value> lgl(ode_t);
                     lgl.EnableVectorization = this->EnableVectorization;
                     this->DynamicsFuncIndex =
-                        this->indexer.addEquality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
+                        this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
                                                   empty, ThreadingFlags::ByApplication);
                 } else {
 
@@ -265,14 +265,14 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     auto lgl = LGLDefects<BlockedODE, cs.value>(BlockedODE(ode_t));
                     lgl.EnableVectorization = this->EnableVectorization;
                     this->DynamicsFuncIndex =
-                        this->indexer.addEquality(lgl, PhaseRegionFlags::BlockDefectPath, StateT,
+                        this->indexer.add_equality(lgl, PhaseRegionFlags::BlockDefectPath, StateT,
                                                   OParT, empty, ThreadingFlags::ByApplication);
                 }
             } else {
                 LGLType<decltype(ode_t), cs.value> lgl(ode_t);
                 lgl.EnableVectorization = this->EnableVectorization;
                 this->DynamicsFuncIndex =
-                    this->indexer.addEquality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
+                    this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
                                               empty, ThreadingFlags::ByApplication);
             }
         };
@@ -284,7 +284,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
                     trap.EnableVectorization = this->EnableVectorization;
                     this->DynamicsFuncIndex =
-                        this->indexer.addEquality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
+                        this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
                                                   empty, ThreadingFlags::ByApplication);
                 } else {
                     using BlockedODE = Blocked_ODE_Wrapper<decltype(ode_t)>;
@@ -293,7 +293,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                     trap.EnableVectorization = this->EnableVectorization;
                     // trap.EnableHessianSparsity = this->EnableHessianSparsity;
                     this->DynamicsFuncIndex =
-                        this->indexer.addEquality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
+                        this->indexer.add_equality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
                                                   OParT, empty, ThreadingFlags::ByApplication);
                 }
 
@@ -301,7 +301,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
                 trap.EnableVectorization = this->EnableVectorization;
                 this->DynamicsFuncIndex =
-                    this->indexer.addEquality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
+                    this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
                                               empty, ThreadingFlags::ByApplication);
             }
         };
@@ -345,7 +345,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
             auto shooter = this->make_shooter();
             this->DynamicsFuncIndex =
-                this->indexer.addEquality(shooter, PhaseRegionFlags::DefectPath, StateT, OParT,
+                this->indexer.add_equality(shooter, PhaseRegionFlags::DefectPath, StateT, OParT,
                                           empty, ThreadingFlags::ByApplication);
 
             break;
@@ -411,12 +411,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             double T0 = Traj[0][this->TVar()];
             double TF = Traj.back()[this->TVar()];
 
-            int BlockSize = this->numTranCardStates;
-            int numBlocks = (Traj.size() - 1) / (BlockSize - 1);
+            int BlockSize = this->num_tran_card_states;
+            int num_blocks = (Traj.size() - 1) / (BlockSize - 1);
 
             Xin = Traj[0];
 
-            for (int i = 0; i < numBlocks; i++) {
+            for (int i = 0; i < num_blocks; i++) {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
@@ -449,15 +449,15 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         double T0 = this->ActiveTraj[0][this->TVar()];
         double TF = this->ActiveTraj.back()[this->TVar()];
 
-        int BlockSize = this->numTranCardStates;
-        int numBlocks = (this->ActiveTraj.size() - 1) / (BlockSize - 1);
+        int BlockSize = this->num_tran_card_states;
+        int num_blocks = (this->ActiveTraj.size() - 1) / (BlockSize - 1);
 
-        mesh_errors.resize(this->XVars(), numBlocks + 1);
-        mesh_dist.resize(this->XVars(), numBlocks + 1);
-        tsnd.resize(numBlocks + 1);
+        mesh_errors.resize(this->XVars(), num_blocks + 1);
+        mesh_dist.resize(this->XVars(), num_blocks + 1);
+        tsnd.resize(num_blocks + 1);
 
-        Eigen::VectorXd XerrWeights(this->numTranCardStates);
-        Eigen::VectorXd DXerrWeights(this->numTranCardStates);
+        Eigen::VectorXd XerrWeights(this->num_tran_card_states);
+        Eigen::VectorXd DXerrWeights(this->num_tran_card_states);
         std::vector<ODEDeriv<double>> Derivs(ActiveTraj.size(),
                                              ODEDeriv<double>::Zero(this->XVars()));
 
@@ -511,10 +511,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
         }
         ////////////////////////////////////////////////////
-        std::vector<ODEDeriv<double>> yvecs(numBlocks);
-        Eigen::VectorXd hs(numBlocks);
+        std::vector<ODEDeriv<double>> yvecs(num_blocks);
+        Eigen::VectorXd hs(num_blocks);
 
-        for (int i = 0; i < numBlocks; i++) {
+        for (int i = 0; i < num_blocks; i++) {
             int start = (BlockSize - 1) * i;
 
             hs[i] = this->ActiveTraj[start + (BlockSize - 1)][this->TVar()] -
@@ -554,7 +554,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         if (this->AutoScaling) {
             // All errors assessed in scaled units
             // yvecs has dims of X/t^Order
-            for (int i = 0; i < numBlocks; i++) {
+            for (int i = 0; i < num_blocks; i++) {
                 yvecs[i] = (yvecs[i].cwiseQuotient(this->XtUPUnits.head(this->XVars()))).eval();
                 yvecs[i] *= std::pow(this->XtUPUnits[this->XVars()], this->Order);
                 hs[i] /= this->XtUPUnits[this->XVars()];
@@ -562,12 +562,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
         ////////////////////////
 
-        tsnd[numBlocks] = 1.0;
+        tsnd[num_blocks] = 1.0;
 
-        for (int i = 0; i < numBlocks; i++) {
+        for (int i = 0; i < num_blocks; i++) {
             ODEDeriv<double> err_tmp(this->XVars());
 
-            if (i > 0 && i < (numBlocks - 1)) {
+            if (i > 0 && i < (num_blocks - 1)) {
 
                 err_tmp = ((yvecs[i] - yvecs[i - 1]) / (hs[i] + hs[i - 1])).cwiseAbs() +
                           ((yvecs[i + 1] - yvecs[i]) / (hs[i] + hs[i + 1])).cwiseAbs();
@@ -582,8 +582,8 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             mesh_errors.col(i) = err_tmp * std::pow(std::abs(hs[i]), this->Order + 1) * ErrorWeight;
         }
 
-        mesh_dist.col(numBlocks) = mesh_dist.col(numBlocks - 1);
-        mesh_errors.col(numBlocks) = mesh_errors.col(numBlocks - 1);
+        mesh_dist.col(num_blocks) = mesh_dist.col(num_blocks - 1);
+        mesh_errors.col(num_blocks) = mesh_errors.col(num_blocks - 1);
     }
 
     virtual void get_meshinfo_integrator(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
@@ -593,12 +593,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             double T0 = Traj[0][this->TVar()];
             double TF = Traj.back()[this->TVar()];
 
-            int BlockSize = this->numTranCardStates;
-            int numBlocks = (Traj.size() - 1) / (BlockSize - 1);
+            int BlockSize = this->num_tran_card_states;
+            int num_blocks = (Traj.size() - 1) / (BlockSize - 1);
 
-            mesh_errors.resize(this->XVars(), numBlocks + 1);
-            mesh_dist.resize(this->XVars(), numBlocks + 1);
-            tsnd.resize(numBlocks + 1);
+            mesh_errors.resize(this->XVars(), num_blocks + 1);
+            mesh_dist.resize(this->XVars(), num_blocks + 1);
+            tsnd.resize(num_blocks + 1);
 
             Eigen::MatrixXd tmp_mat(this->XVars(), Traj.size() - 1);
 
@@ -619,7 +619,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             double max_err = tmp_mat.maxCoeff();
             ODEDeriv<double> evec(this->XVars());
 
-            for (int i = 0; i < numBlocks; i++) {
+            for (int i = 0; i < num_blocks; i++) {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
@@ -649,9 +649,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 mesh_dist.col(i) = (mesh_dist.col(i).array().pow(1 / (this->Order + 1))).eval();
             }
 
-            mesh_errors.col(numBlocks) = mesh_errors.col(numBlocks - 1);
-            mesh_dist.col(numBlocks) = mesh_dist.col(numBlocks - 1);
-            tsnd[numBlocks] = 1.0;
+            mesh_errors.col(num_blocks) = mesh_errors.col(num_blocks - 1);
+            mesh_dist.col(num_blocks) = mesh_dist.col(num_blocks - 1);
+            tsnd[num_blocks] = 1.0;
         };
 
         if (this->AutoScaling) {
@@ -700,5 +700,5 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

@@ -19,7 +19,7 @@
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV> struct ODEBase;
 
@@ -31,12 +31,12 @@ struct ODE : ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _X
     using Base = ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _XV, Jm, Hm>,
                          Derived, _XV, _UV, _PV>;
 
-    void setODESize(int xv, int uv, int pv) {
-        this->setXVars(xv);
-        this->setUVars(uv);
-        this->setPVars(pv);
-        this->setInputRows(this->XtUPVars());
-        this->setOutputRows(this->XVars());
+    void set_ode_size(int xv, int uv, int pv) {
+        this->set_xvars(xv);
+        this->set_uvars(uv);
+        this->set_pvars(pv);
+        this->set_input_rows(this->XtUPVars());
+        this->set_output_rows(this->XVars());
     }
 };
 
@@ -47,10 +47,10 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
                          ExprImpl::UV, ExprImpl::PV>;
     using Base::Base;
 
-    void setODESize(int xv, int uv, int pv) {
-        this->setXVars(xv);
-        this->setUVars(uv);
-        this->setPVars(pv);
+    void set_ode_size(int xv, int uv, int pv) {
+        this->set_xvars(xv);
+        this->set_uvars(uv);
+        this->set_pvars(pv);
     }
 };
 
@@ -82,16 +82,16 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
     static const bool IsGenericODE = true;
 
     GenericODE(BaseType f, int xv, int uv, int pv) : Base(f) {
-        this->setXVars(xv);
-        this->setUVars(uv);
-        this->setPVars(pv);
+        this->set_xvars(xv);
+        this->set_uvars(uv);
+        this->set_pvars(pv);
 
-        if (this->ORows() != xv) {
+        if (this->output_rows() != xv) {
             throw std::invalid_argument(
                 "Output Size of Generic ODE Expression does not match the specified "
                 "model size");
         }
-        if (this->IRows() != (xv + uv + pv + 1)) {
+        if (this->input_rows() != (xv + uv + pv + 1)) {
             throw std::invalid_argument(
                 "Input Size of Generic ODE Expression does not match the specified "
                 "model size");
@@ -107,5 +107,5 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
 template <int XV, int UV, int PV>
 using PythonGenericODE = GenericODE<GenericFunction<-1, -1>, XV, UV, PV>;
 
-} // namespace Tycho
+} // namespace tycho::oc
 

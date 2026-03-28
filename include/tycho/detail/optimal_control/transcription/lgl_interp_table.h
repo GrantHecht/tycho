@@ -47,7 +47,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::oc {
 struct LGLInterpTable {
     using VectorFunctionalX = GenericFunction<-1, -1>;
 
@@ -94,7 +94,7 @@ struct LGLInterpTable {
         this->XtUVars = xv + uv + 1;
         this->ode = od;
         this->HasOde = true;
-        this->setMethod(m);
+        this->set_method(m);
     }
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, TranscriptionModes m,
                    const std::vector<Eigen::VectorXd> &xtudat, int dnum) {
@@ -104,8 +104,8 @@ struct LGLInterpTable {
         this->XtUVars = xv + uv + 1;
         this->ode = od;
         this->HasOde = true;
-        this->setMethod(m);
-        this->loadUnevenData(dnum, xtudat);
+        this->set_method(m);
+        this->load_uneven_data(dnum, xtudat);
     }
 
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, int pv, std::string m,
@@ -116,8 +116,8 @@ struct LGLInterpTable {
         this->XtUVars = xv + uv + 1 + pv;
         this->ode = od;
         this->HasOde = true;
-        this->setMethod(strto_TranscriptionMode(m));
-        this->loadUnevenData(dnum, xtudat);
+        this->set_method(strto_TranscriptionMode(m));
+        this->load_uneven_data(dnum, xtudat);
     }
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, int pv,
                    const std::vector<Eigen::VectorXd> &xtudat)
@@ -135,8 +135,8 @@ struct LGLInterpTable {
         this->UVars = uv;
         this->axis = xv;
         this->XtUVars = xv + uv + 1;
-        this->setMethod(m);
-        this->loadUnevenData(dnum, xtudat);
+        this->set_method(m);
+        this->load_uneven_data(dnum, xtudat);
     }
 
     LGLInterpTable(int xv, const std::vector<Eigen::VectorXd> &xtudat, int dnum) {
@@ -144,29 +144,29 @@ struct LGLInterpTable {
         this->UVars = 0;
         this->axis = xv;
         this->XtUVars = xv + 0 + 1;
-        this->setMethod(TranscriptionModes::LGL3);
-        this->loadUnevenData(dnum, xtudat);
+        this->set_method(TranscriptionModes::LGL3);
+        this->load_uneven_data(dnum, xtudat);
     }
     LGLInterpTable(const std::vector<Eigen::VectorXd> &xtudat) {
         this->XVars = xtudat[0].size() - 1;
         this->UVars = 0;
         this->axis = xtudat[0].size() - 1;
         this->XtUVars = xtudat[0].size();
-        this->setMethod(TranscriptionModes::LGL3);
-        this->loadUnevenData(xtudat.size() - 1, xtudat);
+        this->set_method(TranscriptionModes::LGL3);
+        this->load_uneven_data(xtudat.size() - 1, xtudat);
     }
     LGLInterpTable(int xv, int uv, TranscriptionModes m) {
         this->XVars = xv;
         this->UVars = uv;
         this->axis = xv;
         this->XtUVars = xv + uv + 1;
-        this->setMethod(m);
+        this->set_method(m);
     }
     LGLInterpTable() {}
     std::shared_ptr<LGLInterpTable> getTablePtr() { return std::shared_ptr<LGLInterpTable>(this); }
-    void setMethod(TranscriptionModes m);
+    void set_method(TranscriptionModes m);
 
-    template <class VecType> void checkInput(const std::vector<VecType> &xtudat) {
+    template <class VecType> void check_input(const std::vector<VecType> &xtudat) {
 
         double t0 = xtudat.front()[this->axis];
         double tf = xtudat.back()[this->axis];
@@ -186,7 +186,7 @@ struct LGLInterpTable {
         }
     }
 
-    void makePeriodic() {
+    void make_periodic() {
         this->Periodic = true;
 
         Eigen::VectorXd x0 = XtUData.col(0);
@@ -196,12 +196,12 @@ struct LGLInterpTable {
         double diff = (x0.head(this->XVars) - xf.head(this->XVars)).cwiseAbs().maxCoeff();
 
         if (diff > 1.0e-8) {
-            std::cout << "Warning: Calling makePeriodic on non-Periodic table data" << std::endl;
+            std::cout << "Warning: Calling make_periodic on non-Periodic table data" << std::endl;
         }
         XtUData.col(XtUData.cols() - 1).head(this->XVars) = x0.head(this->XVars);
         XdotData.col(XdotData.cols() - 1).head(this->XVars) = xd0.head(this->XVars);
     }
-    void loadEvenData(const std::vector<Eigen::VectorXd> &xtudat) {
+    void load_even_data(const std::vector<Eigen::VectorXd> &xtudat) {
         int msize = xtudat[0].size();
         if (msize != this->XtUVars) {
             std::cout << "User Input Error in supplying data to LGLInterpTable" << std::endl;
@@ -233,8 +233,8 @@ struct LGLInterpTable {
 
         if (!this->HasOde) {
             FDDerivArbitrary<Eigen::VectorXd> dterp;
-            dterp.setAxis(this->axis);
-            dterp.setData(xtudat);
+            dterp.set_axis(this->axis);
+            dterp.set_data(xtudat);
             std::vector<Eigen::VectorXd> datatmp;
             if (xtudat.size() > 8) {
                 datatmp = dterp.deriv<Eigen::VectorXd>(1, 4);
@@ -259,7 +259,7 @@ struct LGLInterpTable {
             exit(1);
         }
 
-        checkInput(xtudat);
+        check_input(xtudat);
 
         this->XtUData.resize(this->XtUVars, xtudat.size());
         this->XdotData.resize(this->XVars, xtudat.size());
@@ -280,7 +280,7 @@ struct LGLInterpTable {
         }
     }
 
-    void loadUnevenData(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
+    void load_uneven_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
         int msize = xtudat[0].size();
         if (msize != this->XtUVars) {
             std::cout << "User Input Error in supplying data to LGLInterpTable" << std::endl;
@@ -289,11 +289,11 @@ struct LGLInterpTable {
                       << ")" << std::endl;
             exit(1);
         }
-        checkInput(xtudat);
+        check_input(xtudat);
 
         Eigen::VectorXd myspace = this->Tspacing;
         TranscriptionModes mymeth = this->Method;
-        this->setMethod(TranscriptionModes::LGL3);
+        this->set_method(TranscriptionModes::LGL3);
 
         this->XtUData.resize(this->XtUVars, xtudat.size());
         this->XtUData.setZero();
@@ -320,8 +320,8 @@ struct LGLInterpTable {
 
         if (!this->HasOde) {
             FDDerivArbitrary<Eigen::VectorXd> dterp;
-            dterp.setAxis(this->axis);
-            dterp.setData(xtudat);
+            dterp.set_axis(this->axis);
+            dterp.set_data(xtudat);
             std::vector<Eigen::VectorXd> datatmp;
             if (xtudat.size() > 8) {
                 dterp.deriv<Eigen::VectorXd>(datatmp, 1, 4);
@@ -337,13 +337,13 @@ struct LGLInterpTable {
         std::vector<Eigen::VectorXd> nxs = this->NDequidist(myspace, dnum, 0.0, 1.0);
         std::vector<Eigen::VectorXd> ndxs(nxs.size());
 
-        this->setMethod(mymeth);
-        this->loadEvenData(nxs);
+        this->set_method(mymeth);
+        this->load_even_data(nxs);
     }
 
-    void loadRegularData(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
+    void load_regular_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
 
-        checkInput(xtudat);
+        check_input(xtudat);
 
         this->XtUData.resize(this->XtUVars, xtudat.size());
         this->XtUData.setZero();
@@ -365,11 +365,11 @@ struct LGLInterpTable {
             this->XdotData.col(i) = temp;
         }
         std::vector<Eigen::VectorXd> nxs = this->NDequidist(dnum, 0.0, 1.0);
-        this->loadEvenData(nxs);
+        this->load_even_data(nxs);
     }
-    void loadExactData(const std::vector<Eigen::VectorXd> &xtudat) {
+    void load_exact_data(const std::vector<Eigen::VectorXd> &xtudat) {
 
-        checkInput(xtudat);
+        check_input(xtudat);
 
         this->XtUData.resize(this->XtUVars, xtudat.size());
         this->XtUData.setZero();
@@ -392,8 +392,8 @@ struct LGLInterpTable {
         }
     }
     template <class V1, class V2>
-    void loadExactData(const std::vector<V1> &xtudat, const std::vector<V2> &xdotdat) {
-        checkInput(xtudat);
+    void load_exact_data(const std::vector<V1> &xtudat, const std::vector<V2> &xdotdat) {
+        check_input(xtudat);
         this->XtUData.resize(this->XtUVars, xtudat.size());
         this->XtUData.setZero();
         this->XdotData.resize(this->XVars, xtudat.size());
@@ -600,7 +600,7 @@ struct LGLInterpTable {
             tpow[i] = tpow[i - 1] * t;
         }
 
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -608,20 +608,20 @@ struct LGLInterpTable {
         for (int i = 0; i < this->BlockSize; i++) {
             Scalar xsc = tpow.dot(this->Xweights.col(i).template cast<Scalar>());
             Scalar dxsc = tpow.dot(this->DXweights.col(i).template cast<Scalar>());
-            xtuN.head(this->XVars) +=
+            xtu_n.head(this->XVars) +=
                 xtublk.col(i).head(this->XVars).template cast<Scalar>() * xsc +
                 dxblk.col(i).head(this->XVars).template cast<Scalar>() * dxsc * h;
         }
-        xtuN[axis] = t0 + h * t;
+        xtu_n[axis] = t0 + h * t;
 
         if (this->UVars > 0) {
             if (this->BlockedControls) {
-                xtuN.tail(this->UVars) = xtublk.col(0).tail(this->UVars).template cast<Scalar>();
+                xtu_n.tail(this->UVars) = xtublk.col(0).tail(this->UVars).template cast<Scalar>();
             } else {
                 VectorX<Scalar> utpow = tpow.head(Uweights.rows());
                 for (int i = 0; i < this->BlockSize; i++) {
                     Scalar usc = utpow.dot(this->Uweights.col(i).template cast<Scalar>());
-                    xtuN.tail(this->UVars) +=
+                    xtu_n.tail(this->UVars) +=
                         xtublk.col(i).tail(this->UVars).template cast<Scalar>() * usc;
                 }
             }
@@ -644,7 +644,7 @@ struct LGLInterpTable {
             tpow2[i] = tpow[i - 1] * Scalar(i);
         }
 
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -654,15 +654,15 @@ struct LGLInterpTable {
             Scalar dxsc = tpow.dot(this->DXweights.col(i).template cast<Scalar>());
             Scalar xsc_dt = tpow2.dot(this->Xweights.col(i).template cast<Scalar>());
             Scalar dxsc_dt = tpow2.dot(this->DXweights.col(i).template cast<Scalar>());
-            xtuN.col(0).head(this->XVars) +=
+            xtu_n.col(0).head(this->XVars) +=
                 xtublk.col(i).head(this->XVars).template cast<Scalar>() * xsc +
                 dxblk.col(i).head(this->XVars).template cast<Scalar>() * dxsc * h;
-            xtuN.col(1).head(this->XVars) +=
+            xtu_n.col(1).head(this->XVars) +=
                 xtublk.col(i).head(this->XVars).template cast<Scalar>() * xsc_dt / h +
                 dxblk.col(i).head(this->XVars).template cast<Scalar>() * dxsc_dt;
         }
-        xtuN.col(0)[axis] = t0 + h * t;
-        xtuN.col(1)[axis] = 1.0;
+        xtu_n.col(0)[axis] = t0 + h * t;
+        xtu_n.col(1)[axis] = 1.0;
 
         if (this->UVars > 0) {
             VectorX<Scalar> utpow = tpow.head(Uweights.rows());
@@ -672,9 +672,9 @@ struct LGLInterpTable {
                 Scalar usc = utpow.dot(this->Uweights.col(i).template cast<Scalar>());
                 Scalar usc_dt = utpow2.dot(this->Uweights.col(i).template cast<Scalar>());
 
-                xtuN.col(0).tail(this->UVars) +=
+                xtu_n.col(0).tail(this->UVars) +=
                     xtublk.col(i).tail(this->UVars).template cast<Scalar>() * usc;
-                xtuN.col(1).tail(this->UVars) +=
+                xtu_n.col(1).tail(this->UVars) +=
                     xtublk.col(i).tail(this->UVars).template cast<Scalar>() * usc_dt / h;
             }
         }
@@ -696,7 +696,7 @@ struct LGLInterpTable {
             tpow2[i] = tpow[i - 1] * Scalar(i);
         }
 
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -706,13 +706,13 @@ struct LGLInterpTable {
             Scalar dxsc = tpow.dot(this->DXweights.col(i).template cast<Scalar>());
             Scalar xsc_dt = tpow2.dot(this->Xweights.col(i).template cast<Scalar>());
             Scalar dxsc_dt = tpow2.dot(this->DXweights.col(i).template cast<Scalar>());
-            xtuN.col(0).head(this->XVars) +=
+            xtu_n.col(0).head(this->XVars) +=
                 xtublk.col(i).head(this->XVars) * xsc + dxblk.col(i).head(this->XVars) * dxsc * h;
-            xtuN.col(1).head(this->XVars) += xtublk.col(i).head(this->XVars) * xsc_dt / h +
+            xtu_n.col(1).head(this->XVars) += xtublk.col(i).head(this->XVars) * xsc_dt / h +
                                              dxblk.col(i).head(this->XVars) * dxsc_dt;
         }
-        xtuN.col(0)[axis] = t0 + h * t;
-        xtuN.col(1)[axis] = 1.0;
+        xtu_n.col(0)[axis] = t0 + h * t;
+        xtu_n.col(1)[axis] = 1.0;
 
         if (this->UVars > 0) {
             VectorX<Scalar> utpow = tpow.head(Uweights.rows());
@@ -722,9 +722,9 @@ struct LGLInterpTable {
                 Scalar usc = utpow.dot(this->Uweights.col(i).template cast<Scalar>());
                 Scalar usc_dt = utpow2.dot(this->Uweights.col(i).template cast<Scalar>());
 
-                xtuN.col(0).tail(this->UVars) +=
+                xtu_n.col(0).tail(this->UVars) +=
                     xtublk.col(i).tail(this->UVars).template cast<Scalar>() * usc;
-                xtuN.col(1).tail(this->UVars) +=
+                xtu_n.col(1).tail(this->UVars) +=
                     xtublk.col(i).tail(this->UVars).template cast<Scalar>() * usc_dt / h;
             }
         }
@@ -734,7 +734,7 @@ struct LGLInterpTable {
     void InterpBlockLGL3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                          const Eigen::MatrixBase<XtUBlockType> &xtublk,
                          const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -745,20 +745,20 @@ struct LGLInterpTable {
         Scalar xsc1 = (-2.0 * t3 + 3.0 * t2);
         Scalar dxsc1 = (t3 - t2) * h;
 
-        xtuN.head(this->XVars) = xtublk.col(0).head(this->XVars).template cast<Scalar>() * xsc0 +
+        xtu_n.head(this->XVars) = xtublk.col(0).head(this->XVars).template cast<Scalar>() * xsc0 +
                                  dxblk.col(0).head(this->XVars).template cast<Scalar>() * dxsc0 +
                                  xtublk.col(1).head(this->XVars).template cast<Scalar>() * xsc1 +
                                  dxblk.col(1).head(this->XVars).template cast<Scalar>() * dxsc1;
-        xtuN[axis] = t0 + h * t;
+        xtu_n[axis] = t0 + h * t;
 
         if (this->UVars > 0) {
 
             if (this->BlockedControls) {
-                xtuN.tail(this->UVars) = xtublk.col(0).tail(this->UVars).template cast<Scalar>();
+                xtu_n.tail(this->UVars) = xtublk.col(0).tail(this->UVars).template cast<Scalar>();
             } else {
                 Scalar usc0 = 1.0 - t;
                 Scalar usc1 = t;
-                xtuN.tail(this->UVars) =
+                xtu_n.tail(this->UVars) =
                     xtublk.col(0).tail(this->UVars).template cast<Scalar>() * usc0 +
                     xtublk.col(1).tail(this->UVars).template cast<Scalar>() * usc1;
             }
@@ -769,7 +769,7 @@ struct LGLInterpTable {
     void InterpBlockDerivLGL3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                               const Eigen::MatrixBase<XtUBlockType> &xtublk,
                               const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -787,38 +787,38 @@ struct LGLInterpTable {
         Scalar dxsc1_dt = (3.0 * t2 - 2.0 * t);
 
         if constexpr (std::is_same<Scalar, double>::value) {
-            xtuN.col(0).head(this->XVars) =
+            xtu_n.col(0).head(this->XVars) =
                 xtublk.col(0).head(this->XVars) * xsc0 + dxblk.col(0).head(this->XVars) * dxsc0 +
                 xtublk.col(1).head(this->XVars) * xsc1 + dxblk.col(1).head(this->XVars) * dxsc1;
-            xtuN.col(1).head(this->XVars) = xtublk.col(0).head(this->XVars) * xsc0_dt +
+            xtu_n.col(1).head(this->XVars) = xtublk.col(0).head(this->XVars) * xsc0_dt +
                                             dxblk.col(0).head(this->XVars) * dxsc0_dt +
                                             xtublk.col(1).head(this->XVars) * xsc1_dt +
                                             dxblk.col(1).head(this->XVars) * dxsc1_dt;
         } else {
-            xtuN.col(0).head(this->XVars) =
+            xtu_n.col(0).head(this->XVars) =
                 xtublk.col(0).head(this->XVars).template cast<Scalar>() * xsc0 +
                 dxblk.col(0).head(this->XVars).template cast<Scalar>() * dxsc0 +
                 xtublk.col(1).head(this->XVars).template cast<Scalar>() * xsc1 +
                 dxblk.col(1).head(this->XVars).template cast<Scalar>() * dxsc1;
-            xtuN.col(1).head(this->XVars) =
+            xtu_n.col(1).head(this->XVars) =
                 xtublk.col(0).head(this->XVars).template cast<Scalar>() * xsc0_dt +
                 dxblk.col(0).head(this->XVars).template cast<Scalar>() * dxsc0_dt +
                 xtublk.col(1).head(this->XVars).template cast<Scalar>() * xsc1_dt +
                 dxblk.col(1).head(this->XVars).template cast<Scalar>() * dxsc1_dt;
         }
 
-        xtuN.col(0)[axis] = t0 + h * t;
-        xtuN.col(1)[axis] = 1;
+        xtu_n.col(0)[axis] = t0 + h * t;
+        xtu_n.col(1)[axis] = 1;
 
         if (this->UVars > 0) {
             Scalar usc0 = 1.0 - t;
             Scalar usc1 = t;
             Scalar usc0_dt = -1.0 / h;
             Scalar usc1_dt = 1.0 / h;
-            xtuN.col(0).tail(this->UVars) =
+            xtu_n.col(0).tail(this->UVars) =
                 xtublk.col(0).tail(this->UVars).template cast<Scalar>() * usc0 +
                 xtublk.col(1).tail(this->UVars).template cast<Scalar>() * usc1;
-            xtuN.col(1).tail(this->UVars) =
+            xtu_n.col(1).tail(this->UVars) =
                 xtublk.col(0).tail(this->UVars).template cast<Scalar>() * usc0_dt +
                 xtublk.col(1).tail(this->UVars).template cast<Scalar>() * usc1_dt;
         }
@@ -828,7 +828,7 @@ struct LGLInterpTable {
     void InterpBlockDeriv2LGL3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                const Eigen::MatrixBase<XtUBlockType> &xtublk,
                                const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        Eigen::MatrixBase<OutType> &xtuN = fx.const_cast_derived();
+        Eigen::MatrixBase<OutType> &xtu_n = fx.const_cast_derived();
         Scalar t0 = xtublk(axis, 0);
         Scalar tf = xtublk(axis, this->BlockSize - 1);
         Scalar h = tf - t0;
@@ -850,31 +850,31 @@ struct LGLInterpTable {
         Scalar xsc1_dt2 = (-12.0 * t + 6.0) / (h * h);
         Scalar dxsc1_dt2 = (6.0 * t - 2.0) / h;
 
-        xtuN.col(0).head(this->XVars) =
+        xtu_n.col(0).head(this->XVars) =
             xtublk.col(0).head(this->XVars) * xsc0 + dxblk.col(0).head(this->XVars) * dxsc0 +
             xtublk.col(1).head(this->XVars) * xsc1 + dxblk.col(1).head(this->XVars) * dxsc1;
-        xtuN.col(1).head(this->XVars) =
+        xtu_n.col(1).head(this->XVars) =
             xtublk.col(0).head(this->XVars) * xsc0_dt + dxblk.col(0).head(this->XVars) * dxsc0_dt +
             xtublk.col(1).head(this->XVars) * xsc1_dt + dxblk.col(1).head(this->XVars) * dxsc1_dt;
-        xtuN.col(2).head(this->XVars) = xtublk.col(0).head(this->XVars) * xsc0_dt2 +
+        xtu_n.col(2).head(this->XVars) = xtublk.col(0).head(this->XVars) * xsc0_dt2 +
                                         dxblk.col(0).head(this->XVars) * dxsc0_dt2 +
                                         xtublk.col(1).head(this->XVars) * xsc1_dt2 +
                                         dxblk.col(1).head(this->XVars) * dxsc1_dt2;
 
-        xtuN.col(0)[axis] = t0 + h * t;
-        xtuN.col(1)[axis] = 1;
-        xtuN.col(2)[axis] = 0;
+        xtu_n.col(0)[axis] = t0 + h * t;
+        xtu_n.col(1)[axis] = 1;
+        xtu_n.col(2)[axis] = 0;
 
         if (this->UVars > 0) {
             Scalar usc0 = 1.0 - t;
             Scalar usc1 = t;
             Scalar usc0_dt = -1.0 / h;
             Scalar usc1_dt = 1.0 / h;
-            xtuN.col(0).tail(this->UVars) =
+            xtu_n.col(0).tail(this->UVars) =
                 xtublk.col(0).tail(this->UVars) * usc0 + xtublk.col(1).tail(this->UVars) * usc1;
-            xtuN.col(1).tail(this->UVars) = xtublk.col(0).tail(this->UVars) * usc0_dt +
+            xtu_n.col(1).tail(this->UVars) = xtublk.col(0).tail(this->UVars) * usc0_dt +
                                             xtublk.col(1).tail(this->UVars) * usc1_dt;
-            xtuN.col(2).tail(this->UVars).setZero();
+            xtu_n.col(2).tail(this->UVars).setZero();
         }
     }
 
@@ -937,5 +937,5 @@ struct LGLInterpTable {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

@@ -14,7 +14,11 @@
 #include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 #include "tycho/detail/optimal_control/builder/phase_wrapper.h"
 
-namespace Tycho {
+namespace tycho {
+
+using oc::OptimalControlProblem;
+// Solvers types — will be tycho::solvers:: after Task 8
+using Tycho::PSIOPT;
 
 /// Thin wrapper around OptimalControlProblem with Phase-aware overloads.
 ///
@@ -27,9 +31,9 @@ class OCP {
 
     // ── Phase management ────────────────────────────────────────────────
 
-    int addPhase(Phase &p) { return ocp_.addPhase(p.base_ptr()); }
+    int add_phase(Phase &p) { return ocp_.add_phase(p.base_ptr()); }
 
-    int addPhase(Phase &p, const std::string &name) { return ocp_.addPhase(p.base_ptr(), name); }
+    int add_phase(Phase &p, const std::string &name) { return ocp_.add_phase(p.base_ptr(), name); }
 
     // ── Forward link constraints ────────────────────────────────────────
 
@@ -38,7 +42,7 @@ class OCP {
     /// through p2 (using phase ordering within the OCP).  Both phases must
     /// have registries; throws if either is empty or if names resolve to
     /// different indices.
-    int addForwardLinkEqualCon(Phase &p1, Phase &p2,
+    int add_forward_link_equal_con(Phase &p1, Phase &p2,
                                std::initializer_list<std::string> var_names) {
         bool p1_empty = p1.registry().empty();
         bool p2_empty = p2.registry().empty();
@@ -47,7 +51,7 @@ class OCP {
                                : p1_empty            ? "phase p1"
                                                      : "phase p2";
             throw std::invalid_argument(fmt::format(
-                "OCP::addForwardLinkEqualCon: {} {} no variable names "
+                "OCP::add_forward_link_equal_con: {} {} no variable names "
                 "registered -- register names via ODEBuilder::var_names() "
                 "or use the index-based overload",
                 which, (p1_empty && p2_empty) ? "have" : "has"));
@@ -65,17 +69,17 @@ class OCP {
                 return s + "]";
             };
             throw std::invalid_argument(fmt::format(
-                "OCP::addForwardLinkEqualCon: variable names resolve to "
+                "OCP::add_forward_link_equal_con: variable names resolve to "
                 "different indices in p1 {} vs p2 {} -- use the "
                 "index-based overload for heterogeneous phase layouts",
                 fmt_idx(idx1), fmt_idx(idx2)));
         }
-        return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(), idx1);
+        return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), idx1);
     }
 
     /// Link two phases with an index vector.
-    int addForwardLinkEqualCon(Phase &p1, Phase &p2, const Eigen::VectorXi &vars) {
-        return ocp_.addForwardLinkEqualCon(p1.base_ptr(), p2.base_ptr(), vars);
+    int add_forward_link_equal_con(Phase &p1, Phase &p2, const Eigen::VectorXi &vars) {
+        return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), vars);
     }
 
     // ── Solve ───────────────────────────────────────────────────────────
@@ -99,15 +103,15 @@ class OCP {
 
     // ── Settings ────────────────────────────────────────────────────────
 
-    void setAutoScaling(bool autoscale, bool applytophases = true) {
-        ocp_.setAutoScaling(autoscale, applytophases);
+    void set_auto_scaling(bool autoscale, bool applytophases = true) {
+        ocp_.set_auto_scaling(autoscale, applytophases);
     }
-    void setAdaptiveMesh(bool amesh, bool applytophases = true) {
-        ocp_.setAdaptiveMesh(amesh, applytophases);
+    void set_adaptive_mesh(bool amesh, bool applytophases = true) {
+        ocp_.set_adaptive_mesh(amesh, applytophases);
     }
-    void setMeshTol(double t) { ocp_.setMeshTol(t); }
-    void setNumPartitions(int n) { ocp_.setNumPartitions(n); }
-    void setNumPartitions(int n, int qp_threads) { ocp_.setNumPartitions(n, qp_threads); }
+    void set_mesh_tol(double t) { ocp_.set_mesh_tol(t); }
+    void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
+    void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
 
     // ── Optimizer / base access ─────────────────────────────────────────
 
@@ -120,10 +124,10 @@ class OCP {
     void check_has_phases(const char *method) const {
         if (ocp_.phases.empty())
             throw std::invalid_argument(
-                fmt::format("OCP::{}: no phases added — call addPhase() before solving", method));
+                fmt::format("OCP::{}: no phases added — call add_phase() before solving", method));
     }
 
     OptimalControlProblem ocp_;
 };
 
-} // namespace Tycho
+} // namespace tycho

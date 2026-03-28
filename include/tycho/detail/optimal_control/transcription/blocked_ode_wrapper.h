@@ -42,7 +42,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/utils/crtp_base.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     static const int UV = 0;
@@ -58,4 +58,4 @@ template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     Blocked_ODE_Wrapper(const DODE &ode) : Base(ode) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

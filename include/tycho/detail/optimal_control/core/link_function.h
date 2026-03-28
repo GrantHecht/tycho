@@ -41,7 +41,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class FuncType> struct LinkFunction {
     FuncType Func;
@@ -123,10 +123,10 @@ template <class FuncType> struct LinkFunction {
         this->OPVars = opv;
         this->SPVars = spv;
         this->LinkParams = lv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.ORows());
+        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
     }
 
-    Eigen::Matrix<PhaseRegionFlags, -1, 1> makePhaseRegFlags(LinkFlags Flag) {
+    Eigen::Matrix<PhaseRegionFlags, -1, 1> make_phase_reg_flags(LinkFlags Flag) {
         Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags;
         this->LinkFlag = Flag;
 
@@ -186,7 +186,7 @@ template <class FuncType> struct LinkFunction {
                  std::vector<Eigen::VectorXi> lv, ScaleType scale_t) {
         this->init(f, RegFlags, PTL, xtv, opv, spv, lv);
 
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.ORows(), scale_t);
+        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
         this->OutputScales = OutputScales;
         this->ScaleMode = ScaleMode;
         this->ScalesSet = ScalesSet;
@@ -195,14 +195,14 @@ template <class FuncType> struct LinkFunction {
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv, std::vector<Eigen::VectorXi> opv,
                  std::vector<Eigen::VectorXi> spv, std::vector<Eigen::VectorXi> lv) {
-        this->init(f, makePhaseRegFlags(Flag), PTL, xtv, opv, spv, lv);
+        this->init(f, make_phase_reg_flags(Flag), PTL, xtv, opv, spv, lv);
     }
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv, std::vector<Eigen::VectorXi> opv,
                  std::vector<Eigen::VectorXi> spv, std::vector<Eigen::VectorXi> lv,
                  ScaleType scale_t) {
-        this->init(f, makePhaseRegFlags(Flag), PTL, xtv, opv, spv, lv);
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.ORows(), scale_t);
+        this->init(f, make_phase_reg_flags(Flag), PTL, xtv, opv, spv, lv);
+        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
         this->OutputScales = OutputScales;
         this->ScaleMode = ScaleMode;
         this->ScalesSet = ScalesSet;
@@ -215,7 +215,7 @@ template <class FuncType> struct LinkFunction {
     LinkFunction(FuncType f, std::string Flag, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv, std::vector<Eigen::VectorXi> opv,
                  std::vector<Eigen::VectorXi> spv, std::vector<Eigen::VectorXi> lv) {
-        this->init(f, makePhaseRegFlags(strto_LinkFlag(Flag)), PTL, xtv, opv, spv, lv);
+        this->init(f, make_phase_reg_flags(strto_LinkFlag(Flag)), PTL, xtv, opv, spv, lv);
     }
 
     LinkFunction(FuncType f, Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags,
@@ -223,18 +223,18 @@ template <class FuncType> struct LinkFunction {
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
-        std::vector<Eigen::VectorXi> emptyvecLV(PTL.size(), empty);
+        std::vector<Eigen::VectorXi> empty_vec_lv(PTL.size(), empty);
 
-        this->init(f, RegFlags, PTL, xtv, emptyvec, emptyvec, emptyvecLV);
+        this->init(f, RegFlags, PTL, xtv, emptyvec, emptyvec, empty_vec_lv);
     }
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv) {
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
-        std::vector<Eigen::VectorXi> emptyvecLV(PTL.size(), empty);
+        std::vector<Eigen::VectorXi> empty_vec_lv(PTL.size(), empty);
 
-        this->init(f, makePhaseRegFlags(Flag), PTL, xtv, emptyvec, emptyvec, emptyvecLV);
+        this->init(f, make_phase_reg_flags(Flag), PTL, xtv, emptyvec, emptyvec, empty_vec_lv);
     }
     LinkFunction(FuncType f, Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags,
                  std::vector<Eigen::VectorXi> PTL, Eigen::VectorXi xtv) {
@@ -242,9 +242,9 @@ template <class FuncType> struct LinkFunction {
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
-        std::vector<Eigen::VectorXi> emptyvecLV(PTL.size(), empty);
+        std::vector<Eigen::VectorXi> empty_vec_lv(PTL.size(), empty);
 
-        this->init(f, RegFlags, PTL, xtvvec, emptyvec, emptyvec, emptyvecLV);
+        this->init(f, RegFlags, PTL, xtvvec, emptyvec, emptyvec, empty_vec_lv);
     }
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  Eigen::VectorXi xtv) {
@@ -252,9 +252,9 @@ template <class FuncType> struct LinkFunction {
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
-        std::vector<Eigen::VectorXi> emptyvecLV(PTL.size(), empty);
+        std::vector<Eigen::VectorXi> empty_vec_lv(PTL.size(), empty);
 
-        this->init(f, makePhaseRegFlags(Flag), PTL, xtvvec, emptyvec, emptyvec, emptyvecLV);
+        this->init(f, make_phase_reg_flags(Flag), PTL, xtvvec, emptyvec, emptyvec, empty_vec_lv);
     }
 
     LinkFunction(FuncType f, std::string Flag, std::vector<Eigen::VectorXi> PTL,
@@ -263,13 +263,13 @@ template <class FuncType> struct LinkFunction {
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
-        std::vector<Eigen::VectorXi> emptyvecLV(PTL.size(), empty);
+        std::vector<Eigen::VectorXi> empty_vec_lv(PTL.size(), empty);
 
-        this->init(f, makePhaseRegFlags(strto_LinkFlag(Flag)), PTL, xtvvec, emptyvec, emptyvec,
-                   emptyvecLV);
+        this->init(f, make_phase_reg_flags(strto_LinkFlag(Flag)), PTL, xtvvec, emptyvec, emptyvec,
+                   empty_vec_lv);
     }
 
     LinkFunction() {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

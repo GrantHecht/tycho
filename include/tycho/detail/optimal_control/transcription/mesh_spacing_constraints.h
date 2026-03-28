@@ -18,7 +18,7 @@
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     using Base = VectorFunction<SingleMeshSpacing, 3, 1>;
@@ -34,7 +34,7 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     SingleMeshSpacing() {}
     SingleMeshSpacing(double cs) { CardinalSpacing = cs; }
 
-    void setSpacing(double cs) { CardinalSpacing = cs; }
+    void set_spacing(double cs) { CardinalSpacing = cs; }
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -180,5 +180,5 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

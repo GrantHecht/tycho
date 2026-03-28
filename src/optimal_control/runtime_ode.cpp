@@ -13,7 +13,7 @@
 
 #include <fmt/format.h>
 
-namespace Tycho {
+namespace tycho {
 
 Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                         int num_segments) const {
@@ -51,4 +51,4 @@ Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::Vector
     return Phase(phase_ptr, VarRegistry(xvars_, uvars_, pvars_));
 }
 
-} // namespace Tycho
+} // namespace tycho

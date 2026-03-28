@@ -40,7 +40,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <int _XV, int _UV, int _PV> struct ODEConstSizes {
     static const int XV = _XV;
@@ -55,14 +55,14 @@ template <int _XV, int _UV, int _PV> struct ODEXVSizes : ODEConstSizes<_XV, _UV,
     inline int TVar() const { return this->XV; }
     inline int XVars() const { return this->XV; }
     inline int XtVars() const { return this->XtV; }
-    void setXVars(int xv) {}
+    void set_xvars(int xv) {}
 };
 
 template <int _UV, int _PV> struct ODEXVSizes<-1, _UV, _PV> : ODEConstSizes<-1, _UV, _PV> {
     inline int TVar() const { return this->XVdynamic; }
     inline int XVars() const { return this->XVdynamic; }
     inline int XtVars() const { return this->XtVdynamic; }
-    void setXVars(int xv) {
+    void set_xvars(int xv) {
         this->XVdynamic = xv;
         this->XtVdynamic = xv + 1;
     }
@@ -75,12 +75,12 @@ template <int _UV, int _PV> struct ODEXVSizes<-1, _UV, _PV> : ODEConstSizes<-1, 
 template <int _XV, int _UV, int _PV> struct ODEXUVSizes : ODEXVSizes<_XV, _UV, _PV> {
     inline int UVars() const { return this->UV; }
     inline int XtUVars() const { return this->UV + this->XtVars(); }
-    void setUVars(int uv) {}
+    void set_uvars(int uv) {}
 };
 template <int _XV, int _PV> struct ODEXUVSizes<_XV, -1, _PV> : ODEXVSizes<_XV, -1, _PV> {
     inline int UVars() const { return this->UVdynamic; }
     inline int XtUVars() const { return this->UVdynamic + this->XtVars(); }
-    void setUVars(int uv) { this->UVdynamic = uv; }
+    void set_uvars(int uv) { this->UVdynamic = uv; }
 
   protected:
     int UVdynamic = 0;
@@ -89,22 +89,22 @@ template <int _XV, int _PV> struct ODEXUVSizes<_XV, -1, _PV> : ODEXVSizes<_XV, -
 template <int _XV, int _UV, int _PV> struct ODEXUPVSizes : ODEXUVSizes<_XV, _UV, _PV> {
     inline int PVars() const { return this->PV; }
     inline int XtUPVars() const { return this->PV + this->XtUVars(); }
-    void setPVars(int pv) {}
-    void setXtUPVars(int xv, int uv, int pv) {
-        this->setXVars(xv);
-        this->setUVars(uv);
-        this->setPVars(pv);
+    void set_pvars(int pv) {}
+    void set_xt_up_vars(int xv, int uv, int pv) {
+        this->set_xvars(xv);
+        this->set_uvars(uv);
+        this->set_pvars(pv);
     }
 };
 
 template <int _XV, int _UV> struct ODEXUPVSizes<_XV, _UV, -1> : ODEXUVSizes<_XV, _UV, -1> {
     inline int PVars() const { return this->PVdynamic; }
     inline int XtUPVars() const { return this->PVdynamic + this->XtUVars(); }
-    void setPVars(int pv) { this->PVdynamic = pv; }
-    void setXtUPVars(int xv, int uv, int pv) {
-        this->setXVars(xv);
-        this->setUVars(uv);
-        this->setPVars(pv);
+    void set_pvars(int pv) { this->PVdynamic = pv; }
+    void set_xt_up_vars(int xv, int uv, int pv) {
+        this->set_xvars(xv);
+        this->set_uvars(uv);
+        this->set_pvars(pv);
     }
 
   protected:
@@ -225,4 +225,4 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     Eigen::VectorXi Pidxs(int zidxs) const { return idxs_impl(zidxs, this->Pidxs()); }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

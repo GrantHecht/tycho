@@ -21,7 +21,7 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
-int Tycho::ODEPhaseBase::addBoundaryValue(RegionType reg, VarIndexType args,
+int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType args,
                                           const std::variant<double, VectorXd> &value_t,
                                           ScaleType scale_t) {
     Eigen::VectorXd value;
@@ -32,32 +32,32 @@ int Tycho::ODEPhaseBase::addBoundaryValue(RegionType reg, VarIndexType args,
         value = std::get<VectorXd>(value_t);
     }
     auto Func = Arguments<-1>(value.size()) - value;
-    return this->addEqualCon(reg, Func, args, scale_t);
+    return this->add_equal_con(reg, Func, args, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addDeltaVarEqualCon(VarIndexType var, double value, double scale,
+int tycho::oc::ODEPhaseBase::add_delta_var_equal_con(VarIndexType var, double value, double scale,
                                              ScaleType scale_t) {
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
     auto x1 = args.coeff<1>();
     auto func = ((x1 - x0) - value) * scale;
-    return this->addEqualCon(PhaseRegionFlags::FrontandBack, func, var, scale_t);
+    return this->add_equal_con(PhaseRegionFlags::FrontandBack, func, var, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addValueLock(RegionType reg, VarIndexType args, ScaleType scale_t) {
-    int argsize = this->getXtUPVars(getRegion(reg), args).size();
-    return this->addEqualCon(reg, LockArgs<-1>(argsize), args, scale_t);
+int tycho::oc::ODEPhaseBase::add_value_lock(RegionType reg, VarIndexType args, ScaleType scale_t) {
+    int argsize = this->get_xt_up_vars(get_region(reg), args).size();
+    return this->add_equal_con(reg, LockArgs<-1>(argsize), args, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addPeriodicityCon(VarIndexType args, ScaleType scale_t) {
-    int argsize = this->getXtUPVars(PhaseRegionFlags::FrontandBack, args).size();
+int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType scale_t) {
+    int argsize = this->get_xt_up_vars(PhaseRegionFlags::FrontandBack, args).size();
     auto X = Arguments<-1>(argsize * 2);
     auto Func = X.head(argsize) - X.tail(argsize);
-    return this->addEqualCon(PhaseRegionFlags::FrontandBack, Func, args, scale_t);
+    return this->add_equal_con(PhaseRegionFlags::FrontandBack, Func, args, scale_t);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////
 
-int Tycho::ODEPhaseBase::addLUVarBound(RegionType reg, VarIndexType var, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
                                        double upperbound, double lbscale, double ubscale,
                                        ScaleType scale_t) {
     if (lowerbound > upperbound) {
@@ -75,9 +75,9 @@ int Tycho::ODEPhaseBase::addLUVarBound(RegionType reg, VarIndexType var, double 
     auto ubound = (x - upperbound) * ubscale;
     auto lubound = StackedOutputs{lowbound, ubound};
 
-    return this->addInequalCon(reg, lubound, var, scale_t);
+    return this->add_inequal_con(reg, lubound, var, scale_t);
 }
-int Tycho::ODEPhaseBase::addLUVarBound(PhaseRegionFlags reg, int var, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound,
                                        double upperbound, double lbscale, double ubscale) {
 
     if (lowerbound > upperbound) {
@@ -97,27 +97,27 @@ int Tycho::ODEPhaseBase::addLUVarBound(PhaseRegionFlags reg, int var, double low
     auto lubound = StackedOutputs{lowbound, ubound};
     VectorXi v(1);
     v[0] = var;
-    return this->addInequalCon(StateConstraint(lubound, reg, v));
+    return this->add_inequal_con(StateConstraint(lubound, reg, v));
 }
 
-int Tycho::ODEPhaseBase::addLowerVarBound(RegionType reg, VarIndexType var, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound,
                                           double lbscale, ScaleType scale_t) {
     check_lbscale(lbscale);
     auto x = Arguments<1>();
     auto lbound = (lowerbound - x) * lbscale;
 
-    return this->addInequalCon(reg, lbound, var, scale_t);
+    return this->add_inequal_con(reg, lbound, var, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addUpperVarBound(RegionType reg, VarIndexType var, double upperbound,
+int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound,
                                           double ubscale, ScaleType scale_t) {
     check_ubscale(ubscale);
     auto x = Arguments<1>();
     auto ubound = (x - upperbound) * ubscale;
-    return this->addInequalCon(reg, ubound, var, scale_t);
+    return this->add_inequal_con(reg, ubound, var, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addLUFuncBound(RegionType reg, ScalarFunctionalX func,
+int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
                                         VarIndexType XtUPvars, VarIndexType OPvars,
                                         VarIndexType SPvars, double lowerbound, double upperbound,
                                         double lbscale, double ubscale, ScaleType scale_t) {
@@ -134,10 +134,10 @@ int Tycho::ODEPhaseBase::addLUFuncBound(RegionType reg, ScalarFunctionalX func,
     auto x = Arguments<1>();
     auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
     auto lufun = lubound.eval(func);
-    return this->addInequalCon(reg, lufun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, lufun, XtUPvars, OPvars, SPvars, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addLowerFuncBound(RegionType reg, ScalarFunctionalX func,
+int tycho::oc::ODEPhaseBase::add_lower_func_bound(RegionType reg, ScalarFunctionalX func,
                                            VarIndexType XtUPvars, VarIndexType OPvars,
                                            VarIndexType SPvars, double lowerbound, double lbscale,
                                            ScaleType scale_t) {
@@ -147,10 +147,10 @@ int Tycho::ODEPhaseBase::addLowerFuncBound(RegionType reg, ScalarFunctionalX fun
     rhs[0] = lowerbound;
     auto lbfun = ((-1.0 * func) + rhs) * lbscale;
 
-    return this->addInequalCon(reg, lbfun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, lbfun, XtUPvars, OPvars, SPvars, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addUpperFuncBound(RegionType reg, ScalarFunctionalX func,
+int tycho::oc::ODEPhaseBase::add_upper_func_bound(RegionType reg, ScalarFunctionalX func,
                                            VarIndexType XtUPvars, VarIndexType OPvars,
                                            VarIndexType SPvars, double upperbound, double ubscale,
                                            ScaleType scale_t) {
@@ -160,10 +160,10 @@ int Tycho::ODEPhaseBase::addUpperFuncBound(RegionType reg, ScalarFunctionalX fun
     Vector1<double> rhs;
     rhs[0] = -upperbound;
     auto ubfun = ((func) + rhs) * ubscale;
-    return this->addInequalCon(reg, ubfun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, ubfun, XtUPvars, OPvars, SPvars, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addLUNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
                                         double upperbound, double lbscale, double ubscale,
                                         ScaleType scale_t) {
     if (lowerbound > upperbound) {
@@ -176,13 +176,13 @@ int Tycho::ODEPhaseBase::addLUNormBound(RegionType reg, VarIndexType XtUPvars, d
     check_lbscale(lbscale);
     check_ubscale(ubscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
 
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
         auto normfun = lubound.eval(Arguments<sz.value>(size).norm());
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
 
     switch (size) {
@@ -198,7 +198,7 @@ int Tycho::ODEPhaseBase::addLUNormBound(RegionType reg, VarIndexType XtUPvars, d
     return 0;
 }
 
-int Tycho::ODEPhaseBase::addLUSquaredNormBound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
                                                double lowerbound, double upperbound, double lbscale,
                                                double ubscale, ScaleType scale_t) {
     if (lowerbound > upperbound) {
@@ -211,13 +211,13 @@ int Tycho::ODEPhaseBase::addLUSquaredNormBound(RegionType reg, VarIndexType XtUP
     check_lbscale(lbscale);
     check_ubscale(ubscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
 
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
         auto normfun = lubound.eval(Arguments<sz.value>(size).squared_norm());
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
 
     switch (size) {
@@ -233,15 +233,15 @@ int Tycho::ODEPhaseBase::addLUSquaredNormBound(RegionType reg, VarIndexType XtUP
     return 0;
 }
 
-int Tycho::ODEPhaseBase::addLowerNormBound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
                                            double lbscale, ScaleType scale_t) {
     check_lbscale(lbscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (lowerbound - Arguments<sz.value>(size).norm()) * lbscale;
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
     switch (size) {
     case 2:
@@ -255,16 +255,16 @@ int Tycho::ODEPhaseBase::addLowerNormBound(RegionType reg, VarIndexType XtUPvars
     }
 }
 
-int Tycho::ODEPhaseBase::addLowerSquaredNormBound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
                                                   double lowerbound, double lbscale,
                                                   ScaleType scale_t) {
     check_lbscale(lbscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (lowerbound - Arguments<sz.value>(size).squared_norm()) * lbscale;
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
     switch (size) {
     case 2:
@@ -278,15 +278,15 @@ int Tycho::ODEPhaseBase::addLowerSquaredNormBound(RegionType reg, VarIndexType X
     }
 }
 
-int Tycho::ODEPhaseBase::addUpperNormBound(RegionType reg, VarIndexType XtUPvars, double upperbound,
+int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType XtUPvars, double upperbound,
                                            double ubscale, ScaleType scale_t) {
     check_ubscale(ubscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (Arguments<sz.value>(size).norm() - upperbound) * ubscale;
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
     switch (size) {
     case 2:
@@ -301,16 +301,16 @@ int Tycho::ODEPhaseBase::addUpperNormBound(RegionType reg, VarIndexType XtUPvars
     return 0;
 }
 
-int Tycho::ODEPhaseBase::addUpperSquaredNormBound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_upper_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
                                                   double upperbound, double ubscale,
                                                   ScaleType scale_t) {
     check_ubscale(ubscale);
 
-    int size = this->getXtUPVars(getRegion(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (Arguments<sz.value>(size).squared_norm() - upperbound) * ubscale;
-        return this->addInequalCon(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
     };
     switch (size) {
     case 2:
@@ -325,7 +325,7 @@ int Tycho::ODEPhaseBase::addUpperSquaredNormBound(RegionType reg, VarIndexType X
     return 0;
 }
 
-int Tycho::ODEPhaseBase::addLowerDeltaVarBound(RegionType reg, VarIndexType var, double lowerbound,
+int tycho::oc::ODEPhaseBase::add_lower_delta_var_bound(RegionType reg, VarIndexType var, double lowerbound,
                                                double lbscale, ScaleType scale_t) {
     check_lbscale(lbscale);
 
@@ -334,37 +334,37 @@ int Tycho::ODEPhaseBase::addLowerDeltaVarBound(RegionType reg, VarIndexType var,
     auto x1 = args.coeff<1>();
     auto func = (lowerbound - (x1 - x0)) * lbscale;
 
-    return this->addInequalCon(reg, func, var, scale_t);
+    return this->add_inequal_con(reg, func, var, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addUpperDeltaVarBound(RegionType reg, VarIndexType var, double upperbound,
+int tycho::oc::ODEPhaseBase::add_upper_delta_var_bound(RegionType reg, VarIndexType var, double upperbound,
                                                double ubscale, ScaleType scale_t) {
     check_ubscale(ubscale);
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
     auto x1 = args.coeff<1>();
     auto func = ((x1 - x0) - upperbound) * ubscale;
-    return this->addInequalCon(reg, func, var, scale_t);
+    return this->add_inequal_con(reg, func, var, scale_t);
 }
 
 //////////////////////////////
 
-int Tycho::ODEPhaseBase::addValueObjective(RegionType reg, VarIndexType var, double scale,
+int tycho::oc::ODEPhaseBase::add_value_objective(RegionType reg, VarIndexType var, double scale,
                                            ScaleType scale_t) {
     auto obj = Arguments<1>() * scale;
-    return this->addStateObjective(reg, obj, var, scale_t);
+    return this->add_state_objective(reg, obj, var, scale_t);
 }
 
-int Tycho::ODEPhaseBase::addDeltaVarObjective(VarIndexType var, double scale, ScaleType scale_t) {
+int tycho::oc::ODEPhaseBase::add_delta_var_objective(VarIndexType var, double scale, ScaleType scale_t) {
     auto args = Arguments<2>();
     auto x0 = args.coeff<0>();
     auto x1 = args.coeff<1>();
     auto func = ((x1 - x0)) * scale;
 
-    return this->addStateObjective(PhaseRegionFlags::FrontandBack, func, var, scale_t);
+    return this->add_state_objective(PhaseRegionFlags::FrontandBack, func, var, scale_t);
 }
 
-std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnCostateTraj() const {
+std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_costate_traj() const {
     if (!this->PostOptInfoValid) {
         throw std::invalid_argument(
             "No costates to return,a solve or optimize call must be made before "
@@ -372,17 +372,17 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnCostateTraj() const {
     }
 
     auto TrajTemp =
-        this->indexer.getFuncEqMultipliers(this->DynamicsFuncIndex, this->ActiveEqLmults);
+        this->indexer.get_func_eq_multipliers(this->DynamicsFuncIndex, this->ActiveEqLmults);
 
     std::vector<Eigen::VectorXd> tmp;
     int k = 0;
-    int stride = (this->numTranCardStates - 1);
+    int stride = (this->num_tran_card_states - 1);
     auto getSpace = [&](int i) {
-        if (this->numTranCardStates == 4) {
+        if (this->num_tran_card_states == 4) {
             return LGLCoeffs<4>::InteriorSpacings[i];
-        } else if (this->numTranCardStates == 3) {
+        } else if (this->num_tran_card_states == 3) {
             return LGLCoeffs<3>::InteriorSpacings[i];
-        } else if (this->numTranCardStates == 2) {
+        } else if (this->num_tran_card_states == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
             std::invalid_argument("Costate estimation Not Implemented for specified Transcription "
@@ -427,7 +427,7 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnCostateTraj() const {
     return Costates;
 }
 
-std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnTrajError() const {
+std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_traj_error() const {
 
     if (!this->PostOptInfoValid) {
         throw std::invalid_argument(
@@ -436,17 +436,17 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnTrajError() const {
     }
 
     auto ErrTrajTemp =
-        this->indexer.getFuncEqMultipliers(this->DynamicsFuncIndex, this->ActiveEqCons);
+        this->indexer.get_func_eq_multipliers(this->DynamicsFuncIndex, this->ActiveEqCons);
 
     std::vector<Eigen::VectorXd> ErrTraj;
     int k = 0;
-    int stride = (this->numTranCardStates - 1);
+    int stride = (this->num_tran_card_states - 1);
     auto getSpace = [&](int i) {
-        if (this->numTranCardStates == 4) {
+        if (this->num_tran_card_states == 4) {
             return LGLCoeffs<4>::InteriorSpacings[i];
-        } else if (this->numTranCardStates == 3) {
+        } else if (this->num_tran_card_states == 3) {
             return LGLCoeffs<3>::InteriorSpacings[i];
-        } else if (this->numTranCardStates == 2) {
+        } else if (this->num_tran_card_states == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
             std::invalid_argument("Error estimation Not Implemented for specified Transcription "
@@ -470,7 +470,7 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::returnTrajError() const {
     return ErrTraj;
 }
 
-void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh, Eigen::VectorXd DBS,
+void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh, Eigen::VectorXd DBS,
                                   Eigen::VectorXi DPB, bool LerpTraj) {
 
     if (mesh.size() == 0) {
@@ -498,11 +498,11 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh, Eige
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
-            throw std::invalid_argument("NaN detected in State Vector in ODEPhaseBase::setTraj");
+            throw std::invalid_argument("NaN detected in State Vector in ODEPhaseBase::set_traj");
         }
     }
 
-    this->Table.loadUnevenData(DPB.sum(), mesh);
+    this->Table.load_uneven_data(DPB.sum(), mesh);
 
     if (LerpTraj) {
 
@@ -513,7 +513,7 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh, Eige
             intime_nd[i] = (mesh[i][this->TVar()] - t0) / (tf - t0);
         }
 
-        int nstates = (this->numTranCardStates - 1) * DPB.sum() + 1;
+        int nstates = (this->num_tran_card_states - 1) * DPB.sum() + 1;
         Eigen::VectorXd outtime_nd(nstates);
         outtime_nd.setZero();
 
@@ -529,7 +529,7 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh, Eige
             for (int j = 0; j < DPB[i]; j++) {
                 cvect.setConstant(outtime_nd[start]);
                 outtime_nd.segment(start, Tspacing.size()) = cvect + Tspacing * segdt;
-                start += (this->numTranCardStates - 1);
+                start += (this->num_tran_card_states - 1);
             }
         }
 
@@ -549,17 +549,17 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh, Eige
 
     this->DefBinSpacing = DBS;
     this->DefsPerBin = DPB;
-    this->numDefects = DPB.sum();
+    this->num_defects = DPB.sum();
     this->TrajectoryLoaded = true;
-    this->resetTranscription();
-    this->invalidatePostOptInfo();
+    this->reset_transcription();
+    this->invalidate_post_opt_info();
 }
 
-void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh) {
+void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh) {
     /// Sets phase to have same number of defects and spacing as input trajectory
 
-    int numdefects = (mesh.size() - 1) / (this->numTranCardStates - 1);
-    int numrem = (mesh.size() - 1) % (this->numTranCardStates - 1);
+    int numdefects = (mesh.size() - 1) / (this->num_tran_card_states - 1);
+    int numrem = (mesh.size() - 1) % (this->num_tran_card_states - 1);
 
     if (numrem != 0) {
         throw std::invalid_argument(
@@ -579,7 +579,7 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh) {
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
-            throw std::invalid_argument("NaN detected in State Vector in ODEPhaseBase::setTraj");
+            throw std::invalid_argument("NaN detected in State Vector in ODEPhaseBase::set_traj");
         }
     }
 
@@ -592,7 +592,7 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh) {
     double tf = mesh.back()[this->TVar()];
 
     for (int i = 0; i < numdefects; i++) {
-        int elem = (this->numTranCardStates - 1) * (i + 1);
+        int elem = (this->num_tran_card_states - 1) * (i + 1);
         double ti = mesh[elem][this->TVar()];
         DBS[i + 1] = (ti - t0) / (tf - t0);
     }
@@ -602,10 +602,10 @@ void Tycho::ODEPhaseBase::setTraj(const std::vector<Eigen::VectorXd> &mesh) {
     DPB.resize(numdefects);
     DPB.setOnes();
 
-    this->setTraj(mesh, DBS, DPB, false);
+    this->set_traj(mesh, DBS, DPB, false);
 }
 
-void Tycho::ODEPhaseBase::refineTrajManual(VectorXd DBS, VectorXi DPB) {
+void tycho::oc::ODEPhaseBase::refine_traj_manual(VectorXd DBS, VectorXi DPB) {
     if ((DBS.size() - 1) != DPB.size()) {
         std::cout << "User Input Error in function setInitTraj for ODE:" << this->Table.ode.name()
                   << std::endl;
@@ -615,34 +615,34 @@ void Tycho::ODEPhaseBase::refineTrajManual(VectorXd DBS, VectorXi DPB) {
         throw std::invalid_argument("");
     }
 
-    this->Table.loadExactData(this->ActiveTraj);
+    this->Table.load_exact_data(this->ActiveTraj);
     this->ActiveTraj = this->Table.NDdistribute(DBS, DPB);
     this->DefBinSpacing = DBS;
     this->DefsPerBin = DPB;
-    this->numDefects = DPB.sum();
-    this->resetTranscription();
-    this->invalidatePostOptInfo();
+    this->num_defects = DPB.sum();
+    this->reset_transcription();
+    this->invalidate_post_opt_info();
 }
 
-std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::refineTrajEqual(int n) {
-    this->checkMesh();
+std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::refine_traj_equal(int n) {
+    this->check_mesh();
     this->MeshIters.back().up_numsegs = n;
     Eigen::VectorXi dpb = VectorXi::Ones(n);
     Eigen::VectorXd bins = this->MeshIters.back().calc_bins(n);
-    this->refineTrajManual(bins, dpb);
+    this->refine_traj_manual(bins, dpb);
 
     return this->ActiveTraj;
 }
 
-void Tycho::ODEPhaseBase::refineTrajAuto() {
-    this->checkMesh();
-    this->updateMesh();
+void tycho::oc::ODEPhaseBase::refine_traj_auto() {
+    this->check_mesh();
+    this->update_mesh();
     if (this->PrintMeshInfo) {
         this->MeshIters.back().print(0);
     }
 }
 
-void Tycho::ODEPhaseBase::subVariables(PhaseRegionFlags reg, VectorXi indices, VectorXd vals) {
+void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indices, VectorXd vals) {
     switch (reg) {
     case PhaseRegionFlags::Front: {
         for (int i = 0; i < indices.size(); i++) {
@@ -676,7 +676,7 @@ void Tycho::ODEPhaseBase::subVariables(PhaseRegionFlags reg, VectorXi indices, V
     }
 }
 
-void Tycho::ODEPhaseBase::transcribe_integrals() {
+void tycho::oc::ODEPhaseBase::transcribe_integrals() {
     auto MakeInt = [&](auto cs, auto xv, auto pv, const ScalarFunctionalX &integrand, int xvv,
                        int pvv) {
         auto integral =
@@ -723,7 +723,7 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         }
     };
 
-    for (auto &[key, ob] : this->userIntegrands) {
+    for (auto &[key, ob] : this->user_integrands) {
         int xp = ob.XtUVars.size();
         int sop = ob.OPVars.size() + ob.SPVars.size();
         VectorXi xtrap(xp + 1);
@@ -737,7 +737,7 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         if (this->AutoScaling) {
             VectorXd input_scales =
                 this->get_input_scale(ob.RegionFlag, ob.XtUVars, ob.OPVars, ob.SPVars);
-            VectorXd output_scales(Func.ORows());
+            VectorXd output_scales(Func.output_rows());
             output_scales.setOnes();
             output_scales = ob.OutputScales;
 
@@ -769,14 +769,14 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
             ob.Func.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
 
         int Gindex =
-            this->indexer.addObjective(obj, PhaseReg, xtrap, ob.OPVars, ob.SPVars, ThreadMode);
+            this->indexer.add_objective(obj, PhaseReg, xtrap, ob.OPVars, ob.SPVars, ThreadMode);
 
         int PLindex = Gindex - this->indexer.StartObj;
         ob.GlobalIndex = Gindex;
         ob.PhaseLocalIndex = PLindex;
     }
 
-    for (auto &[key, ob] : this->userParamIntegrands) {
+    for (auto &[key, ob] : this->user_param_integrands) {
         int xp = ob.XtUVars.size();
         int sop = ob.OPVars.size() + ob.SPVars.size();
         VectorXi xtrap(xp + 1);
@@ -792,7 +792,7 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         if (this->AutoScaling) {
             VectorXd input_scales =
                 this->get_input_scale(ob.RegionFlag, ob.XtUVars, ob.OPVars, ob.SPVars);
-            VectorXd output_scales(Func.ORows());
+            VectorXd output_scales(Func.output_rows());
             output_scales.setOnes();
             output_scales = ob.OutputScales;
 
@@ -822,7 +822,7 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
 
         auto AccFunc = Arguments<1>() * -AccScale;
 
-        int Gindex = this->indexer.addAccumulation(obj, PhaseReg, xtrap, ob.OPVars, ob.SPVars,
+        int Gindex = this->indexer.add_accumulation(obj, PhaseReg, xtrap, ob.OPVars, ob.SPVars,
                                                    AccFunc, ob.EXTVars, ThreadMode);
 
         int PLindex = Gindex - this->indexer.StartObj;
@@ -830,8 +830,8 @@ void Tycho::ODEPhaseBase::transcribe_integrals() {
         ob.PhaseLocalIndex = PLindex;
     }
 }
-void Tycho::ODEPhaseBase::transcribe_basic_funcs() {
-    for (auto &[key, eq] : this->userEqualities) {
+void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
+    for (auto &[key, eq] : this->user_equalities) {
         ThreadingFlags ThreadMode =
             eq.Func.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (eq.RegionFlag == PhaseRegionFlags::Path ||
@@ -842,20 +842,20 @@ void Tycho::ODEPhaseBase::transcribe_basic_funcs() {
         if (this->AutoScaling) {
             VectorXd input_scales =
                 this->get_input_scale(eq.RegionFlag, eq.XtUVars, eq.OPVars, eq.SPVars);
-            VectorXd output_scales(Func.ORows());
+            VectorXd output_scales(Func.output_rows());
             output_scales.setOnes();
             output_scales = eq.OutputScales;
             Func = IOScaled<decltype(Func)>(eq.Func, input_scales, output_scales);
         }
 
-        int Gindex = this->indexer.addEquality(Func, eq.RegionFlag, eq.XtUVars, eq.OPVars,
+        int Gindex = this->indexer.add_equality(Func, eq.RegionFlag, eq.XtUVars, eq.OPVars,
                                                eq.SPVars, ThreadMode);
 
         int PLindex = Gindex - this->indexer.StartEq;
         eq.GlobalIndex = Gindex;
         eq.PhaseLocalIndex = PLindex;
     }
-    for (auto &[key, iq] : this->userInequalities) {
+    for (auto &[key, iq] : this->user_inequalities) {
         ThreadingFlags ThreadMode =
             iq.Func.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (iq.RegionFlag == PhaseRegionFlags::Path ||
@@ -868,20 +868,20 @@ void Tycho::ODEPhaseBase::transcribe_basic_funcs() {
         if (this->AutoScaling) {
             VectorXd input_scales =
                 this->get_input_scale(iq.RegionFlag, iq.XtUVars, iq.OPVars, iq.SPVars);
-            VectorXd output_scales(Func.ORows());
+            VectorXd output_scales(Func.output_rows());
             output_scales.setOnes();
             output_scales = iq.OutputScales;
 
             Func = IOScaled<decltype(Func)>(iq.Func, input_scales, output_scales);
         }
 
-        int Gindex = this->indexer.addInequality(Func, iq.RegionFlag, iq.XtUVars, iq.OPVars,
+        int Gindex = this->indexer.add_inequality(Func, iq.RegionFlag, iq.XtUVars, iq.OPVars,
                                                  iq.SPVars, ThreadMode);
         int PLindex = Gindex - this->indexer.StartIq;
         iq.GlobalIndex = Gindex;
         iq.PhaseLocalIndex = PLindex;
     }
-    for (auto &[key, ob] : this->userStateObjectives) {
+    for (auto &[key, ob] : this->user_state_objectives) {
         ThreadingFlags ThreadMode =
             ob.Func.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (ob.RegionFlag == PhaseRegionFlags::Path ||
@@ -892,22 +892,22 @@ void Tycho::ODEPhaseBase::transcribe_basic_funcs() {
         if (this->AutoScaling) {
             VectorXd input_scales =
                 this->get_input_scale(ob.RegionFlag, ob.XtUVars, ob.OPVars, ob.SPVars);
-            VectorXd output_scales(Func.ORows());
+            VectorXd output_scales(Func.output_rows());
             output_scales.setOnes();
             output_scales = ob.OutputScales;
 
             Func = IOScaled<decltype(Func)>(ob.Func, input_scales, output_scales);
         }
 
-        int Gindex = this->indexer.addObjective(Func, ob.RegionFlag, ob.XtUVars, ob.OPVars,
+        int Gindex = this->indexer.add_objective(Func, ob.RegionFlag, ob.XtUVars, ob.OPVars,
                                                 ob.SPVars, ThreadMode);
         int PLindex = Gindex - this->indexer.StartObj;
         ob.GlobalIndex = Gindex;
         ob.PhaseLocalIndex = PLindex;
     }
 }
-void Tycho::ODEPhaseBase::transcribe_axis_funcs() {
-    VectorXd cspace(this->numDefects + 1);
+void tycho::oc::ODEPhaseBase::transcribe_axis_funcs() {
+    VectorXd cspace(this->num_defects + 1);
     int start = 0;
     for (int i = 0; i < this->DefsPerBin.size(); i++) {
         cspace.segment(start, this->DefsPerBin[i] + 1)
@@ -918,9 +918,9 @@ void Tycho::ODEPhaseBase::transcribe_axis_funcs() {
     std::vector<ConstraintInterface> AxisFuncs;
     std::vector<ThreadingFlags> Tmodes;
     Eigen::VectorXi bins(this->NumPartitions + 1);
-    bins.setLinSpaced(0, this->indexer.numNodalStates);
+    bins.setLinSpaced(0, this->indexer.num_nodal_states);
 
-    for (int i = 0; i < this->indexer.numNodalStates - 2; i++) {
+    for (int i = 0; i < this->indexer.num_nodal_states - 2; i++) {
         AxisFuncs.emplace_back(SingleMeshSpacing(cspace[i + 1]));
         ThreadingFlags thrt = ThreadingFlags::Thread0;
         for (int j = 0; j < this->NumPartitions; j++) {
@@ -939,19 +939,19 @@ void Tycho::ODEPhaseBase::transcribe_axis_funcs() {
 
     if (this->TranscriptionMode == TranscriptionModes::LGL7) {
         LGLMeshSpacing<4> axcon7;
-        this->indexer.addEquality(axcon7, PhaseRegionFlags::DefectPath, tloc, empty, empty,
+        this->indexer.add_equality(axcon7, PhaseRegionFlags::DefectPath, tloc, empty, empty,
                                   ThreadingFlags::ByApplication);
     } else if (this->TranscriptionMode == TranscriptionModes::LGL5) {
         LGLMeshSpacing<3> axcon5;
-        this->indexer.addEquality(axcon5, PhaseRegionFlags::DefectPath, tloc, empty, empty,
+        this->indexer.add_equality(axcon5, PhaseRegionFlags::DefectPath, tloc, empty, empty,
                                   ThreadingFlags::ByApplication);
     }
 
-    this->indexer.addPartitionedEquality(AxisFuncs, PhaseRegionFlags::FrontNodalBackPath, tloc,
+    this->indexer.add_partitioned_equality(AxisFuncs, PhaseRegionFlags::FrontNodalBackPath, tloc,
                                          empty, empty, Tmodes);
 }
 
-void Tycho::ODEPhaseBase::transcribe_control_funcs() {
+void tycho::oc::ODEPhaseBase::transcribe_control_funcs() {
     VectorXi StateT(this->XtUVars());
     for (int i = 0; i < this->XtUVars(); i++)
         StateT[i] = i;
@@ -973,14 +973,14 @@ void Tycho::ODEPhaseBase::transcribe_control_funcs() {
                 LGLControlSpline<4, -1, 2> lgl7spln2(this->UVars());
 
                 this->ControlFuncsIndex =
-                    this->indexer.addEquality(lgl7spln2, PhaseRegionFlags::DefectPairWisePath,
+                    this->indexer.add_equality(lgl7spln2, PhaseRegionFlags::DefectPairWisePath,
                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
 
             } else if (this->ControlMode == ControlModes::FirstOrderSpline) {
                 LGLControlSpline<4, -1, 1> lgl7spln1(this->UVars());
 
                 this->ControlFuncsIndex =
-                    this->indexer.addEquality(lgl7spln1, PhaseRegionFlags::DefectPairWisePath,
+                    this->indexer.add_equality(lgl7spln1, PhaseRegionFlags::DefectPairWisePath,
                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
             }
         }
@@ -991,14 +991,14 @@ void Tycho::ODEPhaseBase::transcribe_control_funcs() {
                 LGLControlSpline<3, -1, 1> lgl5spln1(this->UVars());
 
                 this->ControlFuncsIndex =
-                    this->indexer.addEquality(lgl5spln1, PhaseRegionFlags::DefectPairWisePath,
+                    this->indexer.add_equality(lgl5spln1, PhaseRegionFlags::DefectPairWisePath,
                                               TUvarT, empty, empty, ThreadingFlags::ByApplication);
             }
         }
     }
 }
 
-void Tycho::ODEPhaseBase::check_functions(int pnum) {
+void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
 
     /*
    Loops through all user defined functions and checks that they do not
@@ -1032,7 +1032,7 @@ void Tycho::ODEPhaseBase::check_functions(int pnum) {
             }
         }
         if (func.SPVars.size() > 0) {
-            if (func.SPVars.maxCoeff() >= this->numStatParams || func.SPVars.minCoeff() < 0) {
+            if (func.SPVars.maxCoeff() >= this->num_stat_params || func.SPVars.minCoeff() < 0) {
                 fmt::print(
                     fmt::fg(fmt::color::red),
                     "Transcription Error!!!\n"
@@ -1044,7 +1044,7 @@ void Tycho::ODEPhaseBase::check_functions(int pnum) {
             }
         }
         if (func.EXTVars.size() > 0) {
-            if (func.EXTVars.maxCoeff() >= this->numStatParams || func.EXTVars.minCoeff() < 0) {
+            if (func.EXTVars.maxCoeff() >= this->num_stat_params || func.EXTVars.minCoeff() < 0) {
 
                 fmt::print(fmt::fg(fmt::color::red),
                            "Transcription Error!!!\n"
@@ -1064,19 +1064,19 @@ void Tycho::ODEPhaseBase::check_functions(int pnum) {
     std::string iobj = "Integral objective";
     std::string ipcon = "Integral parameter";
 
-    for (auto &[key, f] : this->userEqualities)
+    for (auto &[key, f] : this->user_equalities)
         CheckFun(eq, f);
-    for (auto &[key, f] : this->userInequalities)
+    for (auto &[key, f] : this->user_inequalities)
         CheckFun(iq, f);
-    for (auto &[key, f] : this->userIntegrands)
+    for (auto &[key, f] : this->user_integrands)
         CheckFun(iobj, f);
-    for (auto &[key, f] : this->userParamIntegrands)
+    for (auto &[key, f] : this->user_param_integrands)
         CheckFun(ipcon, f);
-    for (auto &[key, f] : this->userStateObjectives)
+    for (auto &[key, f] : this->user_state_objectives)
         CheckFun(sobj, f);
 }
 
-Eigen::VectorXd Tycho::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
+Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
                                                      VectorXi OPV, VectorXi SPV) const {
 
     int nloops;
@@ -1125,7 +1125,7 @@ Eigen::VectorXd Tycho::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, Vect
     return scales;
 }
 
-std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::get_test_inputs(PhaseRegionFlags flag,
+std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::get_test_inputs(PhaseRegionFlags flag,
                                                                   VectorXi XtUV, VectorXi OPV,
                                                                   VectorXi SPV) const {
 
@@ -1216,7 +1216,7 @@ std::vector<Eigen::VectorXd> Tycho::ODEPhaseBase::get_test_inputs(PhaseRegionFla
     return inputs;
 }
 
-void Tycho::ODEPhaseBase::calc_auto_scales() {
+void tycho::oc::ODEPhaseBase::calc_auto_scales() {
     auto calc_impl = [&](auto &funcmap) {
         for (auto &[key, func] : funcmap) {
             if (func.ScaleMode == ScaleModes::AUTO) {
@@ -1232,26 +1232,26 @@ void Tycho::ODEPhaseBase::calc_auto_scales() {
         }
     };
 
-    calc_impl(this->userEqualities);
-    calc_impl(this->userInequalities);
-    calc_impl(this->userStateObjectives);
-    calc_impl(this->userIntegrands);
-    calc_impl(this->userParamIntegrands);
+    calc_impl(this->user_equalities);
+    calc_impl(this->user_inequalities);
+    calc_impl(this->user_state_objectives);
+    calc_impl(this->user_integrands);
+    calc_impl(this->user_param_integrands);
 }
 
-std::vector<double> Tycho::ODEPhaseBase::get_objective_scales() {
+std::vector<double> tycho::oc::ODEPhaseBase::get_objective_scales() {
     // If we have mixed integral and state objectives, we assume that they have the same units
     // since the output scales are computed for the integrands we need to divide by tstar
     // before averaging to make the units consistent
 
     std::vector<double> scales;
-    for (auto &[key, obj] : this->userStateObjectives) {
+    for (auto &[key, obj] : this->user_state_objectives) {
         if (obj.ScaleMode == ScaleModes::AUTO) {
             // OutputScales units 1/obj
             scales.push_back(obj.OutputScales[0]);
         }
     }
-    for (auto &[key, obj] : this->userIntegrands) {
+    for (auto &[key, obj] : this->user_integrands) {
         if (obj.ScaleMode == ScaleModes::AUTO) {
             // OutputScales units tstar/obj
             // Divide by tstar, since this function is the integrand not the total integral
@@ -1262,13 +1262,13 @@ std::vector<double> Tycho::ODEPhaseBase::get_objective_scales() {
     return scales;
 }
 
-void Tycho::ODEPhaseBase::update_objective_scales(double scale) {
-    for (auto &[key, obj] : this->userStateObjectives) {
+void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
+    for (auto &[key, obj] : this->user_state_objectives) {
         if (obj.ScaleMode == ScaleModes::AUTO) {
             obj.OutputScales[0] = scale;
         }
     }
-    for (auto &[key, obj] : this->userIntegrands) {
+    for (auto &[key, obj] : this->user_integrands) {
         if (obj.ScaleMode == ScaleModes::AUTO) {
             // Multiply by tstar, since this function is the integrand not the total integral
             obj.OutputScales[0] = scale * this->XtUPUnits[this->TVar()];
@@ -1276,7 +1276,7 @@ void Tycho::ODEPhaseBase::update_objective_scales(double scale) {
     }
 }
 
-void Tycho::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
+void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
                                            std::shared_ptr<NonLinearProgram> np, int pnum)
 
 {
@@ -1289,14 +1289,14 @@ void Tycho::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
     this->transcribe_basic_funcs();
 
     //////DO NOT GET RID OF THIS!!!!!!//
-    this->doTranscription = false;
+    this->do_transcription = false;
     ////////////////////////////////////
 }
 
-void Tycho::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
+void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
-    this->initIndexing();
+    this->init_indexing();
 
     this->check_functions(0);
     if (this->AutoScaling) {
@@ -1317,53 +1317,53 @@ void Tycho::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     if (showstats)
         this->indexer.print_stats(showfuns);
 
-    if (this->indexer.numPhaseEqCons > this->indexer.numPhaseVars) {
+    if (this->indexer.num_phase_eq_cons > this->indexer.num_phase_vars) {
         fmt::print(fmt::fg(fmt::color::yellow),
                    "Transcription Warning!!!\n"
                    "Number of Equality Constraints({0:}) in phase exceeds number of free "
                    "variables({1:}).\n"
                    "You likely have a redundant constraint.\n",
-                   this->indexer.numPhaseEqCons, this->indexer.numPhaseVars);
+                   this->indexer.num_phase_eq_cons, this->indexer.num_phase_vars);
     }
 
-    this->nlp->make_NLP(this->indexer.numPhaseVars, this->indexer.numPhaseEqCons,
-                        this->indexer.numPhaseIqCons);
+    this->nlp->make_NLP(this->indexer.num_phase_vars, this->indexer.num_phase_eq_cons,
+                        this->indexer.num_phase_iq_cons);
 
     this->optimizer->setNLP(this->nlp);
 }
 
-void Tycho::ODEPhaseBase::test_partitions(int i, int j, int n) {
-    this->resetTranscription();
+void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
+    this->reset_transcription();
 
     auto nlp1 = std::make_shared<NonLinearProgram>(i);
-    this->initIndexing();
+    this->init_indexing();
     this->transcribe_phase(0, 0, 0, nlp1, 0);
     if (false)
         this->indexer.print_stats(false);
-    nlp1->make_NLP(this->indexer.numPhaseVars, this->indexer.numPhaseEqCons,
-                   this->indexer.numPhaseIqCons);
+    nlp1->make_NLP(this->indexer.num_phase_vars, this->indexer.num_phase_eq_cons,
+                   this->indexer.num_phase_iq_cons);
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
-    this->initIndexing();
+    this->init_indexing();
     this->transcribe_phase(0, 0, 0, nlp2, 0);
     if (false)
         this->indexer.print_stats(false);
-    nlp2->make_NLP(this->indexer.numPhaseVars, this->indexer.numPhaseEqCons,
-                   this->indexer.numPhaseIqCons);
+    nlp2->make_NLP(this->indexer.num_phase_vars, this->indexer.num_phase_eq_cons,
+                   this->indexer.num_phase_iq_cons);
 
-    Eigen::VectorXd v = this->makeSolverInput();
+    Eigen::VectorXd v = this->make_solver_input();
     NonLinearProgram::NLPTest(v, n, nlp1, nlp2);
 
-    this->resetTranscription();
+    this->reset_transcription();
 }
 
-bool Tycho::ODEPhaseBase::checkMesh() {
+bool tycho::oc::ODEPhaseBase::check_mesh() {
 
     Eigen::VectorXd tsnd;
     Eigen::MatrixXd mesh_errors;
     Eigen::MatrixXd mesh_dist;
 
-    this->Table.loadExactData(this->ActiveTraj);
+    this->Table.load_exact_data(this->ActiveTraj);
 
     if (this->MeshErrorEstimator == MeshErrorEstimators::INTEGRATOR ||
         this->TranscriptionMode == TranscriptionModes::CentralShooting) {
@@ -1377,7 +1377,7 @@ bool Tycho::ODEPhaseBase::checkMesh() {
     Eigen::VectorXd error = mesh_errors.colwise().lpNorm<Eigen::Infinity>();
     Eigen::VectorXd dist = mesh_dist.colwise().lpNorm<Eigen::Infinity>();
 
-    this->MeshIters.emplace_back(this->numDefects, this->MeshTol, tsnd, error, dist);
+    this->MeshIters.emplace_back(this->num_defects, this->MeshTol, tsnd, error, dist);
 
     if (this->MeshErrorCriteria == MeshErrorAggregation::ENDTOEND ||
         this->MeshErrorDistributor == MeshErrorAggregation::ENDTOEND) {
@@ -1410,7 +1410,7 @@ bool Tycho::ODEPhaseBase::checkMesh() {
     return this->MeshConverged;
 }
 
-void Tycho::ODEPhaseBase::updateMesh() {
+void tycho::oc::ODEPhaseBase::update_mesh() {
 
     double ntemp = 0;
     for (int i = 0; i < this->MeshIters.back().error.size() - 1; i++) {
@@ -1422,8 +1422,8 @@ void Tycho::ODEPhaseBase::updateMesh() {
     }
     int n = int(std::ceil(ntemp)) + this->NumExtraSegs;
 
-    n = std::clamp(n, int(this->numDefects * this->MeshRedFactor),
-                   int(this->numDefects * this->MeshIncFactor));
+    n = std::clamp(n, int(this->num_defects * this->MeshRedFactor),
+                   int(this->num_defects * this->MeshIncFactor));
     n = std::clamp(n, this->MinSegments, this->MaxSegments);
 
     Eigen::VectorXd bins = this->MeshIters.back().calc_bins(n);
@@ -1458,10 +1458,10 @@ void Tycho::ODEPhaseBase::updateMesh() {
     Eigen::VectorXi dpb = VectorXi::Ones(bins.size() - 1);
     this->MeshIters.back().up_numsegs = bins.size() - 1;
 
-    this->refineTrajManual(bins, dpb);
+    this->refine_traj_manual(bins, dpb);
 }
 
-Eigen::VectorXd Tycho::ODEPhaseBase::calcSwitches() {
+Eigen::VectorXd tycho::oc::ODEPhaseBase::calcSwitches() {
 
     Eigen::MatrixXd uvals(this->UVars(), this->ActiveTraj.size());
     Eigen::VectorXd tsnd(this->ActiveTraj.size());
@@ -1501,10 +1501,10 @@ Eigen::VectorXd Tycho::ODEPhaseBase::calcSwitches() {
     return stdvector_to_eigenvector(switches);
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
-    if (this->doTranscription)
+Tycho::PSIOPT::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
+    if (this->do_transcription)
         this->transcribe();
-    VectorXd Input = this->makeSolverInput();
+    VectorXd Input = this->make_solver_input();
     VectorXd Output;
 
     switch (mode) {
@@ -1527,15 +1527,15 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::psipot_call_impl(JetJobMode
         throw std::invalid_argument("Unrecognized PSIOPT mode");
     }
 
-    this->collectSolverOutput(Output);
+    this->collect_solver_output(Output);
 
-    this->collectPostOptInfo(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
+    this->collect_post_opt_info(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
                              this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
 
     return this->optimizer->ConvergeFlag;
 }
 
-Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
+Tycho::PSIOPT::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
 
     if (this->PrintMeshInfo && this->AdaptiveMesh) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
@@ -1572,9 +1572,9 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
                            "Mesh Iteration 0 Failed to Solve: Aborting\n");
             }
         } else {
-            initMeshRefinement();
+            init_mesh_refinement();
             for (int i = 0; i < this->MaxMeshIters; i++) {
-                if (checkMesh() && !((i == 0) && this->ForceOneMeshIter)) {
+                if (check_mesh() && !((i == 0) && this->ForceOneMeshIter)) {
                     if (this->PrintMeshInfo) {
                         MeshIterateInfo::print_header(i);
                         this->MeshIters.back().print(0);
@@ -1589,7 +1589,7 @@ Tycho::PSIOPT::ConvergenceFlags Tycho::ODEPhaseBase::phase_call_impl(JetJobModes
                     }
                     break;
                 } else {
-                    updateMesh();
+                    update_mesh();
                     if (this->PrintMeshInfo) {
                         MeshIterateInfo::print_header(i);
                         this->MeshIters.back().print(0);

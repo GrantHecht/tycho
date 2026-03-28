@@ -17,7 +17,7 @@
 #include "tycho/detail/utils/timer.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 struct InterpTable2D {
 
@@ -431,7 +431,7 @@ struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, DenseDerivative
     std::shared_ptr<InterpTable2D> tab;
 
     InterpFunction2D() {}
-    InterpFunction2D(std::shared_ptr<InterpTable2D> tab) : tab(tab) { this->setIORows(2, 1); }
+    InterpFunction2D(std::shared_ptr<InterpTable2D> tab) : tab(tab) { this->set_io_rows(2, 1); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -470,4 +470,4 @@ struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, DenseDerivative
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

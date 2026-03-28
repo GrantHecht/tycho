@@ -15,7 +15,7 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 
-void Tycho::LGLInterpTable::setMethod(TranscriptionModes m) {
+void tycho::oc::LGLInterpTable::set_method(TranscriptionModes m) {
     this->Method = m;
     switch (this->Method) {
 
@@ -97,7 +97,7 @@ void Tycho::LGLInterpTable::setMethod(TranscriptionModes m) {
     }
 }
 
-std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
+std::vector<Eigen::VectorXd> tycho::oc::LGLInterpTable::NewErrorIntegral() {
 
     auto factorial = [](int n) {
         double fact = 1;
@@ -174,7 +174,7 @@ std::vector<Eigen::VectorXd> Tycho::LGLInterpTable::NewErrorIntegral() {
     return std::vector{tsnd, errs2, errint};
 }
 
-void Tycho::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
+void tycho::oc::LGLInterpTable::DeboorMeshError(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                                             Eigen::MatrixXd &mesh_dist) const {
 
     auto factorial = [](int n) {

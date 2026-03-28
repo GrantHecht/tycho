@@ -17,7 +17,7 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 
 #include "tycho/detail/vf/core/vector_function.h"
-namespace Tycho {
+namespace tycho::oc {
 
 struct InterpTable4D {
 
@@ -2952,7 +2952,7 @@ struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, DenseDerivative
     std::shared_ptr<InterpTable4D> tab;
 
     InterpFunction4D() {}
-    InterpFunction4D(std::shared_ptr<InterpTable4D> tab) : tab(tab) { this->setIORows(4, 1); }
+    InterpFunction4D(std::shared_ptr<InterpTable4D> tab) : tab(tab) { this->set_io_rows(4, 1); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -2991,4 +2991,4 @@ struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, DenseDerivative
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

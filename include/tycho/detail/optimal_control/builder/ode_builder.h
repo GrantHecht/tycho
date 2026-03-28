@@ -20,7 +20,10 @@
 #include <utility>
 #include <vector>
 
-namespace Tycho {
+namespace tycho {
+
+using oc::ODEArguments;
+using vf::GenericFunction;
 
 /// Proxy passed to the ODEBuilder::define() lambda.  Provides simplified
 /// XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors for building VectorFunction
@@ -296,15 +299,15 @@ class ODEBuilder {
 
     void validate_func() const {
         int expected_ir = xvars_ + 1 + uvars_ + pvars_;
-        if (func_.IRows() != expected_ir)
+        if (func_.input_rows() != expected_ir)
             throw std::invalid_argument(
                 fmt::format("ODEBuilder: function input size {} does not match XtUP size {} "
                             "(xv={}, uv={}, pv={})",
-                            func_.IRows(), expected_ir, xvars_, uvars_, pvars_));
-        if (func_.ORows() != xvars_)
+                            func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
+        if (func_.output_rows() != xvars_)
             throw std::invalid_argument(fmt::format(
-                "ODEBuilder: function output size {} does not match XV={}", func_.ORows(), xvars_));
+                "ODEBuilder: function output size {} does not match XV={}", func_.output_rows(), xvars_));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho

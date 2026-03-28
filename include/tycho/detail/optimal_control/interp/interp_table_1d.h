@@ -16,7 +16,7 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 struct InterpTable1D {
 
@@ -330,7 +330,7 @@ struct InterpFunction1D
 
     InterpFunction1D() {}
     InterpFunction1D(std::shared_ptr<InterpTable1D> tab) : tab(tab) {
-        this->setIORows(1, tab->vlen);
+        this->set_io_rows(1, tab->vlen);
     }
 
     template <class InType, class OutType>
@@ -343,7 +343,7 @@ struct InterpFunction1D
             fx = v;
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -358,8 +358,8 @@ struct InterpFunction1D
             jx = dv_dt;
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                           TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -381,10 +381,10 @@ struct InterpFunction1D
             adjhess(0, 0) = dv2_dt2.dot(adjvars);
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                           TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                           TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

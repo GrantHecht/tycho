@@ -18,7 +18,7 @@
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 #include "tycho/detail/utils/lambda_jump_table.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <int OR>
 struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
@@ -40,7 +40,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
             throw std::invalid_argument("Interpolation table has incorrect dimensions");
         }
 
-        this->setIORows(1, this->vars.size());
+        this->set_io_rows(1, this->vars.size());
         // this->setHessFDSteps(tab->DeltaT/10.0);
     }
     InterpFunction(std::shared_ptr<LGLInterpTable> tab) {
@@ -51,7 +51,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         this->vars.resize(tab->XVars);
         for (int i = 0; i < this->vars.size(); i++)
             this->vars[i] = i;
-        this->setIORows(1, this->vars.size());
+        this->set_io_rows(1, this->vars.size());
         // this->setHessFDSteps(tab->DeltaT / 10.0);
     }
 
@@ -65,7 +65,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
             Eigen::Matrix<Scalar, TempSize, 1, 0, maxsize.value, 1> state;
             state.resize(this->table->XtUVars);
             this->table->InterpolateRef(t, state);
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = state[this->vars[i]];
             }
         };
@@ -88,7 +88,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
             Eigen::Matrix<Scalar, TempSize, 2, 0, maxsize.value, 2> state;
             state.resize(this->table->XtUVars, 2);
             this->table->InterpolateDerivRef(t, state);
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = state(this->vars[i], 0);
                 jx(i, 0) = state(this->vars[i], 1);
             }
@@ -120,7 +120,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
                 Eigen::Matrix<Scalar, TempSize, 3, 0, maxsize.value, 3> state;
                 state.resize(this->table->XtUVars, 3);
                 this->table->Interpolate2ndDerivRef(t, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i] = state(this->vars[i], 0);
                     jx(i, 0) = state(this->vars[i], 1);
                     adjgrad[0] += jx(i, 0) * adjvars[i];
@@ -131,7 +131,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
                 Eigen::Matrix<Scalar, TempSize, 2, 0, maxsize.value, 2> state;
                 state.resize(this->table->XtUVars, 2);
                 this->table->InterpolateDerivRef(t, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i] = state(this->vars[i], 0);
                     jx(i, 0) = state(this->vars[i], 1);
                     adjgrad[0] += jx(i, 0) * adjvars[i];
@@ -139,7 +139,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
                 state.setZero();
                 Scalar h = Scalar(this->table->DeltaT / 10.0);
                 this->table->InterpolateDerivRef(t + h, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     hx(0, 0) += (state(this->vars[i], 1) - jx(i, 0)) * adjvars[i] / h;
                 }
             }
@@ -152,5 +152,5 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
 

@@ -41,7 +41,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 template <class FuncType> struct StateFunction {
     FuncType Func;
@@ -67,14 +67,14 @@ template <class FuncType> struct StateFunction {
         this->XtUVars = xtuv;
         this->OPVars = opv;
         this->SPVars = spv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.ORows());
+        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
     }
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv, opv, spv) {
 
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.ORows(), scale_t);
+        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
         this->OutputScales = OutputScales;
         this->ScaleMode = ScaleMode;
         this->ScalesSet = ScalesSet;
@@ -82,7 +82,7 @@ template <class FuncType> struct StateFunction {
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv) {
         this->Func = f;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.ORows());
+        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
 
         switch (Reg) {
         case PhaseRegionFlags::ODEParams: {
@@ -110,7 +110,7 @@ template <class FuncType> struct StateFunction {
     }
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv) {
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.ORows(), scale_t);
+        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
         this->OutputScales = OutputScales;
         this->ScaleMode = ScaleMode;
         this->ScalesSet = ScalesSet;
@@ -121,7 +121,7 @@ template <class FuncType> struct StateFunction {
         this->Func = f;
         this->RegionFlag = Reg;
         this->XtUVars = xtuv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.ORows());
+        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
 
         switch (ParReg) {
         case PhaseRegionFlags::ODEParams: {
@@ -144,4 +144,4 @@ template <class FuncType> struct StateFunction {
     StateFunction() {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

@@ -39,7 +39,7 @@
 #include "tycho/detail/utils/math_functions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 struct MeshIterateInfo {
 
@@ -161,4 +161,4 @@ struct MeshIterateInfo {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc
