@@ -209,27 +209,8 @@ clearly self-contained.
 
 ### Naming Conventions
 
-**C++ namespaces** — a type's namespace is determined by its `include/tycho/detail/`
-subdirectory:
-
-| Subdirectory | Namespace |
-| ------------ | --------- |
-| `detail/vf/` | `tycho::vf` |
-| `detail/optimal_control/` (non-builder) | `tycho::oc` |
-| `detail/optimal_control/builder/` | `tycho` (root) |
-| `detail/solvers/` | `tycho::solvers` |
-| `detail/astro/` | `tycho::astro` |
-| `detail/integrators/` | `tycho::integrators` |
-| `detail/utils/` | `tycho::utils` |
-| `detail/typedefs/`, enums, free utilities | `tycho` (root) |
-| Python binding helpers | `tycho::bind` |
-
-**C++ identifiers:**
 - Types and classes: `PascalCase` (e.g., `DenseFunction`, `ODEPhase`)
 - Member functions: `snake_case` (e.g., `set_io_rows()`, `add_equal_con()`)
-  > **PSIOPT exception:** The bundled PSIOPT optimizer retains its legacy `set_PascalCase`
-  > naming (e.g., `set_MaxIter`, `set_SocIter`, `set_KKTtol`). A dedicated PSIOPT naming
-  > migration is planned as a future PR — do not rename these in routine refactor passes.
 - Member variables: `snake_case_` with trailing underscore (e.g., `num_defects_`)
 - Free functions: `snake_case`
 
@@ -245,7 +226,7 @@ names) and require coordinated changes.
 ### C++ — clang-format (LLVM style)
 
 Config: `.clang-format` at the repo root (LLVM base, 4-space indent, 100-column limit).
-The CMake `clang-format` target applies it to `src/` and `extensions/`.
+The CMake `clang-format` target applies it to `src/`, `extensions/`, and `include/tycho/detail/`.
 
 ```bash
 cd build && ninja clang-format
