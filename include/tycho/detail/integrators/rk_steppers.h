@@ -20,13 +20,13 @@
 namespace tycho::integrators {
 
 // Import cross-namespace types from vf, utils, and solvers.
-using utils::BumpAllocator;
-using utils::SZ_PROD;
-using utils::SZ_DIFF;
-using utils::SZ_SUM;
-using utils::ArrayOfTempSpecs;
-using utils::TempSpec;
 using solvers::SolverIndexingData;
+using utils::ArrayOfTempSpecs;
+using utils::BumpAllocator;
+using utils::SZ_DIFF;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using utils::TempSpec;
 using vf::Arguments;
 using vf::DenseDerivativeMode;
 using vf::NestedCallAndAppendChain;
@@ -51,12 +51,14 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
     using RKData = RKCoeffs<RKOp>;
     static const int Stages = RKData::Stages;
     static const int Stgsm1 = RKData::Stages - 1;
-    static const bool isDiag = RKData::isDiag;
+    static const bool is_diag_ = RKData::is_diag_;
 
     DODE ode;
 
     RKStepper() {}
-    RKStepper(DODE ode) : ode(ode) { this->set_io_rows(this->ode.input_rows() + 1, this->ode.input_rows()); }
+    RKStepper(DODE ode) : ode(ode) {
+        this->set_io_rows(this->ode.input_rows() + 1, this->ode.input_rows());
+    }
 
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
@@ -64,35 +66,35 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &Kvals, auto &xtup) {
+        auto Impl = [&](auto &k_vals, auto &xtup) {
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             Scalar t0 = xtup[this->ode.TVar()];
             Scalar tf = x[this->ode.input_rows()];
             Scalar h = tf - t0;
 
-            this->ode.compute(xtup, Kvals[0]);
-            Kvals[0] *= h;
+            this->ode.compute(xtup, k_vals[0]);
+            k_vals[0] *= h;
 
             for (int i = 0; i < Stgsm1; i++) {
                 Scalar ti = t0 + RKData::Times[i] * h;
                 xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
                 xtup[this->ode.TVar()] = ti;
                 const int ip1 = i + 1;
-                const int js = isDiag ? i : 0;
+                const int js = is_diag_ ? i : 0;
                 for (int j = js; j < ip1; j++) {
                     xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                        Scalar(RKData::ACoeffs[i][j]) * Kvals[j];
+                        Scalar(RKData::ACoeffs[i][j]) * k_vals[j];
                 }
 
-                this->ode.compute(xtup, Kvals[ip1]);
+                this->ode.compute(xtup, k_vals[ip1]);
 
-                Kvals[ip1] *= h;
+                k_vals[ip1] *= h;
             }
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             xtup[this->ode.TVar()] = tf;
             for (int i = 0; i < Stages; i++) {
                 xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                    Scalar(RKData::BCoeffs[i]) * Kvals[i];
+                    Scalar(RKData::BCoeffs[i]) * k_vals[i];
             }
             fx = xtup; // Next State
         };
@@ -110,72 +112,74 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &Kvals, auto &xtup, auto &Kjac, auto &Xijac, auto &KXjacs) {
+        auto Impl = [&](auto &k_vals, auto &xtup, auto &k_jac, auto &xi_jac, auto &kx_jacs) {
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             Scalar t0 = xtup[this->ode.TVar()];
             Scalar tf = x[this->ode.input_rows()];
             Scalar h = tf - t0;
 
-            Xijac.setIdentity();
-            Xijac(this->ode.TVar(), this->input_rows() - 1) = 0;
+            xi_jac.setIdentity();
+            xi_jac(this->ode.TVar(), this->input_rows() - 1) = 0;
 
-            this->ode.compute_jacobian(xtup, Kvals[0], Kjac);
+            this->ode.compute_jacobian(xtup, k_vals[0], k_jac);
 
-            Kjac *= h;
-            KXjacs[0].noalias() = Kjac * Xijac;
-            KXjacs[0].col(this->ode.TVar()).template segment<DODE::XV>(0, this->ode.XVars()) -=
-                Kvals[0];
-            KXjacs[0].col(this->input_rows() - 1).template segment<DODE::XV>(0, this->ode.XVars()) +=
-                Kvals[0];
+            k_jac *= h;
+            kx_jacs[0].noalias() = k_jac * xi_jac;
+            kx_jacs[0].col(this->ode.TVar()).template segment<DODE::XV>(0, this->ode.XVars()) -=
+                k_vals[0];
+            kx_jacs[0]
+                .col(this->input_rows() - 1)
+                .template segment<DODE::XV>(0, this->ode.XVars()) += k_vals[0];
 
-            Kvals[0] *= h;
+            k_vals[0] *= h;
 
             for (int i = 0; i < Stgsm1; i++) {
                 Scalar ti = t0 + RKData::Times[i] * h;
                 xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
-                Xijac.setIdentity();
+                xi_jac.setIdentity();
 
                 xtup[this->ode.TVar()] = ti;
 
-                Xijac(this->ode.TVar(), this->ode.TVar()) = Scalar(1.0) - Scalar(RKData::Times[i]);
-                Xijac(this->ode.TVar(), this->input_rows() - 1) = Scalar(RKData::Times[i]);
+                xi_jac(this->ode.TVar(), this->ode.TVar()) = Scalar(1.0) - Scalar(RKData::Times[i]);
+                xi_jac(this->ode.TVar(), this->input_rows() - 1) = Scalar(RKData::Times[i]);
 
                 const int ip1 = i + 1;
-                const int js = isDiag ? i : 0;
+                const int js = is_diag_ ? i : 0;
                 for (int j = js; j < ip1; j++) {
                     xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                        Scalar(RKData::ACoeffs[i][j]) * Kvals[j];
-                    Xijac.template topRows<DODE::XV>(this->ode.XVars()) +=
-                        Scalar(RKData::ACoeffs[i][j]) * KXjacs[j];
+                        Scalar(RKData::ACoeffs[i][j]) * k_vals[j];
+                    xi_jac.template topRows<DODE::XV>(this->ode.XVars()) +=
+                        Scalar(RKData::ACoeffs[i][j]) * kx_jacs[j];
                 }
-                Kjac.setZero();
+                k_jac.setZero();
 
-                this->ode.compute_jacobian(xtup, Kvals[ip1], Kjac);
+                this->ode.compute_jacobian(xtup, k_vals[ip1], k_jac);
 
-                KXjacs[ip1].noalias() = h * Kjac * Xijac;
-                KXjacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
-                    Kvals[ip1];
-                KXjacs[ip1].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) +=
-                    Kvals[ip1];
+                kx_jacs[ip1].noalias() = h * k_jac * xi_jac;
+                kx_jacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
+                    k_vals[ip1];
+                kx_jacs[ip1]
+                    .col(this->input_rows() - 1)
+                    .template head<DODE::XV>(this->ode.XVars()) += k_vals[ip1];
 
-                Kvals[ip1] *= h;
+                k_vals[ip1] *= h;
             }
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             xtup[this->ode.TVar()] = tf;
 
-            Xijac.setIdentity();
+            xi_jac.setIdentity();
 
-            Xijac(this->ode.TVar(), this->ode.TVar()) = Scalar(0);
-            Xijac(this->ode.TVar(), (this->input_rows() - 1)) = Scalar(1);
+            xi_jac(this->ode.TVar(), this->ode.TVar()) = Scalar(0);
+            xi_jac(this->ode.TVar(), (this->input_rows() - 1)) = Scalar(1);
 
             for (int i = 0; i < Stages; i++) {
                 xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                    Scalar(RKData::BCoeffs[i]) * Kvals[i];
-                Xijac.template topRows<DODE::XV>(this->ode.XVars()) +=
-                    Scalar(RKData::BCoeffs[i]) * KXjacs[i];
+                    Scalar(RKData::BCoeffs[i]) * k_vals[i];
+                xi_jac.template topRows<DODE::XV>(this->ode.XVars()) +=
+                    Scalar(RKData::BCoeffs[i]) * kx_jacs[i];
             }
             fx = xtup; // Next State
-            jx = Xijac;
+            jx = xi_jac;
         };
 
         using KXjacType = Eigen::Matrix<Scalar, DODE::XV, Base::IRC>;
@@ -200,39 +204,39 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        auto Impl = [&](auto &Kvals, auto &xtup, auto &Kjacs, auto &Xijac, auto &KXjacs, auto &Xs,
-                        auto &Kgrads, auto &Khesses, auto &KXmults, auto &HTpar) {
+        auto Impl = [&](auto &k_vals, auto &xtup, auto &k_jacs, auto &xi_jac, auto &kx_jacs,
+                        auto &xs, auto &k_grads, auto &k_hesses, auto &kx_mults, auto &ht_par) {
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
 
             Scalar t0 = xtup[this->ode.TVar()];
             Scalar tf = x[this->ode.input_rows()];
             Scalar h = tf - t0;
 
-            Xs[0] = xtup;
-            this->ode.compute(xtup, Kvals[0]);
-            Kvals[0] *= h;
+            xs[0] = xtup;
+            this->ode.compute(xtup, k_vals[0]);
+            k_vals[0] *= h;
 
             for (int i = 0; i < Stgsm1; i++) {
                 Scalar ti = t0 + RKData::Times[i] * h;
                 xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
                 xtup[this->ode.TVar()] = ti;
                 const int ip1 = i + 1;
-                const int js = isDiag ? i : 0;
+                const int js = is_diag_ ? i : 0;
                 for (int j = js; j < ip1; j++) {
                     xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                        Scalar(RKData::ACoeffs[i][j]) * Kvals[j];
+                        Scalar(RKData::ACoeffs[i][j]) * k_vals[j];
                 }
-                Xs[ip1] = xtup;
-                this->ode.compute(xtup, Kvals[ip1]);
-                Kvals[ip1] *= h;
+                xs[ip1] = xtup;
+                this->ode.compute(xtup, k_vals[ip1]);
+                k_vals[ip1] *= h;
             }
 
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             xtup[this->ode.TVar()] = tf;
             for (int i = 0; i < Stages; i++) {
                 xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                    Scalar(RKData::BCoeffs[i]) * Kvals[i];
-                KXmults[i] = adjvars * Scalar(RKData::BCoeffs[i]) * h;
+                    Scalar(RKData::BCoeffs[i]) * k_vals[i];
+                kx_mults[i] = adjvars * Scalar(RKData::BCoeffs[i]) * h;
             }
 
             fx = xtup; // Next State
@@ -240,88 +244,90 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             for (int i = Stgsm1 - 1; i >= 0; i--) {
 
                 const int ip1 = i + 1;
-                const int js = isDiag ? i : 0;
-                Kvals[ip1].setZero();
+                const int js = is_diag_ ? i : 0;
+                k_vals[ip1].setZero();
                 this->ode.compute_jacobian_adjointgradient_adjointhessian(
-                    Xs[ip1], Kvals[ip1], Kjacs[ip1], Kgrads[ip1], Khesses[ip1],
-                    KXmults[ip1].head(this->ode.output_rows()));
+                    xs[ip1], k_vals[ip1], k_jacs[ip1], k_grads[ip1], k_hesses[ip1],
+                    kx_mults[ip1].head(this->ode.output_rows()));
 
                 for (int j = js; j < ip1; j++) {
-                    KXmults[j] += Kgrads[ip1] * Scalar(RKData::ACoeffs[i][j]) * h;
+                    kx_mults[j] += k_grads[ip1] * Scalar(RKData::ACoeffs[i][j]) * h;
                 }
             }
 
-            Kvals[0].setZero();
+            k_vals[0].setZero();
             this->ode.compute_jacobian_adjointgradient_adjointhessian(
-                Xs[0], Kvals[0], Kjacs[0], Kgrads[0], Khesses[0],
-                KXmults[0].head(this->ode.output_rows()));
+                xs[0], k_vals[0], k_jacs[0], k_grads[0], k_hesses[0],
+                kx_mults[0].head(this->ode.output_rows()));
 
-            adjhess.topLeftCorner(this->ode.input_rows(), this->ode.input_rows()) += Khesses[0];
+            adjhess.topLeftCorner(this->ode.input_rows(), this->ode.input_rows()) += k_hesses[0];
 
-            Xijac.setIdentity();
-            Xijac(this->ode.TVar(), this->input_rows() - 1) = Scalar(0.0);
+            xi_jac.setIdentity();
+            xi_jac(this->ode.TVar(), this->input_rows() - 1) = Scalar(0.0);
 
-            Kjacs[0] *= h;
-            KXjacs[0].noalias() = Kjacs[0] * Xijac;
-            KXjacs[0].col(this->ode.TVar()).template segment<DODE::XV>(0, this->ode.XVars()) -=
-                Kvals[0];
-            KXjacs[0].col(this->input_rows() - 1).template segment<DODE::XV>(0, this->ode.XVars()) +=
-                Kvals[0];
+            k_jacs[0] *= h;
+            kx_jacs[0].noalias() = k_jacs[0] * xi_jac;
+            kx_jacs[0].col(this->ode.TVar()).template segment<DODE::XV>(0, this->ode.XVars()) -=
+                k_vals[0];
+            kx_jacs[0]
+                .col(this->input_rows() - 1)
+                .template segment<DODE::XV>(0, this->ode.XVars()) += k_vals[0];
 
-            Kvals[0] *= h;
+            k_vals[0] *= h;
 
-            HTpar = (Xijac.transpose() * Kgrads[0]) * (1.0 / h);
+            ht_par = (xi_jac.transpose() * k_grads[0]) * (1.0 / h);
 
             //
 
             for (int i = 0; i < Stgsm1; i++) {
                 Scalar ti = t0 + RKData::Times[i] * h;
-                Xijac.setIdentity();
+                xi_jac.setIdentity();
 
-                Xijac(this->ode.TVar(), this->ode.TVar()) = Scalar(1.0) - Scalar(RKData::Times[i]);
-                Xijac(this->ode.TVar(), this->input_rows() - 1) = Scalar(RKData::Times[i]);
+                xi_jac(this->ode.TVar(), this->ode.TVar()) = Scalar(1.0) - Scalar(RKData::Times[i]);
+                xi_jac(this->ode.TVar(), this->input_rows() - 1) = Scalar(RKData::Times[i]);
 
                 const int ip1 = i + 1;
-                const int js = isDiag ? i : 0;
+                const int js = is_diag_ ? i : 0;
                 for (int j = js; j < ip1; j++) {
 
-                    Xijac.template topRows<DODE::XV>(this->ode.XVars()) +=
-                        Scalar(RKData::ACoeffs[i][j]) * KXjacs[j];
+                    xi_jac.template topRows<DODE::XV>(this->ode.XVars()) +=
+                        Scalar(RKData::ACoeffs[i][j]) * kx_jacs[j];
                 }
 
-                KXjacs[ip1].noalias() = h * Kjacs[ip1] * Xijac;
-                KXjacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
-                    Kvals[ip1];
-                KXjacs[ip1].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) +=
-                    Kvals[ip1];
+                kx_jacs[ip1].noalias() = h * k_jacs[ip1] * xi_jac;
+                kx_jacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
+                    k_vals[ip1];
+                kx_jacs[ip1]
+                    .col(this->input_rows() - 1)
+                    .template head<DODE::XV>(this->ode.XVars()) += k_vals[ip1];
 
-                Kvals[ip1] *= h;
+                k_vals[ip1] *= h;
 
-                adjhess += Xijac.transpose() * Khesses[ip1] * Xijac;
+                adjhess += xi_jac.transpose() * k_hesses[ip1] * xi_jac;
 
-                HTpar += (Xijac.transpose() * Kgrads[ip1]) * (1.0 / h);
+                ht_par += (xi_jac.transpose() * k_grads[ip1]) * (1.0 / h);
             }
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             xtup[this->ode.TVar()] = tf;
 
-            Xijac.setIdentity();
+            xi_jac.setIdentity();
 
-            Xijac(this->ode.TVar(), this->ode.TVar()) = Scalar(0.0);
-            Xijac(this->ode.TVar(), (this->input_rows() - 1)) = Scalar(1.0);
+            xi_jac(this->ode.TVar(), this->ode.TVar()) = Scalar(0.0);
+            xi_jac(this->ode.TVar(), (this->input_rows() - 1)) = Scalar(1.0);
 
             for (int i = 0; i < Stages; i++) {
 
-                Xijac.template topRows<DODE::XV>(this->ode.XVars()) +=
-                    Scalar(RKData::BCoeffs[i]) * KXjacs[i];
+                xi_jac.template topRows<DODE::XV>(this->ode.XVars()) +=
+                    Scalar(RKData::BCoeffs[i]) * kx_jacs[i];
             }
 
-            adjhess.col(this->ode.TVar()) -= HTpar;
-            adjhess.col(this->input_rows() - 1) += HTpar;
+            adjhess.col(this->ode.TVar()) -= ht_par;
+            adjhess.col(this->input_rows() - 1) += ht_par;
 
-            adjhess.row(this->ode.TVar()) -= HTpar.transpose();
-            adjhess.row(this->input_rows() - 1) += HTpar.transpose();
+            adjhess.row(this->ode.TVar()) -= ht_par.transpose();
+            adjhess.row(this->input_rows() - 1) += ht_par.transpose();
 
-            jx = Xijac;
+            jx = xi_jac;
             adjgrad = jx.transpose() * adjvars;
         };
 
@@ -330,12 +336,14 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode.output_rows(), 1),
             TempSpec<ODEState<Scalar>>(this->ode.input_rows(), 1),
-            ArrayOfTempSpecs<ODEJacobian<Scalar>, Stages>(this->ode.output_rows(), this->ode.input_rows()),
+            ArrayOfTempSpecs<ODEJacobian<Scalar>, Stages>(this->ode.output_rows(),
+                                                          this->ode.input_rows()),
             TempSpec<Jacobian<Scalar>>(this->output_rows(), this->input_rows()),
             ArrayOfTempSpecs<KXjacType, Stages>(this->ode.output_rows(), this->input_rows()),
             ArrayOfTempSpecs<ODEState<Scalar>, Stages>(this->ode.input_rows(), 1),
             ArrayOfTempSpecs<ODEState<Scalar>, Stages>(this->ode.input_rows(), 1),
-            ArrayOfTempSpecs<ODEHessian<Scalar>, Stages>(this->ode.input_rows(), this->ode.input_rows()),
+            ArrayOfTempSpecs<ODEHessian<Scalar>, Stages>(this->ode.input_rows(),
+                                                         this->ode.input_rows()),
             ArrayOfTempSpecs<ODEState<Scalar>, Stages>(this->ode.input_rows(), 1),
             TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
@@ -372,7 +380,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
     static auto Definition(const DODE &ode) {
         auto ks0 = std::tuple{};
-        return ComputeXf<-1, decltype(ks0)>(ode, ks0);
+        return compute_xf<-1, decltype(ks0)>(ode, ks0);
     }
 
     template <int Stg, int Elem> struct ACoeff : StaticScaleBase<ACoeff<Stg, Elem>> {
@@ -382,7 +390,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
         static constexpr double value = RKCoeffs<RKOp>::BCoeffs[Elem];
     };
 
-    template <int Stg, class Ks> static auto ComputeXf(const DODE &ode, const Ks &ks) {
+    template <int Stg, class Ks> static auto compute_xf(const DODE &ode, const Ks &ks) {
         constexpr int XV = DODE::XV;
         constexpr int UV = DODE::UV;
         constexpr int PV = DODE::PV;
@@ -391,8 +399,8 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
         auto args = Arguments<DODE::IRC + 1 + (Stg + 1) * DODE::XV>();
         auto empty = std::tuple{};
 
-        // auto xi = KthStageSum<Stg, 0, decltype(args)>(ode, args);
-        auto xi = KthStageSum2<Stg, 0, decltype(args), decltype(empty)>(ode, args, empty);
+        // auto xi = kth_stage_sum<Stg, 0, decltype(args)>(ode, args);
+        auto xi = kth_stage_sum2<Stg, 0, decltype(args), decltype(empty)>(ode, args, empty);
 
         auto t0 = args.template coeff<XV>();
         auto tf = args.template coeff<IRC - 1>();
@@ -412,13 +420,13 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
         auto ki = ode.eval(xti) * h;
 
         if constexpr (Stg == RKCoeffs<RKOp>::Stages - 2) {
-            auto xxf = FinalStateSum<0, decltype(args), decltype(ki)>(ode, args, ki);
+            auto xxf = final_state_sum<0, decltype(args), decltype(ki)>(ode, args, ki);
             auto xfun = make_state(ode, xxf, tf, u, p);
             return NestedCallAndAppendChain{xfun, ks};
         } else {
             auto knew = std::tuple_cat(ks, std::make_tuple(ki));
 
-            return ComputeXf<Stg + 1, decltype(knew)>(ode, knew);
+            return compute_xf<Stg + 1, decltype(knew)>(ode, knew);
         }
     }
 
@@ -443,23 +451,23 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
     }
 
     template <int Stg, int Elem, class Args>
-    static auto KthStageSum(const DODE &ode, const Args &args) {
+    static auto kth_stage_sum(const DODE &ode, const Args &args) {
         if constexpr (Elem == Stg + 1) {
             return args.template head<DODE::XV>();
         } else {
             if constexpr (RKCoeffs<RKOp>::ACoeffs[Stg][Elem] == 0.0) {
-                return KthStageSum<Stg, Elem + 1, Args>(ode, args);
+                return kth_stage_sum<Stg, Elem + 1, Args>(ode, args);
             } else {
                 return args.template tail<DODE::XV *(Stg + 1)>()
                                .template segment<DODE::XV, DODE::XV * Elem>() *
                            ACoeff<Stg, Elem>().value +
-                       KthStageSum<Stg, Elem + 1, Args>(ode, args);
+                       kth_stage_sum<Stg, Elem + 1, Args>(ode, args);
             }
         };
     }
 
     template <int Stg, int Elem, class Args, class Ks>
-    static auto KthStageSum2(const DODE &ode, const Args &args, const Ks &ks) {
+    static auto kth_stage_sum2(const DODE &ode, const Args &args, const Ks &ks) {
         if constexpr (Elem == Stg + 1) {
             auto next = args.template head<DODE::XV>();
             auto knew = std::tuple_cat(ks, std::make_tuple(next));
@@ -467,7 +475,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
             return make_sum_tuple(knew);
         } else {
             if constexpr (RKCoeffs<RKOp>::ACoeffs[Stg][Elem] == 0.0) {
-                return KthStageSum2<Stg, Elem + 1, Args, Ks>(ode, args, ks);
+                return kth_stage_sum2<Stg, Elem + 1, Args, Ks>(ode, args, ks);
             } else {
                 auto next = args.template tail<DODE::XV *(Stg + 1)>()
                                 .template segment<DODE::XV, DODE::XV * Elem>() *
@@ -475,13 +483,13 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
 
                 auto knew = std::tuple_cat(ks, std::make_tuple(next));
 
-                return KthStageSum2<Stg, Elem + 1, Args, decltype(knew)>(ode, args, knew);
+                return kth_stage_sum2<Stg, Elem + 1, Args, decltype(knew)>(ode, args, knew);
             }
         };
     }
 
     template <int Elem, class Args, class KF>
-    static auto FinalStateSum(const DODE &ode, const Args &args, const KF &kf) {
+    static auto final_state_sum(const DODE &ode, const Args &args, const KF &kf) {
         if constexpr (RKOp == RKOptions::RK4Classic) {
             return make_sum(kf * BCoeff<3>().value, args.template head<DODE::XV>(),
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
@@ -514,12 +522,12 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
                 return kf * BCoeff<Elem>() + args.template head<DODE::XV>();
         } else {
             if constexpr (RKCoeffs<RKOp>::BCoeffs[Elem] == 0.0)
-                return FinalStateSum<Elem + 1, Args, KF>(ode, args, kf);
+                return final_state_sum<Elem + 1, Args, KF>(ode, args, kf);
             else
                 return args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                .template segment<DODE::XV, DODE::XV * Elem>() *
                            BCoeff<Elem>() +
-                       FinalStateSum<Elem + 1, Args, KF>(ode, args, kf);
+                       final_state_sum<Elem + 1, Args, KF>(ode, args, kf);
         };
     }
 };
@@ -535,10 +543,10 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
 
     static auto Definition(const DODE &ode) {
         auto ks0 = std::tuple{};
-        return ComputeXf<-1, decltype(ks0)>(ode, ks0);
+        return compute_xf<-1, decltype(ks0)>(ode, ks0);
     }
 
-    template <int Stg, class Ks> static auto ComputeXf(const DODE &ode, const Ks &ks) {
+    template <int Stg, class Ks> static auto compute_xf(const DODE &ode, const Ks &ks) {
         constexpr int XV = DODE::XV;
         constexpr int UV = DODE::UV;
         constexpr int PV = DODE::PV;
@@ -554,7 +562,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
         auto args = Arguments<ARGSIZE>(argsize);
         auto empty = std::tuple{};
 
-        auto xi = KthStageSum<Stg, 0, decltype(args), decltype(empty)>(ode, args, empty);
+        auto xi = kth_stage_sum<Stg, 0, decltype(args), decltype(empty)>(ode, args, empty);
 
         auto t0 = args.template coeff<XV>(xv);
         auto up =
@@ -580,24 +588,24 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
         auto ki = ode.eval(xti) * h;
 
         if constexpr (Stg == RKCoeffs<RKOp>::Stages - 2) {
-            auto xxf = FinalStateSum<0, decltype(args), decltype(ki)>(ode, args, ki);
+            auto xxf = final_state_sum<0, decltype(args), decltype(ki)>(ode, args, ki);
             auto xfun = make_state(xxf, tf, up);
             return NestedCallAndAppendChain2{xfun, ks};
         } else {
             auto knew = std::tuple_cat(ks, std::make_tuple(ki));
-            return ComputeXf<Stg + 1, decltype(knew)>(ode, knew);
+            return compute_xf<Stg + 1, decltype(knew)>(ode, knew);
         }
     }
 
     template <int Stg, int Elem, class Args, class Ks>
-    static auto KthStageSum(const DODE &ode, const Args &args, const Ks &ks) {
+    static auto kth_stage_sum(const DODE &ode, const Args &args, const Ks &ks) {
         if constexpr (Elem == Stg + 1) {
             auto next = args.template head<DODE::XV>(ode.XVars());
             auto knew = std::tuple_cat(ks, std::make_tuple(next));
             return make_sum_tuple(knew);
         } else {
             if constexpr (RKCoeffs<RKOp>::ACoeffs[Stg][Elem] == 0.0) {
-                return KthStageSum<Stg, Elem + 1, Args, Ks>(ode, args, ks);
+                return kth_stage_sum<Stg, Elem + 1, Args, Ks>(ode, args, ks);
             } else {
                 auto next =
                     args.template tail<SZ_PROD<(Stg + 1), DODE::XV>::value>((Stg + 1) * ode.XVars())
@@ -605,13 +613,13 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                             ode.XVars() * Elem, ode.XVars()) *
                     ACoeff<Stg, Elem>().value;
                 auto knew = std::tuple_cat(ks, std::make_tuple(next));
-                return KthStageSum<Stg, Elem + 1, Args, decltype(knew)>(ode, args, knew);
+                return kth_stage_sum<Stg, Elem + 1, Args, decltype(knew)>(ode, args, knew);
             }
         };
     }
 
     template <int Elem, class Args, class KF>
-    static auto FinalStateSum(const DODE &ode, const Args &args, const KF &kf) {
+    static auto final_state_sum(const DODE &ode, const Args &args, const KF &kf) {
         //// Finish this
         if constexpr (RKOp == RKOptions::RK4Classic) {
 
@@ -714,12 +722,12 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                 return kf * BCoeff<Elem>() + args.template head<DODE::XV>();
         } else {
             if constexpr (RKCoeffs<RKOp>::BCoeffs[Elem] == 0.0)
-                return FinalStateSum<Elem + 1, Args, KF>(ode, args, kf);
+                return final_state_sum<Elem + 1, Args, KF>(ode, args, kf);
             else
                 return args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                .template segment<DODE::XV, DODE::XV * Elem>() *
                            BCoeff<Elem>() +
-                       FinalStateSum<Elem + 1, Args, KF>(ode, args, kf);
+                       final_state_sum<Elem + 1, Args, KF>(ode, args, kf);
         };
     }
 };
@@ -777,7 +785,7 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
     using RKData = RKCoeffs<RKOp>;
     static const int Stages = RKData::Stages;
     static const int Stgsm1 = RKData::Stages - 1;
-    static const bool isDiag = RKData::isDiag;
+    static const bool is_diag_ = RKData::is_diag_;
 
     DODE ode;
 
@@ -796,36 +804,36 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        STDarray<ODEDeriv<Scalar>, Stages> Kvals;
-        for (auto &K : Kvals)
+        STDarray<ODEDeriv<Scalar>, Stages> k_vals;
+        for (auto &K : k_vals)
             K = ODEDeriv<Scalar>::Zero(this->ode.output_rows());
         ODEState<Scalar> xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
         Scalar t0 = xtup[this->ode.TVar()];
         Scalar tf = x[this->input_rows() - 1];
         Scalar h = tf - t0;
 
-        this->ode.compute(xtup, Kvals[0]);
-        Kvals[0] *= h;
+        this->ode.compute(xtup, k_vals[0]);
+        k_vals[0] *= h;
 
         for (int i = 0; i < Stgsm1; i++) {
             Scalar ti = t0 + RKData::Times[i] * h;
             xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
             xtup[this->ode.TVar()] = ti;
             const int ip1 = i + 1;
-            const int js = isDiag ? i : 0;
+            const int js = is_diag_ ? i : 0;
             for (int j = js; j < ip1; j++) {
                 xtup.template segment<DODE::XV>(0, this->ode.XVars()) +=
-                    RKData::ACoeffs[i][j] * Kvals[j];
+                    RKData::ACoeffs[i][j] * k_vals[j];
             }
 
-            this->ode.compute(xtup, Kvals[ip1]);
+            this->ode.compute(xtup, k_vals[ip1]);
 
-            Kvals[ip1] *= h;
+            k_vals[ip1] *= h;
         }
         xtup = x.template segment<DODE::IRC>(0, this->ode.input_rows());
         xtup[this->ode.TVar()] = tf;
         for (int i = 0; i < Stages; i++) {
-            xtup.template segment<DODE::XV>(0, this->ode.XVars()) += RKData::BCoeffs[i] * Kvals[i];
+            xtup.template segment<DODE::XV>(0, this->ode.XVars()) += RKData::BCoeffs[i] * k_vals[i];
         }
         fx = xtup;
     }
@@ -838,14 +846,14 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        STDarray<ODEDeriv<Scalar>, Stages> Kvals;
-        ODEJacobian<Scalar> Kjacs;
-        Jacobian<Scalar> Xijac = Jacobian<Scalar>::Zero(this->output_rows(), this->input_rows());
+        STDarray<ODEDeriv<Scalar>, Stages> k_vals;
+        ODEJacobian<Scalar> k_jacs;
+        Jacobian<Scalar> xi_jac = Jacobian<Scalar>::Zero(this->output_rows(), this->input_rows());
         ;
 
-        STDarray<Eigen::Matrix<Scalar, DODE::XV, Base::IRC>, Stages> KXjacs;
+        STDarray<Eigen::Matrix<Scalar, DODE::XV, Base::IRC>, Stages> kx_jacs;
 
-        for (auto &K : Kvals)
+        for (auto &K : k_vals)
             K = ODEDeriv<Scalar>::Zero(this->ode.output_rows());
 
         ODEState<Scalar> xtup = x.template head<DODE::IRC>(this->ode.input_rows());
@@ -853,57 +861,59 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
         Scalar t0 = xtup[this->ode.TVar()];
         Scalar tf = x[this->input_rows() - 1];
         Scalar h = tf - t0;
-        Xijac.setIdentity();
-        Xijac(this->ode.TVar(), this->input_rows() - 1) = 0;
-        Kjacs.setZero();
-        this->ode.compute_jacobian(xtup, Kvals[0], Kjacs);
+        xi_jac.setIdentity();
+        xi_jac(this->ode.TVar(), this->input_rows() - 1) = 0;
+        k_jacs.setZero();
+        this->ode.compute_jacobian(xtup, k_vals[0], k_jacs);
 
-        Kjacs *= h;
-        KXjacs[0] = Kjacs * Xijac;
-        KXjacs[0].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -= Kvals[0];
-        KXjacs[0].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) += Kvals[0];
-        Kvals[0] *= h;
+        k_jacs *= h;
+        kx_jacs[0] = k_jacs * xi_jac;
+        kx_jacs[0].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -= k_vals[0];
+        kx_jacs[0].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) +=
+            k_vals[0];
+        k_vals[0] *= h;
 
         for (int i = 0; i < Stgsm1; i++) {
             const int ip1 = i + 1;
             Scalar ti = t0 + RKData::Times[i] * h;
             xtup = x.template head<DODE::IRC>(this->ode.input_rows());
-            Xijac.setIdentity();
+            xi_jac.setIdentity();
 
             xtup[this->ode.TVar()] = ti;
-            Xijac(this->ode.TVar(), this->ode.TVar()) = 1.0 - RKData::Times[i];
-            Xijac(this->ode.TVar(), this->input_rows() - 1) = RKData::Times[i];
+            xi_jac(this->ode.TVar(), this->ode.TVar()) = 1.0 - RKData::Times[i];
+            xi_jac(this->ode.TVar(), this->input_rows() - 1) = RKData::Times[i];
 
-            const int js = isDiag ? i : 0;
+            const int js = is_diag_ ? i : 0;
             for (int j = js; j < ip1; j++) {
-                xtup.template head<DODE::XV>(this->ode.XVars()) += RKData::ACoeffs[i][j] * Kvals[j];
-                Xijac.template topRows<DODE::XV>(this->ode.XVars()) +=
-                    RKData::ACoeffs[i][j] * KXjacs[j];
+                xtup.template head<DODE::XV>(this->ode.XVars()) +=
+                    RKData::ACoeffs[i][j] * k_vals[j];
+                xi_jac.template topRows<DODE::XV>(this->ode.XVars()) +=
+                    RKData::ACoeffs[i][j] * kx_jacs[j];
             }
 
-            Kjacs.setZero();
-            this->ode.compute_jacobian(xtup, Kvals[ip1], Kjacs);
-            KXjacs[ip1].noalias() = h * Kjacs * Xijac;
-            KXjacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
-                Kvals[ip1];
-            KXjacs[ip1].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) +=
-                Kvals[ip1];
-            Kvals[ip1] *= h;
+            k_jacs.setZero();
+            this->ode.compute_jacobian(xtup, k_vals[ip1], k_jacs);
+            kx_jacs[ip1].noalias() = h * k_jacs * xi_jac;
+            kx_jacs[ip1].col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
+                k_vals[ip1];
+            kx_jacs[ip1].col(this->input_rows() - 1).template head<DODE::XV>(this->ode.XVars()) +=
+                k_vals[ip1];
+            k_vals[ip1] *= h;
         }
         xtup = x.template head<DODE::IRC>(this->ode.input_rows());
         xtup[this->ode.TVar()] = tf;
-        Xijac.setIdentity();
+        xi_jac.setIdentity();
 
-        Xijac(this->ode.TVar(), this->ode.TVar()) = 0;
-        Xijac(this->ode.TVar(), (this->input_rows() - 1)) = 1;
+        xi_jac(this->ode.TVar(), this->ode.TVar()) = 0;
+        xi_jac(this->ode.TVar(), (this->input_rows() - 1)) = 1;
 
         for (int i = 0; i < Stages; i++) {
-            xtup.template head<DODE::XV>(this->ode.XVars()) += RKData::BCoeffs[i] * Kvals[i];
-            Xijac.template topRows<DODE::XV>(this->ode.XVars()) += RKData::BCoeffs[i] * KXjacs[i];
+            xtup.template head<DODE::XV>(this->ode.XVars()) += RKData::BCoeffs[i] * k_vals[i];
+            xi_jac.template topRows<DODE::XV>(this->ode.XVars()) += RKData::BCoeffs[i] * kx_jacs[i];
         }
 
         fx = xtup;
-        jx = Xijac;
+        jx = xi_jac;
     }
 };
 
