@@ -64,71 +64,71 @@ struct SolverIndexingData {
     /// Matrix whose columns contains the ordered indices of the variables
     /// that will be forwarded to a constraint or objective function
     /// </summary>
-    MatrixXi Vindex;
+    MatrixXi v_index_;
 
     /// <summary>
     /// Matrix whose columns constraint the ordered constraint output indices for the corresponding
-    /// column in Vindex. This matrix is empy for objective functions.
+    /// column in v_index_. This matrix is empy for objective functions.
     /// </summary>
-    MatrixXi Cindex;
+    MatrixXi c_index_;
 
     /// <summary>
-    /// Each element indicates whether the corresponding indices in Vindex are sorted
+    /// Each element indicates whether the corresponding indices in v_index_ are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<vf::ParsedIOFlags> VindexContinuity;
+    std::vector<vf::ParsedIOFlags> v_index_continuity_;
 
     /// <summary>
-    /// Each element indicates whether the corresponding indices in Cindex are sorted
+    /// Each element indicates whether the corresponding indices in c_index_ are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<vf::ParsedIOFlags> CindexContinuity;
+    std::vector<vf::ParsedIOFlags> c_index_continuity_;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to sum the
     /// constraint output of the ith call of a constraint function.
     /// </summary>
-    VectorXi InnerConstraintStarts;
+    VectorXi inner_constraint_starts_;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to sum the gradient
     /// output of the ith call of a constraint or objective function.
     /// </summary>
-    VectorXi InnerGradientStarts;
+    VectorXi inner_gradient_starts_;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to store the
     /// locations where the derivatives of the ith call to a function should be summed into the
     /// global KKT matrix.
     /// </summary>
-    VectorXi InnerKKTStarts;
+    VectorXi inner_kkt_starts_;
 
     SolverIndexingData() {}
     SolverIndexingData(int irr, int orr, const MatrixXi &vindex, const MatrixXi &cindex)
         : input_size(irr), output_size(orr) {
-        this->setVindexCindex(vindex, cindex);
+        this->set_v_index_c_index(vindex, cindex);
     }
 
     SolverIndexingData(int irr, const MatrixXi &vindex) : input_size(irr), output_size(1) {
-        this->setVindex(vindex);
+        this->set_v_index(vindex);
     }
 
-    void getGradientSpace(EigenRef<VectorXi> GXrows, int &freeloc) {
-        this->InnerGradientStarts.resize(this->NumAppl());
-        for (int V = 0; V < this->NumAppl(); V++) {
-            this->InnerGradientStarts[V] = freeloc;
+    void get_gradient_space(EigenRef<VectorXi> GXrows, int &freeloc) {
+        this->inner_gradient_starts_.resize(this->num_appl());
+        for (int V = 0; V < this->num_appl(); V++) {
+            this->inner_gradient_starts_[V] = freeloc;
             for (int i = 0; i < this->input_size; i++) {
-                GXrows[freeloc] = this->VLoc(i, V);
+                GXrows[freeloc] = this->v_loc(i, V);
                 freeloc++;
             }
         }
     }
-    void getConstraintSpace(EigenRef<VectorXi> FXrows, int &freeloc) {
-        this->InnerConstraintStarts.resize(this->NumAppl());
-        for (int V = 0; V < this->NumAppl(); V++) {
-            this->InnerConstraintStarts[V] = freeloc;
+    void get_constraint_space(EigenRef<VectorXi> FXrows, int &freeloc) {
+        this->inner_constraint_starts_.resize(this->num_appl());
+        for (int V = 0; V < this->num_appl(); V++) {
+            this->inner_constraint_starts_[V] = freeloc;
             for (int j = 0; j < this->output_size; j++) {
-                FXrows[freeloc] = this->CLoc(j, V);
+                FXrows[freeloc] = this->c_loc(j, V);
                 freeloc++;
             }
         }
@@ -153,11 +153,11 @@ struct SolverIndexingData {
         for (int i = 0; i < range; i++) {
             if (this->cindex_init) {
                 split.emplace_back(SolverIndexingData(this->input_size, this->output_size,
-                                                      this->Vindex.middleCols(start, perThr[i]),
-                                                      this->Cindex.middleCols(start, perThr[i])));
+                                                      this->v_index_.middleCols(start, perThr[i]),
+                                                      this->c_index_.middleCols(start, perThr[i])));
             } else {
                 split.emplace_back(SolverIndexingData(this->input_size,
-                                                      this->Vindex.middleCols(start, perThr[i])));
+                                                      this->v_index_.middleCols(start, perThr[i])));
             }
             split.back().unique_constraints = this->unique_constraints;
             start += perThr[i];
@@ -165,48 +165,48 @@ struct SolverIndexingData {
         return split;
     }
 
-    void setVindex(const MatrixXi &vt) {
-        this->Vindex = vt;
+    void set_v_index(const MatrixXi &vt) {
+        this->v_index_ = vt;
         this->vindex_init = true;
-        this->num_funcappl = this->Vindex.cols();
-        this->VindexContinuity.resize(this->Vindex.cols());
-        for (int i = 0; i < this->Vindex.cols(); i++) {
-            this->VindexContinuity[i] = this->checkContinuity(this->Vindex.col(i));
+        this->num_funcappl = this->v_index_.cols();
+        this->v_index_continuity_.resize(this->v_index_.cols());
+        for (int i = 0; i < this->v_index_.cols(); i++) {
+            this->v_index_continuity_[i] = this->checkContinuity(this->v_index_.col(i));
         }
     }
-    void setCindex(const MatrixXi &ct) {
-        this->Cindex = ct;
-        this->CindexContinuity.resize(this->Cindex.cols());
+    void set_c_index(const MatrixXi &ct) {
+        this->c_index_ = ct;
+        this->c_index_continuity_.resize(this->c_index_.cols());
         this->cindex_init = true;
 
-        for (int i = 0; i < this->Cindex.cols(); i++) {
-            this->CindexContinuity[i] = this->checkContinuity(this->Cindex.col(i));
+        for (int i = 0; i < this->c_index_.cols(); i++) {
+            this->c_index_continuity_[i] = this->checkContinuity(this->c_index_.col(i));
         }
     }
-    const MatrixXi &getVindex() const { return this->Vindex; }
-    const MatrixXi &getCindex() const { return this->Cindex; }
-    void setVindexCindex(const MatrixXi &vt, const MatrixXi &ct) {
-        this->setVindex(vt);
-        this->setCindex(ct);
+    const MatrixXi &get_v_index() const { return this->v_index_; }
+    const MatrixXi &get_c_index() const { return this->c_index_; }
+    void set_v_index_c_index(const MatrixXi &vt, const MatrixXi &ct) {
+        this->set_v_index(vt);
+        this->set_c_index(ct);
     }
-    void pushVindex(int push) {
-        for (int i = 0; i < this->Vindex.size(); i++) {
-            this->Vindex(i) += push;
+    void push_v_index(int push) {
+        for (int i = 0; i < this->v_index_.size(); i++) {
+            this->v_index_(i) += push;
         }
     }
-    void pushCindex(int push) {
-        for (int i = 0; i < Cindex.size(); i++) {
-            this->Cindex(i) += push;
+    void push_c_index(int push) {
+        for (int i = 0; i < c_index_.size(); i++) {
+            this->c_index_(i) += push;
         }
     }
-    void pushVindexCindex(int vpush, int cpush) {
-        this->pushVindex(vpush);
-        this->pushCindex(cpush);
+    void push_v_index_c_index(int vpush, int cpush) {
+        this->push_v_index(vpush);
+        this->push_c_index(cpush);
     }
 
-    inline int NumAppl() const { return this->num_funcappl; }
-    inline int CLoc(int loc, int col) const { return this->Cindex(loc, col); }
-    inline int VLoc(int loc, int col) const { return this->Vindex(loc, col); }
+    inline int num_appl() const { return this->num_funcappl; }
+    inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
+    inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }
 
     static vf::ParsedIOFlags checkContinuity(const Eigen::VectorXi &ix) {
         int s = 0;

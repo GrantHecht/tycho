@@ -478,7 +478,7 @@ struct CentralShootingDefect
         std::vector<Input<double>> X1X2s;
         std::vector<Output<double>> Lfs;
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
             this->gather_input(X, x, V, data);
             this->gather_mult(L, l, V, data);
 
@@ -488,11 +488,11 @@ struct CentralShootingDefect
 
         auto [fxs, jxs, hxs] = this->compute_all_impl_v(X1X2s, Lfs);
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
 
-            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.inner_constraint_starts_[V],
                                                  this->output_rows());
-            new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+            new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.inner_gradient_starts_[V],
                                                  this->input_rows());
 
             fx = fxs[V];

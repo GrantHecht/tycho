@@ -54,17 +54,17 @@ void tycho::solvers::NonLinearProgram::countElems() {
 
     for (auto &obj : this->Objectives) {
         nkkt += obj.num_kkt_elements(false, true);
-        npgx += obj.numGradEles();
+        npgx += obj.num_grad_eles();
     }
     for (auto &eq : this->EqualityConstraints) {
         nkkt += eq.num_kkt_elements(true, true);
-        nagx += eq.numGradEles();
-        nec += eq.numConEles();
+        nagx += eq.num_grad_eles();
+        nec += eq.num_con_eles();
     }
     for (auto &ineq : this->InequalityConstraints) {
         nkkt += ineq.num_kkt_elements(true, true);
-        nagx += ineq.numGradEles();
-        nic += ineq.numConEles();
+        nagx += ineq.num_grad_eles();
+        nic += ineq.num_con_eles();
     }
 
     this->numUserKKTElems = nkkt;
@@ -92,20 +92,20 @@ void tycho::solvers::NonLinearProgram::analyzePartitioning() {
 
     auto analyzeOP = [&](auto &SourceFuncs, auto &TargetPartFuncs) {
         for (auto &func : SourceFuncs) {
-            if (func.getThreadMode() ==
+            if (func.get_thread_mode() ==
                 ThreadingFlags::MainThread) { // Force to last partition — parallel_sequence runs
                                               // the last index inline on the calling thread, so
                                               // MainThread functions stay safe.
                 TargetPartFuncs.back().push_back(func);
-            } else if (func.getThreadMode() == ThreadingFlags::RoundRobin) {
+            } else if (func.get_thread_mode() == ThreadingFlags::RoundRobin) {
                 TargetPartFuncs[rrPart].push_back(func);
                 rrPart++;
                 if (rrPart > (this->NumPartitions - 1))
                     rrPart = 0;
-            } else if (static_cast<int>(func.getThreadMode()) >=
+            } else if (static_cast<int>(func.get_thread_mode()) >=
                        0) { // Specific Partition Assignment
                 int part =
-                    std::min(static_cast<int>(func.getThreadMode()), this->NumPartitions - 1);
+                    std::min(static_cast<int>(func.get_thread_mode()), this->NumPartitions - 1);
                 TargetPartFuncs[part].push_back(func);
             } else { // By application
                 auto TempPartFuncs = func.thread_split(this->NumPartitions);
@@ -187,15 +187,15 @@ void tycho::solvers::NonLinearProgram::getRHSSpace() {
 
     for (int i = 0; i < this->NumPartitions; i++) {
         for (auto &obj : this->PartObj[i]) {
-            obj.getGradientSpace(this->PGXCoeffRows(), PGXfreeloc);
+            obj.get_gradient_space(this->PGXCoeffRows(), PGXfreeloc);
         }
         for (auto &eq : this->PartEq[i]) {
-            eq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
-            eq.getConstraintSpace(this->EConCoeffRows(), FXEfreeloc);
+            eq.get_gradient_space(this->AGXCoeffRows(), AGXfreeloc);
+            eq.get_constraint_space(this->EConCoeffRows(), FXEfreeloc);
         }
         for (auto &ineq : this->PartIq[i]) {
-            ineq.getGradientSpace(this->AGXCoeffRows(), AGXfreeloc);
-            ineq.getConstraintSpace(this->IConCoeffRows(), FXIfreeloc);
+            ineq.get_gradient_space(this->AGXCoeffRows(), AGXfreeloc);
+            ineq.get_constraint_space(this->IConCoeffRows(), FXIfreeloc);
         }
     }
 }

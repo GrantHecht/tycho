@@ -1283,14 +1283,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkEqualities.at(index).global_index_;
-        auto Cindex = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
+        auto c_index_ = this->nlp->EqualityConstraints[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
                 vals[j] = this->ActiveEqCons[idx];
             }
             Allvals.push_back(vals);
@@ -1309,14 +1309,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkEqualities.at(index).global_index_;
-        auto Cindex = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
+        auto c_index_ = this->nlp->EqualityConstraints[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
                 vals[j] = this->ActiveEqLmults[idx];
             }
             Allvals.push_back(vals);
@@ -1334,14 +1334,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 index));
         }
         int Gindex = this->LinkInequalities.at(index).global_index_;
-        auto Cindex = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
+        auto c_index_ = this->nlp->InequalityConstraints[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
                 vals[j] = this->ActiveIqCons[idx];
             }
             Allvals.push_back(vals);
@@ -1360,14 +1360,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkInequalities.at(index).global_index_;
-        auto Cindex = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
+        auto c_index_ = this->nlp->InequalityConstraints[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
                 vals[j] = this->ActiveIqLmults[idx];
             }
             Allvals.push_back(vals);

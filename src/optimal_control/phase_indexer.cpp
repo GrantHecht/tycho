@@ -26,7 +26,7 @@ int tycho::oc::PhaseIndexer::add_equality(ConstraintInterface eqfun, PhaseRegion
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, eqfun.output_rows(),
                                            this->next_phase_eq_con);
     this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
-    this->nlp->EqualityConstraints.back().ThreadMode = Tmode;
+    this->nlp->EqualityConstraints.back().thread_mode_ = Tmode;
     this->num_phase_eq_cons += this->next_phase_eq_con - temp;
     this->num_eq_funs++;
     return index;
@@ -45,7 +45,7 @@ void tycho::oc::PhaseIndexer::add_partitioned_equality(
         MatrixXi cindex = vincin[1].col(i);
 
         this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(eqfuns[i], vindex, cindex));
-        this->nlp->EqualityConstraints.back().ThreadMode = Tmodes[i];
+        this->nlp->EqualityConstraints.back().thread_mode_ = Tmodes[i];
         this->num_eq_funs++;
     }
 
@@ -70,7 +70,7 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
                                                accfun.output_rows(), this->next_phase_eq_con);
     this->nlp->EqualityConstraints.emplace_back(
         ConstraintFunction(accfun, vincin_acc[0], vincin_acc[1]));
-    this->nlp->EqualityConstraints.back().ThreadMode = Tmode;
+    this->nlp->EqualityConstraints.back().thread_mode_ = Tmode;
     this->nlp->EqualityConstraints.back().index_data.unique_constraints = false;
 
     int dummy = 0;
@@ -81,7 +81,7 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
     }
 
     this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
-    this->nlp->EqualityConstraints.back().ThreadMode = Tmode;
+    this->nlp->EqualityConstraints.back().thread_mode_ = Tmode;
     this->nlp->EqualityConstraints.back().index_data.unique_constraints = false;
 
     this->num_phase_eq_cons += this->next_phase_eq_con - temp;
@@ -98,7 +98,7 @@ int tycho::oc::PhaseIndexer::add_inequality(ConstraintInterface iqfun, PhaseRegi
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, iqfun.output_rows(),
                                            this->next_phase_iq_con);
     this->nlp->InequalityConstraints.emplace_back(ConstraintFunction(iqfun, vincin[0], vincin[1]));
-    this->nlp->InequalityConstraints.back().ThreadMode = Tmode;
+    this->nlp->InequalityConstraints.back().thread_mode_ = Tmode;
     this->num_phase_iq_cons += this->next_phase_iq_con - temp;
     this->num_iq_funs++;
     return index;
@@ -118,7 +118,7 @@ void tycho::oc::PhaseIndexer::add_partitioned_inequality(
 
         this->nlp->InequalityConstraints.emplace_back(
             ConstraintFunction(iqfuns[i], vindex, cindex));
-        this->nlp->InequalityConstraints.back().ThreadMode = Tmodes[i];
+        this->nlp->InequalityConstraints.back().thread_mode_ = Tmodes[i];
         this->num_iq_funs++;
     }
 
@@ -134,7 +134,7 @@ int tycho::oc::PhaseIndexer::add_objective(ObjectiveInterface objfun, PhaseRegio
     int index = this->nlp->Objectives.size();
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, objfun.output_rows());
     this->nlp->Objectives.emplace_back(ObjectiveFunction(objfun, vincin[0]));
-    this->nlp->Objectives.back().ThreadMode = Tmode;
+    this->nlp->Objectives.back().thread_mode_ = Tmode;
     this->num_obj_funs++;
     return index;
 }
@@ -157,8 +157,8 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     int xpblen =
         DefectCardinalStates * xsize + (DefectCardinalStates - 1) * xsize + opsize + spsize;
 
-    Eigen::MatrixXi Vindex;
-    Eigen::MatrixXi Cindex;
+    Eigen::MatrixXi v_index_;
+    Eigen::MatrixXi c_index_;
 
     bool IsOnlyControl = true;
     for (int i = 0; i < rxtuv.size(); i++) {
@@ -168,29 +168,29 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
 
     auto VinLoopImpl = [&](int &loc, int col, const VectorXi &Locs, const VectorXi &Vars) {
         for (int i = 0; i < Vars.size(); i++) {
-            Vindex(loc, col) = Locs[Vars[i]];
+            v_index_(loc, col) = Locs[Vars[i]];
             loc++;
         }
     };
     auto PathLoopImpl = [&](int &loc, int col, int state) {
         for (int i = 0; i < rxtuv.size(); i++) {
-            Vindex(loc, col) = this->get_xtu_var_loc(rxtuv[i], state);
+            v_index_(loc, col) = this->get_xtu_var_loc(rxtuv[i], state);
             loc++;
         }
     };
     auto DefectPathLoopImpl = [&](int &loc, int col, int state, int Defect) {
         for (int i = 0; i < rxtuv.size(); i++) {
-            Vindex(loc, col) = this->get_xtu_var_loc(rxtuv[i], state, Defect);
+            v_index_(loc, col) = this->get_xtu_var_loc(rxtuv[i], state, Defect);
             loc++;
         }
     };
 
     auto CinSet = [&](int cols) {
-        Cindex.resize(orows, cols);
+        c_index_.resize(orows, cols);
         if (orows > 0) {
             for (int i = 0; i < cols; i++) {
                 for (int j = 0; j < orows; j++) {
-                    Cindex(j, i) = NextCLoc;
+                    c_index_(j, i) = NextCLoc;
                     NextCLoc++;
                 }
             }
@@ -203,7 +203,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::Params: {
         int loc = 0;
         CinSet(1);
-        Vindex.resize(opsize + spsize, 1);
+        v_index_.resize(opsize + spsize, 1);
         VinLoopImpl(loc, 0, this->ODEParamLocs, rodepv);
         VinLoopImpl(loc, 0, this->StaticParamLocs, rstatpv);
 
@@ -211,7 +211,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::Front: {
         int loc = 0;
         CinSet(1);
-        Vindex.resize(x1len, 1);
+        v_index_.resize(x1len, 1);
 
         VinLoopImpl(loc, 0, this->ODEFirstStateLocs, rxtuv);
         VinLoopImpl(loc, 0, this->ODEParamLocs, rodepv);
@@ -220,7 +220,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::Back: {
         int loc = 0;
         CinSet(1);
-        Vindex.resize(x1len, 1);
+        v_index_.resize(x1len, 1);
 
         VinLoopImpl(loc, 0, this->ODELastStateLocs, rxtuv);
         VinLoopImpl(loc, 0, this->ODEParamLocs, rodepv);
@@ -229,7 +229,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::FrontandBack: {
         int loc = 0;
         CinSet(1);
-        Vindex.resize(x2len, 1);
+        v_index_.resize(x2len, 1);
 
         VinLoopImpl(loc, 0, this->ODEFirstStateLocs, rxtuv);
         VinLoopImpl(loc, 0, this->ODELastStateLocs, rxtuv);
@@ -239,7 +239,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::BackandFront: {
         int loc = 0;
         CinSet(1);
-        Vindex.resize(x2len, 1);
+        v_index_.resize(x2len, 1);
 
         VinLoopImpl(loc, 0, this->ODELastStateLocs, rxtuv);
         VinLoopImpl(loc, 0, this->ODEFirstStateLocs, rxtuv);
@@ -249,7 +249,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::Path: {
         if (IsOnlyControl && this->BlockedControls) {
             CinSet(this->num_defects);
-            Vindex.resize(x1len, this->num_defects);
+            v_index_.resize(x1len, this->num_defects);
 
             for (int i = 0; i < this->num_defects; i++) {
                 int loc = 0;
@@ -259,7 +259,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
             }
         } else {
             CinSet(this->num_states);
-            Vindex.resize(x1len, this->num_states);
+            v_index_.resize(x1len, this->num_states);
 
             for (int i = 0; i < this->num_states; i++) {
                 int loc = 0;
@@ -272,7 +272,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::InnerPath: {
         if (IsOnlyControl && this->BlockedControls) {
             CinSet(this->num_defects - 2);
-            Vindex.resize(x1len, this->num_defects - 2);
+            v_index_.resize(x1len, this->num_defects - 2);
 
             for (int i = 1; i < (this->num_defects - 1); i++) {
                 int loc = 0;
@@ -282,7 +282,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
             }
         } else {
             CinSet(this->num_states - 2);
-            Vindex.resize(x1len, this->num_states - 2);
+            v_index_.resize(x1len, this->num_states - 2);
 
             for (int i = 1; i < (this->num_states - 1); i++) {
                 int loc = 0;
@@ -295,7 +295,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::NodalPath: {
         if (IsOnlyControl && this->BlockedControls) {
             CinSet(this->num_defects);
-            Vindex.resize(x1len, this->num_defects);
+            v_index_.resize(x1len, this->num_defects);
 
             for (int i = 0; i < this->num_defects; i++) {
                 int loc = 0;
@@ -305,7 +305,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
             }
         } else {
             CinSet(this->num_defects + 1);
-            Vindex.resize(x1len, this->num_defects + 1);
+            v_index_.resize(x1len, this->num_defects + 1);
 
             for (int i = 0; i < (this->num_defects + 1); i++) {
                 int loc = 0;
@@ -318,7 +318,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::PairWisePath: {
         if (IsOnlyControl && this->BlockedControls) {
             CinSet(this->num_defects - 1);
-            Vindex.resize(x2len, this->num_defects - 1);
+            v_index_.resize(x2len, this->num_defects - 1);
 
             for (int i = 0; i < this->num_defects - 1; i++) {
                 int loc = 0;
@@ -329,7 +329,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
             }
         } else {
             CinSet(this->num_states - 1);
-            Vindex.resize(x2len, this->num_states - 1);
+            v_index_.resize(x2len, this->num_states - 1);
 
             for (int i = 0; i < (this->num_states - 1); i++) {
                 int loc = 0;
@@ -343,7 +343,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     case PhaseRegionFlags::FrontNodalBackPath: {
         if (IsOnlyControl && this->BlockedControls) {
             CinSet(this->num_defects - 2);
-            Vindex.resize(x3len, this->num_defects - 2);
+            v_index_.resize(x3len, this->num_defects - 2);
 
             for (int i = 1; i < (this->num_defects - 1); i++) {
                 int loc = 0;
@@ -355,7 +355,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
             }
         } else {
             CinSet(this->num_defects - 1);
-            Vindex.resize(x3len, this->num_defects - 1);
+            v_index_.resize(x3len, this->num_defects - 1);
 
             for (int i = 1; i < (this->num_defects); i++) {
                 int loc = 0;
@@ -369,7 +369,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     } break;
     case PhaseRegionFlags::DefectPath: {
         CinSet(this->num_defects);
-        Vindex.resize(xblen, this->num_defects);
+        v_index_.resize(xblen, this->num_defects);
         for (int i = 0; i < this->num_defects; i++) {
             int loc = 0;
             for (int j = 0; j < this->DefectCardinalStates; j++) {
@@ -381,18 +381,19 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     } break;
     case PhaseRegionFlags::BlockDefectPath: {
         CinSet(this->num_defects);
-        Vindex.resize(blockdeflen, this->num_defects);
+        v_index_.resize(blockdeflen, this->num_defects);
         for (int i = 0; i < this->num_defects; i++) {
             int loc = 0;
             for (int j = 0; j < this->DefectCardinalStates; j++) {
                 for (int k = 0; k < this->xt_vars(); k++) {
-                    Vindex(loc, i) =
+                    v_index_(loc, i) =
                         this->get_xtu_var_loc(k, i * (this->DefectCardinalStates - 1) + j, i);
                     loc++;
                 }
             }
             for (int k = this->xt_vars(); k < this->xtu_vars(); k++) {
-                Vindex(loc, i) = this->get_xtu_var_loc(k, i * (this->DefectCardinalStates - 1), i);
+                v_index_(loc, i) =
+                    this->get_xtu_var_loc(k, i * (this->DefectCardinalStates - 1), i);
                 loc++;
             }
             VinLoopImpl(loc, i, this->ODEParamLocs, rodepv);
@@ -401,7 +402,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     } break;
     case PhaseRegionFlags::DefectPairWisePath: {
         CinSet(this->num_defects - 1);
-        Vindex.resize(xpblen, this->num_defects - 1);
+        v_index_.resize(xpblen, this->num_defects - 1);
         for (int i = 0; i < this->num_defects - 1; i++) {
             int loc = 0;
             for (int j = 0; j < 2 * this->DefectCardinalStates - 1; j++) {
@@ -416,7 +417,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     }
     }
 
-    return std::array<Eigen::MatrixXi, 2>{Vindex, Cindex};
+    return std::array<Eigen::MatrixXi, 2>{v_index_, c_index_};
 }
 
 Eigen::VectorXd
@@ -512,7 +513,7 @@ std::vector<Eigen::VectorXd>
 tycho::oc::PhaseIndexer::get_func_eq_multipliers(int Gindex,
                                                  const Eigen::VectorXd &EMultphase) const {
 
-    Eigen::MatrixXi CDX = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
+    Eigen::MatrixXi CDX = this->nlp->EqualityConstraints[Gindex].index_data.c_index_;
     std::vector<Eigen::VectorXd> mults;
     for (int i = 0; i < CDX.cols(); i++) {
         Eigen::VectorXd lmi(CDX.rows());
@@ -528,7 +529,7 @@ tycho::oc::PhaseIndexer::get_func_eq_multipliers(int Gindex,
 std::vector<Eigen::VectorXd>
 tycho::oc::PhaseIndexer::get_func_iq_multipliers(int Gindex,
                                                  const Eigen::VectorXd &IMultphase) const {
-    Eigen::MatrixXi CDX = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
+    Eigen::MatrixXi CDX = this->nlp->InequalityConstraints[Gindex].index_data.c_index_;
     std::vector<Eigen::VectorXd> mults;
     for (int i = 0; i < CDX.cols(); i++) {
         Eigen::VectorXd lmi(CDX.rows());

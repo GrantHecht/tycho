@@ -608,8 +608,8 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
     const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const {
     using std::cout;
     using std::endl;
-    MatrixXi Vindex;
-    MatrixXi Cindex;
+    MatrixXi v_index_;
+    MatrixXi c_index_;
 
     switch (Reg) {
     case LinkFlags::PathToPath: {
@@ -646,18 +646,18 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
             }
         }
 
-        Vindex.resize(irows, cols);
+        v_index_.resize(irows, cols);
 
         int start = 0;
         for (int i = 0; i < PTL.size(); i++) {
-            Vindex.middleCols(start, vtemps[i].cols()) = vtemps[i];
+            v_index_.middleCols(start, vtemps[i].cols()) = vtemps[i];
             start += vtemps[i].cols();
         }
 
-        Cindex.resize(orows, cols);
+        c_index_.resize(orows, cols);
         for (int i = 0; i < cols; i++) {
             for (int j = 0; j < orows; j++) {
-                Cindex(j, i) = NextCLoc;
+                c_index_(j, i) = NextCLoc;
                 NextCLoc++;
             }
         }
@@ -668,11 +668,11 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
     }
     default: {
         int cols = std::max(PTL.size(), lv.size());
-        Cindex.resize(orows, cols);
+        c_index_.resize(orows, cols);
 
         for (int i = 0; i < cols; i++) {
             for (int j = 0; j < orows; j++) {
-                Cindex(j, i) = NextCLoc;
+                c_index_(j, i) = NextCLoc;
                 NextCLoc++;
             }
         }
@@ -680,18 +680,18 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
         for (int i = 0; i < PhaseRegs.size(); i++) {
             irows += xtv[i].size() + opv[i].size() + spv[i].size();
         }
-        Vindex.resize(irows, cols);
+        v_index_.resize(irows, cols);
         for (int i = 0; i < cols; i++) {
             int start = 0;
             for (int j = 0; j < PhaseRegs.size(); j++) {
 
                 auto VinTemp = this->phases[PTL[i][j]]->indexer_.make_Vindex_Cindex(
                     PhaseRegs[j], xtv[j], opv[j], spv[j], 1)[0];
-                Vindex.col(i).segment(start, VinTemp.rows()) = VinTemp;
+                v_index_.col(i).segment(start, VinTemp.rows()) = VinTemp;
                 start += VinTemp.rows();
             }
             for (int j = 0; j < lv[i].size(); j++) {
-                Vindex(start, i) = this->LinkParamLocs[lv[i][j]];
+                v_index_(start, i) = this->LinkParamLocs[lv[i][j]];
                 start++;
             }
         }
@@ -699,5 +699,5 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
     }
     }
 
-    return std::array<Eigen::MatrixXi, 2>{Vindex, Cindex};
+    return std::array<Eigen::MatrixXi, 2>{v_index_, c_index_};
 }

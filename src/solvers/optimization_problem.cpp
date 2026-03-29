@@ -60,7 +60,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->EqualityConstraints.back().ThreadMode = ThreadMode;
+        this->nlp->EqualityConstraints.back().thread_mode_ = ThreadMode;
     }
 
     for (auto &func : this->userInequalities) {
@@ -93,7 +93,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->InequalityConstraints.back().ThreadMode = ThreadMode;
+        this->nlp->InequalityConstraints.back().thread_mode_ = ThreadMode;
     }
 
     for (auto &func : this->userObjectives) {
@@ -119,7 +119,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->Objectives.back().ThreadMode = ThreadMode;
+        this->nlp->Objectives.back().thread_mode_ = ThreadMode;
     }
 
     this->nlp->make_NLP(numVars, numEqCons, numIqCons);

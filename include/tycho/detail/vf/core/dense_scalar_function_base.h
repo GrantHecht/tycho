@@ -28,7 +28,7 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         Input<double> x(this->input_rows());
         Output<double> fx(1);
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
             this->gather_input(X, x, V, data);
             fx.setZero();
             this->derived().compute(x, fx);
@@ -43,9 +43,9 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         Jacobian<double> jx(1, this->input_rows());
         Eigen::Map<Input<double>> gx(NULL, this->input_rows());
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
             this->gather_input(X, x, V, data);
-            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V],
+            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.inner_gradient_starts_[V],
                                                 this->input_rows());
             fx.setZero();
             jx.setZero();
@@ -71,9 +71,9 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         Output<double> lm(1);
         lm[0] = ObjScale;
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
             this->gather_input(X, x, V, data);
-            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V],
+            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.inner_gradient_starts_[V],
                                                 this->input_rows());
 
             fx.setZero();
@@ -97,7 +97,7 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
                        EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
                        std::vector<std::mutex> &ClashLocks,
                        const tycho::solvers::SolverIndexingData &data) const {
-        int freeloc = data.InnerKKTStarts[Apl];
+        int freeloc = data.inner_kkt_starts_[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
@@ -122,7 +122,7 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
 
         for (int i = 0; i < IRR; i++) {
-            ActiveVar = data.VLoc(i, Apl);
+            ActiveVar = data.v_loc(i, Apl);
             Lock(ActiveVar);
             ///// insert hessian column symetrically
             for (int j = i; j < IRR; j++) {

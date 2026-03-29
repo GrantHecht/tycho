@@ -42,7 +42,7 @@ template <class FuncType> struct SolverFunctionBase {
 
     FuncType function;
     SolverIndexingData index_data;
-    ThreadingFlags ThreadMode = ThreadingFlags::ByApplication;
+    ThreadingFlags thread_mode_ = ThreadingFlags::ByApplication;
 
     SolverFunctionBase() {}
 
@@ -53,30 +53,30 @@ template <class FuncType> struct SolverFunctionBase {
         cout << "Name: " << this->function.name() << endl << endl;
         cout << "Input  Rows:" << this->function.input_rows() << endl << endl;
         cout << "Output Rows:" << this->function.output_rows() << endl << endl;
-        cout << "Thread Policy:" << static_cast<int>(ThreadMode) << endl << endl;
+        cout << "Thread Policy:" << static_cast<int>(thread_mode_) << endl << endl;
 
-        cout << "Vindex: " << endl << this->index_data.getVindex() << endl << endl;
+        cout << "v_index_: " << endl << this->index_data.get_v_index() << endl << endl;
         if (this->index_data.cindex_init) {
-            cout << "Cindex: " << endl << this->index_data.getCindex() << endl << endl;
+            cout << "c_index_: " << endl << this->index_data.get_c_index() << endl << endl;
         }
     }
 
     int num_kkt_elements(bool dojac, bool dohess) {
-        return this->function.num_kkt_elements(dojac, dohess) * this->index_data.NumAppl();
+        return this->function.num_kkt_elements(dojac, dohess) * this->index_data.num_appl();
     }
-    int numConEles() const { return this->function.output_rows() * this->index_data.NumAppl(); }
-    int numGradEles() const { return this->function.input_rows() * this->index_data.NumAppl(); }
-    ThreadingFlags getThreadMode() const { return this->ThreadMode; }
+    int num_con_eles() const { return this->function.output_rows() * this->index_data.num_appl(); }
+    int num_grad_eles() const { return this->function.input_rows() * this->index_data.num_appl(); }
+    ThreadingFlags get_thread_mode() const { return this->thread_mode_; }
     void get_kkt_space(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
                        int conoffset, bool dojac, bool dohess) {
         this->function.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
                                      this->index_data);
     }
-    void getGradientSpace(EigenRef<VectorXi> GXrows, int &freeloc) {
-        this->index_data.getGradientSpace(GXrows, freeloc);
+    void get_gradient_space(EigenRef<VectorXi> GXrows, int &freeloc) {
+        this->index_data.get_gradient_space(GXrows, freeloc);
     }
-    void getConstraintSpace(EigenRef<VectorXi> FXrows, int &freeloc) {
-        this->index_data.getConstraintSpace(FXrows, freeloc);
+    void get_constraint_space(EigenRef<VectorXi> FXrows, int &freeloc) {
+        this->index_data.get_constraint_space(FXrows, freeloc);
     }
 };
 

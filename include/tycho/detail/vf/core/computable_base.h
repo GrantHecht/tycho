@@ -259,8 +259,8 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
             auto ScalarImpl = [&](int start, int stop) {
                 for (int V = start; V < stop; V++) {
                     this->gather_input(X, x, V, data);
-                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->output_rows());
+                    new (&fx) Eigen::Map<Output<double>>(
+                        FX.data() + data.inner_constraint_starts_[V], this->output_rows());
                     fx.setZero();
                     this->derived().compute(x, fx);
                 }
@@ -275,7 +275,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
             auto VectorImpl = [&]() {
                 using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
-                int Packs = data.NumAppl() / vsize;
+                int Packs = data.num_appl() / vsize;
 
                 Input<SuperScalar> x_vect(this->input_rows());
                 Output<SuperScalar> fx_vect(this->output_rows());
@@ -293,13 +293,13 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
+                            FX.data() + data.inner_constraint_starts_[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
                     }
                 }
-                ScalarImpl(Packs * vsize, data.NumAppl());
+                ScalarImpl(Packs * vsize, data.num_appl());
             };
 
             // Only try vectorized impl if Derived allows and it is enabled
@@ -307,10 +307,10 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
                 if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
-                    ScalarImpl(0, data.NumAppl());
+                    ScalarImpl(0, data.num_appl());
                 }
             } else {
-                ScalarImpl(0, data.NumAppl());
+                ScalarImpl(0, data.num_appl());
             }
         };
 
@@ -327,12 +327,12 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
             Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
-            for (int V = 0; V < data.NumAppl(); V++) {
+            for (int V = 0; V < data.num_appl(); V++) {
                 this->gather_input(X, x, V, data);
                 this->gather_mult(L, l, V, data);
-                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.inner_constraint_starts_[V],
                                                      this->output_rows());
-                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.inner_gradient_starts_[V],
                                                      this->input_rows());
                 fx.setZero();
                 agx.setZero();
@@ -364,11 +364,11 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
                                    Eigen::EigenBase<std::remove_cvref_t<XtType>>>
     inline void gather_input(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
                              const tycho::solvers::SolverIndexingData &data) const {
-        if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
-            xt = X.template segment<IR>(data.VLoc(0, V), this->input_rows());
+        if (data.v_index_continuity_[V] == ParsedIOFlags::Contiguous) {
+            xt = X.template segment<IR>(data.v_loc(0, V), this->input_rows());
         } else {
             for (int i = 0; i < this->input_rows(); i++)
-                xt(i) = X(data.VLoc(i, V));
+                xt(i) = X(data.v_loc(i, V));
         }
     }
 
@@ -382,11 +382,11 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
                                    Eigen::EigenBase<std::remove_cvref_t<LType>>>
     inline void gather_mult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
                             const tycho::solvers::SolverIndexingData &data) const {
-        if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {
-            l = L.template segment<OR>(data.CLoc(0, V), this->output_rows());
+        if (data.c_index_continuity_[V] == ParsedIOFlags::Contiguous) {
+            l = L.template segment<OR>(data.c_loc(0, V), this->output_rows());
         } else {
             for (int i = 0; i < this->output_rows(); i++)
-                l(i) = L(data.CLoc(i, V));
+                l(i) = L(data.c_loc(i, V));
         }
     }
 };

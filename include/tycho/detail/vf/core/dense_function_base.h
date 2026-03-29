@@ -930,16 +930,16 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     void get_kkt_space(EigenRef<Eigen::VectorXi> KKTrows, EigenRef<Eigen::VectorXi> KKTcols,
                        int &freeloc, int conoffset, bool dojac, bool dohess,
                        tycho::solvers::SolverIndexingData &data) {
-        data.InnerKKTStarts.resize(data.NumAppl());
+        data.inner_kkt_starts_.resize(data.num_appl());
 
-        for (int V = 0; V < data.NumAppl(); V++) {
-            data.InnerKKTStarts[V] = freeloc;
+        for (int V = 0; V < data.num_appl(); V++) {
+            data.inner_kkt_starts_[V] = freeloc;
             for (int i = 0; i < this->input_rows(); i++) {
                 if (dohess) {
                     for (int j = i; j < this->input_rows(); j++) {
                         if (this->derived().hessian_elem_is_nonzero(j, i)) {
-                            KKTrows[freeloc] = data.VLoc(j, V);
-                            KKTcols[freeloc] = data.VLoc(i, V);
+                            KKTrows[freeloc] = data.v_loc(j, V);
+                            KKTcols[freeloc] = data.v_loc(i, V);
                             freeloc++;
                         }
                     }
@@ -947,8 +947,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 if (dojac) {
                     for (int j = 0; j < this->output_rows(); j++) {
                         if (this->derived().jacobian_elem_is_nonzero(j, i)) {
-                            KKTrows[freeloc] = data.CLoc(j, V) + conoffset;
-                            KKTcols[freeloc] = data.VLoc(i, V);
+                            KKTrows[freeloc] = data.c_loc(j, V) + conoffset;
+                            KKTcols[freeloc] = data.v_loc(i, V);
                             freeloc++;
                         }
                     }
@@ -986,8 +986,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 for (int V = start; V < stop; V++) {
                     this->gather_input(X, x, V, data);
 
-                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->output_rows());
+                    new (&fx) Eigen::Map<Output<double>>(
+                        FX.data() + data.inner_constraint_starts_[V], this->output_rows());
                     fx.setZero();
                     jx.setZero();
                     this->derived().compute_jacobian(x, fx, jx);
@@ -1001,7 +1001,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             auto VectorImpl = [&]() {
                 using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
-                int Packs = data.NumAppl() / vsize;
+                int Packs = data.num_appl() / vsize;
 
                 Input<SuperScalar> x_vect(this->input_rows());
                 Output<SuperScalar> fx_vect(this->output_rows());
@@ -1032,24 +1032,24 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
+                            FX.data() + data.inner_constraint_starts_[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
                     }
                 }
 
-                ScalarImpl(Packs * vsize, data.NumAppl());
+                ScalarImpl(Packs * vsize, data.num_appl());
             };
 
             if constexpr (Derived::is_vectorizable) {
                 if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
-                    ScalarImpl(0, data.NumAppl());
+                    ScalarImpl(0, data.num_appl());
                 }
             } else {
-                ScalarImpl(0, data.NumAppl());
+                ScalarImpl(0, data.num_appl());
             }
         };
 
@@ -1069,13 +1069,13 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             Eigen::Map<Output<double>> fx(NULL, this->output_rows());
             Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
-            for (int V = 0; V < data.NumAppl(); V++) {
+            for (int V = 0; V < data.num_appl(); V++) {
                 this->gather_input(X, x, V, data);
                 this->gather_mult(L, l, V, data);
 
-                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
+                new (&fx) Eigen::Map<Output<double>>(FX.data() + data.inner_constraint_starts_[V],
                                                      this->output_rows());
-                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
+                new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.inner_gradient_starts_[V],
                                                      this->input_rows());
 
                 fx.setZero();
@@ -1127,10 +1127,10 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     this->gather_input(X, x, V, data);
                     this->gather_mult(L, l, V, data);
 
-                    new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                         this->output_rows());
-                    new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V],
-                                                         this->input_rows());
+                    new (&fx) Eigen::Map<Output<double>>(
+                        FX.data() + data.inner_constraint_starts_[V], this->output_rows());
+                    new (&agx) Eigen::Map<Input<double>>(
+                        AGX.data() + data.inner_gradient_starts_[V], this->input_rows());
 
                     fx.setZero();
                     agx.setZero();
@@ -1150,7 +1150,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             auto VectorImpl = [&]() {
                 using SuperScalar = tycho::DefaultSuperScalar;
                 constexpr int vsize = SuperScalar::SizeAtCompileTime;
-                int Packs = data.NumAppl() / vsize;
+                int Packs = data.num_appl() / vsize;
 
                 Input<SuperScalar> x_vect(this->input_rows());
                 Output<SuperScalar> fx_vect(this->output_rows());
@@ -1198,29 +1198,29 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                     for (int j = 0; j < vsize; j++) {
                         int V = i * vsize + j;
                         new (&fx) Eigen::Map<Output<double>>(
-                            FX.data() + data.InnerConstraintStarts[V], this->output_rows());
+                            FX.data() + data.inner_constraint_starts_[V], this->output_rows());
                         for (int l = 0; l < ORR; l++) {
                             fx[l] = fx_vect[l][j];
                         }
                         new (&agx) Eigen::Map<Input<double>>(
-                            AGX.data() + data.InnerGradientStarts[V], this->input_rows());
+                            AGX.data() + data.inner_gradient_starts_[V], this->input_rows());
                         for (int l = 0; l < IRR; l++) {
                             agx[l] = agx_vect[l][j];
                         }
                     }
                 }
 
-                ScalarImpl(Packs * vsize, data.NumAppl());
+                ScalarImpl(Packs * vsize, data.num_appl());
             };
 
             if constexpr (Derived::is_vectorizable) {
                 if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
-                    ScalarImpl(0, data.NumAppl());
+                    ScalarImpl(0, data.num_appl());
                 }
             } else {
-                ScalarImpl(0, data.NumAppl());
+                ScalarImpl(0, data.num_appl());
             }
         };
 
@@ -1257,7 +1257,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                       EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
                       std::vector<std::mutex> &ClashLocks,
                       const tycho::solvers::SolverIndexingData &data) const {
-        int freeloc = data.InnerKKTStarts[Apl];
+        int freeloc = data.inner_kkt_starts_[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
@@ -1285,7 +1285,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
 
         // bool uc = data.unique_constraints;
         for (int i = 0; i < IRR; i++) {
-            ActiveVar = data.VLoc(i, Apl);
+            ActiveVar = data.v_loc(i, Apl);
             Lock(ActiveVar);
             ///// insert hessian column symetrically
             for (int j = i; j < IRR; j++) {
@@ -1309,14 +1309,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                       Eigen::Ref<Eigen::VectorXi> KKTLocs, Eigen::Ref<Eigen::VectorXi> VarClashes,
                       std::vector<std::mutex> &ClashLocks,
                       const tycho::solvers::SolverIndexingData &data) const {
-        int freeloc = data.InnerKKTStarts[Apl];
+        int freeloc = data.inner_kkt_starts_[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
 
         if (data.unique_constraints) {
             for (int i = 0; i < this->input_rows(); i++) {
-                ActiveVar = data.VLoc(i, Apl);
+                ActiveVar = data.v_loc(i, Apl);
                 for (int j = i; j < this->input_rows(); j++) {
                     if (this->derived().hessian_elem_is_nonzero(j, i))
                         freeloc++;
@@ -1327,7 +1327,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         } else {
             for (int i = 0; i < this->input_rows(); i++) {
-                ActiveVar = data.VLoc(i, Apl);
+                ActiveVar = data.v_loc(i, Apl);
                 if (VarClashes[ActiveVar] == -1) {
                     //// uncontested
                 } else {
