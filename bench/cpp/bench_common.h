@@ -8,6 +8,12 @@
 #include <numbers>
 
 using namespace tycho;
+using namespace tycho::utils;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Runtime initialization (called once per executable via inline variable)
@@ -17,7 +23,7 @@ namespace TychoBench {
 inline void ensure_runtime_initialized() {
     static bool done = [] {
         BumpAllocator::resize(256, 256);
-        double init_ms = tycho::ensure_solver_initialized();
+        double init_ms = tycho::solvers::ensure_solver_initialized();
 #ifdef USE_ACCELERATE_SPARSE
         fmt::print("Accelerate init: {:.3f} ms (VECLIB_MAXIMUM_THREADS={})\n", init_ms,
                    TYCHO_DEFAULT_QP_THREADS);
@@ -137,7 +143,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
         phase->optimizer->PrintLevel = print_level;
@@ -199,7 +205,7 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs, int
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 6, -std::numbers::pi, std::numbers::pi, 1.0);
 
     // Minimize transfer time
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
         phase->optimizer->PrintLevel = print_level;
@@ -333,7 +339,7 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
 
     auto phase =
         std::shared_ptr<ODEPhase<MEELTODE>>(new ODEPhase<MEELTODE>(ode, tmode, IG, n_segs));
-    phase->setAutoScaling(true);
+    phase->set_auto_scaling(true);
 
     // Front boundary: MEEs + weight + time
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(8, 0, 7);
@@ -347,7 +353,7 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
     phase->add_boundary_value(PhaseRegionFlags::Back, back_p_idx, back_p_val, ScaleModes::AUTO);
 
     // Lower bound on final weight
-    phase->addLowerVarBound(PhaseRegionFlags::Back, 6, 0.05);
+    phase->add_lower_var_bound(PhaseRegionFlags::Back, 6, 0.05);
 
     // Throttle parameter bounds
     phase->add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0);
@@ -360,12 +366,12 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
 
     // Mesh refinement settings
     if (adaptive_mesh) {
-        phase->setAdaptiveMesh(true);
-        phase->setMeshErrorEstimator(MeshErrorEstimators::INTEGRATOR);
-        phase->setMeshTol(1.0e-7);
+        phase->set_adaptive_mesh(true);
+        phase->set_mesh_error_estimator(MeshErrorEstimators::INTEGRATOR);
+        phase->set_mesh_tol(1.0e-7);
     }
 
-    phase->setNumPartitions(8, 8);
+    phase->set_num_partitions(8, 8);
 
     if (print_level >= 0) {
         phase->optimizer->PrintLevel = print_level;

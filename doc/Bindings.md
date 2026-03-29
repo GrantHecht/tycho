@@ -9,7 +9,7 @@ This guide assumes familiarity with the [VectorFunction Developer Guide](VectorF
 1. [Overview -- What the Binding Layer Does](#1-overview----what-the-binding-layer-does)
 2. [Module Structure](#2-module-structure)
 3. [The `TychoBind<T>` Trait Pattern](#3-the-tychobindt-trait-pattern)
-4. [`Bind::` Free-Function Helpers](#4-bind-free-function-helpers)
+4. [`bind::` Free-Function Helpers](#4-bind-free-function-helpers)
 5. [Type Casters (`type_casters.h`)](#5-type-casters-type_castersh)
 6. [Precompiled Header Setup](#6-precompiled-header-setup)
 7. [File Organization](#7-file-organization)
@@ -164,7 +164,7 @@ template <> struct TychoBind<ODEPhaseBase> {
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
     static void Build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
-        Bind::ODEPhaseBuildImpl<DODE>(phase);
+        bind::ODEPhaseBuildImpl<DODE>(phase);
         // ...
     }
 };
@@ -173,8 +173,8 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
-        Bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
-        Bind::SegBuild<Segment<IR, OR, ST>>(obj);
+        bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
+        bind::SegBuild<Segment<IR, OR, ST>>(obj);
     }
 };
 ```
@@ -227,13 +227,13 @@ template <int IR> struct RegSelector<IR, 1> {
 };
 ```
 
-This is how Python code like `phase.addEqualityConstraint(my_segment_func)` works -- the `Segment` is implicitly converted to a `VectorFunction` (the type-erased `GenericFunction<-1,-1>`).
+This is how Python code like `phase.add_equal_con(my_segment_func)` works -- the `Segment` is implicitly converted to a `VectorFunction` (the type-erased `GenericFunction<-1,-1>`).
 
 ---
 
-## 4. `Bind::` Free-Function Helpers
+## 4. `bind::` Free-Function Helpers
 
-The `Bind::` namespace (inside `tycho::bind`) contains reusable free-function templates that register common method sets on `nb::class_` objects. These avoid duplicating binding code across the many VectorFunction types.
+The `bind::` namespace (inside `tycho::bind`) contains reusable free-function templates that register common method sets on `nb::class_` objects. These avoid duplicating binding code across the many VectorFunction types.
 
 ### `DenseBaseBuild<Derived>(obj)` -- Core Methods
 
@@ -290,12 +290,12 @@ Defined in `src/bindings/vf/common_functions_bind.h`, `SegBuild` calls all the m
 
 ```cpp
 template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
-    Bind::DoubleMathBuild<Derived>(obj);
-    Bind::UnaryMathBuild<Derived>(obj);
-    Bind::BinaryMathBuild<Derived>(obj);
-    Bind::BinaryOperatorsBuild<Derived>(obj);
-    Bind::FunctionIndexingBuild<Derived>(obj);
-    Bind::ConditionalOperatorsBuild<Derived>(obj);
+    bind::DoubleMathBuild<Derived>(obj);
+    bind::UnaryMathBuild<Derived>(obj);
+    bind::BinaryMathBuild<Derived>(obj);
+    bind::BinaryOperatorsBuild<Derived>(obj);
+    bind::FunctionIndexingBuild<Derived>(obj);
+    bind::ConditionalOperatorsBuild<Derived>(obj);
 
     obj.def("tolist", ...);  // Convert to list of Element/Segment objects
 }
@@ -570,7 +570,7 @@ src/bindings/
 
 ### `*_bind.h` vs `*_bind.cpp`
 
-- **`*_bind.h` headers** -- contain template code (TychoBind partial specializations, Bind:: helpers). Included via the PCH chain so they are available in every binding TU without explicit `#include`.
+- **`*_bind.h` headers** -- contain template code (TychoBind partial specializations, bind:: helpers). Included via the PCH chain so they are available in every binding TU without explicit `#include`.
 - **`*_bind.cpp` files** -- contain out-of-line implementations for non-template specializations and the heavy registration functions that would bloat the PCH if included as headers.
 
 The split is driven by compile-time performance: template code must be in headers, but large non-template binding functions should be in `.cpp` files.
@@ -822,8 +822,8 @@ template <> struct TychoBind<MyNewFunction> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<MyNewFunction>(m, name);
         obj.def(nb::init</* constructor args */>());
-        Bind::DenseBaseBuild<MyNewFunction>(obj);
-        // Optional: Bind::SegBuild if it needs full math/indexing API
+        bind::DenseBaseBuild<MyNewFunction>(obj);
+        // Optional: bind::SegBuild if it needs full math/indexing API
     }
 };
 ```

@@ -136,7 +136,7 @@ Tycho doesn't rely on CRTP alone. It uses a **two-layer architecture**:
 1. **CRTP layer** -- for building and evaluating expressions at full speed during the hot loop (solver iterations).
 2. **Type erasure layer** -- `GenericFunction<IR, OR>` wraps any CRTP expression into a uniform runtime type using `rubber_types::TypeErasure`, with virtual dispatch (see [Section 10](#10-type-erasure-genericfunction)).
 
-The type erasure boundary is where CRTP expressions enter the solver. When you call `phase.addEqualCon(...)` or `vf.stack(...)`, the concrete expression type is erased into a `GenericFunction`. From that point on, the solver calls through virtual dispatch -- but the virtual call is at the *function* level, not the *element* level. Inside each virtual call, the full CRTP expression tree is inlined.
+The type erasure boundary is where CRTP expressions enter the solver. When you call `phase.add_equal_con(...)` or `vf.stack(...)`, the concrete expression type is erased into a `GenericFunction`. From that point on, the solver calls through virtual dispatch -- but the virtual call is at the *function* level, not the *element* level. Inside each virtual call, the full CRTP expression tree is inlined.
 
 #### Alternative Designs
 
@@ -295,7 +295,7 @@ You can override these `static const bool` flags to enable optimizations:
 Here's a complete C++ VectorFunction that computes `f(x) = [x_0^2, x_1^2, ..., x_{n-1}^2]`:
 
 ```cpp
-#include "VectorFunction.h"
+#include <tycho/tycho.h>
 
 namespace tycho {
 
@@ -309,7 +309,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     static const bool IsVectorizable = true;
 
     CwiseSquareExample() {}
-    CwiseSquareExample(int ir) { this->setIORows(ir, ir); }
+    CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
 
     // --- Required: compute f(x) ---
     template <class InType, class OutType>
@@ -371,7 +371,7 @@ struct CwiseSquareAD : VectorFunction<CwiseSquareAD<IR>, IR, IR,
     static const bool IsVectorizable = true;
 
     CwiseSquareAD() {}
-    CwiseSquareAD(int ir) { this->setIORows(ir, ir); }
+    CwiseSquareAD(int ir) { this->set_io_rows(ir, ir); }
 
     // Only compute_impl is needed -- autodiff generates Jacobians and Hessians
     template <class InType, class OutType>
@@ -406,6 +406,8 @@ BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 ```
 
 The `Definition` static method returns a VectorFunction expression, and the macro wraps it in a proper ODE type that can be used with `ODEPhase`.
+
+> **Note:** `BUILD_ODE_FROM_EXPRESSION` is defined in `<tycho/optimal_control.h>`, not in `<tycho/vector_functions.h>`. Use `#include <tycho/tycho.h>` (the umbrella header) or `#include <tycho/optimal_control.h>` when using this macro.
 
 ---
 
@@ -851,8 +853,8 @@ auto composed = outer(inner);  // NestedFunction<OuterFunc, InnerFunc>
 In Python, the same operators and functions are available:
 
 ```python
-import tycho as ast
-vf = ast.VectorFunctions
+import tychopy as typy
+vf = typy.VectorFunctions
 Args = vf.Arguments
 
 args = Args(3)
@@ -933,7 +935,7 @@ The `vf.stack()`, `vf.sum()`, etc. functions also return `GenericFunction`.
 
 ### How VectorFunctions Become Constraints
 
-When you call `phase.addEqualCon(...)`, the phase creates a `ConstraintFunction` wrapper that pairs the VectorFunction with a `SolverIndexingData` struct describing:
+When you call `phase.add_equal_con(...)`, the phase creates a `ConstraintFunction` wrapper that pairs the VectorFunction with a `SolverIndexingData` struct describing:
 
 1. **Which variables** from the full NLP decision vector to pass as inputs (for each collocation node)
 2. **Where to write** the constraint outputs in the full constraint vector
@@ -1007,9 +1009,9 @@ During a single PSIOPT iteration:
 ### Import Convention
 
 ```python
-import tycho as ast
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+import tychopy as typy
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 ```
 
@@ -1118,8 +1120,8 @@ class MyODE(oc.ODEBase):
         UVars = 1
         XtU = oc.ODEArguments(XVars, UVars)
 
-        x, y, v = XtU.XVec().tolist()   # State variables
-        theta = XtU.UVar(0)              # Control variable
+        x, y, v = XtU.x_vec().tolist()   # State variables
+        theta = XtU.u_var(0)              # Control variable
 
         # Build symbolic dynamics
         xdot = vf.sin(theta) * v
@@ -1146,7 +1148,7 @@ def orbit_constraint(a_target, e_target):
     e = ...  # compute eccentricity from r, v
     return vf.stack([a - a_target, e - e_target])
 
-phase.addEqualCon("Back", orbit_constraint(a_t, e_t), range(0, 6))
+phase.add_equal_con("Back", orbit_constraint(a_t, e_t), range(0, 6))
 #                  ^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^
 #                  where   VectorFunction (must=0)     which variables to pass
 
@@ -1156,7 +1158,7 @@ class ControlEffort(vf.ScalarFunction):
         u = Args(3)
         super().__init__(u.squared_norm())
 
-phase.addIntegralObjective(ControlEffort(), [7, 8, 9])
+phase.add_integral_objective(ControlEffort(), [7, 8, 9])
 #                                            ^^^^^^^^^
 #                                            indices into the phase vector
 ```
@@ -1171,10 +1173,10 @@ The classic minimum-time brachistochrone: find the wire shape that lets a bead s
 
 ```python
 import numpy as np
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 
 class Brachistochrone(oc.ODEBase):
     def __init__(self, g):
@@ -1182,8 +1184,8 @@ class Brachistochrone(oc.ODEBase):
         UVars = 1   # Control: [theta]
 
         XtU = oc.ODEArguments(XVars, UVars)
-        x, y, v = XtU.XVec().tolist()
-        theta = XtU.UVar(0)
+        x, y, v = XtU.x_vec().tolist()
+        theta = XtU.u_var(0)
 
         # Dynamics
         xdot = vf.sin(theta) * v
@@ -1212,14 +1214,14 @@ for t in ts:
 
 # Create phase and add constraints
 phase = ode.phase("LGL3", Xs, 32)
-phase.addBoundaryValue("Front", range(0, 4), [0, 10, 0, 0])
-phase.addBoundaryValue("Back", [0, 1], [10, 5])
-phase.addLUVarBound("Path", 4, -0.1, 2.0)
-phase.addDeltaTimeObjective(1.0)
+phase.add_boundary_value("Front", range(0, 4), [0, 10, 0, 0])
+phase.add_boundary_value("Back", [0, 1], [10, 5])
+phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+phase.add_delta_time_objective(1.0)
 
 # Solve
 phase.optimize()
-Traj = phase.returnTraj()
+Traj = phase.return_traj()
 print(f"Optimal time: {Traj[-1][3]:.4f} s")  # ~1.8013 s
 ```
 
@@ -1256,7 +1258,7 @@ class LowThrust(oc.ODEBase):
 # Usage
 ode = LowThrust(mu=1.0, accel=0.01)
 phase = ode.phase("LGL5", initial_guess, 64)
-phase.addIntegralObjective(LowThrust.effort_obj(), [7, 8, 9])
+phase.add_integral_objective(LowThrust.effort_obj(), [7, 8, 9])
 ```
 
 ### Example 3: Brachistochrone (C++)
@@ -1300,14 +1302,14 @@ int main() {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << 0, 10, 0, 0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, std::string("auto"));
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, std::string("auto"));
 
     Eigen::VectorXi back_idx(2); back_idx << 0, 1;
     Eigen::VectorXd back_val(2); back_val << 10, 5;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, std::string("auto"));
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, std::string("auto"));
 
-    phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
-    phase->addDeltaTimeObjective(1.0, std::string("auto"));
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_delta_time_objective(1.0, std::string("auto"));
 
     phase->solve_optimize();
     return 0;

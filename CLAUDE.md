@@ -30,6 +30,14 @@ Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CM
 ```
 include/                Public C++ API headers
   tycho/
+    tycho.h             Master umbrella — includes all public modules
+    vector_functions.h  VectorFunction subsystem umbrella
+    typedefs.h          Eigen type aliases umbrella
+    utils.h             Utilities umbrella
+    integrators.h       Integrators umbrella
+    optimal_control.h   Optimal control umbrella
+    solvers.h           Solvers umbrella
+    astro.h             Astrodynamics umbrella
     detail/             Template implementation bodies (included automatically)
       utils/            Threading, math helpers, type utilities, CRTP base
       typedefs/         Eigen type aliases
@@ -268,6 +276,8 @@ Key obligations:
 - **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
   flag any changes touching MKL integration for manual review
 - **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT) — all permissive, just preserve notices
+- **boost-threads** (Boost Software License 1.0), **rubber_types** (MIT), **kepler propagator** (MIT),
+  **lambert** (MIT), **ctpl** (Apache 2.0) — all permissive; see `notices/` for full list
 
 ## Testing
 
