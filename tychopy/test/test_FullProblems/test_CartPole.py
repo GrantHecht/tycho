@@ -15,14 +15,14 @@ class CartPole(oc.ode_x_u.ode):
 
         args = oc.ODEArguments(4, 1)
 
-        q1 = args.XVar(0)
-        q2 = args.XVar(1)
-        q1d = args.XVar(2)
-        q2d = args.XVar(3)
+        q1 = args.x_var(0)
+        q2 = args.x_var(1)
+        q1d = args.x_var(2)
+        q2d = args.x_var(3)
 
         q1, q2, q1d, q2d = args.x_vec().tolist()
 
-        u = args.UVar(0)
+        u = args.u_var(0)
 
         q1dd = (
             l * m2 * vf.sin(q2) * (q2d**2) + u + m2 * g * vf.cos(q2) * vf.sin(q2)

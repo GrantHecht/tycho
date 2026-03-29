@@ -16,8 +16,8 @@ class ODE(oc.ODEBase):
         UVars = 1
 
         args = oc.ODEArguments(XVars, UVars)
-        x = args.XVar(0)
-        u = args.UVar(0)
+        x = args.x_var(0)
+        u = args.u_var(0)
         xdot = 0.5 * x + u
         super().__init__(xdot, XVars, UVars)
 

@@ -49,12 +49,12 @@ class Cannon(oc.ode_x_u_p.ode):
         ############################################################
         args = oc.ODEArguments(4, 0, 1)
 
-        v = args.XVar(0)
-        gamma = args.XVar(1)
-        h = args.XVar(2)
-        r = args.XVar(3)
+        v = args.x_var(0)
+        gamma = args.x_var(1)
+        h = args.x_var(2)
+        r = args.x_var(3)
 
-        rad = args.PVar(0)
+        rad = args.p_var(0)
 
         S = SFunc(rad)
         M = MFunc(rad, RhoIron)

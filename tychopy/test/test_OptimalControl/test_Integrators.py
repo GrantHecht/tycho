@@ -30,9 +30,9 @@ class CauchyEulerODE(oc.ode_x.ode):
         self.b = b
 
         args = oc.ODEArguments(2)
-        x = args.XVar(0)
-        xdot = args.XVar(1)
-        t = args.TVar()
+        x = args.x_var(0)
+        xdot = args.x_var(1)
+        t = args.t_var()
 
         xddot = -a * xdot / t - b * x / t**2
 

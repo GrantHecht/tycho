@@ -48,16 +48,16 @@ class ShuttleReentry(oc.ODEBase):
         ############################################################
         args = oc.ODEArguments(5, 2)
 
-        h = args.XVar(0)
-        theta = args.XVar(1)
-        v = args.XVar(2)
-        gamma = args.XVar(3)
-        psi = args.XVar(4)
+        h = args.x_var(0)
+        theta = args.x_var(1)
+        v = args.x_var(2)
+        gamma = args.x_var(3)
+        psi = args.x_var(4)
 
         h, theta, v, gamma, psi = args.x_vec().tolist()
 
-        alpha = args.UVar(0)
-        beta = args.UVar(1)
+        alpha = args.u_var(0)
+        beta = args.u_var(1)
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -96,7 +96,7 @@ class ShuttleReentry(oc.ODEBase):
         Vgroups["psi"] = psi
         Vgroups[("alpha", "AoA")] = alpha
         Vgroups["beta"] = beta
-        Vgroups[("t", "time")] = args.TVar()
+        Vgroups[("t", "time")] = args.t_var()
 
         ##############################################################
         super().__init__(ode, 5, 2, Vgroups=Vgroups)

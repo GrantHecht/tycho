@@ -105,7 +105,7 @@ class Delta3(oc.ODEBase):
 
         r = args.x_vec().head3()
         v = args.x_vec().segment3(3)
-        m = args.XVar(6)
+        m = args.x_var(6)
         u = args.tail3().normalized()
 
         h = r.norm() - Re
