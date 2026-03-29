@@ -76,8 +76,8 @@ The module is defined in `src/bindings/tycho_module.cpp`:
 ```cpp
 NB_MODULE(_tychopy, m) {
     m.doc() = "Tycho";
-    m.def("PyMain", &main);
-    m.def("SoftwareInfo", &SoftwareInfo);
+    m.def("py_main", &main);
+    m.def("software_info", &SoftwareInfo);
 
     FunctionRegistry reg(m);     // Must be built first
     VectorFunctionBuild(reg, m); // Must be built second
@@ -195,12 +195,26 @@ This is the primary entry point for registering VectorFunction types. It:
 1. Calls `TychoBind<T>::Build(m, name)` to create the `nb::class_<T>` and define its methods.
 2. Calls `RegSelector<T::IRC, T::ORC>::Register<T>(this)` to register implicit conversions to the type-erased base classes.
 
+Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::Build`:
+
 ```cpp
-template <class Derived> void Build_Register(nb::module_ &m, const char *name) {
-    TychoBind<Derived>::Build(m, name);
-    RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
-}
+// Overload 1: name hardcoded in TychoBind<Derived>::Build(m) — no name argument needed
+template <class Derived>
+    requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
+void Build_Register(nb::module_ &m);
+
+// Overload 2: name passed explicitly; type registered into the registry's root module
+template <class Derived>
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+void Build_Register(const char *name);
+
+// Overload 3: name and target module both passed explicitly (most common)
+template <class Derived>
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+void Build_Register(nb::module_ &m, const char *name);
 ```
+
+All three overloads call `RegSelector<Derived::IRC, Derived::ORC>::Register<Derived>(this)` after building to register implicit conversions.
 
 ### `RegSelector<IR, OR>` -- Implicit Conversion Registration
 
@@ -248,12 +262,12 @@ Defined in `src/bindings/vf/dense_function_base_bind.h`. Registers the fundament
 | `adjointgradient(x, lm)` | `-> numpy.ndarray` | J^T * lambda |
 | `adjointhessian(x, lm)` | `-> numpy.ndarray` | Adjoint Hessian |
 | `computeall(x, lm)` | `-> (fx, Jx, gx, Hx)` | All derivatives at once |
-| `IRows()` | `-> int` | Input dimension |
-| `ORows()` | `-> int` | Output dimension |
+| `input_rows()` | `-> int` | Input dimension |
+| `output_rows()` | `-> int` | Output dimension |
 | `name()` | `-> str` | Type name string |
 | `input_domain()` | `-> ...` | Domain information |
 | `is_linear()` | `-> bool` | Linearity flag |
-| `rpt(...)` | | Repeat/tile |
+
 | `vf()` | `-> VectorFunction` | Convert to type-erased VectorFunction |
 | `sf()` | `-> ScalarFunction` | Convert to ScalarFunction (OR=1 only) |
 
@@ -305,7 +319,7 @@ Types that need the full VectorFunction Python API (like `Arguments`, `Segment`,
 
 ### `GenericBuild<Derived>(obj)`
 
-For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-from-self, `SuperTest`, `SpeedTest`, and then calls `DenseBaseBuild`.
+For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-from-self and then calls `DenseBaseBuild`.
 
 ### ODE and Phase Builders
 
@@ -348,10 +362,13 @@ template <> struct type_caster<Eigen::VectorXi> { ... };   // Full spec -- wins
 
 This ordering is enforced in `pch_nb.h`:
 ```cpp
-#include "type_casters.h"       // BEFORE stl/ casters
-#include <nanobind/stl/vector.h>
+#include "type_casters.h"             // BEFORE stl/ casters
+#include <nanobind/stl/function.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/variant.h>
-// ...
+#include <nanobind/stl/vector.h>
 ```
 
 ### Caster Reference

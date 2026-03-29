@@ -245,14 +245,14 @@ When `IR` and `OR` are known at compile time (e.g., `IR=6, OR=3`), Eigen can use
 ```cpp
 // Static sizing (preferred for performance when dimensions are known):
 template <> struct InputOutputSize<6, 3> {
-    static const int InputRows = 6;
-    static const int OutputRows = 3;
+    static const int input_rows_val = 6;
+    static const int output_rows_val = 3;
 };
 
 // Dynamic sizing (required when dimensions vary at runtime):
 template <> struct InputOutputSize<-1, -1> {
-    int InputRows = 0;  // Mutable, set at construction
-    int OutputRows = 0;
+    int input_rows_val = 0;  // Mutable, set at construction
+    int output_rows_val = 0;
 };
 ```
 
