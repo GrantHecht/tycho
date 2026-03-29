@@ -10,7 +10,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
-//   - Namespace: Tycho
+//   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
 #include "tycho/detail/solvers/optimization_problem_base.h"

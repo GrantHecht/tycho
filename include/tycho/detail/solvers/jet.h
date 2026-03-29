@@ -11,7 +11,7 @@
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
 //   - Thread pool replaced with global tycho::utils::thread_pool() singleton
-//   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
+//   - Removed `nt` parameter: parallelism is controlled by tycho::utils::set_num_threads()
 // =============================================================================
 
 #pragma once

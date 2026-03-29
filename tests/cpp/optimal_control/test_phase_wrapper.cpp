@@ -211,7 +211,7 @@ TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    // "pos" maps to 2 indices — addLowerVarBound requires exactly 1
+    // "pos" maps to 2 indices — add_lower_var_bound requires exactly 1
     EXPECT_THROW(phase.add_lower_var_bound(PhaseRegionFlags::Path, "pos", -1.0),
                  std::invalid_argument);
 }

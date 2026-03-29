@@ -11,7 +11,7 @@
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
 //   - Removed `nt` parameter: parallelism controlled by tycho::set_num_threads()
-//   - Namespace: Tycho
+//   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
 #include "jet_bind.h"

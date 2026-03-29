@@ -227,6 +227,9 @@ subdirectory:
 **C++ identifiers:**
 - Types and classes: `PascalCase` (e.g., `DenseFunction`, `ODEPhase`)
 - Member functions: `snake_case` (e.g., `set_io_rows()`, `add_equal_con()`)
+  > **PSIOPT exception:** The bundled PSIOPT optimizer retains its legacy `set_PascalCase`
+  > naming (e.g., `set_MaxIter`, `set_SocIter`, `set_KKTtol`). A dedicated PSIOPT naming
+  > migration is planned as a future PR — do not rename these in routine refactor passes.
 - Member variables: `snake_case_` with trailing underscore (e.g., `num_defects_`)
 - Free functions: `snake_case`
 
@@ -262,6 +265,18 @@ conda run -n tycho ruff check --select I --fix .
 
 Line length: 88 (Black default). `dep/` and `build/` are excluded automatically.
 
+### Commit Conventions
+
+Use descriptive commit messages with these prefixes:
+
+| Prefix | Use for |
+| ------ | ------- |
+| `feat:` | New features or capabilities |
+| `fix:` | Bug fixes |
+| `refactor:` | Code restructuring without behavior change |
+| `docs:` | Documentation-only changes |
+| `chore:` | Build system, CI, dependency, or tooling changes |
+
 ## License and Notices
 
 The project is licensed under **Apache 2.0**. The `notices/` directory contains
@@ -278,6 +293,16 @@ Key obligations:
 - **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT) — all permissive, just preserve notices
 - **boost-threads** (Boost Software License 1.0), **rubber_types** (MIT), **kepler propagator** (MIT),
   **lambert** (MIT), **ctpl** (Apache 2.0) — all permissive; see `notices/` for full list
+
+## Things to Flag for Human Review
+
+Changes in the following areas require explicit human review before merging:
+
+- **PSIOPT optimizer internals** — algorithmic changes can silently degrade convergence
+- **Intel MKL / Apple Accelerate integration** — redistribution terms and initialization are sensitive
+- **Public API changes** — any Python-facing rename or removal breaks downstream user code
+- **New third-party dependencies** — must add license notice to `notices/` and get approval
+- **PyPI / packaging** — changes to `setup.py`, `pyproject.toml`, or wheel metadata
 
 ## Testing
 
@@ -309,10 +334,21 @@ conda install -n tycho -c conda-forge basemap
 ### C++ brachistochrone example
 
 ```bash
-./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp
+./build/examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
+# Builder-API variant (equivalent convergence check):
+# ./build/examples/cpp_examples/builder/brachistochrone/brachistochrone_cpp
 ```
 
 Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
+
+### Pre-Merge Verification Sequence
+
+Run all four steps in order before opening or merging any PR into `main`:
+
+1. **C++ unit tests** — `ctest --output-on-failure` — all must pass
+2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 38 must exit 0
+3. **C++ brachistochrone** — see path above — must print "Optimal Solution Found", obj ≈ 1.8013 s
+4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy
 
