@@ -521,7 +521,7 @@ static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
     }
 
     {
-        //////////////////Legacy LinkObjectives//////////
+        //////////////////Legacy link_objectives_//////////
 
         obj.def(
             "add_link_objective",

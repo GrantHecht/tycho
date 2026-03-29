@@ -784,7 +784,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         int Gindex = this->indexer_.add_objective(obj, PhaseReg, xtrap, ob.op_vars_, ob.sp_vars_,
                                                   thread_mode);
 
-        int PLindex = Gindex - this->indexer_.StartObj;
+        int PLindex = Gindex - this->indexer_.start_obj_;
         ob.global_index_ = Gindex;
         ob.phase_local_index_ = PLindex;
     }
@@ -838,7 +838,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         int Gindex = this->indexer_.add_accumulation(obj, PhaseReg, xtrap, ob.op_vars_, ob.sp_vars_,
                                                      AccFunc, ob.ext_vars_, thread_mode);
 
-        int PLindex = Gindex - this->indexer_.StartObj;
+        int PLindex = Gindex - this->indexer_.start_obj_;
         ob.global_index_ = Gindex;
         ob.phase_local_index_ = PLindex;
     }
@@ -864,7 +864,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         int Gindex = this->indexer_.add_equality(func, eq.region_flag_, eq.xtu_vars_, eq.op_vars_,
                                                  eq.sp_vars_, thread_mode);
 
-        int PLindex = Gindex - this->indexer_.StartEq;
+        int PLindex = Gindex - this->indexer_.start_eq_;
         eq.global_index_ = Gindex;
         eq.phase_local_index_ = PLindex;
     }
@@ -890,7 +890,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
 
         int Gindex = this->indexer_.add_inequality(func, iq.region_flag_, iq.xtu_vars_, iq.op_vars_,
                                                    iq.sp_vars_, thread_mode);
-        int PLindex = Gindex - this->indexer_.StartIq;
+        int PLindex = Gindex - this->indexer_.start_iq_;
         iq.global_index_ = Gindex;
         iq.phase_local_index_ = PLindex;
     }
@@ -914,7 +914,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
 
         int Gindex = this->indexer_.add_objective(func, ob.region_flag_, ob.xtu_vars_, ob.op_vars_,
                                                   ob.sp_vars_, thread_mode);
-        int PLindex = Gindex - this->indexer_.StartObj;
+        int PLindex = Gindex - this->indexer_.start_obj_;
         ob.global_index_ = Gindex;
         ob.phase_local_index_ = PLindex;
     }

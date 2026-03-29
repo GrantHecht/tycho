@@ -92,12 +92,12 @@ struct OptimalControlProblem : OptimizationProblemBase {
     bool do_transcription_ = true;
     void reset_transcription() { this->do_transcription_ = true; };
 
-    std::map<int, LinkConstraint> LinkEqualities;
-    std::map<int, LinkConstraint> LinkInequalities;
-    std::map<int, LinkObjective> LinkObjectives;
+    std::map<int, LinkConstraint> link_equalities_;
+    std::map<int, LinkConstraint> link_inequalities_;
+    std::map<int, LinkObjective> link_objectives_;
 
     VectorXd active_link_params_;
-    Eigen::VectorXd LPUnits;
+    Eigen::VectorXd lp_units_;
     bool auto_scaling_ = false;
     bool sync_objective_scales_ = true;
 
@@ -112,7 +112,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         this->active_link_params_ = parm;
         this->num_link_params = parm.size();
         this->reset_transcription();
-        this->LPUnits = units;
+        this->lp_units_ = units;
     }
     void set_link_params(VectorXd parm) {
         VectorXd units(parm.size());
@@ -149,10 +149,10 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     void invalidate_post_opt_info() { this->post_opt_info_valid_ = false; };
 
-    VectorXd ActiveEqLmults;
-    VectorXd ActiveIqLmults;
-    VectorXd ActiveEqCons;
-    VectorXd ActiveIqCons;
+    VectorXd active_eq_lmults_;
+    VectorXd active_iq_lmults_;
+    VectorXd active_eq_cons_;
+    VectorXd active_iq_cons_;
 
     VectorXi LinkParamLocs;
 
@@ -164,9 +164,9 @@ struct OptimalControlProblem : OptimizationProblemBase {
     int num_link_eq_cons = 0;
     int num_link_iq_cons = 0;
 
-    int StartObj = 0;
-    int StartEq = 0;
-    int StartIq = 0;
+    int start_obj_ = 0;
+    int start_eq_ = 0;
+    int start_iq_ = 0;
 
     int num_obj_funs = 0;
     int num_eq_funs = 0;
@@ -547,7 +547,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     ////////////////////////////////////////////////
     int add_link_equal_con(LinkConstraint lc) {
-        return add_func_impl(lc, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(lc, this->link_equalities_, "Link Equality Constraint");
     }
     ////////////////////////////////////////////
 
@@ -556,7 +556,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
     int add_link_equal_con(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
                            ScaleType scale_t) {
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
-        return add_func_impl(Func, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
     int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
@@ -566,7 +566,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return add_func_impl(Func, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
     int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
@@ -575,14 +575,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
                                                                             reg1, v1, lv, scale_t);
-        return add_func_impl(Func, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
     int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
                            PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
                                                                             reg1, v1, scale_t);
-        return add_func_impl(Func, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
     std::vector<int> add_forward_link_equal_con(PhaseRefType iphase_t, PhaseRefType fphase_t,
@@ -938,13 +938,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
     ////////////////////////////////////////////////////////////////////
 
     int add_link_inequal_con(LinkConstraint lc) {
-        return add_func_impl(lc, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(lc, this->link_inequalities_, "Link Inequality Constraint");
     }
 
     int add_link_inequal_con(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
                              ScaleType scale_t) {
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
-        return add_func_impl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
 
     int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
@@ -955,7 +955,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return add_func_impl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
 
     int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
@@ -964,7 +964,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
                                                                             reg1, v1, lv, scale_t);
-        return add_func_impl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
     int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
                              VarIndexType v0, PhaseRefType p1, RegionType reg1, VarIndexType v1,
@@ -972,7 +972,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
                                                                             reg1, v1, scale_t);
-        return add_func_impl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
     int add_link_param_inequal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs,
                                    ScaleType scale_t) {
@@ -1101,13 +1101,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
     ////////////////////////////////////////////////////////////////////
 
     int add_link_objective(LinkObjective lc) {
-        return add_func_impl(lc, this->LinkObjectives, "Link Objective");
+        return add_func_impl(lc, this->link_objectives_, "Link Objective");
     }
 
     int add_link_objective(ScalarFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
                            ScaleType scale_t) {
         auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, packs, lv, scale_t);
-        return add_func_impl(Func, this->LinkObjectives, "Link Objective");
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
 
     int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0,
@@ -1117,7 +1117,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return add_func_impl(Func, this->LinkObjectives, "Link Objective");
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
 
     int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
@@ -1126,14 +1126,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1,
                                                                            reg1, v1, lv, scale_t);
-        return add_func_impl(Func, this->LinkObjectives, "Link Objective");
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
     int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
                            PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
 
         auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1,
                                                                            reg1, v1, scale_t);
-        return add_func_impl(Func, this->LinkObjectives, "Link Objective");
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
     int add_link_param_objective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs,
                                  ScaleType scale_t) {
@@ -1262,13 +1262,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////
 
     void remove_link_equal_con(int index) {
-        this->remove_func_impl(this->LinkEqualities, index, "Equality Constraint");
+        this->remove_func_impl(this->link_equalities_, index, "Equality Constraint");
     }
     void remove_link_inequal_con(int index) {
-        this->remove_func_impl(this->LinkInequalities, index, "Inequality Constraint");
+        this->remove_func_impl(this->link_inequalities_, index, "Inequality Constraint");
     }
     void remove_link_objective(int index) {
-        this->remove_func_impl(this->LinkObjectives, index, "Link Objective");
+        this->remove_func_impl(this->link_objectives_, index, "Link Objective");
     }
     ///////////////////////////////////////////////////
 
@@ -1276,13 +1276,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkEqualities.count(index) == 0) {
+        if (this->link_equalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Equality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkEqualities.at(index).global_index_;
+        int Gindex = this->link_equalities_.at(index).global_index_;
         auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
@@ -1291,7 +1291,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
             VectorXd vals(c_index_.rows());
             for (int j = 0; j < c_index_.rows(); j++) {
                 int idx = c_index_(j, i) - offset;
-                vals[j] = this->ActiveEqCons[idx];
+                vals[j] = this->active_eq_cons_[idx];
             }
             Allvals.push_back(vals);
         }
@@ -1302,13 +1302,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkEqualities.count(index) == 0) {
+        if (this->link_equalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Equality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkEqualities.at(index).global_index_;
+        int Gindex = this->link_equalities_.at(index).global_index_;
         auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
@@ -1317,7 +1317,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
             VectorXd vals(c_index_.rows());
             for (int j = 0; j < c_index_.rows(); j++) {
                 int idx = c_index_(j, i) - offset;
-                vals[j] = this->ActiveEqLmults[idx];
+                vals[j] = this->active_eq_lmults_[idx];
             }
             Allvals.push_back(vals);
         }
@@ -1328,12 +1328,12 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkInequalities.count(index) == 0) {
+        if (this->link_inequalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Inequality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
-        int Gindex = this->LinkInequalities.at(index).global_index_;
+        int Gindex = this->link_inequalities_.at(index).global_index_;
         auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
@@ -1342,7 +1342,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
             VectorXd vals(c_index_.rows());
             for (int j = 0; j < c_index_.rows(); j++) {
                 int idx = c_index_(j, i) - offset;
-                vals[j] = this->ActiveIqCons[idx];
+                vals[j] = this->active_iq_cons_[idx];
             }
             Allvals.push_back(vals);
         }
@@ -1353,13 +1353,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkInequalities.count(index) == 0) {
+        if (this->link_inequalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Inequality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkInequalities.at(index).global_index_;
+        int Gindex = this->link_inequalities_.at(index).global_index_;
         auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
@@ -1368,7 +1368,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
             VectorXd vals(c_index_.rows());
             for (int j = 0; j < c_index_.rows(); j++) {
                 int idx = c_index_(j, i) - offset;
-                vals[j] = this->ActiveIqLmults[idx];
+                vals[j] = this->active_iq_lmults_[idx];
             }
             Allvals.push_back(vals);
         }
@@ -1376,13 +1376,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
     Eigen::VectorXd return_link_equal_con_scales(int index) {
-        return this->LinkEqualities.at(index).output_scales_;
+        return this->link_equalities_.at(index).output_scales_;
     }
     Eigen::VectorXd return_link_inequal_con_scales(int index) {
-        return this->LinkInequalities.at(index).output_scales_;
+        return this->link_inequalities_.at(index).output_scales_;
     }
     Eigen::VectorXd return_link_objective_scales(int index) {
-        return this->LinkObjectives.at(index).output_scales_;
+        return this->link_objectives_.at(index).output_scales_;
     }
 
     ///////////////////////////////////////////////////
@@ -1643,9 +1643,9 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 Start = this->num_phase_vars.segment(0, i).sum();
             Vars.segment(Start, this->num_phase_vars[i]) = this->phases[i]->make_solver_input();
         }
-        if (this->auto_scaling_ && this->LPUnits.size() > 0) {
+        if (this->auto_scaling_ && this->lp_units_.size() > 0) {
             Vars.tail(this->num_link_params) =
-                this->active_link_params_.cwiseQuotient(this->LPUnits);
+                this->active_link_params_.cwiseQuotient(this->lp_units_);
         } else {
             Vars.tail(this->num_link_params) = this->active_link_params_;
         }
@@ -1660,9 +1660,9 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 Start = this->num_phase_vars.segment(0, i).sum();
             this->phases[i]->collect_solver_output(Vars.segment(Start, this->num_phase_vars[i]));
         }
-        if (this->auto_scaling_ && this->LPUnits.size() > 0) {
+        if (this->auto_scaling_ && this->lp_units_.size() > 0) {
             this->active_link_params_ =
-                Vars.tail(this->num_link_params).cwiseProduct(this->LPUnits);
+                Vars.tail(this->num_link_params).cwiseProduct(this->lp_units_);
         } else {
             this->active_link_params_ = Vars.tail(this->num_link_params);
         }
@@ -1680,8 +1680,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 EM.segment(EStart, this->num_phase_eq_cons[i]),
                 IM.segment(IStart, this->num_phase_iq_cons[i]));
         }
-        this->ActiveEqLmults = EM.tail(this->num_link_eq_cons);
-        this->ActiveIqLmults = IM.tail(this->num_link_iq_cons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons);
     }
 
     void collect_post_opt_info(const VectorXd &EC, const VectorXd &EM, const VectorXd &IC,
@@ -1701,10 +1701,10 @@ struct OptimalControlProblem : OptimizationProblemBase {
                                                    IC.segment(IStart, this->num_phase_iq_cons[i]),
                                                    IM.segment(IStart, this->num_phase_iq_cons[i]));
         }
-        this->ActiveEqLmults = EM.tail(this->num_link_eq_cons);
-        this->ActiveIqLmults = IM.tail(this->num_link_iq_cons);
-        this->ActiveEqCons = EC.tail(this->num_link_eq_cons);
-        this->ActiveIqCons = IC.tail(this->num_link_iq_cons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons);
+        this->active_eq_cons_ = EC.tail(this->num_link_eq_cons);
+        this->active_iq_cons_ = IC.tail(this->num_link_iq_cons);
     }
 
   public:

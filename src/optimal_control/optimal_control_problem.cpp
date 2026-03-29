@@ -48,7 +48,7 @@ Eigen::VectorXd tycho::oc::OptimalControlProblem::get_input_scale(
 
         VectorXd lscales(LVars[0].size());
         for (int i = 0; i < LVars[0].size(); i++) {
-            lscales[i] = this->LPUnits[LVars[0][i]];
+            lscales[i] = this->lp_units_[LVars[0][i]];
             size++;
         }
         scales.push_back(lscales);
@@ -248,11 +248,11 @@ void tycho::oc::OptimalControlProblem::check_functions() {
     std::string iq = "Link Inequality constraint";
     std::string obj = "Link Objective";
 
-    for (auto &[key, f] : this->LinkEqualities)
+    for (auto &[key, f] : this->link_equalities_)
         CheckFunc(eq, f);
-    for (auto &[key, f] : this->LinkInequalities)
+    for (auto &[key, f] : this->link_inequalities_)
         CheckFunc(iq, f);
-    for (auto &[key, f] : this->LinkObjectives)
+    for (auto &[key, f] : this->link_objectives_)
         CheckFunc(obj, f);
 }
 
@@ -267,13 +267,13 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         this->LinkParamLocs[i] = LinkVarStart + i;
     }
 
-    this->StartObj = int(this->nlp->objectives_.size());
-    this->StartEq = int(this->nlp->equality_constraints_.size());
-    this->StartIq = int(this->nlp->inequality_constraints_.size());
+    this->start_obj_ = int(this->nlp->objectives_.size());
+    this->start_eq_ = int(this->nlp->equality_constraints_.size());
+    this->start_iq_ = int(this->nlp->inequality_constraints_.size());
     this->num_eq_funs = 0;
     this->num_iq_funs = 0;
     this->num_obj_funs = 0;
-    for (auto &[key, Eq] : this->LinkEqualities) {
+    for (auto &[key, Eq] : this->link_equalities_) {
         auto VC = this->make_link_Vindex_Cindex(
             Eq.link_flag_, Eq.phase_reg_flags_, Eq.phases_to_link_, Eq.xtu_vars_, Eq.op_vars_,
             Eq.sp_vars_, Eq.link_params_, Eq.func_.output_rows(), NextEq);
@@ -293,7 +293,7 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         Eq.global_index_ = this->nlp->equality_constraints_.size() - 1;
         this->num_eq_funs++;
     }
-    for (auto &[key, Iq] : this->LinkInequalities) {
+    for (auto &[key, Iq] : this->link_inequalities_) {
         auto VC = this->make_link_Vindex_Cindex(
             Iq.link_flag_, Iq.phase_reg_flags_, Iq.phases_to_link_, Iq.xtu_vars_, Iq.op_vars_,
             Iq.sp_vars_, Iq.link_params_, Iq.func_.output_rows(), NextIq);
@@ -313,7 +313,7 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         Iq.global_index_ = this->nlp->inequality_constraints_.size() - 1;
         this->num_iq_funs++;
     }
-    for (auto &[key, Ob] : this->LinkObjectives) {
+    for (auto &[key, Ob] : this->link_objectives_) {
         int dummy = 0;
         auto VC = this->make_link_Vindex_Cindex(
             Ob.link_flag_, Ob.phase_reg_flags_, Ob.phases_to_link_, Ob.xtu_vars_, Ob.op_vars_,
@@ -362,14 +362,14 @@ void tycho::oc::OptimalControlProblem::calc_auto_scales() {
         }
     };
 
-    calc_impl(this->LinkEqualities);
-    calc_impl(this->LinkInequalities);
-    calc_impl(this->LinkObjectives);
+    calc_impl(this->link_equalities_);
+    calc_impl(this->link_inequalities_);
+    calc_impl(this->link_objectives_);
 }
 
 std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
     std::vector<double> scales;
-    for (auto &[key, obj] : this->LinkObjectives) {
+    for (auto &[key, obj] : this->link_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             scales.push_back(obj.output_scales_[0]);
         }
@@ -385,7 +385,7 @@ std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
 }
 
 void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
-    for (auto &[key, obj] : this->LinkObjectives) {
+    for (auto &[key, obj] : this->link_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             obj.output_scales_[0] = scale;
         }
@@ -584,19 +584,19 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_obj_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->objectives_[this->StartObj + i].print_data();
+            this->nlp->objectives_[this->start_obj_ + i].print_data();
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->equality_constraints_[this->StartEq + i].print_data();
+            this->nlp->equality_constraints_[this->start_eq_ + i].print_data();
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->inequality_constraints_[this->StartIq + i].print_data();
+            this->nlp->inequality_constraints_[this->start_iq_ + i].print_data();
         }
     }
 }

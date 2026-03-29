@@ -59,24 +59,24 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;
 
-    int StaticPVars;
-    int StatPVars() const { return this->StaticPVars; }
+    int static_p_vars_;
+    int static_p_vars() const { return this->static_p_vars_; }
 
     std::shared_ptr<NonLinearProgram> nlp;
 
-    VectorXi ODEFirstStateLocs;
-    VectorXi ODELastStateLocs;
-    VectorXi ODEParamLocs;
-    VectorXi StaticParamLocs;
+    VectorXi ode_first_state_locs_;
+    VectorXi ode_last_state_locs_;
+    VectorXi ode_param_locs_;
+    VectorXi static_param_locs_;
 
     int num_defects;
     int num_states;
     int num_controls;
 
-    bool BlockedControls = false;
-    int BlockedControlStart;
+    bool blocked_controls_ = false;
+    int blocked_control_start_;
 
-    int DefectCardinalStates;
+    int defect_cardinal_states_;
     int num_nodal_states;
 
     int num_phase_vars;
@@ -85,12 +85,12 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int next_phase_eq_con = 0;
     int next_phase_iq_con = 0;
 
-    int StartObj = 0;
-    int StartEq = 0;
-    int StartIq = 0;
+    int start_obj_ = 0;
+    int start_eq_ = 0;
+    int start_iq_ = 0;
 
-    int StartEqCons = 0;
-    int StartIqCons = 0;
+    int start_eq_cons_ = 0;
+    int start_iq_cons_ = 0;
 
     int num_obj_funs = 0;
     int num_eq_funs = 0;
@@ -101,50 +101,50 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->set_xvars(Xv);
         this->set_uvars(Uv);
         this->set_pvars(OPv);
-        this->StaticPVars = SPv;
+        this->static_p_vars_ = SPv;
     }
 
     void set_dimensions(int DCS, int Dnum, bool BlockCon) {
         this->num_defects = Dnum;
-        this->DefectCardinalStates = DCS;
-        this->num_states = (this->DefectCardinalStates - 1) * this->num_defects + 1;
+        this->defect_cardinal_states_ = DCS;
+        this->num_states = (this->defect_cardinal_states_ - 1) * this->num_defects + 1;
         this->num_nodal_states = this->num_defects + 1;
 
-        this->BlockedControls = BlockCon;
+        this->blocked_controls_ = BlockCon;
 
-        if (this->BlockedControls) {
+        if (this->blocked_controls_) {
             this->num_phase_vars = this->num_states * this->xt_vars() +
                                    this->num_defects * this->u_vars() + this->p_vars() +
-                                   this->StatPVars();
+                                   this->static_p_vars();
 
-            ODEFirstStateLocs.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
-            ODEFirstStateLocs.tail(this->u_vars()) += VectorXi::Constant(
+            ode_first_state_locs_.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
+            ode_first_state_locs_.tail(this->u_vars()) += VectorXi::Constant(
                 this->u_vars(), this->xt_vars() * (this->num_states) - this->xt_vars());
 
-            ODELastStateLocs =
-                ODEFirstStateLocs +
+            ode_last_state_locs_ =
+                ode_first_state_locs_ +
                 VectorXi::Constant(this->xtu_vars(), this->xt_vars() * (this->num_states - 1));
-            ODELastStateLocs.tail(this->u_vars()) =
-                ODEFirstStateLocs.tail(this->u_vars()) +
+            ode_last_state_locs_.tail(this->u_vars()) =
+                ode_first_state_locs_.tail(this->u_vars()) +
                 VectorXi::Constant(this->u_vars(), this->u_vars() * (this->num_defects - 1));
 
         } else {
             this->num_phase_vars =
-                this->num_states * this->xtu_vars() + this->p_vars() + this->StatPVars();
+                this->num_states * this->xtu_vars() + this->p_vars() + this->static_p_vars();
 
-            ODEFirstStateLocs.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
-            ODELastStateLocs =
-                ODEFirstStateLocs +
+            ode_first_state_locs_.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
+            ode_last_state_locs_ =
+                ode_first_state_locs_ +
                 VectorXi::Constant(this->xtu_vars(), this->xtu_vars() * (this->num_states - 1));
         }
 
-        ODEParamLocs.setLinSpaced(this->p_vars(), 0, this->p_vars() - 1);
-        ODEParamLocs += Eigen::VectorXi::Constant(
-            this->p_vars(), this->num_phase_vars - this->p_vars() - this->StatPVars());
+        ode_param_locs_.setLinSpaced(this->p_vars(), 0, this->p_vars() - 1);
+        ode_param_locs_ += Eigen::VectorXi::Constant(
+            this->p_vars(), this->num_phase_vars - this->p_vars() - this->static_p_vars());
 
-        StaticParamLocs.setLinSpaced(this->StatPVars(), 0, this->StatPVars() - 1);
-        StaticParamLocs +=
-            Eigen::VectorXi::Constant(this->StatPVars(), this->num_phase_vars - this->StatPVars());
+        static_param_locs_.setLinSpaced(this->static_p_vars(), 0, this->static_p_vars() - 1);
+        static_param_locs_ += Eigen::VectorXi::Constant(
+            this->static_p_vars(), this->num_phase_vars - this->static_p_vars());
     }
     void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
         this->nlp = np;
@@ -152,19 +152,21 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->num_phase_eq_cons = 0;
         this->num_phase_iq_cons = 0;
 
-        this->ODEFirstStateLocs += Eigen::VectorXi::Constant(this->ODEFirstStateLocs.size(), n);
-        this->ODELastStateLocs += Eigen::VectorXi::Constant(this->ODELastStateLocs.size(), n);
-        this->ODEParamLocs += Eigen::VectorXi::Constant(this->ODEParamLocs.size(), n);
-        this->StaticParamLocs += Eigen::VectorXi::Constant(this->StaticParamLocs.size(), n);
+        this->ode_first_state_locs_ +=
+            Eigen::VectorXi::Constant(this->ode_first_state_locs_.size(), n);
+        this->ode_last_state_locs_ +=
+            Eigen::VectorXi::Constant(this->ode_last_state_locs_.size(), n);
+        this->ode_param_locs_ += Eigen::VectorXi::Constant(this->ode_param_locs_.size(), n);
+        this->static_param_locs_ += Eigen::VectorXi::Constant(this->static_param_locs_.size(), n);
         this->next_phase_eq_con = ep;
         this->next_phase_iq_con = ip;
 
-        this->StartEqCons = ep;
-        this->StartIqCons = ip;
+        this->start_eq_cons_ = ep;
+        this->start_iq_cons_ = ip;
 
-        this->StartObj = this->nlp->objectives_.size();
-        this->StartEq = this->nlp->equality_constraints_.size();
-        this->StartIq = this->nlp->inequality_constraints_.size();
+        this->start_obj_ = this->nlp->objectives_.size();
+        this->start_eq_ = this->nlp->equality_constraints_.size();
+        this->start_iq_ = this->nlp->inequality_constraints_.size();
 
         this->num_obj_funs = 0;
         this->num_eq_funs = 0;
@@ -199,31 +201,31 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
 
     int get_xtu_var_loc(int vloc, int State) const {
         int v = 0;
-        if (this->BlockedControls) {
+        if (this->blocked_controls_) {
             if (vloc < xt_vars()) {
-                v = this->ODEFirstStateLocs[vloc] + State * this->xt_vars();
+                v = this->ode_first_state_locs_[vloc] + State * this->xt_vars();
             } else {
-                int unum = State / (this->DefectCardinalStates - 1);
+                int unum = State / (this->defect_cardinal_states_ - 1);
                 if (unum > (this->num_defects - 1))
                     unum = this->num_defects - 1;
-                v = this->ODEFirstStateLocs[vloc] + unum * this->u_vars();
+                v = this->ode_first_state_locs_[vloc] + unum * this->u_vars();
             }
         } else {
-            v = this->ODEFirstStateLocs[vloc] + State * this->xtu_vars();
+            v = this->ode_first_state_locs_[vloc] + State * this->xtu_vars();
         }
         return v;
     }
 
     int get_xtu_var_loc(int vloc, int State, int Defect) const {
         int v = 0;
-        if (this->BlockedControls) {
+        if (this->blocked_controls_) {
             if (vloc < xt_vars()) {
-                v = this->ODEFirstStateLocs[vloc] + State * this->xt_vars();
+                v = this->ode_first_state_locs_[vloc] + State * this->xt_vars();
             } else {
-                v = this->ODEFirstStateLocs[vloc] + Defect * this->u_vars();
+                v = this->ode_first_state_locs_[vloc] + Defect * this->u_vars();
             }
         } else {
-            v = this->ODEFirstStateLocs[vloc] + State * this->xtu_vars();
+            v = this->ode_first_state_locs_[vloc] + State * this->xtu_vars();
         }
         return v;
     }
