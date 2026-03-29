@@ -55,7 +55,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
 
         bind::ODEPhaseBuildImpl<DODE>(phase);
         phase.def_rw("integrator", &ODEPhase<DODE>::integrator);
-        phase.def_rw("enable_hessian_sparsity", &ODEPhase<DODE>::EnableHessianSparsity);
+        phase.def_rw("enable_hessian_sparsity", &ODEPhase<DODE>::enable_hessian_sparsity_);
         phase.def_rw("old_shooting_defect", &ODEPhase<DODE>::OldShootingDefect);
 
         phase.def("get_input_scale", &ODEPhase<DODE>::get_input_scale);

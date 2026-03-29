@@ -9,10 +9,10 @@
 
 #pragma once
 
-#include "tycho/detail/vf/type_erasure/generic_function.h"
-#include "tycho/detail/optimal_control/phase/ode.h"
-#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/builder/var_registry.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/optimal_control/phase/ode.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <optional>
 #include <string>
 #include <utility>
@@ -135,8 +135,9 @@ class RuntimeODE {
                             func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
         }
         if (func_.output_rows() != xvars_) {
-            throw std::invalid_argument(fmt::format(
-                "RuntimeODE: function output size {} does not match XV={}", func_.output_rows(), xvars_));
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE: function output size {} does not match XV={}",
+                            func_.output_rows(), xvars_));
         }
     }
 

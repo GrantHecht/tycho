@@ -27,8 +27,8 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/utils/timer.h"
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_utils.h"
@@ -187,7 +187,8 @@ struct Jet {
             std::vector<std::future<tycho::ConvergenceFlags>> results;
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
-                results.push_back(tycho::utils::thread_pool().submit_task([&Job, i] { return Job(i); }));
+                results.push_back(
+                    tycho::utils::thread_pool().submit_task([&Job, i] { return Job(i); }));
             // track() mutates local counters — must be called sequentially.
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&Job, etc.).

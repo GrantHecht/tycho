@@ -32,7 +32,7 @@ TEST(ODESizeTest, AddIdxDuplicateThrows) {
 TEST(ODESizeTest, PidxsUsesCorrectSize) {
     // Regression test: Pidxs() previously used UVars() instead of PVars()
     ODESize<3, 2, 4> ode;
-    auto pidxs = ode.Pidxs();
+    auto pidxs = ode.p_idxs();
     EXPECT_EQ(pidxs.size(), 4);  // PVars=4, not UVars=2
 
     // Verify actual index values: iota starting at XtUVars()=6
@@ -65,7 +65,7 @@ TEST(ODESizeTest, PidxsWithSubindexing) {
     ODESize<3, 2, 4> ode;
     Eigen::VectorXi sub(2);
     sub << 0, 3;
-    auto result = ode.Pidxs(sub);
+    auto result = ode.p_idxs(sub);
     EXPECT_EQ(result.size(), 2);
     EXPECT_EQ(result[0], 6);   // XtUVars() + 0
     EXPECT_EQ(result[1], 9);   // XtUVars() + 3

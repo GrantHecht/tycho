@@ -24,8 +24,8 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
     // Define ODE via ODEBuilder with named variables
     auto ode = ODEBuilder(3, 1)
                    .define([&](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -79,8 +79,8 @@ TEST_F(BuilderAPITest, OCPWrapperAddPhaseAndLink) {
     auto make_ode = [g]() {
         return ODEBuilder(3, 1)
             .define([g](auto &args) {
-                auto v = args.XVar(2);
-                auto theta = args.UVar(0);
+                auto v = args.x_var(2);
+                auto theta = args.u_var(0);
                 return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
             })
             .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -120,8 +120,8 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
 
     auto ode = ODEBuilder(3, 1)
                    .define([&](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -172,8 +172,8 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
     // Phase 1: has registry
     auto ode1 = ODEBuilder(3, 1)
         .define([g](auto &args) {
-            auto v = args.XVar(2);
-            auto theta = args.UVar(0);
+            auto v = args.x_var(2);
+            auto theta = args.u_var(0);
             return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -182,8 +182,8 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
     // Phase 2: no registry
     auto ode2 = ODEBuilder(3, 1)
         .define([g](auto &args) {
-            auto v = args.XVar(2);
-            auto theta = args.UVar(0);
+            auto v = args.x_var(2);
+            auto theta = args.u_var(0);
             return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
         })
         .build();
@@ -214,8 +214,8 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
     // Phase 1: x=0, y=1, v=2
     auto ode1 = ODEBuilder(3, 1)
         .define([g](auto &args) {
-            auto v = args.XVar(2);
-            auto theta = args.UVar(0);
+            auto v = args.x_var(2);
+            auto theta = args.u_var(0);
             return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -224,8 +224,8 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
     // Phase 2: same names but x=1, y=0 (swapped)
     auto ode2 = ODEBuilder(3, 1)
         .define([g](auto &args) {
-            auto v = args.XVar(2);
-            auto theta = args.UVar(0);
+            auto v = args.x_var(2);
+            auto theta = args.u_var(0);
             return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
         })
         .var_names({{"x", 1}, {"y", 0}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -259,8 +259,8 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
     auto make_ode = [g]() {
         return ODEBuilder(3, 1)
             .define([g](auto &args) {
-                auto v = args.XVar(2);
-                auto theta = args.UVar(0);
+                auto v = args.x_var(2);
+                auto theta = args.u_var(0);
                 return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
             })
             .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})

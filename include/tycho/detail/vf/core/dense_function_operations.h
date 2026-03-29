@@ -32,16 +32,16 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 namespace tycho::vf {
 
@@ -104,9 +104,9 @@ void right_jacobian_product_constant_impl(const INPUT_DOMAIN &sub_domains,
         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(), [&](auto i) {
             constexpr int Start1 = INPUT_DOMAIN::sub_domains[i.value][0];
             constexpr int Size1 = INPUT_DOMAIN::sub_domains[i.value][1];
-            right_jacobian_product_impl(
-                target_ref.template middleCols<Size1>(Start1, Size1), left,
-                right_ref.template middleCols<Size1>(Start1, Size1), assign, aliased);
+            right_jacobian_product_impl(target_ref.template middleCols<Size1>(Start1, Size1), left,
+                                        right_ref.template middleCols<Size1>(Start1, Size1), assign,
+                                        aliased);
         });
 }
 
@@ -129,7 +129,7 @@ void right_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
             int size = sub_domains(1, i);
 
             right_jacobian_product_impl(target_ref.middleCols(start, size), left,
-                                               right_ref.middleCols(start, size), assign, aliased);
+                                        right_ref.middleCols(start, size), assign, aliased);
         }
     }
 }
@@ -234,8 +234,7 @@ void symetric_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
             int size = sub_domains(1, i);
 
             symetric_jacobian_product_impl(target_ref.block(start, start, size, size), left,
-                                                  right_ref.middleCols(start, size), assign,
-                                                  aliased);
+                                           right_ref.middleCols(start, size), assign, aliased);
 
             /*for (int j = i+1; j < sds; j++) {
                 int start2 = sub_domains(0, j);
@@ -287,8 +286,8 @@ void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
             int start = sub_domains(0, i);
             int size = sub_domains(1, i);
 
-            accumulate_impl(target_ref.middleCols(start, size),
-                                   right_ref.middleCols(start, size), assign);
+            accumulate_impl(target_ref.middleCols(start, size), right_ref.middleCols(start, size),
+                            assign);
         }
     }
 }
@@ -309,7 +308,7 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_doma
         int Start1 = sub_domains(0, 0);
         int Size1 = sub_domains(1, 0);
         accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
-                               right_ref.block(Start1, Start1, Size1, Size1), assign);
+                        right_ref.block(Start1, Start1, Size1, Size1), assign);
     } else if (sds == 2) {
 
         int Start1 = sub_domains(0, 0);
@@ -318,16 +317,16 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_doma
         int Size2 = sub_domains(1, 1);
 
         accumulate_impl(target_ref.block(Start1, Start1, Size1, Size1),
-                               right_ref.block(Start1, Start1, Size1, Size1), assign);
+                        right_ref.block(Start1, Start1, Size1, Size1), assign);
 
         accumulate_impl(target_ref.block(Start2, Start1, Size2, Size1),
-                               right_ref.block(Start2, Start1, Size2, Size1), assign);
+                        right_ref.block(Start2, Start1, Size2, Size1), assign);
 
         accumulate_impl(target_ref.block(Start1, Start2, Size1, Size2),
-                               right_ref.block(Start1, Start2, Size1, Size2), assign);
+                        right_ref.block(Start1, Start2, Size1, Size2), assign);
 
         accumulate_impl(target_ref.block(Start2, Start2, Size2, Size2),
-                               right_ref.block(Start2, Start2, Size2, Size2), assign);
+                        right_ref.block(Start2, Start2, Size2, Size2), assign);
 
     } else {
 
@@ -335,8 +334,8 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_doma
             int start = sub_domains(0, i);
             int size = sub_domains(1, i);
 
-            accumulate_impl(target_ref.middleCols(start, size),
-                                   right_ref.middleCols(start, size), assign);
+            accumulate_impl(target_ref.middleCols(start, size), right_ref.middleCols(start, size),
+                            assign);
         }
     }
 }
@@ -357,7 +356,7 @@ void accumulate_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
             int start = sub_domains(0, i);
             int size = sub_domains(1, i);
             accumulate_impl(target_ref.segment(start, size), right_ref.segment(start, size),
-                                   assign);
+                            assign);
         }
     }
 }

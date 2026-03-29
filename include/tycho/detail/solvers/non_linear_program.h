@@ -31,10 +31,10 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/thread_pool.h"
 
 namespace tycho::solvers {
 

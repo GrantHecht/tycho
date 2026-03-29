@@ -36,16 +36,18 @@ template <int _XV, int _UV, int _PV> struct TychoBind<ODEArguments<_XV, _UV, _PV
 
         bind::DenseBaseBuild<Derived>(obj);
 
-        obj.def("x_vec", [](const Derived &a) { return a.segment(0, a.XVars()); });
-        obj.def("x_var", [](const Derived &a, int i) { return a.segment(0, a.XVars()).coeff(i); });
-        obj.def("xt_vec", [](const Derived &a) { return a.segment(0, a.XtVars()); });
-        obj.def("t_var", [](const Derived &a) { return a.coeff(a.TVar()); });
-        obj.def("u_vec", [](const Derived &a) { return a.segment(a.XtVars(), a.UVars()); });
-        obj.def("u_var",
-                [](const Derived &a, int i) { return a.segment(a.XtVars(), a.UVars()).coeff(i); });
-        obj.def("p_vec", [](const Derived &a) { return a.segment(a.XtUVars(), a.PVars()); });
-        obj.def("p_var",
-                [](const Derived &a, int i) { return a.segment(a.XtUVars(), a.PVars()).coeff(i); });
+        obj.def("x_vec", [](const Derived &a) { return a.segment(0, a.x_vars()); });
+        obj.def("x_var", [](const Derived &a, int i) { return a.segment(0, a.x_vars()).coeff(i); });
+        obj.def("xt_vec", [](const Derived &a) { return a.segment(0, a.xt_vars()); });
+        obj.def("t_var", [](const Derived &a) { return a.coeff(a.t_var()); });
+        obj.def("u_vec", [](const Derived &a) { return a.segment(a.xt_vars(), a.u_vars()); });
+        obj.def("u_var", [](const Derived &a, int i) {
+            return a.segment(a.xt_vars(), a.u_vars()).coeff(i);
+        });
+        obj.def("p_vec", [](const Derived &a) { return a.segment(a.xtu_vars(), a.p_vars()); });
+        obj.def("p_var", [](const Derived &a, int i) {
+            return a.segment(a.xtu_vars(), a.p_vars()).coeff(i);
+        });
     }
 };
 

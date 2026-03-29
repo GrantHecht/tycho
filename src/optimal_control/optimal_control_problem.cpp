@@ -96,7 +96,7 @@ std::vector<Eigen::VectorXd> tycho::oc::OptimalControlProblem::get_test_inputs(
 
         VectorXd linput(LVars[j].size());
         for (int i = 0; i < LVars[j].size(); i++) {
-            linput[i] = this->ActiveLinkParams[LVars[j][i]];
+            linput[i] = this->active_link_params_[LVars[j][i]];
             size++;
         }
         inputs.push_back(linput);
@@ -128,12 +128,12 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
         for (int i = 0; i < this->phases.size(); i++) {
             this->phases[i]->NumPartitions = this->NumPartitions;
             this->phases[i]->init_indexing();
-            this->num_phase_vars[i] = this->phases[i]->indexer.num_phase_vars;
+            this->num_phase_vars[i] = this->phases[i]->indexer_.num_phase_vars;
         }
 
         this->phases[0]->transcribe_phase(0, 0, 0, this->nlp, 0);
-        this->num_phase_eq_cons[0] = this->phases[0]->indexer.num_phase_eq_cons;
-        this->num_phase_iq_cons[0] = this->phases[0]->indexer.num_phase_iq_cons;
+        this->num_phase_eq_cons[0] = this->phases[0]->indexer_.num_phase_eq_cons;
+        this->num_phase_iq_cons[0] = this->phases[0]->indexer_.num_phase_iq_cons;
 
         for (int i = 1; i < this->phases.size(); i++) {
             int Vstart = this->num_phase_vars.segment(0, i).sum();
@@ -141,8 +141,8 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
             int Istart = this->num_phase_iq_cons.segment(0, i).sum();
 
             this->phases[i]->transcribe_phase(Vstart, Estart, Istart, this->nlp, i);
-            this->num_phase_eq_cons[i] = this->phases[i]->indexer.num_phase_eq_cons;
-            this->num_phase_iq_cons[i] = this->phases[i]->indexer.num_phase_iq_cons;
+            this->num_phase_eq_cons[i] = this->phases[i]->indexer_.num_phase_eq_cons;
+            this->num_phase_iq_cons[i] = this->phases[i]->indexer_.num_phase_iq_cons;
         }
 
     } else {
@@ -169,22 +169,22 @@ void tycho::oc::OptimalControlProblem::check_functions() {
     }
 
     auto CheckFunc = [&](std::string type, auto &func) {
-        for (int i = 0; i < func.PhasesTolink.size(); i++) {
-            for (int j = 0; j < func.PhasesTolink[i].size(); j++) {
-                int pnum = func.PhasesTolink[i][j];
+        for (int i = 0; i < func.phases_to_link_.size(); i++) {
+            for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
+                int pnum = func.phases_to_link_[i][j];
                 if (pnum >= this->phases.size() || pnum < 0) {
                     fmt::print(fmt::fg(fmt::color::red),
                                "Transcription Error!!!\n"
                                "{0:} references non-existant phase:{1:}\n"
                                " Function Storage Index:{2:}\n"
                                " Function Name:{3:}\n",
-                               type, pnum, func.StorageIndex, func.Func.name());
+                               type, pnum, func.storage_index_, func.func_.name());
                     throw std::invalid_argument("");
                 }
 
-                if (func.XtUVars[j].size() > 0) {
-                    if (func.XtUVars[j].maxCoeff() >= this->Phase(pnum)->XtUPVars() ||
-                        func.XtUVars[j].minCoeff() < 0) {
+                if (func.xtu_vars_[j].size() > 0) {
+                    if (func.xtu_vars_[j].maxCoeff() >= this->Phase(pnum)->xtu_p_vars() ||
+                        func.xtu_vars_[j].minCoeff() < 0) {
 
                         fmt::print(
                             fmt::fg(fmt::color::red),
@@ -192,13 +192,13 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                             "{0:} function state variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.StorageIndex, func.Func.name());
+                            type, pnum, func.storage_index_, func.func_.name());
                         throw std::invalid_argument("");
                     }
                 }
-                if (func.OPVars[j].size() > 0) {
-                    if (func.OPVars[j].maxCoeff() >= this->Phase(pnum)->PVars() ||
-                        func.OPVars[j].minCoeff() < 0) {
+                if (func.op_vars_[j].size() > 0) {
+                    if (func.op_vars_[j].maxCoeff() >= this->Phase(pnum)->p_vars() ||
+                        func.op_vars_[j].minCoeff() < 0) {
 
                         fmt::print(
                             fmt::fg(fmt::color::red),
@@ -206,38 +206,38 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                             "{0:} function ODE Param variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.StorageIndex, func.Func.name());
+                            type, pnum, func.storage_index_, func.func_.name());
                         throw std::invalid_argument("");
                     }
                 }
-                if (func.SPVars[j].size() > 0) {
-                    if (func.SPVars[j].maxCoeff() >= this->Phase(pnum)->num_stat_params ||
-                        func.SPVars[j].minCoeff() < 0) {
+                if (func.sp_vars_[j].size() > 0) {
+                    if (func.sp_vars_[j].maxCoeff() >= this->Phase(pnum)->num_stat_params_ ||
+                        func.sp_vars_[j].minCoeff() < 0) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
                                    "{0:} function Static Param variable indices out of bounds in "
                                    "phase:{1:}\n"
                                    " Function Storage Index:{2:}\n"
                                    " Function Name:{3:}\n",
-                                   type, pnum, func.StorageIndex, func.Func.name());
+                                   type, pnum, func.storage_index_, func.func_.name());
                         throw std::invalid_argument("");
                     }
                 }
             }
         }
 
-        for (int i = 0; i < func.LinkParams.size(); i++) {
-            if (func.LinkParams[i].size() > 0) {
+        for (int i = 0; i < func.link_params_.size(); i++) {
+            if (func.link_params_[i].size() > 0) {
 
-                if (func.LinkParams[i].maxCoeff() >= this->num_link_params ||
-                    func.LinkParams[i].minCoeff() < 0) {
+                if (func.link_params_[i].maxCoeff() >= this->num_link_params ||
+                    func.link_params_[i].minCoeff() < 0) {
 
                     fmt::print(fmt::fg(fmt::color::red),
                                "Transcription Error!!!\n"
                                "{0:} function link parameter variable indices out of bounds\n"
                                " Function Storage Index:{1:}\n"
                                " Function Name:{2:}\n",
-                               type, func.StorageIndex, func.Func.name());
+                               type, func.storage_index_, func.func_.name());
                     throw std::invalid_argument("");
                 }
             }
@@ -274,64 +274,64 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
     this->num_iq_funs = 0;
     this->num_obj_funs = 0;
     for (auto &[key, Eq] : this->LinkEqualities) {
-        auto VC = this->make_link_Vindex_Cindex(Eq.LinkFlag, Eq.PhaseRegFlags, Eq.PhasesTolink,
-                                                Eq.XtUVars, Eq.OPVars, Eq.SPVars, Eq.LinkParams,
-                                                Eq.Func.output_rows(), NextEq);
+        auto VC = this->make_link_Vindex_Cindex(
+            Eq.link_flag_, Eq.phase_reg_flags_, Eq.phases_to_link_, Eq.xtu_vars_, Eq.op_vars_,
+            Eq.sp_vars_, Eq.link_params_, Eq.func_.output_rows(), NextEq);
 
-        auto Func = Eq.Func;
+        auto Func = Eq.func_;
 
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             VectorXd input_scales =
-                this->get_input_scale(Eq.LinkFlag, Eq.PhaseRegFlags, Eq.PhasesTolink, Eq.XtUVars,
-                                      Eq.OPVars, Eq.SPVars, Eq.LinkParams);
+                this->get_input_scale(Eq.link_flag_, Eq.phase_reg_flags_, Eq.phases_to_link_,
+                                      Eq.xtu_vars_, Eq.op_vars_, Eq.sp_vars_, Eq.link_params_);
             VectorXd output_scales(Func.output_rows());
-            output_scales = Eq.OutputScales;
-            Func = IOScaled<decltype(Func)>(Eq.Func, input_scales, output_scales);
+            output_scales = Eq.output_scales_;
+            Func = IOScaled<decltype(Func)>(Eq.func_, input_scales, output_scales);
         }
 
         this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Eq.GlobalIndex = this->nlp->EqualityConstraints.size() - 1;
+        Eq.global_index_ = this->nlp->EqualityConstraints.size() - 1;
         this->num_eq_funs++;
     }
     for (auto &[key, Iq] : this->LinkInequalities) {
-        auto VC = this->make_link_Vindex_Cindex(Iq.LinkFlag, Iq.PhaseRegFlags, Iq.PhasesTolink,
-                                                Iq.XtUVars, Iq.OPVars, Iq.SPVars, Iq.LinkParams,
-                                                Iq.Func.output_rows(), NextIq);
+        auto VC = this->make_link_Vindex_Cindex(
+            Iq.link_flag_, Iq.phase_reg_flags_, Iq.phases_to_link_, Iq.xtu_vars_, Iq.op_vars_,
+            Iq.sp_vars_, Iq.link_params_, Iq.func_.output_rows(), NextIq);
 
-        auto Func = Iq.Func;
+        auto Func = Iq.func_;
 
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             VectorXd input_scales =
-                this->get_input_scale(Iq.LinkFlag, Iq.PhaseRegFlags, Iq.PhasesTolink, Iq.XtUVars,
-                                      Iq.OPVars, Iq.SPVars, Iq.LinkParams);
+                this->get_input_scale(Iq.link_flag_, Iq.phase_reg_flags_, Iq.phases_to_link_,
+                                      Iq.xtu_vars_, Iq.op_vars_, Iq.sp_vars_, Iq.link_params_);
             VectorXd output_scales(Func.output_rows());
-            output_scales = Iq.OutputScales;
-            Func = IOScaled<decltype(Func)>(Iq.Func, input_scales, output_scales);
+            output_scales = Iq.output_scales_;
+            Func = IOScaled<decltype(Func)>(Iq.func_, input_scales, output_scales);
         }
 
         this->nlp->InequalityConstraints.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Iq.GlobalIndex = this->nlp->InequalityConstraints.size() - 1;
+        Iq.global_index_ = this->nlp->InequalityConstraints.size() - 1;
         this->num_iq_funs++;
     }
     for (auto &[key, Ob] : this->LinkObjectives) {
         int dummy = 0;
-        auto VC = this->make_link_Vindex_Cindex(Ob.LinkFlag, Ob.PhaseRegFlags, Ob.PhasesTolink,
-                                                Ob.XtUVars, Ob.OPVars, Ob.SPVars, Ob.LinkParams,
-                                                Ob.Func.output_rows(), dummy);
+        auto VC = this->make_link_Vindex_Cindex(
+            Ob.link_flag_, Ob.phase_reg_flags_, Ob.phases_to_link_, Ob.xtu_vars_, Ob.op_vars_,
+            Ob.sp_vars_, Ob.link_params_, Ob.func_.output_rows(), dummy);
 
-        auto Func = Ob.Func;
+        auto Func = Ob.func_;
 
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             VectorXd input_scales =
-                this->get_input_scale(Ob.LinkFlag, Ob.PhaseRegFlags, Ob.PhasesTolink, Ob.XtUVars,
-                                      Ob.OPVars, Ob.SPVars, Ob.LinkParams);
+                this->get_input_scale(Ob.link_flag_, Ob.phase_reg_flags_, Ob.phases_to_link_,
+                                      Ob.xtu_vars_, Ob.op_vars_, Ob.sp_vars_, Ob.link_params_);
             VectorXd output_scales(Func.output_rows());
-            output_scales = Ob.OutputScales;
-            Func = IOScaled<decltype(Func)>(Ob.Func, input_scales, output_scales);
+            output_scales = Ob.output_scales_;
+            Func = IOScaled<decltype(Func)>(Ob.func_, input_scales, output_scales);
         }
 
         this->nlp->Objectives.emplace_back(ObjectiveFunction(Func, VC[0]));
-        Ob.GlobalIndex = this->nlp->Objectives.size() - 1;
+        Ob.global_index_ = this->nlp->Objectives.size() - 1;
 
         this->num_obj_funs++;
     }
@@ -347,16 +347,16 @@ void tycho::oc::OptimalControlProblem::calc_auto_scales() {
 
     auto calc_impl = [&](auto &funcmap) {
         for (auto &[key, func] : funcmap) {
-            if (func.ScaleMode == ScaleModes::AUTO) {
-                VectorXd input_scales =
-                    this->get_input_scale(func.LinkFlag, func.PhaseRegFlags, func.PhasesTolink,
-                                          func.XtUVars, func.OPVars, func.SPVars, func.LinkParams);
-                std::vector<VectorXd> test_inputs =
-                    this->get_test_inputs(func.LinkFlag, func.PhaseRegFlags, func.PhasesTolink,
-                                          func.XtUVars, func.OPVars, func.SPVars, func.LinkParams);
+            if (func.scale_mode_ == ScaleModes::AUTO) {
+                VectorXd input_scales = this->get_input_scale(
+                    func.link_flag_, func.phase_reg_flags_, func.phases_to_link_, func.xtu_vars_,
+                    func.op_vars_, func.sp_vars_, func.link_params_);
+                std::vector<VectorXd> test_inputs = this->get_test_inputs(
+                    func.link_flag_, func.phase_reg_flags_, func.phases_to_link_, func.xtu_vars_,
+                    func.op_vars_, func.sp_vars_, func.link_params_);
                 VectorXd output_scales =
-                    calc_jacobian_row_scales(func.Func, input_scales, test_inputs);
-                func.OutputScales = output_scales;
+                    calc_jacobian_row_scales(func.func_, input_scales, test_inputs);
+                func.output_scales_ = output_scales;
             } else {
             }
         }
@@ -370,8 +370,8 @@ void tycho::oc::OptimalControlProblem::calc_auto_scales() {
 std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
     std::vector<double> scales;
     for (auto &[key, obj] : this->LinkObjectives) {
-        if (obj.ScaleMode == ScaleModes::AUTO) {
-            scales.push_back(obj.OutputScales[0]);
+        if (obj.scale_mode_ == ScaleModes::AUTO) {
+            scales.push_back(obj.output_scales_[0]);
         }
     }
     for (auto phase : this->phases) {
@@ -386,8 +386,8 @@ std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
 
 void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
     for (auto &[key, obj] : this->LinkObjectives) {
-        if (obj.ScaleMode == ScaleModes::AUTO) {
-            obj.OutputScales[0] = scale;
+        if (obj.scale_mode_ == ScaleModes::AUTO) {
+            obj.output_scales_[0] = scale;
         }
     }
     for (auto phase : this->phases) {
@@ -400,9 +400,9 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
 
     check_functions();
-    if (this->AutoScaling) {
+    if (this->auto_scaling_) {
         this->calc_auto_scales();
-        if (this->SyncObjectiveScales) {
+        if (this->sync_objective_scales_) {
             // Ensure that all objectives have same scale factor to preserve meaning of un-scaled
             // problem Common scale is mean of all separate scale factors
             auto objscales = this->get_objective_scales();
@@ -426,13 +426,13 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->optimizer->setNLP(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//
-    this->do_transcription = false;
+    this->do_transcription_ = false;
 }
 
 tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJobModes mode) {
 
     this->check_transcriptions();
-    if (this->do_transcription)
+    if (this->do_transcription_)
         this->transcribe();
     VectorXd Input = this->make_solver_input();
     VectorXd Output;
@@ -466,7 +466,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 }
 
 tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
-    if (this->PrintMeshInfo && this->AdaptiveMesh) {
+    if (this->print_mesh_info_ && this->adaptive_mesh_) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
         fmt::print(": ");
@@ -480,7 +480,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobMo
     PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
     JetJobModes nextmode = mode;
-    if (this->SolveOnlyFirst) {
+    if (this->solve_only_first_) {
         switch (mode) {
         case JetJobModes::SolveOptimize:
             nextmode = JetJobModes::Optimize;
@@ -493,37 +493,37 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobMo
         }
     }
 
-    if (this->AdaptiveMesh) {
+    if (this->adaptive_mesh_) {
 
-        if (flag >= this->MeshAbortFlag) {
-            if (this->PrintMeshInfo) {
+        if (flag >= this->mesh_abort_flag_) {
+            if (this->print_mesh_info_) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Mesh Iteration 0 Failed to Solve: Aborting\n");
             }
         } else {
             init_meshs();
-            for (int i = 0; i < this->MaxMeshIters; i++) {
-                if (check_meshs(this->PrintMeshInfo)) {
-                    if (this->PrintMeshInfo) {
+            for (int i = 0; i < this->max_mesh_iters_; i++) {
+                if (check_meshs(this->print_mesh_info_)) {
+                    if (this->print_mesh_info_) {
                         this->print_meshs(i);
                         fmt::print(fmt::fg(fmt::color::lime_green), "All Meshes Converged\n");
                     }
 
                     break;
-                } else if (i == this->MaxMeshIters - 1) {
-                    if (this->PrintMeshInfo) {
+                } else if (i == this->max_mesh_iters_ - 1) {
+                    if (this->print_mesh_info_) {
                         this->print_meshs(i);
                         fmt::print(fmt::fg(fmt::color::red), "All Meshes Not Converged\n");
                     }
                     break;
                 } else {
-                    update_meshs(this->PrintMeshInfo);
-                    if (this->PrintMeshInfo)
+                    update_meshs(this->print_mesh_info_);
+                    if (this->print_mesh_info_)
                         this->print_meshs(i);
                 }
                 flag = this->psipot_call_impl(nextmode);
-                if (flag >= this->MeshAbortFlag) {
-                    if (this->PrintMeshInfo) {
+                if (flag >= this->mesh_abort_flag_) {
+                    if (this->print_mesh_info_) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
                     }
@@ -533,7 +533,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobMo
         }
     }
 
-    if (this->PrintMeshInfo && this->AdaptiveMesh) {
+    if (this->print_mesh_info_ && this->adaptive_mesh_) {
 
         Runtimer.stop();
         double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
@@ -567,7 +567,7 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
     for (int i = 0; i < this->phases.size(); i++) {
         cout << "____________________________________________________________" << endl << endl;
         cout << "Phase: " << i << " Statistics" << endl << endl;
-        this->phases[i]->indexer.print_stats(showfuns);
+        this->phases[i]->indexer_.print_stats(showfuns);
         cout << "____________________________________________________________" << endl << endl;
     }
 
@@ -624,7 +624,7 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
             irows = 0;
 
             for (int j = 0; j < PhaseRegs.size(); j++) {
-                auto VinTemp = this->phases[PTL[i][j]]->indexer.make_Vindex_Cindex(
+                auto VinTemp = this->phases[PTL[i][j]]->indexer_.make_Vindex_Cindex(
                     PhaseRegs[j], xtv[j], opv[j], spv[j], 1)[0];
                 vtemps2[j] = VinTemp;
                 irows += VinTemp.rows();
@@ -685,7 +685,7 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
             int start = 0;
             for (int j = 0; j < PhaseRegs.size(); j++) {
 
-                auto VinTemp = this->phases[PTL[i][j]]->indexer.make_Vindex_Cindex(
+                auto VinTemp = this->phases[PTL[i][j]]->indexer_.make_Vindex_Cindex(
                     PhaseRegs[j], xtv[j], opv[j], spv[j], 1)[0];
                 Vindex.col(i).segment(start, VinTemp.rows()) = VinTemp;
                 start += VinTemp.rows();

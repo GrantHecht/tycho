@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "tycho/detail/vf/type_erasure/conditional.h"
 #include "tycho/detail/vf/common/constant.h"
-#include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/derivatives/detect_diagonal.h"
+#include "tycho/detail/vf/type_erasure/conditional.h"
 
 namespace tycho::vf {
 
@@ -125,50 +125,51 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         typedef typename Target::Scalar Scalar;
 
         auto Impl = [&](auto &diag) {
-            diag =
-                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
+            diag = right.derived()
+                       .template middleCols<OR>(this->seg_start, this->output_rows())
+                       .diagonal();
 
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() =
-                        left.derived().diagonal().cwiseProduct(diag);
+                    target.template middleCols<OR>(this->seg_start, this->output_rows())
+                        .diagonal() = left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
                         target.template middleCols<OR>(this->seg_start, this->output_rows()) =
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() =
-                            left.derived() * diag.asDiagonal();
+                        target.template middleCols<OR>(this->seg_start, this->output_rows())
+                            .noalias() = left.derived() * diag.asDiagonal();
                 }
 
             } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() +=
-                        left.derived().diagonal().cwiseProduct(diag);
+                    target.template middleCols<OR>(this->seg_start, this->output_rows())
+                        .diagonal() += left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
                         target.template middleCols<OR>(this->seg_start, this->output_rows()) +=
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() +=
-                            left.derived() * diag.asDiagonal();
+                        target.template middleCols<OR>(this->seg_start, this->output_rows())
+                            .noalias() += left.derived() * diag.asDiagonal();
                 }
 
             } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
 
                 if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
-                    target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() -=
-                        left.derived().diagonal().cwiseProduct(diag);
+                    target.template middleCols<OR>(this->seg_start, this->output_rows())
+                        .diagonal() -= left.derived().diagonal().cwiseProduct(diag);
                 } else {
                     if constexpr (Aliased)
                         target.template middleCols<OR>(this->seg_start, this->output_rows()) -=
                             left.derived() * diag.asDiagonal();
                     else
-                        target.template middleCols<OR>(this->seg_start, this->output_rows()).noalias() -=
-                            left.derived() * diag.asDiagonal();
+                        target.template middleCols<OR>(this->seg_start, this->output_rows())
+                            .noalias() -= left.derived() * diag.asDiagonal();
                 }
 
             } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
@@ -186,7 +187,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         };
 
         const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
@@ -198,8 +200,9 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         typedef typename Target::Scalar Scalar;
 
         Eigen::DiagonalMatrix<Scalar, OR> diag;
-        diag.diagonal() =
-            right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
+        diag.diagonal() = right.derived()
+                              .template middleCols<OR>(this->seg_start, this->output_rows())
+                              .diagonal();
         diag.diagonal() = diag.diagonal().cwiseProduct(diag.diagonal());
 
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
@@ -249,13 +252,19 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() =
-                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
+                right.derived()
+                    .template middleCols<OR>(this->seg_start, this->output_rows())
+                    .diagonal();
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
             target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() +=
-                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
+                right.derived()
+                    .template middleCols<OR>(this->seg_start, this->output_rows())
+                    .diagonal();
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
             target.template middleCols<OR>(this->seg_start, this->output_rows()).diagonal() -=
-                right.derived().template middleCols<OR>(this->seg_start, this->output_rows()).diagonal();
+                right.derived()
+                    .template middleCols<OR>(this->seg_start, this->output_rows())
+                    .diagonal();
         } else {
         }
     }

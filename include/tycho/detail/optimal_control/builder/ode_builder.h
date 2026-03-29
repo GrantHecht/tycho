@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include "tycho/detail/vf/type_erasure/generic_function.h"
-#include "tycho/detail/optimal_control/core/ode_arguments.h"
 #include "tycho/detail/optimal_control/builder/runtime_ode.h"
+#include "tycho/detail/optimal_control/core/ode_arguments.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -33,137 +33,134 @@ class ODEArgsProxy {
     ODEArgsProxy(int xv, int uv, int pv) : args_(xv, uv, pv) {}
 
     /// i-th state variable (0-based within X).
-    auto XVar(int i) const {
-        if (args_.XVars() == 0)
+    auto x_var(int i) const {
+        if (args_.x_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::XVar: no state variables declared (xvars=0)");
-        if (i < 0 || i >= args_.XVars())
-            throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::XVar: index {} out of range [0, {})", i, args_.XVars()));
-        return args_.segment(0, args_.XVars()).coeff(i);
+        if (i < 0 || i >= args_.x_vars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::XVar: index {} out of range [0, {})", i, args_.x_vars()));
+        return args_.segment(0, args_.x_vars()).coeff(i);
     }
 
     /// Full state vector segment.
-    auto XVec() const {
-        if (args_.XVars() == 0)
+    auto x_vec() const {
+        if (args_.x_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::XVec: no state variables declared (xvars=0)");
-        return args_.segment(0, args_.XVars());
+        return args_.segment(0, args_.x_vars());
     }
 
     /// Sub-segment of the state vector (0-based within X).
-    auto XVec(int start, int count) const {
+    auto x_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::XVec: count must be positive (got {})", count));
-        if (start < 0 || start + count > args_.XVars())
-            throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::XVec: range [{}, {}) out of X range [0, {})", start, start + count,
-                args_.XVars()));
+        if (start < 0 || start + count > args_.x_vars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::XVec: range [{}, {}) out of X range [0, {})", start,
+                            start + count, args_.x_vars()));
         return args_.segment(start, count);
     }
 
     /// Time variable.
-    auto TVar() const { return args_.coeff(args_.TVar()); }
+    auto t_var() const { return args_.coeff(args_.t_var()); }
 
     /// i-th control variable (0-based within U).
-    auto UVar(int i) const {
-        if (args_.UVars() == 0)
+    auto u_var(int i) const {
+        if (args_.u_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::UVar: no control variables declared (uvars=0)");
-        if (i < 0 || i >= args_.UVars())
-            throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::UVar: index {} out of range [0, {})", i, args_.UVars()));
-        return args_.segment(args_.XtVars(), args_.UVars()).coeff(i);
+        if (i < 0 || i >= args_.u_vars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::UVar: index {} out of range [0, {})", i, args_.u_vars()));
+        return args_.segment(args_.xt_vars(), args_.u_vars()).coeff(i);
     }
 
     /// Full control vector segment.
-    auto UVec() const {
-        if (args_.UVars() == 0)
+    auto u_vec() const {
+        if (args_.u_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::UVec: no control variables declared (uvars=0)");
-        return args_.segment(args_.XtVars(), args_.UVars());
+        return args_.segment(args_.xt_vars(), args_.u_vars());
     }
 
     /// Sub-segment of the control vector (0-based within U).
-    auto UVec(int start, int count) const {
+    auto u_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::UVec: count must be positive (got {})", count));
-        if (start < 0 || start + count > args_.UVars())
-            throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::UVec: range [{}, {}) out of U range [0, {})", start, start + count,
-                args_.UVars()));
-        return args_.segment(args_.XtVars() + start, count);
+        if (start < 0 || start + count > args_.u_vars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::UVec: range [{}, {}) out of U range [0, {})", start,
+                            start + count, args_.u_vars()));
+        return args_.segment(args_.xt_vars() + start, count);
     }
 
     /// i-th parameter variable (0-based within P).
-    auto PVar(int i) const {
-        if (args_.PVars() == 0)
+    auto p_var(int i) const {
+        if (args_.p_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::PVar: no parameter variables declared (pvars=0)");
-        if (i < 0 || i >= args_.PVars())
-            throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::PVar: index {} out of range [0, {})", i, args_.PVars()));
-        return args_.segment(args_.XtUVars(), args_.PVars()).coeff(i);
+        if (i < 0 || i >= args_.p_vars())
+            throw std::invalid_argument(fmt::format(
+                "ODEArgsProxy::PVar: index {} out of range [0, {})", i, args_.p_vars()));
+        return args_.segment(args_.xtu_vars(), args_.p_vars()).coeff(i);
     }
 
     /// Full parameter vector segment.
-    auto PVec() const {
-        if (args_.PVars() == 0)
+    auto p_vec() const {
+        if (args_.p_vars() == 0)
             throw std::invalid_argument(
                 "ODEArgsProxy::PVec: no parameter variables declared (pvars=0)");
-        return args_.segment(args_.XtUVars(), args_.PVars());
+        return args_.segment(args_.xtu_vars(), args_.p_vars());
     }
 
     /// Sub-segment of the parameter vector (0-based within P).
-    auto PVec(int start, int count) const {
+    auto p_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::PVec: count must be positive (got {})", count));
-        if (start < 0 || start + count > args_.PVars())
-            throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::PVec: range [{}, {}) out of P range [0, {})", start, start + count,
-                args_.PVars()));
-        return args_.segment(args_.XtUVars() + start, count);
+        if (start < 0 || start + count > args_.p_vars())
+            throw std::invalid_argument(
+                fmt::format("ODEArgsProxy::PVec: range [{}, {}) out of P range [0, {})", start,
+                            start + count, args_.p_vars()));
+        return args_.segment(args_.xtu_vars() + start, count);
     }
 
     /// Sub-segment of the state vector with compile-time size (0-based within X).
-    template <int SZ>
-    auto XVec(int start = 0) const {
+    template <int SZ> auto x_vec(int start = 0) const {
         static_assert(SZ > 0, "ODEArgsProxy::XVec<SZ>: SZ must be positive");
-        if (start < 0 || start + SZ > args_.XVars())
+        if (start < 0 || start + SZ > args_.x_vars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::XVec<{}>: range [{}, {}) out of X range [0, {})", SZ,
-                            start, start + SZ, args_.XVars()));
+                            start, start + SZ, args_.x_vars()));
         return args_.segment<SZ>(start);
     }
 
     /// Sub-segment of the control vector with compile-time size (0-based within U).
-    template <int SZ>
-    auto UVec(int start = 0) const {
+    template <int SZ> auto u_vec(int start = 0) const {
         static_assert(SZ > 0, "ODEArgsProxy::UVec<SZ>: SZ must be positive");
-        if (start < 0 || start + SZ > args_.UVars())
+        if (start < 0 || start + SZ > args_.u_vars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::UVec<{}>: range [{}, {}) out of U range [0, {})", SZ,
-                            start, start + SZ, args_.UVars()));
-        return args_.segment<SZ>(args_.XtVars() + start);
+                            start, start + SZ, args_.u_vars()));
+        return args_.segment<SZ>(args_.xt_vars() + start);
     }
 
     /// Sub-segment of the parameter vector with compile-time size (0-based within P).
-    template <int SZ>
-    auto PVec(int start = 0) const {
+    template <int SZ> auto p_vec(int start = 0) const {
         static_assert(SZ > 0, "ODEArgsProxy::PVec<SZ>: SZ must be positive");
-        if (start < 0 || start + SZ > args_.PVars())
+        if (start < 0 || start + SZ > args_.p_vars())
             throw std::invalid_argument(
                 fmt::format("ODEArgsProxy::PVec<{}>: range [{}, {}) out of P range [0, {})", SZ,
-                            start, start + SZ, args_.PVars()));
-        return args_.segment<SZ>(args_.XtUVars() + start);
+                            start, start + SZ, args_.p_vars()));
+        return args_.segment<SZ>(args_.xtu_vars() + start);
     }
 
-    int xvars() const { return args_.XVars(); }
-    int uvars() const { return args_.UVars(); }
-    int pvars() const { return args_.PVars(); }
+    int xvars() const { return args_.x_vars(); }
+    int uvars() const { return args_.u_vars(); }
+    int pvars() const { return args_.p_vars(); }
 
   private:
     ODEArguments<> args_;
@@ -257,9 +254,9 @@ class ODEBuilder {
             throw std::invalid_argument(
                 fmt::format("ODEBuilder::var_group: count must be positive (got {})", count));
         if (start + count > xtup)
-            throw std::invalid_argument(fmt::format(
-                "ODEBuilder::var_group: range [{}, {}) exceeds XtUP size {}", start,
-                start + count, xtup));
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder::var_group: range [{}, {}) exceeds XtUP size {}", start,
+                            start + count, xtup));
         pending_groups_.emplace_back(name, start, count);
         return *this;
     }
@@ -305,8 +302,9 @@ class ODEBuilder {
                             "(xv={}, uv={}, pv={})",
                             func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
         if (func_.output_rows() != xvars_)
-            throw std::invalid_argument(fmt::format(
-                "ODEBuilder: function output size {} does not match XV={}", func_.output_rows(), xvars_));
+            throw std::invalid_argument(
+                fmt::format("ODEBuilder: function output size {} does not match XV={}",
+                            func_.output_rows(), xvars_));
     }
 };
 

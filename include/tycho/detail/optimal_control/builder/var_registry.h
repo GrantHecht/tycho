@@ -76,8 +76,8 @@ class VarRegistry {
         check_name_not_empty(name, "add_group");
         check_not_registered(name);
         if (members.size() == 0) {
-            throw std::invalid_argument(
-                fmt::format("VarRegistry::add_group: member list for '{}' must not be empty", name));
+            throw std::invalid_argument(fmt::format(
+                "VarRegistry::add_group: member list for '{}' must not be empty", name));
         }
         int total = 0;
         for (const auto &m : members)

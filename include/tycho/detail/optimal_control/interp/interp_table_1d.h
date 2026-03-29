@@ -18,14 +18,14 @@
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
-using utils::SZ_SUM;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
+using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
+using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using vf::ThreadingFlags;
 
 struct InterpTable1D {
 
@@ -352,7 +352,8 @@ struct InterpFunction1D
             fx = v;
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -367,8 +368,9 @@ struct InterpFunction1D
             jx = dv_dt;
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
-                                           TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -390,9 +392,10 @@ struct InterpFunction1D
             adjhess(0, 0) = dv2_dt2.dot(adjvars);
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
-                                           TempSpec<Output<Scalar>>(this->output_rows(), 1),
-                                           TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
 };
 

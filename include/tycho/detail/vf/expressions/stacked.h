@@ -137,8 +137,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         this->func1.compute(x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()));
-        this->func2.compute(
-            x, fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()));
+        this->func2.compute(x, fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                               this->func2.output_rows()));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -147,11 +147,13 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        this->func1.compute_jacobian(x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
+        this->func1.compute_jacobian(x,
+                                     fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
                                      jx.template topRows<Func1::ORC>(this->func1.output_rows()));
 
         this->func2.compute_jacobian(
-            x, fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
+            x,
+            fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
             jx.template bottomRows<Func2::ORC>(this->func2.output_rows()));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -177,8 +179,10 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
                     this->func2.compute_jacobian_adjointgradient_adjointhessian(
                         x,
-                        fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
-                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), adjgrad, adjhess,
+                        fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                        this->func2.output_rows()),
+                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), adjgrad,
+                        adjhess,
                         adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
                                                              this->func2.output_rows()));
 
@@ -187,14 +191,16 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
                 } else {
                     this->func1.compute_jacobian_adjointgradient_adjointhessian(
                         x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
-                        jx.template topRows<Func1::ORC>(this->func1.output_rows()), adjgrad, adjhess,
+                        jx.template topRows<Func1::ORC>(this->func1.output_rows()), adjgrad,
+                        adjhess,
                         adjvars.template segment<Func1::ORC>(0, this->func1.output_rows()));
 
                     this->func2.compute_jacobian_adjointgradient_adjointhessian(
                         x,
-                        fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
-                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), func2_adjgrad,
-                        func2_adjhess,
+                        fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                        this->func2.output_rows()),
+                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()),
+                        func2_adjgrad, func2_adjhess,
                         adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
                                                              this->func2.output_rows()));
 
@@ -210,10 +216,13 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
                     adjvars.template segment<Func1::ORC>(0, this->func1.output_rows()));
 
                 this->func2.compute_jacobian_adjointgradient_adjointhessian(
-                    x, fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
+                    x,
+                    fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                    this->func2.output_rows()),
                     jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), func2_adjgrad,
                     func2_adjhess,
-                    adjvars.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()));
+                    adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                         this->func2.output_rows()));
 
                 this->func2.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
                 this->func2.accumulate_gradient(adjgrad, func2_adjgrad, PlusEqualsAssignment());
@@ -221,8 +230,9 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         };
 
         const int irows = this->func2.input_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Func2_gradient<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<Func2_hessian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Func2_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Func2_hessian<Scalar>>(irows, irows));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -258,8 +268,10 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
-        this->func1.scale_jacobian(target.template topRows<Func1::ORC>(this->func1.output_rows()), s);
-        this->func2.scale_jacobian(target.template bottomRows<Func2::ORC>(this->func2.output_rows()), s);
+        this->func1.scale_jacobian(target.template topRows<Func1::ORC>(this->func1.output_rows()),
+                                   s);
+        this->func2.scale_jacobian(
+            target.template bottomRows<Func2::ORC>(this->func2.output_rows()), s);
     }
 
     template <class Target, class JacType, class Assignment>
@@ -270,9 +282,9 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
         // typedef typename Target::Scalar Scalar;
 
-        this->func1.accumulate_jacobian(target.template topRows<Func1::ORC>(this->func1.output_rows()),
-                                        right_ref.template topRows<Func1::ORC>(this->func1.output_rows()),
-                                        assign);
+        this->func1.accumulate_jacobian(
+            target.template topRows<Func1::ORC>(this->func1.output_rows()),
+            right_ref.template topRows<Func1::ORC>(this->func1.output_rows()), assign);
         this->func2.accumulate_jacobian(
             target.template bottomRows<Func2::ORC>(this->func2.output_rows()),
             right_ref.template bottomRows<Func2::ORC>(this->func2.output_rows()), assign);
@@ -406,8 +418,9 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
         };
 
         const int irows = this->input_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Func_gradient<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<Func_hessian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Func_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Func_hessian<Scalar>>(irows, irows));
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

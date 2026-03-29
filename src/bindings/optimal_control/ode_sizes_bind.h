@@ -24,29 +24,29 @@ namespace tycho::bind {
 using namespace tycho::utils;
 
 template <int XV, int UV, int PV, class Derived, class Obj> void ODESizeBuild(Obj &obj) {
-    obj.def("x_vars", &Derived::XVars);
-    obj.def("u_vars", &Derived::UVars);
-    obj.def("p_vars", &Derived::PVars);
-    obj.def("t_var", &Derived::TVar);
+    obj.def("x_vars", &Derived::x_vars);
+    obj.def("u_vars", &Derived::u_vars);
+    obj.def("p_vars", &Derived::p_vars);
+    obj.def("t_var", &Derived::t_var);
 
-    obj.def("xt_vars", &Derived::XtVars);
-    obj.def("xtu_vars", &Derived::XtUVars);
-    obj.def("xtup_vars", &Derived::XtUPVars);
+    obj.def("xt_vars", &Derived::xt_vars);
+    obj.def("xtu_vars", &Derived::xtu_vars);
+    obj.def("xtup_vars", &Derived::xtu_p_vars);
 
-    obj.def("x_idxs", nb::overload_cast<>(&Derived::Xidxs, nb::const_));
-    obj.def("x_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xidxs, nb::const_));
+    obj.def("x_idxs", nb::overload_cast<>(&Derived::x_idxs, nb::const_));
+    obj.def("x_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::x_idxs, nb::const_));
 
-    obj.def("xt_idxs", nb::overload_cast<>(&Derived::Xtidxs, nb::const_));
-    obj.def("xt_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Xtidxs, nb::const_));
+    obj.def("xt_idxs", nb::overload_cast<>(&Derived::xt_idxs, nb::const_));
+    obj.def("xt_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::xt_idxs, nb::const_));
 
-    obj.def("xtu_idxs", nb::overload_cast<>(&Derived::XtUidxs, nb::const_));
-    obj.def("xtu_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::XtUidxs, nb::const_));
+    obj.def("xtu_idxs", nb::overload_cast<>(&Derived::xtu_idxs, nb::const_));
+    obj.def("xtu_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::xtu_idxs, nb::const_));
 
-    obj.def("u_idxs", nb::overload_cast<>(&Derived::Uidxs, nb::const_));
-    obj.def("u_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Uidxs, nb::const_));
+    obj.def("u_idxs", nb::overload_cast<>(&Derived::u_idxs, nb::const_));
+    obj.def("u_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::u_idxs, nb::const_));
 
-    obj.def("p_idxs", nb::overload_cast<>(&Derived::Pidxs, nb::const_));
-    obj.def("p_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::Pidxs, nb::const_));
+    obj.def("p_idxs", nb::overload_cast<>(&Derived::p_idxs, nb::const_));
+    obj.def("p_idxs", nb::overload_cast<const Eigen::VectorXi &>(&Derived::p_idxs, nb::const_));
 
     obj.def("add_idx",
             nb::overload_cast<const std::string &, const Eigen::VectorXi &>(&Derived::add_idx));

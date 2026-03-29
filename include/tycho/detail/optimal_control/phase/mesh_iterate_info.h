@@ -30,12 +30,12 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include <fmt/format.h>
 #include <fmt/color.h>
+#include <fmt/format.h>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/type_name.h"
 
 namespace tycho::oc {

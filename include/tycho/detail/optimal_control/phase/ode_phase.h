@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "tycho/detail/optimal_control/transcription/blocked_ode_wrapper.h"
 #include "tycho/detail/integrators/integrator.h"
-#include "tycho/detail/optimal_control/transcription/lgl_defects.h"
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
+#include "tycho/detail/optimal_control/transcription/blocked_ode_wrapper.h"
+#include "tycho/detail/optimal_control/transcription/lgl_defects.h"
 #include "tycho/detail/optimal_control/transcription/shooting_defects.h"
 #include "tycho/detail/optimal_control/transcription/trapezoidal_defects.h"
 #include <algorithm>
@@ -37,32 +37,32 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
-using utils::SZ_SUM;
+using integrators::Integrator;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::Arguments;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
-using vf::VectorExpression;
-using vf::VectorFunction;
-using vf::ThreadingFlags;
-using vf::Arguments;
 using vf::IOScaled;
 using vf::RowScaled;
-using integrators::Integrator;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 template <class DODE> struct ODEPhase : ODEPhaseBase {
     using VectorXi = Eigen::VectorXi;
@@ -88,16 +88,16 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     ScaledODE ode_scaled;
 
     Integrator<DODE> integrator;
-    bool EnableHessianSparsity = false;
+    bool enable_hessian_sparsity_ = false;
     bool OldShootingDefect = false;
 
     ODEPhase(const DODE &ode, TranscriptionModes Tmode)
-        : ODEPhaseBase(ode.XVars(), ode.UVars(), ode.PVars()) {
+        : ODEPhaseBase(ode.x_vars(), ode.u_vars(), ode.p_vars()) {
         this->ode = ode;
         this->integrator = Integrator<DODE>(ode, .01);
         this->set_idxs(this->ode.get_idxs());
         this->set_transcription_mode(Tmode);
-        this->set_units(Eigen::VectorXd::Ones(this->XtUPVars()));
+        this->set_units(Eigen::VectorXd::Ones(this->xtu_p_vars()));
     }
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef)
@@ -126,13 +126,13 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     void set_units(const Eigen::VectorXd &XtUPUnits_) {
 
-        if (XtUPUnits_.size() != this->XtUPVars()) {
+        if (XtUPUnits_.size() != this->xtu_p_vars()) {
             throw std::invalid_argument("Incorrect size for input units vector");
         }
 
-        this->XtUPUnits = XtUPUnits_;
-        VectorXd output_scales =
-            XtUPUnits.head(this->XVars()).cwiseInverse() * this->XtUPUnits[this->XVars()];
+        this->xtup_units_ = XtUPUnits_;
+        VectorXd output_scales = this->xtup_units_.head(this->x_vars()).cwiseInverse() *
+                                 this->xtup_units_[this->x_vars()];
         VectorFunctionalX odetemp;
 
         if constexpr (DODE::IsGenericODE) {
@@ -141,39 +141,39 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             odetemp = this->ode;
         }
 
-        auto tmp = IOScaled<VectorFunctionalX>(odetemp, this->XtUPUnits, output_scales);
+        auto tmp = IOScaled<VectorFunctionalX>(odetemp, this->xtup_units_, output_scales);
 
-        this->ode_scaled = ScaledODE(tmp, this->XVars(), this->UVars(), this->PVars());
+        this->ode_scaled = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
     }
 
     virtual Integrator<ScaledODE> make_scaled_reintegrator() const {
         Integrator<ScaledODE> Integ;
-        if (this->UVars() == 0 || this->ControlMode == ControlModes::BlockConstant) {
-            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize};
+        if (this->u_vars() == 0 || this->control_mode_ == ControlModes::BlockConstant) {
+            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_};
         } else {
             Eigen::VectorXi ulocs;
-            ulocs.setLinSpaced(this->UVars(), this->TVar() + 1, this->TVar() + this->UVars());
+            ulocs.setLinSpaced(this->u_vars(), this->t_var() + 1, this->t_var() + this->u_vars());
 
             Eigen::VectorXi varlocs(1);
-            varlocs[0] = this->TVar();
+            varlocs[0] = this->t_var();
 
-            double tscale = this->XtUPUnits[this->TVar()];
-            auto tabcon = InterpFunction<-1>(std::make_shared<LGLInterpTable>(this->Table), ulocs)
+            double tscale = this->xtup_units_[this->t_var()];
+            auto tabcon = InterpFunction<-1>(std::make_shared<LGLInterpTable>(this->table_), ulocs)
                               .eval(Arguments<1>(1) * tscale);
             VectorXd Uscales =
-                this->XtUPUnits.segment(this->TVar() + 1, this->UVars()).cwiseInverse();
+                this->xtup_units_.segment(this->t_var() + 1, this->u_vars()).cwiseInverse();
             auto ucon = RowScaled<decltype(tabcon)>(tabcon, Uscales);
-            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize, ucon,
+            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_, ucon,
                                           varlocs};
         }
 
-        Integ.Adaptive = this->integrator.Adaptive;
-        Integ.FastAdaptiveSTM = this->integrator.FastAdaptiveSTM;
-        Integ.AbsTols = this->integrator.AbsTols;
-        Integ.RelTols = this->integrator.RelTols;
-        Integ.MinStepSize = this->integrator.MinStepSize;
-        Integ.MaxStepSize = this->integrator.MaxStepSize;
-        Integ.enable_vectorization_ = this->EnableVectorization;
+        Integ.adaptive_ = this->integrator.adaptive_;
+        Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
+        Integ.abs_tols_ = this->integrator.abs_tols_;
+        Integ.rel_tols_ = this->integrator.rel_tols_;
+        Integ.min_step_size_ = this->integrator.min_step_size_;
+        Integ.max_step_size_ = this->integrator.max_step_size_;
+        Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
     }
@@ -181,20 +181,20 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     virtual Integrator<DODE> make_reintegrator() const {
         Integrator<DODE> Integ;
 
-        if (this->UVars() == 0 || this->ControlMode == ControlModes::BlockConstant) {
-            Integ = Integrator<DODE>{this->ode, this->integrator.DefStepSize};
+        if (this->u_vars() == 0 || this->control_mode_ == ControlModes::BlockConstant) {
+            Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_};
         } else {
-            Integ = Integrator<DODE>{this->ode, this->integrator.DefStepSize,
-                                     std::make_shared<LGLInterpTable>(this->Table)};
+            Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_,
+                                     std::make_shared<LGLInterpTable>(this->table_)};
         }
 
-        Integ.Adaptive = this->integrator.Adaptive;
-        Integ.FastAdaptiveSTM = this->integrator.FastAdaptiveSTM;
-        Integ.AbsTols = this->integrator.AbsTols;
-        Integ.RelTols = this->integrator.RelTols;
-        Integ.MinStepSize = this->integrator.MinStepSize;
-        Integ.MaxStepSize = this->integrator.MaxStepSize;
-        Integ.enable_vectorization_ = this->EnableVectorization;
+        Integ.adaptive_ = this->integrator.adaptive_;
+        Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
+        Integ.abs_tols_ = this->integrator.abs_tols_;
+        Integ.rel_tols_ = this->integrator.rel_tols_;
+        Integ.min_step_size_ = this->integrator.min_step_size_;
+        Integ.max_step_size_ = this->integrator.max_step_size_;
+        Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
     }
@@ -202,7 +202,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     virtual void set_transcription_mode(TranscriptionModes m) {
         this->reset_transcription();
 
-        this->TranscriptionMode = m;
+        this->transcription_mode_ = m;
 
         VectorFunctionalX odetemp;
 
@@ -212,35 +212,38 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             odetemp = this->ode;
         }
 
-        switch (this->TranscriptionMode) {
+        switch (this->transcription_mode_) {
         case TranscriptionModes::LGL7:
-            this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
-            this->Order = 7.0;
-            this->num_tran_card_states = 4;
+            this->table_ =
+                LGLInterpTable(odetemp, this->x_vars(), this->u_vars() + this->p_vars(), m);
+            this->order_ = 7.0;
+            this->num_tran_card_states_ = 4;
             break;
         case TranscriptionModes::LGL5:
-            this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
-            this->Order = 5.0;
-            this->num_tran_card_states = 3;
+            this->table_ =
+                LGLInterpTable(odetemp, this->x_vars(), this->u_vars() + this->p_vars(), m);
+            this->order_ = 5.0;
+            this->num_tran_card_states_ = 3;
             break;
         case TranscriptionModes::LGL3:
-            this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(), m);
+            this->table_ =
+                LGLInterpTable(odetemp, this->x_vars(), this->u_vars() + this->p_vars(), m);
 
-            this->Order = 3.0;
-            this->num_tran_card_states = 2;
+            this->order_ = 3.0;
+            this->num_tran_card_states_ = 2;
             break;
         case TranscriptionModes::Trapezoidal:
-            this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(),
-                                         TranscriptionModes::LGL3);
+            this->table_ = LGLInterpTable(odetemp, this->x_vars(), this->u_vars() + this->p_vars(),
+                                          TranscriptionModes::LGL3);
 
-            this->Order = 2.0;
-            this->num_tran_card_states = 2;
+            this->order_ = 2.0;
+            this->num_tran_card_states_ = 2;
             break;
         case TranscriptionModes::CentralShooting:
-            this->Table = LGLInterpTable(odetemp, this->XVars(), this->UVars() + this->PVars(),
-                                         TranscriptionModes::LGL3);
-            this->Order = 7.0;
-            this->num_tran_card_states = 2;
+            this->table_ = LGLInterpTable(odetemp, this->x_vars(), this->u_vars() + this->p_vars(),
+                                          TranscriptionModes::LGL3);
+            this->order_ = 7.0;
+            this->num_tran_card_states_ = 2;
             // Default Central Shooting to BlockConstant!!!
             this->set_control_mode(ControlModes::BlockConstant);
 
@@ -253,76 +256,76 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     }
 
     virtual void transcribe_dynamics() {
-        VectorXi StateT(this->ode.XtUVars());
-        for (int i = 0; i < this->ode.XtUVars(); i++)
+        VectorXi StateT(this->ode.xtu_vars());
+        for (int i = 0; i < this->ode.xtu_vars(); i++)
             StateT[i] = i;
-        VectorXi OParT(this->ode.PVars());
-        for (int i = 0; i < this->ode.PVars(); i++)
+        VectorXi OParT(this->ode.p_vars());
+        for (int i = 0; i < this->ode.p_vars(); i++)
             OParT[i] = i;
         VectorXi empty(0);
         empty.resize(0);
 
         auto lgldef = [&](auto cs, auto ode_t) {
-            if (this->ControlMode == ControlModes::BlockConstant) {
+            if (this->control_mode_ == ControlModes::BlockConstant) {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     LGLType<decltype(ode_t), cs.value> lgl(ode_t);
-                    lgl.enable_vectorization_ = this->EnableVectorization;
-                    this->DynamicsFuncIndex =
-                        this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
-                                                  empty, ThreadingFlags::ByApplication);
+                    lgl.enable_vectorization_ = this->enable_vectorization_;
+                    this->dynamics_func_index_ =
+                        this->indexer_.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT,
+                                                    OParT, empty, ThreadingFlags::ByApplication);
                 } else {
 
                     using BlockedODE = Blocked_ODE_Wrapper<decltype(ode_t)>;
 
                     auto lgl = LGLDefects<BlockedODE, cs.value>(BlockedODE(ode_t));
-                    lgl.enable_vectorization_ = this->EnableVectorization;
-                    this->DynamicsFuncIndex =
-                        this->indexer.add_equality(lgl, PhaseRegionFlags::BlockDefectPath, StateT,
-                                                  OParT, empty, ThreadingFlags::ByApplication);
+                    lgl.enable_vectorization_ = this->enable_vectorization_;
+                    this->dynamics_func_index_ =
+                        this->indexer_.add_equality(lgl, PhaseRegionFlags::BlockDefectPath, StateT,
+                                                    OParT, empty, ThreadingFlags::ByApplication);
                 }
             } else {
                 LGLType<decltype(ode_t), cs.value> lgl(ode_t);
-                lgl.enable_vectorization_ = this->EnableVectorization;
-                this->DynamicsFuncIndex =
-                    this->indexer.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
-                                              empty, ThreadingFlags::ByApplication);
+                lgl.enable_vectorization_ = this->enable_vectorization_;
+                this->dynamics_func_index_ =
+                    this->indexer_.add_equality(lgl, PhaseRegionFlags::DefectPath, StateT, OParT,
+                                                empty, ThreadingFlags::ByApplication);
             }
         };
 
         auto trapdef = [&](auto ode_t) {
-            if (this->ControlMode == ControlModes::BlockConstant) {
+            if (this->control_mode_ == ControlModes::BlockConstant) {
 
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
-                    trap.enable_vectorization_ = this->EnableVectorization;
-                    this->DynamicsFuncIndex =
-                        this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
-                                                  empty, ThreadingFlags::ByApplication);
+                    trap.enable_vectorization_ = this->enable_vectorization_;
+                    this->dynamics_func_index_ =
+                        this->indexer_.add_equality(trap, PhaseRegionFlags::DefectPath, StateT,
+                                                    OParT, empty, ThreadingFlags::ByApplication);
                 } else {
                     using BlockedODE = Blocked_ODE_Wrapper<decltype(ode_t)>;
 
                     auto trap = TrapezoidalDefects<BlockedODE>(BlockedODE(ode_t));
-                    trap.enable_vectorization_ = this->EnableVectorization;
-                    // trap.EnableHessianSparsity = this->EnableHessianSparsity;
-                    this->DynamicsFuncIndex =
-                        this->indexer.add_equality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
-                                                  OParT, empty, ThreadingFlags::ByApplication);
+                    trap.enable_vectorization_ = this->enable_vectorization_;
+                    // trap.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
+                    this->dynamics_func_index_ =
+                        this->indexer_.add_equality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
+                                                    OParT, empty, ThreadingFlags::ByApplication);
                 }
 
             } else {
                 TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
-                trap.enable_vectorization_ = this->EnableVectorization;
-                this->DynamicsFuncIndex =
-                    this->indexer.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
-                                              empty, ThreadingFlags::ByApplication);
+                trap.enable_vectorization_ = this->enable_vectorization_;
+                this->dynamics_func_index_ =
+                    this->indexer_.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
+                                                empty, ThreadingFlags::ByApplication);
             }
         };
 
-        switch (this->TranscriptionMode) {
+        switch (this->transcription_mode_) {
         case TranscriptionModes::LGL7: {
 
-            if (this->AutoScaling) {
+            if (this->auto_scaling_) {
                 lgldef(int_const<4>(), this->ode_scaled);
             } else {
                 lgldef(int_const<4>(), this->ode);
@@ -331,7 +334,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             break;
         }
         case TranscriptionModes::LGL5: {
-            if (this->AutoScaling) {
+            if (this->auto_scaling_) {
                 lgldef(int_const<3>(), this->ode_scaled);
             } else {
                 lgldef(int_const<3>(), this->ode);
@@ -339,7 +342,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             break;
         }
         case TranscriptionModes::LGL3: {
-            if (this->AutoScaling) {
+            if (this->auto_scaling_) {
                 lgldef(int_const<2>(), this->ode_scaled);
             } else {
                 lgldef(int_const<2>(), this->ode);
@@ -347,7 +350,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             break;
         }
         case TranscriptionModes::Trapezoidal: {
-            if (this->AutoScaling) {
+            if (this->auto_scaling_) {
                 trapdef(this->ode_scaled);
             } else {
                 trapdef(this->ode);
@@ -357,9 +360,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         case TranscriptionModes::CentralShooting: {
 
             auto shooter = this->make_shooter();
-            this->DynamicsFuncIndex =
-                this->indexer.add_equality(shooter, PhaseRegionFlags::DefectPath, StateT, OParT,
-                                          empty, ThreadingFlags::ByApplication);
+            this->dynamics_func_index_ =
+                this->indexer_.add_equality(shooter, PhaseRegionFlags::DefectPath, StateT, OParT,
+                                            empty, ThreadingFlags::ByApplication);
 
             break;
         }
@@ -370,46 +373,46 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     virtual tycho::solvers::ConstraintInterface make_shooter() {
 
-        if (this->AutoScaling) {
-            auto Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.DefStepSize};
-            Integ.Adaptive = this->integrator.Adaptive;
-            Integ.FastAdaptiveSTM = this->integrator.FastAdaptiveSTM;
-            Integ.AbsTols = this->integrator.AbsTols;
-            Integ.MinStepSize = this->integrator.MinStepSize;
-            Integ.MaxStepSize = this->integrator.MaxStepSize;
-            Integ.enable_vectorization_ = this->EnableVectorization;
-            Integ.VectorizeBatchCalls = this->integrator.VectorizeBatchCalls;
+        if (this->auto_scaling_) {
+            auto Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_};
+            Integ.adaptive_ = this->integrator.adaptive_;
+            Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
+            Integ.abs_tols_ = this->integrator.abs_tols_;
+            Integ.min_step_size_ = this->integrator.min_step_size_;
+            Integ.max_step_size_ = this->integrator.max_step_size_;
+            Integ.enable_vectorization_ = this->enable_vectorization_;
+            Integ.vectorize_batch_calls_ = this->integrator.vectorize_batch_calls_;
 
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode_scaled, Integ};
-                shooter.EnableHessianSparsity = this->EnableHessianSparsity;
+                shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode_scaled, Integ};
-                shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                shooter.enable_vectorization_ = this->EnableVectorization;
+                shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
+                shooter.enable_vectorization_ = this->enable_vectorization_;
                 return tycho::solvers::ConstraintInterface(shooter);
             }
         }
         {
 
-            auto Integ = Integrator<DODE>{this->ode, this->integrator.DefStepSize};
-            Integ.Adaptive = this->integrator.Adaptive;
-            Integ.FastAdaptiveSTM = this->integrator.FastAdaptiveSTM;
-            Integ.AbsTols = this->integrator.AbsTols;
-            Integ.MinStepSize = this->integrator.MinStepSize;
-            Integ.MaxStepSize = this->integrator.MaxStepSize;
-            Integ.enable_vectorization_ = this->EnableVectorization;
-            Integ.VectorizeBatchCalls = this->integrator.VectorizeBatchCalls;
+            auto Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_};
+            Integ.adaptive_ = this->integrator.adaptive_;
+            Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
+            Integ.abs_tols_ = this->integrator.abs_tols_;
+            Integ.min_step_size_ = this->integrator.min_step_size_;
+            Integ.max_step_size_ = this->integrator.max_step_size_;
+            Integ.enable_vectorization_ = this->enable_vectorization_;
+            Integ.vectorize_batch_calls_ = this->integrator.vectorize_batch_calls_;
 
             if (OldShootingDefect) {
                 auto shooter = ShootingDefect{this->ode, Integ};
-                shooter.EnableHessianSparsity = this->EnableHessianSparsity;
+                shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);
             } else {
                 auto shooter = CentralShootingDefect{this->ode, Integ};
-                shooter.EnableHessianSparsity = this->EnableHessianSparsity;
-                shooter.enable_vectorization_ = this->EnableVectorization;
+                shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
+                shooter.enable_vectorization_ = this->enable_vectorization_;
                 return tycho::solvers::ConstraintInterface(shooter);
             }
         }
@@ -421,10 +424,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             ODEState<double> Xin;
             ODEState<double> Xout;
 
-            double T0 = Traj[0][this->TVar()];
-            double TF = Traj.back()[this->TVar()];
+            double T0 = Traj[0][this->t_var()];
+            double TF = Traj.back()[this->t_var()];
 
-            int BlockSize = this->num_tran_card_states;
+            int BlockSize = this->num_tran_card_states_;
             int num_blocks = (Traj.size() - 1) / (BlockSize - 1);
 
             Xin = Traj[0];
@@ -433,49 +436,49 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
-                double tf = Traj[stop][this->TVar()];
+                double tf = Traj[stop][this->t_var()];
                 Xout = Integ.integrate(Xin, tf);
                 Xin = Xout;
             }
 
-            Eigen::VectorXd gerror = (Traj.back() - Xout).head(this->XVars()).cwiseAbs();
+            Eigen::VectorXd gerror = (Traj.back() - Xout).head(this->x_vars()).cwiseAbs();
             return gerror;
         };
 
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             Integrator<ScaledODE> Integ = this->make_scaled_reintegrator();
-            auto ActiveTrajTmp = this->ActiveTraj;
+            auto ActiveTrajTmp = this->active_traj_;
             for (auto &T : ActiveTrajTmp) {
-                T = T.cwiseQuotient(this->XtUPUnits);
+                T = T.cwiseQuotient(this->xtup_units_);
             }
             return CalcError(Integ, ActiveTrajTmp);
 
         } else {
             Integrator<DODE> Integ = this->make_reintegrator();
-            return CalcError(Integ, this->ActiveTraj);
+            return CalcError(Integ, this->active_traj_);
         }
     }
 
     virtual void get_meshinfo_deboor(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                                      Eigen::MatrixXd &mesh_dist) const {
 
-        double T0 = this->ActiveTraj[0][this->TVar()];
-        double TF = this->ActiveTraj.back()[this->TVar()];
+        double T0 = this->active_traj_[0][this->t_var()];
+        double TF = this->active_traj_.back()[this->t_var()];
 
-        int BlockSize = this->num_tran_card_states;
-        int num_blocks = (this->ActiveTraj.size() - 1) / (BlockSize - 1);
+        int BlockSize = this->num_tran_card_states_;
+        int num_blocks = (this->active_traj_.size() - 1) / (BlockSize - 1);
 
-        mesh_errors.resize(this->XVars(), num_blocks + 1);
-        mesh_dist.resize(this->XVars(), num_blocks + 1);
+        mesh_errors.resize(this->x_vars(), num_blocks + 1);
+        mesh_dist.resize(this->x_vars(), num_blocks + 1);
         tsnd.resize(num_blocks + 1);
 
-        Eigen::VectorXd XerrWeights(this->num_tran_card_states);
-        Eigen::VectorXd DXerrWeights(this->num_tran_card_states);
-        std::vector<ODEDeriv<double>> Derivs(ActiveTraj.size(),
-                                             ODEDeriv<double>::Zero(this->XVars()));
+        Eigen::VectorXd XerrWeights(this->num_tran_card_states_);
+        Eigen::VectorXd DXerrWeights(this->num_tran_card_states_);
+        std::vector<ODEDeriv<double>> Derivs(this->active_traj_.size(),
+                                             ODEDeriv<double>::Zero(this->x_vars()));
 
-        for (int i = 0; i < this->ActiveTraj.size(); i++) {
-            this->ode.compute(ActiveTraj[i], Derivs[i]);
+        for (int i = 0; i < this->active_traj_.size(); i++) {
+            this->ode.compute(this->active_traj_[i], Derivs[i]);
         }
 
         ////////////////////////////////////////////////////
@@ -486,8 +489,8 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             return fact;
         };
 
-        double PolyFact = factorial(this->Order);
-        double ErrorWeight;
+        double PolyFact = factorial(this->order_);
+        double error_weight;
 
         auto FillErrorInfo = [&](auto CardStates) {
             for (int i = 0; i < CardStates.value; i++) {
@@ -496,10 +499,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 DXerrWeights[i] =
                     LGLCoeffs<CardStates.value>::Cardinal_DXPower_Weights[i][0] * PolyFact;
             }
-            ErrorWeight = LGLCoeffs<CardStates.value>::ErrorWeight;
+            error_weight = LGLCoeffs<CardStates.value>::error_weight_;
         };
 
-        switch (this->TranscriptionMode) {
+        switch (this->transcription_mode_) {
         case TranscriptionModes::LGL7:
             FillErrorInfo(int_const<4>());
             break;
@@ -513,7 +516,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             FillErrorInfo(int_const<2>());
             break;
         case TranscriptionModes::Trapezoidal:
-            ErrorWeight = 1 / 12.0;
+            error_weight = 1 / 12.0;
             XerrWeights.setZero();
             DXerrWeights[0] = -1;
             DXerrWeights[1] = 1;
@@ -530,21 +533,21 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         for (int i = 0; i < num_blocks; i++) {
             int start = (BlockSize - 1) * i;
 
-            hs[i] = this->ActiveTraj[start + (BlockSize - 1)][this->TVar()] -
-                    this->ActiveTraj[start][this->TVar()];
+            hs[i] = this->active_traj_[start + (BlockSize - 1)][this->t_var()] -
+                    this->active_traj_[start][this->t_var()];
 
-            tsnd[i] = (this->ActiveTraj[start][this->TVar()] - T0) / (TF - T0);
+            tsnd[i] = (this->active_traj_[start][this->t_var()] - T0) / (TF - T0);
 
-            ODEDeriv<double> yvec(this->XVars());
+            ODEDeriv<double> yvec(this->x_vars());
             yvec.setZero();
-            double powh = std::pow(hs[i], this->Order);
+            double powh = std::pow(hs[i], this->order_);
 
-            ODEDeriv<double> dtemp(this->XVars());
+            ODEDeriv<double> dtemp(this->x_vars());
 
-            if (this->UVars() != 0 && this->ControlMode == ControlModes::BlockConstant) {
-                ODEState<double> tmp = this->ActiveTraj[start + BlockSize - 1];
-                tmp.segment(this->XtVars(), this->UVars()) =
-                    this->ActiveTraj[start].segment(this->XtVars(), this->UVars());
+            if (this->u_vars() != 0 && this->control_mode_ == ControlModes::BlockConstant) {
+                ODEState<double> tmp = this->active_traj_[start + BlockSize - 1];
+                tmp.segment(this->xt_vars(), this->u_vars()) =
+                    this->active_traj_[start].segment(this->xt_vars(), this->u_vars());
 
                 dtemp = Derivs[start + BlockSize - 1];
                 Derivs[start + BlockSize - 1].setZero();
@@ -552,11 +555,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             }
 
             for (int j = 0; j < BlockSize; j++) {
-                yvec += this->ActiveTraj[start + j].head(this->XVars()) * XerrWeights[j] / powh;
-                yvec += Derivs[start + j].head(this->XVars()) * DXerrWeights[j] * hs[i] / powh;
+                yvec += this->active_traj_[start + j].head(this->x_vars()) * XerrWeights[j] / powh;
+                yvec += Derivs[start + j].head(this->x_vars()) * DXerrWeights[j] * hs[i] / powh;
             }
 
-            if (this->UVars() != 0 && this->ControlMode == ControlModes::BlockConstant) {
+            if (this->u_vars() != 0 && this->control_mode_ == ControlModes::BlockConstant) {
                 Derivs[start + BlockSize - 1] = dtemp;
             }
 
@@ -564,13 +567,13 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
 
         /////////////////////////
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             // All errors assessed in scaled units
             // yvecs has dims of X/t^Order
             for (int i = 0; i < num_blocks; i++) {
-                yvecs[i] = (yvecs[i].cwiseQuotient(this->XtUPUnits.head(this->XVars()))).eval();
-                yvecs[i] *= std::pow(this->XtUPUnits[this->XVars()], this->Order);
-                hs[i] /= this->XtUPUnits[this->XVars()];
+                yvecs[i] = (yvecs[i].cwiseQuotient(this->xtup_units_.head(this->x_vars()))).eval();
+                yvecs[i] *= std::pow(this->xtup_units_[this->x_vars()], this->order_);
+                hs[i] /= this->xtup_units_[this->x_vars()];
             }
         }
         ////////////////////////
@@ -578,7 +581,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         tsnd[num_blocks] = 1.0;
 
         for (int i = 0; i < num_blocks; i++) {
-            ODEDeriv<double> err_tmp(this->XVars());
+            ODEDeriv<double> err_tmp(this->x_vars());
 
             if (i > 0 && i < (num_blocks - 1)) {
 
@@ -591,8 +594,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 err_tmp = (2 * (yvecs[i] - yvecs[i - 1]) / (hs[i] + hs[i - 1])).cwiseAbs();
             }
 
-            mesh_dist.col(i) = err_tmp.array().pow(1 / (this->Order + 1));
-            mesh_errors.col(i) = err_tmp * std::pow(std::abs(hs[i]), this->Order + 1) * ErrorWeight;
+            mesh_dist.col(i) = err_tmp.array().pow(1 / (this->order_ + 1));
+            mesh_errors.col(i) =
+                err_tmp * std::pow(std::abs(hs[i]), this->order_ + 1) * error_weight;
         }
 
         mesh_dist.col(num_blocks) = mesh_dist.col(num_blocks - 1);
@@ -603,41 +607,41 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                                          Eigen::MatrixXd &mesh_dist) const {
 
         auto CalcError = [&](auto &Integ, const auto &Traj) {
-            double T0 = Traj[0][this->TVar()];
-            double TF = Traj.back()[this->TVar()];
+            double T0 = Traj[0][this->t_var()];
+            double TF = Traj.back()[this->t_var()];
 
-            int BlockSize = this->num_tran_card_states;
+            int BlockSize = this->num_tran_card_states_;
             int num_blocks = (Traj.size() - 1) / (BlockSize - 1);
 
-            mesh_errors.resize(this->XVars(), num_blocks + 1);
-            mesh_dist.resize(this->XVars(), num_blocks + 1);
+            mesh_errors.resize(this->x_vars(), num_blocks + 1);
+            mesh_dist.resize(this->x_vars(), num_blocks + 1);
             tsnd.resize(num_blocks + 1);
 
-            Eigen::MatrixXd tmp_mat(this->XVars(), Traj.size() - 1);
+            Eigen::MatrixXd tmp_mat(this->x_vars(), Traj.size() - 1);
 
             std::vector<ODEState<double>> Xins(Traj.size() - 1);
             Eigen::VectorXd tfs(Traj.size() - 1);
 
             for (int i = 0; i < Traj.size() - 1; i++) {
                 Xins[i] = Traj[i];
-                tfs[i] = Traj[i + 1][this->TVar()];
+                tfs[i] = Traj[i + 1][this->t_var()];
             }
             auto Xouts = Integ.integrate(Xins, tfs);
 
             for (int i = 0; i < Traj.size() - 1; i++) {
                 tmp_mat.col(i) =
-                    (Xouts[i].head(this->XVars()) - Traj[i + 1].head(this->XVars())).cwiseAbs();
+                    (Xouts[i].head(this->x_vars()) - Traj[i + 1].head(this->x_vars())).cwiseAbs();
             }
 
             double max_err = tmp_mat.maxCoeff();
-            ODEDeriv<double> evec(this->XVars());
+            ODEDeriv<double> evec(this->x_vars());
 
             for (int i = 0; i < num_blocks; i++) {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
-                double t0 = Traj[start][this->TVar()];
-                double tf = Traj[stop][this->TVar()];
+                double t0 = Traj[start][this->t_var()];
+                double tf = Traj[stop][this->t_var()];
 
                 tsnd[i] = (t0 - T0) / (TF - T0);
 
@@ -650,16 +654,16 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 evec.setZero();
 
                 for (int j = 0; j < BlockSize - 1; j++) {
-                    double ti = Traj[start + j][this->TVar()];
-                    double tn = Traj[start + j + 1][this->TVar()];
+                    double ti = Traj[start + j][this->t_var()];
+                    double tn = Traj[start + j + 1][this->t_var()];
 
                     evec += tmp_mat.col(start + j) * std::abs((tn - ti) / (tf - t0));
                 }
 
                 double h = std::abs(tf - t0);
                 mesh_errors.col(i) = evec;
-                mesh_dist.col(i) = mesh_errors.col(i) / (std::pow(h, this->Order + 1) * max_err);
-                mesh_dist.col(i) = (mesh_dist.col(i).array().pow(1 / (this->Order + 1))).eval();
+                mesh_dist.col(i) = mesh_errors.col(i) / (std::pow(h, this->order_ + 1) * max_err);
+                mesh_dist.col(i) = (mesh_dist.col(i).array().pow(1 / (this->order_ + 1))).eval();
             }
 
             mesh_errors.col(num_blocks) = mesh_errors.col(num_blocks - 1);
@@ -667,24 +671,24 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             tsnd[num_blocks] = 1.0;
         };
 
-        if (this->AutoScaling) {
+        if (this->auto_scaling_) {
             Integrator<ScaledODE> Integ = this->make_scaled_reintegrator();
-            auto ActiveTrajTmp = this->ActiveTraj;
+            auto ActiveTrajTmp = this->active_traj_;
             for (auto &T : ActiveTrajTmp) {
-                T = T.cwiseQuotient(this->XtUPUnits);
+                T = T.cwiseQuotient(this->xtup_units_);
             }
             return CalcError(Integ, ActiveTrajTmp);
 
         } else {
             Integrator<DODE> Integ = this->make_reintegrator();
-            return CalcError(Integ, this->ActiveTraj);
+            return CalcError(Integ, this->active_traj_);
         }
     }
 
     VectorFunctionalX get_defect() {
         VectorFunctionalX func;
 
-        switch (this->TranscriptionMode) {
+        switch (this->transcription_mode_) {
         case TranscriptionModes::LGL7: {
             return func = LGLDefects<DODE, 4>(this->ode);
             break;
@@ -714,4 +718,3 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 };
 
 } // namespace tycho::oc
-

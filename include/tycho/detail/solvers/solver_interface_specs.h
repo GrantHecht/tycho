@@ -40,16 +40,16 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 namespace tycho::solvers {
 
@@ -97,8 +97,8 @@ struct SolverConstraintSpec {
             std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const = 0;
 
         virtual void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows,
-                                 Eigen::Ref<Eigen::VectorXi> KKTcols, int &freeloc, int conoffset,
-                                 bool dojac, bool dohess, SolverIndexingData &data) = 0;
+                                   Eigen::Ref<Eigen::VectorXi> KKTcols, int &freeloc, int conoffset,
+                                   bool dojac, bool dohess, SolverIndexingData &data) = 0;
 
         virtual int num_kkt_elements(bool dojac, bool dohess) const = 0;
     };
@@ -184,8 +184,8 @@ template <typename T> struct ConstraintModel final : ConstraintBase {
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
-                     int &freeloc, int conoffset, bool dojac, bool dohess,
-                     SolverIndexingData &data) override {
+                       int &freeloc, int conoffset, bool dojac, bool dohess,
+                       SolverIndexingData &data) override {
         data_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const override {
@@ -262,8 +262,8 @@ struct ConstraintInterface {
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
-                     int &freeloc, int conoffset, bool dojac, bool dohess,
-                     SolverIndexingData &data) {
+                       int &freeloc, int conoffset, bool dojac, bool dohess,
+                       SolverIndexingData &data) {
         storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const {
@@ -331,8 +331,8 @@ template <typename T> struct ObjectiveModel final : ObjectiveBase {
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
-                     int &freeloc, int conoffset, bool dojac, bool dohess,
-                     SolverIndexingData &data) override {
+                       int &freeloc, int conoffset, bool dojac, bool dohess,
+                       SolverIndexingData &data) override {
         data_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const override {
@@ -427,8 +427,8 @@ struct ObjectiveInterface {
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
-                     int &freeloc, int conoffset, bool dojac, bool dohess,
-                     SolverIndexingData &data) {
+                       int &freeloc, int conoffset, bool dojac, bool dohess,
+                       SolverIndexingData &data) {
         storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const {

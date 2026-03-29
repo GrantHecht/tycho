@@ -79,9 +79,9 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+                                                            this->func2.output_rows()));
         } else {
 
             auto Impl = [&](auto &fx1, auto &fx2) {
@@ -95,8 +95,9 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using FType1 = Func1_Output<Scalar>;
             using FType2 = Func2_Output<Scalar>;
 
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
-                                        tycho::utils::TempSpec<FType2>(orows, 1));
+            tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                      tycho::utils::TempSpec<FType1>(orows, 1),
+                                                      tycho::utils::TempSpec<FType2>(orows, 1));
         }
     }
 
@@ -108,15 +109,17 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+                                                            this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1, this->func1.output_rows()) +=
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1,
+                                             this->func1.output_rows()) +=
                 x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1, this->func2.output_rows()) +=
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1,
+                                             this->func2.output_rows()) +=
                 x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
                     .transpose();
 
@@ -142,9 +145,11 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using FType2 = Func2_Output<Scalar>;
             using JType2 = Func2_jacobian<Scalar>;
 
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
-                                        tycho::utils::TempSpec<FType2>(orows, 1), tycho::utils::TempSpec<JType1>(orows, irows),
-                                        tycho::utils::TempSpec<JType2>(orows, irows));
+            tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                      tycho::utils::TempSpec<FType1>(orows, 1),
+                                                      tycho::utils::TempSpec<FType2>(orows, 1),
+                                                      tycho::utils::TempSpec<JType1>(orows, irows),
+                                                      tycho::utils::TempSpec<JType2>(orows, irows));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -160,23 +165,27 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()));
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+                                                            this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1, this->func1.output_rows()) +=
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1,
+                                             this->func1.output_rows()) +=
                 x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1, this->func2.output_rows()) +=
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1,
+                                             this->func2.output_rows()) +=
                 x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
                     .transpose();
 
-            adjgrad.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows()) +=
+            adjgrad.template segment<Func1::ORC>(this->func1.seg_start,
+                                                 this->func1.output_rows()) +=
                 x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()) *
                 adjvars[0];
 
-            adjgrad.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()) +=
+            adjgrad.template segment<Func2::ORC>(this->func2.seg_start,
+                                                 this->func2.output_rows()) +=
                 x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows()) *
                 adjvars[0];
 
@@ -258,10 +267,14 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             using GType2 = Func2_gradient<Scalar>;
             using HType2 = Func2_hessian<Scalar>;
 
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType1>(orows, 1),
-                                        tycho::utils::TempSpec<FType2>(orows, 1), tycho::utils::TempSpec<JType1>(orows, irows),
-                                        tycho::utils::TempSpec<JType2>(orows, irows), tycho::utils::TempSpec<GType2>(irows, 1),
-                                        tycho::utils::TempSpec<HType2>(irows, irows), tycho::utils::TempSpec<FType1>(orows, 1));
+            tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                      tycho::utils::TempSpec<FType1>(orows, 1),
+                                                      tycho::utils::TempSpec<FType2>(orows, 1),
+                                                      tycho::utils::TempSpec<JType1>(orows, irows),
+                                                      tycho::utils::TempSpec<JType2>(orows, irows),
+                                                      tycho::utils::TempSpec<GType2>(irows, 1),
+                                                      tycho::utils::TempSpec<HType2>(irows, irows),
+                                                      tycho::utils::TempSpec<FType1>(orows, 1));
         }
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

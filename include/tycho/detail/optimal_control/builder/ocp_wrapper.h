@@ -11,8 +11,8 @@
 
 #pragma once
 
-#include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 #include "tycho/detail/optimal_control/builder/phase_wrapper.h"
+#include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 
 namespace tycho {
 
@@ -43,36 +43,36 @@ class OCP {
     /// have registries; throws if either is empty or if names resolve to
     /// different indices.
     int add_forward_link_equal_con(Phase &p1, Phase &p2,
-                               std::initializer_list<std::string> var_names) {
+                                   std::initializer_list<std::string> var_names) {
         bool p1_empty = p1.registry().empty();
         bool p2_empty = p2.registry().empty();
         if (p1_empty || p2_empty) {
             std::string which = p1_empty && p2_empty ? "both phases"
-                               : p1_empty            ? "phase p1"
+                                : p1_empty           ? "phase p1"
                                                      : "phase p2";
-            throw std::invalid_argument(fmt::format(
-                "OCP::add_forward_link_equal_con: {} {} no variable names "
-                "registered -- register names via ODEBuilder::var_names() "
-                "or use the index-based overload",
-                which, (p1_empty && p2_empty) ? "have" : "has"));
+            throw std::invalid_argument(
+                fmt::format("OCP::add_forward_link_equal_con: {} {} no variable names "
+                            "registered -- register names via ODEBuilder::var_names() "
+                            "or use the index-based overload",
+                            which, (p1_empty && p2_empty) ? "have" : "has"));
         }
         auto idx1 = p1.registry().resolve(var_names);
         auto idx2 = p2.registry().resolve(var_names);
-        if (idx1.size() != idx2.size() ||
-            (idx1.array() != idx2.array()).any()) {
+        if (idx1.size() != idx2.size() || (idx1.array() != idx2.array()).any()) {
             auto fmt_idx = [](const Eigen::VectorXi &v) {
                 std::string s = "[";
                 for (int i = 0; i < v.size(); ++i) {
-                    if (i > 0) s += ", ";
+                    if (i > 0)
+                        s += ", ";
                     s += std::to_string(v[i]);
                 }
                 return s + "]";
             };
-            throw std::invalid_argument(fmt::format(
-                "OCP::add_forward_link_equal_con: variable names resolve to "
-                "different indices in p1 {} vs p2 {} -- use the "
-                "index-based overload for heterogeneous phase layouts",
-                fmt_idx(idx1), fmt_idx(idx2)));
+            throw std::invalid_argument(
+                fmt::format("OCP::add_forward_link_equal_con: variable names resolve to "
+                            "different indices in p1 {} vs p2 {} -- use the "
+                            "index-based overload for heterogeneous phase layouts",
+                            fmt_idx(idx1), fmt_idx(idx2)));
         }
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), idx1);
     }

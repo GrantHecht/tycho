@@ -147,7 +147,7 @@ int main() {
 
     const auto flag = phase->optimize_solve();
 
-    if (phase->MeshConverged) {
+    if (phase->mesh_converged_) {
         std::cout << "HyperSens: mesh CONVERGED\n";
     } else {
         std::cerr << "HyperSens: mesh did NOT converge\n";
@@ -168,10 +168,10 @@ int main() {
         std::cout << "  segments = " << traj.size() - 1 << "\n";
     }
 
-    if (phase->MeshConverged) {
+    if (phase->mesh_converged_) {
         std::cout << "HyperSens: PASS\n";
     } else {
         std::cout << "HyperSens: FAIL (mesh did not converge)\n";
     }
-    return phase->MeshConverged ? 0 : 1;
+    return phase->mesh_converged_ ? 0 : 1;
 }

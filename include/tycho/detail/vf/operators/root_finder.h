@@ -104,8 +104,9 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             fx[0] = xtmp[0];
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
 
     template <class InType, class OutType, class JacType>
@@ -128,8 +129,9 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             jx(0, 0) = 0;
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -166,9 +168,10 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             adjhess.col(0).setZero();
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows),
-                                    tycho::utils::TempSpec<Hessian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows),
+            tycho::utils::TempSpec<Hessian<Scalar>>(irows, irows));
     }
 };
 

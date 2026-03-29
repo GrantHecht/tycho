@@ -42,8 +42,8 @@ int main() {
     // ── Define ODE via Builder API ──────────────────────────────────────
     auto ode = ODEBuilder(3, 1)
                    .define([g](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})

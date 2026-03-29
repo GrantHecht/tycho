@@ -211,7 +211,8 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         };
 
         const int orows = this->func.output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -301,7 +302,8 @@ struct RowScaled_Impl
         };
 
         const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -320,7 +322,8 @@ struct RowScaled_Impl
         };
 
         const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -346,8 +349,9 @@ struct RowScaled_Impl
         };
 
         const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
-                                           tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -455,7 +459,8 @@ struct MatrixScaled_Impl
                 fx = (mattmp * fx).eval();
             };
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()));
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                              this->func.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp) {
@@ -465,7 +470,9 @@ struct MatrixScaled_Impl
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                Impl,
+                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                        this->func.output_rows()),
                 tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
         }
     }
@@ -485,7 +492,8 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()));
+                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                              this->func.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp) {
@@ -497,9 +505,12 @@ struct MatrixScaled_Impl
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                Impl,
+                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                        this->func.output_rows()),
                 tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()));
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
+                                                              this->func.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -526,7 +537,9 @@ struct MatrixScaled_Impl
                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                Impl,
+                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                        this->func.output_rows()),
                 tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1)
 
             );
@@ -543,9 +556,12 @@ struct MatrixScaled_Impl
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(), this->func.output_rows()),
+                Impl,
+                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                        this->func.output_rows()),
                 tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(), this->func.input_rows()),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
+                                                              this->func.input_rows()),
                 tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
         }
     }

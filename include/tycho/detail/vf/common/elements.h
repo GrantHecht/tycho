@@ -34,7 +34,8 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        tycho::utils::tuple_for_loop(elements, [&](const auto &ele, auto i) { fx[i] = x[ele.value]; });
+        tycho::utils::tuple_for_loop(elements,
+                                     [&](const auto &ele, auto i) { fx[i] = x[ele.value]; });
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,

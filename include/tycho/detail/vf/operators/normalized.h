@@ -179,7 +179,8 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Jacobian<Scalar>>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Jacobian<Scalar>>(irows, irows));
     }
 };
 

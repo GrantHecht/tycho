@@ -109,7 +109,8 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         const int irows = this->input_rows();
         const int orows = this->output_rows();
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -168,10 +169,11 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         using GType2 = Func2_gradient<Scalar>;
         using HType2 = Func2_hessian<Scalar>;
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType2>(orows, 1),
-                                    tycho::utils::TempSpec<JType2>(orows, irows), tycho::utils::TempSpec<GType2>(irows, 1),
-                                    tycho::utils::TempSpec<HType2>(irows, irows), tycho::utils::TempSpec<FType1>(orows, 1),
-                                    tycho::utils::TempSpec<JType2>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<FType2>(orows, 1),
+            tycho::utils::TempSpec<JType2>(orows, irows), tycho::utils::TempSpec<GType2>(irows, 1),
+            tycho::utils::TempSpec<HType2>(irows, irows), tycho::utils::TempSpec<FType1>(orows, 1),
+            tycho::utils::TempSpec<JType2>(orows, irows));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };

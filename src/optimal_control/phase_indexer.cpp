@@ -152,7 +152,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
 
     int xblen = DefectCardinalStates * xsize + opsize + spsize;
 
-    int blockdeflen = DefectCardinalStates * this->XtVars() + this->UVars() + this->PVars();
+    int blockdeflen = DefectCardinalStates * this->xt_vars() + this->u_vars() + this->p_vars();
 
     int xpblen =
         DefectCardinalStates * xsize + (DefectCardinalStates - 1) * xsize + opsize + spsize;
@@ -162,7 +162,7 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
 
     bool IsOnlyControl = true;
     for (int i = 0; i < rxtuv.size(); i++) {
-        if (rxtuv[i] < this->XtVars())
+        if (rxtuv[i] < this->xt_vars())
             IsOnlyControl = false;
     }
 
@@ -385,13 +385,13 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
         for (int i = 0; i < this->num_defects; i++) {
             int loc = 0;
             for (int j = 0; j < this->DefectCardinalStates; j++) {
-                for (int k = 0; k < this->XtVars(); k++) {
+                for (int k = 0; k < this->xt_vars(); k++) {
                     Vindex(loc, i) =
                         this->get_xtu_var_loc(k, i * (this->DefectCardinalStates - 1) + j, i);
                     loc++;
                 }
             }
-            for (int k = this->XtVars(); k < this->XtUVars(); k++) {
+            for (int k = this->xt_vars(); k < this->xtu_vars(); k++) {
                 Vindex(loc, i) = this->get_xtu_var_loc(k, i * (this->DefectCardinalStates - 1), i);
                 loc++;
             }
@@ -426,32 +426,33 @@ tycho::oc::PhaseIndexer::make_solver_input(const std::vector<Eigen::VectorXd> &A
 
     if (this->BlockedControls) {
         for (int i = 0; i < this->num_states; i++) {
-            Vars.segment(i * this->XtVars(), this->XtVars()) = ActiveTraj[i].head(this->XtVars());
+            Vars.segment(i * this->xt_vars(), this->xt_vars()) =
+                ActiveTraj[i].head(this->xt_vars());
         }
         for (int i = 0; i < this->num_defects; i++) {
-            Vars.segment(this->num_states * this->XtVars() + i * this->UVars(), this->UVars()) =
-                ActiveTraj[i * (this->DefectCardinalStates - 1)].segment(this->XtVars(),
-                                                                         this->UVars());
+            Vars.segment(this->num_states * this->xt_vars() + i * this->u_vars(), this->u_vars()) =
+                ActiveTraj[i * (this->DefectCardinalStates - 1)].segment(this->xt_vars(),
+                                                                         this->u_vars());
         }
 
-        if (this->PVars() > 0) {
-            Vars.segment(this->num_states * this->XtVars() + this->num_defects * this->UVars(),
-                         this->PVars()) = ActiveTraj[0].tail(this->PVars());
+        if (this->p_vars() > 0) {
+            Vars.segment(this->num_states * this->xt_vars() + this->num_defects * this->u_vars(),
+                         this->p_vars()) = ActiveTraj[0].tail(this->p_vars());
         }
         if (this->StatPVars() > 0) {
             Vars.tail(this->StatPVars()) = ActiveStaticParams;
         }
     } else {
         for (int i = 0; i < this->num_states; i++) {
-            Vars.segment(i * this->XtUVars(), this->XtUVars()) =
-                ActiveTraj[i].head(this->XtUVars());
+            Vars.segment(i * this->xtu_vars(), this->xtu_vars()) =
+                ActiveTraj[i].head(this->xtu_vars());
         }
-        if (this->PVars() > 0) {
-            Vars.segment(this->num_states * this->XtUVars(), this->PVars()) =
-                ActiveTraj[0].tail(this->PVars());
+        if (this->p_vars() > 0) {
+            Vars.segment(this->num_states * this->xtu_vars(), this->p_vars()) =
+                ActiveTraj[0].tail(this->p_vars());
         }
         if (this->StatPVars() > 0) {
-            Vars.segment(this->num_states * this->XtUVars() + this->PVars(), this->StatPVars()) =
+            Vars.segment(this->num_states * this->xtu_vars() + this->p_vars(), this->StatPVars()) =
                 ActiveStaticParams;
         }
     }
@@ -462,45 +463,46 @@ tycho::oc::PhaseIndexer::make_solver_input(const std::vector<Eigen::VectorXd> &A
 void tycho::oc::PhaseIndexer::collect_solver_output(const Eigen::VectorXd &Vars,
                                                     std::vector<Eigen::VectorXd> &ActiveTraj,
                                                     Eigen::VectorXd &ActiveStaticParams) const {
-    Eigen::VectorXd opv(this->PVars());
+    Eigen::VectorXd opv(this->p_vars());
 
     if (this->BlockedControls) {
-        if (this->PVars() > 0) {
-            opv =
-                Vars.segment(this->num_states * this->XtVars() + this->num_defects * this->UVars(),
-                             this->PVars());
+        if (this->p_vars() > 0) {
+            opv = Vars.segment(this->num_states * this->xt_vars() +
+                                   this->num_defects * this->u_vars(),
+                               this->p_vars());
         }
         if (this->StatPVars() > 0) {
             ActiveStaticParams = Vars.tail(this->StatPVars());
         }
 
         for (int i = 0; i < this->num_states; i++) {
-            ActiveTraj[i].head(this->XtVars()) = Vars.segment(i * this->XtVars(), this->XtVars());
+            ActiveTraj[i].head(this->xt_vars()) =
+                Vars.segment(i * this->xt_vars(), this->xt_vars());
             int unum = i / (this->DefectCardinalStates - 1);
             if (unum > (this->num_defects - 1))
                 unum = this->num_defects - 1;
 
-            ActiveTraj[i].segment(this->XtVars(), this->UVars()) = Vars.segment(
-                this->num_states * this->XtVars() + unum * this->UVars(), this->UVars());
+            ActiveTraj[i].segment(this->xt_vars(), this->u_vars()) = Vars.segment(
+                this->num_states * this->xt_vars() + unum * this->u_vars(), this->u_vars());
 
-            if (this->PVars() > 0) {
-                ActiveTraj[i].tail(this->PVars()) = opv;
+            if (this->p_vars() > 0) {
+                ActiveTraj[i].tail(this->p_vars()) = opv;
             }
         }
 
     } else {
-        if (this->PVars() > 0) {
-            opv = Vars.segment(this->num_states * this->XtUVars(), this->PVars());
+        if (this->p_vars() > 0) {
+            opv = Vars.segment(this->num_states * this->xtu_vars(), this->p_vars());
         }
         if (this->StatPVars() > 0) {
-            ActiveStaticParams =
-                Vars.segment(this->num_states * this->XtUVars() + this->PVars(), this->StatPVars());
+            ActiveStaticParams = Vars.segment(this->num_states * this->xtu_vars() + this->p_vars(),
+                                              this->StatPVars());
         }
         for (int i = 0; i < this->num_states; i++) {
-            ActiveTraj[i].head(this->XtUVars()) =
-                Vars.segment(i * this->XtUVars(), this->XtUVars());
-            if (this->PVars() > 0) {
-                ActiveTraj[i].tail(this->PVars()) = opv;
+            ActiveTraj[i].head(this->xtu_vars()) =
+                Vars.segment(i * this->xtu_vars(), this->xtu_vars());
+            if (this->p_vars() > 0) {
+                ActiveTraj[i].tail(this->p_vars()) = opv;
             }
         }
     }
@@ -543,8 +545,8 @@ void tycho::oc::PhaseIndexer::print_stats(bool showfuns) const {
     using std::cout;
     using std::endl;
 
-    cout << "# ODEXtUVars:   " << this->XtUVars() << endl;
-    cout << "# ODEParams:    " << this->PVars() << endl;
+    cout << "# ODEXtUVars:   " << this->xtu_vars() << endl;
+    cout << "# ODEParams:    " << this->p_vars() << endl;
     cout << "# StaticParams: " << this->StatPVars() << endl << endl;
 
     cout << "# Defects:      " << this->num_defects << endl;

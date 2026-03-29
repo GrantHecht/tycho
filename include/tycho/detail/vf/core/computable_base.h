@@ -11,8 +11,8 @@
 // and output (OR) rows of the vectorfunction.
 //
 // Inherits from CRTP to gain derived casting capabilities.
-// Inherits from InputOutputSize<IR, OR> to gain fields for holding input and output sizes if necessary
-// for dynamic sized functions (IR=OR=-1).
+// Inherits from InputOutputSize<IR, OR> to gain fields for holding input and output sizes if
+// necessary for dynamic sized functions (IR=OR=-1).
 //
 // Defines the default set of constexpr boolean info about functions that are used by the expression
 // system, such as is_vectorizable. Derived classes are intended to override these as necessary.
@@ -35,10 +35,10 @@
 #pragma once
 #include <concepts>
 
-#include "tycho/detail/vf/derivatives/detect_super_scalar.h"
-#include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/solvers/indexing_data.h"
+#include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/vf/core/input_output_size.h"
+#include "tycho/detail/vf/derivatives/detect_super_scalar.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -56,16 +56,16 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 #include "tycho/detail/utils/memory_management.h"
 
@@ -241,10 +241,10 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     * This function is the interface allowing the vector function to be used as a constraint inside
     psiopt.
     * Vector X is the total variables vector for the full optimization problem, and FX is the total
-    equality or inequality constraints vector for the problem. Data pertaining to the location of the
-    input variables in X for each distinct call as well as the target location for the output
-    variables in FX is stored in the tycho::solvers::SolverIndexingData object. In general users should not directly
-    overload this function unless they have a very good reason.
+    equality or inequality constraints vector for the problem. Data pertaining to the location of
+    the input variables in X for each distinct call as well as the target location for the output
+    variables in FX is stored in the tycho::solvers::SolverIndexingData object. In general users
+    should not directly overload this function unless they have a very good reason.
     */
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
                      const tycho::solvers::SolverIndexingData &data) const {
@@ -314,7 +314,8 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1));
     }
 
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
@@ -339,8 +340,9 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
-                                    tycho::utils::TempSpec<Output<double>>(this->output_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1),
+            tycho::utils::TempSpec<Output<double>>(this->output_rows(), 1));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +363,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
         requires std::derived_from<std::remove_cvref_t<XtType>,
                                    Eigen::EigenBase<std::remove_cvref_t<XtType>>>
     inline void gather_input(ConstEigenRef<Eigen::VectorXd> X, XtType &xt, int V,
-                            const tycho::solvers::SolverIndexingData &data) const {
+                             const tycho::solvers::SolverIndexingData &data) const {
         if (data.VindexContinuity[V] == ParsedIOFlags::Contiguous) {
             xt = X.template segment<IR>(data.VLoc(0, V), this->input_rows());
         } else {
@@ -379,7 +381,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
         requires std::derived_from<std::remove_cvref_t<LType>,
                                    Eigen::EigenBase<std::remove_cvref_t<LType>>>
     inline void gather_mult(ConstEigenRef<Eigen::VectorXd> L, LType &l, int V,
-                           const tycho::solvers::SolverIndexingData &data) const {
+                            const tycho::solvers::SolverIndexingData &data) const {
         if (data.CindexContinuity[V] == ParsedIOFlags::Contiguous) {
             l = L.template segment<OR>(data.CLoc(0, V), this->output_rows());
         } else {

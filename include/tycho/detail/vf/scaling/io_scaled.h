@@ -63,7 +63,8 @@ struct IOScaled
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -89,7 +90,8 @@ struct IOScaled
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -130,8 +132,9 @@ struct IOScaled
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1),
-                                    tycho::utils::TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
 };
 

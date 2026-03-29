@@ -25,7 +25,9 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
 
     using Base = Arguments<ODESize<_XV, _UV, _PV>::XtUPV>;
 
-    ODEArguments(int Xv, int Uv, int Pv) : Base(Xv + Uv + Pv + 1) { this->set_xt_up_vars(Xv, Uv, Pv); }
+    ODEArguments(int Xv, int Uv, int Pv) : Base(Xv + Uv + Pv + 1) {
+        this->set_xt_up_vars(Xv, Uv, Pv);
+    }
     ODEArguments(int Xv, int Uv) : ODEArguments(Xv, Uv, 0) {}
     ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
 };

@@ -20,16 +20,16 @@
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
-using utils::SZ_SUM;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::Arguments;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
+using vf::StackedOutputs;
+using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using vf::ThreadingFlags;
-using vf::Arguments;
-using vf::StackedOutputs;
 
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     static auto Definition(const Integrand &integ, int xv, int pv) {
@@ -76,4 +76,3 @@ struct TrapezoidalIntegral
 };
 
 } // namespace tycho::oc
-

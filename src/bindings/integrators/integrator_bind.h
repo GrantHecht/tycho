@@ -248,17 +248,17 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         obj.def_rw("enable_vectorization", &Integrator<DODE>::enable_vectorization_);
 
-        obj.def_rw("def_step_size", &Integrator<DODE>::DefStepSize);
-        obj.def_rw("max_step_size", &Integrator<DODE>::MaxStepSize);
-        obj.def_rw("min_step_size", &Integrator<DODE>::MinStepSize);
-        obj.def_rw("max_step_change", &Integrator<DODE>::MaxStepChange);
-        obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::FastAdaptiveSTM);
+        obj.def_rw("def_step_size", &Integrator<DODE>::def_step_size_);
+        obj.def_rw("max_step_size", &Integrator<DODE>::max_step_size_);
+        obj.def_rw("min_step_size", &Integrator<DODE>::min_step_size_);
+        obj.def_rw("max_step_change", &Integrator<DODE>::max_step_change_);
+        obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
 
-        obj.def_rw("step_frac", &Integrator<DODE>::StepFrac);
-        obj.def_rw("err_pow_fac", &Integrator<DODE>::ErrPowFac);
+        obj.def_rw("step_frac", &Integrator<DODE>::step_frac_);
+        obj.def_rw("err_pow_fac", &Integrator<DODE>::err_pow_fac_);
 
-        obj.def_rw("adaptive", &Integrator<DODE>::Adaptive);
-        obj.def_rw("abs_tols", &Integrator<DODE>::AbsTols);
+        obj.def_rw("adaptive", &Integrator<DODE>::adaptive_);
+        obj.def_rw("abs_tols", &Integrator<DODE>::abs_tols_);
 
         obj.def("set_abs_tol", &Integrator<DODE>::set_abs_tol);
         obj.def("set_abs_tols", &Integrator<DODE>::set_abs_tols);
@@ -268,12 +268,12 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("set_rel_tols", &Integrator<DODE>::set_rel_tols);
         obj.def("get_rel_tols", &Integrator<DODE>::get_rel_tols);
 
-        obj.def("set_step_sizes", &Integrator<DODE>::set_step_sizes, nb::arg("DefStepSize"),
-                nb::arg("MinStepSize"), nb::arg("MaxStepSize"));
+        obj.def("set_step_sizes", &Integrator<DODE>::set_step_sizes, nb::arg("def_step_size"),
+                nb::arg("min_step_size"), nb::arg("max_step_size"));
 
-        obj.def_rw("event_tol", &Integrator<DODE>::EventTol);
-        obj.def_rw("max_event_iters", &Integrator<DODE>::MaxEventIters);
-        obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::VectorizeBatchCalls);
+        obj.def_rw("event_tol", &Integrator<DODE>::event_tol_);
+        obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);
+        obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_);
     }
 };
 

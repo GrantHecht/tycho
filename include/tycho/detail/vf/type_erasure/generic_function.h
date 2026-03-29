@@ -22,9 +22,9 @@
 
 #pragma once
 
+#include "tycho/detail/vf/common/common_functions.h"
 #include "tycho/detail/vf/core/dense_function_base.h"
 #include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
-#include "tycho/detail/vf/common/common_functions.h"
 
 namespace tycho::vf {
 

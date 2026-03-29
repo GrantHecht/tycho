@@ -100,7 +100,8 @@ struct ParsedInput
                 x.segment(varlocs[0], this->func.input_rows()), fx_,
                 jx.middleCols(varlocs[0], this->func.input_rows()),
                 adjgrad.segment(varlocs[0], this->func.input_rows()),
-                adjhess.block(varlocs[0], varlocs[0], this->func.input_rows(), this->func.input_rows()),
+                adjhess.block(varlocs[0], varlocs[0], this->func.input_rows(),
+                              this->func.input_rows()),
                 adjvars);
 
         } else {

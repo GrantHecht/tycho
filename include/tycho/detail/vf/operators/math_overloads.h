@@ -22,27 +22,33 @@
 /////////////////////// CMath Overloads ////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////
 
-template <class Derived, int IR> auto sin(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto sin(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseSin<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto cos(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto cos(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseCos<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto tan(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto tan(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseTan<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto asin(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto asin(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcSin<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto acos(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto acos(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcCos<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto atan(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto atan(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcTan<Derived>(func.derived());
 }
 
@@ -53,41 +59,51 @@ auto atan2(const tycho::vf::DenseFunctionBase<Derived1, IR1, 1> &yf,
         tycho::vf::StackedOutputs<Derived1, Derived2>(yf.derived(), xf.derived()));
 }
 
-template <class Derived, int IR> auto sqrt(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto sqrt(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseSqrt<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto exp(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto exp(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseExp<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto log(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto log(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseLog<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto sinh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto sinh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseSinH<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto cosh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto cosh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseCosH<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto tanh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto tanh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseTanH<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto asinh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto asinh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcSinH<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto acosh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto acosh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcCosH<Derived>(func.derived());
 }
 
-template <class Derived, int IR> auto atanh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto atanh(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseArcTanH<Derived>(func.derived());
 }
-template <class Derived, int IR> auto abs(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
+template <class Derived, int IR>
+auto abs(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
     return tycho::vf::CwiseAbs<Derived>(func.derived());
 }

@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/derivatives/detect_diagonal.h"
 
 namespace tycho::vf {
 

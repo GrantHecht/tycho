@@ -88,7 +88,7 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
 RuntimeODE make_no_wind(double vMax) {
     return ODEBuilder(2, 1)
         .define([vMax](auto &args) {
-            auto theta = args.UVar(0);
+            auto theta = args.u_var(0);
             return stack(vMax * cos(theta), vMax * sin(theta));
         })
         .var_names({{"x", 0}, {"y", 1}, {"t", 2}, {"theta", 3}})
@@ -100,7 +100,7 @@ RuntimeODE make_uniform_wind(double vMax, double wVel, double wAng) {
     double wy = wVel * std::sin(wAng);
     return ODEBuilder(2, 1)
         .define([vMax, wx, wy](auto &args) {
-            auto theta = args.UVar(0);
+            auto theta = args.u_var(0);
             return stack(vMax * cos(theta) + wx, vMax * sin(theta) + wy);
         })
         .var_names({{"x", 0}, {"y", 1}, {"t", 2}, {"theta", 3}})
@@ -117,7 +117,7 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
     // so we use ODEArguments + from() to build the expression directly.
     auto XtU = ODEArguments(2, 1, 0);
     auto pos = XtU.segment(0, 2);
-    auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);
+    auto theta = XtU.segment(XtU.xt_vars(), 1).coeff(0);
     auto vel = cos(pos.norm());
 
     auto expr = stack(vMax * cos(theta) + vel * cwAng, vMax * sin(theta) + vel * swAng);
@@ -135,7 +135,7 @@ RuntimeODE make_var_wind(double vMax) {
     auto pos = XtU.segment(0, 2);
     auto x = XtU.segment(0, 2).coeff(0);
     auto y = XtU.segment(0, 2).coeff(1);
-    auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);
+    auto theta = XtU.segment(XtU.xt_vars(), 1).coeff(0);
     auto vel = sin(pos.norm());
     auto ang = 2.0 * (x + y);
 

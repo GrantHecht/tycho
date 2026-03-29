@@ -31,17 +31,16 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
 #else
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
-
 
 namespace tycho {
 
@@ -66,8 +65,8 @@ namespace tycho::solvers {
 // Pull root-namespace Eigen type aliases into tycho::solvers so that PSIOPT
 // member declarations (EigenRef<VectorXd>, ConstEigenRef<VectorXd>, …) resolve
 // without full qualification inside this namespace.
-using tycho::EigenRef;
 using tycho::ConstEigenRef;
+using tycho::EigenRef;
 
 struct IterateInfo;
 
@@ -449,7 +448,9 @@ struct PSIOPT {
 
     ////////////////////////////////////////////////////////////////////
 
-    PSIOPT() { this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()); }
+    PSIOPT() {
+        this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+    }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
         this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
         this->setNLP(np);

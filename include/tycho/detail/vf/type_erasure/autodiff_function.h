@@ -26,7 +26,9 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     Func func;
-    ADFun(Func f) : func(std::move(f)) { this->set_io_rows(this->func.input_rows(), this->func.output_rows()); }
+    ADFun(Func f) : func(std::move(f)) {
+        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+    }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         this->func.compute(x, fx_);

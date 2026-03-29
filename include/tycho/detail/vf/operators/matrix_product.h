@@ -106,9 +106,10 @@ struct MatrixFunctionProduct_Impl
         const int o2 = this->matrix_func2.output_rows();
         const int orows = this->output_rows();
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -171,12 +172,13 @@ struct MatrixFunctionProduct_Impl
         const int irows = this->input_rows();
         const int orows = this->output_rows();
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
-                                    tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
-                                    tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
-                                    tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+            tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -384,19 +386,20 @@ struct MatrixFunctionProduct_Impl
         const int irows = this->input_rows();
         const int orows = this->output_rows();
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
 
-                                    tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
-                                    tycho::utils::TempSpec<MatFunc2_gradient<Scalar>>(irows, 1),
-                                    tycho::utils::TempSpec<MatFunc2_hessian<Scalar>>(irows, irows),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
+            tycho::utils::TempSpec<MatFunc2_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<MatFunc2_hessian<Scalar>>(irows, irows),
 
-                                    tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
-                                    tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1),
-                                    tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows));
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+            tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows));
     }
 };
 

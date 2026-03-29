@@ -36,29 +36,29 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/type_name.h"
 
 namespace tycho::oc {
 
 template <class FuncType> struct LinkFunction {
-    FuncType Func;
-    LinkFlags LinkFlag = LinkFlags::ReadRegions;
+    FuncType func_;
+    LinkFlags link_flag_ = LinkFlags::ReadRegions;
 
-    Eigen::Matrix<PhaseRegionFlags, -1, 1> PhaseRegFlags;
-    std::vector<Eigen::VectorXi> PhasesTolink;
-    std::vector<Eigen::VectorXi> XtUVars;
-    std::vector<Eigen::VectorXi> OPVars;
-    std::vector<Eigen::VectorXi> SPVars;
-    std::vector<Eigen::VectorXi> LinkParams;
+    Eigen::Matrix<PhaseRegionFlags, -1, 1> phase_reg_flags_;
+    std::vector<Eigen::VectorXi> phases_to_link_;
+    std::vector<Eigen::VectorXi> xtu_vars_;
+    std::vector<Eigen::VectorXi> op_vars_;
+    std::vector<Eigen::VectorXi> sp_vars_;
+    std::vector<Eigen::VectorXi> link_params_;
 
-    ScaleModes ScaleMode = ScaleModes::AUTO;
-    bool ScalesSet = false;
-    Eigen::VectorXd OutputScales;
+    ScaleModes scale_mode_ = ScaleModes::AUTO;
+    bool scales_set_ = false;
+    Eigen::VectorXd output_scales_;
 
-    int StorageIndex = 0;
-    int GlobalIndex = 0;
+    int storage_index_ = 0;
+    int global_index_ = 0;
 
     void init(FuncType f, Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags,
               std::vector<Eigen::VectorXi> PTL, std::vector<Eigen::VectorXi> xtv,
@@ -114,20 +114,20 @@ template <class FuncType> struct LinkFunction {
             }
         }
 
-        this->PhasesTolink = PTL;
-        this->PhaseRegFlags = RegFlags;
-        this->Func = f;
+        this->phases_to_link_ = PTL;
+        this->phase_reg_flags_ = RegFlags;
+        this->func_ = f;
 
-        this->XtUVars = xtv;
-        this->OPVars = opv;
-        this->SPVars = spv;
-        this->LinkParams = lv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
+        this->xtu_vars_ = xtv;
+        this->op_vars_ = opv;
+        this->sp_vars_ = spv;
+        this->link_params_ = lv;
+        this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
     }
 
     Eigen::Matrix<PhaseRegionFlags, -1, 1> make_phase_reg_flags(LinkFlags Flag) {
         Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags;
-        this->LinkFlag = Flag;
+        this->link_flag_ = Flag;
 
         switch (Flag) {
         case LinkFlags::BackToFront: {
@@ -185,10 +185,11 @@ template <class FuncType> struct LinkFunction {
                  std::vector<Eigen::VectorXi> lv, ScaleType scale_t) {
         this->init(f, RegFlags, PTL, xtv, opv, spv, lv);
 
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
-        this->OutputScales = OutputScales;
-        this->ScaleMode = ScaleMode;
-        this->ScalesSet = ScalesSet;
+        auto [scale_mode, scales_set, output_scales] =
+            get_scale_info(this->func_.output_rows(), scale_t);
+        this->output_scales_ = output_scales;
+        this->scale_mode_ = scale_mode;
+        this->scales_set_ = scales_set;
     }
 
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
@@ -201,10 +202,11 @@ template <class FuncType> struct LinkFunction {
                  std::vector<Eigen::VectorXi> spv, std::vector<Eigen::VectorXi> lv,
                  ScaleType scale_t) {
         this->init(f, make_phase_reg_flags(Flag), PTL, xtv, opv, spv, lv);
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
-        this->OutputScales = OutputScales;
-        this->ScaleMode = ScaleMode;
-        this->ScalesSet = ScalesSet;
+        auto [scale_mode, scales_set, output_scales] =
+            get_scale_info(this->func_.output_rows(), scale_t);
+        this->output_scales_ = output_scales;
+        this->scale_mode_ = scale_mode;
+        this->scales_set_ = scales_set;
     }
     LinkFunction(FuncType f, std::vector<std::string> RegFlags, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv, std::vector<Eigen::VectorXi> opv,

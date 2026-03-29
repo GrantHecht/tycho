@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "tycho/detail/vf/expressions/segment.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/expressions/segment.h"
 
 namespace tycho::vf {
 
@@ -42,7 +42,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     InnerFunc inner_func;
 
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
-    static const bool is_linear_function = OuterFunc::is_linear_function && InnerFunc::is_linear_function;
+    static const bool is_linear_function =
+        OuterFunc::is_linear_function && InnerFunc::is_linear_function;
     static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
@@ -110,8 +111,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
-                                        tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
+                tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR));
 
         } else {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &jx_outer) {
@@ -129,9 +131,10 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
             using OJXType = OuterFunc_jacobian<Scalar>;
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
-                                        tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
-                                        tycho::utils::TempSpec<OJXType>(outer_OR, outer_IR));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
+                tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
+                tycho::utils::TempSpec<OJXType>(outer_OR, outer_IR));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -170,9 +173,10 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             using IJXType = InnerFunc_jacobian<Scalar>;
             using OGXType = OuterFunc_gradient<Scalar>;
 
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
-                                        tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
-                                        tycho::utils::TempSpec<OGXType>(outer_IR, 1));
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
+                tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
+                tycho::utils::TempSpec<OGXType>(outer_IR, 1));
         } else {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &jx_outer, auto &gx_outer,
                             auto &hx_outer, auto &Ht) {
@@ -239,9 +243,12 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             using OHXType = OuterFunc_hessian<Scalar>;
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1), tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
-                tycho::utils::TempSpec<OJXType>(outer_OR, outer_IR), tycho::utils::TempSpec<OGXType>(outer_IR, 1),
-                tycho::utils::TempSpec<OHXType>(outer_IR, outer_IR), tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR));
+                Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
+                tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
+                tycho::utils::TempSpec<OJXType>(outer_OR, outer_IR),
+                tycho::utils::TempSpec<OGXType>(outer_IR, 1),
+                tycho::utils::TempSpec<OHXType>(outer_IR, outer_IR),
+                tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR));
         }
     }
 
@@ -265,7 +272,8 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     OuterFunc outer_func;
 
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
-    static const bool is_linear_function = OuterFunc::is_linear_function && InnerFunc::is_linear_function;
+    static const bool is_linear_function =
+        OuterFunc::is_linear_function && InnerFunc::is_linear_function;
     static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
@@ -328,8 +336,8 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
             x.template segment<InnerFunc::ORC>(this->seg_start, size), fx,
             jx.template middleCols<InnerFunc::ORC>(this->seg_start, size),
             adjgrad.template segment<InnerFunc::ORC>(this->seg_start, size),
-            adjhess.template block<InnerFunc::ORC, InnerFunc::ORC>(this->seg_start, this->seg_start,
-                                                                   this->outer_func.input_rows(), size),
+            adjhess.template block<InnerFunc::ORC, InnerFunc::ORC>(
+                this->seg_start, this->seg_start, this->outer_func.input_rows(), size),
             adjvars);
     }
 

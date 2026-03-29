@@ -14,20 +14,20 @@
 
 #pragma once
 
-#include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
+#include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/vector_functions.h"
 
 namespace tycho::oc {
 
 // Import cross-namespace types used by ODE definitions.
+using integrators::Integrator;
 using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::FunctionHolder;
 using vf::GenericFunction;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using integrators::Integrator;
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV> struct ODEBase;
 
@@ -43,8 +43,8 @@ struct ODE : ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _X
         this->set_xvars(xv);
         this->set_uvars(uv);
         this->set_pvars(pv);
-        this->set_input_rows(this->XtUPVars());
-        this->set_output_rows(this->XVars());
+        this->set_input_rows(this->xtu_p_vars());
+        this->set_output_rows(this->x_vars());
     }
 };
 
@@ -116,4 +116,3 @@ template <int XV, int UV, int PV>
 using PythonGenericODE = GenericODE<GenericFunction<-1, -1>, XV, UV, PV>;
 
 } // namespace tycho::oc
-

@@ -341,8 +341,9 @@ struct FunctionVectorProduct_Impl
 
             using JType = Eigen::Matrix<Scalar, Vsize, Base::IRC>;
             const int irows = this->input_rows();
-            tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(Vsize, irows),
-                                        tycho::utils::TempSpec<JType>(Vsize, irows));
+            tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                      tycho::utils::TempSpec<JType>(Vsize, irows),
+                                                      tycho::utils::TempSpec<JType>(Vsize, irows));
         }
     }
 
@@ -424,8 +425,10 @@ struct FunctionVectorProduct_Impl
         const int irows = this->input_rows();
 
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(Vsize, irows),
-                                    tycho::utils::TempSpec<JType>(Vsize, irows), tycho::utils::TempSpec<JType>(Vsize, irows),
-                                    tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<HType>(irows, irows));
+                                                  tycho::utils::TempSpec<JType>(Vsize, irows),
+                                                  tycho::utils::TempSpec<JType>(Vsize, irows),
+                                                  tycho::utils::TempSpec<GType>(irows, 1),
+                                                  tycho::utils::TempSpec<HType>(irows, irows));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

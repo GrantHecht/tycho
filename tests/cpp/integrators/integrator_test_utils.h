@@ -43,7 +43,7 @@ BUILD_ODE_FROM_EXPRESSION(SHO, SHO_Impl, double);
 inline double sho_error(const std::string &method, double h) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, method, h);
-    integ.Adaptive = false; // Fixed step
+    integ.adaptive_ = false; // Fixed step
 
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0;

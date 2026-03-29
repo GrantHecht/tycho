@@ -34,8 +34,8 @@ int main() {
     // ── Define ODE via Builder API ──────────────────────────────────────
     auto ode = ODEBuilder(1, 1)
                    .define([](auto &args) {
-                       auto x = args.XVar(0);
-                       auto u = args.UVar(0);
+                       auto x = args.x_var(0);
+                       auto u = args.u_var(0);
                        return u - x;
                    })
                    .var_names({{"x", 0}, {"t", 1}, {"u", 2}})

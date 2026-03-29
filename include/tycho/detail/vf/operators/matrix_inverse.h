@@ -58,8 +58,9 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -101,8 +102,9 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -177,9 +179,10 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             adjgrad.noalias() = (adjvars.transpose() * jx_).transpose();
         };
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
 };
 } // namespace tycho::vf

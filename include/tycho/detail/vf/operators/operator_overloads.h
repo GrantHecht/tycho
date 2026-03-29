@@ -221,22 +221,22 @@ decltype(auto) operator+(const DenseFunctionBase<Func1, IR1, OR1> &f1,
 template <class Func1, int IR, int OR, class Func2, class Func3>
 decltype(auto) operator+(const DenseFunctionBase<Func3, IR, OR> &f2,
                          const TwoFunctionSum<Func1, Func2> &f1) {
-    static_assert(IR == TwoFunctionSum<Func1, Func2>::IRC ||
-                      IR < 0 || TwoFunctionSum<Func1, Func2>::IRC < 0,
+    static_assert(IR == TwoFunctionSum<Func1, Func2>::IRC || IR < 0 ||
+                      TwoFunctionSum<Func1, Func2>::IRC < 0,
                   "VF operator+: input size mismatch with sum operand");
-    static_assert(OR == TwoFunctionSum<Func1, Func2>::ORC ||
-                      OR < 0 || TwoFunctionSum<Func1, Func2>::ORC < 0,
+    static_assert(OR == TwoFunctionSum<Func1, Func2>::ORC || OR < 0 ||
+                      TwoFunctionSum<Func1, Func2>::ORC < 0,
                   "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3>(f1.func1, f1.func2, f2.derived());
 }
 template <class Func1, int IR, int OR, class Func2, class Func3, class Func4>
 decltype(auto) operator+(const DenseFunctionBase<Func4, IR, OR> &f2,
                          const MultiFunctionSum<Func1, Func2, Func3> &f1) {
-    static_assert(IR == MultiFunctionSum<Func1, Func2, Func3>::IRC ||
-                      IR < 0 || MultiFunctionSum<Func1, Func2, Func3>::IRC < 0,
+    static_assert(IR == MultiFunctionSum<Func1, Func2, Func3>::IRC || IR < 0 ||
+                      MultiFunctionSum<Func1, Func2, Func3>::IRC < 0,
                   "VF operator+: input size mismatch with sum operand");
-    static_assert(OR == MultiFunctionSum<Func1, Func2, Func3>::ORC ||
-                      OR < 0 || MultiFunctionSum<Func1, Func2, Func3>::ORC < 0,
+    static_assert(OR == MultiFunctionSum<Func1, Func2, Func3>::ORC || OR < 0 ||
+                      MultiFunctionSum<Func1, Func2, Func3>::ORC < 0,
                   "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3, Func4>(f1.func1, f1.func2, std::get<0>(f1.funcs),
                                                         f2.derived());

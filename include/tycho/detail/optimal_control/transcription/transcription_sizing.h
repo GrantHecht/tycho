@@ -19,15 +19,15 @@
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
-using utils::SZ_SUM;
 using utils::SZ_MAX;
 using utils::SZ_NEG;
 using utils::SZ_PROD;
+using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
+using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using vf::ThreadingFlags;
 
 template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
     static const int CS = _CS;

@@ -56,10 +56,10 @@ struct VectorScalarFunctionDivision_Impl
                                {scalarfunc.input_domain(), vectorfunc.input_domain()});
 
         if (this->scalarfunc.input_rows() != this->vectorfunc.input_rows()) {
-            throw std::invalid_argument(fmt::format(
-                "VectorScalarFunctionDivision: input size mismatch "
-                "(VectorFunc IRows={}, ScalarFunc IRows={})",
-                this->vectorfunc.input_rows(), this->scalarfunc.input_rows()));
+            throw std::invalid_argument(
+                fmt::format("VectorScalarFunctionDivision: input size mismatch "
+                            "(VectorFunc IRows={}, ScalarFunc IRows={})",
+                            this->vectorfunc.input_rows(), this->scalarfunc.input_rows()));
         }
     }
 
@@ -114,7 +114,8 @@ struct VectorScalarFunctionDivision_Impl
 
         using FType = Output<Scalar>;
         using JType = ScalFunc_jacobian<Scalar>;
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -165,14 +166,13 @@ struct VectorScalarFunctionDivision_Impl
                 }
             } else {
                 constexpr int sds = ScalFunc::INPUT_DOMAIN::sub_domains.size();
-                tycho::utils::constexpr_for_loop(std::integral_constant<int, 0>(),
-                                          std::integral_constant<int, sds>(), [&](auto i) {
-                                              constexpr int start =
-                                                  ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
-                                              constexpr int size =
-                                                  ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
-                                              hxs.template middleCols<size>(start, size).setZero();
-                                          });
+                tycho::utils::constexpr_for_loop(
+                    std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
+                    [&](auto i) {
+                        constexpr int start = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int size = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
+                        hxs.template middleCols<size>(start, size).setZero();
+                    });
             }
 
             gtmp = (gxs + adjgrad) * (-ifxs);
@@ -228,9 +228,10 @@ struct VectorScalarFunctionDivision_Impl
         using GType = ScalFunc_gradient<Scalar>;
         using HType = ScalFunc_hessian<Scalar>;
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(1, irows),
-                                    tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<GType>(irows, 1),
-                                    tycho::utils::TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(1, irows),
+            tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<GType>(irows, 1),
+            tycho::utils::TempSpec<HType>(irows, irows));
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };

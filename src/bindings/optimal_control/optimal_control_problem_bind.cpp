@@ -120,21 +120,21 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
 
     ///////////////////////
 
-    obj.def_rw("auto_scaling", &OptimalControlProblem::AutoScaling);
-    obj.def_rw("sync_objective_scales", &OptimalControlProblem::SyncObjectiveScales);
+    obj.def_rw("auto_scaling", &OptimalControlProblem::auto_scaling_);
+    obj.def_rw("sync_objective_scales", &OptimalControlProblem::sync_objective_scales_);
 
-    obj.def_rw("adaptive_mesh", &OptimalControlProblem::AdaptiveMesh);
-    obj.def_rw("print_mesh_info", &OptimalControlProblem::PrintMeshInfo);
-    obj.def_rw("max_mesh_iters", &OptimalControlProblem::MaxMeshIters);
-    obj.def_ro("mesh_converged", &OptimalControlProblem::MeshConverged);
-    obj.def_rw("solve_only_first", &OptimalControlProblem::SolveOnlyFirst);
+    obj.def_rw("adaptive_mesh", &OptimalControlProblem::adaptive_mesh_);
+    obj.def_rw("print_mesh_info", &OptimalControlProblem::print_mesh_info_);
+    obj.def_rw("max_mesh_iters", &OptimalControlProblem::max_mesh_iters_);
+    obj.def_ro("mesh_converged", &OptimalControlProblem::mesh_converged_);
+    obj.def_rw("solve_only_first", &OptimalControlProblem::solve_only_first_);
 
-    obj.def_rw("mesh_abort_flag", &OptimalControlProblem::MeshAbortFlag);
+    obj.def_rw("mesh_abort_flag", &OptimalControlProblem::mesh_abort_flag_);
 
     obj.def("set_adaptive_mesh", &OptimalControlProblem::set_adaptive_mesh,
-            nb::arg("AdaptiveMesh") = true, nb::arg("ApplyToPhases") = true);
+            nb::arg("adaptive_mesh_") = true, nb::arg("ApplyToPhases") = true);
     obj.def("set_auto_scaling", &OptimalControlProblem::set_auto_scaling,
-            nb::arg("AutoScaling") = true, nb::arg("ApplyToPhases") = true);
+            nb::arg("auto_scaling_") = true, nb::arg("ApplyToPhases") = true);
 
     obj.def("set_mesh_tol", &OptimalControlProblem::set_mesh_tol);
     obj.def("set_mesh_red_factor", &OptimalControlProblem::set_mesh_red_factor);

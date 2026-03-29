@@ -14,10 +14,10 @@ TEST_F(OptimalControlTest, MeshRefinementConvergence) {
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-4); // relaxed tolerance
     phase->set_max_mesh_iters(5);
-    phase->PrintMeshInfo = false;
+    phase->print_mesh_info_ = false;
 
     phase->solve_optimize();
-    EXPECT_TRUE(phase->MeshConverged) << "Mesh should converge with relaxed tolerance";
+    EXPECT_TRUE(phase->mesh_converged_) << "Mesh should converge with relaxed tolerance";
 }
 
 TEST_F(OptimalControlTest, MeshRefinementIterates) {
@@ -26,8 +26,8 @@ TEST_F(OptimalControlTest, MeshRefinementIterates) {
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-7); // tight tolerance forces refinement
     phase->set_max_mesh_iters(3);
-    phase->PrintMeshInfo = false;
+    phase->print_mesh_info_ = false;
 
     phase->solve_optimize();
-    EXPECT_GT(phase->MeshIters.size(), 0u) << "Should have at least one mesh iteration";
+    EXPECT_GT(phase->mesh_iters_.size(), 0u) << "Should have at least one mesh iteration";
 }

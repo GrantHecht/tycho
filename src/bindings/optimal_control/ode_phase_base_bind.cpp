@@ -34,9 +34,9 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
 
     auto set_mesh_error_estimator = [](ODEPhaseBase &self, nb::object val) {
         if (nb::isinstance<MeshErrorEstimators>(val))
-            self.MeshErrorEstimator = nb::cast<MeshErrorEstimators>(val);
+            self.mesh_error_estimator_ = nb::cast<MeshErrorEstimators>(val);
         else if (nb::isinstance<nb::str>(val))
-            self.MeshErrorEstimator = strto_MeshErrorEstimator(nb::cast<std::string>(val));
+            self.mesh_error_estimator_ = strto_MeshErrorEstimator(nb::cast<std::string>(val));
         else
             throw nb::type_error("expected MeshErrorEstimators enum or str");
     };
@@ -431,13 +431,14 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("calc_global_error", &ODEPhaseBase::calc_global_error);
     obj.def("get_mesh_iters", &ODEPhaseBase::get_mesh_iters);
 
-    obj.def_rw("adaptive_mesh", &ODEPhaseBase::AdaptiveMesh);
-    obj.def_rw("auto_scaling", &ODEPhaseBase::AutoScaling);
-    obj.def_rw("sync_objective_scales", &ODEPhaseBase::SyncObjectiveScales);
+    obj.def_rw("adaptive_mesh", &ODEPhaseBase::adaptive_mesh_);
+    obj.def_rw("auto_scaling", &ODEPhaseBase::auto_scaling_);
+    obj.def_rw("sync_objective_scales", &ODEPhaseBase::sync_objective_scales_);
 
-    obj.def("set_auto_scaling", &ODEPhaseBase::set_auto_scaling, nb::arg("AutoScaling") = true);
+    obj.def("set_auto_scaling", &ODEPhaseBase::set_auto_scaling, nb::arg("auto_scaling_") = true);
 
-    obj.def("set_adaptive_mesh", &ODEPhaseBase::set_adaptive_mesh, nb::arg("AdaptiveMesh") = true);
+    obj.def("set_adaptive_mesh", &ODEPhaseBase::set_adaptive_mesh,
+            nb::arg("adaptive_mesh_") = true);
 
     obj.def("set_units", [](ODEPhaseBase &self, nb::kwargs kwargs) {
         nb::module_ builtins = nb::module_::import_("builtins");
@@ -448,7 +449,7 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
         nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
         nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
 
-        Eigen::VectorXd Units(self.XtUPVars());
+        Eigen::VectorXd Units(self.xtu_p_vars());
         Units.setOnes();
 
         for (const auto &kw : kwargs) {
@@ -509,38 +510,39 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     obj.def("set_mesh_error_distributor",
             nb::overload_cast<const std::string &>(&ODEPhaseBase::set_mesh_error_distributor));
 
-    obj.def_rw("print_mesh_info", &ODEPhaseBase::PrintMeshInfo);
-    obj.def_rw("max_mesh_iters", &ODEPhaseBase::MaxMeshIters);
-    obj.def_rw("mesh_tol", &ODEPhaseBase::MeshTol);
+    obj.def_rw("print_mesh_info", &ODEPhaseBase::print_mesh_info_);
+    obj.def_rw("max_mesh_iters", &ODEPhaseBase::max_mesh_iters_);
+    obj.def_rw("mesh_tol", &ODEPhaseBase::mesh_tol_);
     obj.def_prop_rw(
-        "mesh_error_estimator", [](const ODEPhaseBase &self) { return self.MeshErrorEstimator; },
+        "mesh_error_estimator", [](const ODEPhaseBase &self) { return self.mesh_error_estimator_; },
         [set_mesh_error_estimator](ODEPhaseBase &self, nb::object val) {
             set_mesh_error_estimator(self, val);
         });
     obj.def_prop_rw(
-        "mesh_error_criteria", [](const ODEPhaseBase &self) { return self.MeshErrorCriteria; },
+        "mesh_error_criteria", [](const ODEPhaseBase &self) { return self.mesh_error_criteria_; },
         [set_mesh_error_aggregation](ODEPhaseBase &self, nb::object val) {
-            set_mesh_error_aggregation(self.MeshErrorCriteria, val, "MeshErrorCriteria");
+            set_mesh_error_aggregation(self.mesh_error_criteria_, val, "mesh_error_criteria_");
         });
     obj.def_prop_rw(
         "mesh_error_distributor",
-        [](const ODEPhaseBase &self) { return self.MeshErrorDistributor; },
+        [](const ODEPhaseBase &self) { return self.mesh_error_distributor_; },
         [set_mesh_error_aggregation](ODEPhaseBase &self, nb::object val) {
-            set_mesh_error_aggregation(self.MeshErrorDistributor, val, "MeshErrorDistributor");
+            set_mesh_error_aggregation(self.mesh_error_distributor_, val,
+                                       "mesh_error_distributor_");
         });
 
-    obj.def_rw("solve_only_first", &ODEPhaseBase::SolveOnlyFirst);
-    obj.def_rw("force_one_mesh_iter", &ODEPhaseBase::ForceOneMeshIter);
-    obj.def_rw("new_error", &ODEPhaseBase::NewError);
+    obj.def_rw("solve_only_first", &ODEPhaseBase::solve_only_first_);
+    obj.def_rw("force_one_mesh_iter", &ODEPhaseBase::force_one_mesh_iter_);
+    obj.def_rw("new_error", &ODEPhaseBase::new_error_);
 
-    obj.def_rw("detect_control_switches", &ODEPhaseBase::DetectControlSwitches);
-    obj.def_rw("rel_switch_tol", &ODEPhaseBase::RelSwitchTol);
-    obj.def_rw("abs_switch_tol", &ODEPhaseBase::AbsSwitchTol);
-    obj.def_rw("mesh_abort_flag", &ODEPhaseBase::MeshAbortFlag);
+    obj.def_rw("detect_control_switches", &ODEPhaseBase::detect_control_switches_);
+    obj.def_rw("rel_switch_tol", &ODEPhaseBase::rel_switch_tol_);
+    obj.def_rw("abs_switch_tol", &ODEPhaseBase::abs_switch_tol_);
+    obj.def_rw("mesh_abort_flag", &ODEPhaseBase::mesh_abort_flag_);
 
-    obj.def_rw("num_extra_segs", &ODEPhaseBase::NumExtraSegs);
-    obj.def_rw("mesh_red_factor", &ODEPhaseBase::MeshRedFactor);
-    obj.def_rw("mesh_inc_factor", &ODEPhaseBase::MeshIncFactor);
-    obj.def_rw("mesh_err_factor", &ODEPhaseBase::MeshErrFactor);
-    obj.def_ro("mesh_converged", &ODEPhaseBase::MeshConverged);
+    obj.def_rw("num_extra_segs", &ODEPhaseBase::num_extra_segs_);
+    obj.def_rw("mesh_red_factor", &ODEPhaseBase::mesh_red_factor_);
+    obj.def_rw("mesh_inc_factor", &ODEPhaseBase::mesh_inc_factor_);
+    obj.def_rw("mesh_err_factor", &ODEPhaseBase::mesh_err_factor_);
+    obj.def_ro("mesh_converged", &ODEPhaseBase::mesh_converged_);
 }

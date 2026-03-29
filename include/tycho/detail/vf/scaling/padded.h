@@ -87,8 +87,8 @@ struct PaddedOutput
 
         this->func.compute_jacobian_adjointgradient_adjointhessian(
             x, fx.template segment<Func::ORC>(this->UPad, this->func.output_rows()),
-            jx.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), adjgrad, adjhess,
-            adjvars.template segment<Func::ORC>(this->UPad, this->func.output_rows()));
+            jx.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), adjgrad,
+            adjhess, adjvars.template segment<Func::ORC>(this->UPad, this->func.output_rows()));
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -105,9 +105,10 @@ struct PaddedOutput
             MatrixBaseRef<Right> right_ref = right.const_cast_derived();
             MatrixBaseRef<Left> left_ref = left.const_cast_derived();
             this->func.right_jacobian_product(
-                target_, left_ref.template middleCols<Func::ORC>(this->UPad, this->func.output_rows()),
-                right_ref.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), assign,
-                aliased);
+                target_,
+                left_ref.template middleCols<Func::ORC>(this->UPad, this->func.output_rows()),
+                right_ref.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()),
+                assign, aliased);
         }
     }
 

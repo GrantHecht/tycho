@@ -34,23 +34,23 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
 namespace tycho::oc {
 
 // Solvers types
 using tycho::solvers::ConstraintInterface;
-using tycho::solvers::ObjectiveInterface;
 using tycho::solvers::NonLinearProgram;
+using tycho::solvers::ObjectiveInterface;
 
 // VF types
 using vf::ThreadingFlags;
@@ -113,34 +113,34 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->BlockedControls = BlockCon;
 
         if (this->BlockedControls) {
-            this->num_phase_vars = this->num_states * this->XtVars() +
-                                 this->num_defects * this->UVars() + this->PVars() +
-                                 this->StatPVars();
+            this->num_phase_vars = this->num_states * this->xt_vars() +
+                                   this->num_defects * this->u_vars() + this->p_vars() +
+                                   this->StatPVars();
 
-            ODEFirstStateLocs.setLinSpaced(this->XtUVars(), 0, this->XtUVars() - 1);
-            ODEFirstStateLocs.tail(this->UVars()) += VectorXi::Constant(
-                this->UVars(), this->XtVars() * (this->num_states) - this->XtVars());
+            ODEFirstStateLocs.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
+            ODEFirstStateLocs.tail(this->u_vars()) += VectorXi::Constant(
+                this->u_vars(), this->xt_vars() * (this->num_states) - this->xt_vars());
 
             ODELastStateLocs =
                 ODEFirstStateLocs +
-                VectorXi::Constant(this->XtUVars(), this->XtVars() * (this->num_states - 1));
-            ODELastStateLocs.tail(this->UVars()) =
-                ODEFirstStateLocs.tail(this->UVars()) +
-                VectorXi::Constant(this->UVars(), this->UVars() * (this->num_defects - 1));
+                VectorXi::Constant(this->xtu_vars(), this->xt_vars() * (this->num_states - 1));
+            ODELastStateLocs.tail(this->u_vars()) =
+                ODEFirstStateLocs.tail(this->u_vars()) +
+                VectorXi::Constant(this->u_vars(), this->u_vars() * (this->num_defects - 1));
 
         } else {
             this->num_phase_vars =
-                this->num_states * this->XtUVars() + this->PVars() + this->StatPVars();
+                this->num_states * this->xtu_vars() + this->p_vars() + this->StatPVars();
 
-            ODEFirstStateLocs.setLinSpaced(this->XtUVars(), 0, this->XtUVars() - 1);
+            ODEFirstStateLocs.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
             ODELastStateLocs =
                 ODEFirstStateLocs +
-                VectorXi::Constant(this->XtUVars(), this->XtUVars() * (this->num_states - 1));
+                VectorXi::Constant(this->xtu_vars(), this->xtu_vars() * (this->num_states - 1));
         }
 
-        ODEParamLocs.setLinSpaced(this->PVars(), 0, this->PVars() - 1);
+        ODEParamLocs.setLinSpaced(this->p_vars(), 0, this->p_vars() - 1);
         ODEParamLocs += Eigen::VectorXi::Constant(
-            this->PVars(), this->num_phase_vars - this->PVars() - this->StatPVars());
+            this->p_vars(), this->num_phase_vars - this->p_vars() - this->StatPVars());
 
         StaticParamLocs.setLinSpaced(this->StatPVars(), 0, this->StatPVars() - 1);
         StaticParamLocs +=
@@ -172,44 +172,44 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     }
 
     int add_equality(ConstraintInterface eqfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
-                    const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
-                    ThreadingFlags Tmode);
+                     const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
+                     ThreadingFlags Tmode);
     void add_partitioned_equality(const std::vector<ConstraintInterface> &eqfuns,
-                                PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
-                                const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
-                                const std::vector<ThreadingFlags> &Tmodes);
-
-    int add_accumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
-                        const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
-                        const Eigen::VectorXi &rstatpv, ConstraintInterface accfun,
-                        const Eigen::VectorXi &accpv, ThreadingFlags Tmode);
-
-    int add_inequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
-                      const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
-                      const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode);
-
-    void add_partitioned_inequality(const std::vector<ConstraintInterface> &iqfuns,
                                   PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
                                   const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
                                   const std::vector<ThreadingFlags> &Tmodes);
 
-    int add_objective(ObjectiveInterface objfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
-                     const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
-                     ThreadingFlags Tmode);
+    int add_accumulation(ConstraintInterface eqfun, PhaseRegionFlags sreg,
+                         const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
+                         const Eigen::VectorXi &rstatpv, ConstraintInterface accfun,
+                         const Eigen::VectorXi &accpv, ThreadingFlags Tmode);
+
+    int add_inequality(ConstraintInterface iqfun, PhaseRegionFlags sreg,
+                       const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
+                       const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode);
+
+    void add_partitioned_inequality(const std::vector<ConstraintInterface> &iqfuns,
+                                    PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
+                                    const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
+                                    const std::vector<ThreadingFlags> &Tmodes);
+
+    int add_objective(ObjectiveInterface objfun, PhaseRegionFlags sreg,
+                      const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv,
+                      const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode);
 
     int get_xtu_var_loc(int vloc, int State) const {
         int v = 0;
         if (this->BlockedControls) {
-            if (vloc < XtVars()) {
-                v = this->ODEFirstStateLocs[vloc] + State * this->XtVars();
+            if (vloc < xt_vars()) {
+                v = this->ODEFirstStateLocs[vloc] + State * this->xt_vars();
             } else {
                 int unum = State / (this->DefectCardinalStates - 1);
                 if (unum > (this->num_defects - 1))
                     unum = this->num_defects - 1;
-                v = this->ODEFirstStateLocs[vloc] + unum * this->UVars();
+                v = this->ODEFirstStateLocs[vloc] + unum * this->u_vars();
             }
         } else {
-            v = this->ODEFirstStateLocs[vloc] + State * this->XtUVars();
+            v = this->ODEFirstStateLocs[vloc] + State * this->xtu_vars();
         }
         return v;
     }
@@ -217,13 +217,13 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int get_xtu_var_loc(int vloc, int State, int Defect) const {
         int v = 0;
         if (this->BlockedControls) {
-            if (vloc < XtVars()) {
-                v = this->ODEFirstStateLocs[vloc] + State * this->XtVars();
+            if (vloc < xt_vars()) {
+                v = this->ODEFirstStateLocs[vloc] + State * this->xt_vars();
             } else {
-                v = this->ODEFirstStateLocs[vloc] + Defect * this->UVars();
+                v = this->ODEFirstStateLocs[vloc] + Defect * this->u_vars();
             }
         } else {
-            v = this->ODEFirstStateLocs[vloc] + State * this->XtUVars();
+            v = this->ODEFirstStateLocs[vloc] + State * this->xtu_vars();
         }
         return v;
     }
@@ -241,15 +241,16 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     }
 
     Eigen::VectorXd make_solver_input(const std::vector<Eigen::VectorXd> &ActiveTraj,
-                                    const Eigen::VectorXd &ActiveStaticParams) const;
-    void collect_solver_output(const Eigen::VectorXd &Vars, std::vector<Eigen::VectorXd> &ActiveTraj,
-                             Eigen::VectorXd &ActiveStaticParams) const;
+                                      const Eigen::VectorXd &ActiveStaticParams) const;
+    void collect_solver_output(const Eigen::VectorXd &Vars,
+                               std::vector<Eigen::VectorXd> &ActiveTraj,
+                               Eigen::VectorXd &ActiveStaticParams) const;
 
     std::vector<Eigen::VectorXd> get_func_eq_multipliers(int Gindex,
-                                                      const Eigen::VectorXd &EMultphase) const;
+                                                         const Eigen::VectorXd &EMultphase) const;
 
     std::vector<Eigen::VectorXd> get_func_iq_multipliers(int Gindex,
-                                                      const Eigen::VectorXd &IMultphase) const;
+                                                         const Eigen::VectorXd &IMultphase) const;
 
     void print_stats(bool showfuns) const;
 
@@ -257,4 +258,3 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
 };
 
 } // namespace tycho::oc
-

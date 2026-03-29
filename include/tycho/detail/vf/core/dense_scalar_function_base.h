@@ -36,7 +36,8 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
         }
     }
     void objective_gradient(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
-                            EigenRef<Eigen::VectorXd> GX, const tycho::solvers::SolverIndexingData &data) const {
+                            EigenRef<Eigen::VectorXd> GX,
+                            const tycho::solvers::SolverIndexingData &data) const {
         Input<double> x(this->input_rows());
         Output<double> fx(1);
         Jacobian<double> jx(1, this->input_rows());
@@ -44,8 +45,8 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
 
         for (int V = 0; V < data.NumAppl(); V++) {
             this->gather_input(X, x, V, data);
-            new (&gx)
-                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->input_rows());
+            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V],
+                                                this->input_rows());
             fx.setZero();
             jx.setZero();
             gx.setZero();
@@ -72,8 +73,8 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
 
         for (int V = 0; V < data.NumAppl(); V++) {
             this->gather_input(X, x, V, data);
-            new (&gx)
-                Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V], this->input_rows());
+            new (&gx) Eigen::Map<Input<double>>(GX.data() + data.InnerGradientStarts[V],
+                                                this->input_rows());
 
             fx.setZero();
             jx.setZero();
@@ -92,9 +93,10 @@ struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
   protected:
     // double Scale = 1.0;
     void kkt_fill_hess(int Apl, const Hessian<double> &hx,
-                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
-                     EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
-                     std::vector<std::mutex> &ClashLocks, const tycho::solvers::SolverIndexingData &data) const {
+                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
+                       EigenRef<Eigen::VectorXi> KKTLocs, EigenRef<Eigen::VectorXi> VarClashes,
+                       std::vector<std::mutex> &ClashLocks,
+                       const tycho::solvers::SolverIndexingData &data) const {
         int freeloc = data.InnerKKTStarts[Apl];
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();

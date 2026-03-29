@@ -199,7 +199,8 @@ struct FunctionCrossProduct_Impl
 
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         const int irows = this->input_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(3, irows), tycho::utils::TempSpec<JType>(3, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(3, irows),
+                                                  tycho::utils::TempSpec<JType>(3, irows));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -270,9 +271,10 @@ struct FunctionCrossProduct_Impl
         using HType = Func2_hessian<Scalar>;
         const int irows = this->input_rows();
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(3, irows), tycho::utils::TempSpec<JType>(3, irows),
-                                    tycho::utils::TempSpec<JType>(3, irows), tycho::utils::TempSpec<GType>(irows, 1),
-                                    tycho::utils::TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<JType>(3, irows), tycho::utils::TempSpec<JType>(3, irows),
+            tycho::utils::TempSpec<JType>(3, irows), tycho::utils::TempSpec<GType>(irows, 1),
+            tycho::utils::TempSpec<HType>(irows, irows));
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

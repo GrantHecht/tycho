@@ -19,8 +19,8 @@ namespace {
 RuntimeODE make_brach_runtime_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
-            auto v = args.XVar(2);
-            auto theta = args.UVar(0);
+            auto v = args.x_var(2);
+            auto theta = args.u_var(0);
             return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
         })
         .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -129,8 +129,8 @@ TEST_F(PhaseWrapperTest, BasePhaseResolvesNames) {
 TEST_F(PhaseWrapperTest, LUVarBoundMultiIndexThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
@@ -151,9 +151,9 @@ TEST_F(PhaseWrapperTest, AccessBase) {
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
-    EXPECT_EQ(phase.base().XVars(), 3);
-    EXPECT_EQ(phase.base().UVars(), 1);
-    EXPECT_EQ(phase.base().PVars(), 0);
+    EXPECT_EQ(phase.base().x_vars(), 3);
+    EXPECT_EQ(phase.base().u_vars(), 1);
+    EXPECT_EQ(phase.base().p_vars(), 0);
 }
 
 TEST_F(PhaseWrapperTest, NullPhaseThrows) {
@@ -163,8 +163,8 @@ TEST_F(PhaseWrapperTest, NullPhaseThrows) {
 TEST_F(PhaseWrapperTest, ScalarBoundaryValueGroupThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
@@ -182,8 +182,8 @@ TEST_F(PhaseWrapperTest, ScalarBoundaryValueGroupThrows) {
 TEST_F(PhaseWrapperTest, DeltaVarObjectiveGroupThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
@@ -200,8 +200,8 @@ TEST_F(PhaseWrapperTest, DeltaVarObjectiveGroupThrows) {
 TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
@@ -219,8 +219,8 @@ TEST_F(PhaseWrapperTest, LowerVarBoundGroupThrows) {
 TEST_F(PhaseWrapperTest, UpperVarBoundGroupThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})
@@ -238,8 +238,8 @@ TEST_F(PhaseWrapperTest, UpperVarBoundGroupThrows) {
 TEST_F(PhaseWrapperTest, ValueObjectiveGroupThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}})

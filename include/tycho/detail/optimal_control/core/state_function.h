@@ -36,102 +36,104 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/type_name.h"
 
 namespace tycho::oc {
 
 template <class FuncType> struct StateFunction {
-    FuncType Func;
-    PhaseRegionFlags RegionFlag = PhaseRegionFlags::NotSet;
-    Eigen::VectorXi XtUVars;
-    Eigen::VectorXi OPVars;
-    Eigen::VectorXi SPVars;
+    FuncType func_;
+    PhaseRegionFlags region_flag_ = PhaseRegionFlags::NotSet;
+    Eigen::VectorXi xtu_vars_;
+    Eigen::VectorXi op_vars_;
+    Eigen::VectorXi sp_vars_;
 
-    Eigen::VectorXi EXTVars; // dirty i know
+    Eigen::VectorXi ext_vars_; // dirty i know
 
-    ScaleModes ScaleMode = ScaleModes::AUTO;
-    bool ScalesSet = false;
-    Eigen::VectorXd OutputScales;
+    ScaleModes scale_mode_ = ScaleModes::AUTO;
+    bool scales_set_ = false;
+    Eigen::VectorXd output_scales_;
 
-    int StorageIndex = 0;
-    int PhaseLocalIndex = 0;
-    int GlobalIndex = 0;
+    int storage_index_ = 0;
+    int phase_local_index_ = 0;
+    int global_index_ = 0;
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv) {
-        this->RegionFlag = Reg;
-        this->Func = f;
-        this->XtUVars = xtuv;
-        this->OPVars = opv;
-        this->SPVars = spv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
+        this->region_flag_ = Reg;
+        this->func_ = f;
+        this->xtu_vars_ = xtuv;
+        this->op_vars_ = opv;
+        this->sp_vars_ = spv;
+        this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
     }
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv, opv, spv) {
 
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
-        this->OutputScales = OutputScales;
-        this->ScaleMode = ScaleMode;
-        this->ScalesSet = ScalesSet;
+        auto [scale_mode, scales_set, output_scales] =
+            get_scale_info(this->func_.output_rows(), scale_t);
+        this->output_scales_ = output_scales;
+        this->scale_mode_ = scale_mode;
+        this->scales_set_ = scales_set;
     }
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv) {
-        this->Func = f;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
+        this->func_ = f;
+        this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
 
         switch (Reg) {
         case PhaseRegionFlags::ODEParams: {
-            this->RegionFlag = PhaseRegionFlags::Params;
-            this->XtUVars.resize(0);
-            this->OPVars = xtuv;
-            this->SPVars.resize(0);
+            this->region_flag_ = PhaseRegionFlags::Params;
+            this->xtu_vars_.resize(0);
+            this->op_vars_ = xtuv;
+            this->sp_vars_.resize(0);
             break;
         }
         case PhaseRegionFlags::StaticParams: {
-            this->RegionFlag = PhaseRegionFlags::Params;
-            this->XtUVars.resize(0);
-            this->OPVars.resize(0);
-            this->SPVars = xtuv;
+            this->region_flag_ = PhaseRegionFlags::Params;
+            this->xtu_vars_.resize(0);
+            this->op_vars_.resize(0);
+            this->sp_vars_ = xtuv;
             break;
         }
         default: {
-            this->RegionFlag = Reg;
-            this->XtUVars = xtuv;
-            this->OPVars.resize(0);
-            this->SPVars.resize(0);
+            this->region_flag_ = Reg;
+            this->xtu_vars_ = xtuv;
+            this->op_vars_.resize(0);
+            this->sp_vars_.resize(0);
             break;
         }
         }
     }
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv) {
-        auto [ScaleMode, ScalesSet, OutputScales] = get_scale_info(this->Func.output_rows(), scale_t);
-        this->OutputScales = OutputScales;
-        this->ScaleMode = ScaleMode;
-        this->ScalesSet = ScalesSet;
+        auto [scale_mode, scales_set, output_scales] =
+            get_scale_info(this->func_.output_rows(), scale_t);
+        this->output_scales_ = output_scales;
+        this->scale_mode_ = scale_mode;
+        this->scales_set_ = scales_set;
     }
 
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, PhaseRegionFlags ParReg,
                   Eigen::VectorXi pv) {
-        this->Func = f;
-        this->RegionFlag = Reg;
-        this->XtUVars = xtuv;
-        this->OutputScales = Eigen::VectorXd::Ones(this->Func.output_rows());
+        this->func_ = f;
+        this->region_flag_ = Reg;
+        this->xtu_vars_ = xtuv;
+        this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
 
         switch (ParReg) {
         case PhaseRegionFlags::ODEParams: {
-            this->OPVars = pv;
-            this->SPVars.resize(0);
+            this->op_vars_ = pv;
+            this->sp_vars_.resize(0);
             break;
         }
         case PhaseRegionFlags::StaticParams: {
-            this->RegionFlag = PhaseRegionFlags::Params;
-            this->OPVars.resize(0);
-            this->SPVars = pv;
+            this->region_flag_ = PhaseRegionFlags::Params;
+            this->op_vars_.resize(0);
+            this->sp_vars_ = pv;
             break;
         }
         default: {

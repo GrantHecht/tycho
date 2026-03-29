@@ -26,10 +26,10 @@
 
 #include <Eigen/Core>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/solver_interface_specs.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/vf/core/functional_flags.h"
 
 namespace tycho::solvers {
 
@@ -68,9 +68,9 @@ template <class FuncType> struct SolverFunctionBase {
     int numGradEles() const { return this->function.input_rows() * this->index_data.NumAppl(); }
     ThreadingFlags getThreadMode() const { return this->ThreadMode; }
     void get_kkt_space(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
-                     int conoffset, bool dojac, bool dohess) {
+                       int conoffset, bool dojac, bool dohess) {
         this->function.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
-                                   this->index_data);
+                                     this->index_data);
     }
     void getGradientSpace(EigenRef<VectorXi> GXrows, int &freeloc) {
         this->index_data.getGradientSpace(GXrows, freeloc);

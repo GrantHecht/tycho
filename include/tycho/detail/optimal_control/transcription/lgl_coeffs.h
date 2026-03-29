@@ -62,7 +62,7 @@ template <> struct LGLCoeffs<2> { /// Cubic Hermite-LGL3
         STDarray<double, 2>{-1.0, 1.0}, STDarray<double, 2>{1.0, 0.0}};
 
     static constexpr double Order = 3.0;
-    static constexpr double ErrorWeight = 0.0026041666661458227;
+    static constexpr double error_weight_ = 0.0026041666661458227;
 };
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -168,7 +168,7 @@ template <> struct LGLCoeffs<3> { /// Cubic Hermite-LGL3
         STDarray<double, 3>{1.0, -4.0, 3.0}};
 
     static constexpr double Order = 5.0;
-    static constexpr double ErrorWeight = 3.100198409908181e-06;
+    static constexpr double error_weight_ = 3.100198409908181e-06;
 };
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -344,7 +344,7 @@ template <> struct LGLCoeffs<4> {
                             5.12701665379258 * 6.0 - 5.12701665379258 * 2.0}};
 
     static constexpr double Order = 7.0;
-    static constexpr double ErrorWeight = 2.9357939455472746e-09;
+    static constexpr double error_weight_ = 2.9357939455472746e-09;
 };
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////

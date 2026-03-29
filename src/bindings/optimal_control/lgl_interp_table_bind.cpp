@@ -44,24 +44,24 @@ void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
 
     obj.def(nb::init<int, int, TranscriptionModes>());
     obj.def("load_even_data", &LGLInterpTable::load_even_data);
-    obj.def("get_table_ptr", &LGLInterpTable::getTablePtr);
+    obj.def("get_table_ptr", &LGLInterpTable::get_table_ptr);
     obj.def("load_uneven_data", &LGLInterpTable::load_uneven_data);
-    obj.def("interpolate", &LGLInterpTable::Interpolate<double>);
+    obj.def("interpolate", &LGLInterpTable::interpolate<double>);
 
-    obj.def("new_error_integral", &LGLInterpTable::NewErrorIntegral);
+    obj.def("new_error_integral", &LGLInterpTable::new_error_integral);
 
-    obj.def("__call__", nb::overload_cast<double>(&LGLInterpTable::Interpolate<double>, nb::const_),
+    obj.def("__call__", nb::overload_cast<double>(&LGLInterpTable::interpolate<double>, nb::const_),
             nb::is_operator());
 
-    obj.def("interpolate_deriv", &LGLInterpTable::InterpolateDeriv<double>);
+    obj.def("interpolate_deriv", &LGLInterpTable::interpolate_deriv<double>);
     obj.def("make_periodic", &LGLInterpTable::make_periodic);
 
-    obj.def("interp_range", &LGLInterpTable::InterpRange);
-    obj.def("interp_whole_range", &LGLInterpTable::InterpWholeRange);
-    obj.def("error_integral", &LGLInterpTable::ErrorIntegral);
+    obj.def("interp_range", &LGLInterpTable::interp_range);
+    obj.def("interp_whole_range", &LGLInterpTable::interp_whole_range);
+    obj.def("error_integral", &LGLInterpTable::error_integral);
 
-    obj.def_ro("t0", &LGLInterpTable::T0);
-    obj.def_ro("tf", &LGLInterpTable::TF);
+    obj.def_ro("t0", &LGLInterpTable::t0_);
+    obj.def_ro("tf", &LGLInterpTable::tf_);
 
-    obj.def("interp_non_dim", nb::overload_cast<int, double, double>(&LGLInterpTable::NDequidist));
+    obj.def("interp_non_dim", nb::overload_cast<int, double, double>(&LGLInterpTable::nd_equidist));
 }

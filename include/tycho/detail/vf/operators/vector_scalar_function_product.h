@@ -57,10 +57,10 @@ struct VectorScalarFunctionProduct_Impl
                                {scalarfunc.input_domain(), vectorfunc.input_domain()});
 
         if (this->scalarfunc.input_rows() != this->vectorfunc.input_rows()) {
-            throw std::invalid_argument(fmt::format(
-                "VectorScalarFunctionProduct: input size mismatch "
-                "(VectorFunc IRows={}, ScalarFunc IRows={})",
-                this->vectorfunc.input_rows(), this->scalarfunc.input_rows()));
+            throw std::invalid_argument(
+                fmt::format("VectorScalarFunctionProduct: input size mismatch "
+                            "(VectorFunc IRows={}, ScalarFunc IRows={})",
+                            this->vectorfunc.input_rows(), this->scalarfunc.input_rows()));
         }
     }
 
@@ -156,14 +156,13 @@ struct VectorScalarFunctionProduct_Impl
                 }
             } else {
                 constexpr int sds = ScalFunc::INPUT_DOMAIN::sub_domains.size();
-                tycho::utils::constexpr_for_loop(std::integral_constant<int, 0>(),
-                                          std::integral_constant<int, sds>(), [&](auto i) {
-                                              constexpr int start =
-                                                  ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
-                                              constexpr int size =
-                                                  ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
-                                              hxs.template middleCols<size>(start, size).setZero();
-                                          });
+                tycho::utils::constexpr_for_loop(
+                    std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
+                    [&](auto i) {
+                        constexpr int start = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int size = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
+                        hxs.template middleCols<size>(start, size).setZero();
+                    });
             }
 
             this->scalarfunc.right_jacobian_product(hxs, adjgrad, jxs, DirectAssignment(),
@@ -217,8 +216,9 @@ struct VectorScalarFunctionProduct_Impl
         using HType = ScalFunc_hessian<Scalar>;
         using AType = Output<Scalar>;
 
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(1, irows), tycho::utils::TempSpec<GType>(irows, 1),
-                                    tycho::utils::TempSpec<HType>(irows, irows), tycho::utils::TempSpec<AType>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<JType>(1, irows), tycho::utils::TempSpec<GType>(irows, 1),
+            tycho::utils::TempSpec<HType>(irows, irows), tycho::utils::TempSpec<AType>(orows, 1));
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };

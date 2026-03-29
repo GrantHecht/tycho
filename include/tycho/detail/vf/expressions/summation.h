@@ -145,14 +145,14 @@ struct TwoFunctionSum_Impl
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
 
         if (this->func1.output_rows() != this->func2.output_rows()) {
-            throw std::invalid_argument(fmt::format(
-                "TwoFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
-                this->func1.output_rows(), this->func2.output_rows()));
+            throw std::invalid_argument(
+                fmt::format("TwoFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
+                            this->func1.output_rows(), this->func2.output_rows()));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-            throw std::invalid_argument(fmt::format(
-                "TwoFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
-                this->func1.input_rows(), this->func2.input_rows()));
+            throw std::invalid_argument(
+                fmt::format("TwoFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
+                            this->func1.input_rows(), this->func2.input_rows()));
         }
 
         this->set_io_rows(irtemp, this->func1.output_rows());
@@ -203,7 +203,8 @@ struct TwoFunctionSum_Impl
         const int irows = this->func2.input_rows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -248,8 +249,10 @@ struct TwoFunctionSum_Impl
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(orows, irows),
-                                    tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows),
+                                                  tycho::utils::TempSpec<GType>(irows, 1),
+                                                  tycho::utils::TempSpec<HType>(irows, irows));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -396,18 +399,18 @@ struct MultiFunctionSum_Impl
             [&](auto i) {
                 tmp.push_back(std::get<i.value>(this->funcs).input_domain());
                 if (this->func1.output_rows() != std::get<i.value>(this->funcs).output_rows()) {
-                    throw std::invalid_argument(fmt::format(
-                        "MultiFunctionSum: output size mismatch "
-                        "(Func1 ORows={}, Func{} ORows={})",
-                        this->func1.output_rows(), i.value + 3,
-                        std::get<i.value>(this->funcs).output_rows()));
+                    throw std::invalid_argument(
+                        fmt::format("MultiFunctionSum: output size mismatch "
+                                    "(Func1 ORows={}, Func{} ORows={})",
+                                    this->func1.output_rows(), i.value + 3,
+                                    std::get<i.value>(this->funcs).output_rows()));
                 }
                 if (this->func1.input_rows() != std::get<i.value>(this->funcs).input_rows()) {
-                    throw std::invalid_argument(fmt::format(
-                        "MultiFunctionSum: input size mismatch "
-                        "(Func1 IRows={}, Func{} IRows={})",
-                        this->func1.input_rows(), i.value + 3,
-                        std::get<i.value>(this->funcs).input_rows()));
+                    throw std::invalid_argument(
+                        fmt::format("MultiFunctionSum: input size mismatch "
+                                    "(Func1 IRows={}, Func{} IRows={})",
+                                    this->func1.input_rows(), i.value + 3,
+                                    std::get<i.value>(this->funcs).input_rows()));
                 }
             });
         this->set_input_domain(this->input_rows(), tmp);
@@ -475,7 +478,8 @@ struct MultiFunctionSum_Impl
         const int irows = this->func2.input_rows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -533,8 +537,10 @@ struct MultiFunctionSum_Impl
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(orows, irows),
-                                    tycho::utils::TempSpec<GType>(irows, 1), tycho::utils::TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows),
+                                                  tycho::utils::TempSpec<GType>(irows, 1),
+                                                  tycho::utils::TempSpec<HType>(irows, irows));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
