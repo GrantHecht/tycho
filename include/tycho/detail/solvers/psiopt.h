@@ -161,11 +161,11 @@ struct PSIOPT {
     using VectorXd = Eigen::VectorXd;
     std::shared_ptr<NonLinearProgram> nlp;
 
-    int PrimalVars = 0;
-    int SlackVars = 0;
-    int EqualCons = 0;
-    int InequalCons = 0;
-    int KKTdim = 0;
+    int primal_vars_ = 0;
+    int slack_vars_ = 0;
+    int equal_cons_ = 0;
+    int inequal_cons_ = 0;
+    int kkt_dim_ = 0;
 
 #ifdef USE_ACCELERATE_SPARSE
     Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> KKTSol;
@@ -524,47 +524,47 @@ struct PSIOPT {
     void disable_late_callback() { this->LateCallBackEnabled = false; }
     /////////////////////////////////////////////////////////////////////////////////////////
     EigenRef<VectorXd> getPrimals(EigenRef<VectorXd> XSL) const {
-        return XSL.head(this->PrimalVars);
+        return XSL.head(this->primal_vars_);
     }
     EigenRef<VectorXd> getSlacks(EigenRef<VectorXd> XSL) const {
-        return XSL.segment(this->PrimalVars, this->SlackVars);
+        return XSL.segment(this->primal_vars_, this->slack_vars_);
     }
     EigenRef<VectorXd> getPrimalsSlacks(EigenRef<VectorXd> XSL) const {
-        return XSL.head(this->PrimalVars + this->SlackVars);
+        return XSL.head(this->primal_vars_ + this->slack_vars_);
     }
 
     EigenRef<VectorXd> getLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.tail(this->EqualCons + this->InequalCons);
+        return XSL.tail(this->equal_cons_ + this->inequal_cons_);
     }
 
     EigenRef<VectorXd> getEqLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons);
+        return XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_);
     }
     EigenRef<VectorXd> getIqLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.tail(this->InequalCons);
+        return XSL.tail(this->inequal_cons_);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////
     EigenRef<VectorXd> getPrimGrad(EigenRef<VectorXd> GX_or_AGX_FX) const {
-        return GX_or_AGX_FX.head(this->PrimalVars);
+        return GX_or_AGX_FX.head(this->primal_vars_);
     }
     EigenRef<VectorXd> getDualGrad(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.segment(this->PrimalVars, this->SlackVars);
+        return AGX_FX.segment(this->primal_vars_, this->slack_vars_);
     }
     EigenRef<VectorXd> getPrimDualGrad(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.head(this->PrimalVars + this->SlackVars);
+        return AGX_FX.head(this->primal_vars_ + this->slack_vars_);
     }
     EigenRef<VectorXd> getEqCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.segment(this->PrimalVars + this->SlackVars, this->EqualCons);
+        return AGX_FX.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_);
     }
     EigenRef<VectorXd> getIqCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.tail(this->InequalCons);
+        return AGX_FX.tail(this->inequal_cons_);
     }
     EigenRef<VectorXd> getAllCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.tail(this->InequalCons + this->EqualCons);
+        return AGX_FX.tail(this->inequal_cons_ + this->equal_cons_);
     }
     /////////////////////////////////////////////////////////////////////////////////////////////
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const {
-        for (int i = 0; i < this->SlackVars; i++) {
+        for (int i = 0; i < this->slack_vars_; i++) {
             double fxi = FXI[i];
             double si = S[i];
             if (si < NegSlackReset) {
@@ -582,7 +582,7 @@ struct PSIOPT {
     double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
                                 double bfrac) const {
         double alpha = 1.0;
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             if (dSLI[i] < -bfrac * SLI[i]) {
                 double an = -bfrac * SLI[i] / dSLI[i];
                 if (an < alpha)
@@ -601,7 +601,7 @@ struct PSIOPT {
 
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
         double psi = 0;
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             psi += -mu * std::log(S[i]);
         }
         return psi;
@@ -617,12 +617,12 @@ struct PSIOPT {
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu) {
         Eigen::VectorXd hp = LI.cwiseQuotient(S);
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             if (hp[i] < 0.0) {
                 hp[i] = mu / (S[i] * S[i]);
             }
         }
-        this->nlp->assignKKTSlackHessian(hp, KKTmat);
+        this->nlp->assign_kkt_slack_hessian(hp, KKTmat);
     }
 
     double LOQOMu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
@@ -642,50 +642,53 @@ struct PSIOPT {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void evalKKT(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalKKT(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_kkt(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp->eval_kkt(ObjScale, XSL.head(this->primal_vars_),
+                            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                            XSL.tail(this->inequal_cons_), val, this->getPrimGrad(GX),
+                            this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
+                            this->getIqCons(AGXS_FX), KKTmat);
     }
 
-    void evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                   EigenRef<VectorXd> AGXS_FX,
-                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalKKTNO(ObjScale, XSL.head(this->PrimalVars),
-                             XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                             XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                             this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                             this->getIqCons(AGXS_FX), KKTmat);
+    void eval_kkt_no(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
+                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp->eval_kkt_no(
+            ObjScale, XSL.head(this->primal_vars_),
+            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+            XSL.tail(this->inequal_cons_), val, this->getPrimGrad(GX), this->getPrimGrad(AGXS_FX),
+            this->getEqCons(AGXS_FX), this->getIqCons(AGXS_FX), KKTmat);
     }
 
-    void evalAUG(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalAUG(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_aug(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp->eval_aug(ObjScale, XSL.head(this->primal_vars_),
+                            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                            XSL.tail(this->inequal_cons_), val, this->getPrimGrad(GX),
+                            this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
+                            this->getIqCons(AGXS_FX), KKTmat);
     }
 
-    void evalSOE(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalSOE(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_soe(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp->eval_soe(ObjScale, XSL.head(this->primal_vars_),
+                            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                            XSL.tail(this->inequal_cons_), val, this->getPrimGrad(GX),
+                            this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
+                            this->getIqCons(AGXS_FX), KKTmat);
     }
 
-    void evalRHS(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                 Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
-        this->nlp->evalRHS(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX));
+    void eval_rhs(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
+        this->nlp->eval_rhs(ObjScale, XSL.head(this->primal_vars_),
+                            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                            XSL.tail(this->inequal_cons_), val, this->getPrimGrad(GX),
+                            this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
+                            this->getIqCons(AGXS_FX));
     }
 
     void max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> DXSL,

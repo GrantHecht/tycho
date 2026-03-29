@@ -27,12 +27,12 @@ void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
     obj.def_rw("jet_job_mode", &OptimizationProblemBase::JetJobMode);
-    obj.def_rw("num_partitions", &OptimizationProblemBase::NumPartitions);
+    obj.def_rw("num_partitions", &OptimizationProblemBase::num_partitions_);
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
 
     obj.def("set_num_partitions",
             nb::overload_cast<int, int>(&OptimizationProblemBase::setNumPartitions),
-            nb::arg("NumPartitions"), nb::arg("QPThreads"));
+            nb::arg("num_partitions_"), nb::arg("QPThreads"));
 
     obj.def("set_num_partitions",
             nb::overload_cast<int>(&OptimizationProblemBase::setNumPartitions));

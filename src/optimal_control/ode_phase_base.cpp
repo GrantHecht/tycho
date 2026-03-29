@@ -930,13 +930,13 @@ void tycho::oc::ODEPhaseBase::transcribe_axis_funcs() {
 
     std::vector<ConstraintInterface> AxisFuncs;
     std::vector<ThreadingFlags> Tmodes;
-    Eigen::VectorXi bins(this->NumPartitions + 1);
+    Eigen::VectorXi bins(this->num_partitions_ + 1);
     bins.setLinSpaced(0, this->indexer_.num_nodal_states);
 
     for (int i = 0; i < this->indexer_.num_nodal_states - 2; i++) {
         AxisFuncs.emplace_back(SingleMeshSpacing(cspace[i + 1]));
         ThreadingFlags thrt = ThreadingFlags::Thread0;
-        for (int j = 0; j < this->NumPartitions; j++) {
+        for (int j = 0; j < this->num_partitions_; j++) {
             if (i >= bins(j) && i < bins(j + 1)) {
                 thrt = static_cast<ThreadingFlags>(j);
             }
@@ -1309,7 +1309,7 @@ void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
 }
 
 void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
-    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
+    this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     this->init_indexing();
 
@@ -1341,7 +1341,7 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
                    this->indexer_.num_phase_eq_cons, this->indexer_.num_phase_vars);
     }
 
-    this->nlp->make_NLP(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
+    this->nlp->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
                         this->indexer_.num_phase_iq_cons);
 
     this->optimizer->setNLP(this->nlp);
@@ -1355,7 +1355,7 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
     this->transcribe_phase(0, 0, 0, nlp1, 0);
     if (false)
         this->indexer_.print_stats(false);
-    nlp1->make_NLP(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
+    nlp1->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
                    this->indexer_.num_phase_iq_cons);
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
@@ -1363,11 +1363,11 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
     this->transcribe_phase(0, 0, 0, nlp2, 0);
     if (false)
         this->indexer_.print_stats(false);
-    nlp2->make_NLP(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
+    nlp2->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
                    this->indexer_.num_phase_iq_cons);
 
     Eigen::VectorXd v = this->make_solver_input();
-    NonLinearProgram::NLPTest(v, n, nlp1, nlp2);
+    NonLinearProgram::nlp_test(v, n, nlp1, nlp2);
 
     this->reset_transcription();
 }

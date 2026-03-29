@@ -126,7 +126,7 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
         this->num_phase_iq_cons.resize(this->phases.size());
 
         for (int i = 0; i < this->phases.size(); i++) {
-            this->phases[i]->NumPartitions = this->NumPartitions;
+            this->phases[i]->num_partitions_ = this->num_partitions_;
             this->phases[i]->init_indexing();
             this->num_phase_vars[i] = this->phases[i]->indexer_.num_phase_vars;
         }
@@ -267,9 +267,9 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         this->LinkParamLocs[i] = LinkVarStart + i;
     }
 
-    this->StartObj = int(this->nlp->Objectives.size());
-    this->StartEq = int(this->nlp->EqualityConstraints.size());
-    this->StartIq = int(this->nlp->InequalityConstraints.size());
+    this->StartObj = int(this->nlp->objectives_.size());
+    this->StartEq = int(this->nlp->equality_constraints_.size());
+    this->StartIq = int(this->nlp->inequality_constraints_.size());
     this->num_eq_funs = 0;
     this->num_iq_funs = 0;
     this->num_obj_funs = 0;
@@ -289,8 +289,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Eq.func_, input_scales, output_scales);
         }
 
-        this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Eq.global_index_ = this->nlp->EqualityConstraints.size() - 1;
+        this->nlp->equality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
+        Eq.global_index_ = this->nlp->equality_constraints_.size() - 1;
         this->num_eq_funs++;
     }
     for (auto &[key, Iq] : this->LinkInequalities) {
@@ -309,8 +309,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Iq.func_, input_scales, output_scales);
         }
 
-        this->nlp->InequalityConstraints.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Iq.global_index_ = this->nlp->InequalityConstraints.size() - 1;
+        this->nlp->inequality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
+        Iq.global_index_ = this->nlp->inequality_constraints_.size() - 1;
         this->num_iq_funs++;
     }
     for (auto &[key, Ob] : this->LinkObjectives) {
@@ -330,8 +330,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Ob.func_, input_scales, output_scales);
         }
 
-        this->nlp->Objectives.emplace_back(ObjectiveFunction(Func, VC[0]));
-        Ob.global_index_ = this->nlp->Objectives.size() - 1;
+        this->nlp->objectives_.emplace_back(ObjectiveFunction(Func, VC[0]));
+        Ob.global_index_ = this->nlp->objectives_.size() - 1;
 
         this->num_obj_funs++;
     }
@@ -397,7 +397,7 @@ void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
 
 void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
 
-    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
+    this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     check_functions();
     if (this->auto_scaling_) {
@@ -422,7 +422,7 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->num_prob_iq_cons = this->num_phase_iq_cons.sum() + this->num_link_iq_cons;
     if (showstats)
         this->print_stats(showfuns);
-    this->nlp->make_NLP(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
+    this->nlp->make_nlp(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
     this->optimizer->setNLP(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//
@@ -560,7 +560,7 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
     cout << "Problem Statistics" << endl << endl;
 
     cout << "# Variables:    " << num_prob_vars << endl;
-    cout << "# EqualCons:    " << num_prob_eq_cons << endl;
+    cout << "# equal_cons_:    " << num_prob_eq_cons << endl;
     cout << "# InEqualCons:  " << num_prob_iq_cons << endl;
     cout << "# Phases:       " << this->phases.size() << endl << endl;
 
@@ -574,7 +574,7 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
     cout << "____________________________________________________________" << endl << endl;
     cout << "Link Statistics" << endl << endl;
     cout << "# Link Params:    " << num_link_params << endl;
-    cout << "# Link EqualCons:    " << num_link_eq_cons << endl;
+    cout << "# Link equal_cons_:    " << num_link_eq_cons << endl;
     cout << "# Link InEqualCons:  " << num_link_iq_cons << endl;
 
     cout << "____________________________________________________________" << endl << endl;
@@ -584,19 +584,19 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_obj_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->Objectives[this->StartObj + i].print_data();
+            this->nlp->objectives_[this->StartObj + i].print_data();
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->EqualityConstraints[this->StartEq + i].print_data();
+            this->nlp->equality_constraints_[this->StartEq + i].print_data();
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->InequalityConstraints[this->StartIq + i].print_data();
+            this->nlp->inequality_constraints_[this->StartIq + i].print_data();
         }
     }
 }

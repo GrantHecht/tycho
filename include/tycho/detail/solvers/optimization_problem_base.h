@@ -42,7 +42,7 @@ struct OptimizationProblemBase {
         OptimizeSolve
     };
 
-    int NumPartitions = 1;
+    int num_partitions_ = 1;
     JetJobModes JetJobMode = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
@@ -63,7 +63,7 @@ struct OptimizationProblemBase {
 
     /// Compute default partition count from the global thread budget.
     /// Over-partitions by 4x so the work-stealing pool can smooth out
-    /// unequal partition costs. make_NLP() further caps this via
+    /// unequal partition costs. make_nlp() further caps this via
     /// MIN_NNZ_PER_PARTITION on small problems.
     static int default_num_partitions() {
         int nt = tycho::utils::get_num_threads();
@@ -73,7 +73,7 @@ struct OptimizationProblemBase {
     }
 
     virtual void initPartitions() {
-        this->NumPartitions = default_num_partitions();
+        this->num_partitions_ = default_num_partitions();
         this->optimizer->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
 
@@ -81,24 +81,24 @@ struct OptimizationProblemBase {
         if (num_partitions < 1 || qp_threads < 1) {
             throw std::invalid_argument("Number of partitions/threads must be positive");
         }
-        this->NumPartitions = num_partitions;
+        this->num_partitions_ = num_partitions;
         this->optimizer->QPThreads = qp_threads;
     }
     virtual void setNumPartitions(int num_partitions) {
         if (num_partitions < 1) {
             throw std::invalid_argument("Number of partitions must be positive");
         }
-        this->NumPartitions = num_partitions;
+        this->num_partitions_ = num_partitions;
     }
 
     virtual void jet_initialize() = 0;
     virtual void jet_release() = 0;
 
     // IMPORTANT: jet_run() is called from Jet::map() on pool worker threads.
-    // If jet_initialize() did NOT set NumPartitions=1, the NLP eval methods
+    // If jet_initialize() did NOT set num_partitions_=1, the NLP eval methods
     // would call parallel_sequence/parallel_task from a pool worker, triggering
     // the nested-dispatch guard (std::logic_error). jet_initialize() MUST set
-    // NumPartitions=1 so NLP eval methods run inline.
+    // num_partitions_=1 so NLP eval methods run inline.
     virtual PSIOPT::ConvergenceFlags jet_run() {
         this->jet_initialize();
 

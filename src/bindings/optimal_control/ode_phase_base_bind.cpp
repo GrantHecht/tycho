@@ -206,7 +206,7 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
             nb::arg("vars"), nb::arg("AutoScale").none() = std::string("auto"));
 
     //////////////////////////////////
-    /////// InequalCons
+    /////// inequal_cons_
     obj.def("add_inequal_con",
             nb::overload_cast<RegionType, VectorFunctionalX, VarIndexType, VarIndexType,
                               VarIndexType, ScaleType>(&ODEPhaseBase::add_inequal_con),

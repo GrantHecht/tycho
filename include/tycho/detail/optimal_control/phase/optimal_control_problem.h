@@ -1283,7 +1283,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkEqualities.at(index).global_index_;
-        auto c_index_ = this->nlp->EqualityConstraints[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1309,7 +1309,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkEqualities.at(index).global_index_;
-        auto c_index_ = this->nlp->EqualityConstraints[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1334,7 +1334,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 index));
         }
         int Gindex = this->LinkInequalities.at(index).global_index_;
-        auto c_index_ = this->nlp->InequalityConstraints[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1360,7 +1360,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->LinkInequalities.at(index).global_index_;
-        auto c_index_ = this->nlp->InequalityConstraints[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;

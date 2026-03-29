@@ -18,7 +18,7 @@ using tycho::solvers::ConstraintFunction;
 using tycho::solvers::ObjectiveFunction;
 
 void tycho::solvers::OptimizationProblem::transcribe() {
-    this->nlp = std::make_shared<NonLinearProgram>(this->NumPartitions);
+    this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     int numVars = this->ActiveVariables.size();
 
@@ -53,14 +53,15 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             }
         }
 
-        this->nlp->EqualityConstraints.emplace_back(ConstraintFunction(func.func, vindex, cindex));
+        this->nlp->equality_constraints_.emplace_back(
+            ConstraintFunction(func.func, vindex, cindex));
 
         ThreadingFlags ThreadMode =
             func.func.thread_safe()
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->EqualityConstraints.back().thread_mode_ = ThreadMode;
+        this->nlp->equality_constraints_.back().thread_mode_ = ThreadMode;
     }
 
     for (auto &func : this->userInequalities) {
@@ -85,7 +86,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             }
         }
 
-        this->nlp->InequalityConstraints.emplace_back(
+        this->nlp->inequality_constraints_.emplace_back(
             ConstraintFunction(func.func, vindex, cindex));
 
         ThreadingFlags ThreadMode =
@@ -93,7 +94,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->InequalityConstraints.back().thread_mode_ = ThreadMode;
+        this->nlp->inequality_constraints_.back().thread_mode_ = ThreadMode;
     }
 
     for (auto &func : this->userObjectives) {
@@ -112,17 +113,17 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             vindex.col(i) = func.indices[i];
         }
 
-        this->nlp->Objectives.emplace_back(ObjectiveFunction(func.func, vindex));
+        this->nlp->objectives_.emplace_back(ObjectiveFunction(func.func, vindex));
 
         ThreadingFlags ThreadMode =
             func.func.thread_safe()
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp->Objectives.back().thread_mode_ = ThreadMode;
+        this->nlp->objectives_.back().thread_mode_ = ThreadMode;
     }
 
-    this->nlp->make_NLP(numVars, numEqCons, numIqCons);
+    this->nlp->make_nlp(numVars, numEqCons, numIqCons);
     this->optimizer->setNLP(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//

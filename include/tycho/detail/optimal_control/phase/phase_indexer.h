@@ -162,9 +162,9 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->StartEqCons = ep;
         this->StartIqCons = ip;
 
-        this->StartObj = this->nlp->Objectives.size();
-        this->StartEq = this->nlp->EqualityConstraints.size();
-        this->StartIq = this->nlp->InequalityConstraints.size();
+        this->StartObj = this->nlp->objectives_.size();
+        this->StartEq = this->nlp->equality_constraints_.size();
+        this->StartIq = this->nlp->inequality_constraints_.size();
 
         this->num_obj_funs = 0;
         this->num_eq_funs = 0;

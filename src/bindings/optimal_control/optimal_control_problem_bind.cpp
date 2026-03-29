@@ -159,7 +159,7 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
 
 static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
 
-    //////////// EqualCons////////////////////////////////////////
+    //////////// equal_cons_////////////////////////////////////////
     {
         obj.def(
             "add_link_equal_con",
@@ -219,7 +219,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 nb::arg("reg1"), nb::arg("v1"), nb::arg("AutoScale").none() = std::string("auto"));
     }
 
-    //////////// InequalCons////////////////////////////////////////
+    //////////// inequal_cons_////////////////////////////////////////
     {
         obj.def(
             "add_link_inequal_con",
@@ -259,7 +259,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 nb::arg("func"), nb::arg("LinkParms"),
                 nb::arg("AutoScale").none() = std::string("auto"));
     }
-    //////////// Objectives ////////////////////////////////////////
+    //////////// objectives_ ////////////////////////////////////////
     {
         obj.def(
             "add_link_objective",
@@ -303,7 +303,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
 
 static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
     {
-        ////////////////// Legacy EqualCons//////////
+        ////////////////// Legacy equal_cons_//////////
         obj.def("add_link_equal_con",
                 nb::overload_cast<LinkConstraint>(&OptimalControlProblem::add_link_equal_con), "");
 
@@ -427,7 +427,7 @@ static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 "");
     }
 
-    //////////////////Legacy  InequalCons//////////
+    //////////////////Legacy  inequal_cons_//////////
     {
 
         obj.def("add_link_inequal_con",
