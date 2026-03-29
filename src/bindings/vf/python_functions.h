@@ -34,7 +34,7 @@ struct PyVectorFunction
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
 
-    bool threadSafe = false;
+    bool thread_safe_ = false;
     nb::object pyfun;
     nb::tuple pyargs;
 
@@ -74,7 +74,7 @@ struct PyVectorFunction
         fx = nb::cast<Output<double>>(result);
     }
 
-    bool thread_safe() const { return threadSafe; }
+    bool thread_safe() const { return thread_safe_; }
 };
 
 template <int IRR, int ORR>
@@ -90,7 +90,7 @@ struct NumbaVectorFunction
     using FType = long long unsigned int;
     typedef void (*FPtr)(double *, double *, int, int);
 
-    bool threadSafe = false;
+    bool thread_safe_ = false;
     bool dojac = false;
     FPtr fun;
 
@@ -121,7 +121,7 @@ struct NumbaVectorFunction
         : NumbaVectorFunction(irr, ORR, f, js, hs) {}
     NumbaVectorFunction(int irr, const FType &f) : NumbaVectorFunction(irr, ORR, f) {}
 
-    bool thread_safe() const { return threadSafe; }
+    bool thread_safe() const { return thread_safe_; }
 };
 
 // ── TychoBind<PyVectorFunction>
@@ -142,7 +142,7 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
 
         bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
         obj.def_prop_rw(
-            "thread_safe", [](const PyVectorFunction<IRR, ORR> &self) { return self.threadSafe; },
+            "thread_safe", [](const PyVectorFunction<IRR, ORR> &self) { return self.thread_safe_; },
             [](PyVectorFunction<IRR, ORR> &, bool val) {
                 if (val)
                     throw std::invalid_argument(
@@ -172,7 +172,7 @@ template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
                 nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &, double, double>());
             obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
-        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::threadSafe);
+        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe_);
         bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
     }
 };
