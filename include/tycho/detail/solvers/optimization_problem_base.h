@@ -43,7 +43,7 @@ struct OptimizationProblemBase {
     };
 
     int num_partitions_ = 1;
-    JetJobModes JetJobMode = JetJobModes::NotSet;
+    JetJobModes jet_job_mode_ = JetJobModes::NotSet;
 
     std::shared_ptr<NonLinearProgram> nlp;
     std::shared_ptr<PSIOPT> optimizer;
@@ -77,14 +77,14 @@ struct OptimizationProblemBase {
         this->optimizer->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
 
-    virtual void setNumPartitions(int num_partitions, int qp_threads) {
+    virtual void set_num_partitions(int num_partitions, int qp_threads) {
         if (num_partitions < 1 || qp_threads < 1) {
             throw std::invalid_argument("Number of partitions/threads must be positive");
         }
         this->num_partitions_ = num_partitions;
         this->optimizer->qp_threads_ = qp_threads;
     }
-    virtual void setNumPartitions(int num_partitions) {
+    virtual void set_num_partitions(int num_partitions) {
         if (num_partitions < 1) {
             throw std::invalid_argument("Number of partitions must be positive");
         }
@@ -104,7 +104,7 @@ struct OptimizationProblemBase {
 
         PSIOPT::ConvergenceFlags flag;
 
-        switch (this->JetJobMode) {
+        switch (this->jet_job_mode_) {
         case JetJobModes::Solve: {
             flag = this->solve();
             break;
@@ -126,10 +126,10 @@ struct OptimizationProblemBase {
             break;
         }
         case JetJobModes::NotSet: {
-            throw ::std::invalid_argument("JetJobMode not set");
+            throw ::std::invalid_argument("jet_job_mode_ not set");
         }
         default:
-            throw std::invalid_argument("Unrecognized JetJobMode");
+            throw std::invalid_argument("Unrecognized jet_job_mode_");
         }
 
         this->jet_release();
@@ -152,13 +152,13 @@ struct OptimizationProblemBase {
         else if (str == "DoNothing" || str == "do_nothing" || str == "Do_Nothing")
             return JetJobModes::DoNothing;
         else {
-            auto msg = fmt::format("Unrecognized JetJobMode: {0}\n", str);
+            auto msg = fmt::format("Unrecognized jet_job_mode_: {0}\n", str);
             throw std::invalid_argument(msg);
         }
     }
 
-    void setJetJobMode(JetJobModes m) { this->JetJobMode = m; }
-    void setJetJobMode(const std::string &str) { this->setJetJobMode(strto_JetJobMode(str)); }
+    void set_jet_job_mode(JetJobModes m) { this->jet_job_mode_ = m; }
+    void set_jet_job_mode(const std::string &str) { this->set_jet_job_mode(strto_JetJobMode(str)); }
 };
 
 } // namespace tycho::solvers

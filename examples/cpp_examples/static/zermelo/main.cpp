@@ -130,7 +130,7 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
     // Phase
     auto phase = std::make_shared<ODEPhase<ODE>>(ode, TranscriptionModes::LGL3);
     phase->set_traj(trajG, nSeg);
-    phase->setNumPartitions(10);
+    phase->set_num_partitions(10);
 
     // Boundary conditions
     Eigen::VectorXi xy_idx(2);

@@ -52,21 +52,21 @@ struct OptimizationProblem : OptimizationProblemBase {
             : func(func), indices(indices) {}
     };
 
-    bool doTranscription = true;
-    void resetTranscription() { this->doTranscription = true; };
-    bool EnableVectorization = true;
+    bool do_transcription_ = true;
+    void resetTranscription() { this->do_transcription_ = true; };
+    bool enable_vectorization_ = true;
 
-    VectorXd ActiveVariables;
-    bool MultipliersLoaded = false;
+    VectorXd active_variables_;
+    bool multipliers_loaded_ = false;
 
-    VectorXd ActiveEqLmults;
-    VectorXd ActiveIqLmults;
+    VectorXd active_eq_lmults_;
+    VectorXd active_iq_lmults_;
 
     std::vector<FuncIndexHolder<ConstraintInterface>> userEqualities;
     std::vector<FuncIndexHolder<ConstraintInterface>> userInequalities;
     std::vector<FuncIndexHolder<ObjectiveInterface>> userObjectives;
 
-    OptimizationProblem() { this->setNumPartitions(1, 1); }
+    OptimizationProblem() { this->set_num_partitions(1, 1); }
     virtual ~OptimizationProblem() = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -91,8 +91,8 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    void setVars(const VectorXd &v) { this->ActiveVariables = v; }
-    VectorXd returnVars() const { return this->ActiveVariables; }
+    void setVars(const VectorXd &v) { this->active_variables_ = v; }
+    VectorXd returnVars() const { return this->active_variables_; }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -147,60 +147,60 @@ struct OptimizationProblem : OptimizationProblemBase {
     void transcribe();
 
     void jet_initialize() {
-        this->setNumPartitions(1, 1);
+        this->set_num_partitions(1, 1);
         this->optimizer->print_level_ = 10;
         this->transcribe();
     }
     void jet_release() {
         this->optimizer->release();
-        this->setNumPartitions(1, 1);
+        this->set_num_partitions(1, 1);
         this->optimizer->print_level_ = 0;
         this->nlp = std::shared_ptr<NonLinearProgram>();
         this->resetTranscription();
     }
 
     PSIOPT::ConvergenceFlags solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->last_eq_lmults_;
-        this->ActiveIqLmults = this->optimizer->last_iq_lmults_;
+        this->active_variables_ = this->optimizer->solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
         return this->optimizer->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->optimize(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->last_eq_lmults_;
-        this->ActiveIqLmults = this->optimizer->last_iq_lmults_;
+        this->active_variables_ = this->optimizer->optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
         return this->optimizer->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve_optimize(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->last_eq_lmults_;
-        this->ActiveIqLmults = this->optimizer->last_iq_lmults_;
+        this->active_variables_ = this->optimizer->solve_optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
         return this->optimizer->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve_optimize_solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->last_eq_lmults_;
-        this->ActiveIqLmults = this->optimizer->last_iq_lmults_;
+        this->active_variables_ = this->optimizer->solve_optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
         return this->optimizer->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize_solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->optimize_solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->last_eq_lmults_;
-        this->ActiveIqLmults = this->optimizer->last_iq_lmults_;
+        this->active_variables_ = this->optimizer->optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
         return this->optimizer->converge_flag_;
     }
 };

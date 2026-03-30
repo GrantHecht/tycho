@@ -13,7 +13,7 @@ TEST_F(SolverTest, JetMapPrebuiltProblems) {
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < 3; ++i) {
         auto p = make_brach_solver_phase(16);
-        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
         phases.push_back(p);
     }
 
@@ -31,7 +31,7 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     // Single generator function that builds a Brach phase from a segment count
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen = [](int n_segs) {
         auto p = make_brach_solver_phase(n_segs);
-        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
 
@@ -55,7 +55,7 @@ TEST_F(SolverTest, JetMapSaturatedPool) {
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < num_jobs; ++i) {
         auto p = make_brach_solver_phase(16);
-        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
         phases.push_back(p);
     }
 
@@ -72,12 +72,12 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     // Two generators: different segment counts
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen16 = [](int) {
         auto p = make_brach_solver_phase(16);
-        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen32 = [](int) {
         auto p = make_brach_solver_phase(32);
-        p->JetJobMode = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
 

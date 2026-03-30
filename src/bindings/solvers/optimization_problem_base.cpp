@@ -26,21 +26,21 @@ using namespace tycho::utils;
 void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
-    obj.def_rw("jet_job_mode", &OptimizationProblemBase::JetJobMode);
+    obj.def_rw("jet_job_mode", &OptimizationProblemBase::jet_job_mode_);
     obj.def_rw("num_partitions", &OptimizationProblemBase::num_partitions_);
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
 
     obj.def("set_num_partitions",
-            nb::overload_cast<int, int>(&OptimizationProblemBase::setNumPartitions),
+            nb::overload_cast<int, int>(&OptimizationProblemBase::set_num_partitions),
             nb::arg("num_partitions_"), nb::arg("qp_threads_"));
 
     obj.def("set_num_partitions",
-            nb::overload_cast<int>(&OptimizationProblemBase::setNumPartitions));
+            nb::overload_cast<int>(&OptimizationProblemBase::set_num_partitions));
 
     obj.def("set_jet_job_mode",
-            nb::overload_cast<JetJobModes>(&OptimizationProblemBase::setJetJobMode));
+            nb::overload_cast<JetJobModes>(&OptimizationProblemBase::set_jet_job_mode));
     obj.def("set_jet_job_mode",
-            nb::overload_cast<const std::string &>(&OptimizationProblemBase::setJetJobMode));
+            nb::overload_cast<const std::string &>(&OptimizationProblemBase::set_jet_job_mode));
 
     obj.def("solve", &OptimizationProblemBase::solve, nb::call_guard<nb::gil_scoped_release>());
     obj.def("optimize", &OptimizationProblemBase::optimize,

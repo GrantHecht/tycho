@@ -20,7 +20,7 @@ using tycho::solvers::ObjectiveFunction;
 void tycho::solvers::OptimizationProblem::transcribe() {
     this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
-    int numVars = this->ActiveVariables.size();
+    int numVars = this->active_variables_.size();
 
     if (numVars == 0) {
         fmt::print(fmt::fg(fmt::color::red), "Transcription Error!!!\n"
@@ -127,6 +127,6 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     this->optimizer->set_nlp(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//
-    this->doTranscription = false;
+    this->do_transcription_ = false;
     ////////////////////////////////////
 }

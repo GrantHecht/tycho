@@ -740,8 +740,8 @@ struct PSIOPT {
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    double ls_impl(LineSearchModes lsmode, double obj_scale_, double Mu, double PrimObj,
-                   double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
+    double ls_impl(LineSearchModes lsmode, double obj_scale_, double Mu, double prim_obj_,
+                   double barr_obj_, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 

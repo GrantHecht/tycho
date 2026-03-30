@@ -124,7 +124,7 @@ int main() {
     phase->optimizer->set_soe_ls_mode("L1");
     phase->optimizer->set_max_ls_iters(2);
     phase->optimizer->print_level_ = 2;
-    phase->setNumPartitions(1);
+    phase->set_num_partitions(1);
 
     // MINDEG ordering — required for stability at tf=10000
     phase->optimizer->set_qp_ordering_mode("MINDEG");

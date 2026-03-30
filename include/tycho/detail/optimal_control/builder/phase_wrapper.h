@@ -401,9 +401,9 @@ class Phase {
     void set_mesh_red_factor(double factor) { phase_->set_mesh_red_factor(factor); }
     void set_mesh_err_factor(double factor) { phase_->set_mesh_err_factor(factor); }
 
-    void set_num_partitions(int nparts) { phase_->setNumPartitions(nparts); }
+    void set_num_partitions(int nparts) { phase_->set_num_partitions(nparts); }
     void set_num_partitions(int nparts, int qp_threads) {
-        phase_->setNumPartitions(nparts, qp_threads);
+        phase_->set_num_partitions(nparts, qp_threads);
     }
 
     void set_units(const Eigen::VectorXd &units) { phase_->set_units(units); }
