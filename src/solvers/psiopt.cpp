@@ -808,8 +808,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
     this->last_pre_time_ += pretime;
 
-    this->factor_flops_ = this->kkt_sol_.m_flops;
-    this->factor_mem_ = this->kkt_sol_.m_mem;
+    this->factor_flops_ = this->kkt_sol_.flops_;
+    this->factor_mem_ = this->kkt_sol_.mem_;
 
     if (this->print_level_ < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);

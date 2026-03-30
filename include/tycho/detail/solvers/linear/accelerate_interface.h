@@ -269,21 +269,21 @@ class AccelerateImpl
             m_triType = (UpLo_ & Lower) ? SparseLowerTriangle : SparseUpperTriangle;
         }
 
-        m_order = SparseOrderMetis;
-        m_doIterativeRefinement = false;
-        m_iterativeRefinementIterations = 2;
+        order_ = SparseOrderMetis;
+        do_iterative_refinement_ = false;
+        iterative_refinement_iterations_ = 2;
     }
 
     explicit AccelerateImpl(const MatrixType &matrix) : AccelerateImpl() { compute(matrix); }
 
     ~AccelerateImpl() {}
 
-    inline Index cols() const { return m_nCols; }
-    inline Index rows() const { return m_nRows; }
+    inline Index cols() const { return n_cols_; }
+    inline Index rows() const { return n_rows_; }
 
     ComputationInfo info() const {
         eigen_assert(m_isInitialized && "Decomposition is not initialized.");
-        return m_info;
+        return info_;
     }
 
     void set_matrix(const MatrixType &matrix);
@@ -298,57 +298,57 @@ class AccelerateImpl
     void _solve_impl(const MatrixBase<Rhs> &b, MatrixBase<Dest> &dest) const;
 
     /** Sets the ordering algorithm to use. */
-    void set_order(SparseOrder_t order) { m_order = order; }
+    void set_order(SparseOrder_t order) { order_ = order; }
 
     /** Sets the number of threads for accelerate */
     inline void set_num_threads(int num_threads) { accelerate_set_num_threads(num_threads); }
 
     void set_iterative_refinement(bool iterativeRefinement) {
-        m_doIterativeRefinement = iterativeRefinement;
+        do_iterative_refinement_ = iterativeRefinement;
     }
 
     void set_iterative_refinement_iterations(int iterations) {
         eigen_assert(iterations >= 0 && "Number of iterations must be non-negative.");
-        m_iterativeRefinementIterations = iterations;
+        iterative_refinement_iterations_ = iterations;
     }
 
-    void set_pivot_tolerance(Scalar tol) { m_pivotTolerance = tol; }
-    void set_zero_tolerance(Scalar tol) { m_zeroTolerance = tol; }
+    void set_pivot_tolerance(Scalar tol) { pivot_tolerance_ = tol; }
+    void set_zero_tolerance(Scalar tol) { zero_tolerance_ = tol; }
 
-    MatrixType &get_matrix() { return m_matrix; }
+    MatrixType &get_matrix() { return matrix_; }
 
     template <int U = UpLo>
     typename std::enable_if<!bool(U & Symmetric), void>::type get_matrix(const MatrixType &matrix) {
-        m_matrix = matrix;
-        m_matrix.makeCompressed();
+        matrix_ = matrix;
+        matrix_.makeCompressed();
     }
 
     template <int U = UpLo>
     typename std::enable_if<bool(U &Symmetric), void>::type get_matrix(const MatrixType &matrix) {
         // Similar to Pardiso, use selfadjointView to ensure symmetry
         PermutationMatrix<Dynamic, Dynamic, StorageIndex> p_null;
-        m_matrix.resize(matrix.rows(), matrix.cols());
+        matrix_.resize(matrix.rows(), matrix.cols());
 
         constexpr int TriangleType = (UpLo & Lower) ? Lower : Upper;
-        m_matrix.template selfadjointView<TriangleType>() =
+        matrix_.template selfadjointView<TriangleType>() =
             matrix.template selfadjointView<TriangleType>().twistedBy(p_null);
-        m_matrix.makeCompressed();
+        matrix_.makeCompressed();
     }
 
     template <int U = UpLo>
     typename std::enable_if<bool(U &Symmetric), MatrixType>::type
     get_matrix_twisted(const MatrixType &matrix) {
-        eigen_assert(!m_permutation.empty() &&
+        eigen_assert(!permutation_.empty() &&
                      "Permutation not available. Call compute() or analyze_pattern() first.");
         eigen_assert(matrix.rows() == matrix.cols() &&
                      "Matrix must be square for twisted operation.");
-        eigen_assert(static_cast<size_t>(matrix.rows()) == m_permutation.size() &&
+        eigen_assert(static_cast<size_t>(matrix.rows()) == permutation_.size() &&
                      "Matrix size must match permutation size.");
 
         // Create permutation matrix from the stored permutation vector
         PermutationMatrix<Dynamic, Dynamic, StorageIndex> p_perm;
         p_perm.indices() =
-            Map<const Matrix<StorageIndex, Dynamic, 1>>(m_permutation.data(), m_permutation.size());
+            Map<const Matrix<StorageIndex, Dynamic, 1>>(permutation_.data(), permutation_.size());
 
         MatrixType result;
         result.resize(matrix.rows(), matrix.cols());
@@ -363,17 +363,17 @@ class AccelerateImpl
 
     template <SparseFactorization_t S = Solver_>
     std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> peigs() const {
-        return static_cast<Index>(m_peigs);
+        return static_cast<Index>(peigs_);
     }
 
     template <SparseFactorization_t S = Solver_>
     std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> neigs() const {
-        return static_cast<Index>(m_neigs);
+        return static_cast<Index>(neigs_);
     }
 
     template <SparseFactorization_t S = Solver_>
     std::enable_if_t<S == SparseFactorizationLDLTTPP, Index> zeigs() const {
-        return static_cast<Index>(m_zeigs);
+        return static_cast<Index>(zeigs_);
     }
 
     inline int ppivs() const {
@@ -383,7 +383,7 @@ class AccelerateImpl
     }
 
     // This method initializes the internal AccelSparseMatrix. This must be called
-    // after changing the sparsity pattern of m_matrix via the reference returned
+    // after changing the sparsity pattern of matrix_ via the reference returned
     // from MatrixType& get_matrix()
     void reinitialize_internal_matrix_representation();
 
@@ -397,8 +397,8 @@ class AccelerateImpl
     void release();
 
     // Performance metrics
-    mutable int m_flops = 0;
-    mutable int m_mem = 0;
+    mutable int flops_ = 0;
+    mutable int mem_ = 0;
 
   private:
     void *getAlignedPointer(std::vector<uint8_t> &storage) const {
@@ -413,13 +413,13 @@ class AccelerateImpl
             if (m_numericFactorization) {
                 int np = 0, nz = 0, nn = 0;
                 if (SparseGetInertia(*m_numericFactorization, &np, &nz, &nn) == 0) {
-                    m_peigs = np;
-                    m_neigs = nn;
-                    m_zeigs = nz;
+                    peigs_ = np;
+                    neigs_ = nn;
+                    zeigs_ = nz;
                 } else {
-                    m_peigs = 0;
-                    m_neigs = 0;
-                    m_zeigs = 0;
+                    peigs_ = 0;
+                    neigs_ = 0;
+                    zeigs_ = 0;
                 }
             }
         }
@@ -427,10 +427,10 @@ class AccelerateImpl
 
     void updatePerformanceMetrics() {
         if (m_symbolicFactorization) {
-            m_mem = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
-                                                        : m_symbolicFactorization->factorSize_Float;
+            mem_ = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
+                                                       : m_symbolicFactorization->factorSize_Float;
         }
-        m_flops = 0;
+        flops_ = 0;
     }
 
     void buildAccelSparseMatrix() {
@@ -443,15 +443,15 @@ class AccelerateImpl
         if constexpr (MatrixType::IsRowMajor) { // RowMajor (CSR) format
             // For CSR, Accelerate expects CSC. We use the 'transpose' attribute
             // to tell Accelerate to interpret the CSR matrix as a transposed CSC matrix.
-            const Index nRowStarts = m_matrix.rows() + 1;
+            const Index nRowStarts = matrix_.rows() + 1;
             m_columnStarts.resize(nRowStarts); // Reuse m_columnStarts for rowStarts
-            std::copy_n(m_matrix.outerIndexPtr(), nRowStarts, m_columnStarts.data());
+            std::copy_n(matrix_.outerIndexPtr(), nRowStarts, m_columnStarts.data());
 
-            structure.rowCount = static_cast<int>(m_matrix.cols());    // Swapped
-            structure.columnCount = static_cast<int>(m_matrix.rows()); // Swapped
-            structure.columnStarts = m_columnStarts.data();            // These are now rowStarts
+            structure.rowCount = static_cast<int>(matrix_.cols());    // Swapped
+            structure.columnCount = static_cast<int>(matrix_.rows()); // Swapped
+            structure.columnStarts = m_columnStarts.data();           // These are now rowStarts
             structure.rowIndices =
-                const_cast<int *>(m_matrix.innerIndexPtr()); // These are now columnIndices
+                const_cast<int *>(matrix_.innerIndexPtr()); // These are now columnIndices
             attributes.transpose = true;
 
             // When transposing, we need to flip the triangle type for symmetric matrices
@@ -462,36 +462,36 @@ class AccelerateImpl
                 attributes.triangle = m_triType;
             }
         } else { // CSC format
-            const Index nColumnsStarts = m_matrix.cols() + 1;
+            const Index nColumnsStarts = matrix_.cols() + 1;
             m_columnStarts.resize(nColumnsStarts);
-            std::copy_n(m_matrix.outerIndexPtr(), nColumnsStarts, m_columnStarts.data());
+            std::copy_n(matrix_.outerIndexPtr(), nColumnsStarts, m_columnStarts.data());
 
-            structure.rowCount = static_cast<int>(m_matrix.rows());
-            structure.columnCount = static_cast<int>(m_matrix.cols());
+            structure.rowCount = static_cast<int>(matrix_.rows());
+            structure.columnCount = static_cast<int>(matrix_.cols());
             structure.columnStarts = m_columnStarts.data();
-            structure.rowIndices = const_cast<int *>(m_matrix.innerIndexPtr());
+            structure.rowIndices = const_cast<int *>(matrix_.innerIndexPtr());
             attributes.transpose = false;
             attributes.triangle = m_triType;
         }
 
         structure.attributes = attributes;
-        m_accel_matrix.structure = structure;
-        m_accel_matrix.data = const_cast<Scalar *>(m_matrix.valuePtr());
+        accel_matrix_.structure = structure;
+        accel_matrix_.data = const_cast<Scalar *>(matrix_.valuePtr());
     }
 
     void doAnalysis() {
         m_numericFactorization.reset(nullptr);
 
         // Only resize permutation if necessary to avoid unnecessary allocations
-        if (m_permutation.size() != static_cast<size_t>(m_nRows)) {
-            m_permutation.resize(m_nRows);
+        if (permutation_.size() != static_cast<size_t>(n_rows_)) {
+            permutation_.resize(n_rows_);
         }
-        std::iota(m_permutation.begin(), m_permutation.end(), 0); // Initialize with identity
+        std::iota(permutation_.begin(), permutation_.end(), 0); // Initialize with identity
 
         SparseSymbolicFactorOptions fopts{};
         fopts.control = SparseDefaultControl;
-        fopts.orderMethod = m_order;
-        fopts.order = m_permutation.data(); // Provide storage for computed permutation
+        fopts.orderMethod = order_;
+        fopts.order = permutation_.data(); // Provide storage for computed permutation
         fopts.ignoreRowsAndColumns = nullptr;
         fopts.malloc = malloc;
         fopts.free = free;
@@ -502,7 +502,7 @@ class AccelerateImpl
         };
 
         m_symbolicFactorization.reset(
-            new SymbolicFactorization(SparseFactor(Solver_, m_accel_matrix.structure, fopts)));
+            new SymbolicFactorization(SparseFactor(Solver_, accel_matrix_.structure, fopts)));
 
         SparseStatus_t status = m_symbolicFactorization->status;
 
@@ -523,8 +523,8 @@ class AccelerateImpl
             nopts.scalingMethod = SparseScalingDefault;
             nopts.scaling = nullptr;
             // Default values set by Apple
-            nopts.pivotTolerance = m_pivotTolerance;
-            nopts.zeroTolerance = m_zeroTolerance;
+            nopts.pivotTolerance = pivot_tolerance_;
+            nopts.zeroTolerance = zero_tolerance_;
 
             // Get factor and workspace size
             const int factorSize = std::is_same<Scalar, double>::value
@@ -535,9 +535,9 @@ class AccelerateImpl
                                           : m_symbolicFactorization->workspaceSize_Float;
 
             m_numericFactorization.reset(new NumericFactorization(
-                SparseFactor(*m_symbolicFactorization, m_accel_matrix, nopts,
-                             internal::resizeForAccelerateAlignment(factorSize, &m_factorStorage),
-                             internal::resizeForAccelerateAlignment(workspaceSize, &m_workspace))));
+                SparseFactor(*m_symbolicFactorization, accel_matrix_, nopts,
+                             internal::resizeForAccelerateAlignment(factorSize, &factor_storage_),
+                             internal::resizeForAccelerateAlignment(workspaceSize, &workspace_))));
 
             status = m_numericFactorization->status;
 
@@ -558,8 +558,8 @@ class AccelerateImpl
             return;
         }
 
-        void *ws = getAlignedPointer(m_workspace);
-        SparseRefactor(m_accel_matrix, m_numericFactorization.get(), ws);
+        void *ws = getAlignedPointer(workspace_);
+        SparseRefactor(accel_matrix_, m_numericFactorization.get(), ws);
 
         SparseStatus_t status = m_numericFactorization->status;
         updateInfoStatus(status);
@@ -574,44 +574,44 @@ class AccelerateImpl
     void updateInfoStatus(SparseStatus_t status) const {
         switch (status) {
         case SparseStatusOK:
-            m_info = Success;
+            info_ = Success;
             break;
         case SparseFactorizationFailed:
         case SparseMatrixIsSingular:
-            m_info = NumericalIssue;
+            info_ = NumericalIssue;
             break;
         case SparseInternalError:
         case SparseParameterError:
         case SparseStatusReleased:
         default:
-            m_info = InvalidInput;
+            info_ = InvalidInput;
             break;
         }
     }
 
     std::vector<long> m_columnStarts;
-    mutable MatrixType m_matrix;
-    mutable AccelSparseMatrix m_accel_matrix;
-    mutable ComputationInfo m_info;
-    mutable std::vector<uint8_t> m_factorStorage;
-    mutable std::vector<uint8_t> m_workspace;
-    mutable std::vector<uint8_t> m_solve_workspace; // Cache solve workspace
-    mutable std::vector<Scalar> m_r_mem;
-    mutable int m_cached_solve_workspace_size = 0; // Track cached size
-    Index m_nRows, m_nCols;
+    mutable MatrixType matrix_;
+    mutable AccelSparseMatrix accel_matrix_;
+    mutable ComputationInfo info_;
+    mutable std::vector<uint8_t> factor_storage_;
+    mutable std::vector<uint8_t> workspace_;
+    mutable std::vector<uint8_t> solve_workspace_; // Cache solve workspace
+    mutable std::vector<Scalar> r_mem_;
+    mutable int cached_solve_workspace_size_ = 0; // Track cached size
+    Index n_rows_, n_cols_;
     std::unique_ptr<SymbolicFactorization, SymbolicFactorizationDeleter> m_symbolicFactorization;
     std::unique_ptr<NumericFactorization, NumericFactorizationDeleter> m_numericFactorization;
     SparseKind_t m_sparseKind;
     SparseTriangle_t m_triType;
-    SparseOrder_t m_order;
-    bool m_doIterativeRefinement;
-    int m_iterativeRefinementIterations;
-    Scalar m_pivotTolerance = Scalar(0.01);
-    Scalar m_zeroTolerance = Scalar(1e-4) * std::numeric_limits<Scalar>::epsilon();
-    mutable int m_peigs = 0;
-    mutable int m_neigs = 0;
-    mutable int m_zeigs = 0;
-    mutable std::vector<StorageIndex> m_permutation; // Store permutation from factorization
+    SparseOrder_t order_;
+    bool do_iterative_refinement_;
+    int iterative_refinement_iterations_;
+    Scalar pivot_tolerance_ = Scalar(0.01);
+    Scalar zero_tolerance_ = Scalar(1e-4) * std::numeric_limits<Scalar>::epsilon();
+    mutable int peigs_ = 0;
+    mutable int neigs_ = 0;
+    mutable int zeigs_ = 0;
+    mutable std::vector<StorageIndex> permutation_; // Store permutation from factorization
 };
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
@@ -621,18 +621,18 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::set_matrix(
         eigen_assert(matrix.rows() == matrix.cols());
     }
 
-    // m_matrix = matrix;
+    // matrix_ = matrix;
     get_matrix(matrix);
-    m_nRows = m_matrix.rows();
-    m_nCols = m_matrix.cols();
+    n_rows_ = matrix_.rows();
+    n_cols_ = matrix_.cols();
 
     buildAccelSparseMatrix();
 
     m_isInitialized = false;
     m_symbolicFactorization.reset(nullptr);
     m_numericFactorization.reset(nullptr);
-    m_cached_solve_workspace_size = 0; // Clear cached workspace size
-    m_info = Success;
+    cached_solve_workspace_size_ = 0; // Clear cached workspace size
+    info_ = Success;
 }
 
 /** Computes the symbolic and numeric decomposition of matrix \a a */
@@ -677,13 +677,13 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyze_patter
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize(const MatrixType &a) {
     eigen_assert(m_symbolicFactorization && "You must first call analyze_pattern()");
-    eigen_assert(m_nRows == a.rows() && m_nCols == a.cols());
+    eigen_assert(n_rows_ == a.rows() && n_cols_ == a.cols());
 
     if (EnforceSquare_) {
         eigen_assert(a.rows() == a.cols());
     }
 
-    m_matrix = a;
+    matrix_ = a;
     buildAccelSparseMatrix();
     m_numericFactorization.reset(nullptr);
 
@@ -695,11 +695,11 @@ template <typename Rhs, typename Dest>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     const MatrixBase<Rhs> &b, MatrixBase<Dest> &x) const {
     if (!m_numericFactorization) {
-        m_info = InvalidInput;
+        info_ = InvalidInput;
         return;
     }
 
-    eigen_assert(m_nRows == b.rows());
+    eigen_assert(n_rows_ == b.rows());
     eigen_assert(((b.cols() == 1) || b.outerStride() == b.rows()));
 
     SparseStatus_t status = SparseStatusOK;
@@ -727,11 +727,11 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     // Use cached solve workspace to avoid repeated allocations
     void *ws;
-    if (workspaceSize != m_cached_solve_workspace_size) {
-        ws = internal::resizeForAccelerateAlignment(workspaceSize, &m_solve_workspace);
-        m_cached_solve_workspace_size = workspaceSize;
+    if (workspaceSize != cached_solve_workspace_size_) {
+        ws = internal::resizeForAccelerateAlignment(workspaceSize, &solve_workspace_);
+        cached_solve_workspace_size_ = workspaceSize;
     } else {
-        ws = getAlignedPointer(m_solve_workspace);
+        ws = getAlignedPointer(solve_workspace_);
     }
     assert(ws != nullptr && "Accelerate workspace alignment failed");
 
@@ -739,26 +739,26 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     updateInfoStatus(status);
 
-    if (m_doIterativeRefinement) {
+    if (do_iterative_refinement_) {
         auto n = vDSP_Length(x.rows() * x.cols());
-        if (m_r_mem.size() < n) {
-            m_r_mem.resize(n);
+        if (r_mem_.size() < n) {
+            r_mem_.resize(n);
         }
         AccelDenseMatrix ref_mat{};
         ref_mat.attributes = SparseAttributes_t();
         ref_mat.columnCount = static_cast<int>(x.cols());
         ref_mat.rowCount = static_cast<int>(x.rows());
         ref_mat.columnStride = ref_mat.rowCount;
-        ref_mat.data = m_r_mem.data();
+        ref_mat.data = r_mem_.data();
 
-        for (int i = 0; i < m_iterativeRefinementIterations; ++i) {
+        for (int i = 0; i < iterative_refinement_iterations_; ++i) {
             // Calculate residual: r = -b + A*x
             if constexpr (std::is_same_v<Scalar, double>) {
                 vDSP_vnegD(bmat.data, 1, ref_mat.data, 1, n);
             } else {
                 vDSP_vneg(bmat.data, 1, ref_mat.data, 1, n);
             }
-            SparseMultiplyAdd(m_accel_matrix, xmat, ref_mat);
+            SparseMultiplyAdd(accel_matrix_, xmat, ref_mat);
 
             // Solve for correction: ref = A^{-1} * r
             SparseSolve(*m_numericFactorization, ref_mat, ws);
@@ -775,7 +775,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
 /** Initializes the internal AccelSparseMatrix from the internal Eigen sparse matrix
  *
- * This method must be called after changing the sparsity pattern of the m_matrix
+ * This method must be called after changing the sparsity pattern of the matrix_
  * member via the reference returned from MatrixType& get_matrix().
  *
  */
@@ -783,10 +783,10 @@ template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool E
 void AccelerateImpl<MatrixType_, UpLo_, Solver_,
                     EnforceSquare_>::reinitialize_internal_matrix_representation() {
     // Update matrix dimensions in case they changed when the sparsity pattern was modified
-    m_nRows = m_matrix.rows();
-    m_nCols = m_matrix.cols();
+    n_rows_ = matrix_.rows();
+    n_cols_ = matrix_.cols();
 
-    // Build/rebuild the internal AccelSparseMatrix from the current state of m_matrix
+    // Build/rebuild the internal AccelSparseMatrix from the current state of matrix_
     buildAccelSparseMatrix();
 
     // Reset factorizations since the matrix structure has changed
@@ -794,19 +794,19 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
     m_numericFactorization.reset(nullptr);
 
     // Clear cached workspace size since matrix structure changed
-    m_cached_solve_workspace_size = 0;
+    cached_solve_workspace_size_ = 0;
 
     // Reset initialization state - will need to recompute factorizations
     m_isInitialized = false;
 
     // Reset computation info
-    m_info = Success;
+    info_ = Success;
 }
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_> &
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyze_pattern_internal() {
-    eigen_assert(m_matrix.rows() > 0 && m_matrix.cols() > 0 &&
+    eigen_assert(matrix_.rows() > 0 && matrix_.cols() > 0 &&
                  "Matrix must be set before calling analyze_pattern_internal()");
 
     m_symbolicFactorization.reset(nullptr);
@@ -840,7 +840,7 @@ AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::refactorize_interna
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_> &
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::compute_internal() {
-    eigen_assert(m_matrix.rows() > 0 && m_matrix.cols() > 0 &&
+    eigen_assert(matrix_.rows() > 0 && matrix_.cols() > 0 &&
                  "Matrix must be set before calling compute_internal()");
 
     m_symbolicFactorization.reset(nullptr);
@@ -866,28 +866,28 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::release() {
     m_symbolicFactorization.reset(nullptr);
 
     // Clear storage vectors
-    m_factorStorage.clear();
-    m_workspace.clear();
-    m_solve_workspace.clear();
-    m_r_mem.clear();
+    factor_storage_.clear();
+    workspace_.clear();
+    solve_workspace_.clear();
+    r_mem_.clear();
 
     // Clear matrix data
-    m_matrix.resize(0, 0);
-    m_matrix.data().squeeze();
+    matrix_.resize(0, 0);
+    matrix_.data().squeeze();
 
     // Clear permutation
-    m_permutation.clear();
+    permutation_.clear();
 
     // Reset cached sizes
-    m_cached_solve_workspace_size = 0;
+    cached_solve_workspace_size_ = 0;
 
     // Reset performance metrics
-    m_flops = 0;
-    m_mem = 0;
+    flops_ = 0;
+    mem_ = 0;
 
     // Reset initialization state
     m_isInitialized = false;
-    m_info = Success;
+    info_ = Success;
 }
 
 } // end namespace Eigen

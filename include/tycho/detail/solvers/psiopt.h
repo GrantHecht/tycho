@@ -498,18 +498,18 @@ struct PSIOPT {
         this->kkt_sol_.set_pivot_tolerance(accel_pivot_tolerance_);
         this->kkt_sol_.set_zero_tolerance(accel_zero_tolerance_);
 #else
-        this->kkt_sol_.m_ord = static_cast<int>(qp_ord_);
-        this->kkt_sol_.m_pivotstrat = static_cast<int>(qp_pivot_strategy_);
-        this->kkt_sol_.m_pivotpert = qp_pivot_perturb_;
-        this->kkt_sol_.m_matching = qp_matching_;
-        this->kkt_sol_.m_scaling = qp_scaling_;
-        this->kkt_sol_.m_iterref = qp_ref_steps_;
-        this->kkt_sol_.m_alg = static_cast<int>(qp_alg_);
-        this->kkt_sol_.m_msglvl = qp_print_;
+        this->kkt_sol_.ord_ = static_cast<int>(qp_ord_);
+        this->kkt_sol_.pivotstrat_ = static_cast<int>(qp_pivot_strategy_);
+        this->kkt_sol_.pivotpert_ = qp_pivot_perturb_;
+        this->kkt_sol_.matching_ = qp_matching_;
+        this->kkt_sol_.scaling_ = qp_scaling_;
+        this->kkt_sol_.iterref_ = qp_ref_steps_;
+        this->kkt_sol_.alg_ = static_cast<int>(qp_alg_);
+        this->kkt_sol_.msglvl_ = qp_print_;
 
         if (this->cnr_mode_)
-            this->kkt_sol_.m_threads = this->qp_threads_;
-        this->kkt_sol_.m_parsolve = this->qp_par_solve_;
+            this->kkt_sol_.threads_ = this->qp_threads_;
+        this->kkt_sol_.parsolve_ = this->qp_par_solve_;
         this->kkt_sol_.set_params();
 #endif
     }
