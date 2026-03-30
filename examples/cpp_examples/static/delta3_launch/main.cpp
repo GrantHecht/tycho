@@ -413,10 +413,10 @@ int main() {
     auto link_vars = make_idx({0, 1, 2, 3, 4, 5, 7, 8, 9, 10});
     ocp.add_forward_link_equal_con(phase1, phase4, link_vars);
 
-    ocp.optimizer->set_OptLSMode("L1");
-    ocp.optimizer->set_SoeLSMode("L1");
-    ocp.optimizer->set_MaxLSIters(2);
-    ocp.optimizer->set_PrintLevel(1);
+    ocp.optimizer->set_opt_ls_mode("L1");
+    ocp.optimizer->set_soe_ls_mode("L1");
+    ocp.optimizer->set_max_ls_iters(2);
+    ocp.optimizer->set_print_level(1);
 
     ///////////////////////////////////////////////////////////////////////////
     // Solve

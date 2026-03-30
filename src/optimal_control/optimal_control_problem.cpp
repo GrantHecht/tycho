@@ -423,7 +423,7 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     if (showstats)
         this->print_stats(showfuns);
     this->nlp->make_nlp(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
-    this->optimizer->setNLP(this->nlp);
+    this->optimizer->set_nlp(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;
@@ -459,10 +459,10 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 
     this->collect_solver_output(Output);
 
-    this->collect_post_opt_info(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
-                                this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
+    this->collect_post_opt_info(this->optimizer->last_eq_cons_, this->optimizer->last_eq_lmults_,
+                                this->optimizer->last_iq_cons_, this->optimizer->last_iq_lmults_);
 
-    return this->optimizer->ConvergeFlag;
+    return this->optimizer->converge_flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {

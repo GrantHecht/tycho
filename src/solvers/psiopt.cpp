@@ -24,11 +24,11 @@
 void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
-        this->LastSolverInitTime = initMs / 1000.0;
+        this->last_solver_init_time_ = initMs / 1000.0;
         // Suppress the init line when init was trivially fast (< 0.5 ms),
         // which also covers subsequent calls (return 0.0).
         constexpr double kSolverInitPrintThresholdMs = 0.5;
-        if (initMs > kSolverInitPrintThresholdMs && this->PrintLevel < 2) {
+        if (initMs > kSolverInitPrintThresholdMs && this->print_level_ < 2) {
             fmt::print(" Solver Initialization : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
@@ -38,74 +38,74 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
 void tycho::solvers::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPreTime * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_pre_time_ * 1000.0);
     fmt::print(" NLP Function Evaluation Time : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastFuncTime * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_func_time_ * 1000.0);
     fmt::print(" KKT Factor/Solve Time        : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastKKTTime * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_kkt_time_ * 1000.0);
     fmt::print(" Console Print Time           : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastPrintTime * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_print_time_ * 1000.0);
     fmt::print(" Misc Time                    : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->LastMiscTime * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_misc_time_ * 1000.0);
 }
 
-void tycho::solvers::PSIOPT::setNLP(std::shared_ptr<NonLinearProgram> np) {
+void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->nlp = np;
     this->primal_vars_ = this->nlp->primal_vars_;
     this->equal_cons_ = this->nlp->equal_cons_;
     this->inequal_cons_ = this->nlp->inequal_cons_;
     this->slack_vars_ = this->nlp->slack_vars_;
     this->kkt_dim_ = this->nlp->kkt_dim_;
-    this->setQPParams();
+    this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
-    accelerate_set_num_threads(QPThreads);
+    accelerate_set_num_threads(qp_threads_);
 #else
-    mkl_set_num_threads(QPThreads);
+    mkl_set_num_threads(qp_threads_);
 #endif
 
-    this->nlp->analyze_sparsity(this->KKTSol.getMatrix());
+    this->nlp->analyze_sparsity(this->kkt_sol_.getMatrix());
 #ifdef USE_ACCELERATE_SPARSE
     // we need to call this to update the internal AccelSparseMatrix since
     // we changed the sparsity pattern via the reference returned from getMatrix.
-    this->KKTSol.reinitializeInternalMatrixRepresentation();
+    this->kkt_sol_.reinitializeInternalMatrixRepresentation();
 #endif
-    if (storespmat)
-        spmat = this->KKTSol.getMatrix();
-    this->QPanalyzed = false;
+    if (store_sp_mat_)
+        spmat = this->kkt_sol_.getMatrix();
+    this->qp_analyzed_ = false;
 }
 
 void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
                                                   Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
                                                   double &alphap, double &alphad) {
-    double Smax = this->max_step_to_boundary(this->getSlacks(XSL), this->getSlacks(DXSL), bfrac);
+    double Smax = this->max_step_to_boundary(this->get_slacks(XSL), this->get_slacks(DXSL), bfrac);
     double Lmax =
-        this->max_step_to_boundary(this->getIqLmults(XSL), this->getIqLmults(DXSL), bfrac);
+        this->max_step_to_boundary(this->get_iq_lmults(XSL), this->get_iq_lmults(DXSL), bfrac);
 
     double primstep = Smax;
     double slackstep = Smax;
     double eqmultstep = Smax;
     double iqmultstep = Lmax;
 
-    if (this->PDStepStrategy == PDStepStrategies::PrimSlackEq_Iq) {
-    } else if (this->PDStepStrategy == PDStepStrategies::AllMinimum) {
+    if (this->pd_step_strategy_ == PDStepStrategies::PrimSlackEq_Iq) {
+    } else if (this->pd_step_strategy_ == PDStepStrategies::AllMinimum) {
         double step = std::min(Smax, Lmax);
         primstep = step;
         slackstep = step;
         eqmultstep = step;
         iqmultstep = step;
-    } else if (this->PDStepStrategy == PDStepStrategies::PrimSlack_EqIq) {
+    } else if (this->pd_step_strategy_ == PDStepStrategies::PrimSlack_EqIq) {
         eqmultstep = Lmax;
-    } else if (this->PDStepStrategy == PDStepStrategies::MaxEq) {
+    } else if (this->pd_step_strategy_ == PDStepStrategies::MaxEq) {
         double step = std::max(Smax, Lmax);
         eqmultstep = step;
     }
-    this->getPrimals(DXSL) *= primstep;
+    this->get_primals(DXSL) *= primstep;
     if (inequal_cons_ > 0)
-        this->getSlacks(DXSL) *= slackstep;
+        this->get_slacks(DXSL) *= slackstep;
     if (equal_cons_ > 0)
-        this->getEqLmults(DXSL) *= eqmultstep;
+        this->get_eq_lmults(DXSL) *= eqmultstep;
     if (inequal_cons_ > 0)
-        this->getIqLmults(DXSL) *= iqmultstep;
+        this->get_iq_lmults(DXSL) *= iqmultstep;
 
     alphap = Smax;
     alphad = Lmax;
@@ -118,75 +118,75 @@ void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL,
     iter.PrimObj = pobj;
     iter.BarrObj = bobj;
     iter.Mu = mu;
-    iter.PPivots = this->KKTSol.ppivs();
-    iter.KKTInf = this->getPrimGrad(RHS).lpNorm<Eigen::Infinity>();
+    iter.PPivots = this->kkt_sol_.ppivs();
+    iter.KKTInf = this->get_prim_grad(RHS).lpNorm<Eigen::Infinity>();
 
     double avgcomp = 0;
     double mincomp = 0;
     double maxcomp = 0;
     if (inequal_cons_ > 0) {
-        iter.IConInf = this->getIqCons(RHS).lpNorm<Eigen::Infinity>();
-        iter.IConNormErr = this->getIqCons(RHS).norm();
-        iter.MaxIMult = this->getIqLmults(XSL).lpNorm<Eigen::Infinity>();
-        this->complementarity(this->getSlacks(XSL), this->getIqLmults(XSL), avgcomp, mincomp,
+        iter.IConInf = this->get_iq_cons(RHS).lpNorm<Eigen::Infinity>();
+        iter.IConNormErr = this->get_iq_cons(RHS).norm();
+        iter.MaxIMult = this->get_iq_lmults(XSL).lpNorm<Eigen::Infinity>();
+        this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
                               maxcomp);
 
         iter.BarrInf = maxcomp;
         iter.BarrNormErr = avgcomp;
     }
     if (equal_cons_ > 0) {
-        iter.EConInf = this->getEqCons(RHS).lpNorm<Eigen::Infinity>();
-        iter.EConNormErr = this->getEqCons(RHS).norm();
-        iter.MaxEMult = this->getEqLmults(XSL).lpNorm<Eigen::Infinity>();
+        iter.EConInf = this->get_eq_cons(RHS).lpNorm<Eigen::Infinity>();
+        iter.EConNormErr = this->get_eq_cons(RHS).norm();
+        iter.MaxEMult = this->get_eq_lmults(XSL).lpNorm<Eigen::Infinity>();
     }
 
-    iter.KKTNormErr = this->getPrimGrad(RHS).norm();
+    iter.KKTNormErr = this->get_prim_grad(RHS).norm();
 
     if (equal_cons_ > 0 || inequal_cons_ > 0)
-        iter.AllConNormErr = this->getAllCons(RHS).norm();
+        iter.AllConNormErr = this->get_all_cons(RHS).norm();
 }
 
-void tycho::solvers::PSIOPT::evalNLP(AlgorithmModes algmode, double ObjScale,
-                                     ConstEigenRef<VectorXd> XSL, double &val,
-                                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale_,
+                                      ConstEigenRef<VectorXd> XSL, double &val,
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
     switch (algmode) {
     case AlgorithmModes::OPT:
-        eval_kkt(ObjScale, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_kkt(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::OPTNO:
-        eval_kkt_no(ObjScale, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_kkt_no(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
 
         break;
     case AlgorithmModes::INIT:
-        eval_aug(ObjScale, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_aug(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::SOE:
         this->nlp->set_primal_diags(1.0);
         eval_soe(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp->set_primal_diags(0.0);
-        this->getPrimGrad(GX).setZero();
-        this->getPrimGrad(AGXS_FX).setZero();
+        this->get_prim_grad(GX).setZero();
+        this->get_prim_grad(AGXS_FX).setZero();
         break;
     default:
         throw std::invalid_argument("Unknown AlgorithmMode");
     }
 }
 
-tycho::ConvergenceFlags tycho::solvers::PSIOPT::convergeCheck(std::vector<IterateInfo> &iters) {
+tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
     IterateInfo last = iters.back();
-    bool KKTFeas = (last.KKTInf < this->KKTtol);
-    bool EConFeas = (last.EConInf < this->EContol);
-    bool IConFeas = (last.IConInf < this->IContol);
-    bool BarFeas = (last.BarrInf < this->Bartol);
+    bool KKTFeas = (last.KKTInf < this->kkt_tol_);
+    bool EConFeas = (last.EConInf < this->econ_tol_);
+    bool IConFeas = (last.IConInf < this->icon_tol_);
+    bool BarFeas = (last.BarrInf < this->bar_tol_);
 
-    bool KKTDiv = (last.KKTInf > this->DivKKTtol) || !std::isfinite(last.KKTInf);
-    bool EConDiv = (last.EConInf > this->DivEContol) || !std::isfinite(last.EConInf);
-    bool IConDiv = (last.IConInf > this->DivIContol) || !std::isfinite(last.IConInf);
-    bool BarDiv = (last.BarrInf > this->DivBartol) || !std::isfinite(last.BarrInf);
+    bool KKTDiv = (last.KKTInf > this->div_kkt_tol_) || !std::isfinite(last.KKTInf);
+    bool EConDiv = (last.EConInf > this->div_econ_tol_) || !std::isfinite(last.EConInf);
+    bool IConDiv = (last.IConInf > this->div_icon_tol_) || !std::isfinite(last.IConInf);
+    bool BarDiv = (last.BarrInf > this->div_bar_tol_) || !std::isfinite(last.BarrInf);
 
     if (KKTDiv || EConDiv || IConDiv || BarDiv) {
         Flag = ConvergenceFlags::DIVERGING;
@@ -194,20 +194,20 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::convergeCheck(std::vector<Iterat
     } else if (KKTFeas && EConFeas && IConFeas && BarFeas) {
         Flag = ConvergenceFlags::CONVERGED;
         return Flag;
-    } else if (int(iters.size()) > this->MaxAccIters) {
+    } else if (int(iters.size()) > this->max_acc_iters_) {
         int nfeas = 0;
-        for (int i = 0; i < this->MaxAccIters; i++) {
+        for (int i = 0; i < this->max_acc_iters_; i++) {
             last = iters[int(iters.size()) - i - 1];
-            KKTFeas = (last.KKTInf < this->AccKKTtol);
-            EConFeas = (last.EConInf < this->AccEContol);
-            IConFeas = (last.IConInf < this->AccIContol);
-            BarFeas = (last.BarrInf < this->AccBartol);
+            KKTFeas = (last.KKTInf < this->acc_kkt_tol_);
+            EConFeas = (last.EConInf < this->acc_econ_tol_);
+            IConFeas = (last.IConInf < this->acc_icon_tol_);
+            BarFeas = (last.BarrInf < this->acc_bar_tol_);
             if (KKTFeas && EConFeas && IConFeas && BarFeas)
                 nfeas++;
             else
                 break;
         }
-        if (nfeas == this->MaxAccIters) {
+        if (nfeas == this->max_acc_iters_) {
             Flag = ConvergenceFlags::ACCEPTABLE;
             return Flag;
         }
@@ -216,7 +216,7 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::convergeCheck(std::vector<Iterat
     return Flag;
 }
 
-void tycho::solvers::PSIOPT::printPSIOPT() {
+void tycho::solvers::PSIOPT::print_psiopt() {
 
     constexpr const char *PsioptStr =
         "       ____    _____    ____          ____     ____   ______\n"
@@ -224,11 +224,11 @@ void tycho::solvers::PSIOPT::printPSIOPT() {
         "     / /_/ /  \\__ \\    / /   ______ / / / /  / /_/ /  / /   \n"
         "    / ____/  ___/ /  _/ /   /_____// /_/ /  / ____/  / /    \n"
         "   /_/      /____/  /___/          \\____/  /_/      /_/    \n";
-    print_Header();
+    print_header();
     fmt::print(fmt::fg(fmt::color::crimson), PsioptStr);
     fmt::print(fmt::fg(fmt::color::crimson),
                " \n       Parallel Sparse Interior-point Optimizer\n");
-    print_Header();
+    print_header();
 }
 
 void tycho::solvers::PSIOPT::print_settings() {
@@ -242,20 +242,20 @@ void tycho::solvers::PSIOPT::print_settings() {
 
     fmt::print("{0:_^{1}}\n", "", 39);
     fmt::print("|------|   tol   | Acctol  | Divtol  |\n");
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "KKT", this->KKTtol, this->AccKKTtol,
-               this->DivKKTtol);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "Bar", this->Bartol, this->AccBartol,
-               this->DivBartol);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ECons", this->EContol, this->AccEContol,
-               this->DivEContol);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ICons", this->IContol, this->AccIContol,
-               this->DivIContol);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "KKT", this->kkt_tol_,
+               this->acc_kkt_tol_, this->div_kkt_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "Bar", this->bar_tol_,
+               this->acc_bar_tol_, this->div_bar_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ECons", this->econ_tol_,
+               this->acc_econ_tol_, this->div_econ_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ICons", this->icon_tol_,
+               this->acc_icon_tol_, this->div_icon_tol_);
 }
 
 void tycho::solvers::PSIOPT::print_matrixinfo() {}
 
 void tycho::solvers::PSIOPT::print_stats() {
-    printPSIOPT();
+    print_psiopt();
 
     auto cyan = fmt::fg(fmt::color::cyan);
     auto magenta = fmt::fg(fmt::color::magenta);
@@ -272,10 +272,10 @@ void tycho::solvers::PSIOPT::print_stats() {
     fmt::print(" KKT-Matrix DIM (P+E+2*I) : ");
     fmt::print(cyan, "{:<10}\n", this->kkt_dim_);
     fmt::print(" KKT-Matrix NNZs          : ");
-    fmt::print(cyan, "{:<10}\n", this->KKTSol.getMatrix().nonZeros());
+    fmt::print(cyan, "{:<10}\n", this->kkt_sol_.getMatrix().nonZeros());
     fmt::print(" KKT-Matrix NNZ%          : ");
     fmt::print(cyan, "{:.6f}%\n",
-               100.0 * double(this->KKTSol.getMatrix().nonZeros()) /
+               100.0 * double(this->kkt_sol_.getMatrix().nonZeros()) /
                    (double(this->kkt_dim_) * double(this->kkt_dim_)));
     fmt::print("\n");
 }
@@ -285,7 +285,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     bool wide = false;
 
     if (last.iter % 10 == 0) {
-        if (WideConsole) {
+        if (wide_console_) {
             fmt::print("{0:=^{1}}\n", "", 159);
             fmt::print(
                 "|Iter| Mu Val | Prim Obj |  Bar Obj |  KKT Inf |  Bar Inf | ECons Inf| ICons "
@@ -308,10 +308,10 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::text_style BHashcol = fmt::text_style();
     fmt::text_style BOHashcol = fmt::text_style();
 
-    fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
-    fmt::text_style Bcol = calculate_color(last.BarrInf, this->Bartol, this->AccBartol);
-    fmt::text_style Ecol = calculate_color(last.EConInf, this->EContol, this->AccEContol);
-    fmt::text_style Icol = calculate_color(last.IConInf, this->IContol, this->AccIContol);
+    fmt::text_style Kcol = calculate_color(last.KKTInf, this->kkt_tol_, this->acc_kkt_tol_);
+    fmt::text_style Bcol = calculate_color(last.BarrInf, this->bar_tol_, this->acc_bar_tol_);
+    fmt::text_style Ecol = calculate_color(last.EConInf, this->econ_tol_, this->acc_econ_tol_);
+    fmt::text_style Icol = calculate_color(last.IConInf, this->icon_tol_, this->acc_icon_tol_);
 
     if (iters.size() > 1) {
 
@@ -347,7 +347,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::print(Icol, "{:>10.4e}", last.IConInf);
     chash(IHashcol);
 
-    if (WideConsole) {
+    if (wide_console_) {
         fmt::print(
             "{:>9.3e}|{:>9.3e}|{:>8.2e}|{:>8.2e}|{:>8.2e}|{:>10.3e}|{:>3}|{:>3}|{:>3}|{:>6.1e}|\n",
             last.MaxEMult, last.MaxIMult, last.alphaP, last.alphaD, last.alphaT, last.MeritVal,
@@ -358,14 +358,14 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     }
 }
 
-void tycho::solvers::PSIOPT::print_Beginning(std::string msg) const {
+void tycho::solvers::PSIOPT::print_beginning(std::string msg) const {
     fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
     fmt::print(": ");
     fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
     fmt::print("\n");
 }
 
-void tycho::solvers::PSIOPT::print_Finished(std::string msg) const {
+void tycho::solvers::PSIOPT::print_finished(std::string msg) const {
 
     fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
     fmt::print(": ");
@@ -373,13 +373,13 @@ void tycho::solvers::PSIOPT::print_Finished(std::string msg) const {
     fmt::print("\n");
 }
 
-void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last,
-                                             int iternum, double tottime, double nlptime,
-                                             double qptime, double printtime) {
-    fmt::text_style Kcol = calculate_color(last.KKTInf, this->KKTtol, this->AccKKTtol);
-    fmt::text_style Bcol = calculate_color(last.BarrInf, this->Bartol, this->AccBartol);
-    fmt::text_style Ecol = calculate_color(last.EConInf, this->EContol, this->AccEContol);
-    fmt::text_style Icol = calculate_color(last.IConInf, this->IContol, this->AccIContol);
+void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last,
+                                              int iternum, double tottime, double nlptime,
+                                              double qptime, double printtime) {
+    fmt::text_style Kcol = calculate_color(last.KKTInf, this->kkt_tol_, this->acc_kkt_tol_);
+    fmt::text_style Bcol = calculate_color(last.BarrInf, this->bar_tol_, this->acc_bar_tol_);
+    fmt::text_style Ecol = calculate_color(last.EConInf, this->econ_tol_, this->acc_econ_tol_);
+    fmt::text_style Icol = calculate_color(last.IConInf, this->icon_tol_, this->acc_icon_tol_);
 
     auto TColor = fmt::fg(fmt::color::cyan);
     auto Printtime = [&](const char *msg, double t1) {
@@ -387,7 +387,7 @@ void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const It
         fmt::print(TColor, "{0:>10.3f} ms {1:>10.3f} ms/iter\n", t1, double(t1 / iternum));
     };
 
-    if (this->PrintLevel < 3) {
+    if (this->print_level_ < 3) {
         if (ExitCode == ConvergenceFlags::CONVERGED) {
             fmt::print(fmt::fg(fmt::color::lime_green), "\nOptimal Solution Found\n");
         } else if (ExitCode == ConvergenceFlags::ACCEPTABLE) {
@@ -399,7 +399,7 @@ void tycho::solvers::PSIOPT::print_ExitStats(ConvergenceFlags ExitCode, const It
         }
     }
 
-    if (this->PrintLevel < 2) {
+    if (this->print_level_ < 2) {
 
         fmt::print(" Iterations : ");
         fmt::print("{:<5}\n", iternum);
@@ -451,16 +451,16 @@ fmt::text_style tycho::solvers::PSIOPT::calculate_color(double val, double targ,
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert) {
     auto Inertia = [&]() {
-        return this->KKTSol.neigs() - (this->equal_cons_ + this->inequal_cons_);
+        return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
     };
     auto RankDef = [&]() {
-        if ((this->KKTSol.neigs() + this->KKTSol.peigs() - this->kkt_dim_) != 0) {
+        if ((this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0) {
             std::cout << "Potential Rank Deficiency Detected!!!" << std::endl;
         }
     };
-    auto Perturb = [&](double p) { this->nlp->perturb_kkt_p_diags(p, this->KKTSol.getMatrix()); };
-    auto Refactor = [&]() { this->KKTSol.refactorize_internal(); };
-    auto Compute = [&]() { this->KKTSol.compute_internal(); };
+    auto Perturb = [&](double p) { this->nlp->perturb_kkt_p_diags(p, this->kkt_sol_.getMatrix()); };
+    auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
+    auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
     int IncEigs;
 
     if (Zfac || docompute) {
@@ -476,7 +476,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     }
     double p = ipurt;
 
-    for (int i = 0; i < this->MaxRefac; i++) {
+    for (int i = 0; i < this->max_refac_; i++) {
         Perturb(p);
         Refactor();
         RankDef();
@@ -491,11 +491,11 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
             p *= incpurt;
         p -= finalpert;
     }
-    return this->MaxRefac;
+    return this->max_refac_;
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
-                                                 LineSearchModes lsmode, double ObjScale,
+                                                 LineSearchModes lsmode, double obj_scale_,
                                                  double MuI, Eigen::Ref<Eigen::VectorXd> xsl) {
     Eigen::VectorXd XSL = xsl;
     Eigen::VectorXd RHS(this->kkt_dim_);
@@ -518,17 +518,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     tycho::utils::Timer LStimer;
     tycho::utils::Timer QPtimer;
     tycho::utils::Timer
-        CBtimer; // Callback time is included in LastMiscTime (not separately reported)
+        CBtimer; // Callback time is included in last_misc_time_ (not separately reported)
     tycho::utils::Timer Printtimer;
 
-    double Hpert0 = this->deltaH;
+    double Hpert0 = this->delta_h_;
     std::vector<IterateInfo> iters;
-    iters.reserve(this->MaxIters);
+    iters.reserve(this->max_iters_);
     ConvergenceFlags ExitCode;
     bool FirstPert = true;
 
     Runtimer.start();
-    for (int i = 0; i < this->MaxIters; i++) {
+    for (int i = 0; i < this->max_iters_; i++) {
         IterateInfo Citer;
         Citer.iter = i;
 
@@ -547,21 +547,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Funtimer.start();
         /////////////////////////////////////////////////////////////
 
-        this->evalNLP(algmode, ObjScale, XSL, PrimObj, PGX, RHS, this->KKTSol.getMatrix());
+        this->eval_nlp(algmode, obj_scale_, XSL, PrimObj, PGX, RHS, this->kkt_sol_.getMatrix());
 
         if (this->inequal_cons_ > 0) {
-            this->apply_reset_slacks(this->getSlacks(XSL), this->getIqCons(RHS));
-            this->barrier_hessian(this->KKTSol.getMatrix(), this->getSlacks(XSL),
-                                  this->getIqLmults(XSL), Mu);
-            this->complementarity(this->getSlacks(XSL), this->getIqLmults(XSL), avgcomp, mincomp,
+            this->apply_reset_slacks(this->get_slacks(XSL), this->get_iq_cons(RHS));
+            this->barrier_hessian(this->kkt_sol_.getMatrix(), this->get_slacks(XSL),
+                                  this->get_iq_lmults(XSL), Mu);
+            this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
                                   maxcomp);
         }
 
         ///////////////////////////////////////////////////////////////
         Funtimer.stop();
-        if (this->EarlyCallBackEnabled) {
+        if (this->early_callback_enabled_) {
             CBtimer.start();
-            this->EarlyCallBack(i, ObjScale, XSL, PrimObj, PGX, RHS, this->KKTSol.getMatrix());
+            this->early_callback_(i, obj_scale_, XSL, PrimObj, PGX, RHS,
+                                  this->kkt_sol_.getMatrix());
             CBtimer.stop();
         }
         QPtimer.start();
@@ -570,12 +571,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         ////////////////////////////////////////////////////////////////
         double nhpert = 0;
-        double Incr = this->incrH;
-        double Incr2 = this->incrH;
+        double Incr = this->incr_h_;
+        double Incr2 = this->incr_h_;
         if (FirstPert)
-            Incr2 *= this->incrH;
+            Incr2 *= this->incr_h_;
         bool Zfac = true;
-        if (this->FastFactorAlg && i > 6 && ((i * 3) % 4) != 0) {
+        if (this->fast_factor_alg_ && i > 6 && ((i * 3) % 4) != 0) {
             bool cycling = true;
             for (int j = 0; j < 4; j++) {
                 int ns = iters[iters.size() - 1 - j].Hfacs;
@@ -590,7 +591,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.Hfacs = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert);
 
         if (Citer.Hfacs > 0) {
-            Hpert0 = std::max(this->deltaH, nhpert * decrH);
+            Hpert0 = std::max(this->delta_h_, nhpert * decr_h_);
             FirstPert = false;
         }
         Citer.Hpert = nhpert;
@@ -599,15 +600,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (this->inequal_cons_ > 0) {
             switch (barmode) {
             case BarrierModes::PROBE:
-                this->barrier_gradient(this->getIqLmults(XSL), this->getDualGrad(RHS));
-                DXSL = -this->KKTSol.solve(RHS);
-                this->max_primal_dual_step(XSL, DXSL, this->BoundFraction, alphap, alphad);
+                this->barrier_gradient(this->get_iq_lmults(XSL), this->get_dual_grad(RHS));
+                DXSL = -this->kkt_sol_.solve(RHS);
+                this->max_primal_dual_step(XSL, DXSL, this->bound_fraction_, alphap, alphad);
                 Temp = XSL + DXSL;
-                Mu = this->MPCMu(this->getSlacks(Temp), this->getIqLmults(Temp), avgcomp, mincomp);
+                Mu = this->mpc_mu(this->get_slacks(Temp), this->get_iq_lmults(Temp), avgcomp,
+                                  mincomp);
 
                 break;
             case BarrierModes::LOQO:
-                Mu = this->LOQOMu(this->getSlacks(XSL), this->getIqLmults(XSL), avgcomp, mincomp);
+                Mu = this->loqo_mu(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp,
+                                   mincomp);
                 break;
             case BarrierModes::FIACCO:
                 break;
@@ -615,19 +618,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 break;
             }
 
-            Mu = std::max(Mu, this->MinMu);
-            Mu = std::min(Mu, this->MaxMu);
-            BarrObj = this->barrier_objective(this->getSlacks(XSL), Mu);
-            this->barrier_gradient(this->getSlacks(XSL), this->getIqLmults(XSL), Mu,
-                                   this->getDualGrad(RHS));
+            Mu = std::max(Mu, this->min_mu_);
+            Mu = std::min(Mu, this->max_mu_);
+            BarrObj = this->barrier_objective(this->get_slacks(XSL), Mu);
+            this->barrier_gradient(this->get_slacks(XSL), this->get_iq_lmults(XSL), Mu,
+                                   this->get_dual_grad(RHS));
         }
 
-        DXSL = -this->KKTSol.solve(RHS);
+        DXSL = -this->kkt_sol_.solve(RHS);
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
-            this->max_primal_dual_step(XSL, DXSL, this->BoundFraction, alphap, alphad);
+            this->max_primal_dual_step(XSL, DXSL, this->bound_fraction_, alphap, alphad);
         /////////////////////////////////////////////////////////////////////
-        if (Diagnostic) {
+        if (diagnostic_) {
         }
         QPtimer.stop();
 
@@ -637,7 +640,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
-            alpha = ls_impl(lsmode, ObjScale * lsobjscale, Mu, PrimObj, BarrObj, XSL, DXSL, Temp,
+            alpha = ls_impl(lsmode, obj_scale_ * lsobjscale, Mu, PrimObj, BarrObj, XSL, DXSL, Temp,
                             RHS, RHS2, Citer, iters);
 
         } else {
@@ -654,9 +657,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->fill_iter_info(XSL, RHS, PrimObj, BarrObj, Mu, Citer);
         iters.push_back(Citer);
 
-        if (this->ReturnBest) {
+        if (this->return_best_) {
             double critval;
-            switch (this->BestCriteria) {
+            switch (this->best_criteria_) {
             case BestCriteriaModes::ECONS:
                 critval = iters.back().EConInf;
                 break;
@@ -680,31 +683,31 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             }
         }
 
-        if (this->LateCallBackEnabled) {
+        if (this->late_callback_enabled_) {
             CBtimer.start();
-            this->LateCallBack(iters.back(), XSL, RHS);
+            this->late_callback_(iters.back(), XSL, RHS);
             CBtimer.stop();
         }
 
-        ExitCode = this->convergeCheck(iters);
+        ExitCode = this->converge_check(iters);
         if (!GoodStep)
             ExitCode = ConvergenceFlags::DIVERGING;
 
-        if (this->PrintLevel == 0) {
+        if (this->print_level_ == 0) {
             Printtimer.start();
             this->print_last_iterate(iters);
             Printtimer.stop();
         }
 
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || i == (this->MaxIters - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || i == (this->max_iters_ - 1)) {
 
-            if (ExitCode != ConvergenceFlags::CONVERGED && this->ReturnBest) {
+            if (ExitCode != ConvergenceFlags::CONVERGED && this->return_best_) {
                 XSL = BestXSL;
                 RHS = BestRHS;
             }
 
-            this->ConvergeFlag = ExitCode;
+            this->converge_flag_ = ExitCode;
             break;
         }
 
@@ -714,39 +717,39 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     }
 
     if (algmode == AlgorithmModes::OPT) {
-        this->LastObjVal = iters.back().PrimObj;
+        this->last_obj_val_ = iters.back().PrimObj;
     } else {
         Funtimer.start();
-        this->LastObjVal = 0;
-        this->nlp->eval_obj(ObjScale, XSL.head(this->primal_vars_), this->LastObjVal);
+        this->last_obj_val_ = 0;
+        this->nlp->eval_obj(obj_scale_, XSL.head(this->primal_vars_), this->last_obj_val_);
         Funtimer.stop();
     }
 
     if (this->equal_cons_ > 0) {
-        this->LastEqCons = this->getEqCons(RHS);
-        this->LastEqLmults = this->getEqLmults(XSL);
+        this->last_eq_cons_ = this->get_eq_cons(RHS);
+        this->last_eq_lmults_ = this->get_eq_lmults(XSL);
     }
     if (this->inequal_cons_ > 0) {
-        this->LastIqCons = this->getIqCons(RHS) - this->getSlacks(XSL);
-        this->LastIqLmults = this->getIqLmults(XSL);
+        this->last_iq_cons_ = this->get_iq_cons(RHS) - this->get_slacks(XSL);
+        this->last_iq_lmults_ = this->get_iq_lmults(XSL);
     }
 
     Runtimer.stop();
-    this->LastIterNum += iters.size();
+    this->last_iter_num_ += iters.size();
     double qptime = double(QPtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double nlptime = double(Funtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double tottime = double(Runtimer.count<std::chrono::microseconds>()) / 1000000.0;
 
-    this->LastFuncTime += nlptime;
-    this->LastKKTTime += qptime;
+    this->last_func_time_ += nlptime;
+    this->last_kkt_time_ += qptime;
     double printtime = double(Printtimer.count<std::chrono::microseconds>()) / 1000000.0;
-    this->LastPrintTime += printtime;
+    this->last_print_time_ += printtime;
 
     ///////////////////////////////////////////////////////////////////////////
 
-    int retiter = (this->ReturnBest ? BestIter : iters.size() - 1);
-    print_ExitStats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
-                    qptime * 1000, printtime * 1000);
+    int retiter = (this->return_best_ ? BestIter : iters.size() - 1);
+    print_exit_stats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
+                     qptime * 1000, printtime * 1000);
     ////////////////////////////////////////////////////////////////////////////
 
     return XSL;
@@ -769,61 +772,61 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     if (this->inequal_cons_ > 0) {
         this->nlp->set_slacks_ones();
     }
-    this->evalNLP(AlgorithmModes::INIT, this->ObjScale, XSL, val, RHS.head(this->primal_vars_), RHS,
-                  this->KKTSol.getMatrix());
+    this->eval_nlp(AlgorithmModes::INIT, this->obj_scale_, XSL, val, RHS.head(this->primal_vars_),
+                   RHS, this->kkt_sol_.getMatrix());
 
     Eigen::VectorXd hp(this->slack_vars_);
 
     for (int i = 0; i < this->slack_vars_; i++) {
-        double fxi = this->getIqCons(RHS)[i];
-        if (fxi < -this->BoundPush) {
-            this->getSlacks(XSL)[i] = abs(fxi);
+        double fxi = this->get_iq_cons(RHS)[i];
+        if (fxi < -this->bound_push_) {
+            this->get_slacks(XSL)[i] = abs(fxi);
         } else {
-            this->getSlacks(XSL)[i] = this->BoundPush;
+            this->get_slacks(XSL)[i] = this->bound_push_;
         }
         hp[i] = 1.0;
-        this->getIqLmults(XSL)[i] = Mu / this->getSlacks(XSL)[i];
+        this->get_iq_lmults(XSL)[i] = Mu / this->get_slacks(XSL)[i];
     }
 
     RHS.tail(this->equal_cons_ + this->inequal_cons_).setZero();
 
     if (this->inequal_cons_ > 0)
-        this->nlp->assign_kkt_slack_hessian(hp, this->KKTSol.getMatrix());
-    if (this->PrintLevel < 2) {
-        print_Beginning("KKT-Matrix Analysis ");
+        this->nlp->assign_kkt_slack_hessian(hp, this->kkt_sol_.getMatrix());
+    if (this->print_level_ < 2) {
+        print_beginning("KKT-Matrix Analysis ");
     }
 
     if (docompute)
-        this->KKTSol.compute_internal();
+        this->kkt_sol_.compute_internal();
     else
-        this->KKTSol.refactorize_internal();
+        this->kkt_sol_.refactorize_internal();
     kktt.stop();
 
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
-    this->LastPreTime += pretime;
+    this->last_pre_time_ += pretime;
 
-    this->FactorFlops = this->KKTSol.m_flops;
-    this->FactorMem = this->KKTSol.m_mem;
+    this->factor_flops_ = this->kkt_sol_.m_flops;
+    this->factor_mem_ = this->kkt_sol_.m_mem;
 
-    if (this->PrintLevel < 2) {
+    if (this->print_level_ < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);
         if (docompute) {
             fmt::print(" LDLT Factor Size      : ");
-            fmt::print(cyan, "{0:<10}\n", this->FactorMem);
-            if (this->FactorFlops > 0) {
+            fmt::print(cyan, "{0:<10}\n", this->factor_mem_);
+            if (this->factor_flops_ > 0) {
                 fmt::print(" LDLT Factor FLOPs     : ");
-                fmt::print(cyan, "{0} MFLOPs\n", this->FactorFlops);
+                fmt::print(cyan, "{0} MFLOPs\n", this->factor_flops_);
             }
         }
         fmt::print(" Analysis/Reorder Time : ");
         fmt::print(cyan, "{0:.3f} ms\n", pretime * 1000);
-        print_Finished("KKT-Matrix Analysis ");
+        print_finished("KKT-Matrix Analysis ");
     }
 
-    Eigen::VectorXd dx = -this->KKTSol.solve(RHS);
+    Eigen::VectorXd dx = -this->kkt_sol_.solve(RHS);
 
     if (equal_cons_ > 0)
-        this->getEqLmults(XSL) = this->getEqLmults(dx);
+        this->get_eq_lmults(XSL) = this->get_eq_lmults(dx);
     if (this->inequal_cons_ > 0)
         this->nlp->set_slack_diags(0.0);
     this->nlp->set_primal_diags(0.0);
@@ -831,7 +834,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
-double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, double Mu,
+double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale_, double Mu,
                                        double PrimObj, double BarrObj, EigenRef<VectorXd> XSL,
                                        EigenRef<VectorXd> DXSL, EigenRef<VectorXd> XSL2,
                                        EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
@@ -843,35 +846,35 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, 
     double alpha = 1.0;
 
     if (lsmode == LineSearchModes::LANG) {
-        double LangInit = PrimObj + BarrObj + this->getLmults(XSL).dot(this->getAllCons(RHS));
+        double LangInit = PrimObj + BarrObj + this->get_lmults(XSL).dot(this->get_all_cons(RHS));
 
-        for (int j = 0; j < this->MaxLSIters; j++) {
+        for (int j = 0; j < this->max_ls_iters_; j++) {
             double ptest = 0;
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->eval_rhs(ObjScale, XSL2, ptest, RHS2, RHS2);
-            this->apply_reset_slacks(this->getSlacks(XSL2), this->getIqCons(RHS2));
-            btest = this->barrier_objective(this->getSlacks(XSL2), Mu);
-            this->barrier_gradient(this->getSlacks(XSL2), this->getIqLmults(XSL2), Mu,
-                                   this->getDualGrad(RHS2));
-            double LangTest = ptest + btest + this->getLmults(XSL2).dot(this->getAllCons(RHS2));
+            this->eval_rhs(obj_scale_, XSL2, ptest, RHS2, RHS2);
+            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
+            btest = this->barrier_objective(this->get_slacks(XSL2), Mu);
+            this->barrier_gradient(this->get_slacks(XSL2), this->get_iq_lmults(XSL2), Mu,
+                                   this->get_dual_grad(RHS2));
+            double LangTest = ptest + btest + this->get_lmults(XSL2).dot(this->get_all_cons(RHS2));
             Citer.LSiters = j;
             if (LangTest < LangInit) {
                 break;
             } else {
-                alpha = alpha / this->alphaRed;
+                alpha = alpha / this->alpha_red_;
             }
         }
     } else if (lsmode == LineSearchModes::L1) {
         double vv = RHS.head(this->primal_vars_ + this->slack_vars_)
                         .dot(DXSL.head(this->primal_vars_ + this->slack_vars_));
-        double cv = this->getLmults(DXSL).dot(this->getAllCons(RHS));
+        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
 
         double LangInit = PrimObj + BarrObj;
-        double InitL1Pen = this->getLmults(XSL).cwiseAbs().dot(this->getAllCons(RHS).cwiseAbs());
-        double InitL2Pen = this->getAllCons(RHS).squaredNorm();
-        double InitLinfPenalty = this->getAllCons(RHS).lpNorm<Eigen::Infinity>();
+        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
+        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
+        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
 
         double sc = .1 + std::abs(vv - cv) / InitL2Pen;
         if (InitL2Pen == 0.0)
@@ -879,24 +882,24 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, 
 
         LangInit += InitL1Pen + InitL2Pen * sc;
 
-        for (int j = 0; j < this->MaxLSIters; j++) {
+        for (int j = 0; j < this->max_ls_iters_; j++) {
             double ptest = 0;
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
             this->nlp->eval_occ(
-                ObjScale, XSL2.head(this->primal_vars_), ptest,
+                obj_scale_, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
 
-            this->apply_reset_slacks(this->getSlacks(XSL2), this->getIqCons(RHS2));
-            btest = this->barrier_objective(this->getSlacks(XSL2), Mu);
+            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
+            btest = this->barrier_objective(this->get_slacks(XSL2), Mu);
 
             double LangTest = ptest + btest;
             double TestL1Pen =
-                this->getLmults(XSL).cwiseAbs().dot(this->getAllCons(RHS2).cwiseAbs());
-            double TestL2Pen = this->getAllCons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->getAllCons(RHS2).lpNorm<Eigen::Infinity>();
+                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
+            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
+            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
 
             LangTest += TestL1Pen + TestL2Pen * sc;
 
@@ -907,18 +910,18 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, 
                 break;
             } else {
                 Citer.LSiters = j + 1;
-                alpha = alpha / this->alphaRed;
+                alpha = alpha / this->alpha_red_;
             }
         }
     } else if (lsmode == LineSearchModes::AUGLANG) {
 
-        double vv = this->getPrimDualGrad(RHS).dot(this->getPrimalsSlacks(DXSL));
-        double cv = this->getLmults(DXSL).dot(this->getAllCons(RHS));
+        double vv = this->get_prim_dual_grad(RHS).dot(this->get_primals_slacks(DXSL));
+        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
 
         double LangInit = PrimObj + BarrObj;
-        double InitL1Pen = this->getLmults(XSL).cwiseAbs().dot(this->getAllCons(RHS).cwiseAbs());
-        double InitL2Pen = this->getAllCons(RHS).squaredNorm();
-        double InitLinfPenalty = this->getAllCons(RHS).lpNorm<Eigen::Infinity>();
+        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
+        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
+        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
 
         double sc = .01 + std::abs(vv - cv) / InitL2Pen;
         if (InitL2Pen == 0.0)
@@ -926,46 +929,47 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, 
 
         LangInit += InitL1Pen + InitL2Pen * sc;
 
-        for (int j = 0; j < this->MaxLSIters; j++) {
+        for (int j = 0; j < this->max_ls_iters_; j++) {
             double ptest = 0;
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
             this->nlp->eval_occ(
-                ObjScale, XSL2.head(this->primal_vars_), ptest,
+                obj_scale_, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
 
-            this->apply_reset_slacks(this->getSlacks(XSL2), this->getIqCons(RHS2));
-            btest = this->barrier_objective(this->getSlacks(XSL2), Mu);
+            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
+            btest = this->barrier_objective(this->get_slacks(XSL2), Mu);
 
             double LangTest = ptest + btest;
 
             double TestL1Pen =
-                this->getLmults(XSL).cwiseAbs().dot(this->getAllCons(RHS2).cwiseAbs());
+                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
 
             TestL1Pen = 0;
 
             for (int i = 0; i < this->equal_cons_; i++) {
-                double eqerr = abs(this->getEqCons(RHS2)[i]);
-                double eqmul = abs(this->getEqLmults(XSL)[i]);
-                if (eqerr > this->EContol * 10) {
+                double eqerr = abs(this->get_eq_cons(RHS2)[i]);
+                double eqmul = abs(this->get_eq_lmults(XSL)[i]);
+                if (eqerr > this->econ_tol_ * 10) {
                     TestL1Pen += eqerr * eqmul;
                 }
             }
 
             for (int i = 0; i < this->inequal_cons_; i++) {
-                double iqerr = abs(this->getIqCons(RHS2)[i]);
-                double iqmul = abs(this->getIqLmults(XSL)[i]);
-                if (iqerr > this->IContol * 10) {
+                double iqerr = abs(this->get_iq_cons(RHS2)[i]);
+                double iqmul = abs(this->get_iq_lmults(XSL)[i]);
+                if (iqerr > this->icon_tol_ * 10) {
                     TestL1Pen += iqerr * iqmul;
                 }
             }
 
-            double TestL2Pen = this->getAllCons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->getAllCons(RHS2).lpNorm<Eigen::Infinity>();
+            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
+            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
 
-            if (TestL2Pen < EContol * EContol * equal_cons_ + IContol * IContol * inequal_cons_) {
+            if (TestL2Pen <
+                econ_tol_ * econ_tol_ * equal_cons_ + icon_tol_ * icon_tol_ * inequal_cons_) {
                 TestL2Pen = 0;
             }
 
@@ -978,7 +982,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double ObjScale, 
                 break;
             } else {
                 Citer.LSiters = j + 1;
-                alpha = alpha / this->alphaRed;
+                alpha = alpha / this->alpha_red_;
             }
         }
     } else
@@ -991,271 +995,271 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
 
-    if (this->PrintLevel == 0)
+    if (this->print_level_ == 0)
         print_stats();
-    if (this->PrintLevel < 2) {
-        print_Header();
-        print_Beginning("PSIOPT ");
+    if (this->print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
     tycho::utils::Timer t;
     t.start();
 
-    bool docompute = analyze_KKT_Matrix();
+    bool docompute = analyze_kkt_matrix();
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->initMu, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
 
     Eigen::VectorXd XSLans(this->kkt_dim_);
     XSLans.setZero();
-    if (this->PrintLevel < 2) {
-        print_Beginning("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Optimization Algorithm ");
     }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
-                            this->initMu, XSL);
-    if (this->PrintLevel < 2) {
-        print_Finished("Optimization Algorithm ");
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
+    if (this->print_level_ < 2) {
+        print_finished("Optimization Algorithm ");
     }
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
-                         this->LastFuncTime - this->LastPrintTime;
+    this->last_total_time_ = tottime / 1000.0;
+    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
+                            this->last_func_time_ - this->last_print_time_;
 
-    if (this->PrintLevel < 2) {
+    if (this->print_level_ < 2) {
         print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_Finished("PSIOPT ");
-        print_Header();
+        print_finished("PSIOPT ");
+        print_header();
     }
-    return this->getPrimals(XSLans);
+    return this->get_primals(XSLans);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
-    if (this->PrintLevel == 0)
+    if (this->print_level_ == 0)
         print_stats();
-    if (this->PrintLevel < 2) {
-        print_Header();
-        print_Beginning("PSIOPT ");
+    if (this->print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
     tycho::utils::Timer t;
     t.start();
 
-    bool docompute = analyze_KKT_Matrix();
+    bool docompute = analyze_kkt_matrix();
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->initMu, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
     Eigen::VectorXd XSLans(this->kkt_dim_);
     XSLans.setZero();
 
-    if (this->PrintLevel < 2) {
-        print_Beginning("Solve Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Solve Algorithm ");
     }
 
-    XSLans = this->alg_impl(this->SoeMode, this->SoeBarMode, this->SoeLSMode, this->ObjScale,
-                            this->initMu, XSL);
-    if (this->PrintLevel < 2) {
-        print_Finished("Solve Algorithm ");
+    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
+    if (this->print_level_ < 2) {
+        print_finished("Solve Algorithm ");
     }
-    Eigen::VectorXd Xt = this->getPrimals(XSLans);
-    XSL = this->init_impl(Xt, this->initMu, false);
+    Eigen::VectorXd Xt = this->get_primals(XSLans);
+    XSL = this->init_impl(Xt, this->init_mu_, false);
 
-    if (this->PrintLevel < 2) {
-        print_Beginning("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Optimization Algorithm ");
     }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
-                            this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
-                         this->LastFuncTime - this->LastPrintTime;
+    this->last_total_time_ = tottime / 1000.0;
+    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
+                            this->last_func_time_ - this->last_print_time_;
 
-    if (this->PrintLevel < 2) {
-        print_Finished("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_finished("Optimization Algorithm ");
         print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_Finished("PSIOPT ");
-        print_Header();
+        print_finished("PSIOPT ");
+        print_header();
     }
 
-    return this->getPrimals(XSLans);
+    return this->get_primals(XSLans);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
-    if (this->PrintLevel == 0)
+    if (this->print_level_ == 0)
         print_stats();
-    if (this->PrintLevel < 2) {
-        print_Header();
-        print_Beginning("PSIOPT ");
+    if (this->print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
     tycho::utils::Timer t;
     t.start();
 
-    bool docompute = analyze_KKT_Matrix();
+    bool docompute = analyze_kkt_matrix();
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->initMu, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
     Eigen::VectorXd XSLans(this->kkt_dim_);
     XSLans.setZero();
 
-    if (this->PrintLevel < 2) {
-        print_Beginning("Solve Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Solve Algorithm ");
     }
 
-    XSLans = this->alg_impl(this->SoeMode, this->SoeBarMode, this->SoeLSMode, this->ObjScale,
-                            this->initMu, XSL);
-    if (this->PrintLevel < 2) {
-        print_Finished("Solve Algorithm ");
+    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
+    if (this->print_level_ < 2) {
+        print_finished("Solve Algorithm ");
     }
-    Eigen::VectorXd Xt = this->getPrimals(XSLans);
-    XSL = this->init_impl(Xt, this->initMu, false);
+    Eigen::VectorXd Xt = this->get_primals(XSLans);
+    XSL = this->init_impl(Xt, this->init_mu_, false);
 
-    if (this->PrintLevel < 2) {
-        print_Beginning("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Optimization Algorithm ");
     }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
-                            this->initMu, XSL);
-    if (this->PrintLevel < 2) {
-        print_Finished("Optimization Algorithm ");
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
+    if (this->print_level_ < 2) {
+        print_finished("Optimization Algorithm ");
     }
-    if (this->ConvergeFlag == ConvergenceFlags::CONVERGED) {
+    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
-        Xt = this->getPrimals(XSLans);
-        XSL = this->init_impl(Xt, this->initMu, false);
+        Xt = this->get_primals(XSLans);
+        XSL = this->init_impl(Xt, this->init_mu_, false);
 
-        if (this->PrintLevel < 2) {
-            print_Beginning("Solve Algorithm ");
+        if (this->print_level_ < 2) {
+            print_beginning("Solve Algorithm ");
         }
-        XSLans = this->alg_impl(this->SoeMode, this->SoeBarMode, this->SoeLSMode, this->ObjScale,
-                                this->initMu, XSL);
+        XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
+                                this->obj_scale_, this->init_mu_, XSL);
 
-        if (this->PrintLevel < 2) {
-            print_Finished("Solve Algorithm ");
+        if (this->print_level_ < 2) {
+            print_finished("Solve Algorithm ");
         }
     }
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
-                         this->LastFuncTime - this->LastPrintTime;
+    this->last_total_time_ = tottime / 1000.0;
+    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
+                            this->last_func_time_ - this->last_print_time_;
 
-    if (this->PrintLevel < 2) {
+    if (this->print_level_ < 2) {
         print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_Finished("PSIOPT ");
-        print_Header();
+        print_finished("PSIOPT ");
+        print_header();
     }
 
-    return this->getPrimals(XSLans);
+    return this->get_primals(XSLans);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
     this->zero_timing_stats();
-    if (this->PrintLevel == 0)
+    if (this->print_level_ == 0)
         print_stats();
-    if (this->PrintLevel < 2) {
-        print_Header();
-        print_Beginning("PSIOPT ");
+    if (this->print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
     tycho::utils::Timer t;
     t.start();
 
-    bool docompute = analyze_KKT_Matrix();
+    bool docompute = analyze_kkt_matrix();
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->initMu, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
     Eigen::VectorXd XSLans(this->kkt_dim_);
 
-    if (this->PrintLevel < 2) {
-        print_Beginning("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Optimization Algorithm ");
     }
 
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->OptBarMode, this->OptLSMode, this->ObjScale,
-                            this->initMu, XSL);
+    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
 
-    if (this->PrintLevel < 2) {
-        print_Finished("Optimization Algorithm ");
+    if (this->print_level_ < 2) {
+        print_finished("Optimization Algorithm ");
     }
 
-    if (this->ConvergeFlag == ConvergenceFlags::CONVERGED) {
+    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
-        Eigen::VectorXd Xt = this->getPrimals(XSLans);
-        XSL = this->init_impl(Xt, this->initMu, false);
+        Eigen::VectorXd Xt = this->get_primals(XSLans);
+        XSL = this->init_impl(Xt, this->init_mu_, false);
 
-        if (this->PrintLevel < 2) {
-            print_Beginning("Solve Algorithm ");
+        if (this->print_level_ < 2) {
+            print_beginning("Solve Algorithm ");
         }
-        XSLans = this->alg_impl(this->SoeMode, this->SoeBarMode, this->SoeLSMode, this->ObjScale,
-                                this->initMu, XSL);
+        XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
+                                this->obj_scale_, this->init_mu_, XSL);
 
-        if (this->PrintLevel < 2) {
-            print_Finished("Solve Algorithm ");
+        if (this->print_level_ < 2) {
+            print_finished("Solve Algorithm ");
         }
     }
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
-                         this->LastFuncTime - this->LastPrintTime;
+    this->last_total_time_ = tottime / 1000.0;
+    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
+                            this->last_func_time_ - this->last_print_time_;
 
-    if (this->PrintLevel < 2) {
+    if (this->print_level_ < 2) {
         print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_Finished("PSIOPT ");
-        print_Header();
+        print_finished("PSIOPT ");
+        print_header();
     }
 
-    return this->getPrimals(XSLans);
+    return this->get_primals(XSLans);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
 
     this->zero_timing_stats();
-    if (this->PrintLevel == 0)
+    if (this->print_level_ == 0)
         print_stats();
-    if (this->PrintLevel < 2) {
-        print_Header();
-        print_Beginning("PSIOPT ");
+    if (this->print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
     }
     this->ensure_solver_initialized();
     tycho::utils::Timer t;
     t.start();
-    bool docompute = analyze_KKT_Matrix();
+    bool docompute = analyze_kkt_matrix();
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->initMu, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
     Eigen::VectorXd XSLans(this->kkt_dim_);
     XSLans.setZero();
-    if (this->PrintLevel < 2) {
-        print_Beginning("Solve Algorithm ");
+    if (this->print_level_ < 2) {
+        print_beginning("Solve Algorithm ");
     }
-    XSLans = this->alg_impl(this->SoeMode, this->SoeBarMode, this->SoeLSMode, this->ObjScale,
-                            this->initMu, XSL);
+    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
+                            this->obj_scale_, this->init_mu_, XSL);
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->LastTotalTime = tottime / 1000.0;
-    this->LastMiscTime = this->LastTotalTime - this->LastPreTime - this->LastKKTTime -
-                         this->LastFuncTime - this->LastPrintTime;
+    this->last_total_time_ = tottime / 1000.0;
+    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
+                            this->last_func_time_ - this->last_print_time_;
 
-    if (this->PrintLevel < 2) {
-        print_Finished("Solve Algorithm ");
+    if (this->print_level_ < 2) {
+        print_finished("Solve Algorithm ");
         print_timing_summary();
         fmt::print(" PSIOPT Total Time            : ");
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_Finished("PSIOPT ");
-        print_Header();
+        print_finished("PSIOPT ");
+        print_header();
     }
 
-    return this->getPrimals(XSLans);
+    return this->get_primals(XSLans);
 }

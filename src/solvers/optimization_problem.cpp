@@ -124,7 +124,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     }
 
     this->nlp->make_nlp(numVars, numEqCons, numIqCons);
-    this->optimizer->setNLP(this->nlp);
+    this->optimizer->set_nlp(this->nlp);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->doTranscription = false;

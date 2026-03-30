@@ -1344,7 +1344,7 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     this->nlp->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
                         this->indexer_.num_phase_iq_cons);
 
-    this->optimizer->setNLP(this->nlp);
+    this->optimizer->set_nlp(this->nlp);
 }
 
 void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
@@ -1545,10 +1545,10 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
 
     this->collect_solver_output(output);
 
-    this->collect_post_opt_info(this->optimizer->LastEqCons, this->optimizer->LastEqLmults,
-                                this->optimizer->LastIqCons, this->optimizer->LastIqLmults);
+    this->collect_post_opt_info(this->optimizer->last_eq_cons_, this->optimizer->last_eq_lmults_,
+                                this->optimizer->last_iq_cons_, this->optimizer->last_iq_lmults_);
 
-    return this->optimizer->ConvergeFlag;
+    return this->optimizer->converge_flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {

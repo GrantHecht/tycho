@@ -72,19 +72,19 @@ int main() {
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -50.0, 50.0);
 
     // ── Solver settings ─────────────────────────────────────────────────
-    phase.optimizer().set_OptLSMode("L1");
-    phase.optimizer().set_SoeLSMode("L1");
-    phase.optimizer().set_MaxLSIters(2);
-    phase.optimizer().PrintLevel = 2;
+    phase.optimizer().set_opt_ls_mode("L1");
+    phase.optimizer().set_soe_ls_mode("L1");
+    phase.optimizer().set_max_ls_iters(2);
+    phase.optimizer().print_level_ = 2;
     phase.set_num_partitions(1);
 
     // MINDEG ordering — needed for reliable convergence at tf=10000
-    phase.optimizer().set_QPOrderingMode("MINDEG");
+    phase.optimizer().set_qp_ordering_mode("MINDEG");
 
     // Adaptive mesh refinement
     phase.set_adaptive_mesh(true);
     phase.set_mesh_tol(1.0e-7);
-    phase.optimizer().set_EContol(1.0e-7);
+    phase.optimizer().set_econ_tol(1.0e-7);
     phase.set_max_mesh_iters(10);
     phase.set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
     phase.set_mesh_error_criteria(MeshErrorAggregation::MAX);

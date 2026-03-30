@@ -341,10 +341,10 @@ int main() {
     // mass is discontinuous at staging events.
     ocp.add_forward_link_equal_con(phase1, phase4, {"R", "V", "t", "u"});
 
-    ocp.optimizer().set_OptLSMode("L1");
-    ocp.optimizer().set_SoeLSMode("L1");
-    ocp.optimizer().set_MaxLSIters(2);
-    ocp.optimizer().set_PrintLevel(1);
+    ocp.optimizer().set_opt_ls_mode("L1");
+    ocp.optimizer().set_soe_ls_mode("L1");
+    ocp.optimizer().set_max_ls_iters(2);
+    ocp.optimizer().set_print_level(1);
 
     ///////////////////////////////////////////////////////////////////////////
     // Solve

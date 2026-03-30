@@ -69,8 +69,8 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
     phase.add_delta_time_objective(1.0);
 
     // Solver settings
-    phase.optimizer().set_EContol(tol);
-    phase.optimizer().set_KKTtol(tol);
+    phase.optimizer().set_econ_tol(tol);
+    phase.optimizer().set_kkt_tol(tol);
 
     const auto status = phase.solve_optimize();
     if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {

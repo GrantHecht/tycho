@@ -74,7 +74,7 @@ struct OptimizationProblemBase {
 
     virtual void initPartitions() {
         this->num_partitions_ = default_num_partitions();
-        this->optimizer->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
+        this->optimizer->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
 
     virtual void setNumPartitions(int num_partitions, int qp_threads) {
@@ -82,7 +82,7 @@ struct OptimizationProblemBase {
             throw std::invalid_argument("Number of partitions/threads must be positive");
         }
         this->num_partitions_ = num_partitions;
-        this->optimizer->QPThreads = qp_threads;
+        this->optimizer->qp_threads_ = qp_threads;
     }
     virtual void setNumPartitions(int num_partitions) {
         if (num_partitions < 1) {

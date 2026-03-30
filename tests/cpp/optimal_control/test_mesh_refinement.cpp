@@ -10,7 +10,7 @@ using namespace TychoTest;
 
 TEST_F(OptimalControlTest, MeshRefinementConvergence) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer->print_level_ = 0;
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-4); // relaxed tolerance
     phase->set_max_mesh_iters(5);
@@ -22,7 +22,7 @@ TEST_F(OptimalControlTest, MeshRefinementConvergence) {
 
 TEST_F(OptimalControlTest, MeshRefinementIterates) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer->print_level_ = 0;
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-7); // tight tolerance forces refinement
     phase->set_max_mesh_iters(3);
