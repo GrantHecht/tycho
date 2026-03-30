@@ -286,9 +286,9 @@ class AccelerateImpl
         return m_info;
     }
 
-    void setMatrix(const MatrixType &matrix);
+    void set_matrix(const MatrixType &matrix);
 
-    void analyzePattern(const MatrixType &matrix);
+    void analyze_pattern(const MatrixType &matrix);
 
     void factorize(const MatrixType &matrix);
 
@@ -298,33 +298,33 @@ class AccelerateImpl
     void _solve_impl(const MatrixBase<Rhs> &b, MatrixBase<Dest> &dest) const;
 
     /** Sets the ordering algorithm to use. */
-    void setOrder(SparseOrder_t order) { m_order = order; }
+    void set_order(SparseOrder_t order) { m_order = order; }
 
     /** Sets the number of threads for accelerate */
-    inline void setNumThreads(int num_threads) { accelerate_set_num_threads(num_threads); }
+    inline void set_num_threads(int num_threads) { accelerate_set_num_threads(num_threads); }
 
-    void setIterativeRefinement(bool iterativeRefinement) {
+    void set_iterative_refinement(bool iterativeRefinement) {
         m_doIterativeRefinement = iterativeRefinement;
     }
 
-    void setIterativeRefinementIterations(int iterations) {
+    void set_iterative_refinement_iterations(int iterations) {
         eigen_assert(iterations >= 0 && "Number of iterations must be non-negative.");
         m_iterativeRefinementIterations = iterations;
     }
 
-    void setPivotTolerance(Scalar tol) { m_pivotTolerance = tol; }
-    void setZeroTolerance(Scalar tol) { m_zeroTolerance = tol; }
+    void set_pivot_tolerance(Scalar tol) { m_pivotTolerance = tol; }
+    void set_zero_tolerance(Scalar tol) { m_zeroTolerance = tol; }
 
-    MatrixType &getMatrix() { return m_matrix; }
+    MatrixType &get_matrix() { return m_matrix; }
 
     template <int U = UpLo>
-    typename std::enable_if<!bool(U & Symmetric), void>::type getMatrix(const MatrixType &matrix) {
+    typename std::enable_if<!bool(U & Symmetric), void>::type get_matrix(const MatrixType &matrix) {
         m_matrix = matrix;
         m_matrix.makeCompressed();
     }
 
     template <int U = UpLo>
-    typename std::enable_if<bool(U &Symmetric), void>::type getMatrix(const MatrixType &matrix) {
+    typename std::enable_if<bool(U &Symmetric), void>::type get_matrix(const MatrixType &matrix) {
         // Similar to Pardiso, use selfadjointView to ensure symmetry
         PermutationMatrix<Dynamic, Dynamic, StorageIndex> p_null;
         m_matrix.resize(matrix.rows(), matrix.cols());
@@ -337,9 +337,9 @@ class AccelerateImpl
 
     template <int U = UpLo>
     typename std::enable_if<bool(U &Symmetric), MatrixType>::type
-    getMatrixTwisted(const MatrixType &matrix) {
+    get_matrix_twisted(const MatrixType &matrix) {
         eigen_assert(!m_permutation.empty() &&
-                     "Permutation not available. Call compute() or analyzePattern() first.");
+                     "Permutation not available. Call compute() or analyze_pattern() first.");
         eigen_assert(matrix.rows() == matrix.cols() &&
                      "Matrix must be square for twisted operation.");
         eigen_assert(static_cast<size_t>(matrix.rows()) == m_permutation.size() &&
@@ -384,11 +384,11 @@ class AccelerateImpl
 
     // This method initializes the internal AccelSparseMatrix. This must be called
     // after changing the sparsity pattern of m_matrix via the reference returned
-    // from MatrixType& getMatrix()
-    void reinitializeInternalMatrixRepresentation();
+    // from MatrixType& get_matrix()
+    void reinitialize_internal_matrix_representation();
 
     // Internal factorization methods
-    AccelerateImpl &analyzePattern_internal();
+    AccelerateImpl &analyze_pattern_internal();
     AccelerateImpl &factorize_internal();
     AccelerateImpl &refactorize_internal();
     AccelerateImpl &compute_internal();
@@ -615,14 +615,14 @@ class AccelerateImpl
 };
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
-void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::setMatrix(
+void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::set_matrix(
     const MatrixType &matrix) {
     if (EnforceSquare_) {
         eigen_assert(matrix.rows() == matrix.cols());
     }
 
     // m_matrix = matrix;
-    getMatrix(matrix);
+    get_matrix(matrix);
     m_nRows = m_matrix.rows();
     m_nCols = m_matrix.cols();
 
@@ -638,7 +638,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::setMatrix(
 /** Computes the symbolic and numeric decomposition of matrix \a a */
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::compute(const MatrixType &a) {
-    setMatrix(a);
+    set_matrix(a);
 
     doAnalysis();
 
@@ -655,12 +655,12 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::compute(const 
  * \sa factorize()
  */
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
-void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyzePattern(
+void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyze_pattern(
     const MatrixType &a) {
     if (EnforceSquare_) {
         eigen_assert(a.rows() == a.cols());
     }
-    setMatrix(a);
+    set_matrix(a);
 
     doAnalysis();
 
@@ -672,11 +672,11 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyzePattern
  * The given matrix must have the same sparsity pattern as the matrix on which the symbolic
  * decomposition has been performed.
  *
- * \sa analyzePattern()
+ * \sa analyze_pattern()
  */
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize(const MatrixType &a) {
-    eigen_assert(m_symbolicFactorization && "You must first call analyzePattern()");
+    eigen_assert(m_symbolicFactorization && "You must first call analyze_pattern()");
     eigen_assert(m_nRows == a.rows() && m_nCols == a.cols());
 
     if (EnforceSquare_) {
@@ -776,12 +776,12 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 /** Initializes the internal AccelSparseMatrix from the internal Eigen sparse matrix
  *
  * This method must be called after changing the sparsity pattern of the m_matrix
- * member via the reference returned from MatrixType& getMatrix().
+ * member via the reference returned from MatrixType& get_matrix().
  *
  */
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_,
-                    EnforceSquare_>::reinitializeInternalMatrixRepresentation() {
+                    EnforceSquare_>::reinitialize_internal_matrix_representation() {
     // Update matrix dimensions in case they changed when the sparsity pattern was modified
     m_nRows = m_matrix.rows();
     m_nCols = m_matrix.cols();
@@ -805,9 +805,9 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_> &
-AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyzePattern_internal() {
+AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyze_pattern_internal() {
     eigen_assert(m_matrix.rows() > 0 && m_matrix.cols() > 0 &&
-                 "Matrix must be set before calling analyzePattern_internal()");
+                 "Matrix must be set before calling analyze_pattern_internal()");
 
     m_symbolicFactorization.reset(nullptr);
     doAnalysis();
@@ -819,7 +819,7 @@ AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::analyzePattern_inte
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_> &
 AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize_internal() {
-    eigen_assert(m_symbolicFactorization && "You must first call analyzePattern_internal()");
+    eigen_assert(m_symbolicFactorization && "You must first call analyze_pattern_internal()");
 
     m_numericFactorization.reset(nullptr);
     doFactorization();

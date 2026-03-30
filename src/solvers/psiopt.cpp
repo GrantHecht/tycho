@@ -63,14 +63,14 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     mkl_set_num_threads(qp_threads_);
 #endif
 
-    this->nlp->analyze_sparsity(this->kkt_sol_.getMatrix());
+    this->nlp->analyze_sparsity(this->kkt_sol_.get_matrix());
 #ifdef USE_ACCELERATE_SPARSE
     // we need to call this to update the internal AccelSparseMatrix since
-    // we changed the sparsity pattern via the reference returned from getMatrix.
-    this->kkt_sol_.reinitializeInternalMatrixRepresentation();
+    // we changed the sparsity pattern via the reference returned from get_matrix.
+    this->kkt_sol_.reinitialize_internal_matrix_representation();
 #endif
     if (store_sp_mat_)
-        spmat = this->kkt_sol_.getMatrix();
+        spmat = this->kkt_sol_.get_matrix();
     this->qp_analyzed_ = false;
 }
 
@@ -272,10 +272,10 @@ void tycho::solvers::PSIOPT::print_stats() {
     fmt::print(" KKT-Matrix DIM (P+E+2*I) : ");
     fmt::print(cyan, "{:<10}\n", this->kkt_dim_);
     fmt::print(" KKT-Matrix NNZs          : ");
-    fmt::print(cyan, "{:<10}\n", this->kkt_sol_.getMatrix().nonZeros());
+    fmt::print(cyan, "{:<10}\n", this->kkt_sol_.get_matrix().nonZeros());
     fmt::print(" KKT-Matrix NNZ%          : ");
     fmt::print(cyan, "{:.6f}%\n",
-               100.0 * double(this->kkt_sol_.getMatrix().nonZeros()) /
+               100.0 * double(this->kkt_sol_.get_matrix().nonZeros()) /
                    (double(this->kkt_dim_) * double(this->kkt_dim_)));
     fmt::print("\n");
 }
@@ -459,7 +459,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
             std::cout << "Potential Rank Deficiency Detected!!!" << std::endl;
         }
     };
-    auto Perturb = [&](double p) { this->nlp->perturb_kkt_p_diags(p, this->kkt_sol_.getMatrix()); };
+    auto Perturb = [&](double p) {
+        this->nlp->perturb_kkt_p_diags(p, this->kkt_sol_.get_matrix());
+    };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
     int IncEigs;
@@ -548,11 +550,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Funtimer.start();
         /////////////////////////////////////////////////////////////
 
-        this->eval_nlp(algmode, obj_scale_, XSL, prim_obj, PGX, RHS, this->kkt_sol_.getMatrix());
+        this->eval_nlp(algmode, obj_scale_, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
 
         if (this->inequal_cons_ > 0) {
             this->apply_reset_slacks(this->get_slacks(XSL), this->get_iq_cons(RHS));
-            this->barrier_hessian(this->kkt_sol_.getMatrix(), this->get_slacks(XSL),
+            this->barrier_hessian(this->kkt_sol_.get_matrix(), this->get_slacks(XSL),
                                   this->get_iq_lmults(XSL), mu);
             this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
                                   maxcomp);
@@ -563,7 +565,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (this->early_callback_enabled_) {
             CBtimer.start();
             this->early_callback_(i, obj_scale_, XSL, prim_obj, PGX, RHS,
-                                  this->kkt_sol_.getMatrix());
+                                  this->kkt_sol_.get_matrix());
             CBtimer.stop();
         }
         QPtimer.start();
@@ -774,7 +776,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
         this->nlp->set_slacks_ones();
     }
     this->eval_nlp(AlgorithmModes::INIT, this->obj_scale_, XSL, val, RHS.head(this->primal_vars_),
-                   RHS, this->kkt_sol_.getMatrix());
+                   RHS, this->kkt_sol_.get_matrix());
 
     Eigen::VectorXd hp(this->slack_vars_);
 
@@ -792,7 +794,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     RHS.tail(this->equal_cons_ + this->inequal_cons_).setZero();
 
     if (this->inequal_cons_ > 0)
-        this->nlp->assign_kkt_slack_hessian(hp, this->kkt_sol_.getMatrix());
+        this->nlp->assign_kkt_slack_hessian(hp, this->kkt_sol_.get_matrix());
     if (this->print_level_ < 2) {
         print_beginning("KKT-Matrix Analysis ");
     }

@@ -468,35 +468,35 @@ struct PSIOPT {
 
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
     Eigen::MatrixXd get_sp_mat() { return this->spmat.toDense(); }
-    Eigen::MatrixXd get_sp_mat2() { return this->kkt_sol_.getMatrixTwisted(this->spmat); }
+    Eigen::MatrixXd get_sp_mat2() { return this->kkt_sol_.get_matrix_twisted(this->spmat); }
 
     void set_qp_params() {
 #ifdef USE_ACCELERATE_SPARSE
         // Accelerate interface uses different configuration methods
         switch (qp_ord_) {
         case QPOrderingModes::MINDEG:
-            this->kkt_sol_.setOrder(SparseOrderAMD);
+            this->kkt_sol_.set_order(SparseOrderAMD);
             break;
         case QPOrderingModes::METIS:
             // Serial METIS: faster than MT-METIS at all tested scales (up to
             // ~5400 primal variables) due to per-call thread coordination overhead.
-            this->kkt_sol_.setOrder(SparseOrderMetis);
+            this->kkt_sol_.set_order(SparseOrderMetis);
             break;
         case QPOrderingModes::PARMETIS:
             // MT-METIS (macOS 26+): currently slower than serial METIS at tested
             // scales. Retained for tracking Apple's improvements across releases.
 #ifdef TYCHO_HAS_MTMETIS
-            this->kkt_sol_.setOrder(SparseOrderMTMetis);
+            this->kkt_sol_.set_order(SparseOrderMTMetis);
 #else
-            this->kkt_sol_.setOrder(SparseOrderMetis);
+            this->kkt_sol_.set_order(SparseOrderMetis);
 #endif
             break;
         }
-        this->kkt_sol_.setNumThreads(qp_threads_);
-        this->kkt_sol_.setIterativeRefinement(qp_ref_steps_ > 0);
-        this->kkt_sol_.setIterativeRefinementIterations(qp_ref_steps_);
-        this->kkt_sol_.setPivotTolerance(accel_pivot_tolerance_);
-        this->kkt_sol_.setZeroTolerance(accel_zero_tolerance_);
+        this->kkt_sol_.set_num_threads(qp_threads_);
+        this->kkt_sol_.set_iterative_refinement(qp_ref_steps_ > 0);
+        this->kkt_sol_.set_iterative_refinement_iterations(qp_ref_steps_);
+        this->kkt_sol_.set_pivot_tolerance(accel_pivot_tolerance_);
+        this->kkt_sol_.set_zero_tolerance(accel_zero_tolerance_);
 #else
         this->kkt_sol_.m_ord = static_cast<int>(qp_ord_);
         this->kkt_sol_.m_pivotstrat = static_cast<int>(qp_pivot_strategy_);
@@ -510,7 +510,7 @@ struct PSIOPT {
         if (this->cnr_mode_)
             this->kkt_sol_.m_threads = this->qp_threads_;
         this->kkt_sol_.m_parsolve = this->qp_par_solve_;
-        this->kkt_sol_.setParams();
+        this->kkt_sol_.set_params();
 #endif
     }
 
