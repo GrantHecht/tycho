@@ -31,22 +31,22 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     int numEqCons = 0;
     int numIqCons = 0;
 
-    for (auto &func : this->userEqualities) {
-        int irows = func.func.input_rows();
-        int orows = func.func.output_rows();
-        int numappl = func.indices.size();
+    for (auto &func : this->user_equalities_) {
+        int irows = func.func_.input_rows();
+        int orows = func.func_.output_rows();
+        int numappl = func.indices_.size();
 
         MatrixXi vindex(irows, numappl);
         MatrixXi cindex(orows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices[i].maxCoeff() > numVars) {
+            if (func.indices_[i].maxCoeff() > numVars) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Transcription Error!!!\n"
                            "Variable indices out of bounds in equality constraint");
                 throw std::invalid_argument("");
             }
-            vindex.col(i) = func.indices[i];
+            vindex.col(i) = func.indices_[i];
             for (int j = 0; j < orows; j++) {
                 cindex(j, i) = numEqCons;
                 numEqCons++;
@@ -54,32 +54,32 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         }
 
         this->nlp_->equality_constraints_.emplace_back(
-            ConstraintFunction(func.func, vindex, cindex));
+            ConstraintFunction(func.func_, vindex, cindex));
 
         ThreadingFlags ThreadMode =
-            func.func.thread_safe()
+            func.func_.thread_safe()
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
         this->nlp_->equality_constraints_.back().thread_mode_ = ThreadMode;
     }
 
-    for (auto &func : this->userInequalities) {
-        int irows = func.func.input_rows();
-        int orows = func.func.output_rows();
-        int numappl = func.indices.size();
+    for (auto &func : this->user_inequalities_) {
+        int irows = func.func_.input_rows();
+        int orows = func.func_.output_rows();
+        int numappl = func.indices_.size();
 
         MatrixXi vindex(irows, numappl);
         MatrixXi cindex(orows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices[i].maxCoeff() > numVars) {
+            if (func.indices_[i].maxCoeff() > numVars) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Transcription Error!!!\n"
                            "Variable indices out of bounds in inequality constraint");
                 throw std::invalid_argument("");
             }
-            vindex.col(i) = func.indices[i];
+            vindex.col(i) = func.indices_[i];
             for (int j = 0; j < orows; j++) {
                 cindex(j, i) = numIqCons;
                 numIqCons++;
@@ -87,36 +87,36 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         }
 
         this->nlp_->inequality_constraints_.emplace_back(
-            ConstraintFunction(func.func, vindex, cindex));
+            ConstraintFunction(func.func_, vindex, cindex));
 
         ThreadingFlags ThreadMode =
-            func.func.thread_safe()
+            func.func_.thread_safe()
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
         this->nlp_->inequality_constraints_.back().thread_mode_ = ThreadMode;
     }
 
-    for (auto &func : this->userObjectives) {
-        int irows = func.func.input_rows();
-        int numappl = func.indices.size();
+    for (auto &func : this->user_objectives_) {
+        int irows = func.func_.input_rows();
+        int numappl = func.indices_.size();
 
         MatrixXi vindex(irows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices[i].maxCoeff() > numVars) {
+            if (func.indices_[i].maxCoeff() > numVars) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Transcription Error!!!\n"
                            "Variable indices out of bounds in inequality constraint");
                 throw std::invalid_argument("");
             }
-            vindex.col(i) = func.indices[i];
+            vindex.col(i) = func.indices_[i];
         }
 
-        this->nlp_->objectives_.emplace_back(ObjectiveFunction(func.func, vindex));
+        this->nlp_->objectives_.emplace_back(ObjectiveFunction(func.func_, vindex));
 
         ThreadingFlags ThreadMode =
-            func.func.thread_safe()
+            func.func_.thread_safe()
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 

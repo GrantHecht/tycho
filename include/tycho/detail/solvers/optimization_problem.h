@@ -45,15 +45,15 @@ struct OptimizationProblem : OptimizationProblemBase {
     using ScalarFunctionalX = GenericFunction<-1, 1>;
 
     template <class Func> struct FuncIndexHolder {
-        Func func;
-        std::vector<VectorXi> indices;
+        Func func_;
+        std::vector<VectorXi> indices_;
         FuncIndexHolder() {}
         FuncIndexHolder(Func func, const std::vector<VectorXi> &indices)
-            : func(func), indices(indices) {}
+            : func_(func), indices_(indices) {}
     };
 
     bool do_transcription_ = true;
-    void resetTranscription() { this->do_transcription_ = true; };
+    void reset_transcription() { this->do_transcription_ = true; };
     bool enable_vectorization_ = true;
 
     VectorXd active_variables_;
@@ -62,9 +62,9 @@ struct OptimizationProblem : OptimizationProblemBase {
     VectorXd active_eq_lmults_;
     VectorXd active_iq_lmults_;
 
-    std::vector<FuncIndexHolder<ConstraintInterface>> userEqualities;
-    std::vector<FuncIndexHolder<ConstraintInterface>> userInequalities;
-    std::vector<FuncIndexHolder<ObjectiveInterface>> userObjectives;
+    std::vector<FuncIndexHolder<ConstraintInterface>> user_equalities_;
+    std::vector<FuncIndexHolder<ConstraintInterface>> user_inequalities_;
+    std::vector<FuncIndexHolder<ObjectiveInterface>> user_objectives_;
 
     OptimizationProblem() { this->set_num_partitions(1, 1); }
     virtual ~OptimizationProblem() = default;
@@ -73,8 +73,8 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     template <class T> static void check_function_size(const T &func, std::string ftype) {
-        int irows = func.func.input_rows();
-        for (auto &index : func.indices) {
+        int irows = func.func_.input_rows();
+        for (auto &index : func.indices_) {
             int isize = index.size();
             if (irows != isize) {
                 fmt::print(fmt::fg(fmt::color::red),
@@ -98,10 +98,10 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     int addEqualCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userEqualities.size());
-        this->userEqualities.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
-        check_function_size(this->userEqualities.back(), "Equality Constraint");
+        this->reset_transcription();
+        int index = int(this->user_equalities_.size());
+        this->user_equalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
+        check_function_size(this->user_equalities_.back(), "Equality Constraint");
         return index;
     }
     int addEqualCon(VectorFunctionalX fun, VectorXi index) {
@@ -113,10 +113,10 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     int addInequalCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userInequalities.size());
-        this->userInequalities.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
-        check_function_size(this->userInequalities.back(), "Inequality Constraint");
+        this->reset_transcription();
+        int index = int(this->user_inequalities_.size());
+        this->user_inequalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
+        check_function_size(this->user_inequalities_.back(), "Inequality Constraint");
         return index;
     }
 
@@ -129,10 +129,10 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     int addObjective(ScalarFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userObjectives.size());
-        this->userObjectives.emplace_back(FuncIndexHolder<ObjectiveInterface>(fun, indices));
-        check_function_size(this->userObjectives.back(), "Objective");
+        this->reset_transcription();
+        int index = int(this->user_objectives_.size());
+        this->user_objectives_.emplace_back(FuncIndexHolder<ObjectiveInterface>(fun, indices));
+        check_function_size(this->user_objectives_.back(), "Objective");
 
         return index;
     }
@@ -156,7 +156,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         this->set_num_partitions(1, 1);
         this->optimizer_->print_level_ = 0;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
-        this->resetTranscription();
+        this->reset_transcription();
     }
 
     PSIOPT::ConvergenceFlags solve() {
