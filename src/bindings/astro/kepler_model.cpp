@@ -41,7 +41,7 @@ template <> struct TychoBind<KeplerPhase> {
     static void Build(nb::module_ &m) {
         auto phase = nb::class_<KeplerPhase, ODEPhaseBase>(m, "phase");
         bind::ODEPhaseBuildImpl<Kepler>(phase);
-        phase.def_rw("integrator", &KeplerPhase::integrator);
+        phase.def_rw("integrator", &KeplerPhase::integrator_);
         phase.def_rw("use_kepler_propagator", &KeplerPhase::UseKeplerPropagator);
     }
 };

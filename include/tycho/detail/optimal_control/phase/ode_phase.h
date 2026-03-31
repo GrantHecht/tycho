@@ -84,18 +84,18 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     using ScaledODE = GenericODE<GenericFunction<-1, -1>, DODE::XV, DODE::UV, DODE::PV>;
 
-    DODE ode;
-    ScaledODE ode_scaled;
+    DODE ode_;
+    ScaledODE ode_scaled_;
 
-    Integrator<DODE> integrator;
+    Integrator<DODE> integrator_;
     bool enable_hessian_sparsity_ = false;
     bool OldShootingDefect = false;
 
     ODEPhase(const DODE &ode, TranscriptionModes Tmode)
         : ODEPhaseBase(ode.x_vars(), ode.u_vars(), ode.p_vars()) {
-        this->ode = ode;
-        this->integrator = Integrator<DODE>(ode, .01);
-        this->set_idxs(this->ode.get_idxs());
+        this->ode_ = ode;
+        this->integrator_ = Integrator<DODE>(ode, .01);
+        this->set_idxs(this->ode_.get_idxs());
         this->set_transcription_mode(Tmode);
         this->set_units(Eigen::VectorXd::Ones(this->xtu_p_vars()));
     }
@@ -136,20 +136,20 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         VectorFunctionalX odetemp;
 
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode.func;
+            odetemp = this->ode_.func;
         } else {
-            odetemp = this->ode;
+            odetemp = this->ode_;
         }
 
         auto tmp = IOScaled<VectorFunctionalX>(odetemp, this->xtup_units_, output_scales);
 
-        this->ode_scaled = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
+        this->ode_scaled_ = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
     }
 
     virtual Integrator<ScaledODE> make_scaled_reintegrator() const {
         Integrator<ScaledODE> Integ;
         if (this->u_vars() == 0 || this->control_mode_ == ControlModes::BlockConstant) {
-            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_};
+            Integ = Integrator<ScaledODE>{this->ode_scaled_, this->integrator_.def_step_size_};
         } else {
             Eigen::VectorXi ulocs;
             ulocs.setLinSpaced(this->u_vars(), this->t_var() + 1, this->t_var() + this->u_vars());
@@ -163,16 +163,16 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             VectorXd Uscales =
                 this->xtup_units_.segment(this->t_var() + 1, this->u_vars()).cwiseInverse();
             auto ucon = RowScaled<decltype(tabcon)>(tabcon, Uscales);
-            Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_, ucon,
+            Integ = Integrator<ScaledODE>{this->ode_scaled_, this->integrator_.def_step_size_, ucon,
                                           varlocs};
         }
 
-        Integ.adaptive_ = this->integrator.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
-        Integ.abs_tols_ = this->integrator.abs_tols_;
-        Integ.rel_tols_ = this->integrator.rel_tols_;
-        Integ.min_step_size_ = this->integrator.min_step_size_;
-        Integ.max_step_size_ = this->integrator.max_step_size_;
+        Integ.adaptive_ = this->integrator_.adaptive_;
+        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
+        Integ.abs_tols_ = this->integrator_.abs_tols_;
+        Integ.rel_tols_ = this->integrator_.rel_tols_;
+        Integ.min_step_size_ = this->integrator_.min_step_size_;
+        Integ.max_step_size_ = this->integrator_.max_step_size_;
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -182,18 +182,18 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         Integrator<DODE> Integ;
 
         if (this->u_vars() == 0 || this->control_mode_ == ControlModes::BlockConstant) {
-            Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_};
+            Integ = Integrator<DODE>{this->ode_, this->integrator_.def_step_size_};
         } else {
-            Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_,
+            Integ = Integrator<DODE>{this->ode_, this->integrator_.def_step_size_,
                                      std::make_shared<LGLInterpTable>(this->table_)};
         }
 
-        Integ.adaptive_ = this->integrator.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
-        Integ.abs_tols_ = this->integrator.abs_tols_;
-        Integ.rel_tols_ = this->integrator.rel_tols_;
-        Integ.min_step_size_ = this->integrator.min_step_size_;
-        Integ.max_step_size_ = this->integrator.max_step_size_;
+        Integ.adaptive_ = this->integrator_.adaptive_;
+        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
+        Integ.abs_tols_ = this->integrator_.abs_tols_;
+        Integ.rel_tols_ = this->integrator_.rel_tols_;
+        Integ.min_step_size_ = this->integrator_.min_step_size_;
+        Integ.max_step_size_ = this->integrator_.max_step_size_;
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -207,9 +207,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         VectorFunctionalX odetemp;
 
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode.func;
+            odetemp = this->ode_.func;
         } else {
-            odetemp = this->ode;
+            odetemp = this->ode_;
         }
 
         switch (this->transcription_mode_) {
@@ -256,11 +256,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     }
 
     virtual void transcribe_dynamics() {
-        VectorXi StateT(this->ode.xtu_vars());
-        for (int i = 0; i < this->ode.xtu_vars(); i++)
+        VectorXi StateT(this->ode_.xtu_vars());
+        for (int i = 0; i < this->ode_.xtu_vars(); i++)
             StateT[i] = i;
-        VectorXi OParT(this->ode.p_vars());
-        for (int i = 0; i < this->ode.p_vars(); i++)
+        VectorXi OParT(this->ode_.p_vars());
+        for (int i = 0; i < this->ode_.p_vars(); i++)
             OParT[i] = i;
         VectorXi empty(0);
         empty.resize(0);
@@ -326,34 +326,34 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         case TranscriptionModes::LGL7: {
 
             if (this->auto_scaling_) {
-                lgldef(int_const<4>(), this->ode_scaled);
+                lgldef(int_const<4>(), this->ode_scaled_);
             } else {
-                lgldef(int_const<4>(), this->ode);
+                lgldef(int_const<4>(), this->ode_);
             }
 
             break;
         }
         case TranscriptionModes::LGL5: {
             if (this->auto_scaling_) {
-                lgldef(int_const<3>(), this->ode_scaled);
+                lgldef(int_const<3>(), this->ode_scaled_);
             } else {
-                lgldef(int_const<3>(), this->ode);
+                lgldef(int_const<3>(), this->ode_);
             }
             break;
         }
         case TranscriptionModes::LGL3: {
             if (this->auto_scaling_) {
-                lgldef(int_const<2>(), this->ode_scaled);
+                lgldef(int_const<2>(), this->ode_scaled_);
             } else {
-                lgldef(int_const<2>(), this->ode);
+                lgldef(int_const<2>(), this->ode_);
             }
             break;
         }
         case TranscriptionModes::Trapezoidal: {
             if (this->auto_scaling_) {
-                trapdef(this->ode_scaled);
+                trapdef(this->ode_scaled_);
             } else {
-                trapdef(this->ode);
+                trapdef(this->ode_);
             }
             break;
         }
@@ -374,21 +374,21 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     virtual tycho::solvers::ConstraintInterface make_shooter() {
 
         if (this->auto_scaling_) {
-            auto Integ = Integrator<ScaledODE>{this->ode_scaled, this->integrator.def_step_size_};
-            Integ.adaptive_ = this->integrator.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
-            Integ.abs_tols_ = this->integrator.abs_tols_;
-            Integ.min_step_size_ = this->integrator.min_step_size_;
-            Integ.max_step_size_ = this->integrator.max_step_size_;
+            auto Integ = Integrator<ScaledODE>{this->ode_scaled_, this->integrator_.def_step_size_};
+            Integ.adaptive_ = this->integrator_.adaptive_;
+            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
+            Integ.abs_tols_ = this->integrator_.abs_tols_;
+            Integ.min_step_size_ = this->integrator_.min_step_size_;
+            Integ.max_step_size_ = this->integrator_.max_step_size_;
             Integ.enable_vectorization_ = this->enable_vectorization_;
-            Integ.vectorize_batch_calls_ = this->integrator.vectorize_batch_calls_;
+            Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
             if (OldShootingDefect) {
-                auto shooter = ShootingDefect{this->ode_scaled, Integ};
+                auto shooter = ShootingDefect{this->ode_scaled_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);
             } else {
-                auto shooter = CentralShootingDefect{this->ode_scaled, Integ};
+                auto shooter = CentralShootingDefect{this->ode_scaled_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 shooter.enable_vectorization_ = this->enable_vectorization_;
                 return tycho::solvers::ConstraintInterface(shooter);
@@ -396,21 +396,21 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
         {
 
-            auto Integ = Integrator<DODE>{this->ode, this->integrator.def_step_size_};
-            Integ.adaptive_ = this->integrator.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator.fast_adaptive_stm_;
-            Integ.abs_tols_ = this->integrator.abs_tols_;
-            Integ.min_step_size_ = this->integrator.min_step_size_;
-            Integ.max_step_size_ = this->integrator.max_step_size_;
+            auto Integ = Integrator<DODE>{this->ode_, this->integrator_.def_step_size_};
+            Integ.adaptive_ = this->integrator_.adaptive_;
+            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
+            Integ.abs_tols_ = this->integrator_.abs_tols_;
+            Integ.min_step_size_ = this->integrator_.min_step_size_;
+            Integ.max_step_size_ = this->integrator_.max_step_size_;
             Integ.enable_vectorization_ = this->enable_vectorization_;
-            Integ.vectorize_batch_calls_ = this->integrator.vectorize_batch_calls_;
+            Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
             if (OldShootingDefect) {
-                auto shooter = ShootingDefect{this->ode, Integ};
+                auto shooter = ShootingDefect{this->ode_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);
             } else {
-                auto shooter = CentralShootingDefect{this->ode, Integ};
+                auto shooter = CentralShootingDefect{this->ode_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 shooter.enable_vectorization_ = this->enable_vectorization_;
                 return tycho::solvers::ConstraintInterface(shooter);
@@ -478,7 +478,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                                              ODEDeriv<double>::Zero(this->x_vars()));
 
         for (int i = 0; i < this->active_traj_.size(); i++) {
-            this->ode.compute(this->active_traj_[i], Derivs[i]);
+            this->ode_.compute(this->active_traj_[i], Derivs[i]);
         }
 
         ////////////////////////////////////////////////////
@@ -551,7 +551,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
                 dtemp = Derivs[start + BlockSize - 1];
                 Derivs[start + BlockSize - 1].setZero();
-                this->ode.compute(tmp, Derivs[start + BlockSize - 1]);
+                this->ode_.compute(tmp, Derivs[start + BlockSize - 1]);
             }
 
             for (int j = 0; j < BlockSize; j++) {
@@ -690,23 +690,23 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
         switch (this->transcription_mode_) {
         case TranscriptionModes::LGL7: {
-            return func = LGLDefects<DODE, 4>(this->ode);
+            return func = LGLDefects<DODE, 4>(this->ode_);
             break;
         }
         case TranscriptionModes::LGL5: {
-            return func = LGLDefects<DODE, 3>(this->ode);
+            return func = LGLDefects<DODE, 3>(this->ode_);
             break;
         }
         case TranscriptionModes::LGL3: {
-            return func = LGLDefects<DODE, 2>(this->ode);
+            return func = LGLDefects<DODE, 2>(this->ode_);
             break;
         }
         case TranscriptionModes::Trapezoidal: {
-            return func = LGLDefects<DODE, 2>(this->ode);
+            return func = LGLDefects<DODE, 2>(this->ode_);
             break;
         }
         case TranscriptionModes::CentralShooting: {
-            return func = LGLDefects<DODE, 2>(this->ode);
+            return func = LGLDefects<DODE, 2>(this->ode_);
             break;
         }
         default:

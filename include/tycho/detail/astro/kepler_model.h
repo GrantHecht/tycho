@@ -54,7 +54,7 @@ struct KeplerPhase : ODEPhase<Kepler> {
 
     tycho::solvers::ConstraintInterface make_shooter() {
         if (UseKeplerPropagator) {
-            auto kprop = KeplerPropagator(this->ode.mu);
+            auto kprop = KeplerPropagator(this->ode_.mu);
             auto Args = Arguments<14>();
             auto X1 = Args.head<6>();
             auto X2 = Args.segment<6, 7>();
