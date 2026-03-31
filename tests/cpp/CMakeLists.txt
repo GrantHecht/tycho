@@ -102,6 +102,7 @@ set(TYCHO_TEST_SOURCES
     optimal_control/test_ode_builder.cpp
     optimal_control/test_phase_wrapper.cpp
     optimal_control/test_builder_brachistochrone.cpp
+    optimal_control/test_control_modes.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
