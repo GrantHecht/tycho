@@ -28,7 +28,7 @@ void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
     obj.def_rw("jet_job_mode", &OptimizationProblemBase::jet_job_mode_);
     obj.def_rw("num_partitions", &OptimizationProblemBase::num_partitions_);
-    obj.def_ro("optimizer", &OptimizationProblemBase::optimizer);
+    obj.def_ro("optimizer", &OptimizationProblemBase::optimizer_);
 
     obj.def("set_num_partitions",
             nb::overload_cast<int, int>(&OptimizationProblemBase::set_num_partitions),

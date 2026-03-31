@@ -31,8 +31,8 @@ namespace tycho::solvers {
 
 struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     using Base = SolverFunctionBase<ConstraintInterface>;
-    using Base::function;
-    using Base::index_data;
+    using Base::function_;
+    using Base::index_data_;
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
 
@@ -40,13 +40,13 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
 
     ConstraintFunction(const ConstraintInterface &f, const MatrixXi &vindex,
                        const MatrixXi &cindex) {
-        this->function = f;
-        this->index_data = SolverIndexingData(f.input_rows(), f.output_rows(), vindex, cindex);
+        this->function_ = f;
+        this->index_data_ = SolverIndexingData(f.input_rows(), f.output_rows(), vindex, cindex);
     }
 
     ConstraintFunction(const ConstraintInterface &f, const SolverIndexingData &data) {
-        this->function = f;
-        this->index_data = data;
+        this->function_ = f;
+        this->index_data_ = data;
     }
 
     /*
@@ -54,10 +54,10 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     will be called on multiple threads.
     */
     std::vector<ConstraintFunction> thread_split(int Thr) const {
-        std::vector<SolverIndexingData> idat = this->index_data.thread_split(Thr);
+        std::vector<SolverIndexingData> idat = this->index_data_.thread_split(Thr);
         std::vector<ConstraintFunction> split(idat.size());
         for (int i = 0; i < idat.size(); i++) {
-            split[i] = ConstraintFunction(this->function, idat[i]);
+            split[i] = ConstraintFunction(this->function_, idat[i]);
         }
         return split;
     }
@@ -68,7 +68,7 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     underlying vector function.
     */
     void constraints(ConstEigenRef<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> FX) const {
-        this->function.constraints(X, FX, this->index_data);
+        this->function_.constraints(X, FX, this->index_data_);
     }
 
     /*
@@ -79,7 +79,7 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
                                      ConstEigenRef<Eigen::VectorXd> L, EigenRef<Eigen::VectorXd> FX,
                                      EigenRef<Eigen::VectorXd> AGX) const {
-        this->function.constraints_adjointgradient(X, L, FX, AGX, this->index_data);
+        this->function_.constraints_adjointgradient(X, L, FX, AGX, this->index_data_);
     }
 
     /*
@@ -92,8 +92,8 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
                               EigenRef<Eigen::VectorXi> KKTLocations,
                               EigenRef<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks) const {
-        this->function.constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks,
-                                            this->index_data);
+        this->function_.constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks,
+                                             this->index_data_);
     }
 
     /*
@@ -109,8 +109,8 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
                                               EigenRef<Eigen::VectorXi> KKTLocations,
                                               EigenRef<Eigen::VectorXi> KKTClashes,
                                               std::vector<std::mutex> &KKTLocks) const {
-        this->function.constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
-                                                            KKTClashes, KKTLocks, this->index_data);
+        this->function_.constraints_jacobian_adjointgradient(
+            X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, this->index_data_);
     }
 
     /*
@@ -124,8 +124,8 @@ struct ConstraintFunction : SolverFunctionBase<ConstraintInterface> {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks) const {
-        this->function.constraints_jacobian_adjointgradient_adjointhessian(
-            X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, this->index_data);
+        this->function_.constraints_jacobian_adjointgradient_adjointhessian(
+            X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, this->index_data_);
     }
 };
 

@@ -45,13 +45,13 @@ struct OptimizationProblemBase {
     int num_partitions_ = 1;
     JetJobModes jet_job_mode_ = JetJobModes::NotSet;
 
-    std::shared_ptr<NonLinearProgram> nlp;
-    std::shared_ptr<PSIOPT> optimizer;
+    std::shared_ptr<NonLinearProgram> nlp_;
+    std::shared_ptr<PSIOPT> optimizer_;
 
     virtual ~OptimizationProblemBase() = default;
 
     OptimizationProblemBase() {
-        this->optimizer = std::make_shared<PSIOPT>();
+        this->optimizer_ = std::make_shared<PSIOPT>();
         this->initPartitions();
     }
 
@@ -74,7 +74,7 @@ struct OptimizationProblemBase {
 
     virtual void initPartitions() {
         this->num_partitions_ = default_num_partitions();
-        this->optimizer->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
+        this->optimizer_->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
 
     virtual void set_num_partitions(int num_partitions, int qp_threads) {
@@ -82,7 +82,7 @@ struct OptimizationProblemBase {
             throw std::invalid_argument("Number of partitions/threads must be positive");
         }
         this->num_partitions_ = num_partitions;
-        this->optimizer->qp_threads_ = qp_threads;
+        this->optimizer_->qp_threads_ = qp_threads;
     }
     virtual void set_num_partitions(int num_partitions) {
         if (num_partitions < 1) {

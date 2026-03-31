@@ -121,9 +121,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     VectorXd active_eq_cons_;
     VectorXd active_iq_cons_;
 
-    std::map<int, StateConstraint> user_equalities;
-    std::map<int, StateConstraint> user_inequalities;
-    std::map<int, StateObjective> user_state_objectives;
+    std::map<int, StateConstraint> user_equalities_;
+    std::map<int, StateConstraint> user_inequalities_;
+    std::map<int, StateObjective> user_state_objectives_;
     std::map<int, StateObjective> user_integrands;
     std::map<int, StateObjective> user_param_integrands;
 
@@ -498,7 +498,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int add_equal_con(StateConstraint con) {
-        return add_func_impl(con, this->user_equalities, "Equality Constraint");
+        return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
     int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
@@ -506,7 +506,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
                                                                       OPvars_t, SPvars_t, scale_t);
-        return add_func_impl(con, this->user_equalities, "Equality Constraint");
+        return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
     int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
@@ -516,7 +516,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
                                                                       empty, scale_t);
-        return add_func_impl(con, this->user_equalities, "Equality Constraint");
+        return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
     int add_boundary_value(RegionType reg, VarIndexType args,
@@ -533,14 +533,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int add_inequal_con(StateConstraint con) {
-        return add_func_impl(con, this->user_inequalities, "Inequality Constraint");
+        return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
     int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
                         VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
         auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
                                                                       OPvars_t, SPvars_t, scale_t);
-        return add_func_impl(con, this->user_inequalities, "Inequality Constraint");
+        return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
 
     int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
@@ -550,7 +550,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
                                                                       empty, scale_t);
-        return add_func_impl(con, this->user_inequalities, "Inequality Constraint");
+        return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
 
     ////////////////////////
@@ -709,14 +709,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     int add_state_objective(StateObjective obj) {
-        return add_func_impl(obj, this->user_state_objectives, "State Objective");
+        return add_func_impl(obj, this->user_state_objectives_, "State Objective");
     }
     int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
                             VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t,
                                                                      OPvars_t, SPvars_t, scale_t);
-        return add_func_impl(con, this->user_state_objectives, "State Objective");
+        return add_func_impl(con, this->user_state_objectives_, "State Objective");
     }
 
     int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
@@ -726,7 +726,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, empty,
                                                                      empty, scale_t);
-        return add_func_impl(con, this->user_state_objectives, "State Objective");
+        return add_func_impl(con, this->user_state_objectives_, "State Objective");
     }
     int add_value_objective(RegionType reg, VarIndexType var, double scale, ScaleType scale_t);
     int add_delta_var_objective(VarIndexType var, double scale, ScaleType scale_t);
@@ -790,13 +790,13 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /////////////////////////////////////////////////
 
     void remove_equal_con(int index) {
-        this->remove_func_impl(this->user_equalities, index, "Equality Constraint");
+        this->remove_func_impl(this->user_equalities_, index, "Equality Constraint");
     }
     void remove_inequal_con(int index) {
-        this->remove_func_impl(this->user_inequalities, index, "Inequality Constraint");
+        this->remove_func_impl(this->user_inequalities_, index, "Inequality Constraint");
     }
     void remove_state_objective(int index) {
-        this->remove_func_impl(this->user_state_objectives, index, "State Objective");
+        this->remove_func_impl(this->user_state_objectives_, index, "State Objective");
     }
     void remove_integral_objective(int index) {
         this->remove_func_impl(this->user_integrands, index, "Integral Objective");
@@ -956,7 +956,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "No multipliers to return, a solve or optimize call must be made "
                 "before returning constraint multipliers ");
         }
-        int Gindex = this->user_equalities.at(index).global_index_;
+        int Gindex = this->user_equalities_.at(index).global_index_;
         return this->indexer_.get_func_eq_multipliers(Gindex, this->active_eq_lmults_);
     }
     std::vector<Eigen::VectorXd> return_equal_con_vals(int index) const {
@@ -965,11 +965,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "No constraints to return, a solve or optimize call must be made "
                 "before returning constraint values ");
         }
-        int Gindex = this->user_equalities.at(index).global_index_;
+        int Gindex = this->user_equalities_.at(index).global_index_;
         return this->indexer_.get_func_eq_multipliers(Gindex, this->active_eq_cons_);
     }
     Eigen::VectorXd return_equal_con_scales(int index) const {
-        return this->user_equalities.at(index).output_scales_;
+        return this->user_equalities_.at(index).output_scales_;
     }
 
     std::vector<Eigen::VectorXd> return_inequal_con_lmults(int index) const {
@@ -978,7 +978,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "No multipliers to return, a solve or optimize call must be made "
                 "before returning constraint multipliers ");
         }
-        int Gindex = this->user_inequalities.at(index).global_index_;
+        int Gindex = this->user_inequalities_.at(index).global_index_;
         return this->indexer_.get_func_iq_multipliers(Gindex, this->active_iq_lmults_);
     }
 
@@ -988,11 +988,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "No constraints to return, a solve or optimize call must be made "
                 "before returning constraint values ");
         }
-        int Gindex = this->user_inequalities.at(index).global_index_;
+        int Gindex = this->user_inequalities_.at(index).global_index_;
         return this->indexer_.get_func_iq_multipliers(Gindex, this->active_iq_cons_);
     }
     Eigen::VectorXd return_inequal_con_scales(int index) const {
-        return this->user_inequalities.at(index).output_scales_;
+        return this->user_inequalities_.at(index).output_scales_;
     }
 
     std::vector<Eigen::VectorXd> return_costate_traj() const;
@@ -1005,7 +1005,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         return this->user_param_integrands.at(index).output_scales_;
     }
     Eigen::VectorXd return_state_objective_scales(int index) const {
-        return this->user_state_objectives.at(index).output_scales_;
+        return this->user_state_objectives_.at(index).output_scales_;
     }
     Eigen::VectorXd return_ode_output_scales() const {
         VectorXd output_scales =
@@ -1173,18 +1173,18 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     void jet_initialize() {
         this->set_num_partitions(1, 1);
-        this->optimizer->print_level_ = 10;
+        this->optimizer_->print_level_ = 10;
         this->print_mesh_info_ = false;
 
         this->transcribe();
     }
     void jet_release() {
         this->indexer_ = PhaseIndexer();
-        this->optimizer->release();
+        this->optimizer_->release();
         this->initPartitions();
-        this->optimizer->print_level_ = 0;
+        this->optimizer_->print_level_ = 0;
         this->print_mesh_info_ = true;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->reset_transcription();
         this->invalidate_post_opt_info();
     }

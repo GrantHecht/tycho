@@ -21,12 +21,12 @@ int tycho::oc::PhaseIndexer::add_equality(ConstraintInterface eqfun, PhaseRegion
                                           const Eigen::VectorXi &rxtuv,
                                           const Eigen::VectorXi &rodepv,
                                           const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode) {
-    int index = this->nlp->equality_constraints_.size();
+    int index = this->nlp_->equality_constraints_.size();
     int temp = this->next_phase_eq_con;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, eqfun.output_rows(),
                                            this->next_phase_eq_con);
-    this->nlp->equality_constraints_.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
-    this->nlp->equality_constraints_.back().thread_mode_ = Tmode;
+    this->nlp_->equality_constraints_.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
+    this->nlp_->equality_constraints_.back().thread_mode_ = Tmode;
     this->num_phase_eq_cons += this->next_phase_eq_con - temp;
     this->num_eq_funs++;
     return index;
@@ -36,7 +36,7 @@ void tycho::oc::PhaseIndexer::add_partitioned_equality(
     const std::vector<ConstraintInterface> &eqfuns, PhaseRegionFlags sreg,
     const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
     const std::vector<ThreadingFlags> &Tmodes) {
-    int index = this->nlp->equality_constraints_.size();
+    int index = this->nlp_->equality_constraints_.size();
     int temp = this->next_phase_eq_con;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, eqfuns[0].output_rows(),
                                            this->next_phase_eq_con);
@@ -44,9 +44,9 @@ void tycho::oc::PhaseIndexer::add_partitioned_equality(
         MatrixXi vindex = vincin[0].col(i);
         MatrixXi cindex = vincin[1].col(i);
 
-        this->nlp->equality_constraints_.emplace_back(
+        this->nlp_->equality_constraints_.emplace_back(
             ConstraintFunction(eqfuns[i], vindex, cindex));
-        this->nlp->equality_constraints_.back().thread_mode_ = Tmodes[i];
+        this->nlp_->equality_constraints_.back().thread_mode_ = Tmodes[i];
         this->num_eq_funs++;
     }
 
@@ -61,7 +61,7 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
                                               const Eigen::VectorXi &accpv, ThreadingFlags Tmode)
 
 {
-    int index = this->nlp->equality_constraints_.size();
+    int index = this->nlp_->equality_constraints_.size();
     int temp = this->next_phase_eq_con;
 
     Eigen::VectorXi empty(0);
@@ -69,10 +69,10 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
 
     auto vincin_acc = this->make_Vindex_Cindex(PhaseRegionFlags::Params, empty, empty, accpv,
                                                accfun.output_rows(), this->next_phase_eq_con);
-    this->nlp->equality_constraints_.emplace_back(
+    this->nlp_->equality_constraints_.emplace_back(
         ConstraintFunction(accfun, vincin_acc[0], vincin_acc[1]));
-    this->nlp->equality_constraints_.back().thread_mode_ = Tmode;
-    this->nlp->equality_constraints_.back().index_data.unique_constraints = false;
+    this->nlp_->equality_constraints_.back().thread_mode_ = Tmode;
+    this->nlp_->equality_constraints_.back().index_data_.unique_constraints_ = false;
 
     int dummy = 0;
     auto vincin =
@@ -81,9 +81,9 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
         vincin[1].col(i) = vincin_acc[1].col(0);
     }
 
-    this->nlp->equality_constraints_.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
-    this->nlp->equality_constraints_.back().thread_mode_ = Tmode;
-    this->nlp->equality_constraints_.back().index_data.unique_constraints = false;
+    this->nlp_->equality_constraints_.emplace_back(ConstraintFunction(eqfun, vincin[0], vincin[1]));
+    this->nlp_->equality_constraints_.back().thread_mode_ = Tmode;
+    this->nlp_->equality_constraints_.back().index_data_.unique_constraints_ = false;
 
     this->num_phase_eq_cons += this->next_phase_eq_con - temp;
     this->num_eq_funs += 2;
@@ -94,13 +94,13 @@ int tycho::oc::PhaseIndexer::add_inequality(ConstraintInterface iqfun, PhaseRegi
                                             const Eigen::VectorXi &rxtuv,
                                             const Eigen::VectorXi &rodepv,
                                             const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode) {
-    int index = this->nlp->inequality_constraints_.size();
+    int index = this->nlp_->inequality_constraints_.size();
     int temp = this->next_phase_iq_con;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, iqfun.output_rows(),
                                            this->next_phase_iq_con);
-    this->nlp->inequality_constraints_.emplace_back(
+    this->nlp_->inequality_constraints_.emplace_back(
         ConstraintFunction(iqfun, vincin[0], vincin[1]));
-    this->nlp->inequality_constraints_.back().thread_mode_ = Tmode;
+    this->nlp_->inequality_constraints_.back().thread_mode_ = Tmode;
     this->num_phase_iq_cons += this->next_phase_iq_con - temp;
     this->num_iq_funs++;
     return index;
@@ -110,7 +110,7 @@ void tycho::oc::PhaseIndexer::add_partitioned_inequality(
     const std::vector<ConstraintInterface> &iqfuns, PhaseRegionFlags sreg,
     const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
     const std::vector<ThreadingFlags> &Tmodes) {
-    int index = this->nlp->inequality_constraints_.size();
+    int index = this->nlp_->inequality_constraints_.size();
     int temp = this->next_phase_iq_con;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, iqfuns[0].output_rows(),
                                            this->next_phase_iq_con);
@@ -118,9 +118,9 @@ void tycho::oc::PhaseIndexer::add_partitioned_inequality(
         MatrixXi vindex = vincin[0].col(i);
         MatrixXi cindex = vincin[1].col(i);
 
-        this->nlp->inequality_constraints_.emplace_back(
+        this->nlp_->inequality_constraints_.emplace_back(
             ConstraintFunction(iqfuns[i], vindex, cindex));
-        this->nlp->inequality_constraints_.back().thread_mode_ = Tmodes[i];
+        this->nlp_->inequality_constraints_.back().thread_mode_ = Tmodes[i];
         this->num_iq_funs++;
     }
 
@@ -133,10 +133,10 @@ int tycho::oc::PhaseIndexer::add_objective(ObjectiveInterface objfun, PhaseRegio
                                            const Eigen::VectorXi &rstatpv, ThreadingFlags Tmode)
 
 {
-    int index = this->nlp->objectives_.size();
+    int index = this->nlp_->objectives_.size();
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, objfun.output_rows());
-    this->nlp->objectives_.emplace_back(ObjectiveFunction(objfun, vincin[0]));
-    this->nlp->objectives_.back().thread_mode_ = Tmode;
+    this->nlp_->objectives_.emplace_back(ObjectiveFunction(objfun, vincin[0]));
+    this->nlp_->objectives_.back().thread_mode_ = Tmode;
     this->num_obj_funs++;
     return index;
 }
@@ -515,7 +515,7 @@ std::vector<Eigen::VectorXd>
 tycho::oc::PhaseIndexer::get_func_eq_multipliers(int Gindex,
                                                  const Eigen::VectorXd &EMultphase) const {
 
-    Eigen::MatrixXi CDX = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
+    Eigen::MatrixXi CDX = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
     std::vector<Eigen::VectorXd> mults;
     for (int i = 0; i < CDX.cols(); i++) {
         Eigen::VectorXd lmi(CDX.rows());
@@ -531,7 +531,7 @@ tycho::oc::PhaseIndexer::get_func_eq_multipliers(int Gindex,
 std::vector<Eigen::VectorXd>
 tycho::oc::PhaseIndexer::get_func_iq_multipliers(int Gindex,
                                                  const Eigen::VectorXd &IMultphase) const {
-    Eigen::MatrixXi CDX = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
+    Eigen::MatrixXi CDX = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
     std::vector<Eigen::VectorXd> mults;
     for (int i = 0; i < CDX.cols(); i++) {
         Eigen::VectorXd lmi(CDX.rows());
@@ -564,21 +564,21 @@ void tycho::oc::PhaseIndexer::print_stats(bool showfuns) const {
         for (int i = 0; i < this->num_obj_funs; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->nlp->objectives_[this->start_obj_ + i].print_data();
+            this->nlp_->objectives_[this->start_obj_ + i].print_data();
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->nlp->equality_constraints_[this->start_eq_ + i].print_data();
+            this->nlp_->equality_constraints_[this->start_eq_ + i].print_data();
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->nlp->inequality_constraints_[this->start_iq_ + i].print_data();
+            this->nlp_->inequality_constraints_[this->start_iq_ + i].print_data();
         }
     }
 }

@@ -62,7 +62,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int static_p_vars_;
     int static_p_vars() const { return this->static_p_vars_; }
 
-    std::shared_ptr<NonLinearProgram> nlp;
+    std::shared_ptr<NonLinearProgram> nlp_;
 
     VectorXi ode_first_state_locs_;
     VectorXi ode_last_state_locs_;
@@ -147,7 +147,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
             this->static_p_vars(), this->num_phase_vars - this->static_p_vars());
     }
     void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
-        this->nlp = np;
+        this->nlp_ = np;
 
         this->num_phase_eq_cons = 0;
         this->num_phase_iq_cons = 0;
@@ -164,9 +164,9 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->start_eq_cons_ = ep;
         this->start_iq_cons_ = ip;
 
-        this->start_obj_ = this->nlp->objectives_.size();
-        this->start_eq_ = this->nlp->equality_constraints_.size();
-        this->start_iq_ = this->nlp->inequality_constraints_.size();
+        this->start_obj_ = this->nlp_->objectives_.size();
+        this->start_eq_ = this->nlp_->equality_constraints_.size();
+        this->start_iq_ = this->nlp_->inequality_constraints_.size();
 
         this->num_obj_funs = 0;
         this->num_eq_funs = 0;

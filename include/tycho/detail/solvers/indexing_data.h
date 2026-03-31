@@ -52,13 +52,13 @@ struct SolverIndexingData {
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
 
-    int input_size = 0;
-    int output_size = 0;
-    int num_funcappl = 0;
+    int input_size_ = 0;
+    int output_size_ = 0;
+    int num_funcappl_ = 0;
 
-    bool vindex_init = false;
-    bool cindex_init = false;
-    bool unique_constraints = true;
+    bool vindex_init_ = false;
+    bool cindex_init_ = false;
+    bool unique_constraints_ = true;
 
     /// <summary>
     /// Matrix whose columns contains the ordered indices of the variables
@@ -105,11 +105,11 @@ struct SolverIndexingData {
 
     SolverIndexingData() {}
     SolverIndexingData(int irr, int orr, const MatrixXi &vindex, const MatrixXi &cindex)
-        : input_size(irr), output_size(orr) {
+        : input_size_(irr), output_size_(orr) {
         this->set_v_index_c_index(vindex, cindex);
     }
 
-    SolverIndexingData(int irr, const MatrixXi &vindex) : input_size(irr), output_size(1) {
+    SolverIndexingData(int irr, const MatrixXi &vindex) : input_size_(irr), output_size_(1) {
         this->set_v_index(vindex);
     }
 
@@ -117,7 +117,7 @@ struct SolverIndexingData {
         this->inner_gradient_starts_.resize(this->num_appl());
         for (int V = 0; V < this->num_appl(); V++) {
             this->inner_gradient_starts_[V] = freeloc;
-            for (int i = 0; i < this->input_size; i++) {
+            for (int i = 0; i < this->input_size_; i++) {
                 GXrows[freeloc] = this->v_loc(i, V);
                 freeloc++;
             }
@@ -127,7 +127,7 @@ struct SolverIndexingData {
         this->inner_constraint_starts_.resize(this->num_appl());
         for (int V = 0; V < this->num_appl(); V++) {
             this->inner_constraint_starts_[V] = freeloc;
-            for (int j = 0; j < this->output_size; j++) {
+            for (int j = 0; j < this->output_size_; j++) {
                 FXrows[freeloc] = this->c_loc(j, V);
                 freeloc++;
             }
@@ -138,7 +138,7 @@ struct SolverIndexingData {
         std::vector<SolverIndexingData> split;
         split.reserve(Threads);
 
-        int cols = this->num_funcappl;
+        int cols = this->num_funcappl_;
         int colpThr = cols / Threads;
         int rempThr = cols % Threads;
 
@@ -151,15 +151,15 @@ struct SolverIndexingData {
         else
             range = rempThr;
         for (int i = 0; i < range; i++) {
-            if (this->cindex_init) {
-                split.emplace_back(SolverIndexingData(this->input_size, this->output_size,
+            if (this->cindex_init_) {
+                split.emplace_back(SolverIndexingData(this->input_size_, this->output_size_,
                                                       this->v_index_.middleCols(start, perThr[i]),
                                                       this->c_index_.middleCols(start, perThr[i])));
             } else {
-                split.emplace_back(SolverIndexingData(this->input_size,
+                split.emplace_back(SolverIndexingData(this->input_size_,
                                                       this->v_index_.middleCols(start, perThr[i])));
             }
-            split.back().unique_constraints = this->unique_constraints;
+            split.back().unique_constraints_ = this->unique_constraints_;
             start += perThr[i];
         }
         return split;
@@ -167,8 +167,8 @@ struct SolverIndexingData {
 
     void set_v_index(const MatrixXi &vt) {
         this->v_index_ = vt;
-        this->vindex_init = true;
-        this->num_funcappl = this->v_index_.cols();
+        this->vindex_init_ = true;
+        this->num_funcappl_ = this->v_index_.cols();
         this->v_index_continuity_.resize(this->v_index_.cols());
         for (int i = 0; i < this->v_index_.cols(); i++) {
             this->v_index_continuity_[i] = this->checkContinuity(this->v_index_.col(i));
@@ -177,7 +177,7 @@ struct SolverIndexingData {
     void set_c_index(const MatrixXi &ct) {
         this->c_index_ = ct;
         this->c_index_continuity_.resize(this->c_index_.cols());
-        this->cindex_init = true;
+        this->cindex_init_ = true;
 
         for (int i = 0; i < this->c_index_.cols(); i++) {
             this->c_index_continuity_[i] = this->checkContinuity(this->c_index_.col(i));
@@ -204,7 +204,7 @@ struct SolverIndexingData {
         this->push_c_index(cpush);
     }
 
-    inline int num_appl() const { return this->num_funcappl; }
+    inline int num_appl() const { return this->num_funcappl_; }
     inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
     inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }
 

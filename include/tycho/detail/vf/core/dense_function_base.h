@@ -1281,9 +1281,9 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             }
         };
 
-        const bool uniquecon = data.unique_constraints;
+        const bool uniquecon = data.unique_constraints_;
 
-        // bool uc = data.unique_constraints;
+        // bool uc = data.unique_constraints_;
         for (int i = 0; i < IRR; i++) {
             ActiveVar = data.v_loc(i, Apl);
             Lock(ActiveVar);
@@ -1314,7 +1314,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         const int *lpt = KKTLocs.data();
         int ActiveVar;
 
-        if (data.unique_constraints) {
+        if (data.unique_constraints_) {
             for (int i = 0; i < this->input_rows(); i++) {
                 ActiveVar = data.v_loc(i, Apl);
                 for (int j = i; j < this->input_rows(); j++) {

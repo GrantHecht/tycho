@@ -40,8 +40,8 @@ template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
 
-    FuncType function;
-    SolverIndexingData index_data;
+    FuncType function_;
+    SolverIndexingData index_data_;
     ThreadingFlags thread_mode_ = ThreadingFlags::ByApplication;
 
     SolverFunctionBase() {}
@@ -50,33 +50,37 @@ template <class FuncType> struct SolverFunctionBase {
         using std::cout;
         using std::endl;
 
-        cout << "Name: " << this->function.name() << endl << endl;
-        cout << "Input  Rows:" << this->function.input_rows() << endl << endl;
-        cout << "Output Rows:" << this->function.output_rows() << endl << endl;
+        cout << "Name: " << this->function_.name() << endl << endl;
+        cout << "Input  Rows:" << this->function_.input_rows() << endl << endl;
+        cout << "Output Rows:" << this->function_.output_rows() << endl << endl;
         cout << "Thread Policy:" << static_cast<int>(thread_mode_) << endl << endl;
 
-        cout << "v_index_: " << endl << this->index_data.get_v_index() << endl << endl;
-        if (this->index_data.cindex_init) {
-            cout << "c_index_: " << endl << this->index_data.get_c_index() << endl << endl;
+        cout << "v_index_: " << endl << this->index_data_.get_v_index() << endl << endl;
+        if (this->index_data_.cindex_init_) {
+            cout << "c_index_: " << endl << this->index_data_.get_c_index() << endl << endl;
         }
     }
 
     int num_kkt_elements(bool dojac, bool dohess) {
-        return this->function.num_kkt_elements(dojac, dohess) * this->index_data.num_appl();
+        return this->function_.num_kkt_elements(dojac, dohess) * this->index_data_.num_appl();
     }
-    int num_con_eles() const { return this->function.output_rows() * this->index_data.num_appl(); }
-    int num_grad_eles() const { return this->function.input_rows() * this->index_data.num_appl(); }
+    int num_con_eles() const {
+        return this->function_.output_rows() * this->index_data_.num_appl();
+    }
+    int num_grad_eles() const {
+        return this->function_.input_rows() * this->index_data_.num_appl();
+    }
     ThreadingFlags get_thread_mode() const { return this->thread_mode_; }
     void get_kkt_space(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
                        int conoffset, bool dojac, bool dohess) {
-        this->function.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
-                                     this->index_data);
+        this->function_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
+                                      this->index_data_);
     }
     void get_gradient_space(EigenRef<VectorXi> GXrows, int &freeloc) {
-        this->index_data.get_gradient_space(GXrows, freeloc);
+        this->index_data_.get_gradient_space(GXrows, freeloc);
     }
     void get_constraint_space(EigenRef<VectorXi> FXrows, int &freeloc) {
-        this->index_data.get_constraint_space(FXrows, freeloc);
+        this->index_data_.get_constraint_space(FXrows, freeloc);
     }
 };
 

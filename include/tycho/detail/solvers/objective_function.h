@@ -33,12 +33,12 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     ObjectiveFunction() {}
 
     ObjectiveFunction(const ObjectiveInterface &f, const MatrixXi &vindex) {
-        this->function = f;
-        this->index_data = SolverIndexingData(f.input_rows(), vindex);
+        this->function_ = f;
+        this->index_data_ = SolverIndexingData(f.input_rows(), vindex);
     }
     ObjectiveFunction(const ObjectiveInterface &f, const SolverIndexingData &data) {
-        this->function = f;
-        this->index_data = data;
+        this->function_ = f;
+        this->index_data_ = data;
     }
 
     /*
@@ -46,10 +46,10 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     will be called on multiple threads.
     */
     std::vector<ObjectiveFunction> thread_split(int Thr) const {
-        std::vector<SolverIndexingData> idat = this->index_data.thread_split(Thr);
+        std::vector<SolverIndexingData> idat = this->index_data_.thread_split(Thr);
         std::vector<ObjectiveFunction> split(idat.size());
         for (int i = 0; i < idat.size(); i++) {
-            split[i] = ObjectiveFunction(this->function, idat[i]);
+            split[i] = ObjectiveFunction(this->function_, idat[i]);
         }
         return split;
     }
@@ -60,7 +60,7 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     underlying vector function.
     */
     void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val) const {
-        this->function.objective(ObjScale, X, Val, this->index_data);
+        this->function_.objective(ObjScale, X, Val, this->index_data_);
     }
 
     /*
@@ -70,7 +70,7 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
     */
     void objective_gradient(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
                             EigenRef<Eigen::VectorXd> GX) const {
-        this->function.objective_gradient(ObjScale, X, Val, GX, this->index_data);
+        this->function_.objective_gradient(ObjScale, X, Val, GX, this->index_data_);
     }
 
     /*
@@ -84,8 +84,8 @@ struct ObjectiveFunction : SolverFunctionBase<ObjectiveInterface> {
                                     EigenRef<Eigen::VectorXi> KKTLocations,
                                     EigenRef<Eigen::VectorXi> KKTClashes,
                                     std::vector<std::mutex> &KKTLocks) {
-        this->function.objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
-                                                  KKTClashes, KKTLocks, this->index_data);
+        this->function_.objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
+                                                   KKTClashes, KKTLocks, this->index_data_);
     }
 };
 

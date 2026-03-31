@@ -201,7 +201,7 @@ struct ConstraintInterface;
 struct ObjectiveInterface;
 
 struct ConstraintInterface {
-    TypeStorage<ConstraintBase> storage;
+    TypeStorage<ConstraintBase> storage_;
 
     ConstraintInterface() = default;
 
@@ -209,7 +209,7 @@ struct ConstraintInterface {
                            !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
                            bool> = true>
     ConstraintInterface(const T &t) {
-        storage.emplace<ConstraintModel<std::decay_t<T>>>(t);
+        storage_.emplace<ConstraintModel<std::decay_t<T>>>(t);
     }
 
     // Stores T directly (one virtual dispatch per solver call) instead of double-erasure.
@@ -218,21 +218,21 @@ struct ConstraintInterface {
     }
 
     // ---- Forwarding methods ----
-    std::string name() const { return storage.get().name(); }
-    int input_rows() const { return storage.get().input_rows(); }
-    int output_rows() const { return storage.get().output_rows(); }
-    bool thread_safe() const { return storage.get().thread_safe(); }
+    std::string name() const { return storage_.get().name(); }
+    int input_rows() const { return storage_.get().input_rows(); }
+    int output_rows() const { return storage_.get().output_rows(); }
+    bool thread_safe() const { return storage_.get().thread_safe(); }
 
     void constraints(const Eigen::Ref<const Eigen::VectorXd> &X, Eigen::Ref<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {
-        storage.get().constraints(X, FX, data);
+        storage_.get().constraints(X, FX, data);
     }
     void constraints_adjointgradient(const Eigen::Ref<const Eigen::VectorXd> &X,
                                      const Eigen::Ref<const Eigen::VectorXd> &L,
                                      Eigen::Ref<Eigen::VectorXd> FX,
                                      Eigen::Ref<Eigen::VectorXd> AGX,
                                      const SolverIndexingData &data) const {
-        storage.get().constraints_adjointgradient(X, L, FX, AGX, data);
+        storage_.get().constraints_adjointgradient(X, L, FX, AGX, data);
     }
     void constraints_jacobian(const Eigen::Ref<const Eigen::VectorXd> &X,
                               Eigen::Ref<Eigen::VectorXd> FX,
@@ -241,7 +241,8 @@ struct ConstraintInterface {
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
                               const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
+        storage_.get().constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks,
+                                            data);
     }
     void constraints_jacobian_adjointgradient(
         const Eigen::Ref<const Eigen::VectorXd> &X, const Eigen::Ref<const Eigen::VectorXd> &L,
@@ -249,8 +250,8 @@ struct ConstraintInterface {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
-                                                           KKTClashes, KKTLocks, data);
+        storage_.get().constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
+                                                            KKTClashes, KKTLocks, data);
     }
     void constraints_jacobian_adjointgradient_adjointhessian(
         const Eigen::Ref<const Eigen::VectorXd> &X, const Eigen::Ref<const Eigen::VectorXd> &L,
@@ -258,16 +259,16 @@ struct ConstraintInterface {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian_adjointgradient_adjointhessian(
+        storage_.get().constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                        int &freeloc, int conoffset, bool dojac, bool dohess,
                        SolverIndexingData &data) {
-        storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        storage_.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const {
-        return storage.get().num_kkt_elements(dojac, dohess);
+        return storage_.get().num_kkt_elements(dojac, dohess);
     }
 };
 
@@ -366,7 +367,7 @@ template <typename T> struct ObjectiveModel final : ObjectiveBase {
 };
 
 struct ObjectiveInterface {
-    TypeStorage<ObjectiveBase> storage;
+    TypeStorage<ObjectiveBase> storage_;
 
     ObjectiveInterface() = default;
 
@@ -374,7 +375,7 @@ struct ObjectiveInterface {
                            !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
                            bool> = true>
     ObjectiveInterface(const T &t) {
-        storage.emplace<ObjectiveModel<std::decay_t<T>>>(t);
+        storage_.emplace<ObjectiveModel<std::decay_t<T>>>(t);
     }
 
     // Stores T directly (one virtual dispatch per solver call).
@@ -383,21 +384,21 @@ struct ObjectiveInterface {
     }
 
     // ---- Forwarding methods ----
-    std::string name() const { return storage.get().name(); }
-    int input_rows() const { return storage.get().input_rows(); }
-    int output_rows() const { return storage.get().output_rows(); }
-    bool thread_safe() const { return storage.get().thread_safe(); }
+    std::string name() const { return storage_.get().name(); }
+    int input_rows() const { return storage_.get().input_rows(); }
+    int output_rows() const { return storage_.get().output_rows(); }
+    bool thread_safe() const { return storage_.get().thread_safe(); }
 
     void constraints(const Eigen::Ref<const Eigen::VectorXd> &X, Eigen::Ref<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {
-        storage.get().constraints(X, FX, data);
+        storage_.get().constraints(X, FX, data);
     }
     void constraints_adjointgradient(const Eigen::Ref<const Eigen::VectorXd> &X,
                                      const Eigen::Ref<const Eigen::VectorXd> &L,
                                      Eigen::Ref<Eigen::VectorXd> FX,
                                      Eigen::Ref<Eigen::VectorXd> AGX,
                                      const SolverIndexingData &data) const {
-        storage.get().constraints_adjointgradient(X, L, FX, AGX, data);
+        storage_.get().constraints_adjointgradient(X, L, FX, AGX, data);
     }
     void constraints_jacobian(const Eigen::Ref<const Eigen::VectorXd> &X,
                               Eigen::Ref<Eigen::VectorXd> FX,
@@ -406,7 +407,8 @@ struct ObjectiveInterface {
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
                               const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
+        storage_.get().constraints_jacobian(X, FX, KKTmat, KKTLocations, KKTClashes, KKTLocks,
+                                            data);
     }
     void constraints_jacobian_adjointgradient(
         const Eigen::Ref<const Eigen::VectorXd> &X, const Eigen::Ref<const Eigen::VectorXd> &L,
@@ -414,8 +416,8 @@ struct ObjectiveInterface {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
-                                                           KKTClashes, KKTLocks, data);
+        storage_.get().constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
+                                                            KKTClashes, KKTLocks, data);
     }
     void constraints_jacobian_adjointgradient_adjointhessian(
         const Eigen::Ref<const Eigen::VectorXd> &X, const Eigen::Ref<const Eigen::VectorXd> &L,
@@ -423,26 +425,26 @@ struct ObjectiveInterface {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         Eigen::Ref<Eigen::VectorXi> KKTLocations, Eigen::Ref<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        storage.get().constraints_jacobian_adjointgradient_adjointhessian(
+        storage_.get().constraints_jacobian_adjointgradient_adjointhessian(
             X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes, KKTLocks, data);
     }
     void get_kkt_space(Eigen::Ref<Eigen::VectorXi> KKTrows, Eigen::Ref<Eigen::VectorXi> KKTcols,
                        int &freeloc, int conoffset, bool dojac, bool dohess,
                        SolverIndexingData &data) {
-        storage.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
+        storage_.get().get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess, data);
     }
     int num_kkt_elements(bool dojac, bool dohess) const {
-        return storage.get().num_kkt_elements(dojac, dohess);
+        return storage_.get().num_kkt_elements(dojac, dohess);
     }
 
     void objective(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X, double &Val,
                    const SolverIndexingData &data) const {
-        storage.get().objective(ObjScale, X, Val, data);
+        storage_.get().objective(ObjScale, X, Val, data);
     }
     void objective_gradient(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X,
                             double &Val, Eigen::Ref<Eigen::VectorXd> GX,
                             const SolverIndexingData &data) const {
-        storage.get().objective_gradient(ObjScale, X, Val, GX, data);
+        storage_.get().objective_gradient(ObjScale, X, Val, GX, data);
     }
     void objective_gradient_hessian(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &X,
                                     double &Val, Eigen::Ref<Eigen::VectorXd> GX,
@@ -451,8 +453,8 @@ struct ObjectiveInterface {
                                     Eigen::Ref<Eigen::VectorXi> KKTClashes,
                                     std::vector<std::mutex> &KKTLocks,
                                     const SolverIndexingData &data) const {
-        storage.get().objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
-                                                 KKTClashes, KKTLocks, data);
+        storage_.get().objective_gradient_hessian(ObjScale, X, Val, GX, KKTmat, KKTLocations,
+                                                  KKTClashes, KKTLocks, data);
     }
 };
 

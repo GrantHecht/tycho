@@ -443,7 +443,7 @@ class Phase {
     ODEPhaseBase &base() { return *phase_; }
     const ODEPhaseBase &base() const { return *phase_; }
     std::shared_ptr<ODEPhaseBase> base_ptr() { return phase_; }
-    PSIOPT &optimizer() { return *phase_->optimizer; }
+    PSIOPT &optimizer() { return *phase_->optimizer_; }
     const VarRegistry &registry() const { return registry_; }
 
   private:

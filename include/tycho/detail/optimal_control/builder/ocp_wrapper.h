@@ -115,7 +115,7 @@ class OCP {
 
     // ── Optimizer / base access ─────────────────────────────────────────
 
-    PSIOPT &optimizer() { return *ocp_.optimizer; }
+    PSIOPT &optimizer() { return *ocp_.optimizer_; }
 
     OptimalControlProblem &base() { return ocp_; }
     const OptimalControlProblem &base() const { return ocp_; }

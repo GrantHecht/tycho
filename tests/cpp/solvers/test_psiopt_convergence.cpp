@@ -37,7 +37,7 @@ TEST_F(SolverTest, ConvergenceFlagOrdering) {
 
 TEST_F(SolverTest, PrintLevelZeroSilent) {
     auto phase = make_brach_solver_phase(16);
-    phase->optimizer->print_level_ = 0;
+    phase->optimizer_->print_level_ = 0;
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 }

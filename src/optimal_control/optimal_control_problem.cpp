@@ -131,7 +131,7 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
             this->num_phase_vars[i] = this->phases[i]->indexer_.num_phase_vars;
         }
 
-        this->phases[0]->transcribe_phase(0, 0, 0, this->nlp, 0);
+        this->phases[0]->transcribe_phase(0, 0, 0, this->nlp_, 0);
         this->num_phase_eq_cons[0] = this->phases[0]->indexer_.num_phase_eq_cons;
         this->num_phase_iq_cons[0] = this->phases[0]->indexer_.num_phase_iq_cons;
 
@@ -140,7 +140,7 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
             int Estart = this->num_phase_eq_cons.segment(0, i).sum();
             int Istart = this->num_phase_iq_cons.segment(0, i).sum();
 
-            this->phases[i]->transcribe_phase(Vstart, Estart, Istart, this->nlp, i);
+            this->phases[i]->transcribe_phase(Vstart, Estart, Istart, this->nlp_, i);
             this->num_phase_eq_cons[i] = this->phases[i]->indexer_.num_phase_eq_cons;
             this->num_phase_iq_cons[i] = this->phases[i]->indexer_.num_phase_iq_cons;
         }
@@ -267,9 +267,9 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         this->LinkParamLocs[i] = LinkVarStart + i;
     }
 
-    this->start_obj_ = int(this->nlp->objectives_.size());
-    this->start_eq_ = int(this->nlp->equality_constraints_.size());
-    this->start_iq_ = int(this->nlp->inequality_constraints_.size());
+    this->start_obj_ = int(this->nlp_->objectives_.size());
+    this->start_eq_ = int(this->nlp_->equality_constraints_.size());
+    this->start_iq_ = int(this->nlp_->inequality_constraints_.size());
     this->num_eq_funs = 0;
     this->num_iq_funs = 0;
     this->num_obj_funs = 0;
@@ -289,8 +289,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Eq.func_, input_scales, output_scales);
         }
 
-        this->nlp->equality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Eq.global_index_ = this->nlp->equality_constraints_.size() - 1;
+        this->nlp_->equality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
+        Eq.global_index_ = this->nlp_->equality_constraints_.size() - 1;
         this->num_eq_funs++;
     }
     for (auto &[key, Iq] : this->link_inequalities_) {
@@ -309,8 +309,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Iq.func_, input_scales, output_scales);
         }
 
-        this->nlp->inequality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Iq.global_index_ = this->nlp->inequality_constraints_.size() - 1;
+        this->nlp_->inequality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
+        Iq.global_index_ = this->nlp_->inequality_constraints_.size() - 1;
         this->num_iq_funs++;
     }
     for (auto &[key, Ob] : this->link_objectives_) {
@@ -330,8 +330,8 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Ob.func_, input_scales, output_scales);
         }
 
-        this->nlp->objectives_.emplace_back(ObjectiveFunction(Func, VC[0]));
-        Ob.global_index_ = this->nlp->objectives_.size() - 1;
+        this->nlp_->objectives_.emplace_back(ObjectiveFunction(Func, VC[0]));
+        Ob.global_index_ = this->nlp_->objectives_.size() - 1;
 
         this->num_obj_funs++;
     }
@@ -397,7 +397,7 @@ void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
 
 void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
 
-    this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
+    this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     check_functions();
     if (this->auto_scaling_) {
@@ -422,8 +422,8 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->num_prob_iq_cons = this->num_phase_iq_cons.sum() + this->num_link_iq_cons;
     if (showstats)
         this->print_stats(showfuns);
-    this->nlp->make_nlp(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
-    this->optimizer->set_nlp(this->nlp);
+    this->nlp_->make_nlp(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
+    this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;
@@ -439,19 +439,19 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 
     switch (mode) {
     case JetJobModes::Solve:
-        Output = this->optimizer->solve(Input);
+        Output = this->optimizer_->solve(Input);
         break;
     case JetJobModes::Optimize:
-        Output = this->optimizer->optimize(Input);
+        Output = this->optimizer_->optimize(Input);
         break;
     case JetJobModes::SolveOptimize:
-        Output = this->optimizer->solve_optimize(Input);
+        Output = this->optimizer_->solve_optimize(Input);
         break;
     case JetJobModes::SolveOptimizeSolve:
-        Output = this->optimizer->solve_optimize_solve(Input);
+        Output = this->optimizer_->solve_optimize_solve(Input);
         break;
     case JetJobModes::OptimizeSolve:
-        Output = this->optimizer->optimize_solve(Input);
+        Output = this->optimizer_->optimize_solve(Input);
         break;
     default:
         throw std::invalid_argument("Unrecognized PSIOPT mode");
@@ -459,10 +459,10 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 
     this->collect_solver_output(Output);
 
-    this->collect_post_opt_info(this->optimizer->last_eq_cons_, this->optimizer->last_eq_lmults_,
-                                this->optimizer->last_iq_cons_, this->optimizer->last_iq_lmults_);
+    this->collect_post_opt_info(this->optimizer_->last_eq_cons_, this->optimizer_->last_eq_lmults_,
+                                this->optimizer_->last_iq_cons_, this->optimizer_->last_iq_lmults_);
 
-    return this->optimizer->converge_flag_;
+    return this->optimizer_->converge_flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
@@ -584,19 +584,19 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_obj_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->objectives_[this->start_obj_ + i].print_data();
+            this->nlp_->objectives_[this->start_obj_ + i].print_data();
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->equality_constraints_[this->start_eq_ + i].print_data();
+            this->nlp_->equality_constraints_[this->start_eq_ + i].print_data();
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp->inequality_constraints_[this->start_iq_ + i].print_data();
+            this->nlp_->inequality_constraints_[this->start_iq_ + i].print_data();
         }
     }
 }

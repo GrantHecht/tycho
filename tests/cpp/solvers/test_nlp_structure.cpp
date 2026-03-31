@@ -12,7 +12,7 @@ TEST_F(SolverTest, NLPDimensionsConsistency) {
     auto phase = make_brach_solver_phase(16);
     phase->transcribe(false, false);
 
-    auto &nlp = phase->nlp;
+    auto &nlp = phase->nlp_;
     ASSERT_NE(nlp, nullptr);
     EXPECT_GT(nlp->primal_vars_, 0);
     EXPECT_GT(nlp->equal_cons_, 0);
@@ -24,7 +24,7 @@ TEST_F(SolverTest, NLPSparsityNonEmpty) {
     auto phase = make_brach_solver_phase(16);
     phase->transcribe(false, false);
 
-    auto &nlp = phase->nlp;
+    auto &nlp = phase->nlp_;
     ASSERT_NE(nlp, nullptr);
     EXPECT_GT(nlp->kkt_coeff_rows_.size(), 0);
     EXPECT_GT(nlp->kkt_coeff_cols_.size(), 0);

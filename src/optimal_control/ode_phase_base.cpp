@@ -844,7 +844,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
     }
 }
 void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
-    for (auto &[key, eq] : this->user_equalities) {
+    for (auto &[key, eq] : this->user_equalities_) {
         ThreadingFlags thread_mode =
             eq.func_.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (eq.region_flag_ == PhaseRegionFlags::Path ||
@@ -868,7 +868,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         eq.global_index_ = Gindex;
         eq.phase_local_index_ = PLindex;
     }
-    for (auto &[key, iq] : this->user_inequalities) {
+    for (auto &[key, iq] : this->user_inequalities_) {
         ThreadingFlags thread_mode =
             iq.func_.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (iq.region_flag_ == PhaseRegionFlags::Path ||
@@ -894,7 +894,7 @@ void tycho::oc::ODEPhaseBase::transcribe_basic_funcs() {
         iq.global_index_ = Gindex;
         iq.phase_local_index_ = PLindex;
     }
-    for (auto &[key, ob] : this->user_state_objectives) {
+    for (auto &[key, ob] : this->user_state_objectives_) {
         ThreadingFlags thread_mode =
             ob.func_.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
         if (ob.region_flag_ == PhaseRegionFlags::Path ||
@@ -1079,15 +1079,15 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
     std::string iobj = "Integral objective";
     std::string ipcon = "Integral parameter";
 
-    for (auto &[key, f] : this->user_equalities)
+    for (auto &[key, f] : this->user_equalities_)
         CheckFun(eq, f);
-    for (auto &[key, f] : this->user_inequalities)
+    for (auto &[key, f] : this->user_inequalities_)
         CheckFun(iq, f);
     for (auto &[key, f] : this->user_integrands)
         CheckFun(iobj, f);
     for (auto &[key, f] : this->user_param_integrands)
         CheckFun(ipcon, f);
-    for (auto &[key, f] : this->user_state_objectives)
+    for (auto &[key, f] : this->user_state_objectives_)
         CheckFun(sobj, f);
 }
 
@@ -1247,9 +1247,9 @@ void tycho::oc::ODEPhaseBase::calc_auto_scales() {
         }
     };
 
-    calc_impl(this->user_equalities);
-    calc_impl(this->user_inequalities);
-    calc_impl(this->user_state_objectives);
+    calc_impl(this->user_equalities_);
+    calc_impl(this->user_inequalities_);
+    calc_impl(this->user_state_objectives_);
     calc_impl(this->user_integrands);
     calc_impl(this->user_param_integrands);
 }
@@ -1260,7 +1260,7 @@ std::vector<double> tycho::oc::ODEPhaseBase::get_objective_scales() {
     // before averaging to make the units consistent
 
     std::vector<double> scales;
-    for (auto &[key, obj] : this->user_state_objectives) {
+    for (auto &[key, obj] : this->user_state_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             // OutputScales units 1/obj
             scales.push_back(obj.output_scales_[0]);
@@ -1278,7 +1278,7 @@ std::vector<double> tycho::oc::ODEPhaseBase::get_objective_scales() {
 }
 
 void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
-    for (auto &[key, obj] : this->user_state_objectives) {
+    for (auto &[key, obj] : this->user_state_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             obj.output_scales_[0] = scale;
         }
@@ -1309,7 +1309,7 @@ void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
 }
 
 void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
-    this->nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
+    this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     this->init_indexing();
 
@@ -1328,7 +1328,7 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
         }
     }
 
-    this->transcribe_phase(0, 0, 0, this->nlp, 0);
+    this->transcribe_phase(0, 0, 0, this->nlp_, 0);
     if (showstats)
         this->indexer_.print_stats(showfuns);
 
@@ -1341,10 +1341,10 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
                    this->indexer_.num_phase_eq_cons, this->indexer_.num_phase_vars);
     }
 
-    this->nlp->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
-                        this->indexer_.num_phase_iq_cons);
+    this->nlp_->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
+                         this->indexer_.num_phase_iq_cons);
 
-    this->optimizer->set_nlp(this->nlp);
+    this->optimizer_->set_nlp(this->nlp_);
 }
 
 void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
@@ -1525,19 +1525,19 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
 
     switch (mode) {
     case JetJobModes::Solve:
-        output = this->optimizer->solve(input);
+        output = this->optimizer_->solve(input);
         break;
     case JetJobModes::Optimize:
-        output = this->optimizer->optimize(input);
+        output = this->optimizer_->optimize(input);
         break;
     case JetJobModes::SolveOptimize:
-        output = this->optimizer->solve_optimize(input);
+        output = this->optimizer_->solve_optimize(input);
         break;
     case JetJobModes::SolveOptimizeSolve:
-        output = this->optimizer->solve_optimize_solve(input);
+        output = this->optimizer_->solve_optimize_solve(input);
         break;
     case JetJobModes::OptimizeSolve:
-        output = this->optimizer->optimize_solve(input);
+        output = this->optimizer_->optimize_solve(input);
         break;
     default:
         throw std::invalid_argument("Unrecognized PSIOPT mode");
@@ -1545,10 +1545,10 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
 
     this->collect_solver_output(output);
 
-    this->collect_post_opt_info(this->optimizer->last_eq_cons_, this->optimizer->last_eq_lmults_,
-                                this->optimizer->last_iq_cons_, this->optimizer->last_iq_lmults_);
+    this->collect_post_opt_info(this->optimizer_->last_eq_cons_, this->optimizer_->last_eq_lmults_,
+                                this->optimizer_->last_iq_cons_, this->optimizer_->last_iq_lmults_);
 
-    return this->optimizer->converge_flag_;
+    return this->optimizer_->converge_flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {

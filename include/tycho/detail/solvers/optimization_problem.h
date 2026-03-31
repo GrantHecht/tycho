@@ -148,60 +148,60 @@ struct OptimizationProblem : OptimizationProblemBase {
 
     void jet_initialize() {
         this->set_num_partitions(1, 1);
-        this->optimizer->print_level_ = 10;
+        this->optimizer_->print_level_ = 10;
         this->transcribe();
     }
     void jet_release() {
-        this->optimizer->release();
+        this->optimizer_->release();
         this->set_num_partitions(1, 1);
-        this->optimizer->print_level_ = 0;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
+        this->optimizer_->print_level_ = 0;
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->resetTranscription();
     }
 
     PSIOPT::ConvergenceFlags solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer->solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
-        return this->optimizer->converge_flag_;
+        this->active_variables_ = this->optimizer_->solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer->optimize(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
-        return this->optimizer->converge_flag_;
+        this->active_variables_ = this->optimizer_->optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer->solve_optimize(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
-        return this->optimizer->converge_flag_;
+        this->active_variables_ = this->optimizer_->solve_optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer->solve_optimize_solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
-        return this->optimizer->converge_flag_;
+        this->active_variables_ = this->optimizer_->solve_optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer->optimize_solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer->last_eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer->last_iq_lmults_;
-        return this->optimizer->converge_flag_;
+        this->active_variables_ = this->optimizer_->optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 };
 

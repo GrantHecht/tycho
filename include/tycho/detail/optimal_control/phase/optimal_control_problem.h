@@ -1283,7 +1283,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->link_equalities_.at(index).global_index_;
-        auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1309,7 +1309,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->link_equalities_.at(index).global_index_;
-        auto c_index_ = this->nlp->equality_constraints_[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
         int offset = this->num_phase_eq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1334,7 +1334,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 index));
         }
         int Gindex = this->link_inequalities_.at(index).global_index_;
-        auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1360,7 +1360,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         int Gindex = this->link_inequalities_.at(index).global_index_;
-        auto c_index_ = this->nlp->inequality_constraints_[Gindex].index_data.c_index_;
+        auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
         int offset = this->num_phase_iq_cons.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
@@ -1567,16 +1567,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     void jet_initialize() {
         this->set_num_partitions(1, 1);
-        this->optimizer->print_level_ = 10;
+        this->optimizer_->print_level_ = 10;
         this->print_mesh_info_ = false;
         this->transcribe();
     }
     void jet_release() {
-        this->optimizer->release();
+        this->optimizer_->release();
         this->initPartitions();
-        this->optimizer->print_level_ = 0;
+        this->optimizer_->print_level_ = 0;
         this->print_mesh_info_ = true;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
         for (auto &phase : this->phases)
             phase->jet_release();
         this->reset_transcription();
