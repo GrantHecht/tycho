@@ -54,7 +54,7 @@ inline void InterpTable1DBuild(nb::module_ &m) {
 
     obj.def("__call__", [](std::shared_ptr<InterpTable1D> &self, const GenericFunction<-1, 1> &t) {
         nb::object pyfun;
-        if (self->vlen == 1) {
+        if (self->vlen_ == 1) {
             auto f = GenericFunction<-1, 1>(InterpFunction1D<1>(self).eval(t));
             pyfun = nb::cast(f);
         } else {
@@ -67,7 +67,7 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     obj.def("__call__", [](std::shared_ptr<InterpTable1D> &self, const Segment<-1, 1, -1> &t) {
         nb::object pyfun;
 
-        if (self->vlen == 1) {
+        if (self->vlen_ == 1) {
             auto f = GenericFunction<-1, 1>(InterpFunction1D<1>(self).eval(t));
             pyfun = nb::cast(f);
         } else {
@@ -80,11 +80,11 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     obj.def("interp_deriv1", &InterpTable1D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable1D::interp_deriv2);
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable1D::WarnOutOfBounds);
-    obj.def_rw("throw_out_of_bounds", &InterpTable1D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable1D::warn_out_of_bounds_);
+    obj.def_rw("throw_out_of_bounds", &InterpTable1D::throw_out_of_bounds_);
 
     obj.def("sf", [](std::shared_ptr<InterpTable1D> &self) {
-        if (self->vlen != 1) {
+        if (self->vlen_ != 1) {
             throw std::invalid_argument(
                 "InterpTable1D storing Vector data cannot be converted to Scalar Function.");
         }
@@ -109,8 +109,8 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable2D::WarnOutOfBounds);
-    obj.def_rw("throw_out_of_bounds", &InterpTable2D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable2D::warn_out_of_bounds_);
+    obj.def_rw("throw_out_of_bounds", &InterpTable2D::throw_out_of_bounds_);
 
     obj.def("interp_deriv1", &InterpTable2D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable2D::interp_deriv2);
@@ -168,8 +168,8 @@ inline void InterpTable3DBuild(nb::module_ &m) {
     obj.def("interp_deriv2",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp_deriv2, nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable3D::WarnOutOfBounds);
-    obj.def_rw("throw_out_of_bounds", &InterpTable3D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable3D::warn_out_of_bounds_);
+    obj.def_rw("throw_out_of_bounds", &InterpTable3D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_),
@@ -221,8 +221,8 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     obj.def("interp_deriv2", nb::overload_cast<double, double, double, double>(
                                  &InterpTable4D::interp_deriv2, nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable4D::WarnOutOfBounds);
-    obj.def_rw("throw_out_of_bounds", &InterpTable4D::ThrowOutOfBounds);
+    obj.def_rw("warn_out_of_bounds", &InterpTable4D::warn_out_of_bounds_);
+    obj.def_rw("throw_out_of_bounds", &InterpTable4D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_),

@@ -69,21 +69,21 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     VectorXi ode_param_locs_;
     VectorXi static_param_locs_;
 
-    int num_defects;
-    int num_states;
-    int num_controls;
+    int num_defects_;
+    int num_states_;
+    int num_controls_;
 
     bool blocked_controls_ = false;
     int blocked_control_start_;
 
     int defect_cardinal_states_;
-    int num_nodal_states;
+    int num_nodal_states_;
 
-    int num_phase_vars;
-    int num_phase_eq_cons = 0;
-    int num_phase_iq_cons = 0;
-    int next_phase_eq_con = 0;
-    int next_phase_iq_con = 0;
+    int num_phase_vars_;
+    int num_phase_eq_cons_ = 0;
+    int num_phase_iq_cons_ = 0;
+    int next_phase_eq_con_ = 0;
+    int next_phase_iq_con_ = 0;
 
     int start_obj_ = 0;
     int start_eq_ = 0;
@@ -92,9 +92,9 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int start_eq_cons_ = 0;
     int start_iq_cons_ = 0;
 
-    int num_obj_funs = 0;
-    int num_eq_funs = 0;
-    int num_iq_funs = 0;
+    int num_obj_funs_ = 0;
+    int num_eq_funs_ = 0;
+    int num_iq_funs_ = 0;
 
     PhaseIndexer() {}
     PhaseIndexer(int Xv, int Uv, int OPv, int SPv) {
@@ -105,52 +105,52 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     }
 
     void set_dimensions(int DCS, int Dnum, bool BlockCon) {
-        this->num_defects = Dnum;
+        this->num_defects_ = Dnum;
         this->defect_cardinal_states_ = DCS;
-        this->num_states = (this->defect_cardinal_states_ - 1) * this->num_defects + 1;
-        this->num_nodal_states = this->num_defects + 1;
+        this->num_states_ = (this->defect_cardinal_states_ - 1) * this->num_defects_ + 1;
+        this->num_nodal_states_ = this->num_defects_ + 1;
 
         this->blocked_controls_ = BlockCon;
 
         if (this->blocked_controls_) {
-            this->num_phase_vars = this->num_states * this->xt_vars() +
-                                   this->num_defects * this->u_vars() + this->p_vars() +
+            this->num_phase_vars_ = this->num_states_ * this->xt_vars() +
+                                   this->num_defects_ * this->u_vars() + this->p_vars() +
                                    this->static_p_vars();
 
             ode_first_state_locs_.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
             ode_first_state_locs_.tail(this->u_vars()) += VectorXi::Constant(
-                this->u_vars(), this->xt_vars() * (this->num_states) - this->xt_vars());
+                this->u_vars(), this->xt_vars() * (this->num_states_) - this->xt_vars());
 
             ode_last_state_locs_ =
                 ode_first_state_locs_ +
-                VectorXi::Constant(this->xtu_vars(), this->xt_vars() * (this->num_states - 1));
+                VectorXi::Constant(this->xtu_vars(), this->xt_vars() * (this->num_states_ - 1));
             ode_last_state_locs_.tail(this->u_vars()) =
                 ode_first_state_locs_.tail(this->u_vars()) +
-                VectorXi::Constant(this->u_vars(), this->u_vars() * (this->num_defects - 1));
+                VectorXi::Constant(this->u_vars(), this->u_vars() * (this->num_defects_ - 1));
 
         } else {
-            this->num_phase_vars =
-                this->num_states * this->xtu_vars() + this->p_vars() + this->static_p_vars();
+            this->num_phase_vars_ =
+                this->num_states_ * this->xtu_vars() + this->p_vars() + this->static_p_vars();
 
             ode_first_state_locs_.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
             ode_last_state_locs_ =
                 ode_first_state_locs_ +
-                VectorXi::Constant(this->xtu_vars(), this->xtu_vars() * (this->num_states - 1));
+                VectorXi::Constant(this->xtu_vars(), this->xtu_vars() * (this->num_states_ - 1));
         }
 
         ode_param_locs_.setLinSpaced(this->p_vars(), 0, this->p_vars() - 1);
         ode_param_locs_ += Eigen::VectorXi::Constant(
-            this->p_vars(), this->num_phase_vars - this->p_vars() - this->static_p_vars());
+            this->p_vars(), this->num_phase_vars_ - this->p_vars() - this->static_p_vars());
 
         static_param_locs_.setLinSpaced(this->static_p_vars(), 0, this->static_p_vars() - 1);
         static_param_locs_ += Eigen::VectorXi::Constant(
-            this->static_p_vars(), this->num_phase_vars - this->static_p_vars());
+            this->static_p_vars(), this->num_phase_vars_ - this->static_p_vars());
     }
     void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
         this->nlp_ = np;
 
-        this->num_phase_eq_cons = 0;
-        this->num_phase_iq_cons = 0;
+        this->num_phase_eq_cons_ = 0;
+        this->num_phase_iq_cons_ = 0;
 
         this->ode_first_state_locs_ +=
             Eigen::VectorXi::Constant(this->ode_first_state_locs_.size(), n);
@@ -158,8 +158,8 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
             Eigen::VectorXi::Constant(this->ode_last_state_locs_.size(), n);
         this->ode_param_locs_ += Eigen::VectorXi::Constant(this->ode_param_locs_.size(), n);
         this->static_param_locs_ += Eigen::VectorXi::Constant(this->static_param_locs_.size(), n);
-        this->next_phase_eq_con = ep;
-        this->next_phase_iq_con = ip;
+        this->next_phase_eq_con_ = ep;
+        this->next_phase_iq_con_ = ip;
 
         this->start_eq_cons_ = ep;
         this->start_iq_cons_ = ip;
@@ -168,9 +168,9 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->start_eq_ = this->nlp_->equality_constraints_.size();
         this->start_iq_ = this->nlp_->inequality_constraints_.size();
 
-        this->num_obj_funs = 0;
-        this->num_eq_funs = 0;
-        this->num_iq_funs = 0;
+        this->num_obj_funs_ = 0;
+        this->num_eq_funs_ = 0;
+        this->num_iq_funs_ = 0;
     }
 
     int add_equality(ConstraintInterface eqfun, PhaseRegionFlags sreg, const Eigen::VectorXi &rxtuv,
@@ -206,8 +206,8 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
                 v = this->ode_first_state_locs_[vloc] + State * this->xt_vars();
             } else {
                 int unum = State / (this->defect_cardinal_states_ - 1);
-                if (unum > (this->num_defects - 1))
-                    unum = this->num_defects - 1;
+                if (unum > (this->num_defects_ - 1))
+                    unum = this->num_defects_ - 1;
                 v = this->ode_first_state_locs_[vloc] + unum * this->u_vars();
             }
         } else {

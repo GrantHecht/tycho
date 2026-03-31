@@ -110,7 +110,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
 
         this->active_link_params_ = parm;
-        this->num_link_params = parm.size();
+        this->num_link_params_ = parm.size();
         this->reset_transcription();
         this->lp_units_ = units;
     }
@@ -154,27 +154,27 @@ struct OptimalControlProblem : OptimizationProblemBase {
     VectorXd active_eq_cons_;
     VectorXd active_iq_cons_;
 
-    VectorXi LinkParamLocs;
+    VectorXi link_param_locs_;
 
-    VectorXi num_phase_vars;
-    VectorXi num_phase_eq_cons;
-    VectorXi num_phase_iq_cons;
+    VectorXi num_phase_vars_;
+    VectorXi num_phase_eq_cons_;
+    VectorXi num_phase_iq_cons_;
 
-    int num_link_params = 0;
-    int num_link_eq_cons = 0;
-    int num_link_iq_cons = 0;
+    int num_link_params_ = 0;
+    int num_link_eq_cons_ = 0;
+    int num_link_iq_cons_ = 0;
 
     int start_obj_ = 0;
     int start_eq_ = 0;
     int start_iq_ = 0;
 
-    int num_obj_funs = 0;
-    int num_eq_funs = 0;
-    int num_iq_funs = 0;
+    int num_obj_funs_ = 0;
+    int num_eq_funs_ = 0;
+    int num_iq_funs_ = 0;
 
-    int num_prob_vars = 0;
-    int num_prob_eq_cons = 0;
-    int num_prob_iq_cons = 0;
+    int num_prob_vars_ = 0;
+    int num_prob_eq_cons_ = 0;
+    int num_prob_iq_cons_ = 0;
 
     ///////////////////////////////
     bool adaptive_mesh_ = false;
@@ -1284,7 +1284,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         int Gindex = this->link_equalities_.at(index).global_index_;
         auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
-        int offset = this->num_phase_eq_cons.sum();
+        int offset = this->num_phase_eq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
         for (int i = 0; i < c_index_.cols(); i++) {
@@ -1310,7 +1310,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         int Gindex = this->link_equalities_.at(index).global_index_;
         auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
-        int offset = this->num_phase_eq_cons.sum();
+        int offset = this->num_phase_eq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
         for (int i = 0; i < c_index_.cols(); i++) {
@@ -1335,7 +1335,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         }
         int Gindex = this->link_inequalities_.at(index).global_index_;
         auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
-        int offset = this->num_phase_iq_cons.sum();
+        int offset = this->num_phase_iq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
         for (int i = 0; i < c_index_.cols(); i++) {
@@ -1361,7 +1361,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         int Gindex = this->link_inequalities_.at(index).global_index_;
         auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
-        int offset = this->num_phase_iq_cons.sum();
+        int offset = this->num_phase_iq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
         for (int i = 0; i < c_index_.cols(); i++) {
@@ -1635,19 +1635,19 @@ struct OptimalControlProblem : OptimizationProblemBase {
     PSIOPT::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
     VectorXd make_solver_input() const {
-        VectorXd Vars(this->num_prob_vars);
+        VectorXd Vars(this->num_prob_vars_);
 
         for (int i = 0; i < this->phases.size(); i++) {
             int Start = 0;
             if (i > 0)
-                Start = this->num_phase_vars.segment(0, i).sum();
-            Vars.segment(Start, this->num_phase_vars[i]) = this->phases[i]->make_solver_input();
+                Start = this->num_phase_vars_.segment(0, i).sum();
+            Vars.segment(Start, this->num_phase_vars_[i]) = this->phases[i]->make_solver_input();
         }
         if (this->auto_scaling_ && this->lp_units_.size() > 0) {
-            Vars.tail(this->num_link_params) =
+            Vars.tail(this->num_link_params_) =
                 this->active_link_params_.cwiseQuotient(this->lp_units_);
         } else {
-            Vars.tail(this->num_link_params) = this->active_link_params_;
+            Vars.tail(this->num_link_params_) = this->active_link_params_;
         }
 
         return Vars;
@@ -1657,14 +1657,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (int i = 0; i < this->phases.size(); i++) {
             int Start = 0;
             if (i > 0)
-                Start = this->num_phase_vars.segment(0, i).sum();
-            this->phases[i]->collect_solver_output(Vars.segment(Start, this->num_phase_vars[i]));
+                Start = this->num_phase_vars_.segment(0, i).sum();
+            this->phases[i]->collect_solver_output(Vars.segment(Start, this->num_phase_vars_[i]));
         }
         if (this->auto_scaling_ && this->lp_units_.size() > 0) {
             this->active_link_params_ =
-                Vars.tail(this->num_link_params).cwiseProduct(this->lp_units_);
+                Vars.tail(this->num_link_params_).cwiseProduct(this->lp_units_);
         } else {
-            this->active_link_params_ = Vars.tail(this->num_link_params);
+            this->active_link_params_ = Vars.tail(this->num_link_params_);
         }
     }
     void collect_solver_multipliers(const VectorXd &EM, const VectorXd &IM) {
@@ -1672,16 +1672,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (int i = 0; i < this->phases.size(); i++) {
             int EStart = 0;
             if (i > 0)
-                EStart = this->num_phase_eq_cons.segment(0, i).sum();
+                EStart = this->num_phase_eq_cons_.segment(0, i).sum();
             int IStart = 0;
             if (i > 0)
-                IStart = this->num_phase_iq_cons.segment(0, i).sum();
+                IStart = this->num_phase_iq_cons_.segment(0, i).sum();
             this->phases[i]->collect_solver_multipliers(
-                EM.segment(EStart, this->num_phase_eq_cons[i]),
-                IM.segment(IStart, this->num_phase_iq_cons[i]));
+                EM.segment(EStart, this->num_phase_eq_cons_[i]),
+                IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons);
-        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
     }
 
     void collect_post_opt_info(const VectorXd &EC, const VectorXd &EM, const VectorXd &IC,
@@ -1692,19 +1692,19 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (int i = 0; i < this->phases.size(); i++) {
             int EStart = 0;
             if (i > 0)
-                EStart = this->num_phase_eq_cons.segment(0, i).sum();
+                EStart = this->num_phase_eq_cons_.segment(0, i).sum();
             int IStart = 0;
             if (i > 0)
-                IStart = this->num_phase_iq_cons.segment(0, i).sum();
-            this->phases[i]->collect_post_opt_info(EC.segment(EStart, this->num_phase_eq_cons[i]),
-                                                   EM.segment(EStart, this->num_phase_eq_cons[i]),
-                                                   IC.segment(IStart, this->num_phase_iq_cons[i]),
-                                                   IM.segment(IStart, this->num_phase_iq_cons[i]));
+                IStart = this->num_phase_iq_cons_.segment(0, i).sum();
+            this->phases[i]->collect_post_opt_info(EC.segment(EStart, this->num_phase_eq_cons_[i]),
+                                                   EM.segment(EStart, this->num_phase_eq_cons_[i]),
+                                                   IC.segment(IStart, this->num_phase_iq_cons_[i]),
+                                                   IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons);
-        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons);
-        this->active_eq_cons_ = EC.tail(this->num_link_eq_cons);
-        this->active_iq_cons_ = IC.tail(this->num_link_iq_cons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
+        this->active_eq_cons_ = EC.tail(this->num_link_eq_cons_);
+        this->active_iq_cons_ = IC.tail(this->num_link_iq_cons_);
     }
 
   public:

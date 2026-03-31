@@ -121,39 +121,39 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
 
     if (this->phases.size() > 0) {
 
-        this->num_phase_vars.resize(this->phases.size());
-        this->num_phase_eq_cons.resize(this->phases.size());
-        this->num_phase_iq_cons.resize(this->phases.size());
+        this->num_phase_vars_.resize(this->phases.size());
+        this->num_phase_eq_cons_.resize(this->phases.size());
+        this->num_phase_iq_cons_.resize(this->phases.size());
 
         for (int i = 0; i < this->phases.size(); i++) {
             this->phases[i]->num_partitions_ = this->num_partitions_;
             this->phases[i]->init_indexing();
-            this->num_phase_vars[i] = this->phases[i]->indexer_.num_phase_vars;
+            this->num_phase_vars_[i] = this->phases[i]->indexer_.num_phase_vars_;
         }
 
         this->phases[0]->transcribe_phase(0, 0, 0, this->nlp_, 0);
-        this->num_phase_eq_cons[0] = this->phases[0]->indexer_.num_phase_eq_cons;
-        this->num_phase_iq_cons[0] = this->phases[0]->indexer_.num_phase_iq_cons;
+        this->num_phase_eq_cons_[0] = this->phases[0]->indexer_.num_phase_eq_cons_;
+        this->num_phase_iq_cons_[0] = this->phases[0]->indexer_.num_phase_iq_cons_;
 
         for (int i = 1; i < this->phases.size(); i++) {
-            int Vstart = this->num_phase_vars.segment(0, i).sum();
-            int Estart = this->num_phase_eq_cons.segment(0, i).sum();
-            int Istart = this->num_phase_iq_cons.segment(0, i).sum();
+            int Vstart = this->num_phase_vars_.segment(0, i).sum();
+            int Estart = this->num_phase_eq_cons_.segment(0, i).sum();
+            int Istart = this->num_phase_iq_cons_.segment(0, i).sum();
 
             this->phases[i]->transcribe_phase(Vstart, Estart, Istart, this->nlp_, i);
-            this->num_phase_eq_cons[i] = this->phases[i]->indexer_.num_phase_eq_cons;
-            this->num_phase_iq_cons[i] = this->phases[i]->indexer_.num_phase_iq_cons;
+            this->num_phase_eq_cons_[i] = this->phases[i]->indexer_.num_phase_eq_cons_;
+            this->num_phase_iq_cons_[i] = this->phases[i]->indexer_.num_phase_iq_cons_;
         }
 
     } else {
 
-        this->num_phase_vars.resize(1);
-        this->num_phase_eq_cons.resize(1);
-        this->num_phase_iq_cons.resize(1);
+        this->num_phase_vars_.resize(1);
+        this->num_phase_eq_cons_.resize(1);
+        this->num_phase_iq_cons_.resize(1);
 
-        this->num_phase_vars[0] = 0;
-        this->num_phase_eq_cons[0] = 0;
-        this->num_phase_iq_cons[0] = 0;
+        this->num_phase_vars_[0] = 0;
+        this->num_phase_eq_cons_[0] = 0;
+        this->num_phase_iq_cons_[0] = 0;
     }
 }
 
@@ -229,7 +229,7 @@ void tycho::oc::OptimalControlProblem::check_functions() {
         for (int i = 0; i < func.link_params_.size(); i++) {
             if (func.link_params_[i].size() > 0) {
 
-                if (func.link_params_[i].maxCoeff() >= this->num_link_params ||
+                if (func.link_params_[i].maxCoeff() >= this->num_link_params_ ||
                     func.link_params_[i].minCoeff() < 0) {
 
                     fmt::print(fmt::fg(fmt::color::red),
@@ -258,21 +258,21 @@ void tycho::oc::OptimalControlProblem::check_functions() {
 
 void tycho::oc::OptimalControlProblem::transcribe_links() {
 
-    int NextEq = this->num_phase_eq_cons.sum();
-    int NextIq = this->num_phase_iq_cons.sum();
+    int NextEq = this->num_phase_eq_cons_.sum();
+    int NextIq = this->num_phase_iq_cons_.sum();
 
-    int LinkVarStart = this->num_phase_vars.sum();
-    this->LinkParamLocs.resize(this->num_link_params);
-    for (int i = 0; i < this->num_link_params; i++) {
-        this->LinkParamLocs[i] = LinkVarStart + i;
+    int LinkVarStart = this->num_phase_vars_.sum();
+    this->link_param_locs_.resize(this->num_link_params_);
+    for (int i = 0; i < this->num_link_params_; i++) {
+        this->link_param_locs_[i] = LinkVarStart + i;
     }
 
     this->start_obj_ = int(this->nlp_->objectives_.size());
     this->start_eq_ = int(this->nlp_->equality_constraints_.size());
     this->start_iq_ = int(this->nlp_->inequality_constraints_.size());
-    this->num_eq_funs = 0;
-    this->num_iq_funs = 0;
-    this->num_obj_funs = 0;
+    this->num_eq_funs_ = 0;
+    this->num_iq_funs_ = 0;
+    this->num_obj_funs_ = 0;
     for (auto &[key, Eq] : this->link_equalities_) {
         auto VC = this->make_link_Vindex_Cindex(
             Eq.link_flag_, Eq.phase_reg_flags_, Eq.phases_to_link_, Eq.xtu_vars_, Eq.op_vars_,
@@ -291,7 +291,7 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
 
         this->nlp_->equality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
         Eq.global_index_ = this->nlp_->equality_constraints_.size() - 1;
-        this->num_eq_funs++;
+        this->num_eq_funs_++;
     }
     for (auto &[key, Iq] : this->link_inequalities_) {
         auto VC = this->make_link_Vindex_Cindex(
@@ -311,7 +311,7 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
 
         this->nlp_->inequality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
         Iq.global_index_ = this->nlp_->inequality_constraints_.size() - 1;
-        this->num_iq_funs++;
+        this->num_iq_funs_++;
     }
     for (auto &[key, Ob] : this->link_objectives_) {
         int dummy = 0;
@@ -333,11 +333,11 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
         this->nlp_->objectives_.emplace_back(ObjectiveFunction(Func, VC[0]));
         Ob.global_index_ = this->nlp_->objectives_.size() - 1;
 
-        this->num_obj_funs++;
+        this->num_obj_funs_++;
     }
 
-    this->num_link_eq_cons = NextEq - this->num_phase_eq_cons.sum();
-    this->num_link_iq_cons = NextIq - this->num_phase_iq_cons.sum();
+    this->num_link_eq_cons_ = NextEq - this->num_phase_eq_cons_.sum();
+    this->num_link_iq_cons_ = NextIq - this->num_phase_iq_cons_.sum();
 }
 
 void tycho::oc::OptimalControlProblem::calc_auto_scales() {
@@ -417,12 +417,12 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->transcribe_phases();
     this->transcribe_links();
 
-    this->num_prob_vars = this->num_phase_vars.sum() + this->num_link_params;
-    this->num_prob_eq_cons = this->num_phase_eq_cons.sum() + this->num_link_eq_cons;
-    this->num_prob_iq_cons = this->num_phase_iq_cons.sum() + this->num_link_iq_cons;
+    this->num_prob_vars_ = this->num_phase_vars_.sum() + this->num_link_params_;
+    this->num_prob_eq_cons_ = this->num_phase_eq_cons_.sum() + this->num_link_eq_cons_;
+    this->num_prob_iq_cons_ = this->num_phase_iq_cons_.sum() + this->num_link_iq_cons_;
     if (showstats)
         this->print_stats(showfuns);
-    this->nlp_->make_nlp(this->num_prob_vars, this->num_prob_eq_cons, this->num_prob_iq_cons);
+    this->nlp_->make_nlp(this->num_prob_vars_, this->num_prob_eq_cons_, this->num_prob_iq_cons_);
     this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
@@ -559,9 +559,9 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
     using std::endl;
     cout << "Problem Statistics" << endl << endl;
 
-    cout << "# Variables:    " << num_prob_vars << endl;
-    cout << "# equal_cons_:    " << num_prob_eq_cons << endl;
-    cout << "# InEqualCons:  " << num_prob_iq_cons << endl;
+    cout << "# Variables:    " << num_prob_vars_ << endl;
+    cout << "# equal_cons_:    " << num_prob_eq_cons_ << endl;
+    cout << "# InEqualCons:  " << num_prob_iq_cons_ << endl;
     cout << "# Phases:       " << this->phases.size() << endl << endl;
 
     for (int i = 0; i < this->phases.size(); i++) {
@@ -573,28 +573,28 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
 
     cout << "____________________________________________________________" << endl << endl;
     cout << "Link Statistics" << endl << endl;
-    cout << "# Link Params:    " << num_link_params << endl;
-    cout << "# Link equal_cons_:    " << num_link_eq_cons << endl;
-    cout << "# Link InEqualCons:  " << num_link_iq_cons << endl;
+    cout << "# Link Params:    " << num_link_params_ << endl;
+    cout << "# Link equal_cons_:    " << num_link_eq_cons_ << endl;
+    cout << "# Link InEqualCons:  " << num_link_iq_cons_ << endl;
 
     cout << "____________________________________________________________" << endl << endl;
 
     if (showfuns) {
         cout << "Objective Functions" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
-        for (int i = 0; i < this->num_obj_funs; i++) {
+        for (int i = 0; i < this->num_obj_funs_; i++) {
             cout << "************************************************************" << endl << endl;
             this->nlp_->objectives_[this->start_obj_ + i].print_data();
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
-        for (int i = 0; i < this->num_eq_funs; i++) {
+        for (int i = 0; i < this->num_eq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
             this->nlp_->equality_constraints_[this->start_eq_ + i].print_data();
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
-        for (int i = 0; i < this->num_iq_funs; i++) {
+        for (int i = 0; i < this->num_iq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
             this->nlp_->inequality_constraints_[this->start_iq_ + i].print_data();
         }
@@ -691,7 +691,7 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vinde
                 start += VinTemp.rows();
             }
             for (int j = 0; j < lv[i].size(); j++) {
-                v_index_(start, i) = this->LinkParamLocs[lv[i][j]];
+                v_index_(start, i) = this->link_param_locs_[lv[i][j]];
                 start++;
             }
         }

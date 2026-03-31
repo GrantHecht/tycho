@@ -36,22 +36,22 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
 
-    double CardinalSpacing;
-    double Scale = 1.0;
+    double cardinal_spacing_;
+    double scale_ = 1.0;
     static const bool IsLinearFunction = true;
 
     SingleMeshSpacing() {}
-    SingleMeshSpacing(double cs) { CardinalSpacing = cs; }
+    SingleMeshSpacing(double cs) { cardinal_spacing_ = cs; }
 
-    void set_spacing(double cs) { CardinalSpacing = cs; }
+    void set_spacing(double cs) { cardinal_spacing_ = cs; }
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
     }
 
     template <class InType, class OutType, class JacType>
@@ -62,13 +62,13 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
 
-        jx(0, 0) = (1.0 - CardinalSpacing);
+        jx(0, 0) = (1.0 - cardinal_spacing_);
         jx(0, 1) = -1.0;
-        jx(0, 2) = CardinalSpacing;
-        jx *= Scale;
+        jx(0, 2) = cardinal_spacing_;
+        jx *= scale_;
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
@@ -94,13 +94,13 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
 
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
 
-        jx(0, 0) = (1.0 - CardinalSpacing);
+        jx(0, 0) = (1.0 - cardinal_spacing_);
         jx(0, 1) = -1.0;
-        jx(0, 2) = CardinalSpacing;
-        jx *= Scale;
+        jx(0, 2) = cardinal_spacing_;
+        jx *= scale_;
         adjgrad = (adjvars.transpose() * jx_).transpose();
     }
 };

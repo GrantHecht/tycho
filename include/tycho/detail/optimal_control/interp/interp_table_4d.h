@@ -32,40 +32,40 @@ struct InterpTable4D {
 
     enum class InterpType { cubic_interp, linear_interp };
 
-    Eigen::VectorXd xs;
-    Eigen::VectorXd ys;
-    Eigen::VectorXd zs;
-    Eigen::VectorXd ws;
+    Eigen::VectorXd xs_;
+    Eigen::VectorXd ys_;
+    Eigen::VectorXd zs_;
+    Eigen::VectorXd ws_;
 
     // numpy meshgrid ij format (x,y,z,w)
-    Eigen::Tensor<double, 4> fs;
+    Eigen::Tensor<double, 4> fs_;
 
     // Holds f, and all derivatives at each data point contiguously
     // Improved runtime by factor of two over holding separately like in the 3d table
-    Eigen::Tensor<Eigen::Matrix<double, 16, 1>, 4> fs_all;
+    Eigen::Tensor<Eigen::Matrix<double, 16, 1>, 4> fs_all_;
 
-    Eigen::Tensor<Eigen::Matrix<double, 256, 1>, 4> alphavecs;
+    Eigen::Tensor<Eigen::Matrix<double, 256, 1>, 4> alphavecs_;
 
-    InterpType interp_kind = InterpType::linear_interp;
+    InterpType interp_kind_ = InterpType::linear_interp;
 
-    bool xeven = true;
-    bool yeven = true;
-    bool zeven = true;
-    bool weven = true;
+    bool xeven_ = true;
+    bool yeven_ = true;
+    bool zeven_ = true;
+    bool weven_ = true;
 
-    int xsize;
-    double xtotal;
-    int ysize;
-    double ytotal;
-    int zsize;
-    double ztotal;
-    int wsize;
-    double wtotal;
+    int xsize_;
+    double xtotal_;
+    int ysize_;
+    double ytotal_;
+    int zsize_;
+    double ztotal_;
+    int wsize_;
+    double wtotal_;
 
-    bool cache_alpha = false;
+    bool cache_alpha_ = false;
 
-    bool WarnOutOfBounds = true;
-    bool ThrowOutOfBounds = false;
+    bool warn_out_of_bounds_ = true;
+    bool throw_out_of_bounds_ = false;
 
     InterpTable4D() {}
 
@@ -74,109 +74,109 @@ struct InterpTable4D {
 
                   const Eigen::Tensor<double, 4> &Fs, std::string kind, bool cache) {
 
-        this->xs = Xs;
-        this->ys = Ys;
-        this->zs = Zs;
-        this->ws = Ws;
+        this->xs_ = Xs;
+        this->ys_ = Ys;
+        this->zs_ = Zs;
+        this->ws_ = Ws;
 
-        this->fs = Fs;
-        this->cache_alpha = cache;
+        this->fs_ = Fs;
+        this->cache_alpha_ = cache;
 
         if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind = InterpType::cubic_interp;
+            this->interp_kind_ = InterpType::cubic_interp;
         } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind = InterpType::linear_interp;
+            this->interp_kind_ = InterpType::linear_interp;
         } else {
             throw std::invalid_argument("Unrecognized interpolation type");
         }
 
-        xsize = xs.size();
-        ysize = ys.size();
-        zsize = zs.size();
-        wsize = ws.size();
+        xsize_ = xs_.size();
+        ysize_ = ys_.size();
+        zsize_ = zs_.size();
+        wsize_ = ws_.size();
 
-        if (xsize < 5) {
+        if (xsize_ < 5) {
             throw std::invalid_argument("X coordinates must be larger than 4");
         }
-        if (ysize < 5) {
+        if (ysize_ < 5) {
             throw std::invalid_argument("Y  coordinates must be larger than 4");
         }
-        if (zsize < 5) {
+        if (zsize_ < 5) {
             throw std::invalid_argument("Z  coordinates must be larger than 4");
         }
-        if (wsize < 5) {
+        if (wsize_ < 5) {
             throw std::invalid_argument("W  coordinates must be larger than 4");
         }
 
-        if (xsize != fs.dimension(0)) {
+        if (xsize_ != fs_.dimension(0)) {
             throw std::invalid_argument("X coordinates must be first dimension of value tensor");
         }
-        if (ysize != fs.dimension(1)) {
+        if (ysize_ != fs_.dimension(1)) {
             throw std::invalid_argument("Y coordinates must be second dimension of value tensor");
         }
-        if (zsize != fs.dimension(2)) {
+        if (zsize_ != fs_.dimension(2)) {
             throw std::invalid_argument("Z coordinates must be third dimension of value tensor");
         }
-        if (wsize != fs.dimension(3)) {
+        if (wsize_ != fs_.dimension(3)) {
             throw std::invalid_argument("W coordinates must be third dimension of value tensor");
         }
 
-        for (int i = 0; i < xsize - 1; i++) {
-            if (xs[i + 1] < xs[i]) {
+        for (int i = 0; i < xsize_ - 1; i++) {
+            if (xs_[i + 1] < xs_[i]) {
                 throw std::invalid_argument("X coordinates must be in ascending order");
             }
         }
-        for (int i = 0; i < ysize - 1; i++) {
-            if (ys[i + 1] < ys[i]) {
+        for (int i = 0; i < ysize_ - 1; i++) {
+            if (ys_[i + 1] < ys_[i]) {
                 throw std::invalid_argument("Y coordinates must be in ascending order");
             }
         }
-        for (int i = 0; i < zsize - 1; i++) {
-            if (zs[i + 1] < zs[i]) {
+        for (int i = 0; i < zsize_ - 1; i++) {
+            if (zs_[i + 1] < zs_[i]) {
                 throw std::invalid_argument("Z coordinates must be in ascending order");
             }
         }
-        for (int i = 0; i < wsize - 1; i++) {
-            if (ws[i + 1] < ws[i]) {
+        for (int i = 0; i < wsize_ - 1; i++) {
+            if (ws_[i + 1] < ws_[i]) {
                 throw std::invalid_argument("W coordinates must be in ascending order");
             }
         }
 
-        xtotal = xs[xsize - 1] - xs[0];
-        ytotal = ys[ysize - 1] - ys[0];
-        ztotal = zs[zsize - 1] - zs[0];
-        wtotal = ws[wsize - 1] - ws[0];
+        xtotal_ = xs_[xsize_ - 1] - xs_[0];
+        ytotal_ = ys_[ysize_ - 1] - ys_[0];
+        ztotal_ = zs_[zsize_ - 1] - zs_[0];
+        wtotal_ = ws_[wsize_ - 1] - ws_[0];
 
         Eigen::VectorXd testx;
-        testx.setLinSpaced(xsize, xs[0], xs[xsize - 1]);
+        testx.setLinSpaced(xsize_, xs_[0], xs_[xsize_ - 1]);
         Eigen::VectorXd testy;
-        testy.setLinSpaced(ysize, ys[0], ys[ysize - 1]);
+        testy.setLinSpaced(ysize_, ys_[0], ys_[ysize_ - 1]);
         Eigen::VectorXd testz;
-        testz.setLinSpaced(zsize, zs[0], zs[zsize - 1]);
+        testz.setLinSpaced(zsize_, zs_[0], zs_[zsize_ - 1]);
         Eigen::VectorXd testw;
-        testw.setLinSpaced(wsize, ws[0], ws[wsize - 1]);
+        testw.setLinSpaced(wsize_, ws_[0], ws_[wsize_ - 1]);
 
-        double xerr = (xs - testx).lpNorm<Eigen::Infinity>();
-        double yerr = (ys - testy).lpNorm<Eigen::Infinity>();
-        double zerr = (zs - testz).lpNorm<Eigen::Infinity>();
-        double werr = (ws - testw).lpNorm<Eigen::Infinity>();
+        double xerr = (xs_ - testx).lpNorm<Eigen::Infinity>();
+        double yerr = (ys_ - testy).lpNorm<Eigen::Infinity>();
+        double zerr = (zs_ - testz).lpNorm<Eigen::Infinity>();
+        double werr = (ws_ - testw).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal) * 1.0e-12) {
-            this->xeven = false;
+        if (xerr > abs(xtotal_) * 1.0e-12) {
+            this->xeven_ = false;
         }
-        if (yerr > abs(ytotal) * 1.0e-12) {
-            this->yeven = false;
+        if (yerr > abs(ytotal_) * 1.0e-12) {
+            this->yeven_ = false;
         }
-        if (zerr > abs(ztotal) * 1.0e-12) {
-            this->zeven = false;
+        if (zerr > abs(ztotal_) * 1.0e-12) {
+            this->zeven_ = false;
         }
-        if (werr > abs(wtotal) * 1.0e-12) {
-            this->weven = false;
+        if (werr > abs(wtotal_) * 1.0e-12) {
+            this->weven_ = false;
         }
 
-        if (this->interp_kind == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::cubic_interp) {
             this->calc_derivs();
-            if (this->cache_alpha) {
+            if (this->cache_alpha_) {
                 this->cache_alphavecs();
             }
         }
@@ -199,10 +199,10 @@ struct InterpTable4D {
 
     std::tuple<int, int, int, int> get_xyzwelems(double x, double y, double z, double w) const {
 
-        int xelem = this->find_elem(this->xs, this->xeven, x);
-        int yelem = this->find_elem(this->ys, this->yeven, y);
-        int zelem = this->find_elem(this->zs, this->zeven, z);
-        int welem = this->find_elem(this->ws, this->weven, w);
+        int xelem = this->find_elem(this->xs_, this->xeven_, x);
+        int yelem = this->find_elem(this->ys_, this->yeven_, y);
+        int zelem = this->find_elem(this->zs_, this->zeven_, z);
+        int welem = this->find_elem(this->ws_, this->weven_, w);
 
         return std::tuple{xelem, yelem, zelem, welem};
     }
@@ -232,24 +232,24 @@ struct InterpTable4D {
         // Fourth Cross Deriv
         Eigen::Tensor<double, 4> fs_dxdydzdw;
 
-        fs_dx.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dy.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dz.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
+        fs_dx.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dy.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dz.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
 
-        fs_dxdy.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dxdz.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dxdw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dydz.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dydw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dzdw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
+        fs_dxdy.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dxdz.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dxdw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dydz.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dydw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dzdw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
 
-        fs_dxdydz.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dxdydw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dxdzdw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
-        fs_dydzdw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
+        fs_dxdydz.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dxdydw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dxdzdw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
+        fs_dydzdw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
 
-        fs_dxdydzdw.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
+        fs_dxdydzdw.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
 
         auto fdiffimpl = [&](int dir, bool even, const auto &ts, const auto &src, auto &dest) {
             Eigen::Matrix<double, 5, 5> stens;
@@ -300,34 +300,34 @@ struct InterpTable4D {
             }
         };
 
-        fdiffimpl(0, this->xeven, this->xs, this->fs, fs_dx);
-        fdiffimpl(1, this->yeven, this->ys, this->fs, fs_dy);
-        fdiffimpl(2, this->zeven, this->zs, this->fs, fs_dz);
-        fdiffimpl(3, this->weven, this->ws, this->fs, fs_dw);
+        fdiffimpl(0, this->xeven_, this->xs_, this->fs_, fs_dx);
+        fdiffimpl(1, this->yeven_, this->ys_, this->fs_, fs_dy);
+        fdiffimpl(2, this->zeven_, this->zs_, this->fs_, fs_dz);
+        fdiffimpl(3, this->weven_, this->ws_, this->fs_, fs_dw);
 
-        fdiffimpl(1, this->yeven, this->ys, fs_dx, fs_dxdy);
-        fdiffimpl(2, this->zeven, this->zs, fs_dx, fs_dxdz);
-        fdiffimpl(3, this->weven, this->ws, fs_dx, fs_dxdw);
-        fdiffimpl(2, this->zeven, this->zs, fs_dy, fs_dydz);
-        fdiffimpl(3, this->weven, this->ws, fs_dy, fs_dydw);
-        fdiffimpl(3, this->weven, this->ws, fs_dz, fs_dzdw);
+        fdiffimpl(1, this->yeven_, this->ys_, fs_dx, fs_dxdy);
+        fdiffimpl(2, this->zeven_, this->zs_, fs_dx, fs_dxdz);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dx, fs_dxdw);
+        fdiffimpl(2, this->zeven_, this->zs_, fs_dy, fs_dydz);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dy, fs_dydw);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dz, fs_dzdw);
 
-        fdiffimpl(2, this->zeven, this->zs, fs_dxdy, fs_dxdydz);
-        fdiffimpl(3, this->weven, this->ws, fs_dxdy, fs_dxdydw);
-        fdiffimpl(3, this->weven, this->ws, fs_dxdz, fs_dxdzdw);
-        fdiffimpl(3, this->weven, this->ws, fs_dydz, fs_dydzdw);
+        fdiffimpl(2, this->zeven_, this->zs_, fs_dxdy, fs_dxdydz);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dxdy, fs_dxdydw);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dxdz, fs_dxdzdw);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dydz, fs_dydzdw);
 
-        fdiffimpl(3, this->weven, this->ws, fs_dxdydz, fs_dxdydzdw);
+        fdiffimpl(3, this->weven_, this->ws_, fs_dxdydz, fs_dxdydzdw);
 
         Eigen::Matrix<double, 16, 1> tmp;
 
-        fs_all.resize(fs.dimension(0), fs.dimension(1), fs.dimension(2), fs.dimension(3));
+        fs_all_.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2), fs_.dimension(3));
 
-        for (int i = 0; i < wsize; i++) {
-            for (int j = 0; j < zsize; j++) {
-                for (int k = 0; k < ysize; k++) {
-                    for (int l = 0; l < xsize; l++) {
-                        tmp[0] = fs(l, k, j, i);
+        for (int i = 0; i < wsize_; i++) {
+            for (int j = 0; j < zsize_; j++) {
+                for (int k = 0; k < ysize_; k++) {
+                    for (int l = 0; l < xsize_; l++) {
+                        tmp[0] = fs_(l, k, j, i);
                         tmp[1] = fs_dx(l, k, j, i);
                         tmp[2] = fs_dy(l, k, j, i);
                         tmp[3] = fs_dz(l, k, j, i);
@@ -343,7 +343,7 @@ struct InterpTable4D {
                         tmp[13] = fs_dxdzdw(l, k, j, i);
                         tmp[14] = fs_dydzdw(l, k, j, i);
                         tmp[15] = fs_dxdydzdw(l, k, j, i);
-                        fs_all(l, k, j, i) = tmp;
+                        fs_all_(l, k, j, i) = tmp;
                     }
                 }
             }
@@ -352,10 +352,10 @@ struct InterpTable4D {
 
     Eigen::Matrix<double, 256, 1> calc_alphavec(int xelem, int yelem, int zelem, int welem) const {
 
-        double xstep = xs[xelem + 1] - xs[xelem];
-        double ystep = ys[yelem + 1] - ys[yelem];
-        double zstep = zs[zelem + 1] - zs[zelem];
-        double wstep = ws[welem + 1] - ws[welem];
+        double xstep = xs_[xelem + 1] - xs_[xelem];
+        double ystep = ys_[yelem + 1] - ys_[yelem];
+        double zstep = zs_[zelem + 1] - zs_[zelem];
+        double wstep = ws_[welem + 1] - ws_[welem];
 
         Eigen::Matrix<double, 256, 1> bvec;
         Eigen::Matrix<double, 16, 1> tmp;
@@ -380,7 +380,7 @@ struct InterpTable4D {
 
         int corner = 0;
         auto fillop = [&](int xoffs, int yoffs, int zoffs, int woffs) {
-            tmp = this->fs_all(xelem + xoffs, yelem + yoffs, zelem + zoffs, welem + woffs)
+            tmp = this->fs_all_(xelem + xoffs, yelem + yoffs, zelem + zoffs, welem + woffs)
                       .cwiseProduct(scales);
             for (int i = 0; i < 16; i++) {
                 bvec[corner + 16 * i] = tmp[i];
@@ -410,22 +410,22 @@ struct InterpTable4D {
     }
 
     Eigen::Matrix<double, 256, 1> get_alphavec(int xelem, int yelem, int zelem, int welem) const {
-        if (this->cache_alpha) {
-            return this->alphavecs(xelem, yelem, zelem, welem);
+        if (this->cache_alpha_) {
+            return this->alphavecs_(xelem, yelem, zelem, welem);
         } else {
             return this->calc_alphavec(xelem, yelem, zelem, welem);
         }
     }
 
     void cache_alphavecs() {
-        this->alphavecs.resize(fs.dimension(0) - 1, fs.dimension(1) - 1, fs.dimension(2) - 1,
-                               fs.dimension(3) - 1);
+        this->alphavecs_.resize(fs_.dimension(0) - 1, fs_.dimension(1) - 1, fs_.dimension(2) - 1,
+                               fs_.dimension(3) - 1);
 
-        for (int i = 0; i < wsize - 1; i++) {
-            for (int j = 0; j < zsize - 1; j++) {
-                for (int k = 0; k < ysize - 1; k++) {
-                    for (int l = 0; l < xsize - 1; l++) {
-                        this->alphavecs(l, k, j, i) = this->calc_alphavec(l, k, j, i);
+        for (int i = 0; i < wsize_ - 1; i++) {
+            for (int j = 0; j < zsize_ - 1; j++) {
+                for (int k = 0; k < ysize_ - 1; k++) {
+                    for (int l = 0; l < xsize_ - 1; l++) {
+                        this->alphavecs_(l, k, j, i) = this->calc_alphavec(l, k, j, i);
                     }
                 }
             }
@@ -2651,41 +2651,41 @@ struct InterpTable4D {
     void interp_impl(double x, double y, double z, double w, int deriv, double &fval,
                      Eigen::Vector4<double> &dfxyzw, Eigen::Matrix4<double> &d2fxyzw) const {
 
-        if (WarnOutOfBounds || ThrowOutOfBounds) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal;
-            if (x < (xs[0] - xeps) || x > (xs[xs.size() - 1] + xeps)) {
+        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
+            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
 
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: x coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal;
-            if (y < (ys[0] - yeps) || y > (ys[ys.size() - 1]) + yeps) {
+            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: y coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
-            double zeps = std::numeric_limits<double>::epsilon() * ztotal;
-            if (z < (zs[0] - zeps) || z > (zs[zs.size() - 1]) + zeps) {
+            double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
+            if (z < (zs_[0] - zeps) || z > (zs_[zs_.size() - 1]) + zeps) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: z coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
-            double weps = std::numeric_limits<double>::epsilon() * wtotal;
-            if (w < (ws[0] - weps) || w > (ws[ws.size() - 1]) + weps) {
+            double weps = std::numeric_limits<double>::epsilon() * wtotal_;
+            if (w < (ws_[0] - weps) || w > (ws_[ws_.size() - 1]) + weps) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: w coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
@@ -2693,17 +2693,17 @@ struct InterpTable4D {
 
         auto [xelem, yelem, zelem, welem] = get_xyzwelems(x, y, z, w);
 
-        double xstep = xs[xelem + 1] - xs[xelem];
-        double ystep = ys[yelem + 1] - ys[yelem];
-        double zstep = zs[zelem + 1] - zs[zelem];
-        double wstep = ws[welem + 1] - ws[welem];
+        double xstep = xs_[xelem + 1] - xs_[xelem];
+        double ystep = ys_[yelem + 1] - ys_[yelem];
+        double zstep = zs_[zelem + 1] - zs_[zelem];
+        double wstep = ws_[welem + 1] - ws_[welem];
 
-        double xf = (x - xs[xelem]) / xstep;
-        double yf = (y - ys[yelem]) / ystep;
-        double zf = (z - zs[zelem]) / zstep;
-        double wf = (w - ws[welem]) / wstep;
+        double xf = (x - xs_[xelem]) / xstep;
+        double yf = (y - ys_[yelem]) / ystep;
+        double zf = (z - zs_[zelem]) / zstep;
+        double wf = (w - ws_[welem]) / wstep;
 
-        if (this->interp_kind == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::cubic_interp) {
             Eigen::Matrix<double, 256, 1> alphavec = this->get_alphavec(xelem, yelem, zelem, welem);
 
             double xf2 = xf * xf;
@@ -2865,7 +2865,7 @@ struct InterpTable4D {
                     for (int k = 0; k < 2; k++) {
                         for (int l = 0; l < 2; l++) {
 
-                            double fcorner = this->fs(xelem + l, yelem + k, zelem + j, welem + i);
+                            double fcorner = this->fs_(xelem + l, yelem + k, zelem + j, welem + i);
 
                             double xweight = (l == 0 ? 1 - xf : xf);
                             double yweight = (k == 0 ? 1 - yf : yf);

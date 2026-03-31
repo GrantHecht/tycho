@@ -62,17 +62,17 @@ template <int _XV, int _UV, int _PV> struct ODEXVSizes : ODEConstSizes<_XV, _UV,
 };
 
 template <int _UV, int _PV> struct ODEXVSizes<-1, _UV, _PV> : ODEConstSizes<-1, _UV, _PV> {
-    inline int t_var() const { return this->XVdynamic; }
-    inline int x_vars() const { return this->XVdynamic; }
-    inline int xt_vars() const { return this->XtVdynamic; }
+    inline int t_var() const { return this->xv_dynamic_; }
+    inline int x_vars() const { return this->xv_dynamic_; }
+    inline int xt_vars() const { return this->xtv_dynamic_; }
     void set_xvars(int xv) {
-        this->XVdynamic = xv;
-        this->XtVdynamic = xv + 1;
+        this->xv_dynamic_ = xv;
+        this->xtv_dynamic_ = xv + 1;
     }
 
   protected:
-    int XVdynamic = 0;
-    int XtVdynamic = 0;
+    int xv_dynamic_ = 0;
+    int xtv_dynamic_ = 0;
 };
 
 template <int _XV, int _UV, int _PV> struct ODEXUVSizes : ODEXVSizes<_XV, _UV, _PV> {
@@ -81,12 +81,12 @@ template <int _XV, int _UV, int _PV> struct ODEXUVSizes : ODEXVSizes<_XV, _UV, _
     void set_uvars(int uv) {}
 };
 template <int _XV, int _PV> struct ODEXUVSizes<_XV, -1, _PV> : ODEXVSizes<_XV, -1, _PV> {
-    inline int u_vars() const { return this->UVdynamic; }
-    inline int xtu_vars() const { return this->UVdynamic + this->xt_vars(); }
-    void set_uvars(int uv) { this->UVdynamic = uv; }
+    inline int u_vars() const { return this->uv_dynamic_; }
+    inline int xtu_vars() const { return this->uv_dynamic_ + this->xt_vars(); }
+    void set_uvars(int uv) { this->uv_dynamic_ = uv; }
 
   protected:
-    int UVdynamic = 0;
+    int uv_dynamic_ = 0;
 };
 
 template <int _XV, int _UV, int _PV> struct ODEXUPVSizes : ODEXUVSizes<_XV, _UV, _PV> {
@@ -101,9 +101,9 @@ template <int _XV, int _UV, int _PV> struct ODEXUPVSizes : ODEXUVSizes<_XV, _UV,
 };
 
 template <int _XV, int _UV> struct ODEXUPVSizes<_XV, _UV, -1> : ODEXUVSizes<_XV, _UV, -1> {
-    inline int p_vars() const { return this->PVdynamic; }
-    inline int xtu_p_vars() const { return this->PVdynamic + this->xtu_vars(); }
-    void set_pvars(int pv) { this->PVdynamic = pv; }
+    inline int p_vars() const { return this->pv_dynamic_; }
+    inline int xtu_p_vars() const { return this->pv_dynamic_ + this->xtu_vars(); }
+    void set_pvars(int pv) { this->pv_dynamic_ = pv; }
     void set_xt_up_vars(int xv, int uv, int pv) {
         this->set_xvars(xv);
         this->set_uvars(uv);
@@ -111,7 +111,7 @@ template <int _XV, int _UV> struct ODEXUPVSizes<_XV, _UV, -1> : ODEXUVSizes<_XV,
     }
 
   protected:
-    int PVdynamic = 0;
+    int pv_dynamic_ = 0;
 };
 
 template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV> {

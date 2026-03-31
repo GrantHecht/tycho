@@ -639,7 +639,7 @@ void tycho::oc::ODEPhaseBase::refine_traj_manual(VectorXd DBS, VectorXi DPB) {
 
 std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::refine_traj_equal(int n) {
     this->check_mesh();
-    this->mesh_iters_.back().up_numsegs = n;
+    this->mesh_iters_.back().up_numsegs_ = n;
     Eigen::VectorXi dpb = VectorXi::Ones(n);
     Eigen::VectorXd bins = this->mesh_iters_.back().calc_bins(n);
     this->refine_traj_manual(bins, dpb);
@@ -931,9 +931,9 @@ void tycho::oc::ODEPhaseBase::transcribe_axis_funcs() {
     std::vector<ConstraintInterface> AxisFuncs;
     std::vector<ThreadingFlags> Tmodes;
     Eigen::VectorXi bins(this->num_partitions_ + 1);
-    bins.setLinSpaced(0, this->indexer_.num_nodal_states);
+    bins.setLinSpaced(0, this->indexer_.num_nodal_states_);
 
-    for (int i = 0; i < this->indexer_.num_nodal_states - 2; i++) {
+    for (int i = 0; i < this->indexer_.num_nodal_states_ - 2; i++) {
         AxisFuncs.emplace_back(SingleMeshSpacing(cspace[i + 1]));
         ThreadingFlags thrt = ThreadingFlags::Thread0;
         for (int j = 0; j < this->num_partitions_; j++) {
@@ -1332,17 +1332,17 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     if (showstats)
         this->indexer_.print_stats(showfuns);
 
-    if (this->indexer_.num_phase_eq_cons > this->indexer_.num_phase_vars) {
+    if (this->indexer_.num_phase_eq_cons_ > this->indexer_.num_phase_vars_) {
         fmt::print(fmt::fg(fmt::color::yellow),
                    "Transcription Warning!!!\n"
                    "Number of Equality Constraints({0:}) in phase exceeds number of free "
                    "variables({1:}).\n"
                    "You likely have a redundant constraint.\n",
-                   this->indexer_.num_phase_eq_cons, this->indexer_.num_phase_vars);
+                   this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_vars_);
     }
 
-    this->nlp_->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
-                         this->indexer_.num_phase_iq_cons);
+    this->nlp_->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                         this->indexer_.num_phase_iq_cons_);
 
     this->optimizer_->set_nlp(this->nlp_);
 }
@@ -1355,16 +1355,16 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
     this->transcribe_phase(0, 0, 0, nlp1, 0);
     if (false)
         this->indexer_.print_stats(false);
-    nlp1->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
-                   this->indexer_.num_phase_iq_cons);
+    nlp1->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                   this->indexer_.num_phase_iq_cons_);
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
     this->init_indexing();
     this->transcribe_phase(0, 0, 0, nlp2, 0);
     if (false)
         this->indexer_.print_stats(false);
-    nlp2->make_nlp(this->indexer_.num_phase_vars, this->indexer_.num_phase_eq_cons,
-                   this->indexer_.num_phase_iq_cons);
+    nlp2->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                   this->indexer_.num_phase_iq_cons_);
 
     Eigen::VectorXd v = this->make_solver_input();
     NonLinearProgram::nlp_test(v, n, nlp1, nlp2);
@@ -1397,30 +1397,30 @@ bool tycho::oc::ODEPhaseBase::check_mesh() {
     if (this->mesh_error_criteria_ == MeshErrorAggregation::ENDTOEND ||
         this->mesh_error_distributor_ == MeshErrorAggregation::ENDTOEND) {
         Eigen::VectorXd error_vec = this->calc_global_error();
-        this->mesh_iters_.back().global_error = error_vec.lpNorm<Eigen::Infinity>();
+        this->mesh_iters_.back().global_error_ = error_vec.lpNorm<Eigen::Infinity>();
     }
 
     double error_crit;
 
     switch (this->mesh_error_criteria_) {
     case MeshErrorAggregation::MAX:
-        error_crit = this->mesh_iters_.back().max_error;
+        error_crit = this->mesh_iters_.back().max_error_;
         break;
     case MeshErrorAggregation::AVG:
-        error_crit = this->mesh_iters_.back().avg_error;
+        error_crit = this->mesh_iters_.back().avg_error_;
         break;
     case MeshErrorAggregation::GEOMETRIC:
-        error_crit = this->mesh_iters_.back().gmean_error;
+        error_crit = this->mesh_iters_.back().gmean_error_;
         break;
     case MeshErrorAggregation::ENDTOEND:
-        error_crit = this->mesh_iters_.back().global_error;
+        error_crit = this->mesh_iters_.back().global_error_;
         break;
     default:
         throw std::invalid_argument("Unknown MeshErrorAggregation");
     }
 
     this->mesh_converged_ = (error_crit < this->mesh_tol_);
-    this->mesh_iters_.back().converged = this->mesh_converged_;
+    this->mesh_iters_.back().converged_ = this->mesh_converged_;
 
     return this->mesh_converged_;
 }
@@ -1428,10 +1428,10 @@ bool tycho::oc::ODEPhaseBase::check_mesh() {
 void tycho::oc::ODEPhaseBase::update_mesh() {
 
     double ntemp = 0;
-    for (int i = 0; i < this->mesh_iters_.back().error.size() - 1; i++) {
+    for (int i = 0; i < this->mesh_iters_.back().error_.size() - 1; i++) {
 
         double nsegs =
-            std::pow((this->mesh_iters_.back().error[i] * this->mesh_err_factor_) / this->mesh_tol_,
+            std::pow((this->mesh_iters_.back().error_[i] * this->mesh_err_factor_) / this->mesh_tol_,
                      1 / (this->order_ + 1));
         ntemp += std::max(this->mesh_red_factor_, nsegs);
     }
@@ -1471,7 +1471,7 @@ void tycho::oc::ODEPhaseBase::update_mesh() {
     }
 
     Eigen::VectorXi dpb = VectorXi::Ones(bins.size() - 1);
-    this->mesh_iters_.back().up_numsegs = bins.size() - 1;
+    this->mesh_iters_.back().up_numsegs_ = bins.size() - 1;
 
     this->refine_traj_manual(bins, dpb);
 }

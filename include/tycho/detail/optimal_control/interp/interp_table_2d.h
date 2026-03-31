@@ -32,28 +32,28 @@ struct InterpTable2D {
 
     enum class InterpType { cubic_interp, linear_interp };
 
-    Eigen::VectorXd xs;
-    Eigen::VectorXd ys;
+    Eigen::VectorXd xs_;
+    Eigen::VectorXd ys_;
 
     using MatType = Eigen::Matrix<double, -1, -1, Eigen::RowMajor>;
 
-    MatType zs;
-    MatType dzxs;
-    MatType dzys;
-    MatType dzys_dxs;
+    MatType zs_;
+    MatType dzxs_;
+    MatType dzys_;
+    MatType dzys_dxs_;
 
-    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor> all_dat;
+    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor> all_dat_;
 
-    bool WarnOutOfBounds = true;
-    bool ThrowOutOfBounds = false;
+    bool warn_out_of_bounds_ = true;
+    bool throw_out_of_bounds_ = false;
 
-    InterpType interp_kind = InterpType::cubic_interp;
-    bool xeven = true;
-    bool yeven = true;
-    int xsize;
-    double xtotal;
-    int ysize;
-    double ytotal;
+    InterpType interp_kind_ = InterpType::cubic_interp;
+    bool xeven_ = true;
+    bool yeven_ = true;
+    int xsize_;
+    double xtotal_;
+    int ysize_;
+    double ytotal_;
 
     InterpTable2D() {}
 
@@ -66,72 +66,72 @@ struct InterpTable2D {
                   std::string kind) {
 
         if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind = InterpType::cubic_interp;
+            this->interp_kind_ = InterpType::cubic_interp;
         } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind = InterpType::linear_interp;
+            this->interp_kind_ = InterpType::linear_interp;
         } else {
             throw std::invalid_argument("Unrecognized interpolation type");
         }
 
-        this->xs = Xs;
-        this->ys = Ys;
-        this->zs = Zs;
+        this->xs_ = Xs;
+        this->ys_ = Ys;
+        this->zs_ = Zs;
 
-        xsize = xs.size();
-        ysize = ys.size();
+        xsize_ = xs_.size();
+        ysize_ = ys_.size();
 
-        if (xsize < 5) {
+        if (xsize_ < 5) {
             throw std::invalid_argument("X coordinates must be larger than 4");
         }
-        if (ysize < 5) {
+        if (ysize_ < 5) {
             throw std::invalid_argument("Y  coordinates must be larger than 4");
         }
 
-        if (xsize != zs.cols()) {
+        if (xsize_ != zs_.cols()) {
             throw std::invalid_argument("X coordinates must match cols in Z matrix");
         }
-        if (ysize != zs.rows()) {
+        if (ysize_ != zs_.rows()) {
             throw std::invalid_argument("Y coordinates must match rows in Z matrix");
         }
 
-        for (int i = 0; i < xs.size() - 1; i++) {
-            if (xs[i + 1] < xs[i]) {
+        for (int i = 0; i < xs_.size() - 1; i++) {
+            if (xs_[i + 1] < xs_[i]) {
                 throw std::invalid_argument("X Coordinates must be in ascending order");
             }
         }
-        for (int i = 0; i < ys.size() - 1; i++) {
-            if (ys[i + 1] < ys[i]) {
+        for (int i = 0; i < ys_.size() - 1; i++) {
+            if (ys_[i + 1] < ys_[i]) {
                 throw std::invalid_argument("Y Coordinates must be in ascending order");
             }
         }
 
-        xtotal = xs[xsize - 1] - xs[0];
-        ytotal = ys[ysize - 1] - ys[0];
+        xtotal_ = xs_[xsize_ - 1] - xs_[0];
+        ytotal_ = ys_[ysize_ - 1] - ys_[0];
 
         Eigen::VectorXd testx;
-        testx.setLinSpaced(xs.size(), xs[0], xs[xs.size() - 1]);
+        testx.setLinSpaced(xs_.size(), xs_[0], xs_[xs_.size() - 1]);
         Eigen::VectorXd testy;
-        testy.setLinSpaced(ys.size(), ys[0], ys[ys.size() - 1]);
+        testy.setLinSpaced(ys_.size(), ys_[0], ys_[ys_.size() - 1]);
 
-        double xerr = (xs - testx).lpNorm<Eigen::Infinity>();
-        double yerr = (ys - testy).lpNorm<Eigen::Infinity>();
+        double xerr = (xs_ - testx).lpNorm<Eigen::Infinity>();
+        double yerr = (ys_ - testy).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal) * 1.0e-12) {
-            this->xeven = false;
+        if (xerr > abs(xtotal_) * 1.0e-12) {
+            this->xeven_ = false;
         }
-        if (yerr > abs(ytotal) * 1.0e-12) {
-            this->yeven = false;
+        if (yerr > abs(ytotal_) * 1.0e-12) {
+            this->yeven_ = false;
         }
 
-        if (this->interp_kind == InterpType::cubic_interp)
+        if (this->interp_kind_ == InterpType::cubic_interp)
             calc_derivs();
     }
 
     void calc_derivs() {
-        dzxs.resize(ysize, xsize);
-        dzys.resize(ysize, xsize);
-        dzys_dxs.resize(ysize, xsize);
-        all_dat.resize(ysize, xsize);
+        dzxs_.resize(ysize_, xsize_);
+        dzys_.resize(ysize_, xsize_);
+        dzys_dxs_.resize(ysize_, xsize_);
+        all_dat_.resize(ysize_, xsize_);
 
         Eigen::Matrix<double, 5, 5> stens;
         stens.row(0).setOnes();
@@ -141,28 +141,28 @@ struct InterpTable2D {
         Eigen::Matrix<double, 5, 1> coeffs;
 
         bool hitcent = false;
-        for (int i = 0; i < this->ysize; i++) {
+        for (int i = 0; i < this->ysize_; i++) {
             int start = 0;
             bool recalc = true;
-            if (i + 2 <= this->ysize - 1 && i - 2 >= 0) {
+            if (i + 2 <= this->ysize_ - 1 && i - 2 >= 0) {
                 // central difference
-                if (this->yeven && hitcent) {
+                if (this->yeven_ && hitcent) {
                     recalc = false;
                 }
                 hitcent = true;
                 start = i - 2;
-            } else if (i < this->ysize - 1 - i) {
+            } else if (i < this->ysize_ - 1 - i) {
                 // forward difference
                 start = 0;
             } else {
                 // backward difference
-                start = this->ysize - 5;
+                start = this->ysize_ - 5;
             }
-            int stepdir = (i < this->ysize - 1) ? 1 : -1;
-            double yi = this->ys[i];
-            double ystep = std::abs(this->ys[i + stepdir] - yi);
+            int stepdir = (i < this->ysize_ - 1) ? 1 : -1;
+            double yi = this->ys_[i];
+            double ystep = std::abs(this->ys_[i + stepdir] - yi);
             if (recalc) {
-                times = this->ys.segment(start, 5);
+                times = this->ys_.segment(start, 5);
                 times -= Eigen::Matrix<double, 5, 1>::Constant(yi);
                 times /= ystep;
                 stens.row(1) = times.transpose();
@@ -171,32 +171,32 @@ struct InterpTable2D {
                 stens.row(4) = stens.row(3).cwiseProduct(times.transpose());
                 coeffs = stens.inverse() * rhs;
             }
-            dzys.row(i) = (coeffs / ystep).transpose() * this->zs.middleRows(start, 5);
+            dzys_.row(i) = (coeffs / ystep).transpose() * this->zs_.middleRows(start, 5);
         }
 
         hitcent = false;
-        for (int i = 0; i < this->xsize; i++) {
+        for (int i = 0; i < this->xsize_; i++) {
             int start = 0;
             bool recalc = true;
-            if (i + 2 <= this->xsize - 1 && i - 2 >= 0) {
+            if (i + 2 <= this->xsize_ - 1 && i - 2 >= 0) {
                 // central difference
-                if (this->xeven && hitcent) {
+                if (this->xeven_ && hitcent) {
                     recalc = false;
                 }
                 hitcent = true;
                 start = i - 2;
-            } else if (i < this->xsize - 1 - i) {
+            } else if (i < this->xsize_ - 1 - i) {
                 // forward difference
                 start = 0;
             } else {
                 // backward difference
-                start = this->xsize - 5;
+                start = this->xsize_ - 5;
             }
-            int stepdir = (i < this->xsize - 1) ? 1 : -1;
-            double xi = this->xs[i];
-            double xstep = std::abs(this->xs[i + stepdir] - xi);
+            int stepdir = (i < this->xsize_ - 1) ? 1 : -1;
+            double xi = this->xs_[i];
+            double xstep = std::abs(this->xs_[i + stepdir] - xi);
             if (recalc) {
-                times = this->xs.segment(start, 5);
+                times = this->xs_.segment(start, 5);
                 times -= Eigen::Matrix<double, 5, 1>::Constant(xi);
                 times /= xstep;
                 stens.row(1) = times.transpose();
@@ -206,40 +206,40 @@ struct InterpTable2D {
                 coeffs = stens.inverse() * rhs;
             }
 
-            dzxs.col(i) = this->zs.middleCols(start, 5) * (coeffs / xstep);
-            dzys_dxs.col(i) = this->dzys.middleCols(start, 5) * (coeffs / xstep);
+            dzxs_.col(i) = this->zs_.middleCols(start, 5) * (coeffs / xstep);
+            dzys_dxs_.col(i) = this->dzys_.middleCols(start, 5) * (coeffs / xstep);
         }
     }
 
-    int find_elem(const Eigen::VectorXd &vs, double v) const {
-        int center = int(vs.size() / 2);
-        int shift = (vs[center] > v) ? 0 : center;
-        auto it = std::upper_bound(vs.begin() + shift, vs.end(), v);
-        int elem = int(it - vs.begin()) - 1;
+    int find_elem(const Eigen::VectorXd &vals, double v) const {
+        int center = int(vals.size() / 2);
+        int shift = (vals[center] > v) ? 0 : center;
+        auto it = std::upper_bound(vals.begin() + shift, vals.end(), v);
+        int elem = int(it - vals.begin()) - 1;
         return elem;
     }
 
     std::tuple<int, int> get_xyelems(double x, double y) const {
         int xelem, yelem;
 
-        if (this->xeven) {
-            double xlocal = x - this->xs[0];
-            double xstep = this->xs[1] - this->xs[0];
-            xelem = std::min(int(xlocal / xstep), this->xsize - 2);
+        if (this->xeven_) {
+            double xlocal = x - this->xs_[0];
+            double xstep = this->xs_[1] - this->xs_[0];
+            xelem = std::min(int(xlocal / xstep), this->xsize_ - 2);
         } else {
-            xelem = this->find_elem(this->xs, x);
+            xelem = this->find_elem(this->xs_, x);
         }
 
-        if (this->yeven) {
-            double ylocal = y - this->ys[0];
-            double ystep = this->ys[1] - this->ys[0];
-            yelem = std::min(int(ylocal / ystep), this->ysize - 2);
+        if (this->yeven_) {
+            double ylocal = y - this->ys_[0];
+            double ystep = this->ys_[1] - this->ys_[0];
+            yelem = std::min(int(ylocal / ystep), this->ysize_ - 2);
         } else {
-            yelem = this->find_elem(this->ys, y);
+            yelem = this->find_elem(this->ys_, y);
         }
 
-        xelem = std::min(xelem, this->xsize - 2);
-        yelem = std::min(yelem, this->ysize - 2);
+        xelem = std::min(xelem, this->xsize_ - 2);
+        yelem = std::min(yelem, this->ysize_ - 2);
 
         xelem = std::max(xelem, 0);
         yelem = std::max(yelem, 0);
@@ -249,8 +249,8 @@ struct InterpTable2D {
 
     Eigen::Matrix4<double> get_amatrix(int xelem, int yelem) const {
 
-        double xstep = xs[xelem + 1] - xs[xelem];
-        double ystep = ys[yelem + 1] - ys[yelem];
+        double xstep = xs_[xelem + 1] - xs_[xelem];
+        double ystep = ys_[yelem + 1] - ys_[yelem];
 
         Eigen::Matrix4<double> a;
         Eigen::Matrix4<double> L;
@@ -261,25 +261,25 @@ struct InterpTable2D {
 
         Eigen::Matrix4<double> Z;
 
-        double z00 = zs(yelem, xelem);
-        double z10 = zs(yelem, xelem + 1);
-        double z01 = zs(yelem + 1, xelem);
-        double z11 = zs(yelem + 1, xelem + 1);
+        double z00 = zs_(yelem, xelem);
+        double z10 = zs_(yelem, xelem + 1);
+        double z01 = zs_(yelem + 1, xelem);
+        double z11 = zs_(yelem + 1, xelem + 1);
 
-        double dz00_x = dzxs(yelem, xelem) * xstep;
-        double dz10_x = dzxs(yelem, xelem + 1) * xstep;
-        double dz01_x = dzxs(yelem + 1, xelem) * xstep;
-        double dz11_x = dzxs(yelem + 1, xelem + 1) * xstep;
+        double dz00_x = dzxs_(yelem, xelem) * xstep;
+        double dz10_x = dzxs_(yelem, xelem + 1) * xstep;
+        double dz01_x = dzxs_(yelem + 1, xelem) * xstep;
+        double dz11_x = dzxs_(yelem + 1, xelem + 1) * xstep;
 
-        double dz00_y = dzys(yelem, xelem) * ystep;
-        double dz10_y = dzys(yelem, xelem + 1) * ystep;
-        double dz01_y = dzys(yelem + 1, xelem) * ystep;
-        double dz11_y = dzys(yelem + 1, xelem + 1) * ystep;
+        double dz00_y = dzys_(yelem, xelem) * ystep;
+        double dz10_y = dzys_(yelem, xelem + 1) * ystep;
+        double dz01_y = dzys_(yelem + 1, xelem) * ystep;
+        double dz11_y = dzys_(yelem + 1, xelem + 1) * ystep;
 
-        double dz00_xy = dzys_dxs(yelem, xelem) * xstep * ystep;
-        double dz10_xy = dzys_dxs(yelem, xelem + 1) * xstep * ystep;
-        double dz01_xy = dzys_dxs(yelem + 1, xelem) * xstep * ystep;
-        double dz11_xy = dzys_dxs(yelem + 1, xelem + 1) * xstep * ystep;
+        double dz00_xy = dzys_dxs_(yelem, xelem) * xstep * ystep;
+        double dz10_xy = dzys_dxs_(yelem, xelem + 1) * xstep * ystep;
+        double dz01_xy = dzys_dxs_(yelem + 1, xelem) * xstep * ystep;
+        double dz11_xy = dzys_dxs_(yelem + 1, xelem + 1) * xstep * ystep;
 
         Z << z00, z01, dz00_y, dz01_y, z10, z11, dz10_y, dz11_y, dz00_x, dz01_x, dz00_xy, dz01_xy,
             dz10_x, dz11_x, dz10_xy, dz11_xy;
@@ -291,23 +291,23 @@ struct InterpTable2D {
     void interp_impl(double x, double y, int deriv, double &z, Eigen::Vector2<double> &dzxy,
                      Eigen::Matrix2<double> &d2zxy) const {
 
-        if (WarnOutOfBounds || ThrowOutOfBounds) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal;
-            if (x < (xs[0] - xeps) || x > (xs[xs.size() - 1] + xeps)) {
+        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
+            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
 
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: x coordinate falls outside of InterpTable2D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal;
-            if (y < (ys[0] - yeps) || y > (ys[ys.size() - 1]) + yeps) {
+            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: y coordinate falls outside of InterpTable2D range. Data is "
                            "being extrapolated!!\n");
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
@@ -315,13 +315,13 @@ struct InterpTable2D {
 
         auto [xelem, yelem] = get_xyelems(x, y);
 
-        double xstep = xs[xelem + 1] - xs[xelem];
-        double ystep = ys[yelem + 1] - ys[yelem];
+        double xstep = xs_[xelem + 1] - xs_[xelem];
+        double ystep = ys_[yelem + 1] - ys_[yelem];
 
-        double xf = (x - xs[xelem]) / xstep;
-        double yf = (y - ys[yelem]) / ystep;
+        double xf = (x - xs_[xelem]) / xstep;
+        double yf = (y - ys_[yelem]) / ystep;
 
-        if (this->interp_kind == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::cubic_interp) {
 
             double yf2 = yf * yf;
             double yf3 = yf2 * yf;
@@ -365,12 +365,12 @@ struct InterpTable2D {
 
         } else {
             // Linear
-            double zx0y0 = zs(yelem, xelem);
-            double zx1y0 = zs(yelem, xelem + 1);
+            double zx0y0 = zs_(yelem, xelem);
+            double zx1y0 = zs_(yelem, xelem + 1);
             double zy0m = zx0y0 * (1 - xf) + zx1y0 * xf;
 
-            double zx0y1 = zs(yelem + 1, xelem);
-            double zx1y1 = zs(yelem + 1, xelem + 1);
+            double zx0y1 = zs_(yelem + 1, xelem);
+            double zx1y1 = zs_(yelem + 1, xelem + 1);
             double zy1m = zx0y1 * (1 - xf) + zx1y1 * xf;
 
             z = zy0m * (1 - yf) + zy1m * (yf);
@@ -398,15 +398,15 @@ struct InterpTable2D {
         return z;
     }
 
-    MatType interp(const MatType &xs, const MatType &ys) const {
-        MatType zs(xs.rows(), xs.cols());
+    MatType interp(const MatType &x_vals, const MatType &y_vals) const {
+        MatType z_out(x_vals.rows(), x_vals.cols());
 
-        for (int i = 0; i < xs.rows(); i++) {
-            for (int j = 0; j < xs.cols(); j++) {
-                zs(i, j) = interp(xs(i, j), ys(i, j));
+        for (int i = 0; i < x_vals.rows(); i++) {
+            for (int j = 0; j < x_vals.cols(); j++) {
+                z_out(i, j) = interp(x_vals(i, j), y_vals(i, j));
             }
         }
-        return zs;
+        return z_out;
     }
 
     std::tuple<double, Eigen::Vector2<double>> interp_deriv1(double x, double y) const {

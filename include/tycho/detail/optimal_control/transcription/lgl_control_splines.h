@@ -54,18 +54,18 @@ struct LGLControlSplineSize<Derived, CSC, -1, Order> : VectorFunction<Derived, -
     static const int Usz = -1;
     static const int t_usz = -1;
 
-    int Uszd = -1;
-    int t_uszd = -1;
+    int usz_d_ = -1;
+    int t_usz_d_ = -1;
 
-    int t_usize() const { return t_uszd; }
-    int Usize() const { return Uszd; }
+    int t_usize() const { return t_usz_d_; }
+    int Usize() const { return usz_d_; }
 
     template <class Scalar> using TUVec = Eigen::Matrix<Scalar, -1, 1>;
     template <class Scalar> using UVec = Eigen::Matrix<Scalar, -1, 1>;
 
     void set_usize(int u) {
-        this->Uszd = u;
-        this->t_uszd = u + 1;
+        this->usz_d_ = u;
+        this->t_usz_d_ = u + 1;
         int irr = (2 * CSC - 1) * (u + 1);
         int orr = u * Order;
         this->set_io_rows(irr, orr);
