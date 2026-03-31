@@ -59,9 +59,9 @@ template <class DODE> struct Blocked_ODE_Wrapper : DODE {
     static const int XtUV = DODE::XtV;
     using Base = DODE;
 
-    inline int XtUVars() const { return Base::XtVars(); }
-    inline int UVars() const { return 0; }
-    inline int PVars() const { return Base::UVars() + Base::PVars(); }
+    inline int xtu_vars() const { return Base::xt_vars(); }
+    inline int u_vars() const { return 0; }
+    inline int p_vars() const { return Base::u_vars() + Base::p_vars(); }
 
     Blocked_ODE_Wrapper() {};
     Blocked_ODE_Wrapper(const DODE &ode) : Base(ode) {}

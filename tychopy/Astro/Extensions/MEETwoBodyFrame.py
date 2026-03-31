@@ -87,7 +87,7 @@ class MEETwoBodyFrame:
             accs = vf.sum(otherAccs)
         else:
             accs = otherAccs[0]
-        MEEdot = ast.Astro.ModifiedDynamics(1.0).eval(vf.stack([X, accs]))
+        MEEdot = ast.Astro.modified_dynamics(1.0).eval(vf.stack([X, accs]))
 
         return vf.stack([MEEdot] + otherEOMs)
 
