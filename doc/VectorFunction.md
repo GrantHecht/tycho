@@ -610,9 +610,9 @@ inline void compute(x, fx_) const {
 }
 ```
 
-**Key insight:** When `IsVectorizable = true`, the function's `compute_impl` is written to work correctly with *both* scalar types (`double`) and SuperScalar types (`Eigen::Array<double, N>`). Eigen's expression templates make this work automatically -- operations like `+`, `*`, `.sin()`, `.cos()` are overloaded for both scalars and arrays.
+**Key insight:** When `is_vectorizable = true`, the function's `compute_impl` is written to work correctly with *both* scalar types (`double`) and SuperScalar types (`Eigen::Array<double, N>`). Eigen's expression templates make this work automatically -- operations like `+`, `*`, `.sin()`, `.cos()` are overloaded for both scalars and arrays.
 
-When `IsVectorizable = false` but the solver calls with a SuperScalar, the base class automatically unpacks the array, calls `compute_impl` N times with plain `double`, and repacks the results. This is correct but slower.
+When `is_vectorizable = false` but the solver calls with a SuperScalar, the base class automatically unpacks the array, calls `compute_impl` N times with plain `double`, and repacks the results. This is correct but slower.
 
 ### The Solver-Level Batching
 
@@ -659,16 +659,16 @@ void constraints(X, FX, data) const {
 }
 ```
 
-### Guidelines for IsVectorizable
+### Guidelines for is_vectorizable
 
-Set `IsVectorizable = true` when your `compute_impl` (and `compute_jacobian_impl`, etc.) works correctly with `Eigen::Array<double, N, 1>` as the scalar type. This is automatic if you:
+Set `is_vectorizable = true` when your `compute_impl` (and `compute_jacobian_impl`, etc.) works correctly with `Eigen::Array<double, N, 1>` as the scalar type. This is automatic if you:
 - Use only Eigen array/matrix operations (`.sin()`, `.cos()`, `+`, `*`, etc.)
 - Avoid branches that depend on the scalar value (no `if (x[0] > 0)`)
 - Avoid calling external functions that expect `double`
 
 **If your function calls Python code or external C libraries, it is NOT vectorizable.**
 
-For composite functions (`NestedFunction`, `StackedOutputs`, etc.), `IsVectorizable` is the logical AND of all sub-functions' vectorizability.
+For composite functions (`NestedFunction`, `StackedOutputs`, etc.), `is_vectorizable` is the logical AND of all sub-functions' vectorizability.
 
 ---
 
@@ -687,7 +687,7 @@ Segment<8, 3, 2>:  R^8 --> R^3
                     x  |-->  [x[2], x[3], x[4]]
 ```
 
-Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `IsLinearFunction = true` and `IsVectorizable = true`.
+Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `IsLinearFunction = true` and `is_vectorizable = true`.
 
 `Arguments<IR>` is a special case: a Segment that passes the entire input through unchanged.
 
@@ -716,8 +716,8 @@ Represents `f(x) = Outer(Inner(x))`:
 
 ```
 NestedFunction<Outer, Inner>:
-    IRows = Inner.IRows
-    ORows = Outer.ORows
+    input_rows = Inner.input_rows
+    output_rows = Outer.output_rows
     Jacobian: J_f = J_outer * J_inner  (chain rule)
 ```
 
@@ -729,7 +729,7 @@ Stacks the outputs of multiple functions into a single output vector:
 
 ```
 StackedOutputs{f1, f2, f3}:
-    ORows = f1.ORows + f2.ORows + f3.ORows
+    output_rows = f1.output_rows + f2.output_rows + f3.output_rows
     f(x) = [f1(x); f2(x); f3(x)]
     J(x) = [J1(x); J2(x); J3(x)]    // vertical concatenation
 ```
@@ -845,7 +845,7 @@ The `operator()` on `DenseFunctionBase` creates a `NestedFunction`:
 
 ```cpp
 auto composed = outer(inner);  // NestedFunction<OuterFunc, InnerFunc>
-// Requirement: inner.ORows() == outer.IRows()
+// Requirement: inner.output_rows() == outer.input_rows()
 ```
 
 ### Python DSL
@@ -945,17 +945,17 @@ When you call `phase.add_equal_con(...)`, the phase creates a `ConstraintFunctio
 
 ```cpp
 struct SolverIndexingData {
-    MatrixXi Vindex;  // Columns = function applications, rows = input variable indices
-    MatrixXi Cindex;  // Columns = function applications, rows = constraint indices
+    MatrixXi v_index_;  // Columns = function applications, rows = input variable indices
+    MatrixXi c_index_;  // Columns = function applications, rows = constraint indices
 
     // Pre-computed metadata
-    VectorXi InnerConstraintStarts;  // Where each constraint block starts in FX
-    VectorXi InnerGradientStarts;    // Where each gradient block starts in AGX
-    VectorXi InnerKKTStarts;         // Where each KKT block starts in the sparse matrix
+    VectorXi inner_constraint_starts_;  // Where each constraint block starts in FX
+    VectorXi inner_gradient_starts_;    // Where each gradient block starts in AGX
+    VectorXi inner_kkt_starts_;         // Where each KKT block starts in the sparse matrix
 
-    int NumAppl();   // Number of times this function is applied (e.g., # collocation nodes)
-    int VLoc(i, V);  // Input variable index i for application V
-    int CLoc(j, V);  // Constraint index j for application V
+    int num_appl();   // Number of times this function is applied (e.g., # collocation nodes)
+    int v_loc(i, V);  // Input variable index i for application V
+    int c_loc(j, V);  // Constraint index j for application V
 };
 ```
 
@@ -965,13 +965,13 @@ Before each function evaluation, the solver gathers the relevant variables from 
 
 ```cpp
 void gatherInput(X, xt, V, data) {
-    if (data.VindexContinuity[V] == Contiguous) {
+    if (data.v_index_continuity_[V] == Contiguous) {
         // Variables are contiguous in X -- fast memcpy-like operation
-        xt = X.segment<IR>(data.VLoc(0, V), IRows());
+        xt = X.segment<IR>(data.v_loc(0, V), input_rows());
     } else {
         // Variables are scattered -- gather one by one
-        for (int i = 0; i < IRows(); i++)
-            xt(i) = X(data.VLoc(i, V));
+        for (int i = 0; i < input_rows(); i++)
+            xt(i) = X(data.v_loc(i, V));
     }
 }
 ```
@@ -995,12 +995,12 @@ KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data):
 During a single PSIOPT iteration:
 
 1. PSIOPT calls `constraints_jacobian_adjointgradient_adjointhessian(X, L, FX, AGX, KKTmat, ...)`
-2. For each of `data.NumAppl()` applications:
+2. For each of `data.num_appl()` applications:
    a. `gatherInput(X, x, V, data)` -- extract local inputs from global vector
    b. `gatherMult(L, l, V, data)` -- extract local multipliers
    c. `compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, agx, hx, l)` -- evaluate
    d. `KKTFillAll(V, jx, hx, ...)` -- scatter into KKT matrix
-3. If `IsVectorizable && EnableVectorization`, step 2 is batched using `DefaultSuperScalar`
+3. If `is_vectorizable && enable_vectorization_`, step 2 is batched using `DefaultSuperScalar`
 
 ---
 
@@ -1108,7 +1108,7 @@ f.rpt([1.0, 2.0, 3.0], 100000)  # Run 100k evaluations and print timing
 f = vf.sin(Args(1)[0]) * Args(1)[0]  # Compile-time expression type
 
 gf = f.vf()   # Convert to GenericFunction<-1, -1> (vector)
-sf = f.sf()   # Convert to GenericFunction<-1, 1> (scalar, only if ORows==1)
+sf = f.sf()   # Convert to GenericFunction<-1, 1> (scalar, only if output_rows()==1)
 ```
 
 ### Defining ODEs in Python
