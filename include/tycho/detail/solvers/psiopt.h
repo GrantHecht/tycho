@@ -203,23 +203,23 @@ struct PSIOPT {
     int max_ls_iters_ = 2;
     int max_acc_iters_ = 50;
 
-    void set_max_iters(int max_iters_) {
-        if (max_iters_ < 1) {
-            throw std::invalid_argument("max_iters_ must be greater than 0.");
+    void set_max_iters(int max_iters) {
+        if (max_iters < 1) {
+            throw std::invalid_argument("max_iters must be greater than 0.");
         }
-        this->max_iters_ = max_iters_;
+        this->max_iters_ = max_iters;
     }
-    void set_max_acc_iters(int max_acc_iters_) {
-        if (max_acc_iters_ < 1) {
-            throw std::invalid_argument("max_acc_iters_ must be greater than 0.");
+    void set_max_acc_iters(int max_acc_iters) {
+        if (max_acc_iters < 1) {
+            throw std::invalid_argument("max_acc_iters must be greater than 0.");
         }
-        this->max_acc_iters_ = max_acc_iters_;
+        this->max_acc_iters_ = max_acc_iters;
     }
-    void set_max_ls_iters(int max_ls_iters_) {
-        if (max_ls_iters_ < 0) {
-            throw std::invalid_argument("max_ls_iters_ must be positive.");
+    void set_max_ls_iters(int max_ls_iters) {
+        if (max_ls_iters < 0) {
+            throw std::invalid_argument("max_ls_iters must be positive.");
         }
-        this->max_ls_iters_ = max_ls_iters_;
+        this->max_ls_iters_ = max_ls_iters;
     }
     void set_all_max_iters(int m1, int m2) {
         set_max_iters(m1);
@@ -258,15 +258,15 @@ struct PSIOPT {
     double icon_tol_ = 1.0e-6;
     double bar_tol_ = 1.0e-6;
 
-    void set_kkt_tol(double kkt_tol_) { this->kkt_tol_ = std::abs(kkt_tol_); }
-    void set_bar_tol(double bar_tol_) { this->bar_tol_ = std::abs(bar_tol_); }
-    void set_econ_tol(double econ_tol_) { this->econ_tol_ = std::abs(econ_tol_); }
-    void set_icon_tol(double icon_tol_) { this->icon_tol_ = std::abs(icon_tol_); }
-    void set_tols(double kkt_tol_, double econ_tol_, double icon_tol_, double bar_tol_) {
-        this->set_kkt_tol(kkt_tol_);
-        this->set_econ_tol(econ_tol_);
-        this->set_icon_tol(icon_tol_);
-        this->set_bar_tol(bar_tol_);
+    void set_kkt_tol(double kkt_tol) { this->kkt_tol_ = std::abs(kkt_tol); }
+    void set_bar_tol(double bar_tol) { this->bar_tol_ = std::abs(bar_tol); }
+    void set_econ_tol(double econ_tol) { this->econ_tol_ = std::abs(econ_tol); }
+    void set_icon_tol(double icon_tol) { this->icon_tol_ = std::abs(icon_tol); }
+    void set_tols(double kkt_tol, double econ_tol, double icon_tol, double bar_tol) {
+        this->set_kkt_tol(kkt_tol);
+        this->set_econ_tol(econ_tol);
+        this->set_icon_tol(icon_tol);
+        this->set_bar_tol(bar_tol);
     }
 
     double acc_kkt_tol_ = 1.0e-2;
@@ -274,16 +274,16 @@ struct PSIOPT {
     double acc_icon_tol_ = 1.0e-3;
     double acc_bar_tol_ = 1.0e-3;
 
-    void set_acc_kkt_tol(double acc_kkt_tol_) { this->acc_kkt_tol_ = std::abs(acc_kkt_tol_); }
-    void set_acc_bar_tol(double acc_bar_tol_) { this->acc_bar_tol_ = std::abs(acc_bar_tol_); }
-    void set_acc_econ_tol(double acc_econ_tol_) { this->acc_econ_tol_ = std::abs(acc_econ_tol_); }
-    void set_acc_icon_tol(double acc_icon_tol_) { this->acc_icon_tol_ = std::abs(acc_icon_tol_); }
-    void set_acc_tols(double acc_kkt_tol_, double acc_econ_tol_, double acc_icon_tol_,
-                      double acc_bar_tol_) {
-        this->set_acc_kkt_tol(acc_kkt_tol_);
-        this->set_acc_econ_tol(acc_econ_tol_);
-        this->set_acc_icon_tol(acc_icon_tol_);
-        this->set_acc_bar_tol(acc_bar_tol_);
+    void set_acc_kkt_tol(double acc_kkt_tol) { this->acc_kkt_tol_ = std::abs(acc_kkt_tol); }
+    void set_acc_bar_tol(double acc_bar_tol) { this->acc_bar_tol_ = std::abs(acc_bar_tol); }
+    void set_acc_econ_tol(double acc_econ_tol) { this->acc_econ_tol_ = std::abs(acc_econ_tol); }
+    void set_acc_icon_tol(double acc_icon_tol) { this->acc_icon_tol_ = std::abs(acc_icon_tol); }
+    void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
+                      double acc_bar_tol) {
+        this->set_acc_kkt_tol(acc_kkt_tol);
+        this->set_acc_econ_tol(acc_econ_tol);
+        this->set_acc_icon_tol(acc_icon_tol);
+        this->set_acc_bar_tol(acc_bar_tol);
     }
 
     double unacc_kkt_tol_ = 10;
@@ -303,16 +303,16 @@ struct PSIOPT {
     double div_icon_tol_ = 1.0e15;
     double div_bar_tol_ = 1.0e15;
 
-    void set_div_kkt_tol(double div_kkt_tol_) { this->div_kkt_tol_ = std::abs(div_kkt_tol_); }
-    void set_div_bar_tol(double div_bar_tol_) { this->div_bar_tol_ = std::abs(div_bar_tol_); }
-    void set_div_econ_tol(double div_econ_tol_) { this->div_econ_tol_ = std::abs(div_econ_tol_); }
-    void set_div_icon_tol(double div_icon_tol_) { this->div_icon_tol_ = std::abs(div_icon_tol_); }
-    void set_div_tols(double div_kkt_tol_, double div_econ_tol_, double div_icon_tol_,
-                      double div_bar_tol_) {
-        this->set_div_kkt_tol(div_kkt_tol_);
-        this->set_div_econ_tol(div_econ_tol_);
-        this->set_div_icon_tol(div_icon_tol_);
-        this->set_div_bar_tol(div_bar_tol_);
+    void set_div_kkt_tol(double div_kkt_tol) { this->div_kkt_tol_ = std::abs(div_kkt_tol); }
+    void set_div_bar_tol(double div_bar_tol) { this->div_bar_tol_ = std::abs(div_bar_tol); }
+    void set_div_econ_tol(double div_econ_tol) { this->div_econ_tol_ = std::abs(div_econ_tol); }
+    void set_div_icon_tol(double div_icon_tol) { this->div_icon_tol_ = std::abs(div_icon_tol); }
+    void set_div_tols(double div_kkt_tol, double div_econ_tol, double div_icon_tol,
+                      double div_bar_tol) {
+        this->set_div_kkt_tol(div_kkt_tol);
+        this->set_div_econ_tol(div_econ_tol);
+        this->set_div_icon_tol(div_icon_tol);
+        this->set_div_bar_tol(div_bar_tol);
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -321,19 +321,19 @@ struct PSIOPT {
 
     double bound_fraction_ = 0.99;
 
-    void set_bound_fraction(double bound_fraction_) {
-        if (bound_fraction_ >= 1.0 || bound_fraction_ <= 0.0) {
-            throw std::invalid_argument("bound_fraction_ must be between 0 and 1.");
+    void set_bound_fraction(double bound_fraction) {
+        if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
+            throw std::invalid_argument("bound_fraction must be between 0 and 1.");
         }
-        this->bound_fraction_ = bound_fraction_;
+        this->bound_fraction_ = bound_fraction;
     }
 
     double bound_push_ = 1.0e-3;
-    void set_bound_push(double bound_push_) {
-        if (bound_push_ <= 0.0) {
-            throw std::invalid_argument("bound_push_ must be greater than 0.");
+    void set_bound_push(double bound_push) {
+        if (bound_push <= 0.0) {
+            throw std::invalid_argument("bound_push must be greater than 0.");
         }
-        this->bound_push_ = bound_push_;
+        this->bound_push_ = bound_push;
     }
 
     double neg_slack_reset_ = 1.0e-12;
@@ -344,7 +344,7 @@ struct PSIOPT {
 
     void set_alpha_red(double ared) {
         if (ared <= 1.0) {
-            throw std::invalid_argument("alpha_red_ must be greater than 1.0");
+            throw std::invalid_argument("alpha_red must be greater than 1.0");
         }
         this->alpha_red_ = ared;
     }
@@ -354,28 +354,28 @@ struct PSIOPT {
     double incr_h_ = 8.00;
     double decr_h_ = 0.333333;
 
-    void set_delta_h(double delta_h_) {
-        if (delta_h_ <= 0.0) {
-            throw std::invalid_argument("delta_h_ must be greater than 0.");
+    void set_delta_h(double delta_h) {
+        if (delta_h <= 0.0) {
+            throw std::invalid_argument("delta_h must be greater than 0.");
         }
-        this->delta_h_ = delta_h_;
+        this->delta_h_ = delta_h;
     }
-    void set_incr_h(double incr_h_) {
-        if (incr_h_ <= 1.0) {
-            throw std::invalid_argument("incr_h_ must  greater than 1.0.");
+    void set_incr_h(double incr_h) {
+        if (incr_h <= 1.0) {
+            throw std::invalid_argument("incr_h must be greater than 1.0.");
         }
-        this->incr_h_ = incr_h_;
+        this->incr_h_ = incr_h;
     }
-    void set_decr_h(double decr_h_) {
-        if (decr_h_ >= 1.0 || decr_h_ <= 0) {
-            throw std::invalid_argument("decr_h_ must be between 0 and 1.");
+    void set_decr_h(double decr_h) {
+        if (decr_h >= 1.0 || decr_h <= 0) {
+            throw std::invalid_argument("decr_h must be between 0 and 1.");
         }
-        this->decr_h_ = decr_h_;
+        this->decr_h_ = decr_h;
     }
-    void set_hpert_params(double delta_h_, double incr_h_, double decr_h_) {
-        this->set_delta_h(delta_h_);
-        this->set_incr_h(incr_h_);
-        this->set_decr_h(decr_h_);
+    void set_hpert_params(double delta_h, double incr_h, double decr_h) {
+        this->set_delta_h(delta_h);
+        this->set_incr_h(incr_h);
+        this->set_decr_h(decr_h);
     }
     /////////////////////////////////////////////////////////////////////////
     ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
