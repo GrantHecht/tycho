@@ -109,8 +109,9 @@ void MatrixFunctionBuild(nb::module_ &m) {
         return colmattype(minv, size, size);
     });
 
-    ColMat.def("transpose",
-               [](const colmattype &m1) { return rowmattype(m1, m1.matrix_cols_, m1.matrix_rows_); });
+    ColMat.def("transpose", [](const colmattype &m1) {
+        return rowmattype(m1, m1.matrix_cols_, m1.matrix_rows_);
+    });
 
     ColMat.def("vf", [](const colmattype &m) { return GenericFunction<-1, -1>(m); });
 
@@ -198,8 +199,9 @@ void MatrixFunctionBuild(nb::module_ &m) {
         return rowmattype(minv, size, size);
     });
 
-    RowMat.def("transpose",
-               [](const rowmattype &m1) { return colmattype(m1, m1.matrix_cols_, m1.matrix_rows_); });
+    RowMat.def("transpose", [](const rowmattype &m1) {
+        return colmattype(m1, m1.matrix_cols_, m1.matrix_rows_);
+    });
 
     RowMat.def("vf", [](const rowmattype &m) { return GenericFunction<-1, -1>(m); });
 

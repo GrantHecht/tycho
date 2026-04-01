@@ -79,7 +79,7 @@ struct FunctionVectorSum_Impl
         // VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         // MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
         this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_, adjhess_,
-                                                                   adjvars);
+                                                                    adjvars);
         fx += this->offset_vector.template cast<Scalar>();
     }
 

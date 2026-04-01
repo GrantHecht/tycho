@@ -323,7 +323,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
         typedef typename InType::Scalar Scalar;
 
         this->propfunc_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                       adjhess_, adjvars);
+                                                                        adjhess_, adjvars);
     }
 
     /*

@@ -114,8 +114,8 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
 
         if (this->blocked_controls_) {
             this->num_phase_vars_ = this->num_states_ * this->xt_vars() +
-                                   this->num_defects_ * this->u_vars() + this->p_vars() +
-                                   this->static_p_vars();
+                                    this->num_defects_ * this->u_vars() + this->p_vars() +
+                                    this->static_p_vars();
 
             ode_first_state_locs_.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
             ode_first_state_locs_.tail(this->u_vars()) += VectorXi::Constant(

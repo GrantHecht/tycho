@@ -52,8 +52,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
+            fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
+                        .sum();
         } else {
             Func_Output<Scalar> fxv;
             if constexpr (Func::OutputIsDynamic) {
@@ -72,8 +72,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
+            fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
+                        .sum();
             jx.template middleCols<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                 .setOnes();
         } else {
@@ -127,8 +127,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] =
-                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
+            fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
+                        .sum();
             jx.template middleCols<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                 .setOnes();
             adjgrad.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
@@ -139,7 +139,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 adjv.setConstant(adjvars[0]);
 
                 this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxv, jxv, adjgrad,
-                                                                           adjhess, adjv);
+                                                                            adjhess, adjv);
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {

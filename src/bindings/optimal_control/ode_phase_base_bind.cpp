@@ -437,8 +437,7 @@ void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
 
     obj.def("set_auto_scaling", &ODEPhaseBase::set_auto_scaling, nb::arg("auto_scaling") = true);
 
-    obj.def("set_adaptive_mesh", &ODEPhaseBase::set_adaptive_mesh,
-            nb::arg("adaptive_mesh") = true);
+    obj.def("set_adaptive_mesh", &ODEPhaseBase::set_adaptive_mesh, nb::arg("adaptive_mesh") = true);
 
     obj.def("set_units", [](ODEPhaseBase &self, nb::kwargs kwargs) {
         nb::module_ builtins = nb::module_::import_("builtins");

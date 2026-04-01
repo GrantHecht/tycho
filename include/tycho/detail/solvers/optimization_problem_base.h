@@ -158,7 +158,9 @@ struct OptimizationProblemBase {
     }
 
     void set_jet_job_mode(JetJobModes m) { this->jet_job_mode_ = m; }
-    void set_jet_job_mode(const std::string &str) { this->set_jet_job_mode(strto_jet_job_mode(str)); }
+    void set_jet_job_mode(const std::string &str) {
+        this->set_jet_job_mode(strto_jet_job_mode(str));
+    }
 };
 
 } // namespace tycho::solvers

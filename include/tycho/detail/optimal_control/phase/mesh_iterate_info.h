@@ -71,7 +71,8 @@ struct MeshIterateInfo {
         this->max_error_ = this->error_.maxCoeff();
         this->avg_error_ = (this->error_.head(n - 1).cwiseProduct(hs)).sum();
 
-        this->gmean_error_ = std::exp((std::log(this->max_error_) + std::log(this->avg_error_)) / 2.0);
+        this->gmean_error_ =
+            std::exp((std::log(this->max_error_) + std::log(this->avg_error_)) / 2.0);
 
         // this->gmean_error_ = std::exp((this->error_.head(n - 1).array().log()*hs.array()).sum());
 
@@ -96,8 +97,8 @@ struct MeshIterateInfo {
         int elem = 0;
         for (int i = 1; i < nbins; i++) {
             double di = double(i) / double(nbins);
-            auto it =
-                std::upper_bound(this->distintegral_.cbegin() + elem, this->distintegral_.cend(), di);
+            auto it = std::upper_bound(this->distintegral_.cbegin() + elem,
+                                       this->distintegral_.cend(), di);
             elem = int(it - this->distintegral_.cbegin()) - 1;
 
             double t0 = this->times_[elem];

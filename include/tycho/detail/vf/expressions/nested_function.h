@@ -48,7 +48,7 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
-        : outer_func_(std::move(ofunc)),  inner_func_(std::move(ifunc)) {
+        : outer_func_(std::move(ofunc)), inner_func_(std::move(ifunc)) {
         if (this->inner_func_.output_rows() != this->outer_func_.input_rows()) {
 
             fmt::print(fmt::fg(fmt::color::red),
@@ -119,8 +119,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &jx_outer) {
                 this->inner_func_.compute_jacobian(x, fx_inner, jx_inner);
                 this->outer_func_.compute_jacobian(fx_inner, fx_, jx_outer);
-                this->inner_func_.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
-                                                        std::bool_constant<false>());
+                this->inner_func_.right_jacobian_product(
+                    jx_, jx_outer, jx_inner, DirectAssignment(), std::bool_constant<false>());
             };
 
             const int inner_OR = this->inner_func_.output_rows();
@@ -186,8 +186,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
                 fx_inner.setZero();
                 this->inner_func_.compute_jacobian_adjointgradient_adjointhessian(
                     x, fx_inner, jx_inner, adjgrad_, adjhess_, gx_outer);
-                this->inner_func_.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
-                                                        std::bool_constant<false>());
+                this->inner_func_.right_jacobian_product(
+                    jx_, jx_outer, jx_inner, DirectAssignment(), std::bool_constant<false>());
 
                 if constexpr (!OuterFunc::is_linear_function) {
 

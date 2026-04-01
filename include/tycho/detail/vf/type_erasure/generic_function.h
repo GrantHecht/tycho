@@ -140,8 +140,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             typename Dspec::AdjGradType adjgradt(adjgrad_.const_cast_derived());
             typename Dspec::AdjHessType adjhesst(adjhess_.const_cast_derived());
             typename Dspec::AdjVarType adjvarst(adjvars.derived());
-            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
-                                                                             adjhesst, adjvarst);
+            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(
+                xt, fxt, jxt, adjgradt, adjhesst, adjvarst);
         } else {
             typename Dspec::SuperInType xt(x.derived());
             typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
@@ -149,8 +149,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             typename Dspec::SuperAdjGradType adjgradt(adjgrad_.const_cast_derived());
             typename Dspec::SuperAdjHessType adjhesst(adjhess_.const_cast_derived());
             typename Dspec::SuperAdjVarType adjvarst(adjvars.derived());
-            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
-                                                                             adjhesst, adjvarst);
+            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(
+                xt, fxt, jxt, adjgradt, adjhesst, adjvarst);
         }
     }
 

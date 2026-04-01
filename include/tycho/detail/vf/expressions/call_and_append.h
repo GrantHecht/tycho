@@ -63,8 +63,9 @@ struct NestedCallAndAppendChain2
 
         auto Impl = [&](auto &xchain) {
             xchain.template head<Base::IRC>(this->input_rows()) = x;
-            this->inner_func1_.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                             this->input_rows(), this->inner_func1_.output_rows()));
+            this->inner_func1_.compute(
+                x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(),
+                                                            this->inner_func1_.output_rows()));
             tycho::utils::tuple_for_each(this->inner_funcs_, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
@@ -110,7 +111,7 @@ struct NestedCallAndAppendChain2
             this->outer_func_.compute_jacobian(xchain, fx_, jx_o);
 
             tycho::utils::reverse_tuple_for_loop(this->inner_funcs_, [&](const auto &func_i,
-                                                                        auto i) {
+                                                                         auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
                 func_i.right_jacobian_product(
@@ -145,7 +146,8 @@ struct NestedCallAndAppendChain2
                 make_temp_tuple(jis)};
 
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func_.input_rows(), 1),
+            Impl,
+            tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func_.input_rows(), 1),
             tycho::utils::TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1_.output_rows(),
                                                                 this->inner_func1_.input_rows()),
             JITemps,
@@ -189,8 +191,9 @@ struct NestedCallAndAppendChain2
         auto Impl = [&](auto &xchain, auto &jx1, auto &gx1, auto &hx1, auto &jxi, auto &gxi,
                         auto &hxi, auto &jx_o, auto &gx_o, auto &hx_o, auto &j0s) {
             xchain.template head<Base::IRC>(this->input_rows()) = x;
-            this->inner_func1_.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                             this->input_rows(), this->inner_func1_.output_rows()));
+            this->inner_func1_.compute(
+                x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(),
+                                                            this->inner_func1_.output_rows()));
 
             tycho::utils::tuple_for_each(this->inner_funcs_, [&](const auto &func_i) {
                 using FTtype = typename std::remove_const<
@@ -201,10 +204,10 @@ struct NestedCallAndAppendChain2
             });
 
             this->outer_func_.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jx_o,
-                                                                             gx_o, hx_o, adjvars);
+                                                                              gx_o, hx_o, adjvars);
 
             tycho::utils::reverse_tuple_for_loop(this->inner_funcs_, [&](const auto &func_i,
-                                                                        auto i) {
+                                                                         auto i) {
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
@@ -336,7 +339,8 @@ struct NestedCallAndAppendChain2
                 make_temp_tuple(his)};
 
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func_.input_rows(), 1),
+            Impl,
+            tycho::utils::TempSpec<OuterFunc_Input<Scalar>>(this->outer_func_.input_rows(), 1),
             tycho::utils::TempSpec<InnerFunc1_jacobian<Scalar>>(this->inner_func1_.output_rows(),
                                                                 this->inner_func1_.input_rows()),
             tycho::utils::TempSpec<InnerFunc1_gradient<Scalar>>(this->inner_func1_.input_rows(), 1),
@@ -408,7 +412,7 @@ struct NestedCallAndAppendChain
         // int start = this->input_rows();
 
         this->inner_func1_.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                         this->input_rows(), this->inner_func1_.output_rows()));
+                                          this->input_rows(), this->inner_func1_.output_rows()));
 
         tycho::utils::tuple_for_each(this->inner_funcs_, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
@@ -434,10 +438,11 @@ struct NestedCallAndAppendChain
 
         InnerFunc1_jacobian<Scalar> jx1; // jx1.setZero();
 
-        this->inner_func1_.compute_jacobian(x,
-                                           xchain.template segment<InnerFunc1::ORC>(
-                                               this->input_rows(), this->inner_func1_.output_rows()),
-                                           jx1);
+        this->inner_func1_.compute_jacobian(
+            x,
+            xchain.template segment<InnerFunc1::ORC>(this->input_rows(),
+                                                     this->inner_func1_.output_rows()),
+            jx1);
 
         std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
 
@@ -501,7 +506,7 @@ struct NestedCallAndAppendChain
         int start = this->input_rows();
 
         this->inner_func1_.compute(x, xchain.template segment<InnerFunc1::ORC>(
-                                         this->input_rows(), this->inner_func1_.output_rows()));
+                                          this->input_rows(), this->inner_func1_.output_rows()));
 
         tycho::utils::tuple_for_each(this->inner_funcs_, [&](const auto &func_i) {
             using FTtype = typename std::remove_const<
@@ -524,7 +529,7 @@ struct NestedCallAndAppendChain
         std::tuple<typename InnerFuncs::template Gradient<Scalar>...> gxi;
 
         this->outer_func_.compute_jacobian_adjointgradient_adjointhessian(xchain, fx_, jx_o, gx_o,
-                                                                         hx_o, adjvars);
+                                                                          hx_o, adjvars);
 
         tycho::utils::reverse_tuple_for_loop(this->inner_funcs_, [&](const auto &func_i, auto i) {
             using FTtype = typename std::remove_const<

@@ -871,7 +871,8 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
 
         k_jacs *= h;
         kx_jacs[0] = k_jacs * xi_jac;
-        kx_jacs[0].col(this->ode_.t_var()).template head<DODE::XV>(this->ode_.x_vars()) -= k_vals[0];
+        kx_jacs[0].col(this->ode_.t_var()).template head<DODE::XV>(this->ode_.x_vars()) -=
+            k_vals[0];
         kx_jacs[0].col(this->input_rows() - 1).template head<DODE::XV>(this->ode_.x_vars()) +=
             k_vals[0];
         k_vals[0] *= h;

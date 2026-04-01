@@ -69,7 +69,7 @@ struct ParsedInput
 
         if (this->contiguous_) {
             this->func_.compute_jacobian(x.segment(varlocs_[0], this->func_.input_rows()), fx_,
-                                        jx.middleCols(varlocs_[0], this->func_.input_rows()));
+                                         jx.middleCols(varlocs_[0], this->func_.input_rows()));
         } else {
             Func_Input<Scalar> xin(this->func_.input_rows());
             Func_jacobian<Scalar> jxin(this->func_.output_rows(), this->func_.input_rows());
@@ -118,7 +118,7 @@ struct ParsedInput
             }
 
             this->func_.compute_jacobian_adjointgradient_adjointhessian(xin, fx_, jxin, gxin, hxin,
-                                                                       adjvars);
+                                                                        adjvars);
 
             for (int i = 0; i < this->func_.input_rows(); i++) {
                 jx.col(this->varlocs_[i]) = jxin.col(i);

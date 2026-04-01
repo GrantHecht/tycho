@@ -397,7 +397,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if constexpr (DODE::UV != 0) {
             if (this->use_controller_) {
                 this->controller_.compute(xtup, xtup.template segment<DODE::UV>(
-                                                   this->ode_.t_var() + 1, this->ode_.u_vars()));
+                                                    this->ode_.t_var() + 1, this->ode_.u_vars()));
             }
         }
     }
@@ -1249,7 +1249,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 stepper_output_ss.setZero();
                 stepper_jacobian_ss.setZero();
                 this->stepper_.compute_jacobian(stepper_input_ss, stepper_output_ss,
-                                               stepper_jacobian_ss);
+                                                stepper_jacobian_ss);
                 jactmp_ss.noalias() = stepper_jacobian_ss * jxall_ss;
                 jxall_ss.template topRows<Base::ORC>(this->output_rows()) = jactmp_ss;
                 stepper_input_ss.head(this->ode_.input_rows()) = stepper_output_ss;
@@ -1328,7 +1328,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 stepper_input_ss[this->ode_.input_rows()][j] = xs[i + j + 1][this->ode_.t_var()];
             }
             this->stepper_.compute_jacobian(stepper_input_ss, stepper_output_ss,
-                                           stepper_jacobian_ss);
+                                            stepper_jacobian_ss);
 
             for (int j = 0; j < vsize; j++) {
                 for (int k = 0; k < this->input_rows(); k++) {

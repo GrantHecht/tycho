@@ -105,7 +105,7 @@ struct StaticScaled_Impl
         Output<Scalar> adjv_scaled = adjvars * Value::value;
 
         this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_, adjhess_,
-                                                                   adjv_scaled);
+                                                                    adjv_scaled);
         fx *= Value::value;
         this->func_.scale_jacobian(jx, Value::value);
     }
@@ -205,7 +205,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         auto Impl = [&](auto &adjv_scaled) {
             adjv_scaled = adjvars * Scalar(this->scale_value_);
             this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                       adjhess_, adjv_scaled);
+                                                                        adjhess_, adjv_scaled);
             fx *= Scalar(this->scale_value_);
             this->func_.scale_jacobian(jx_, Scalar(this->scale_value_));
         };
@@ -318,7 +318,7 @@ struct RowScaled_Impl
             this->func_.compute_jacobian(x, fx_, jx_);
             fx = fx.cwiseProduct(scales);
             this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         };
 
         const int orows = this->output_rows();
@@ -342,10 +342,10 @@ struct RowScaled_Impl
             adjv_scaled = adjvars.cwiseProduct(scales);
 
             this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                       adjhess_, adjv_scaled);
+                                                                        adjhess_, adjv_scaled);
             fx = fx.cwiseProduct(scales);
             this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         };
 
         const int orows = this->output_rows();
@@ -489,7 +489,7 @@ struct MatrixScaled_Impl
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fx).eval();
                 this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
-                                                  std::bool_constant<true>());
+                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
@@ -501,7 +501,7 @@ struct MatrixScaled_Impl
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fxtmp);
                 this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
-                                                  std::bool_constant<false>());
+                                                   std::bool_constant<false>());
             };
 
             tycho::utils::BumpAllocator::allocate_run(
@@ -530,11 +530,11 @@ struct MatrixScaled_Impl
                 mattmp = this->mat.template cast<Scalar>();
                 adjv_scaled = (adjvars.transpose() * mattmp).transpose();
                 this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                           adjhess_, adjv_scaled);
+                                                                            adjhess_, adjv_scaled);
 
                 fx = (mattmp * fx).eval();
                 this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
-                                                  std::bool_constant<true>());
+                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
                 Impl,
@@ -552,7 +552,7 @@ struct MatrixScaled_Impl
                     x, fxtmp, jxtmp, adjgrad_, adjhess_, adjv_scaled);
                 fx = (mattmp * fxtmp);
                 this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
-                                                  std::bool_constant<false>());
+                                                   std::bool_constant<false>());
             };
 
             tycho::utils::BumpAllocator::allocate_run(

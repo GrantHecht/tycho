@@ -891,10 +891,10 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         this->derived().cwise_compute_jacobian(fxt, fx_, jxdiag);
         if constexpr (Func::ORC == 1) {
             this->func_.right_jacobian_product(jx_, jxdiag, jx_, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         } else {
             this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx_, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -925,20 +925,20 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> adjtemp = jxdiag.cwiseProduct(adjvars);
         hxdiag = hxdiag.cwiseProduct(adjvars);
         this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxt, jx_, adjgrad_, adjhess_,
-                                                                   adjtemp);
+                                                                    adjtemp);
         if constexpr (Func::ORC == 1) {
 
             this->func_.symetric_jacobian_product(adjhess, hxdiag, jx, PlusEqualsAssignment(),
-                                                 std::bool_constant<false>());
+                                                  std::bool_constant<false>());
 
             this->func_.right_jacobian_product(jx_, jxdiag, jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         } else {
             this->func_.symetric_jacobian_product(adjhess, hxdiag.asDiagonal(), jx,
-                                                 PlusEqualsAssignment(),
-                                                 std::bool_constant<false>());
+                                                  PlusEqualsAssignment(),
+                                                  std::bool_constant<false>());
             this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+                                               std::bool_constant<true>());
         }
     }
 };

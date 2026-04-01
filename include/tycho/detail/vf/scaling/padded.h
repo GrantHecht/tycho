@@ -58,7 +58,8 @@ struct PaddedOutput
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->func_.compute(x, fx.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()));
+        this->func_.compute(
+            x, fx.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()));
     }
 
     template <class InType, class OutType, class JacType>

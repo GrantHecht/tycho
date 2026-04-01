@@ -154,7 +154,8 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     IfElseFunction() {}
 
     IfElseFunction(TestFunc test, TrueFunc _true, FalseFunc _false)
-        : test_func_(std::move(test)), true_func_(std::move(_true)), false_func_(std::move(_false)) {
+        : test_func_(std::move(test)), true_func_(std::move(_true)),
+          false_func_(std::move(_false)) {
         this->set_io_rows(this->true_func_.input_rows(), this->true_func_.output_rows());
 
         this->set_input_domain(this->input_rows(),
@@ -202,10 +203,10 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
         if (this->test_func_.compute(x)) {
             this->true_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                            adjhess_, adjvars);
+                                                                             adjhess_, adjvars);
         } else {
             this->false_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                             adjhess_, adjvars);
+                                                                              adjhess_, adjvars);
         }
     }
 };

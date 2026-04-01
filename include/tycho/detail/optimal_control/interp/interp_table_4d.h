@@ -419,7 +419,7 @@ struct InterpTable4D {
 
     void cache_alphavecs() {
         this->alphavecs_.resize(fs_.dimension(0) - 1, fs_.dimension(1) - 1, fs_.dimension(2) - 1,
-                               fs_.dimension(3) - 1);
+                                fs_.dimension(3) - 1);
 
         for (int i = 0; i < wsize_ - 1; i++) {
             for (int j = 0; j < zsize_ - 1; j++) {

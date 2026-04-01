@@ -115,7 +115,7 @@ struct IOScaled
                 l_scaled[i] = this->output_scales[i] * adjvars[i];
             }
             this->func_.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
-                                                                       adjhess, l_scaled);
+                                                                        adjhess, l_scaled);
 
             for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];

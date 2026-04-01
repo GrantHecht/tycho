@@ -79,9 +79,10 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
-                                                            this->func2.output_rows()));
+            fx[0] =
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
+                                                        this->func2.output_rows()));
         } else {
 
             auto Impl = [&](auto &fx1, auto &fx2) {
@@ -109,9 +110,10 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
-                                                            this->func2.output_rows()));
+            fx[0] =
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
+                                                        this->func2.output_rows()));
 
             jx.template block<1, Func1::ORC>(0, this->func1.seg_start_, 1,
                                              this->func1.output_rows()) +=
@@ -165,9 +167,10 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
-                                                            this->func2.output_rows()));
+            fx[0] =
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                    .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
+                                                        this->func2.output_rows()));
 
             jx.template block<1, Func1::ORC>(0, this->func1.seg_start_, 1,
                                              this->func1.output_rows()) +=

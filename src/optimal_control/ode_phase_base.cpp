@@ -1430,9 +1430,9 @@ void tycho::oc::ODEPhaseBase::update_mesh() {
     double ntemp = 0;
     for (int i = 0; i < this->mesh_iters_.back().error_.size() - 1; i++) {
 
-        double nsegs =
-            std::pow((this->mesh_iters_.back().error_[i] * this->mesh_err_factor_) / this->mesh_tol_,
-                     1 / (this->order_ + 1));
+        double nsegs = std::pow((this->mesh_iters_.back().error_[i] * this->mesh_err_factor_) /
+                                    this->mesh_tol_,
+                                1 / (this->order_ + 1));
         ntemp += std::max(this->mesh_red_factor_, nsegs);
     }
     int n = int(std::ceil(ntemp)) + this->num_extra_segs_;

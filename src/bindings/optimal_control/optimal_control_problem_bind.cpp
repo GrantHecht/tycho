@@ -32,7 +32,8 @@ using LinkObjective = LinkFunction<ScalarFunctionalX>;
 using PhaseRefType = std::variant<int, PhasePtr, std::string>;
 using PhasePack = std::tuple<PhaseRefType, RegionType, VarIndexType, VarIndexType, VarIndexType>;
 
-static void build_new_link_interface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj);
+static void
+build_new_link_interface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj);
 static void BuildOldLinkIterface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj);
 
 void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
@@ -157,7 +158,8 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
                                               &OptimalControlProblem::set_mesh_error_distributor));
 }
 
-static void build_new_link_interface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
+static void
+build_new_link_interface(nb::class_<OptimalControlProblem, OptimizationProblemBase> &obj) {
 
     //////////// equal_cons_////////////////////////////////////////
     {
