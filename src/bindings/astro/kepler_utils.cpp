@@ -66,7 +66,7 @@ void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
           [](const Vector6<double> &XV, double mu) { return cartesian_to_classic_true(XV, mu); });
 
     ////////////////////////////////////////////////////////////////////////////////////////
-    ////////////////////         Conversions as ASSET Functions    /////////////////////////
+    ////////////////////       Conversions as VectorFunctions      /////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////
 
     m.def("modified_to_cartesian", [](const GenericFunction<-1, -1> &meelems, double mu) {

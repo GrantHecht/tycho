@@ -184,7 +184,7 @@ TEST_F(ODEBuilderTest, VectorAccessors) {
 }
 
 TEST_F(ODEBuilderTest, SubSegmentAccessors) {
-    // XVec(start, count), UVec(start, count), PVec(start, count)
+    // x_vec(start, count), u_vec(start, count), p_vec(start, count)
     auto ode = ODEBuilder(5, 3, 2)
                    .define([](auto &args) {
                        // First 3 states + first 2 controls + first param
@@ -275,7 +275,7 @@ TEST_F(ODEBuilderTest, WithPVars) {
 }
 
 TEST_F(ODEBuilderTest, TemplateXVecCrossProduct) {
-    // Template XVec<3> produces ORC=3, enabling cross products in define()
+    // Template x_vec<3> produces ORC=3, enabling cross products in define()
     auto ode = ODEBuilder(7, 3)
                    .define([](auto &args) {
                        auto R = args.template x_vec<3>(0);

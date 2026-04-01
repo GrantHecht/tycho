@@ -17,8 +17,8 @@ class RuntimeODETest : public OptimalControlTest {};
 TEST_F(RuntimeODETest, ConstructFromExpression) {
     // Build Brachistochrone dynamics using the VF DSL
     auto args = ODEArguments(3, 1, 0);
-    auto v = args.segment(0, 3).coeff(2);     // XVar(2)
-    auto theta = args.segment(4, 1).coeff(0); // UVar(0)
+    auto v = args.segment(0, 3).coeff(2);     // x_var(2)
+    auto theta = args.segment(4, 1).coeff(0); // u_var(0)
 
     auto xdot = sin(theta) * v;
     auto ydot = cos(theta) * v * (-1.0);

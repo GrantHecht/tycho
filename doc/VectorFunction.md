@@ -160,7 +160,7 @@ template <class Derived, int IR, int OR>
 struct ComputableBase : CRTPBase<Derived> {
     template <class InType, class OutType>
     void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
-        if constexpr (!Derived::IsVectorizable) { /* ... */ }
+        if constexpr (!Derived::is_vectorizable) { /* ... */ }
         this->derived().compute_impl(x, fx_);
     }
 };
@@ -171,7 +171,7 @@ struct ComputableBase {
     template <class Self, class InType, class OutType>
     void compute(this Self const& self, ConstVectorBaseRef<InType> x,
                  ConstVectorBaseRef<OutType> fx_) {
-        if constexpr (!Self::IsVectorizable) { /* ... */ }
+        if constexpr (!Self::is_vectorizable) { /* ... */ }
         self.compute_impl(x, fx_);
     }
 };
@@ -285,7 +285,7 @@ You can override these `static const bool` flags to enable optimizations:
 
 | Flag                  | Default | Meaning                                                                                                     |
 | --------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
-| `IsVectorizable`      | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
+| `is_vectorizable`     | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
 | `IsLinearFunction`    | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
 | `HasDiagonalJacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
 | `IsGenericFunction`   | `false` | Set only by `GenericFunction`                                                                               |
@@ -306,7 +306,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     // Enable batch evaluation with DefaultSuperScalar
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     CwiseSquareExample() {}
     CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
@@ -368,7 +368,7 @@ struct CwiseSquareAD : VectorFunction<CwiseSquareAD<IR>, IR, IR,
     using Base = VectorFunction<CwiseSquareAD<IR>, IR, IR, AutodiffFwd, AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     CwiseSquareAD() {}
     CwiseSquareAD(int ir) { this->set_io_rows(ir, ir); }
@@ -492,12 +492,12 @@ Uses the `autodiff` library's dual numbers. For the Jacobian, each input variabl
 template <class InType, class OutType, class JacType>
 void compute_jacobian_impl(x, fx_, jx_) {
     Input<dual<Scalar>> xdual = x.cast<dual<Scalar>>();
-    Output<dual<Scalar>> fdual(ORows());
+    Output<dual<Scalar>> fdual(output_rows());
 
-    for (int i = 0; i < IRows(); i++) {
+    for (int i = 0; i < input_rows(); i++) {
         xdual[i].grad = 1.0;          // Seed input i
         compute(xdual, fdual);          // Evaluate with dual numbers
-        for (int j = 0; j < ORows(); j++)
+        for (int j = 0; j < output_rows(); j++)
             jx(j, i) = fdual[j].grad;  // Extract partial derivative
         xdual[i].grad = 0.0;           // Reset seed
         fdual.setZero();
@@ -587,15 +587,15 @@ template <class InType, class OutType>
 inline void compute(x, fx_) const {
     typedef typename InType::Scalar Scalar;
 
-    if constexpr (!Derived::IsVectorizable) {
+    if constexpr (!Derived::is_vectorizable) {
         // Case 1: Function does NOT support vectorization
         if constexpr (Is_SuperScalar<Scalar>::value) {
             // But caller passed SuperScalar input! Must unpack and call one at a time.
             for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                for (int j = 0; j < IRows(); j++)
+                for (int j = 0; j < input_rows(); j++)
                     x_r[j] = x[j][i];           // Extract the i-th scalar from each input
                 compute_impl(x_r, fx_r);          // Scalar evaluation
-                for (int j = 0; j < ORows(); j++)
+                for (int j = 0; j < output_rows(); j++)
                     fx[j][i] = fx_r[j];           // Pack scalar result back
             }
         } else {
@@ -624,16 +624,16 @@ void constraints(X, FX, data) const {
     auto VectorImpl = [&]() {
         using SuperScalar = tycho::DefaultSuperScalar;
         constexpr int vsize = SuperScalar::SizeAtCompileTime;  // 2 on ARM, 4 on x86
-        int Packs = data.NumAppl() / vsize;
+        int Packs = data.num_appl() / vsize;
 
-        Input<SuperScalar> x_vect(IRows());
-        Output<SuperScalar> fx_vect(ORows());
+        Input<SuperScalar> x_vect(input_rows());
+        Output<SuperScalar> fx_vect(output_rows());
 
         for (int i = 0; i < Packs; i++) {
             // Pack vsize independent inputs into x_vect
             for (int j = 0; j < vsize; j++) {
                 gatherInput(X, x, i * vsize + j, data);
-                for (int k = 0; k < IRows(); k++)
+                for (int k = 0; k < input_rows(); k++)
                     x_vect[k][j] = x[k];
             }
             // Single batched evaluation
@@ -645,16 +645,16 @@ void constraints(X, FX, data) const {
             }
         }
         // Handle remainder (< vsize applications) with scalar fallback
-        ScalarImpl(Packs * vsize, data.NumAppl());
+        ScalarImpl(Packs * vsize, data.num_appl());
     };
 
-    if constexpr (Derived::IsVectorizable) {
-        if (EnableVectorization)
+    if constexpr (Derived::is_vectorizable) {
+        if (enable_vectorization_)
             VectorImpl();
         else
-            ScalarImpl(0, data.NumAppl());
+            ScalarImpl(0, data.num_appl());
     } else {
-        ScalarImpl(0, data.NumAppl());
+        ScalarImpl(0, data.num_appl());
     }
 }
 ```
