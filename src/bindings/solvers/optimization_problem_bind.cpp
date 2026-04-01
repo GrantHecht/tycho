@@ -32,24 +32,24 @@ void TychoBind<OptimizationProblem>::Build(nb::module_ &m) {
 
     obj.def(nb::init<>());
 
-    obj.def("set_vars", &OptimizationProblem::setVars);
-    obj.def("return_vars", &OptimizationProblem::returnVars);
+    obj.def("set_vars", &OptimizationProblem::set_vars);
+    obj.def("return_vars", &OptimizationProblem::return_vars);
 
     obj.def("add_equal_con", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
-                                 &OptimizationProblem::addEqualCon));
+                                 &OptimizationProblem::add_equal_con));
 
     obj.def("add_equal_con",
-            nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::addEqualCon));
+            nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::add_equal_con));
 
     obj.def("add_inequal_con", nb::overload_cast<VectorFunctionalX, const std::vector<VectorXi> &>(
-                                   &OptimizationProblem::addInequalCon));
+                                   &OptimizationProblem::add_inequal_con));
 
     obj.def("add_inequal_con",
-            nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::addInequalCon));
+            nb::overload_cast<VectorFunctionalX, VectorXi>(&OptimizationProblem::add_inequal_con));
 
     obj.def("add_objective", nb::overload_cast<ScalarFunctionalX, const std::vector<VectorXi> &>(
-                                 &OptimizationProblem::addObjective));
+                                 &OptimizationProblem::add_objective));
 
     obj.def("add_objective",
-            nb::overload_cast<ScalarFunctionalX, VectorXi>(&OptimizationProblem::addObjective));
+            nb::overload_cast<ScalarFunctionalX, VectorXi>(&OptimizationProblem::add_objective));
 }

@@ -91,28 +91,28 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    void setVars(const VectorXd &v) { this->active_variables_ = v; }
-    VectorXd returnVars() const { return this->active_variables_; }
+    void set_vars(const VectorXd &v) { this->active_variables_ = v; }
+    VectorXd return_vars() const { return this->active_variables_; }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addEqualCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
+    int add_equal_con(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
         this->reset_transcription();
         int index = int(this->user_equalities_.size());
         this->user_equalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
         check_function_size(this->user_equalities_.back(), "Equality Constraint");
         return index;
     }
-    int addEqualCon(VectorFunctionalX fun, VectorXi index) {
+    int add_equal_con(VectorFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addEqualCon(fun, indices);
+        return this->add_equal_con(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addInequalCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
+    int add_inequal_con(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
         this->reset_transcription();
         int index = int(this->user_inequalities_.size());
         this->user_inequalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
@@ -120,15 +120,15 @@ struct OptimizationProblem : OptimizationProblemBase {
         return index;
     }
 
-    int addInequalCon(VectorFunctionalX fun, VectorXi index) {
+    int add_inequal_con(VectorFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addInequalCon(fun, indices);
+        return this->add_inequal_con(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addObjective(ScalarFunctionalX fun, const std::vector<VectorXi> &indices) {
+    int add_objective(ScalarFunctionalX fun, const std::vector<VectorXi> &indices) {
         this->reset_transcription();
         int index = int(this->user_objectives_.size());
         this->user_objectives_.emplace_back(FuncIndexHolder<ObjectiveInterface>(fun, indices));
@@ -136,9 +136,9 @@ struct OptimizationProblem : OptimizationProblemBase {
 
         return index;
     }
-    int addObjective(ScalarFunctionalX fun, VectorXi index) {
+    int add_objective(ScalarFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addObjective(fun, indices);
+        return this->add_objective(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
