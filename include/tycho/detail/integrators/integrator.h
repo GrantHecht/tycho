@@ -1141,7 +1141,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         GenericFunction<-1, -1> odetemp;
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode_.func;
+            odetemp = this->ode_.func_;
         } else {
             odetemp = this->ode_;
         }
@@ -1160,7 +1160,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         GenericFunction<-1, -1> odetemp;
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode_.func;
+            odetemp = this->ode_.func_;
         } else {
             odetemp = this->ode_;
         }

@@ -79,8 +79,8 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
                                                             this->func2.output_rows()));
         } else {
 
@@ -109,18 +109,18 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
                                                             this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1,
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start_, 1,
                                              this->func1.output_rows()) +=
-                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
+                x.template segment<Func2::ORC>(this->func2.seg_start_, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1,
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start_, 1,
                                              this->func2.output_rows()) +=
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
                     .transpose();
 
         } else {
@@ -165,33 +165,33 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
-            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
-                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start,
+            fx[0] = x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
+                        .dot(x.template segment<Func2::ORC>(this->func2.seg_start_,
                                                             this->func2.output_rows()));
 
-            jx.template block<1, Func1::ORC>(0, this->func1.seg_start, 1,
+            jx.template block<1, Func1::ORC>(0, this->func1.seg_start_, 1,
                                              this->func1.output_rows()) +=
-                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows())
+                x.template segment<Func2::ORC>(this->func2.seg_start_, this->func2.output_rows())
                     .transpose();
 
-            jx.template block<1, Func2::ORC>(0, this->func2.seg_start, 1,
+            jx.template block<1, Func2::ORC>(0, this->func2.seg_start_, 1,
                                              this->func2.output_rows()) +=
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows())
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows())
                     .transpose();
 
-            adjgrad.template segment<Func1::ORC>(this->func1.seg_start,
+            adjgrad.template segment<Func1::ORC>(this->func1.seg_start_,
                                                  this->func1.output_rows()) +=
-                x.template segment<Func2::ORC>(this->func2.seg_start, this->func2.output_rows()) *
+                x.template segment<Func2::ORC>(this->func2.seg_start_, this->func2.output_rows()) *
                 adjvars[0];
 
-            adjgrad.template segment<Func2::ORC>(this->func2.seg_start,
+            adjgrad.template segment<Func2::ORC>(this->func2.seg_start_,
                                                  this->func2.output_rows()) +=
-                x.template segment<Func1::ORC>(this->func1.seg_start, this->func1.output_rows()) *
+                x.template segment<Func1::ORC>(this->func1.seg_start_, this->func1.output_rows()) *
                 adjvars[0];
 
             for (int i = 0; i < this->func1.output_rows(); i++) {
-                adjhess(this->func1.seg_start + i, this->func2.seg_start + i) += adjvars[0];
-                adjhess(this->func2.seg_start + i, this->func1.seg_start + i) += adjvars[0];
+                adjhess(this->func1.seg_start_ + i, this->func2.seg_start_ + i) += adjvars[0];
+                adjhess(this->func2.seg_start_ + i, this->func1.seg_start_ + i) += adjvars[0];
             }
 
         } else {

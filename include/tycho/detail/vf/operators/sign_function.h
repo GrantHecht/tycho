@@ -22,14 +22,14 @@ template <class Func>
 struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
     using Base = VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC>;
 
-    Func func;
+    Func func_;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     // using INPUT_DOMAIN = SingleDomain<Func::IRC, 0, 0>;
 
     SignFunction() {}
-    SignFunction(Func func) : func(std::move(func)) {
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+    SignFunction(Func func) : func_(std::move(func)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = 0;
@@ -52,7 +52,7 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
     template <class InType, class OutType, class JacType>
@@ -62,7 +62,7 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -77,7 +77,7 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
 };

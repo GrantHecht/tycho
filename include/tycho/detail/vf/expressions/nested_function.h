@@ -38,8 +38,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     SUB_FUNCTION_IO_TYPES(OuterFunc);
     SUB_FUNCTION_IO_TYPES(InnerFunc);
 
-    OuterFunc outer_func;
-    InnerFunc inner_func;
+    OuterFunc outer_func_;
+    InnerFunc inner_func_;
 
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
     static const bool is_linear_function =
@@ -48,21 +48,21 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
-        : outer_func(std::move(ofunc)), inner_func(std::move(ifunc)) {
-        if (this->inner_func.output_rows() != this->outer_func.input_rows()) {
+        : outer_func_(std::move(ofunc)),  inner_func_(std::move(ifunc)) {
+        if (this->inner_func_.output_rows() != this->outer_func_.input_rows()) {
 
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in NestedFunction/.eval method !!!\n"
                        "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
                        "OuterFunction "
                        "(IRows = {1:}).\n",
-                       this->inner_func.output_rows(), this->outer_func.input_rows());
+                       this->inner_func_.output_rows(), this->outer_func_.input_rows());
 
             throw std::invalid_argument("");
         }
 
-        this->set_io_rows(this->inner_func.input_rows(), this->outer_func.output_rows());
-        this->set_input_domain(this->input_rows(), {inner_func.input_domain()});
+        this->set_io_rows(this->inner_func_.input_rows(), this->outer_func_.output_rows());
+        this->set_input_domain(this->input_rows(), {inner_func_.input_domain()});
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -73,16 +73,16 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
         auto Impl = [&](auto &fx_inner) {
             if constexpr (Is_Segment<OuterFunc>::value) {
-                this->inner_func.compute(x, fx_inner);
-                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func.seg_start,
+                this->inner_func_.compute(x, fx_inner);
+                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                                this->output_rows());
             } else {
-                this->inner_func.compute(x, fx_inner);
-                this->outer_func.compute(fx_inner, fx);
+                this->inner_func_.compute(x, fx_inner);
+                this->outer_func_.compute(fx_inner, fx);
             }
         };
 
-        const int orows = this->inner_func.output_rows();
+        const int orows = this->inner_func_.output_rows();
         using FType = InnerFunc_Output<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
@@ -96,18 +96,18 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         if constexpr (Is_Segment<OuterFunc>::value) {
 
             auto Impl = [&](auto &fx_inner, auto &jx_inner) {
-                this->inner_func.compute_jacobian(x, fx_inner, jx_inner);
-                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func.seg_start,
+                this->inner_func_.compute_jacobian(x, fx_inner, jx_inner);
+                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                                this->output_rows());
-                this->inner_func.accumulate_matrix_domain(
+                this->inner_func_.accumulate_matrix_domain(
                     jx_,
-                    jx_inner.template middleRows<OuterFunc::ORC>(this->outer_func.seg_start,
+                    jx_inner.template middleRows<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                                  this->output_rows()),
                     PlusEqualsAssignment());
             };
 
-            const int inner_OR = this->inner_func.output_rows();
-            const int inner_IR = this->inner_func.input_rows();
+            const int inner_OR = this->inner_func_.output_rows();
+            const int inner_IR = this->inner_func_.input_rows();
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
@@ -117,16 +117,16 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
         } else {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &jx_outer) {
-                this->inner_func.compute_jacobian(x, fx_inner, jx_inner);
-                this->outer_func.compute_jacobian(fx_inner, fx_, jx_outer);
-                this->inner_func.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
+                this->inner_func_.compute_jacobian(x, fx_inner, jx_inner);
+                this->outer_func_.compute_jacobian(fx_inner, fx_, jx_outer);
+                this->inner_func_.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
                                                         std::bool_constant<false>());
             };
 
-            const int inner_OR = this->inner_func.output_rows();
-            const int inner_IR = this->inner_func.input_rows();
-            const int outer_OR = this->outer_func.output_rows();
-            const int outer_IR = this->outer_func.input_rows();
+            const int inner_OR = this->inner_func_.output_rows();
+            const int inner_IR = this->inner_func_.input_rows();
+            const int outer_OR = this->outer_func_.output_rows();
+            const int outer_IR = this->outer_func_.input_rows();
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
@@ -151,23 +151,23 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
         if constexpr (Is_Segment<OuterFunc>::value) {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &gx_outer) {
-                gx_outer.template segment<OuterFunc::ORC>(this->outer_func.seg_start,
+                gx_outer.template segment<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                           this->output_rows()) = adjvars;
-                this->inner_func.compute_jacobian_adjointgradient_adjointhessian(
+                this->inner_func_.compute_jacobian_adjointgradient_adjointhessian(
                     x, fx_inner, jx_inner, adjgrad_, adjhess_, gx_outer);
 
-                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func.seg_start,
+                fx = fx_inner.template segment<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                                this->output_rows());
-                this->inner_func.accumulate_matrix_domain(
+                this->inner_func_.accumulate_matrix_domain(
                     jx_,
-                    jx_inner.template middleRows<OuterFunc::ORC>(this->outer_func.seg_start,
+                    jx_inner.template middleRows<OuterFunc::ORC>(this->outer_func_.seg_start_,
                                                                  this->output_rows()),
                     PlusEqualsAssignment());
             };
 
-            const int inner_OR = this->inner_func.output_rows();
-            const int inner_IR = this->inner_func.input_rows();
-            const int outer_IR = this->outer_func.input_rows();
+            const int inner_OR = this->inner_func_.output_rows();
+            const int inner_IR = this->inner_func_.input_rows();
+            const int outer_IR = this->outer_func_.input_rows();
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
@@ -180,31 +180,31 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         } else {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &jx_outer, auto &gx_outer,
                             auto &hx_outer, auto &Ht) {
-                this->inner_func.compute(x, fx_inner);
-                this->outer_func.compute_jacobian_adjointgradient_adjointhessian(
+                this->inner_func_.compute(x, fx_inner);
+                this->outer_func_.compute_jacobian_adjointgradient_adjointhessian(
                     fx_inner, fx_, jx_outer, gx_outer, hx_outer, adjvars);
                 fx_inner.setZero();
-                this->inner_func.compute_jacobian_adjointgradient_adjointhessian(
+                this->inner_func_.compute_jacobian_adjointgradient_adjointhessian(
                     x, fx_inner, jx_inner, adjgrad_, adjhess_, gx_outer);
-                this->inner_func.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
+                this->inner_func_.right_jacobian_product(jx_, jx_outer, jx_inner, DirectAssignment(),
                                                         std::bool_constant<false>());
 
                 if constexpr (!OuterFunc::is_linear_function) {
 
-                    this->inner_func.right_jacobian_product(
+                    this->inner_func_.right_jacobian_product(
                         Ht, hx_outer, jx_inner, DirectAssignment(), std::bool_constant<false>());
                     if constexpr (InnerFunc::InputIsDynamic) {
-                        int sds = this->inner_func.sub_domains.cols();
+                        int sds = this->inner_func_.sub_domains.cols();
                         if (sds == 0) {
-                            this->inner_func.right_jacobian_product(
+                            this->inner_func_.right_jacobian_product(
                                 adjhess, Ht.transpose(), jx_inner, PlusEqualsAssignment(),
                                 std::bool_constant<false>());
                         } else {
 
                             for (int i = 0; i < sds; i++) {
-                                int start = this->inner_func.sub_domains(0, i);
-                                int size = this->inner_func.sub_domains(1, i);
-                                this->inner_func.right_jacobian_product(
+                                int start = this->inner_func_.sub_domains(0, i);
+                                int size = this->inner_func_.sub_domains(1, i);
+                                this->inner_func_.right_jacobian_product(
                                     adjhess.middleRows(start, size),
                                     Ht.middleCols(start, size).transpose(), jx_inner,
                                     PlusEqualsAssignment(), std::bool_constant<false>());
@@ -222,7 +222,7 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
                                 constexpr int size =
                                     InnerFunc::INPUT_DOMAIN::sub_domains[i.value][1];
 
-                                this->inner_func.right_jacobian_product(
+                                this->inner_func_.right_jacobian_product(
                                     adjhess.template middleRows<size>(start, size),
                                     HTT.template middleRows<size>(start, size), jx_inner,
                                     PlusEqualsAssignment(), std::bool_constant<false>());
@@ -231,10 +231,10 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
                 }
             };
 
-            const int inner_OR = this->inner_func.output_rows();
-            const int inner_IR = this->inner_func.input_rows();
-            const int outer_OR = this->outer_func.output_rows();
-            const int outer_IR = this->outer_func.input_rows();
+            const int inner_OR = this->inner_func_.output_rows();
+            const int inner_IR = this->inner_func_.input_rows();
+            const int outer_OR = this->outer_func_.output_rows();
+            const int outer_IR = this->outer_func_.input_rows();
 
             using IFXType = InnerFunc_Output<Scalar>;
             using IJXType = InnerFunc_jacobian<Scalar>;
@@ -269,7 +269,7 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
 
     using InnerFunc = Segment<IR, OR, ST>;
 
-    OuterFunc outer_func;
+    OuterFunc outer_func_;
 
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
     static const bool is_linear_function =
@@ -278,20 +278,20 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, Segment<IR, OR, ST> ifunc) {
-        this->outer_func = ofunc;
-        this->set_seg_start(ifunc.seg_start);
+        this->outer_func_ = ofunc;
+        this->set_seg_start(ifunc.seg_start_);
 
-        if (ifunc.output_rows() != this->outer_func.input_rows()) {
+        if (ifunc.output_rows() != this->outer_func_.input_rows()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in NestedFunction/.eval method !!!\n"
                        "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
                        "OuterFunction "
                        "(IRows = {1:}).\n",
-                       ifunc.output_rows(), this->outer_func.input_rows());
+                       ifunc.output_rows(), this->outer_func_.input_rows());
             throw std::invalid_argument("");
         }
 
-        this->set_io_rows(ifunc.input_rows(), this->outer_func.output_rows());
+        this->set_io_rows(ifunc.input_rows(), this->outer_func_.output_rows());
         this->set_input_domain(this->input_rows(), {ifunc.input_domain()});
     }
 
@@ -301,9 +301,9 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        const int size = this->outer_func.input_rows();
+        const int size = this->outer_func_.input_rows();
 
-        this->outer_func.compute(x.template segment<InnerFunc::ORC>(this->seg_start, size), fx);
+        this->outer_func_.compute(x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx);
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -312,11 +312,11 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        const int size = this->outer_func.input_rows();
+        const int size = this->outer_func_.input_rows();
 
-        this->outer_func.compute_jacobian(
-            x.template segment<InnerFunc::ORC>(this->seg_start, size), fx,
-            jx.template middleCols<InnerFunc::ORC>(this->seg_start, size));
+        this->outer_func_.compute_jacobian(
+            x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx,
+            jx.template middleCols<InnerFunc::ORC>(this->seg_start_, size));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -330,14 +330,14 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        const int size = this->outer_func.input_rows();
+        const int size = this->outer_func_.input_rows();
 
-        this->outer_func.compute_jacobian_adjointgradient_adjointhessian(
-            x.template segment<InnerFunc::ORC>(this->seg_start, size), fx,
-            jx.template middleCols<InnerFunc::ORC>(this->seg_start, size),
-            adjgrad.template segment<InnerFunc::ORC>(this->seg_start, size),
+        this->outer_func_.compute_jacobian_adjointgradient_adjointhessian(
+            x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx,
+            jx.template middleCols<InnerFunc::ORC>(this->seg_start_, size),
+            adjgrad.template segment<InnerFunc::ORC>(this->seg_start_, size),
             adjhess.template block<InnerFunc::ORC, InnerFunc::ORC>(
-                this->seg_start, this->seg_start, this->outer_func.input_rows(), size),
+                this->seg_start_, this->seg_start_, this->outer_func_.input_rows(), size),
             adjvars);
     }
 
@@ -350,10 +350,10 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         if constexpr (OR > 0 && IR > 0 && OuterFunc::IRC == -1) {
             Base::accumulate_jacobian(target_, right, assign);
         } else {
-            const int size = this->outer_func.input_rows();
-            this->outer_func.accumulate_jacobian(
-                target.template middleCols<InnerFunc::ORC>(this->seg_start, size),
-                right_ref.template middleCols<InnerFunc::ORC>(this->seg_start, size), assign);
+            const int size = this->outer_func_.input_rows();
+            this->outer_func_.accumulate_jacobian(
+                target.template middleCols<InnerFunc::ORC>(this->seg_start_, size),
+                right_ref.template middleCols<InnerFunc::ORC>(this->seg_start_, size), assign);
         }
     }
 
@@ -367,12 +367,12 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         if constexpr (OR > 0 && IR > 0 && OuterFunc::IRC == -1) {
             Base::accumulate_hessian(target_, right, assign);
         } else {
-            const int size = this->outer_func.input_rows();
-            this->outer_func.accumulate_hessian(
-                target.template block<InnerFunc::ORC, InnerFunc::ORC>(this->seg_start,
-                                                                      this->seg_start, size, size),
+            const int size = this->outer_func_.input_rows();
+            this->outer_func_.accumulate_hessian(
+                target.template block<InnerFunc::ORC, InnerFunc::ORC>(this->seg_start_,
+                                                                      this->seg_start_, size, size),
                 right_ref.template block<InnerFunc::ORC, InnerFunc::ORC>(
-                    this->seg_start, this->seg_start, size, size),
+                    this->seg_start_, this->seg_start_, size, size),
                 assign);
         }
     }

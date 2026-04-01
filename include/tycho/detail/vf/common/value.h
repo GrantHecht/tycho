@@ -24,14 +24,14 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
 
     template <class Func> using REARGUMENT = Value<OSZ>;
 
-    typename Base::template Output<double> value;
+    typename Base::template Output<double> value_;
 
-    Value() { this->value.setOnes(); }
+    Value() { this->value_.setOnes(); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value;
+        fx = this->value_;
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -39,7 +39,7 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        fx = this->value;
+        fx = this->value_;
     }
 
     template <class Func, int FuncIRC, int ii>

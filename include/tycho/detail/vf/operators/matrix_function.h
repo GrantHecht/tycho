@@ -51,29 +51,29 @@ struct RowMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + 
 };
 
 template <int MRows, int MCols> struct MatrixRowsCols {
-    static const int MatrixRows = MRows;
-    static const int MatrixCols = MCols;
+    static const int matrix_rows_ = MRows;
+    static const int matrix_cols_ = MCols;
 
     MatrixRowsCols(int rows, int cols) {}
 };
 
 template <> struct MatrixRowsCols<-1, -1> {
-    int MatrixRows = 0;
-    int MatrixCols = 0;
+    int matrix_rows_ = 0;
+    int matrix_cols_ = 0;
 
-    MatrixRowsCols(int rows, int cols) : MatrixRows(rows), MatrixCols(cols) {}
+    MatrixRowsCols(int rows, int cols) : matrix_rows_(rows), matrix_cols_(cols) {}
 };
 
 template <int MCols> struct MatrixRowsCols<-1, MCols> {
-    int MatrixRows = 0;
-    static const int MatrixCols = MCols;
-    MatrixRowsCols(int rows, int cols) : MatrixRows(rows) {}
+    int matrix_rows_ = 0;
+    static const int matrix_cols_ = MCols;
+    MatrixRowsCols(int rows, int cols) : matrix_rows_(rows) {}
 };
 
 template <int MRows> struct MatrixRowsCols<MRows, -1> {
-    static const int MatrixRows = MRows;
-    int MatrixCols = 0;
-    MatrixRowsCols(int rows, int cols) : MatrixCols(cols) {}
+    static const int matrix_rows_ = MRows;
+    int matrix_cols_ = 0;
+    MatrixRowsCols(int rows, int cols) : matrix_cols_(cols) {}
 };
 
 } // namespace tycho::vf

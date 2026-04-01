@@ -43,18 +43,18 @@ struct KeplerPhase;
 struct Kepler : ODE_Expression<Kepler, Kepler_Impl, double> {
     using Base = ODE_Expression<Kepler, Kepler_Impl, double>;
     using Base::Base;
-    double mu = 1.0;
-    Kepler(double mu) : Base(mu) { this->mu = mu; }
+    double mu_ = 1.0;
+    Kepler(double mu) : Base(mu) { this->mu_ = mu; }
 };
 
 struct KeplerPhase : ODEPhase<Kepler> {
     using Base = ODEPhase<Kepler>;
     using Base::Base;
-    bool UseKeplerPropagator = true;
+    bool use_kepler_propagator_ = true;
 
     tycho::solvers::ConstraintInterface make_shooter() {
-        if (UseKeplerPropagator) {
-            auto kprop = KeplerPropagator(this->ode_.mu);
+        if (use_kepler_propagator_) {
+            auto kprop = KeplerPropagator(this->ode_.mu_);
             auto Args = Arguments<14>();
             auto X1 = Args.head<6>();
             auto X2 = Args.segment<6, 7>();

@@ -25,11 +25,11 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     static const bool is_linear_function = true;
     static const bool is_vectorizable = true;
 
-    Output<double> value;
+    Output<double> value_;
 
     Constant(int ir, Output<double> val) {
         this->set_io_rows(ir, val.size());
-        value = val;
+        value_ = val;
 
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
@@ -43,14 +43,14 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
                                       ConstMatrixBaseRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -61,7 +61,7 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
 };
 

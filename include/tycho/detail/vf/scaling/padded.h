@@ -19,14 +19,14 @@
 namespace tycho::vf {
 
 template <int St> struct UpperPadHolder {
-    static const int UPad = St;
+    static const int u_pad_ = St;
     UpperPadHolder(int st) {};
     UpperPadHolder() {};
 };
 
 template <> struct UpperPadHolder<-1> {
-    int UPad = 0;
-    UpperPadHolder(int st) { UPad = st; };
+    int u_pad_ = 0;
+    UpperPadHolder(int st) { u_pad_ = st; };
     UpperPadHolder() {};
 };
 
@@ -38,19 +38,19 @@ struct PaddedOutput
         VectorFunction<PaddedOutput<Func, UP, LP>, Func::IRC, SZ_SUM<LP, UP, Func::ORC>::value>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    Func func;
+    Func func_;
     static const bool is_vectorizable = Func::is_vectorizable;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
     static const bool is_linear_function = Func::is_linear_function;
 
-    PaddedOutput(Func f, int upad, int lpad) : UpperPadHolder<UP>(upad), func(std::move(f)) {
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows() + upad + lpad);
+    PaddedOutput(Func f, int upad, int lpad) : UpperPadHolder<UP>(upad), func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows() + upad + lpad);
 
-        this->set_input_domain(this->input_rows(), {func.input_domain()});
+        this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
 
-    bool is_linear() const { return this->func.is_linear(); }
+    bool is_linear() const { return this->func_.is_linear(); }
 
     PaddedOutput() {}
 
@@ -58,7 +58,7 @@ struct PaddedOutput
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->func.compute(x, fx.template segment<Func::ORC>(this->UPad, this->func.output_rows()));
+        this->func_.compute(x, fx.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()));
     }
 
     template <class InType, class OutType, class JacType>
@@ -67,9 +67,9 @@ struct PaddedOutput
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        this->func.compute_jacobian(
-            x, fx.template segment<Func::ORC>(this->UPad, this->func.output_rows()),
-            jx.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()));
+        this->func_.compute_jacobian(
+            x, fx.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()),
+            jx.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -85,10 +85,10 @@ struct PaddedOutput
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        this->func.compute_jacobian_adjointgradient_adjointhessian(
-            x, fx.template segment<Func::ORC>(this->UPad, this->func.output_rows()),
-            jx.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), adjgrad,
-            adjhess, adjvars.template segment<Func::ORC>(this->UPad, this->func.output_rows()));
+        this->func_.compute_jacobian_adjointgradient_adjointhessian(
+            x, fx.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()),
+            jx.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()), adjgrad,
+            adjhess, adjvars.template segment<Func::ORC>(this->u_pad_, this->func_.output_rows()));
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -104,10 +104,10 @@ struct PaddedOutput
         } else {
             MatrixBaseRef<Right> right_ref = right.const_cast_derived();
             MatrixBaseRef<Left> left_ref = left.const_cast_derived();
-            this->func.right_jacobian_product(
+            this->func_.right_jacobian_product(
                 target_,
-                left_ref.template middleCols<Func::ORC>(this->UPad, this->func.output_rows()),
-                right_ref.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()),
+                left_ref.template middleCols<Func::ORC>(this->u_pad_, this->func_.output_rows()),
+                right_ref.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()),
                 assign, aliased);
         }
     }
@@ -118,33 +118,33 @@ struct PaddedOutput
         MatrixBaseRef<Target> target = target_.const_cast_derived();
         MatrixBaseRef<JacType> right = right_.const_cast_derived();
 
-        this->func.accumulate_jacobian(
-            target.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()),
-            right.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), assign);
+        this->func_.accumulate_jacobian(
+            target.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()),
+            right.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()), assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_gradient(target_, right, assign);
+        this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_hessian(target_, right, assign);
+        this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
-        this->func.scale_jacobian(
-            target.template middleRows<Func::ORC>(this->UPad, this->func.output_rows()), s);
+        this->func_.scale_jacobian(
+            target.template middleRows<Func::ORC>(this->u_pad_, this->func_.output_rows()), s);
     }
     template <class Target, class Scalar>
     inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_gradient(target_, s);
+        this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_hessian(target_, s);
+        this->func_.scale_hessian(target_, s);
     }
 };
 

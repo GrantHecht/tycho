@@ -136,7 +136,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         VectorFunctionalX odetemp;
 
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode_.func;
+            odetemp = this->ode_.func_;
         } else {
             odetemp = this->ode_;
         }
@@ -207,7 +207,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         VectorFunctionalX odetemp;
 
         if constexpr (DODE::IsGenericODE) {
-            odetemp = this->ode_.func;
+            odetemp = this->ode_.func_;
         } else {
             odetemp = this->ode_;
         }

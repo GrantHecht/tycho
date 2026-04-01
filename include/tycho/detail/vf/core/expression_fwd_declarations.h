@@ -99,7 +99,7 @@ template <int IR, int OR, int ST, int OR2, int ST2>
 struct NestedFunctionSelector<Segment<OR, OR2, ST2>, Segment<IR, OR, ST>> {
     static decltype(auto) make_nested(Segment<OR, OR2, ST2> ofunc, Segment<IR, OR, ST> ifunc) {
         return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.input_rows(), ofunc.output_rows(),
-                                                        ifunc.seg_start + ofunc.seg_start);
+                                                        ifunc.seg_start_ + ofunc.seg_start_);
     }
 };
 

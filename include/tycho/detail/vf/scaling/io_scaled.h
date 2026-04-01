@@ -25,7 +25,7 @@ struct IOScaled
         VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    Func func;
+    Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
     static const bool is_linear_function = Func::is_linear_function;
     static const bool is_vectorizable = Func::is_vectorizable;
@@ -36,14 +36,14 @@ struct IOScaled
     IOScaled() {}
 
     IOScaled(Func f, const Input<double> &input_scales, const Output<double> &output_scales)
-        : func(std::move(f)) {
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
-        this->set_input_domain(this->input_rows(), {this->func.input_domain()});
+        : func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
 
         this->input_scales = input_scales;
         this->output_scales = output_scales;
 
-        this->enable_vectorization_ = this->func.enable_vectorization_;
+        this->enable_vectorization_ = this->func_.enable_vectorization_;
     }
 
     template <class InType, class OutType>
@@ -56,7 +56,7 @@ struct IOScaled
                 x_scaled[i] = this->input_scales[i] * x[i];
             }
 
-            this->func.compute(x_scaled, fx);
+            this->func_.compute(x_scaled, fx);
 
             for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];
@@ -79,7 +79,7 @@ struct IOScaled
                 x_scaled[i] = this->input_scales[i] * x[i];
             }
 
-            this->func.compute_jacobian(x_scaled, fx, jx);
+            this->func_.compute_jacobian(x_scaled, fx, jx);
 
             for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];
@@ -114,7 +114,7 @@ struct IOScaled
             for (int i = 0; i < this->output_rows(); i++) {
                 l_scaled[i] = this->output_scales[i] * adjvars[i];
             }
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
                                                                        adjhess, l_scaled);
 
             for (int i = 0; i < this->output_rows(); i++) {

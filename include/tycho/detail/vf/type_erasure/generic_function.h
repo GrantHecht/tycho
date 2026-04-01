@@ -40,8 +40,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     using Derived = GenericFunction<IR, OR>;
     using Concept = GFConcept<IR, OR>;
 
-    GFStorage<IR, OR> func;
-    bool islinear = false;
+    GFStorage<IR, OR> func_;
+    bool is_linear_ = false;
 
     GenericFunction() {}
 
@@ -49,14 +49,14 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
                            !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
                            bool> = true>
     GenericFunction(const T &t) {
-        func.emplace(t);
+        func_.emplace(t);
         this->cachedata();
     }
 
     // Same-type copy: deep-clone via GFStorage copy semantics
     GenericFunction(const GenericFunction<IR, OR> &obj) {
-        if (!obj.func.empty()) {
-            this->func = obj.func;
+        if (!obj.func_.empty()) {
+            this->func_ = obj.func_;
             this->cachedata();
         } else {
             throw std::invalid_argument("Attempting to copy null function");
@@ -67,8 +67,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     template <int IR1, int OR1>
         requires(IR == -1 && OR == -1)
     GenericFunction(const GenericFunction<IR1, OR1> &obj) {
-        if (!obj.func.empty()) {
-            obj.func.get().clone_into_dynamic(this->func);
+        if (!obj.func_.empty()) {
+            obj.func_.get().clone_into_dynamic(this->func_);
             cachedata();
         } else {
             throw std::invalid_argument("Attempting to copy null function");
@@ -76,15 +76,15 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     void cachedata() {
-        this->set_io_rows(this->func.get().input_rows(), this->func.get().output_rows());
-        this->set_input_domain(this->input_rows(), {this->func.get().input_domain()});
-        this->islinear = this->func.get().is_linear();
+        this->set_io_rows(this->func_.get().input_rows(), this->func_.get().output_rows());
+        this->set_input_domain(this->input_rows(), {this->func_.get().input_domain()});
+        this->is_linear_ = this->func_.get().is_linear();
     }
 
-    std::string name() const { return this->func.get().name(); }
-    inline bool is_linear() const { return this->islinear; }
+    std::string name() const { return this->func_.get().name(); }
+    inline bool is_linear() const { return this->is_linear_; }
     void enable_vectorization(bool b) const {
-        this->func.get().enable_vectorization(b);
+        this->func_.get().enable_vectorization(b);
         this->enable_vectorization_ = b;
     }
 
@@ -99,11 +99,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         if constexpr (std::is_same_v<Scalar, double>) {
             typename Dspec::InType xt(x.derived());
             typename Dspec::OutType fxt(fx_.const_cast_derived());
-            this->func.get().compute(xt, fxt);
+            this->func_.get().compute(xt, fxt);
         } else {
             typename Dspec::SuperInType xt(x.derived());
             typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
-            this->func.get().compute(xt, fxt);
+            this->func_.get().compute(xt, fxt);
         }
     }
 
@@ -116,12 +116,12 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             typename Dspec::InType xt(x.derived());
             typename Dspec::OutType fxt(fx_.const_cast_derived());
             typename Dspec::JacType jxt(jx_.const_cast_derived());
-            this->func.get().compute_jacobian(xt, fxt, jxt);
+            this->func_.get().compute_jacobian(xt, fxt, jxt);
         } else {
             typename Dspec::SuperInType xt(x.derived());
             typename Dspec::SuperOutType fxt(fx_.const_cast_derived());
             typename Dspec::SuperJacType jxt(jx_.const_cast_derived());
-            this->func.get().compute_jacobian(xt, fxt, jxt);
+            this->func_.get().compute_jacobian(xt, fxt, jxt);
         }
     }
 
@@ -140,7 +140,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             typename Dspec::AdjGradType adjgradt(adjgrad_.const_cast_derived());
             typename Dspec::AdjHessType adjhesst(adjhess_.const_cast_derived());
             typename Dspec::AdjVarType adjvarst(adjvars.derived());
-            this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
+            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
                                                                              adjhesst, adjvarst);
         } else {
             typename Dspec::SuperInType xt(x.derived());
@@ -149,7 +149,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             typename Dspec::SuperAdjGradType adjgradt(adjgrad_.const_cast_derived());
             typename Dspec::SuperAdjHessType adjhesst(adjhess_.const_cast_derived());
             typename Dspec::SuperAdjVarType adjvarst(adjvars.derived());
-            this->func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
+            this->func_.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, adjgradt,
                                                                              adjhesst, adjvarst);
         }
     }
@@ -175,7 +175,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
                     typename Dspec::RightJacTarget tgt(target_.const_cast_derived());
                     typename Dspec::LeftJacMatrix lft(left_ref.derived());
                     typename Dspec::JacType rht(right_ref.const_cast_derived());
-                    this->func.get().right_jacobian_product(tgt, lft, rht, assign, aliased);
+                    this->func_.get().right_jacobian_product(tgt, lft, rht, assign, aliased);
                 }
             } else {
                 Base::right_jacobian_product(target_, left, right, assign, aliased);
@@ -201,7 +201,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             if (this->is_linear()) {
                 typename Dspec::JacType jtarg(target_.const_cast_derived());
                 typename Dspec::JacType jright(right.const_cast_derived());
-                this->func.get().accumulate_jacobian(jtarg, jright, assign);
+                this->func_.get().accumulate_jacobian(jtarg, jright, assign);
             } else {
                 Base::accumulate_jacobian(target_, right, assign);
             }
@@ -217,7 +217,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             Base::scale_jacobian(target_, s);
         } else {
             typename Dspec::JacType jxt(target_.const_cast_derived());
-            this->func.get().scale_jacobian(jxt, s);
+            this->func_.get().scale_jacobian(jxt, s);
         }
     }
 

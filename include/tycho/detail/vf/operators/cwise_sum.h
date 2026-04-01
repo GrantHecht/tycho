@@ -40,11 +40,11 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);
 
-    Func func;
+    Func func_;
     CwiseSum_Impl() {}
-    CwiseSum_Impl(Func f) : func(std::move(f)) {
-        this->set_io_rows(this->func.input_rows(), 1);
-        this->set_input_domain(this->input_rows(), {this->func.input_domain()});
+    CwiseSum_Impl(Func f) : func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), 1);
+        this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
     }
 
     template <class InType, class OutType>
@@ -53,14 +53,14 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
+                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
         } else {
             Func_Output<Scalar> fxv;
             if constexpr (Func::OutputIsDynamic) {
-                fxv.resize(this->func.output_rows());
+                fxv.resize(this->func_.output_rows());
             }
 
-            this->func.compute(x, fxv);
+            this->func_.compute(x, fxv);
             fx[0] = fxv.sum();
         }
     }
@@ -73,13 +73,13 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
 
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
-            jx.template middleCols<Func::ORC>(this->func.seg_start, this->func.output_rows())
+                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
+            jx.template middleCols<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                 .setOnes();
         } else {
 
             auto Impl = [&](auto &fxv, auto &jxv) {
-                this->func.compute_jacobian(x, fxv, jxv);
+                this->func_.compute_jacobian(x, fxv, jxv);
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {
@@ -109,9 +109,9 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
-                                                              this->func.input_rows()));
+                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                                                              this->func_.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -128,17 +128,17 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
 
         if constexpr (IsSegmentOp) {
             fx[0] =
-                x.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows()).sum();
-            jx.template middleCols<Func::ORC>(this->func.seg_start, this->func.output_rows())
+                x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows()).sum();
+            jx.template middleCols<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                 .setOnes();
-            adjgrad.template segment<Func::ORC>(this->func.seg_start, this->func.output_rows())
+            adjgrad.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                 .setConstant(adjvars[0]);
         } else {
 
             auto Impl = [&](auto &fxv, auto &jxv, auto &adjv) {
                 adjv.setConstant(adjvars[0]);
 
-                this->func.compute_jacobian_adjointgradient_adjointhessian(x, fxv, jxv, adjgrad,
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxv, jxv, adjgrad,
                                                                            adjhess, adjv);
                 fx[0] = fxv.sum();
 
@@ -167,10 +167,10 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
-                                                              this->func.input_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
+                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                                                              this->func_.input_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
         }
     }
 };

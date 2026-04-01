@@ -92,7 +92,7 @@ decltype(auto) operator/(const DenseFunctionBase<Derived, IR, OR> &func,
     return RowScaled<Derived>(func.derived(), s.cwiseInverse());
 }
 template <class Derived> decltype(auto) operator/(const Scaled<Derived> &func, double s) {
-    return Scaled<Derived>(func.func, func.scale_value_ / s);
+    return Scaled<Derived>(func.func_, func.scale_value_ / s);
 }
 
 template <class Derived, int IR>

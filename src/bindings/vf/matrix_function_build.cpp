@@ -48,51 +48,51 @@ void MatrixFunctionBuild(nb::module_ &m) {
 
     ColMat.def("__mul__", [](const colmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<colmattype, colmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     ColMat.def("__mul__", [](const colmattype &m1, const rowmattype &m2) {
         auto tmp = MatrixFunctionProduct<colmattype, rowmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     ColMat.def("__mul__", [](const colmattype &m1, double scale) {
-        return colmattype(m1 * scale, m1.MatrixRows, m1.MatrixCols);
+        return colmattype(m1 * scale, m1.matrix_rows_, m1.matrix_cols_);
     });
     ColMat.def("__rmul__", [](const colmattype &m1, double scale) {
-        return colmattype(m1 * scale, m1.MatrixRows, m1.MatrixCols);
+        return colmattype(m1 * scale, m1.matrix_rows_, m1.matrix_cols_);
     });
     ColMat.def("__add__", [](const colmattype &m1, const Eigen::MatrixXd &mshift) {
-        if (m1.MatrixRows != mshift.rows() || m1.MatrixCols != mshift.cols()) {
+        if (m1.matrix_rows_ != mshift.rows() || m1.matrix_cols_ != mshift.cols()) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
         Eigen::VectorXd v = mshift.reshaped(mshift.rows() * mshift.cols(), 1);
-        return colmattype(m1 + v, m1.MatrixRows, m1.MatrixCols);
+        return colmattype(m1 + v, m1.matrix_rows_, m1.matrix_cols_);
     });
     ColMat.def("__radd__", [](const colmattype &m1, const Eigen::MatrixXd &mshift) {
-        if (m1.MatrixRows != mshift.rows() || m1.MatrixCols != mshift.cols()) {
+        if (m1.matrix_rows_ != mshift.rows() || m1.matrix_cols_ != mshift.cols()) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
         Eigen::VectorXd v = mshift.reshaped(mshift.rows() * mshift.cols(), 1);
-        return colmattype(m1 + v, m1.MatrixRows, m1.MatrixCols);
+        return colmattype(m1 + v, m1.matrix_rows_, m1.matrix_cols_);
     });
 
     ColMat.attr("__array_ufunc__") = nb::none();
 
     ColMat.def("__add__", [](const colmattype &m1, const colmattype &m2) {
-        if (m1.MatrixRows != m2.MatrixRows || m1.MatrixCols != m2.MatrixCols) {
+        if (m1.matrix_rows_ != m2.matrix_rows_ || m1.matrix_cols_ != m2.matrix_cols_) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
 
-        return colmattype(m1 + m2, m1.MatrixRows, m1.MatrixCols);
+        return colmattype(m1 + m2, m1.matrix_rows_, m1.matrix_cols_);
     });
 
     ColMat.def("inverse", [](const colmattype &m1) {
-        if (m1.MatrixRows != m1.MatrixCols) {
+        if (m1.matrix_rows_ != m1.matrix_cols_) {
             throw std::invalid_argument("Matrix must be square to be invertible");
         }
 
-        int size = m1.MatrixRows;
+        int size = m1.matrix_rows_;
 
         GenericFunction<-1, -1> invfunc;
 
@@ -110,7 +110,7 @@ void MatrixFunctionBuild(nb::module_ &m) {
     });
 
     ColMat.def("transpose",
-               [](const colmattype &m1) { return rowmattype(m1, m1.MatrixCols, m1.MatrixRows); });
+               [](const colmattype &m1) { return rowmattype(m1, m1.matrix_cols_, m1.matrix_rows_); });
 
     ColMat.def("vf", [](const colmattype &m) { return GenericFunction<-1, -1>(m); });
 
@@ -134,54 +134,54 @@ void MatrixFunctionBuild(nb::module_ &m) {
 
     RowMat.def("__mul__", [](const rowmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<rowmattype, colmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     RowMat.def("__mul__", [](const rowmattype &m1, const rowmattype &m2) {
         auto tmp = MatrixFunctionProduct<rowmattype, rowmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     RowMat.def("__mul__", [](const rowmattype &m1, double scale) {
-        return rowmattype(m1 * scale, m1.MatrixRows, m1.MatrixCols);
+        return rowmattype(m1 * scale, m1.matrix_rows_, m1.matrix_cols_);
     });
     RowMat.def("__rmul__", [](const rowmattype &m1, double scale) {
-        return rowmattype(m1 * scale, m1.MatrixRows, m1.MatrixCols);
+        return rowmattype(m1 * scale, m1.matrix_rows_, m1.matrix_cols_);
     });
 
     RowMat.def("__add__", [](const rowmattype &m1, const rowmattype &m2) {
-        if (m1.MatrixRows != m2.MatrixRows || m1.MatrixCols != m2.MatrixCols) {
+        if (m1.matrix_rows_ != m2.matrix_rows_ || m1.matrix_cols_ != m2.matrix_cols_) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
 
-        return rowmattype(m1 + m2, m1.MatrixRows, m1.MatrixCols);
+        return rowmattype(m1 + m2, m1.matrix_rows_, m1.matrix_cols_);
     });
 
     RowMat.attr("__array_ufunc__") = nb::none();
 
     RowMat.def("__add__", [](const rowmattype &m1, const Eigen::MatrixXd &mshift) {
-        if (m1.MatrixRows != mshift.rows() || m1.MatrixCols != mshift.cols()) {
+        if (m1.matrix_rows_ != mshift.rows() || m1.matrix_cols_ != mshift.cols()) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
         Eigen::MatrixXd tmp = mshift.transpose();
         Eigen::VectorXd v = tmp.reshaped(mshift.rows() * mshift.cols(), 1);
-        return rowmattype(m1 + v, m1.MatrixRows, m1.MatrixCols);
+        return rowmattype(m1 + v, m1.matrix_rows_, m1.matrix_cols_);
     });
     RowMat.def("__radd__", [](const rowmattype &m1, const Eigen::MatrixXd &mshift) {
-        if (m1.MatrixRows != mshift.rows() || m1.MatrixCols != mshift.cols()) {
+        if (m1.matrix_rows_ != mshift.rows() || m1.matrix_cols_ != mshift.cols()) {
             throw std::invalid_argument("Matrices must have the same dimensions to be added.");
         }
         Eigen::MatrixXd tmp = mshift.transpose();
         Eigen::VectorXd v = tmp.reshaped(mshift.rows() * mshift.cols(), 1);
-        return rowmattype(m1 + v, m1.MatrixRows, m1.MatrixCols);
+        return rowmattype(m1 + v, m1.matrix_rows_, m1.matrix_cols_);
     });
 
     RowMat.def("inverse", [](const rowmattype &m1) {
-        if (m1.MatrixRows != m1.MatrixCols) {
+        if (m1.matrix_rows_ != m1.matrix_cols_) {
             throw std::invalid_argument("Matrix must be square to be invertible.");
         }
 
-        int size = m1.MatrixRows;
+        int size = m1.matrix_rows_;
 
         GenericFunction<-1, -1> invfunc;
 
@@ -199,7 +199,7 @@ void MatrixFunctionBuild(nb::module_ &m) {
     });
 
     RowMat.def("transpose",
-               [](const rowmattype &m1) { return colmattype(m1, m1.MatrixCols, m1.MatrixRows); });
+               [](const rowmattype &m1) { return colmattype(m1, m1.matrix_cols_, m1.matrix_rows_); });
 
     RowMat.def("vf", [](const rowmattype &m) { return GenericFunction<-1, -1>(m); });
 
@@ -224,12 +224,12 @@ void MatrixFunctionBuild(nb::module_ &m) {
 
     m.def("matmul", [](const colmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<colmattype, colmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     m.def("matmul", [](const colmattype &m1, const rowmattype &m2) {
         auto tmp = MatrixFunctionProduct<colmattype, rowmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     m.def("matmul", [](const colmattype &m1, const Func &m2) {
@@ -247,12 +247,12 @@ void MatrixFunctionBuild(nb::module_ &m) {
 
     m.def("matmul", [](const rowmattype &m1, const colmattype &m2) {
         auto tmp = MatrixFunctionProduct<rowmattype, colmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     m.def("matmul", [](const rowmattype &m1, const rowmattype &m2) {
         auto tmp = MatrixFunctionProduct<rowmattype, rowmattype>(m1, m2);
-        return colmattype(tmp, m1.MatrixRows, m2.MatrixCols);
+        return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     });
 
     m.def("matmul", [](const rowmattype &m1, const Func &m2) {

@@ -316,9 +316,9 @@ struct FunctionVectorProduct_Impl
             this->func1.compute(x, fx1);
             this->func2.compute(x, fx2);
             fx = this->vecprodimpl(Scalar(1.0), fx1, fx2);
-            this->fillprodmatrix(fx2, jx.template middleCols<Vsize>(this->func1.seg_start, Vsize),
+            this->fillprodmatrix(fx2, jx.template middleCols<Vsize>(this->func1.seg_start_, Vsize),
                                  fsign1);
-            this->fillprodmatrix(fx1, jx.template middleCols<Vsize>(this->func2.seg_start, Vsize),
+            this->fillprodmatrix(fx1, jx.template middleCols<Vsize>(this->func2.seg_start_, Vsize),
                                  fsign2);
         } else {
 

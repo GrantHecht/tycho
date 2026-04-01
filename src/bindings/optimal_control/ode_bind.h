@@ -91,7 +91,7 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
 
     nb::implicitly_convertible<Derived, GenericFunction<-1, -1>>();
     reg.vfuncx.def("__init__", [](GenericFunction<-1, -1> *self, const Derived &ode) {
-        new (self) GenericFunction<-1, -1>(ode.func);
+        new (self) GenericFunction<-1, -1>(ode.func_);
     });
 
     reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
@@ -100,7 +100,7 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
 
     ODESizeBuild<_XV, _UV, _PV, Derived>(obj);
 
-    obj.def("vf", [](const Derived &od) { return od.func; });
+    obj.def("vf", [](const Derived &od) { return od.func_; });
 
     obj.def("shooting_defect", [](const Derived &ode, const Integrator<Derived> &integ) {
         auto shooter = CentralShootingDefect<Derived, Integrator<Derived>>(ode, integ);

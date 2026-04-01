@@ -214,7 +214,7 @@ struct ConstraintInterface {
 
     // Stores T directly (one virtual dispatch per solver call) instead of double-erasure.
     template <int IR, int OR> ConstraintInterface(const GenericFunction<IR, OR> &t) {
-        t.func.get().pack_into_constraint_interface(*this);
+        t.func_.get().pack_into_constraint_interface(*this);
     }
 
     // ---- Forwarding methods ----
@@ -380,7 +380,7 @@ struct ObjectiveInterface {
 
     // Stores T directly (one virtual dispatch per solver call).
     template <int IR> ObjectiveInterface(const GenericFunction<IR, 1> &t) {
-        t.func.get().pack_into_objective_interface(*this);
+        t.func_.get().pack_into_objective_interface(*this);
     }
 
     // ---- Forwarding methods ----

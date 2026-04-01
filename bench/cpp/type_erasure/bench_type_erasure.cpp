@@ -33,7 +33,7 @@ template <typename ODE> static void BM_GF_VJP(benchmark::State &state, ODE ode) 
         Dspec::AdjGradType gxt(gx_s);
         Dspec::AdjHessType hxt(hx_s);
         Dspec::AdjVarType lxt(l_s);
-        gf.func.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, gxt, hxt, lxt);
+        gf.func_.get().compute_jacobian_adjointgradient_adjointhessian(xt, fxt, jxt, gxt, hxt, lxt);
         benchmark::DoNotOptimize(fx_s);
     }
 }

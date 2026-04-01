@@ -63,20 +63,20 @@ struct StaticScaled_Impl
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    Func func;
+    Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
     static const bool is_linear_function = Func::is_linear_function;
 
     StaticScaled_Impl() {}
-    StaticScaled_Impl(Func f) : func(std::move(f)) {
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
+    StaticScaled_Impl(Func f) : func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->func.compute(x, fx_);
+        this->func_.compute(x, fx_);
         fx *= Value::value;
     }
     template <class InType, class OutType, class JacType>
@@ -85,10 +85,10 @@ struct StaticScaled_Impl
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        this->func.compute_jacobian(x, fx_, jx_);
+        this->func_.compute_jacobian(x, fx_, jx_);
 
         fx *= Value::value;
-        this->func.scale_jacobian(jx, Value::value);
+        this->func_.scale_jacobian(jx, Value::value);
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -104,10 +104,10 @@ struct StaticScaled_Impl
 
         Output<Scalar> adjv_scaled = adjvars * Value::value;
 
-        this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_, adjhess_,
+        this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_, adjhess_,
                                                                    adjv_scaled);
         fx *= Value::value;
-        this->func.scale_jacobian(jx, Value::value);
+        this->func_.scale_jacobian(jx, Value::value);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,41 +116,41 @@ struct StaticScaled_Impl
                                        ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
-        this->func.right_jacobian_product(target_, left, right, assign, aliased);
+        this->func_.right_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
     inline void symetric_jacobian_product(ConstMatrixBaseRef<Target> target_,
                                           ConstEigenBaseRef<Left> left,
                                           ConstEigenBaseRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
-        this->func.symetric_jacobian_product(target_, left, right, assign, aliased);
+        this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_jacobian(target_, right, assign);
+        this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_gradient(target_, right, assign);
+        this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_hessian(target_, right, assign);
+        this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_jacobian(target_, s);
+        this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_gradient(target_, s);
+        this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_hessian(target_, s);
+        this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
@@ -160,7 +160,7 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    Func func;
+    Func func_;
     double scale_value_ = 1.0;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
@@ -169,18 +169,18 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     static const bool is_vectorizable = Func::is_vectorizable;
 
     Scaled_Impl() {}
-    Scaled_Impl(Func f, double s) : func(std::move(f)), scale_value_(s) {
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
-        this->set_input_domain(this->input_rows(), {func.input_domain()});
+    Scaled_Impl(Func f, double s) : func_(std::move(f)), scale_value_(s) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
 
-    bool is_linear() const { return func.is_linear(); }
+    bool is_linear() const { return func_.is_linear(); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->func.compute(x, fx_);
+        this->func_.compute(x, fx_);
         fx *= Scalar(this->scale_value_);
     }
     template <class InType, class OutType, class JacType>
@@ -189,9 +189,9 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        this->func.compute_jacobian(x, fx_, jx_);
+        this->func_.compute_jacobian(x, fx_, jx_);
         fx *= Scalar(this->scale_value_);
-        this->func.scale_jacobian(jx, Scalar(this->scale_value_));
+        this->func_.scale_jacobian(jx, Scalar(this->scale_value_));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -204,13 +204,13 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
 
         auto Impl = [&](auto &adjv_scaled) {
             adjv_scaled = adjvars * Scalar(this->scale_value_);
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                        adjhess_, adjv_scaled);
             fx *= Scalar(this->scale_value_);
-            this->func.scale_jacobian(jx_, Scalar(this->scale_value_));
+            this->func_.scale_jacobian(jx_, Scalar(this->scale_value_));
         };
 
-        const int orows = this->func.output_rows();
+        const int orows = this->func_.output_rows();
         tycho::utils::BumpAllocator::allocate_run(Impl,
                                                   tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
@@ -224,11 +224,11 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
             ConstMatrixBaseRef<Right> right_ref(right.derived());
             ConstDiagonalBaseRef<Left> left_ref(left.derived());
-            this->func.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
+            this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         } else {
             ConstMatrixBaseRef<Right> right_ref(right.derived());
             ConstMatrixBaseRef<Left> left_ref(left.derived());
-            this->func.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
+            this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         }
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
@@ -236,34 +236,34 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
                                           ConstEigenBaseRef<Left> left,
                                           ConstEigenBaseRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
-        this->func.symetric_jacobian_product(target_, left, right, assign, aliased);
+        this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_jacobian(target_, right, assign);
+        this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_gradient(target_, right, assign);
+        this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_hessian(target_, right, assign);
+        this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_jacobian(target_, s);
+        this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_gradient(target_, s);
+        this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_hessian(target_, s);
+        this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
@@ -274,7 +274,7 @@ struct RowScaled_Impl
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    Func func;
+    Func func_;
     Output<double> row_scale_values_;
     static const bool is_linear_function = Func::is_linear_function;
     static const bool is_vectorizable = Func::is_vectorizable;
@@ -283,12 +283,12 @@ struct RowScaled_Impl
     RowScaled_Impl() { this->row_scale_values_.setOnes(); }
 
     template <class OutType>
-    RowScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func(std::move(f)) {
+    RowScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func_(std::move(f)) {
         this->row_scale_values_ = s;
-        this->set_io_rows(this->func.input_rows(), this->func.output_rows());
-        this->set_input_domain(this->input_rows(), {func.input_domain()});
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
-    bool is_linear() const { return func.is_linear(); }
+    bool is_linear() const { return func_.is_linear(); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -297,7 +297,7 @@ struct RowScaled_Impl
 
         auto Impl = [&](auto &scales) {
             scales = this->row_scale_values_.template cast<Scalar>();
-            this->func.compute(x, fx_);
+            this->func_.compute(x, fx_);
             fx = fx.cwiseProduct(scales);
         };
 
@@ -315,9 +315,9 @@ struct RowScaled_Impl
         auto Impl = [&](auto &scales) {
             scales = this->row_scale_values_.template cast<Scalar>();
 
-            this->func.compute_jacobian(x, fx_, jx_);
+            this->func_.compute_jacobian(x, fx_, jx_);
             fx = fx.cwiseProduct(scales);
-            this->func.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
+            this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
                                               std::bool_constant<true>());
         };
 
@@ -341,10 +341,10 @@ struct RowScaled_Impl
             scales = this->row_scale_values_.template cast<Scalar>();
             adjv_scaled = adjvars.cwiseProduct(scales);
 
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                        adjhess_, adjv_scaled);
             fx = fx.cwiseProduct(scales);
-            this->func.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
+            this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
                                               std::bool_constant<true>());
         };
 
@@ -365,11 +365,11 @@ struct RowScaled_Impl
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
             ConstMatrixBaseRef<Right> right_ref(right.derived());
             ConstDiagonalBaseRef<Left> left_ref(left.derived());
-            this->func.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
+            this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         } else {
             ConstMatrixBaseRef<Right> right_ref(right.derived());
             ConstMatrixBaseRef<Left> left_ref(left.derived());
-            this->func.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
+            this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         }
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
@@ -377,34 +377,34 @@ struct RowScaled_Impl
                                           ConstEigenBaseRef<Left> left,
                                           ConstEigenBaseRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
-        this->func.symetric_jacobian_product(target_, left, right, assign, aliased);
+        this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_jacobian(target_, right, assign);
+        this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
                                     ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_gradient(target_, right, assign);
+        this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        this->func.accumulate_hessian(target_, right, assign);
+        this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_jacobian(target_, s);
+        this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_gradient(target_, s);
+        this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        this->func.scale_hessian(target_, s);
+        this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
@@ -417,7 +417,7 @@ struct MatrixScaled_Impl
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);
 
-    Func func;
+    Func func_;
 
     template <class Scalar> using MatType = Eigen::Matrix<Scalar, MRows, Func::ORC>;
 
@@ -431,12 +431,12 @@ struct MatrixScaled_Impl
     MatrixScaled_Impl() {}
 
     template <class OutType>
-    MatrixScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func(std::move(f)) {
+    MatrixScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func_(std::move(f)) {
         this->mat = s;
-        this->set_io_rows(this->func.input_rows(), this->mat.rows());
-        this->set_input_domain(this->input_rows(), {this->func.input_domain()});
+        this->set_io_rows(this->func_.input_rows(), this->mat.rows());
+        this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
 
-        if (mat.cols() != func.output_rows()) {
+        if (mat.cols() != func_.output_rows()) {
             throw std::invalid_argument(
                 "Matrix Must have same number of cols as RHS vector function.");
         }
@@ -445,7 +445,7 @@ struct MatrixScaled_Impl
             NoTemp = true;
         }
     }
-    bool is_linear() const { return this->func.is_linear(); }
+    bool is_linear() const { return this->func_.is_linear(); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -454,17 +454,17 @@ struct MatrixScaled_Impl
 
         if (NoTemp) {
             auto Impl = [&](auto &mattmp) {
-                this->func.compute(x, fx_);
+                this->func_.compute(x, fx_);
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fx).eval();
             };
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                              this->func.output_rows()));
+                                                              this->func_.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp) {
-                this->func.compute(x, fxtmp);
+                this->func_.compute(x, fxtmp);
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fxtmp);
             };
@@ -472,8 +472,8 @@ struct MatrixScaled_Impl
             tycho::utils::BumpAllocator::allocate_run(
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
+                                                        this->func_.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
         }
     }
     template <class InType, class OutType, class JacType>
@@ -485,32 +485,32 @@ struct MatrixScaled_Impl
 
         if (NoTemp) {
             auto Impl = [&](auto &mattmp) {
-                this->func.compute_jacobian(x, fx_, jx_);
+                this->func_.compute_jacobian(x, fx_, jx_);
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fx).eval();
-                this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
+                this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                              this->func.output_rows()));
+                                                              this->func_.output_rows()));
         } else {
 
             auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp) {
-                this->func.compute_jacobian(x, fxtmp, jxtmp);
+                this->func_.compute_jacobian(x, fxtmp, jxtmp);
                 mattmp = this->mat.template cast<Scalar>();
                 fx = (mattmp * fxtmp);
-                this->func.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
+                this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
                                                   std::bool_constant<false>());
             };
 
             tycho::utils::BumpAllocator::allocate_run(
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
-                                                              this->func.input_rows()));
+                                                        this->func_.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                                                              this->func_.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -529,18 +529,18 @@ struct MatrixScaled_Impl
             auto Impl = [&](auto &mattmp, auto &adjv_scaled) {
                 mattmp = this->mat.template cast<Scalar>();
                 adjv_scaled = (adjvars.transpose() * mattmp).transpose();
-                this->func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                            adjhess_, adjv_scaled);
 
                 fx = (mattmp * fx).eval();
-                this->func.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
+                this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
                                                   std::bool_constant<true>());
             };
             tycho::utils::BumpAllocator::allocate_run(
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1)
+                                                        this->func_.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1)
 
             );
         } else {
@@ -548,21 +548,21 @@ struct MatrixScaled_Impl
             auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp, auto &adjv_scaled) {
                 mattmp = this->mat.template cast<Scalar>();
                 adjv_scaled = (adjvars.transpose() * mattmp).transpose();
-                this->func.compute_jacobian_adjointgradient_adjointhessian(
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(
                     x, fxtmp, jxtmp, adjgrad_, adjhess_, adjv_scaled);
                 fx = (mattmp * fxtmp);
-                this->func.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
+                this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
                                                   std::bool_constant<false>());
             };
 
             tycho::utils::BumpAllocator::allocate_run(
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func.output_rows(),
-                                                              this->func.input_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func.output_rows(), 1));
+                                                        this->func_.output_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                                                              this->func_.input_rows()),
+                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
         }
     }
 };

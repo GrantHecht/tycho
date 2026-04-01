@@ -68,11 +68,11 @@ struct MatrixFunctionProduct_Impl
 
     MatrixFunctionProduct_Impl() {}
     MatrixFunctionProduct_Impl(MatFunc1 mf1, MatFunc2 mf2) : matrix_func1(mf1), matrix_func2(mf2) {
-        m1rows = this->matrix_func1.MatrixRows;
-        m1cols_m2rows = this->matrix_func2.MatrixRows;
-        m2cols = this->matrix_func2.MatrixCols;
+        m1rows = this->matrix_func1.matrix_rows_;
+        m1cols_m2rows = this->matrix_func2.matrix_rows_;
+        m2cols = this->matrix_func2.matrix_cols_;
 
-        if (this->matrix_func1.MatrixCols != this->matrix_func2.MatrixRows) {
+        if (this->matrix_func1.matrix_cols_ != this->matrix_func2.matrix_rows_) {
             throw std::invalid_argument(
                 "Invalid matrix product. Number of columns in matrix 1 does not match "
                 "number of rows in matrix 2.");
