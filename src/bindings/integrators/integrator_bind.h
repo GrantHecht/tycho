@@ -104,46 +104,46 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("integrate",
                 (IntegRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate,
-                nb::arg("Xt0UP"), nb::arg("tf"));
+                nb::arg("xt0_up"), nb::arg("tf"));
 
         obj.def("integrate",
                 (IntegEventRet (Integrator<DODE>::*)(const ODEStateD &, double,
                                                      const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("Events"));
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"));
 
         obj.def("integrate",
                 (std::vector<IntegRet> (Integrator<DODE>::*)(const std::vector<ODEStateD> &,
                                                              const Eigen::VectorXd &) const) &
                     Integrator<DODE>::integrate,
-                nb::arg("Xt0UPs"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_stm",
                 (std::vector<STMRet> (Integrator<DODE>::*)(const std::vector<ODEStateD> &,
                                                            const Eigen::VectorXd &) const) &
                     Integrator<DODE>::integrate_stm,
-                nb::arg("Xt0UPs"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_stm2",
                 (std::vector<std::tuple<ODEStateD, Eigen::MatrixXd, Eigen::MatrixXd>> (
                     Integrator<DODE>::*)(const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                                          const std::vector<ODEStateD> &) const) &
                     Integrator<DODE>::integrate_stm2,
-                nb::arg("Xt0UPs"), nb::arg("tfs"), nb::arg("Lfs"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("lfs"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_parallel",
                 (std::vector<IntegRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_parallel,
-                nb::arg("Xt0UPs"), nb::arg("tfs"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_parallel",
                 (std::vector<IntegEventRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_parallel,
-                nb::arg("Xt0UPs"), nb::arg("tfs"), nb::arg("Events"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("events"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         ////////////////////////////////////////////////////////////////////////////
@@ -151,12 +151,12 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("integrate_dense",
                 (DenseRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("Xt0UP"), nb::arg("tf"));
+                nb::arg("xt0_up"), nb::arg("tf"));
 
         obj.def("integrate_dense",
                 (DenseRet (Integrator<DODE>::*)(const ODEStateD &, double, int) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("n"));
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("n"));
 
         obj.def(
             "integrate_dense",
@@ -167,19 +167,19 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                                                  return PyObject_IsTrue(pyfunc(x).ptr()) != 0;
                                              });
             },
-            nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("n"), nb::arg("StopFunc"));
+            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("n"), nb::arg("stop_func"));
 
         obj.def("integrate_dense",
                 (DenseEventRet (Integrator<DODE>::*)(const ODEStateD &, double,
                                                      const std::vector<EventPack> &, bool) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("Events"), nb::arg("alloutput") = false);
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("alloutput") = false);
 
         obj.def("integrate_dense",
                 (DenseEventRet (Integrator<DODE>::*)(const ODEStateD &, double, int,
                                                      const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("nstates"), nb::arg("Events"));
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("nstates"), nb::arg("events"));
 
         ////////////////////////////////////////////////////////////////////////////
 
@@ -187,7 +187,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -195,14 +195,14 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("Events"), nb::arg("threads"),
+            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
             nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_dense_parallel",
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<int> &, int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("ns"), nb::arg("threads"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -210,7 +210,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &, const std::vector<int> &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("ns"), nb::arg("Events"), nb::arg("threads"),
+            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("events"), nb::arg("threads"),
             nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////
@@ -218,28 +218,28 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("integrate_stm",
                 (STMRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate_stm,
-                nb::arg("Xt0UP"), nb::arg("tf"));
+                nb::arg("xt0_up"), nb::arg("tf"));
         obj.def("integrate_stm",
                 (STMEventRet (Integrator<DODE>::*)(const ODEStateD &, double,
                                                    const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate_stm,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("Events"));
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"));
         obj.def("integrate_stm_parallel",
                 (STMRet (Integrator<DODE>::*)(const ODEStateD &, double,
                                               int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
         obj.def("integrate_stm_parallel",
                 (std::vector<STMRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
         obj.def("integrate_stm_parallel",
                 (std::vector<STMEventRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("Xt0UP"), nb::arg("tf"), nb::arg("Events"), nb::arg("threads"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////

@@ -132,9 +132,9 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
     obj.def_rw("mesh_abort_flag", &OptimalControlProblem::mesh_abort_flag_);
 
     obj.def("set_adaptive_mesh", &OptimalControlProblem::set_adaptive_mesh,
-            nb::arg("adaptive_mesh_") = true, nb::arg("ApplyToPhases") = true);
+            nb::arg("adaptive_mesh") = true, nb::arg("apply_to_phases") = true);
     obj.def("set_auto_scaling", &OptimalControlProblem::set_auto_scaling,
-            nb::arg("auto_scaling_") = true, nb::arg("ApplyToPhases") = true);
+            nb::arg("auto_scaling") = true, nb::arg("apply_to_phases") = true);
 
     obj.def("set_mesh_tol", &OptimalControlProblem::set_mesh_tol);
     obj.def("set_mesh_red_factor", &OptimalControlProblem::set_mesh_red_factor);
@@ -166,7 +166,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<VectorFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_equal_con),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
-            nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def(
             "add_link_equal_con",
@@ -174,10 +174,10 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_equal_con),
-            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
-            nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
-            nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
-            nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("xt_u_vars0"),
+            nb::arg("op_vars0"), nb::arg("sp_vars0"), nb::arg("phase1"), nb::arg("reg1"),
+            nb::arg("xt_u_vars1"), nb::arg("op_vars1"), nb::arg("sp_vars1"),
+            nb::arg("linkparams") = VectorXi(), nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_equal_con",
                 nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
@@ -186,37 +186,37 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_param_equal_con",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::add_link_param_equal_con),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
         obj.def("add_link_param_equal_con",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::add_link_param_equal_con),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_forward_link_equal_con",
                 nb::overload_cast<PhaseRefType, PhaseRefType, VarIndexType, ScaleType>(
                     &OptimalControlProblem::add_forward_link_equal_con),
                 nb::arg("phase0"), nb::arg("phase1"), nb::arg("vars"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_param_link_equal_con",
                 nb::overload_cast<PhaseRefType, PhaseRefType, RegionType, VarIndexType, ScaleType>(
                     &OptimalControlProblem::add_param_link_equal_con),
                 nb::arg("phase0"), nb::arg("phase1"), nb::arg("reg0"), nb::arg("vars"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_direct_link_equal_con",
                 nb::overload_cast<PhaseRefType, RegionType, VarIndexType, PhaseRefType, RegionType,
                                   VarIndexType, ScaleType>(
                     &OptimalControlProblem::add_direct_link_equal_con),
                 nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"), nb::arg("phase1"),
-                nb::arg("reg1"), nb::arg("v1"), nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("reg1"), nb::arg("v1"), nb::arg("auto_scale").none() = std::string("auto"));
     }
 
     //////////// inequal_cons_////////////////////////////////////////
@@ -226,7 +226,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<VectorFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_inequal_con),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
-            nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def(
             "add_link_inequal_con",
@@ -234,10 +234,10 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_inequal_con),
-            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
-            nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
-            nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
-            nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("xt_u_vars0"),
+            nb::arg("op_vars0"), nb::arg("sp_vars0"), nb::arg("phase1"), nb::arg("reg1"),
+            nb::arg("xt_u_vars1"), nb::arg("op_vars1"), nb::arg("sp_vars1"),
+            nb::arg("linkparams") = VectorXi(), nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_inequal_con",
                 nb::overload_cast<VectorFunctionalX, PhaseRefType, RegionType, VarIndexType,
@@ -246,18 +246,18 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_param_inequal_con",
                 nb::overload_cast<VectorFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::add_link_param_inequal_con),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
         obj.def("add_link_param_inequal_con",
                 nb::overload_cast<VectorFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::add_link_param_inequal_con),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
     }
     //////////// objectives_ ////////////////////////////////////////
     {
@@ -266,7 +266,7 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
             nb::overload_cast<ScalarFunctionalX, std::vector<PhasePack>, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_objective),
             nb::arg("func"), nb::arg("phasepack"), nb::arg("linkparams") = VectorXi(),
-            nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def(
             "add_link_objective",
@@ -274,10 +274,10 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                               VarIndexType, VarIndexType, PhaseRefType, RegionType, VarIndexType,
                               VarIndexType, VarIndexType, VarIndexType, ScaleType>(
                 &OptimalControlProblem::add_link_objective),
-            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("XtUVars0"),
-            nb::arg("OPVars0"), nb::arg("SPVars0"), nb::arg("phase1"), nb::arg("reg1"),
-            nb::arg("XtUVars1"), nb::arg("OPVars1"), nb::arg("SPVars1"),
-            nb::arg("linkparams") = VectorXi(), nb::arg("AutoScale").none() = std::string("auto"));
+            nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("xt_u_vars0"),
+            nb::arg("op_vars0"), nb::arg("sp_vars0"), nb::arg("phase1"), nb::arg("reg1"),
+            nb::arg("xt_u_vars1"), nb::arg("op_vars1"), nb::arg("sp_vars1"),
+            nb::arg("linkparams") = VectorXi(), nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_objective",
                 nb::overload_cast<ScalarFunctionalX, PhaseRefType, RegionType, VarIndexType,
@@ -286,18 +286,18 @@ static void BuildNewLinkIterface(nb::class_<OptimalControlProblem, OptimizationP
                 nb::arg("func"), nb::arg("phase0"), nb::arg("reg0"), nb::arg("v0"),
                 nb::arg("phase1"), nb::arg("reg1"), nb::arg("v1"),
                 nb::arg("linkparams") = VectorXi(),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("auto_scale").none() = std::string("auto"));
 
         obj.def("add_link_param_objective",
                 nb::overload_cast<ScalarFunctionalX, std::vector<VectorXi>, ScaleType>(
                     &OptimalControlProblem::add_link_param_objective),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
         obj.def("add_link_param_objective",
                 nb::overload_cast<ScalarFunctionalX, VectorXi, ScaleType>(
                     &OptimalControlProblem::add_link_param_objective),
-                nb::arg("func"), nb::arg("LinkParms"),
-                nb::arg("AutoScale").none() = std::string("auto"));
+                nb::arg("func"), nb::arg("link_parms"),
+                nb::arg("auto_scale").none() = std::string("auto"));
     }
 }
 

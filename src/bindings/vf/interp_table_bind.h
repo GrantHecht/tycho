@@ -33,13 +33,13 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     auto obj = nb::class_<InterpTable1D>(m, "InterpTable1D");
 
     obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, int, std::string>(),
-            nb::arg("ts"), nb::arg("Vs"), nb::arg("axis") = 0,
+            nb::arg("ts"), nb::arg("vs"), nb::arg("axis") = 0,
             nb::arg("kind") = std::string("cubic"));
 
     obj.def(nb::init<const Eigen::VectorXd &, const MatType &, int, std::string>(), nb::arg("ts"),
-            nb::arg("Vs"), nb::arg("axis") = 0, nb::arg("kind") = std::string("cubic"));
+            nb::arg("vs"), nb::arg("axis") = 0, nb::arg("kind") = std::string("cubic"));
 
-    obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, std::string>(), nb::arg("Vts"),
+    obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, std::string>(), nb::arg("vts"),
             nb::arg("tvar") = -1, nb::arg("kind") = std::string("cubic"));
 
     obj.def("interp", nb::overload_cast<double>(&InterpTable1D::interp, nb::const_));
@@ -103,7 +103,7 @@ inline void InterpTable2DBuild(nb::module_ &m) {
 
     obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &,
                      const Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &, std::string>(),
-            nb::arg("xs"), nb::arg("ys"), nb::arg("Z"), nb::arg("kind") = std::string("cubic"));
+            nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = std::string("cubic"));
 
     obj.def("interp", nb::overload_cast<double, double>(&InterpTable2D::interp, nb::const_));
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,

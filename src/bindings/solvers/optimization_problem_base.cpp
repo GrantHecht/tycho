@@ -32,7 +32,7 @@ void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
 
     obj.def("set_num_partitions",
             nb::overload_cast<int, int>(&OptimizationProblemBase::set_num_partitions),
-            nb::arg("num_partitions_"), nb::arg("qp_threads_"));
+            nb::arg("num_partitions"), nb::arg("qp_threads"));
 
     obj.def("set_num_partitions",
             nb::overload_cast<int>(&OptimizationProblemBase::set_num_partitions));

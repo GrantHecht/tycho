@@ -402,19 +402,19 @@ if __name__ == "__main__":
     phase4 = ode4.phase(tmode, IG4, nsegs4)
     phase4.set_control_mode(cmode)
 
-    ## AutoScale = "auto" if not specified
+    ## auto_scale = "auto" if not specified
     phase4.add_boundary_value("Front", "mass", m0_phase4)
     phase4.add_upper_var_bound("Back", "time", tf_phase4)
-    # AutoScale=None, will turn it off for this constraint
-    phase4.add_lu_norm_bound("Path", "U", 0.5, 1.5, AutoScale=None)
+    # auto_scale=None, will turn it off for this constraint
+    phase4.add_lu_norm_bound("Path", "U", 0.5, 1.5, auto_scale=None)
 
-    phase4.add_lower_norm_bound("Path", "R", Re, AutoScale=1 / Lstar)
+    phase4.add_lower_norm_bound("Path", "R", Re, auto_scale=1 / Lstar)
 
     phase4.add_equal_con(
         "Back",
         TargetOrbit(at, et, istart, Ot, Wt),
         ["RV"],
-        AutoScale=[1 / Lstar, 1.0, 1.0, 1.0, 1.0],
+        auto_scale=[1 / Lstar, 1.0, 1.0, 1.0, 1.0],
     )
 
     # Maximize final mass
@@ -437,12 +437,12 @@ if __name__ == "__main__":
         phase.set_mesh_error_criteria(oc.MeshErrorAggregation.MAX)
         phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
 
-    ## Each Phase does not have to have the same AutoScale units even if its the same ODE
+    ## Each Phase does not have to have the same auto_scale units even if its the same ODE
     phase4.set_units(R=2 * Lstar, V=Vstar, t=0.8 * Tstar, m=Mstar)
 
     ## Everything but mass
     ocp.add_forward_link_equal_con(
-        phase1, phase4, ["R", "V", "t", "U"], AutoScale="auto"
+        phase1, phase4, ["R", "V", "t", "U"], auto_scale="auto"
     )
 
     ocp.optimizer.set_opt_ls_mode("L1")

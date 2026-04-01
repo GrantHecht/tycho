@@ -131,12 +131,12 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
         auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
 
         if constexpr (ORR != 1) {
-            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
-                    nb::arg("ORows"), nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6,
-                    nb::arg("Hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple());
+            obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
+                    nb::arg("o_rows"), nb::arg("func"), nb::arg("jstepsize") = 1.0e-6,
+                    nb::arg("hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple());
         } else {
-            obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("IRows"),
-                    nb::arg("Func"), nb::arg("Jstepsize") = 1.0e-6, nb::arg("Hstepsize") = 1.0e-4,
+            obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
+                    nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 1.0e-4,
                     nb::arg("args") = nb::tuple());
         }
 
