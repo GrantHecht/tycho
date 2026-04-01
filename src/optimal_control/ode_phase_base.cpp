@@ -736,7 +736,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         }
     };
 
-    for (auto &[key, ob] : this->user_integrands) {
+    for (auto &[key, ob] : this->user_integrands_) {
         int xp = ob.xtu_vars_.size();
         int sop = ob.op_vars_.size() + ob.sp_vars_.size();
         VectorXi xtrap(xp + 1);
@@ -789,7 +789,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         ob.phase_local_index_ = PLindex;
     }
 
-    for (auto &[key, ob] : this->user_param_integrands) {
+    for (auto &[key, ob] : this->user_param_integrands_) {
         int xp = ob.xtu_vars_.size();
         int sop = ob.op_vars_.size() + ob.sp_vars_.size();
         VectorXi xtrap(xp + 1);
@@ -1083,9 +1083,9 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
         CheckFun(eq, f);
     for (auto &[key, f] : this->user_inequalities_)
         CheckFun(iq, f);
-    for (auto &[key, f] : this->user_integrands)
+    for (auto &[key, f] : this->user_integrands_)
         CheckFun(iobj, f);
-    for (auto &[key, f] : this->user_param_integrands)
+    for (auto &[key, f] : this->user_param_integrands_)
         CheckFun(ipcon, f);
     for (auto &[key, f] : this->user_state_objectives_)
         CheckFun(sobj, f);
@@ -1250,8 +1250,8 @@ void tycho::oc::ODEPhaseBase::calc_auto_scales() {
     calc_impl(this->user_equalities_);
     calc_impl(this->user_inequalities_);
     calc_impl(this->user_state_objectives_);
-    calc_impl(this->user_integrands);
-    calc_impl(this->user_param_integrands);
+    calc_impl(this->user_integrands_);
+    calc_impl(this->user_param_integrands_);
 }
 
 std::vector<double> tycho::oc::ODEPhaseBase::get_objective_scales() {
@@ -1266,7 +1266,7 @@ std::vector<double> tycho::oc::ODEPhaseBase::get_objective_scales() {
             scales.push_back(obj.output_scales_[0]);
         }
     }
-    for (auto &[key, obj] : this->user_integrands) {
+    for (auto &[key, obj] : this->user_integrands_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             // OutputScales units tstar/obj
             // Divide by tstar, since this function is the integrand not the total integral
@@ -1283,7 +1283,7 @@ void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
             obj.output_scales_[0] = scale;
         }
     }
-    for (auto &[key, obj] : this->user_integrands) {
+    for (auto &[key, obj] : this->user_integrands_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             // Multiply by tstar, since this function is the integrand not the total integral
             obj.output_scales_[0] = scale * this->xtup_units_[this->t_var()];

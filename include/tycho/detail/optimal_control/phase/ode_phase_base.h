@@ -124,8 +124,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     std::map<int, StateConstraint> user_equalities_;
     std::map<int, StateConstraint> user_inequalities_;
     std::map<int, StateObjective> user_state_objectives_;
-    std::map<int, StateObjective> user_integrands;
-    std::map<int, StateObjective> user_param_integrands;
+    std::map<int, StateObjective> user_integrands_;
+    std::map<int, StateObjective> user_param_integrands_;
 
     int dynamics_func_index_ = 0;
     int control_funcs_index_ = -1;
@@ -738,7 +738,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     ///////////////////////////////////////////////////
     int add_integral_objective(StateObjective obj) {
-        return add_func_impl(obj, this->user_integrands, "Integral Objective");
+        return add_func_impl(obj, this->user_integrands_, "Integral Objective");
     }
 
     int add_integral_objective(ScalarFunctionalX fun, VarIndexType XtUPvars_t,
@@ -746,7 +746,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
             PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
-        return add_func_impl(con, this->user_integrands, "Integral Objective");
+        return add_func_impl(con, this->user_integrands_, "Integral Objective");
     }
 
     int add_integral_objective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, ScaleType scale_t) {
@@ -755,15 +755,15 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
             PhaseRegionFlags::Path, fun, XtUPvars_t, empty, empty, scale_t);
-        return add_func_impl(con, this->user_integrands, "Integral Objective");
+        return add_func_impl(con, this->user_integrands_, "Integral Objective");
     }
 
     ///////////////////////////////////////////////////
     int add_integral_param_function(StateObjective con, int pv) {
         VectorXi epv(1);
         epv[0] = pv;
-        int index = add_func_impl(con, this->user_param_integrands, "Integral Parameter Function");
-        this->user_param_integrands[index].ext_vars_ = epv;
+        int index = add_func_impl(con, this->user_param_integrands_, "Integral Parameter Function");
+        this->user_param_integrands_[index].ext_vars_ = epv;
         return index;
     }
 
@@ -776,8 +776,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
             PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
-        int index = add_func_impl(con, this->user_param_integrands, "Integral Parameter Function");
-        this->user_param_integrands[index].ext_vars_ = epv;
+        int index = add_func_impl(con, this->user_param_integrands_, "Integral Parameter Function");
+        this->user_param_integrands_[index].ext_vars_ = epv;
         return index;
     }
 
@@ -799,10 +799,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->remove_func_impl(this->user_state_objectives_, index, "State Objective");
     }
     void remove_integral_objective(int index) {
-        this->remove_func_impl(this->user_integrands, index, "Integral Objective");
+        this->remove_func_impl(this->user_integrands_, index, "Integral Objective");
     }
     void remove_integral_param_function(int index) {
-        this->remove_func_impl(this->user_param_integrands, index, "Integral Parameter Function");
+        this->remove_func_impl(this->user_param_integrands_, index, "Integral Parameter Function");
     }
 
     /////////////////////////////////////////////////
@@ -999,10 +999,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     std::vector<Eigen::VectorXd> return_traj_error() const;
 
     Eigen::VectorXd return_integral_objective_scales(int index) const {
-        return this->user_integrands.at(index).output_scales_;
+        return this->user_integrands_.at(index).output_scales_;
     }
     Eigen::VectorXd return_integral_param_function_scales(int index) const {
-        return this->user_param_integrands.at(index).output_scales_;
+        return this->user_param_integrands_.at(index).output_scales_;
     }
     Eigen::VectorXd return_state_objective_scales(int index) const {
         return this->user_state_objectives_.at(index).output_scales_;
