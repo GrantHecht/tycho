@@ -52,7 +52,7 @@ struct OptimizationProblemBase {
 
     OptimizationProblemBase() {
         this->optimizer_ = std::make_shared<PSIOPT>();
-        this->initPartitions();
+        this->init_partitions();
     }
 
     virtual PSIOPT::ConvergenceFlags solve() = 0;
@@ -72,7 +72,7 @@ struct OptimizationProblemBase {
         return nt * 4;
     }
 
-    virtual void initPartitions() {
+    virtual void init_partitions() {
         this->num_partitions_ = default_num_partitions();
         this->optimizer_->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
@@ -136,7 +136,7 @@ struct OptimizationProblemBase {
         return flag;
     }
 
-    static JetJobModes strto_JetJobMode(const std::string &str) {
+    static JetJobModes strto_jet_job_mode(const std::string &str) {
 
         if (str == "solve" || str == "Solve")
             return JetJobModes::Solve;
@@ -158,7 +158,7 @@ struct OptimizationProblemBase {
     }
 
     void set_jet_job_mode(JetJobModes m) { this->jet_job_mode_ = m; }
-    void set_jet_job_mode(const std::string &str) { this->set_jet_job_mode(strto_JetJobMode(str)); }
+    void set_jet_job_mode(const std::string &str) { this->set_jet_job_mode(strto_jet_job_mode(str)); }
 };
 
 } // namespace tycho::solvers

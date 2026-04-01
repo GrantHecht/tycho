@@ -1181,7 +1181,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void jet_release() {
         this->indexer_ = PhaseIndexer();
         this->optimizer_->release();
-        this->initPartitions();
+        this->init_partitions();
         this->optimizer_->print_level_ = 0;
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();

@@ -183,7 +183,7 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                 }
 
                 if (func.xtu_vars_[j].size() > 0) {
-                    if (func.xtu_vars_[j].maxCoeff() >= this->Phase(pnum)->xtu_p_vars() ||
+                    if (func.xtu_vars_[j].maxCoeff() >= this->phase(pnum)->xtu_p_vars() ||
                         func.xtu_vars_[j].minCoeff() < 0) {
 
                         fmt::print(
@@ -197,7 +197,7 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                     }
                 }
                 if (func.op_vars_[j].size() > 0) {
-                    if (func.op_vars_[j].maxCoeff() >= this->Phase(pnum)->p_vars() ||
+                    if (func.op_vars_[j].maxCoeff() >= this->phase(pnum)->p_vars() ||
                         func.op_vars_[j].minCoeff() < 0) {
 
                         fmt::print(
@@ -211,7 +211,7 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                     }
                 }
                 if (func.sp_vars_[j].size() > 0) {
-                    if (func.sp_vars_[j].maxCoeff() >= this->Phase(pnum)->num_stat_params_ ||
+                    if (func.sp_vars_[j].maxCoeff() >= this->phase(pnum)->num_stat_params_ ||
                         func.sp_vars_[j].minCoeff() < 0) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"

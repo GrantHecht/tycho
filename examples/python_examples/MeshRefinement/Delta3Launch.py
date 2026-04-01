@@ -460,7 +460,7 @@ if __name__ == "__main__":
 
     plt.show()
 
-    Phase1Traj = phase1.return_traj()  # or ocp.Phase(i).return_traj()
+    Phase1Traj = phase1.return_traj()  # or ocp.phase(i).return_traj()
     Phase2Traj = phase2.return_traj()
     Phase3Traj = phase3.return_traj()
     Phase4Traj = phase4.return_traj()

@@ -83,7 +83,7 @@ void TychoBind<OptimalControlProblem>::Build(nb::module_ &m) {
     obj.def("get_phase_num", nb::overload_cast<PhasePtr>(&OptimalControlProblem::get_phase_num));
 
     obj.def("remove_phase", &OptimalControlProblem::remove_phase, "");
-    obj.def("phase", &OptimalControlProblem::Phase, "");
+    obj.def("phase", &OptimalControlProblem::phase, "");
 
     obj.def("set_link_params",
             nb::overload_cast<VectorXd, VectorXd>(&OptimalControlProblem::set_link_params));

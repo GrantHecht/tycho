@@ -61,15 +61,15 @@ the ocp.
 
 ###############################################################################
 """
-You can access the phases in an ocp using the ocp.Phase(i) method where i
+You can access the phases in an ocp using the ocp.phase(i) method where i
 is the index of the phase in the order they were added. If the phase is created
 elswhere in the script you can maninuplaute it throught that orbject or via
-the .Phase(i) method as shown below. Note, phases are large stateful objects and we
-do not make copies of them by default, thus ocp.Phase(0) and phase0 are the EXACT
+the .phase(i) method as shown below. Note, phases are large stateful objects and we
+do not make copies of them by default, thus ocp.phase(0) and phase0 are the EXACT
 same object. Be careful not to apply duplicate constraints to the same phase accidentally
 as WE DO NOT CHECK FOR THIS
 """
-ocp.Phase(0).addBoundaryValue("Front", range(0, 6), np.zeros((6)))
+ocp.phase(0).addBoundaryValue("Front", range(0, 6), np.zeros((6)))
 """
 Equivalent to above,make sure you dont accidentally do both.
 """
@@ -137,12 +137,12 @@ ocp.addLinkEqualCon(
 ## Same as above
 ocp.addLinkEqualCon(
     ALinkEqualCon(),
-    ocp.Phase(0),
+    ocp.phase(0),
     "Last",
     XtUvars0,
     OPvars0,
     SPvars0,
-    ocp.Phase(1),
+    ocp.phase(1),
     "First",
     XtUvars1,
     OPvars1,

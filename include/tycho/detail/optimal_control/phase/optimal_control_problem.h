@@ -366,7 +366,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         this->phases.erase(this->phases.begin() + ith);
         this->phase_names.erase(this->phase_names.begin() + ith);
     }
-    PhasePtr Phase(int ith) {
+    PhasePtr phase(int ith) {
         if (ith < 0)
             ith = (this->phases.size() + ith);
         return this->phases[ith];
@@ -1573,7 +1573,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
     void jet_release() {
         this->optimizer_->release();
-        this->initPartitions();
+        this->init_partitions();
         this->optimizer_->print_level_ = 0;
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
