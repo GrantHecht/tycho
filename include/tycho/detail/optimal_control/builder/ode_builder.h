@@ -2,7 +2,7 @@
 // Tycho — Builder API: ODEBuilder
 //
 // Fluent builder for constructing RuntimeODE objects.  Accepts dynamics via
-// a lambda (receiving a proxy with XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors) or
+// a lambda (receiving a proxy with x_var/u_var/t_var/p_var/x_vec/u_vec/p_vec accessors) or
 // a pre-built VectorFunction expression.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
@@ -26,7 +26,7 @@ using oc::ODEArguments;
 using vf::GenericFunction;
 
 /// Proxy passed to the ODEBuilder::define() lambda.  Provides simplified
-/// XVar/UVar/TVar/PVar/XVec/UVec/PVec accessors for building VectorFunction
+/// x_var/u_var/t_var/p_var/x_vec/u_vec/p_vec accessors for building VectorFunction
 /// expressions from the XtUP input layout.
 class ODEArgsProxy {
   public:
@@ -36,10 +36,10 @@ class ODEArgsProxy {
     auto x_var(int i) const {
         if (args_.x_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::XVar: no state variables declared (xvars=0)");
+                "ODEArgsProxy::x_var: no state variables declared (xvars=0)");
         if (i < 0 || i >= args_.x_vars())
             throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::XVar: index {} out of range [0, {})", i, args_.x_vars()));
+                "ODEArgsProxy::x_var: index {} out of range [0, {})", i, args_.x_vars()));
         return args_.segment(0, args_.x_vars()).coeff(i);
     }
 
@@ -47,7 +47,7 @@ class ODEArgsProxy {
     auto x_vec() const {
         if (args_.x_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::XVec: no state variables declared (xvars=0)");
+                "ODEArgsProxy::x_vec: no state variables declared (xvars=0)");
         return args_.segment(0, args_.x_vars());
     }
 
@@ -55,10 +55,10 @@ class ODEArgsProxy {
     auto x_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::XVec: count must be positive (got {})", count));
+                fmt::format("ODEArgsProxy::x_vec: count must be positive (got {})", count));
         if (start < 0 || start + count > args_.x_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::XVec: range [{}, {}) out of X range [0, {})", start,
+                fmt::format("ODEArgsProxy::x_vec: range [{}, {}) out of X range [0, {})", start,
                             start + count, args_.x_vars()));
         return args_.segment(start, count);
     }
@@ -70,10 +70,10 @@ class ODEArgsProxy {
     auto u_var(int i) const {
         if (args_.u_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::UVar: no control variables declared (uvars=0)");
+                "ODEArgsProxy::u_var: no control variables declared (uvars=0)");
         if (i < 0 || i >= args_.u_vars())
             throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::UVar: index {} out of range [0, {})", i, args_.u_vars()));
+                "ODEArgsProxy::u_var: index {} out of range [0, {})", i, args_.u_vars()));
         return args_.segment(args_.xt_vars(), args_.u_vars()).coeff(i);
     }
 
@@ -81,7 +81,7 @@ class ODEArgsProxy {
     auto u_vec() const {
         if (args_.u_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::UVec: no control variables declared (uvars=0)");
+                "ODEArgsProxy::u_vec: no control variables declared (uvars=0)");
         return args_.segment(args_.xt_vars(), args_.u_vars());
     }
 
@@ -89,10 +89,10 @@ class ODEArgsProxy {
     auto u_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::UVec: count must be positive (got {})", count));
+                fmt::format("ODEArgsProxy::u_vec: count must be positive (got {})", count));
         if (start < 0 || start + count > args_.u_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::UVec: range [{}, {}) out of U range [0, {})", start,
+                fmt::format("ODEArgsProxy::u_vec: range [{}, {}) out of U range [0, {})", start,
                             start + count, args_.u_vars()));
         return args_.segment(args_.xt_vars() + start, count);
     }
@@ -101,10 +101,10 @@ class ODEArgsProxy {
     auto p_var(int i) const {
         if (args_.p_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::PVar: no parameter variables declared (pvars=0)");
+                "ODEArgsProxy::p_var: no parameter variables declared (pvars=0)");
         if (i < 0 || i >= args_.p_vars())
             throw std::invalid_argument(fmt::format(
-                "ODEArgsProxy::PVar: index {} out of range [0, {})", i, args_.p_vars()));
+                "ODEArgsProxy::p_var: index {} out of range [0, {})", i, args_.p_vars()));
         return args_.segment(args_.xtu_vars(), args_.p_vars()).coeff(i);
     }
 
@@ -112,7 +112,7 @@ class ODEArgsProxy {
     auto p_vec() const {
         if (args_.p_vars() == 0)
             throw std::invalid_argument(
-                "ODEArgsProxy::PVec: no parameter variables declared (pvars=0)");
+                "ODEArgsProxy::p_vec: no parameter variables declared (pvars=0)");
         return args_.segment(args_.xtu_vars(), args_.p_vars());
     }
 
@@ -120,40 +120,40 @@ class ODEArgsProxy {
     auto p_vec(int start, int count) const {
         if (count <= 0)
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::PVec: count must be positive (got {})", count));
+                fmt::format("ODEArgsProxy::p_vec: count must be positive (got {})", count));
         if (start < 0 || start + count > args_.p_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::PVec: range [{}, {}) out of P range [0, {})", start,
+                fmt::format("ODEArgsProxy::p_vec: range [{}, {}) out of P range [0, {})", start,
                             start + count, args_.p_vars()));
         return args_.segment(args_.xtu_vars() + start, count);
     }
 
     /// Sub-segment of the state vector with compile-time size (0-based within X).
     template <int SZ> auto x_vec(int start = 0) const {
-        static_assert(SZ > 0, "ODEArgsProxy::XVec<SZ>: SZ must be positive");
+        static_assert(SZ > 0, "ODEArgsProxy::x_vec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.x_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::XVec<{}>: range [{}, {}) out of X range [0, {})", SZ,
+                fmt::format("ODEArgsProxy::x_vec<{}>: range [{}, {}) out of X range [0, {})", SZ,
                             start, start + SZ, args_.x_vars()));
         return args_.segment<SZ>(start);
     }
 
     /// Sub-segment of the control vector with compile-time size (0-based within U).
     template <int SZ> auto u_vec(int start = 0) const {
-        static_assert(SZ > 0, "ODEArgsProxy::UVec<SZ>: SZ must be positive");
+        static_assert(SZ > 0, "ODEArgsProxy::u_vec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.u_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::UVec<{}>: range [{}, {}) out of U range [0, {})", SZ,
+                fmt::format("ODEArgsProxy::u_vec<{}>: range [{}, {}) out of U range [0, {})", SZ,
                             start, start + SZ, args_.u_vars()));
         return args_.segment<SZ>(args_.xt_vars() + start);
     }
 
     /// Sub-segment of the parameter vector with compile-time size (0-based within P).
     template <int SZ> auto p_vec(int start = 0) const {
-        static_assert(SZ > 0, "ODEArgsProxy::PVec<SZ>: SZ must be positive");
+        static_assert(SZ > 0, "ODEArgsProxy::p_vec<SZ>: SZ must be positive");
         if (start < 0 || start + SZ > args_.p_vars())
             throw std::invalid_argument(
-                fmt::format("ODEArgsProxy::PVec<{}>: range [{}, {}) out of P range [0, {})", SZ,
+                fmt::format("ODEArgsProxy::p_vec<{}>: range [{}, {}) out of P range [0, {})", SZ,
                             start, start + SZ, args_.p_vars()));
         return args_.segment<SZ>(args_.xtu_vars() + start);
     }
@@ -171,8 +171,8 @@ class ODEArgsProxy {
 /// Usage:
 ///   auto ode = ODEBuilder(3, 1)
 ///       .define([](const auto& args) {
-///           auto v = args.XVar(2);
-///           auto theta = args.UVar(0);
+///           auto v = args.x_var(2);
+///           auto theta = args.u_var(0);
 ///           return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
 ///       })
 ///       .var_names({{"x",0}, {"y",1}, {"v",2}, {"t",3}, {"theta",4}})

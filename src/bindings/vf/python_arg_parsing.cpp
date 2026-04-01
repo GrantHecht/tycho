@@ -106,7 +106,7 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
             if (irows == 0) {
                 irows = irowstmp;
             } else if (irowstmp != irows) {
-                throw std::invalid_argument("Asset functions in list must have same input size");
+                throw std::invalid_argument("VectorFunctions in list must have same input size");
             }
 
         } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
@@ -129,14 +129,14 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
 
         else {
             nb::print(nb::str(xi.type()));
-            throw std::invalid_argument("Argument cannot be converted to Asset function");
+            throw std::invalid_argument("Argument cannot be converted to VectorFunction");
         }
 
         i++;
     }
 
     if (irows == 0) {
-        throw std::invalid_argument("Argument list must contain at least one asset function.");
+        throw std::invalid_argument("Argument list must contain at least one VectorFunction.");
     }
 
     std::vector<Rtype> funs;
@@ -227,7 +227,7 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
             if (irows == 0) {
                 irows = irowstmp;
             } else if (irowstmp != irows) {
-                throw std::invalid_argument("Asset functions in list must have same input size");
+                throw std::invalid_argument("VectorFunctions in list must have same input size");
             }
 
         } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
@@ -235,13 +235,13 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
             // Good to go
         } else {
             nb::print(nb::str(xi.type()));
-            throw std::invalid_argument("Argument cannot be converted to Asset function");
+            throw std::invalid_argument("Argument cannot be converted to VectorFunction");
         }
 
         i++;
     }
     if (irows == 0) {
-        throw std::invalid_argument("Argument list must contain at least one asset function.");
+        throw std::invalid_argument("Argument list must contain at least one VectorFunction.");
     }
     std::vector<Rtype> funs;
     int Elem = 0;

@@ -129,7 +129,7 @@ struct OptimizationProblemBase {
             throw ::std::invalid_argument("jet_job_mode_ not set");
         }
         default:
-            throw std::invalid_argument("Unrecognized jet_job_mode_");
+            throw std::invalid_argument("Unrecognized jet_job_mode");
         }
 
         this->jet_release();
@@ -152,7 +152,7 @@ struct OptimizationProblemBase {
         else if (str == "DoNothing" || str == "do_nothing" || str == "Do_Nothing")
             return JetJobModes::DoNothing;
         else {
-            auto msg = fmt::format("Unrecognized jet_job_mode_: {0}\n", str);
+            auto msg = fmt::format("Unrecognized jet_job_mode: {0}\n", str);
             throw std::invalid_argument(msg);
         }
     }
