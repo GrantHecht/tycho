@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,19 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::Arguments;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::StackedOutputs;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     static auto Definition(const Integrand &integ, int xv, int pv) {
@@ -64,5 +75,4 @@ struct TrapezoidalIntegral
     TrapezoidalIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

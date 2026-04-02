@@ -8,14 +8,13 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::utils {
 /*!
  * @brief Factorial function
  *
@@ -31,23 +30,23 @@ inline int factorial(int i) { return (i == 1 || i == 0) ? 1 : factorial(i - 1) *
  * @param j
  * @return int
  */
-inline int factorialDiv(int i, int j) {
+inline int factorial_div(int i, int j) {
     if (i == 0) {
-        return factorialDiv(i + 1, j);
+        return factorial_div(i + 1, j);
     } else if (j == 0) {
-        return factorialDiv(i, j + 1);
+        return factorial_div(i, j + 1);
     } else if (j == i + 1) {
         return j;
     } else if (i == j + 1) {
         return i;
     } else if (i > j) {
-        return i * factorialDiv(i - 1, j);
+        return i * factorial_div(i - 1, j);
     } else if (j > i) {
-        return j * factorialDiv(i, j - 1);
+        return j * factorial_div(i, j - 1);
     } else if (i == j) {
         return 1;
     } else {
         return 0;
     }
 }
-} // namespace Tycho
+} // namespace tycho::utils

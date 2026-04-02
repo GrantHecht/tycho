@@ -8,7 +8,7 @@
 #include "tycho/detail/utils/sizing_helpers.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(SizingHelpersTest, SumPositive) {
     static_assert(SZ_SUM<3, 4>::value == 7);

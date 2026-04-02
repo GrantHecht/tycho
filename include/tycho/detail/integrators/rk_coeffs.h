@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include <array>
 
-namespace Tycho {
+namespace tycho::integrators {
 
 enum class RKOptions {
     RK4Classic,
@@ -35,7 +34,7 @@ template <RKOptions opt> struct RKCoeffs {};
 
 template <> struct RKCoeffs<RKOptions::RK4Classic> {
     static const int Stages = 4;
-    static const bool isDiag = true;
+    static const bool is_diag_ = true;
     static const bool EmbeddedCorrector = false;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
@@ -51,7 +50,7 @@ template <> struct RKCoeffs<RKOptions::RK4Classic> {
 
 template <> struct RKCoeffs<RKOptions::DOPRI54> {
     static const int Stages = 7;
-    static const bool isDiag = false;
+    static const bool is_diag_ = false;
     static const bool EmbeddedCorrector = true;
     static const bool FSAL = true;
 
@@ -83,7 +82,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI54> {
 
 template <> struct RKCoeffs<RKOptions::DOPRI5> {
     static const int Stages = 6;
-    static const bool isDiag = false;
+    static const bool is_diag_ = false;
     static const bool EmbeddedCorrector = false;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
@@ -106,7 +105,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI5> {
 
 template <> struct RKCoeffs<RKOptions::DOPRI87> {
     static const int Stages = 13;
-    static const bool isDiag = false;
+    static const bool is_diag_ = false;
     static const bool EmbeddedCorrector = true;
     static const bool FSAL = false;
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
@@ -189,4 +188,4 @@ template <> struct RKCoeffs<RKOptions::DOPRI87> {
         0.0138169474640115,  -0.0276768086980947};
 };
 
-} // namespace Tycho
+} // namespace tycho::integrators

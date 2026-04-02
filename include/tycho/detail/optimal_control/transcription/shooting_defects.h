@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -34,35 +33,51 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::Arguments;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::Is_SuperScalar;
+using vf::StackedOutputs;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
+
+// Solvers types
+using tycho::solvers::SolverIndexingData;
 
 template <class DODE, class Integrator> struct ShootingDefect_Impl {
     static auto Definition(const DODE &ode, const Integrator &integ) {
         constexpr int IRC = SZ_SUM<SZ_PROD<DODE::XtUV, 2>::value, DODE::PV>::value;
-        int input_rows = ode.XtUVars() * 2 + ode.PVars();
+        int input_rows = ode.xtu_vars() * 2 + ode.p_vars();
 
         auto args = Arguments<IRC>(input_rows);
         // Input[x1,t1,u1,x2,t2,u2,pv]
 
-        auto x1 = args.template head<DODE::XtUV>(ode.XtUVars());
-        auto t1 = x1.template coeff<DODE::XV>(ode.XVars());
-        auto x2 = args.template segment<DODE::XtUV, DODE::XtUV>(ode.XtUVars(), ode.XtUVars());
-        auto t2 = x2.template coeff<DODE::XV>(ode.XVars());
+        auto x1 = args.template head<DODE::XtUV>(ode.xtu_vars());
+        auto t1 = x1.template coeff<DODE::XV>(ode.x_vars());
+        auto x2 = args.template segment<DODE::XtUV, DODE::XtUV>(ode.xtu_vars(), ode.xtu_vars());
+        auto t2 = x2.template coeff<DODE::XV>(ode.x_vars());
 
         auto tm = 0.5 * (t1 + t2);
 
-        auto pvars = args.template tail<DODE::PV>(ode.PVars());
+        auto pvars = args.template tail<DODE::PV>(ode.p_vars());
 
         auto make_state = [&](auto xx) {
             if constexpr (DODE::PV == 0) {
@@ -75,8 +90,8 @@ template <class DODE, class Integrator> struct ShootingDefect_Impl {
         auto Arc1Input = make_state(x1);
         auto Arc2Input = make_state(x2);
 
-        auto defect = integ.eval(Arc1Input).template head<DODE::XV>(ode.XVars()) -
-                      integ.eval(Arc2Input).template head<DODE::XV>(ode.XVars());
+        auto defect = integ.eval(Arc1Input).template head<DODE::XV>(ode.x_vars()) -
+                      integ.eval(Arc2Input).template head<DODE::XV>(ode.x_vars());
 
         return defect;
     }
@@ -92,7 +107,7 @@ struct ShootingDefect
     // using Base::Base;
     ShootingDefect() {}
     ShootingDefect(const DODE &ode, const Integrator &integ) : Base(ode, integ) {}
-    bool EnableHessianSparsity = false;
+    bool enable_hessian_sparsity_ = false;
 };
 
 template <class DODE, class Integrator>
@@ -109,14 +124,14 @@ struct CentralShootingDefect
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
     template <class Scalar> using IntegJac = typename Integrator::template Jacobian<Scalar>;
 
-    static const bool IsVectorizable = true;
-    bool EnableHessianSparsity = false;
+    static const bool is_vectorizable = true;
+    bool enable_hessian_sparsity_ = false;
 
-    DODE ode;
-    Integrator integ;
+    DODE ode_;
+    Integrator integ_;
 
-    CentralShootingDefect(const DODE &ode, const Integrator &integ) : ode(ode), integ(integ) {
-        this->setIORows(2 * this->ode.XtUVars() + this->ode.PVars(), this->ode.XVars());
+    CentralShootingDefect(const DODE &ode, const Integrator &integ) : ode_(ode), integ_(integ) {
+        this->set_io_rows(2 * this->ode_.xtu_vars() + this->ode_.p_vars(), this->ode_.x_vars());
     }
 
     CentralShootingDefect() {}
@@ -129,8 +144,8 @@ struct CentralShootingDefect
 
         X1X2s.resize(Scalar::SizeAtCompileTime);
         for (int v = 0; v < Scalar::SizeAtCompileTime; v++) {
-            X1X2s[v].resize(this->IRows());
-            for (int i = 0; i < this->IRows(); i++) {
+            X1X2s[v].resize(this->input_rows());
+            for (int i = 0; i < this->input_rows(); i++) {
                 X1X2s[v][i] = X1X2[i][v];
             }
         }
@@ -144,8 +159,8 @@ struct CentralShootingDefect
 
         Lfs.resize(Scalar::SizeAtCompileTime);
         for (int v = 0; v < Scalar::SizeAtCompileTime; v++) {
-            Lfs[v].resize(this->ORows());
-            for (int i = 0; i < this->ORows(); i++) {
+            Lfs[v].resize(this->output_rows());
+            for (int i = 0; i < this->output_rows(); i++) {
                 Lfs[v][i] = Lf[i][v];
             }
         }
@@ -159,22 +174,22 @@ struct CentralShootingDefect
 
         for (int i = 0; i < X1X2s.size(); i++) {
 
-            Xs[2 * i].resize(this->ode.IRows());
-            Xs[2 * i + 1].resize(this->ode.IRows());
+            Xs[2 * i].resize(this->ode_.input_rows());
+            Xs[2 * i + 1].resize(this->ode_.input_rows());
 
-            Xs[2 * i].head(this->ode.XtUVars()) = X1X2s[i].head(this->ode.XtUVars());
-            Xs[2 * i + 1].head(this->ode.XtUVars()) =
-                X1X2s[i].segment(this->ode.XtUVars(), this->ode.XtUVars());
+            Xs[2 * i].head(this->ode_.xtu_vars()) = X1X2s[i].head(this->ode_.xtu_vars());
+            Xs[2 * i + 1].head(this->ode_.xtu_vars()) =
+                X1X2s[i].segment(this->ode_.xtu_vars(), this->ode_.xtu_vars());
 
-            double tm = (Xs[2 * i][this->ode.TVar()] + Xs[2 * i + 1][this->ode.TVar()]) / 2.0;
+            double tm = (Xs[2 * i][this->ode_.t_var()] + Xs[2 * i + 1][this->ode_.t_var()]) / 2.0;
 
             tfs[2 * i] = tm;
             tfs[2 * i + 1] = tm;
 
             if constexpr (DODE::PV != 0) {
 
-                Xs[2 * i].tail(this->ode.PVars()) = X1X2s[i].tail(this->ode.PVars());
-                Xs[2 * i + 1].tail(this->ode.PVars()) = X1X2s[i].tail(this->ode.PVars());
+                Xs[2 * i].tail(this->ode_.p_vars()) = X1X2s[i].tail(this->ode_.p_vars());
+                Xs[2 * i + 1].tail(this->ode_.p_vars()) = X1X2s[i].tail(this->ode_.p_vars());
             }
         }
     }
@@ -185,13 +200,13 @@ struct CentralShootingDefect
 
         for (int i = 0; i < Ls.size(); i++) {
 
-            Lfs[2 * i].resize(this->ode.IRows());
-            Lfs[2 * i + 1].resize(this->ode.IRows());
+            Lfs[2 * i].resize(this->ode_.input_rows());
+            Lfs[2 * i + 1].resize(this->ode_.input_rows());
             Lfs[2 * i].setZero();
             Lfs[2 * i + 1].setZero();
 
-            Lfs[2 * i].head(this->ode.XVars()) = Ls[i];
-            Lfs[2 * i + 1].head(this->ode.XVars()) = Ls[i];
+            Lfs[2 * i].head(this->ode_.x_vars()) = Ls[i];
+            Lfs[2 * i + 1].head(this->ode_.x_vars()) = Ls[i];
         }
     }
 
@@ -203,12 +218,13 @@ struct CentralShootingDefect
 
         this->get_input_states_tfs(X1X2s, Xs, tfs);
 
-        Xfs = this->integ.integrate(Xs, tfs);
+        Xfs = this->integ_.integrate(Xs, tfs);
 
         std::vector<Output<double>> fxs(X1X2s.size());
 
         for (int i = 0; i < X1X2s.size(); i++) {
-            fxs[i] = Xfs[2 * i].head(this->ode.XVars()) - Xfs[2 * i + 1].head(this->ode.XVars());
+            fxs[i] =
+                Xfs[2 * i].head(this->ode_.x_vars()) - Xfs[2 * i + 1].head(this->ode_.x_vars());
         }
         return fxs;
     }
@@ -220,29 +236,32 @@ struct CentralShootingDefect
         Eigen::VectorXd tfs;
 
         this->get_input_states_tfs(X1X2s, Xs, tfs);
-        auto Xfs_Jfs = this->integ.integrate_stm(Xs, tfs);
+        auto Xfs_Jfs = this->integ_.integrate_stm(Xs, tfs);
 
         std::vector<Output<double>> fxs(X1X2s.size());
         std::vector<Jacobian<double>> jxs(X1X2s.size());
 
-        Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(ode.ORows(),
-                                                                                 integ.IRows() * 2);
-        Eigen::Matrix<double, SZ_PROD<Integrator::IRC, 2>::value, Base::IRC> XJac(integ.IRows() * 2,
-                                                                                  this->IRows());
+        Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(
+            ode_.output_rows(), integ_.input_rows() * 2);
+        Eigen::Matrix<double, SZ_PROD<Integrator::IRC, 2>::value, Base::IRC> XJac(
+            integ_.input_rows() * 2, this->input_rows());
 
         XJac.setZero();
 
-        XJac.topLeftCorner(ode.XtUVars(), ode.XtUVars()).setIdentity();
-        XJac.block(ode.XtUVars(), 2 * ode.XtUVars(), ode.PVars(), ode.PVars()).setIdentity();
-        XJac(ode.IRows(), ode.TVar()) = .5;
-        XJac(ode.IRows(), ode.XtUVars() + ode.TVar()) = .5;
+        XJac.topLeftCorner(ode_.xtu_vars(), ode_.xtu_vars()).setIdentity();
+        XJac.block(ode_.xtu_vars(), 2 * ode_.xtu_vars(), ode_.p_vars(), ode_.p_vars())
+            .setIdentity();
+        XJac(ode_.input_rows(), ode_.t_var()) = .5;
+        XJac(ode_.input_rows(), ode_.xtu_vars() + ode_.t_var()) = .5;
 
-        XJac.block(integ.IRows(), ode.XtUVars(), ode.XtUVars(), ode.XtUVars()).setIdentity();
-        XJac.block(integ.IRows() + ode.XtUVars(), 2 * ode.XtUVars(), ode.PVars(), ode.PVars())
+        XJac.block(integ_.input_rows(), ode_.xtu_vars(), ode_.xtu_vars(), ode_.xtu_vars())
+            .setIdentity();
+        XJac.block(integ_.input_rows() + ode_.xtu_vars(), 2 * ode_.xtu_vars(), ode_.p_vars(),
+                   ode_.p_vars())
             .setIdentity();
 
-        XJac(integ.IRows() + ode.IRows(), ode.TVar()) = .5;
-        XJac(integ.IRows() + ode.IRows(), ode.XtUVars() + ode.TVar()) = .5;
+        XJac(integ_.input_rows() + ode_.input_rows(), ode_.t_var()) = .5;
+        XJac(integ_.input_rows() + ode_.input_rows(), ode_.xtu_vars() + ode_.t_var()) = .5;
 
         for (int i = 0; i < X1X2s.size(); i++) {
 
@@ -251,10 +270,10 @@ struct CentralShootingDefect
 
             Jf2 *= -1.0;
 
-            fxs[i] = Xf1.head(ode.XVars()) - Xf2.head(ode.XVars());
+            fxs[i] = Xf1.head(ode_.x_vars()) - Xf2.head(ode_.x_vars());
 
-            IJac.leftCols(integ.IRows()) = Jf1.topRows(ode.XVars());
-            IJac.rightCols(integ.IRows()) = Jf2.topRows(ode.XVars());
+            IJac.leftCols(integ_.input_rows()) = Jf1.topRows(ode_.x_vars());
+            IJac.rightCols(integ_.input_rows()) = Jf2.topRows(ode_.x_vars());
 
             jxs[i].noalias() = IJac * XJac;
         }
@@ -273,37 +292,40 @@ struct CentralShootingDefect
         this->get_input_states_tfs(X1X2s, Xs, tfs);
         this->get_lmults(Ls, Lfs);
 
-        auto Xfs_Jfs_Hfs = this->integ.integrate_stm2(Xs, tfs, Lfs);
+        auto Xfs_Jfs_Hfs = this->integ_.integrate_stm2(Xs, tfs, Lfs);
 
         std::vector<Output<double>> fxs(X1X2s.size());
         std::vector<Jacobian<double>> jxs(X1X2s.size());
         std::vector<Hessian<double>> hxs(X1X2s.size());
 
-        Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(ode.ORows(),
-                                                                                 integ.IRows() * 2);
+        Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(
+            ode_.output_rows(), integ_.input_rows() * 2);
         IJac.setZero();
 
         Eigen::Matrix<double, SZ_PROD<Integrator::IRC, 2>::value,
                       SZ_PROD<Integrator::IRC, 2>::value>
-            IHess(integ.IRows() * 2, integ.IRows() * 2);
+            IHess(integ_.input_rows() * 2, integ_.input_rows() * 2);
 
         IHess.setZero();
 
-        Eigen::Matrix<double, SZ_PROD<Integrator::IRC, 2>::value, Base::IRC> XJac(integ.IRows() * 2,
-                                                                                  this->IRows());
+        Eigen::Matrix<double, SZ_PROD<Integrator::IRC, 2>::value, Base::IRC> XJac(
+            integ_.input_rows() * 2, this->input_rows());
         XJac.setZero();
 
-        XJac.topLeftCorner(ode.XtUVars(), ode.XtUVars()).setIdentity();
-        XJac.block(ode.XtUVars(), 2 * ode.XtUVars(), ode.PVars(), ode.PVars()).setIdentity();
-        XJac(ode.IRows(), ode.TVar()) = .5;
-        XJac(ode.IRows(), ode.XtUVars() + ode.TVar()) = .5;
+        XJac.topLeftCorner(ode_.xtu_vars(), ode_.xtu_vars()).setIdentity();
+        XJac.block(ode_.xtu_vars(), 2 * ode_.xtu_vars(), ode_.p_vars(), ode_.p_vars())
+            .setIdentity();
+        XJac(ode_.input_rows(), ode_.t_var()) = .5;
+        XJac(ode_.input_rows(), ode_.xtu_vars() + ode_.t_var()) = .5;
 
-        XJac.block(integ.IRows(), ode.XtUVars(), ode.XtUVars(), ode.XtUVars()).setIdentity();
-        XJac.block(integ.IRows() + ode.XtUVars(), 2 * ode.XtUVars(), ode.PVars(), ode.PVars())
+        XJac.block(integ_.input_rows(), ode_.xtu_vars(), ode_.xtu_vars(), ode_.xtu_vars())
+            .setIdentity();
+        XJac.block(integ_.input_rows() + ode_.xtu_vars(), 2 * ode_.xtu_vars(), ode_.p_vars(),
+                   ode_.p_vars())
             .setIdentity();
 
-        XJac(integ.IRows() + ode.IRows(), ode.TVar()) = .5;
-        XJac(integ.IRows() + ode.IRows(), ode.XtUVars() + ode.TVar()) = .5;
+        XJac(integ_.input_rows() + ode_.input_rows(), ode_.t_var()) = .5;
+        XJac(integ_.input_rows() + ode_.input_rows(), ode_.xtu_vars() + ode_.t_var()) = .5;
 
         for (int i = 0; i < X1X2s.size(); i++) {
 
@@ -313,13 +335,13 @@ struct CentralShootingDefect
             Jf2 *= -1.0;
             Hf2 *= -1.0;
 
-            fxs[i] = Xf1.head(this->ode.XVars()) - Xf2.head(this->ode.XVars());
+            fxs[i] = Xf1.head(this->ode_.x_vars()) - Xf2.head(this->ode_.x_vars());
 
-            IJac.leftCols(integ.IRows()) = Jf1.topRows(ode.XVars());
-            IJac.rightCols(integ.IRows()) = Jf2.topRows(ode.XVars());
+            IJac.leftCols(integ_.input_rows()) = Jf1.topRows(ode_.x_vars());
+            IJac.rightCols(integ_.input_rows()) = Jf2.topRows(ode_.x_vars());
 
-            IHess.topLeftCorner(integ.IRows(), integ.IRows()) = Hf1;
-            IHess.bottomRightCorner(integ.IRows(), integ.IRows()) = Hf2;
+            IHess.topLeftCorner(integ_.input_rows(), integ_.input_rows()) = Hf1;
+            IHess.bottomRightCorner(integ_.input_rows(), integ_.input_rows()) = Hf2;
 
             jxs[i].noalias() = IJac * XJac;
             hxs[i].noalias() = XJac.transpose() * IHess * XJac;
@@ -346,7 +368,7 @@ struct CentralShootingDefect
             fx = fxs.front();
         } else {
             for (int v = 0; v < Scalar::SizeAtCompileTime; v++) {
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i][v] = fxs[v][i];
                 }
             }
@@ -375,12 +397,12 @@ struct CentralShootingDefect
 
         } else {
             for (int v = 0; v < Scalar::SizeAtCompileTime; v++) {
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i][v] = fxs[v][i];
                 }
 
-                for (int j = 0; j < this->IRows(); j++) {
-                    for (int i = 0; i < this->ORows(); i++) {
+                for (int j = 0; j < this->input_rows(); j++) {
+                    for (int i = 0; i < this->output_rows(); i++) {
                         jx(i, j)[v] = jxs[v](i, j);
                     }
                 }
@@ -419,18 +441,18 @@ struct CentralShootingDefect
         } else {
             for (int v = 0; v < Scalar::SizeAtCompileTime; v++) {
 
-                for (int i = 0; i < this->ORows(); i++) {
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i][v] = fxs[v][i];
                 }
 
-                for (int j = 0; j < this->IRows(); j++) {
-                    for (int i = 0; i < this->ORows(); i++) {
+                for (int j = 0; j < this->input_rows(); j++) {
+                    for (int i = 0; i < this->output_rows(); i++) {
                         jx(i, j)[v] = jxs[v](i, j);
                     }
                 }
 
-                for (int j = 0; j < this->IRows(); j++) {
-                    for (int i = 0; i < this->IRows(); i++) {
+                for (int j = 0; j < this->input_rows(); j++) {
+                    for (int i = 0; i < this->input_rows(); i++) {
                         adjhess(i, j)[v] = hxs[v](i, j);
                     }
                 }
@@ -447,18 +469,18 @@ struct CentralShootingDefect
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
 
-        Input<double> x(this->IRows());
-        Output<double> l(this->ORows());
+        Input<double> x(this->input_rows());
+        Output<double> l(this->output_rows());
 
-        Eigen::Map<Output<double>> fx(NULL, this->ORows());
-        Eigen::Map<Input<double>> agx(NULL, this->IRows());
+        Eigen::Map<Output<double>> fx(NULL, this->output_rows());
+        Eigen::Map<Input<double>> agx(NULL, this->input_rows());
 
         std::vector<Input<double>> X1X2s;
         std::vector<Output<double>> Lfs;
 
-        for (int V = 0; V < data.NumAppl(); V++) {
-            this->gatherInput(X, x, V, data);
-            this->gatherMult(L, l, V, data);
+        for (int V = 0; V < data.num_appl(); V++) {
+            this->gather_input(X, x, V, data);
+            this->gather_mult(L, l, V, data);
 
             X1X2s.push_back(x);
             Lfs.push_back(l);
@@ -466,20 +488,19 @@ struct CentralShootingDefect
 
         auto [fxs, jxs, hxs] = this->compute_all_impl_v(X1X2s, Lfs);
 
-        for (int V = 0; V < data.NumAppl(); V++) {
+        for (int V = 0; V < data.num_appl(); V++) {
 
-            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.InnerConstraintStarts[V],
-                                                 this->ORows());
-            new (&agx)
-                Eigen::Map<Input<double>>(AGX.data() + data.InnerGradientStarts[V], this->IRows());
+            new (&fx) Eigen::Map<Output<double>>(FX.data() + data.inner_constraint_starts_[V],
+                                                 this->output_rows());
+            new (&agx) Eigen::Map<Input<double>>(AGX.data() + data.inner_gradient_starts_[V],
+                                                 this->input_rows());
 
             fx = fxs[V];
             agx = jxs[V].transpose() * Lfs[V];
-            this->derived().KKTFillAll(V, jxs[V], hxs[V], KKTmat, KKTLocations, KKTClashes,
-                                       KKTLocks, data);
+            this->derived().kkt_fill_all(V, jxs[V], hxs[V], KKTmat, KKTLocations, KKTClashes,
+                                         KKTLocks, data);
         }
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

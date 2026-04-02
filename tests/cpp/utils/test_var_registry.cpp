@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 #include <tycho/detail/optimal_control/builder/var_registry.h>
 
-using namespace Tycho;
+using namespace tycho;
 
 TEST(VarRegistry, SingleNameLookup) {
     VarRegistry reg(3, 1, 0);

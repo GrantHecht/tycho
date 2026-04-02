@@ -45,7 +45,7 @@ if __name__ == "__main__":
     tf_dim = 3534 * c.day  # s
     mass_dim = 4000  # kg
 
-    typy.SoftwareInfo()
+    typy.software_info()
     thruster = CSIThruster(Tmag_dim, Isp_dim, mass_dim)
     ode = MEETwoBody_CSI(c.MuSun, c.AU, thruster)
 
@@ -76,35 +76,37 @@ if __name__ == "__main__":
         TrajIG.append(State)
 
     phase = ode.phase("LGL5", TrajIG, 160)
-    phase.setControlMode("BlockConstant")  # This problem only likes this
+    phase.set_control_mode("BlockConstant")  # This problem only likes this
 
-    phase.addBoundaryValue("Front", range(0, 8), Istate[0:8])
-    phase.addLUNormBound("Path", range(8, 11), 0.000001, 1, 1)  # Lowbound is leakmass
-    phase.addBoundaryValue("Back", [7], [tf])
-    phase.addBoundaryValue("Back", range(0, 6), XF[0:6])
-    phase.addValueObjective("Back", 6, -1.0)
+    phase.add_boundary_value("Front", range(0, 8), Istate[0:8])
+    phase.add_lu_norm_bound(
+        "Path", range(8, 11), 0.000001, 1, 1
+    )  # Lowbound is leakmass
+    phase.add_boundary_value("Back", [7], [tf])
+    phase.add_boundary_value("Back", range(0, 6), XF[0:6])
+    phase.add_value_objective("Back", 6, -1.0)
 
-    phase.setNumPartitions(8, 8)
-    phase.optimizer.set_OptLSMode("AUGLANG")
-    phase.optimizer.set_MaxLSIters(2)
-    phase.optimizer.set_MaxAccIters(200)
-    phase.optimizer.set_BoundFraction(0.997)
-    phase.optimizer.set_PrintLevel(1)
-    phase.optimizer.set_deltaH(1.0e-6)
-    phase.optimizer.set_EContol(1.0e-9)
+    phase.set_num_partitions(8, 8)
+    phase.optimizer.set_opt_ls_mode("AUGLANG")
+    phase.optimizer.set_max_ls_iters(2)
+    phase.optimizer.set_max_acc_iters(200)
+    phase.optimizer.set_bound_fraction(0.997)
+    phase.optimizer.set_print_level(1)
+    phase.optimizer.set_delta_h(1.0e-6)
+    phase.optimizer.set_eq_con_tol(1.0e-9)
     phase.optimize()
 
-    ConvTraj = phase.returnTraj()
+    ConvTraj = phase.return_traj()
 
     FinalMass = ConvTraj[-1][6] * mass_dim
 
     print("Final Mass   :", FinalMass, " kg")
     print("Mass Expended:", mass_dim - FinalMass, " kg")
 
-    Tab = phase.returnTrajTable()
+    Tab = phase.return_traj_table()
 
     integ = ode.integrator(0.1, Tab)
-    integ.setAbsTol(1.0e-13)
+    integ.set_abs_tol(1.0e-13)
 
     ## Do this for non-blockconstant control or if you dont care about exact accuracy
     ReintTraj1 = integ.integrate_dense(ConvTraj[0], ConvTraj[-1][7])

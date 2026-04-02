@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #ifndef PCH_H
@@ -36,8 +35,8 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 
 // Real private headers (no detail/ counterpart)
-#include "Utils/eigen_stl.h"
-#include "Utils/fmtlib.h"
+#include "utils/eigen_stl.h"
+#include "utils/fmtlib.h"
 
 // Utils
 #include "tycho/detail/utils/get_core_count.h"

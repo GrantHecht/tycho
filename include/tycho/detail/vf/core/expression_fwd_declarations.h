@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -33,18 +32,18 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR> struct DenseFunctionBase;
 
@@ -99,8 +98,8 @@ template <class InnerFunc, int IR> struct NestedFunctionSelector<Arguments<IR>, 
 template <int IR, int OR, int ST, int OR2, int ST2>
 struct NestedFunctionSelector<Segment<OR, OR2, ST2>, Segment<IR, OR, ST>> {
     static decltype(auto) make_nested(Segment<OR, OR2, ST2> ofunc, Segment<IR, OR, ST> ifunc) {
-        return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.IRows(), ofunc.ORows(),
-                                                        ifunc.SegStart + ofunc.SegStart);
+        return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.input_rows(), ofunc.output_rows(),
+                                                        ifunc.seg_start_ + ofunc.seg_start_);
     }
 };
 
@@ -108,7 +107,7 @@ template <int IR, int OR, int ST, int EL1, int... ELS>
 struct NestedFunctionSelector<Elements<OR, EL1, ELS...>, Segment<IR, OR, ST>> {
     static decltype(auto) make_nested(Elements<OR, EL1, ELS...> ofunc, Segment<IR, OR, ST> ifunc) {
         if constexpr (IR >= 0 && OR >= 0 && ST >= 0 && EL1 >= 0) {
-            return Elements<IR, EL1 + ST, ELS + ST...>(ifunc.IRows());
+            return Elements<IR, EL1 + ST, ELS + ST...>(ifunc.input_rows());
         } else {
             return NestedFunction<decltype(ofunc), decltype(ifunc)>(ofunc, ifunc);
         }
@@ -247,4 +246,4 @@ template <class Func1, class Func2> struct CwiseFunctionProduct;
 
 template <class Func> struct CallAndAppend;
 
-} // namespace Tycho
+} // namespace tycho::vf

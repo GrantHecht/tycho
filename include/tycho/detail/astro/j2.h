@@ -8,15 +8,14 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 struct J2Cartesian_Impl {
     /// <summary>
     /// Computes J2 effect given position vector relative to body and the north pole vector of the
@@ -37,7 +36,7 @@ struct J2Cartesian_Impl {
 
         double Scale = 0.5 * (mu)*J2 * Rb * Rb;
 
-        auto dotterm = r.normalized().dot(p).Square();
+        auto dotterm = r.normalized().dot(p).square();
 
         auto term1 = (15.0 * dotterm - 3.0) * rn5;
 
@@ -82,4 +81,4 @@ struct J2Modified_Impl {
 
 // BUILD_FROM_EXPRESSION(J2Modified, J2Modified_Impl, double, double,double );
 
-} // namespace Tycho
+} // namespace tycho::astro

@@ -266,7 +266,7 @@ class CR3BPFrame:
             Position of sub Lagrange points
 
         """
-        X = np.zeros((func.IRows()))
+        X = np.zeros((func.input_rows()))
         X[0:3] = IG
         while max(abs(func.compute(X))) > 1.0e-14:
             F = func.compute(X)[3:5]

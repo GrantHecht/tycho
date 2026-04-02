@@ -11,7 +11,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -22,8 +22,8 @@ TEST_F(CommonFunctionsTest, NestedComposition) {
     auto args = Arguments<3>();
     auto scaled = 2.0 * args;
     auto normed = scaled.norm();
-    EXPECT_EQ(normed.IRows(), 3);
-    EXPECT_EQ(normed.ORows(), 1);
+    EXPECT_EQ(normed.input_rows(), 3);
+    EXPECT_EQ(normed.output_rows(), 1);
 
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 2.0;
@@ -60,7 +60,7 @@ TEST_F(CommonFunctionsTest, TripleCompositionAdjoint) {
 
 TEST_F(CommonFunctionsTest, SinAnalyticalJacobian) {
     auto args = Arguments<3>();
-    auto s = args.Sin();
+    auto s = args.sin();
     Eigen::VectorXd x(3);
     x << 0.5, 1.0, 1.5;
     // J = diag(cos(x))
@@ -73,7 +73,7 @@ TEST_F(CommonFunctionsTest, SinAnalyticalJacobian) {
 
 TEST_F(CommonFunctionsTest, CosAnalyticalJacobian) {
     auto args = Arguments<3>();
-    auto c = args.Cos();
+    auto c = args.cos();
     Eigen::VectorXd x(3);
     x << 0.5, 1.0, 1.5;
     // J = diag(-sin(x))
@@ -86,7 +86,7 @@ TEST_F(CommonFunctionsTest, CosAnalyticalJacobian) {
 
 TEST_F(CommonFunctionsTest, SqrtAnalyticalJacobian) {
     auto args = Arguments<3>();
-    auto sq = args.Sqrt();
+    auto sq = args.sqrt();
     Eigen::VectorXd x(3);
     x << 4.0, 9.0, 16.0;
     // J = diag(1 / (2*sqrt(x)))
@@ -99,7 +99,7 @@ TEST_F(CommonFunctionsTest, SqrtAnalyticalJacobian) {
 
 TEST_F(CommonFunctionsTest, ExpAnalyticalJacobian) {
     auto args = Arguments<3>();
-    auto ex = args.Exp();
+    auto ex = args.exp();
     Eigen::VectorXd x(3);
     x << 0.0, 1.0, -1.0;
     // J = diag(exp(x))
@@ -112,7 +112,7 @@ TEST_F(CommonFunctionsTest, ExpAnalyticalJacobian) {
 
 TEST_F(CommonFunctionsTest, SquareAnalyticalJacobian) {
     auto args = Arguments<3>();
-    auto sq = args.Square();
+    auto sq = args.square();
     Eigen::VectorXd x(3);
     x << 2.0, 3.0, -1.0;
     // J = diag(2*x)
@@ -127,7 +127,7 @@ TEST_F(CommonFunctionsTest, CwiseProductAdjointConsistency) {
     auto args = Arguments<6>();
     auto a = args.template head<3>();
     auto b = args.template tail<3>();
-    auto cw = a.cwiseProduct(b);
+    auto cw = a.cwise_product(b);
     Eigen::VectorXd x = deterministic_random_vector(6, 80, 1.0, 5.0);
     Eigen::VectorXd lm = deterministic_random_vector(3, 81, -1.0, 1.0);
     verify_adjoint_consistency(cw, x, lm);

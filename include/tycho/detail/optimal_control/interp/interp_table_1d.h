@@ -8,15 +8,24 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 struct InterpTable1D {
 
@@ -24,18 +33,18 @@ struct InterpTable1D {
 
     using MatType = Eigen::Matrix<double, -1, -1>;
 
-    Eigen::VectorXd ts;
-    MatType vs;
-    MatType dvs_dts;
+    Eigen::VectorXd ts_;
+    MatType vs_;
+    MatType dvs_dts_;
 
-    InterpType interp_kind = InterpType::cubic_interp;
-    bool teven = true;
-    int axis = 0;
-    int tsize;
-    double ttotal;
-    int vlen;
-    bool WarnOutOfBounds = true;
-    bool ThrowOutOfBounds = false;
+    InterpType interp_kind_ = InterpType::cubic_interp;
+    bool teven_ = true;
+    int axis_ = 0;
+    int tsize_;
+    double ttotal_;
+    int vlen_;
+    bool warn_out_of_bounds_ = true;
+    bool throw_out_of_bounds_ = false;
 
     InterpTable1D() {}
 
@@ -86,59 +95,59 @@ struct InterpTable1D {
     }
     void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
 
-        this->ts = Ts;
+        this->ts_ = Ts;
 
         if (axis == 1) {
-            this->axis = 1;
-            this->vs = Vs;
+            this->axis_ = 1;
+            this->vs_ = Vs;
         } else if (axis == 0) {
-            this->axis = 0;
-            this->vs = Vs.transpose();
+            this->axis_ = 0;
+            this->vs_ = Vs.transpose();
         } else {
             throw std::invalid_argument("Interpolation axis must be 0 or 1");
         }
 
         if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind = InterpType::cubic_interp;
+            this->interp_kind_ = InterpType::cubic_interp;
         } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind = InterpType::linear_interp;
+            this->interp_kind_ = InterpType::linear_interp;
         } else {
             throw std::invalid_argument("Unrecognized interpolation type");
         }
 
-        tsize = ts.size();
-        vlen = vs.rows();
-        ttotal = ts[tsize - 1] - ts[0];
+        tsize_ = ts_.size();
+        vlen_ = vs_.rows();
+        ttotal_ = ts_[tsize_ - 1] - ts_[0];
 
-        if (tsize < 5) {
+        if (tsize_ < 5) {
             throw std::invalid_argument("t coordinates must be larger than 4");
         }
-        if (tsize != vs.cols()) {
+        if (tsize_ != vs_.cols()) {
             throw std::invalid_argument(
                 "Length of t coordinates must match length of interpolation axis");
         }
-        for (int i = 0; i < tsize - 1; i++) {
-            if (ts[i + 1] < ts[i]) {
+        for (int i = 0; i < tsize_ - 1; i++) {
+            if (ts_[i + 1] < ts_[i]) {
                 throw std::invalid_argument("t Coordinates must be in ascending order");
             }
         }
 
         Eigen::VectorXd testt;
-        testt.setLinSpaced(ts.size(), ts[0], ts[tsize - 1]);
+        testt.setLinSpaced(ts_.size(), ts_[0], ts_[tsize_ - 1]);
 
-        double terr = (ts - testt).lpNorm<Eigen::Infinity>();
+        double terr = (ts_ - testt).lpNorm<Eigen::Infinity>();
 
-        if (terr > abs(ttotal) * 1.0e-12) {
-            this->teven = false;
+        if (terr > abs(ttotal_) * 1.0e-12) {
+            this->teven_ = false;
         }
 
-        if (this->interp_kind == InterpType::cubic_interp)
+        if (this->interp_kind_ == InterpType::cubic_interp)
             calc_derivs();
     }
 
     void calc_derivs() {
 
-        this->dvs_dts.resize(this->vlen, this->tsize);
+        this->dvs_dts_.resize(this->vlen_, this->tsize_);
 
         Eigen::Matrix<double, 5, 5> stens;
         stens.row(0).setOnes();
@@ -148,28 +157,28 @@ struct InterpTable1D {
         Eigen::Matrix<double, 5, 1> coeffs;
 
         bool hitcent = false;
-        for (int i = 0; i < this->tsize; i++) {
+        for (int i = 0; i < this->tsize_; i++) {
             int start = 0;
             bool recalc = true;
-            if (i + 2 <= this->tsize - 1 && i - 2 >= 0) {
+            if (i + 2 <= this->tsize_ - 1 && i - 2 >= 0) {
                 // central difference
-                if (this->teven && hitcent) {
+                if (this->teven_ && hitcent) {
                     recalc = false;
                 }
                 hitcent = true;
                 start = i - 2;
-            } else if (i < this->tsize - 1 - i) {
+            } else if (i < this->tsize_ - 1 - i) {
                 // forward difference
                 start = 0;
             } else {
                 // backward difference
-                start = this->tsize - 5;
+                start = this->tsize_ - 5;
             }
-            int stepdir = (i < this->tsize - 1) ? 1 : -1;
-            double ti = this->ts[i];
-            double tstep = std::abs(this->ts[i + stepdir] - ti);
+            int stepdir = (i < this->tsize_ - 1) ? 1 : -1;
+            double ti = this->ts_[i];
+            double tstep = std::abs(this->ts_[i + stepdir] - ti);
             if (recalc) {
-                times = this->ts.segment(start, 5);
+                times = this->ts_.segment(start, 5);
                 times -= Eigen::Matrix<double, 5, 1>::Constant(ti);
                 times /= tstep;
                 stens.row(1) = times.transpose();
@@ -179,24 +188,24 @@ struct InterpTable1D {
                 coeffs = stens.inverse() * rhs;
             }
 
-            dvs_dts.col(i) = this->vs.middleCols(start, 5) * (coeffs / tstep);
+            dvs_dts_.col(i) = this->vs_.middleCols(start, 5) * (coeffs / tstep);
         }
     }
 
     int get_telem(double t) const {
         int telem;
-        if (this->teven) {
-            double tlocal = t - ts[0];
-            double tstep = ts[1] - ts[0];
-            telem = std::min(int(tlocal / tstep), this->tsize - 2);
+        if (this->teven_) {
+            double tlocal = t - ts_[0];
+            double tstep = ts_[1] - ts_[0];
+            telem = std::min(int(tlocal / tstep), this->tsize_ - 2);
         } else {
-            int center = int(ts.size() / 2);
-            int shift = (ts[center] > t) ? 0 : center;
-            auto it = std::upper_bound(ts.cbegin(), ts.cend(), t);
-            telem = int(it - ts.begin()) - 1;
+            int center = int(ts_.size() / 2);
+            int shift = (ts_[center] > t) ? 0 : center;
+            auto it = std::upper_bound(ts_.cbegin(), ts_.cend(), t);
+            telem = int(it - ts_.begin()) - 1;
         }
 
-        telem = std::min(telem, this->tsize - 2);
+        telem = std::min(telem, this->tsize_ - 2);
         telem = std::max(telem, 0);
         return telem;
     }
@@ -204,24 +213,24 @@ struct InterpTable1D {
     template <class VType>
     void interp_impl(double t, int deriv, VType &v, VType &dv_dt, VType &dv2_dt2) const {
 
-        if (WarnOutOfBounds || ThrowOutOfBounds) {
-            double eps = std::numeric_limits<double>::epsilon() * ttotal;
-            if (t < (ts[0] - eps) || t > (ts[ts.size() - 1] + eps)) {
+        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
+            double eps = std::numeric_limits<double>::epsilon() * ttotal_;
+            if (t < (ts_[0] - eps) || t > (ts_[ts_.size() - 1] + eps)) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "WARNING: t= {0:} falls outside of InterpTable1D time range. Data is "
                            "being extrapolated!!\n",
                            t);
-                if (ThrowOutOfBounds) {
+                if (throw_out_of_bounds_) {
                     throw std::invalid_argument("");
                 }
             }
         }
 
         double telem = this->get_telem(t);
-        double tstep = ts[telem + 1] - ts[telem];
-        double tnd = (t - ts[telem]) / tstep;
+        double tstep = ts_[telem + 1] - ts_[telem];
+        double tnd = (t - ts_[telem]) / tstep;
 
-        if (this->interp_kind == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::cubic_interp) {
 
             double tnd2 = tnd * tnd;
             double tnd3 = tnd2 * tnd;
@@ -231,8 +240,8 @@ struct InterpTable1D {
             double p1 = (-2.0 * tnd3 + 3.0 * tnd2);
             double m1 = (tnd3 - tnd2) * tstep;
 
-            v = vs.col(telem) * p0 + vs.col(telem + 1) * p1 + dvs_dts.col(telem) * m0 +
-                dvs_dts.col(telem + 1) * m1;
+            v = vs_.col(telem) * p0 + vs_.col(telem + 1) * p1 + dvs_dts_.col(telem) * m0 +
+                dvs_dts_.col(telem + 1) * m1;
 
             if (deriv > 0) {
 
@@ -241,8 +250,8 @@ struct InterpTable1D {
                 double p1_dt = (-6.0 * tnd2 + 6.0 * tnd) / tstep;
                 double m1_dt = (3.0 * tnd2 - 2.0 * tnd);
 
-                dv_dt = vs.col(telem) * p0_dt + vs.col(telem + 1) * p1_dt +
-                        dvs_dts.col(telem) * m0_dt + dvs_dts.col(telem + 1) * m1_dt;
+                dv_dt = vs_.col(telem) * p0_dt + vs_.col(telem + 1) * p1_dt +
+                        dvs_dts_.col(telem) * m0_dt + dvs_dts_.col(telem + 1) * m1_dt;
 
                 if (deriv > 1) {
 
@@ -251,15 +260,15 @@ struct InterpTable1D {
                     double p1_dt2 = (-12.0 * tnd + 6.0) / (tstep * tstep);
                     double m1_dt2 = (6.0 * tnd - 2.0) / tstep;
 
-                    dv2_dt2 = vs.col(telem) * p0_dt2 + vs.col(telem + 1) * p1_dt2 +
-                              dvs_dts.col(telem) * m0_dt2 + dvs_dts.col(telem + 1) * m1_dt2;
+                    dv2_dt2 = vs_.col(telem) * p0_dt2 + vs_.col(telem + 1) * p1_dt2 +
+                              dvs_dts_.col(telem) * m0_dt2 + dvs_dts_.col(telem + 1) * m1_dt2;
                 }
             }
 
         } else {
-            v = vs.col(telem) * (1 - tnd) + vs.col(telem + 1) * tnd;
+            v = vs_.col(telem) * (1 - tnd) + vs_.col(telem + 1) * tnd;
             if (deriv > 0) {
-                dv_dt = (vs.col(telem + 1) - vs.col(telem)) / tstep;
+                dv_dt = (vs_.col(telem + 1) - vs_.col(telem)) / tstep;
                 if (deriv > 1) {
                     // Zero
                 }
@@ -270,33 +279,33 @@ struct InterpTable1D {
     Eigen::VectorXd interp(double t) const {
 
         Eigen::VectorXd v;
-        v.resize(vlen);
+        v.resize(vlen_);
         interp_impl(t, 0, v, v, v);
         return v;
     }
 
-    Eigen::MatrixXd interp(const Eigen::VectorXd &ts) const {
+    Eigen::MatrixXd interp(const Eigen::VectorXd &t_vals) const {
 
-        Eigen::MatrixXd vs;
-        vs.resize(vlen, ts.size());
+        Eigen::MatrixXd v_out;
+        v_out.resize(vlen_, t_vals.size());
         Eigen::VectorXd v;
-        v.resize(vlen);
+        v.resize(vlen_);
 
-        for (int i = 0; i < ts.size(); i++) {
-            interp_impl(ts[i], 0, v, v, v);
-            vs.col(i) = v;
+        for (int i = 0; i < t_vals.size(); i++) {
+            interp_impl(t_vals[i], 0, v, v, v);
+            v_out.col(i) = v;
             v.setZero();
         }
 
-        return vs;
+        return v_out;
     }
 
     std::tuple<Eigen::VectorXd, Eigen::VectorXd> interp_deriv1(double t) const {
 
         Eigen::VectorXd v;
-        v.resize(vlen);
+        v.resize(vlen_);
         Eigen::VectorXd dv_dt;
-        dv_dt.resize(vlen);
+        dv_dt.resize(vlen_);
 
         interp_impl(t, 1, v, dv_dt, dv_dt);
 
@@ -306,11 +315,11 @@ struct InterpTable1D {
     std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd> interp_deriv2(double t) const {
 
         Eigen::VectorXd v;
-        v.resize(vlen);
+        v.resize(vlen_);
         Eigen::VectorXd dv_dt;
-        dv_dt.resize(vlen);
+        dv_dt.resize(vlen_);
         Eigen::VectorXd dv2_dt2;
-        dv2_dt2.resize(vlen);
+        dv2_dt2.resize(vlen_);
 
         interp_impl(t, 2, v, dv_dt, dv2_dt2);
 
@@ -330,7 +339,7 @@ struct InterpFunction1D
 
     InterpFunction1D() {}
     InterpFunction1D(std::shared_ptr<InterpTable1D> tab) : tab(tab) {
-        this->setIORows(1, tab->vlen);
+        this->set_io_rows(1, tab->vlen_);
     }
 
     template <class InType, class OutType>
@@ -343,7 +352,8 @@ struct InterpFunction1D
             fx = v;
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -358,8 +368,9 @@ struct InterpFunction1D
             jx = dv_dt;
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -381,10 +392,11 @@ struct InterpFunction1D
             adjhess(0, 0) = dv2_dt2.dot(adjvars);
         };
 
-        Tycho::BumpAllocator::allocate_run(Impl, TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1),
-                                           TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl,
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                                                  TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

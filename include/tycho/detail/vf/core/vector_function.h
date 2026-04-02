@@ -8,20 +8,19 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
-#include "tycho/detail/vf/derivatives/dense_derivatives.h"
+#include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/vf/derivatives/dense_autodiff_fwd.h"
+#include "tycho/detail/vf/derivatives/dense_derivatives.h"
 #include "tycho/detail/vf/derivatives/dense_fdiff_cent_array.h"
 #include "tycho/detail/vf/derivatives/dense_fdiff_fwd.h"
-#include "tycho/detail/utils/function_return_type.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
@@ -41,7 +40,7 @@ struct VectorExpression
     VectorExpression() {};
 
     /////////////////////////////////////
-    void InitExpression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
+    void init_expression(Ts... ts) { *this = Base(ExprImpl::Definition(ts...)); }
 };
 
 template <class Derived, class ExprImpl>
@@ -54,7 +53,7 @@ struct VectorExpression<Derived, ExprImpl>
     VectorExpression() : Base(ExprImpl::Definition()) {}
 
     /////////////////////////////////////
-    void InitExpression() { *this = Base(ExprImpl::Definition()); }
+    void init_expression() { *this = Base(ExprImpl::Definition()); }
 };
 
 #define BUILD_FROM_EXPRESSION(NAME, IMPL, ...)                                                     \
@@ -63,4 +62,4 @@ struct VectorExpression<Derived, ExprImpl>
         using Base::Base;                                                                          \
     };
 
-} // namespace Tycho
+} // namespace tycho::vf

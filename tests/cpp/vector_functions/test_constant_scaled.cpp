@@ -8,7 +8,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -19,8 +19,8 @@ TEST_F(CommonFunctionsTest, ConstantOutput) {
     Eigen::VectorXd val(3);
     val << 7.0, 8.0, 9.0;
     auto c = Constant<-1, -1>(4, val);
-    EXPECT_EQ(c.IRows(), 4);
-    EXPECT_EQ(c.ORows(), 3);
+    EXPECT_EQ(c.input_rows(), 4);
+    EXPECT_EQ(c.output_rows(), 3);
 
     Eigen::VectorXd x(4);
     x << 1, 2, 3, 4;

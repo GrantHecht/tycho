@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     using Base = VectorFunction<Value<OSZ>, OSZ, OSZ>;
@@ -25,14 +24,14 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
 
     template <class Func> using REARGUMENT = Value<OSZ>;
 
-    typename Base::template Output<double> value;
+    typename Base::template Output<double> value_;
 
-    Value() { this->value.setOnes(); }
+    Value() { this->value_.setOnes(); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value;
+        fx = this->value_;
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -40,7 +39,7 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        fx = this->value;
+        fx = this->value_;
     }
 
     template <class Func, int FuncIRC, int ii>
@@ -49,4 +48,4 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

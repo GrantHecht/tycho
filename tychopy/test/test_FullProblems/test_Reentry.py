@@ -56,16 +56,16 @@ class ShuttleReentry(oc.ode_x_u.ode):
         ############################################################
         args = oc.ODEArguments(5, 2)
 
-        h = args.XVar(0)
-        theta = args.XVar(1)
-        v = args.XVar(2)
-        gamma = args.XVar(3)
-        psi = args.XVar(4)
+        h = args.x_var(0)
+        theta = args.x_var(1)
+        v = args.x_var(2)
+        gamma = args.x_var(3)
+        psi = args.x_var(4)
 
-        h, theta, v, gamma, psi = args.XVec().tolist()
+        h, theta, v, gamma, psi = args.x_vec().tolist()
 
-        alpha = args.UVar(0)
-        beta = args.UVar(1)
+        alpha = args.u_var(0)
+        beta = args.u_var(1)
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -162,20 +162,22 @@ class test_Reentry(unittest.TestCase):
         ode = ShuttleReentry()
 
         phase = ode.phase(tmode, TrajIG, self.NumSegments1)
-        phase.setControlMode(cmode)
+        phase.set_control_mode(cmode)
 
-        phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
-        phase.addLUVarBounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
-        phase.addLUVarBound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
-        phase.addLUVarBound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
-        phase.addUpperDeltaTimeBound(tmax, 1.0)
-        phase.addBoundaryValue("Back", [0, 2, 3], [htf, vtf, gammatf])
-        phase.addDeltaVarObjective(1, -1.0)
+        phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
+        phase.add_lu_var_bounds(
+            "Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0
+        )
+        phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
+        phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
+        phase.add_upper_delta_time_bound(tmax, 1.0)
+        phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
+        phase.add_delta_var_objective(1, -1.0)
 
-        phase.optimizer.set_OptLSMode("AUGLANG")
-        phase.optimizer.MaxLSIters = 2
-        phase.optimizer.MaxAccIters = 100
-        phase.optimizer.PrintLevel = 3
+        phase.optimizer.set_opt_ls_mode("AUGLANG")
+        phase.optimizer.max_ls_iters = 2
+        phase.optimizer.max_acc_iters = 100
+        phase.optimizer.print_level = 3
 
         Flag1 = phase.solve_optimize()
 
@@ -184,15 +186,15 @@ class test_Reentry(unittest.TestCase):
         )
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters1,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        phase.refineTrajManual(self.NumSegments2)
+        phase.refine_traj_manual(self.NumSegments2)
         phase.optimize()
 
-        Obj1 = phase.optimizer.LastObjVal
+        Obj1 = phase.optimizer.last_obj_val
         ObjError1 = abs(Obj1 - self.FinalObj1)
         self.assertLess(
             ObjError1,
@@ -200,19 +202,19 @@ class test_Reentry(unittest.TestCase):
             "Final objective significantly differs from known answer",
         )
 
-        phase.addUpperFuncBound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
+        phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
         Flag2 = phase.optimize()
 
         self.assertEqual(
             Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters2,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj2 = phase.optimizer.LastObjVal
+        Obj2 = phase.optimizer.last_obj_val
         ObjError2 = abs(Obj2 - self.FinalObj2)
         self.assertLess(
             ObjError2,

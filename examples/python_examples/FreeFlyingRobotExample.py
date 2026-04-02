@@ -37,12 +37,12 @@ class FreeFlyingRobotODE(oc.ODEBase):
         Uvars = 4
         ############################################################
         args = oc.ODEArguments(6, 4)
-        xy = args.XVec().head(2)
-        xydot = args.XVec().segment2(2)
-        theta = args.XVar(4)
-        omega = args.XVar(5)
+        xy = args.x_vec().head(2)
+        xydot = args.x_vec().segment2(2)
+        theta = args.x_var(4)
+        omega = args.x_var(5)
 
-        u = args.UVec()
+        u = args.u_vec()
 
         vscale = u[0] - u[1] + u[2] - u[3]
         vxydot = vf.stack([vf.cos(theta), vf.sin(theta)]) * vscale
@@ -75,17 +75,17 @@ if __name__ == "__main__":
 
     phase = ode.phase("LGL5", IG, 128)
 
-    phase.addBoundaryValue("Front", range(0, 7), X0)
-    phase.addBoundaryValue("Back", range(0, 7), XF)
-    phase.addLUVarBounds("Path", range(7, 11), 0.0, 1.0, 1)
-    phase.addIntegralObjective(Args(4).sum(), range(7, 11))
-    phase.optimizer.set_PrintLevel(0)
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_MaxLSIters(2)
+    phase.add_boundary_value("Front", range(0, 7), X0)
+    phase.add_boundary_value("Back", range(0, 7), XF)
+    phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0, 1)
+    phase.add_integral_objective(Args(4).sum(), range(7, 11))
+    phase.optimizer.set_print_level(0)
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_max_ls_iters(2)
     phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
     phase.optimize()
 
-    TrajConv = phase.returnTraj()
+    TrajConv = phase.return_traj()
 
     ##########################################################
     IGT = np.array(TrajConv).T

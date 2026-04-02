@@ -8,39 +8,38 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func>
 struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
     using Base = VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC>;
 
-    Func func;
+    Func func_;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     // using INPUT_DOMAIN = SingleDomain<Func::IRC, 0, 0>;
 
     SignFunction() {}
-    SignFunction(Func func) : func(std::move(func)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
+    SignFunction(Func func) : func_(std::move(func)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = 0;
-        this->set_input_domain(this->IRows(), {dmn});
+        this->set_input_domain(this->input_rows(), {dmn});
     }
 
     template <class OutType> void sign_impl(OutType &fx) const {
         typedef typename OutType::Scalar Scalar;
         if constexpr (Is_SuperScalar<Scalar>::value) {
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = fx[i].sign();
             }
         } else {
@@ -53,7 +52,7 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
     template <class InType, class OutType, class JacType>
@@ -63,7 +62,7 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -78,9 +77,9 @@ struct SignFunction : VectorFunction<SignFunction<Func>, Func::IRC, Func::ORC> {
         VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        this->func.compute(x, fx);
+        this->func_.compute(x, fx);
         this->sign_impl(fx);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

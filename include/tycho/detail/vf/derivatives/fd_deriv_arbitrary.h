@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -37,11 +36,11 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class VectorType>
 std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, bool inctime) {
@@ -80,17 +79,17 @@ template <class DType> struct FDDerivArbitrary {
     int length;
     std::vector<DType> data;
 
-    inline void setAxis(int i) { this->axis = i; }
+    inline void set_axis(int i) { this->axis = i; }
 
-    inline void setData(const std::vector<DType> &d) {
+    inline void set_data(const std::vector<DType> &d) {
         this->data = d;
         this->length = d.size();
     }
 
     FDDerivArbitrary() {};
     FDDerivArbitrary(int i, const std::vector<DType> &d) {
-        this->setAxis(i);
-        this->setData(d);
+        this->set_axis(i);
+        this->set_data(d);
     }
 
     /*!
@@ -103,14 +102,14 @@ template <class DType> struct FDDerivArbitrary {
      * @param dout
      */
     template <class DerivType>
-    inline void derivAt(const int i, DerivType &dout, const int Order, const int Accuracy) const {
+    inline void deriv_at(const int i, DerivType &dout, const int Order, const int Accuracy) const {
         const int acc = 2 * ((Accuracy + 1) / 2);
         const int ord = Order;
 
-        const int centStenSize = ((ord / 2) == ((ord + 1) / 2)) ? (ord - 1 + acc) : (ord + acc);
-        const int fbStenSize = acc + ord;
+        const int cent_sten_size = ((ord / 2) == ((ord + 1) / 2)) ? (ord - 1 + acc) : (ord + acc);
+        const int fb_sten_size = acc + ord;
 
-        if (length < fbStenSize) {
+        if (length < fb_sten_size) {
             std::cout << "ERROR: Requested accuracy too high for given data" << std::endl;
         }
 
@@ -124,23 +123,23 @@ template <class DType> struct FDDerivArbitrary {
         // Calc steps and stencil
         Eigen::Matrix<Scalar, -1, 1> steps;
         std::vector<int> stencil;
-        if (i < fbStenSize / 2) { // Forward / semi-forward
-            steps.resize(fbStenSize);
-            for (int j = 0; j < fbStenSize; j++) {
+        if (i < fb_sten_size / 2) { // Forward / semi-forward
+            steps.resize(fb_sten_size);
+            for (int j = 0; j < fb_sten_size; j++) {
                 steps[j] = data[j][axis] - t0;
                 stencil.push_back(j - i);
             }
-        } else if (length - 1 - i < fbStenSize / 2) { // Backward / semi-backward
-            steps.resize(fbStenSize);
-            for (int j = length - fbStenSize; j < length; j++) {
-                int k = j - length + fbStenSize;
+        } else if (length - 1 - i < fb_sten_size / 2) { // Backward / semi-backward
+            steps.resize(fb_sten_size);
+            for (int j = length - fb_sten_size; j < length; j++) {
+                int k = j - length + fb_sten_size;
                 steps[k] = data[j][axis] - t0;
                 stencil.push_back(j - i);
             }
         } else { // Centered
-            steps.resize(centStenSize);
-            int lb = centStenSize / 2;
-            for (int j = 0; j < centStenSize; j++) {
+            steps.resize(cent_sten_size);
+            int lb = cent_sten_size / 2;
+            for (int j = 0; j < cent_sten_size; j++) {
                 steps[j] = data[i - lb + j][axis] - t0;
                 stencil.push_back(j - lb);
             }
@@ -156,7 +155,7 @@ template <class DType> struct FDDerivArbitrary {
 
         Eigen::Matrix<Scalar, -1, 1> vec(sz);
         vec.setZero();
-        vec[ord] = factorial(ord);
+        vec[ord] = tycho::utils::factorial(ord);
 
         Eigen::Matrix<Scalar, -1, 1> weights = mat.colPivHouseholderQr().solve(vec);
 
@@ -177,9 +176,9 @@ template <class DType> struct FDDerivArbitrary {
      * @return DerivType
      */
     template <class DerivType>
-    inline DerivType derivAt(const int i, const int Order, const int Accuracy) const {
+    inline DerivType deriv_at(const int i, const int Order, const int Accuracy) const {
         DerivType dout(this->data[0].size());
-        this->derivAt<DType>(i, dout, Order, Accuracy);
+        this->deriv_at<DType>(i, dout, Order, Accuracy);
         dout[axis] = this->data[i][axis];
         return dout;
     }
@@ -196,7 +195,7 @@ template <class DType> struct FDDerivArbitrary {
     inline void deriv(std::vector<DerivType> &bulk, const int Order, const int Accuracy) const {
         bulk.resize(length);
         for (int i = 0; i < length; i++) {
-            bulk[i] = derivAt<DerivType>(i, Order, Accuracy);
+            bulk[i] = deriv_at<DerivType>(i, Order, Accuracy);
         }
     }
 
@@ -221,8 +220,8 @@ template <class DType> struct FDDerivArbitrary {
     }
     template <class DerivType>
     inline DerivType ithderiv_python(const int i, const int Order, const int Accuracy) const {
-        return derivAt<DerivType>(i, Order, Accuracy);
+        return deriv_at<DerivType>(i, Order, Accuracy);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

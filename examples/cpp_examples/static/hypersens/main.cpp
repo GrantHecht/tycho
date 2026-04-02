@@ -24,7 +24,7 @@
 // === PAIN POINTS (for Phase 7 static DSL improvements) ===
 // 1. Integral objectives require constructing a GenericFunction wrapper and
 //    manually specifying which phase variables map to the function's inputs.
-//    Python: phase.addIntegralObjective(Args(2).squared_norm()/2, [0, 2])
+//    Python: phase.add_integral_objective(Args(2).squared_norm()/2, [0, 2])
 //    C++:    GenericFunction<-1,1> + VectorXi index array
 // 2. Boundary conditions require manual VectorXi/VectorXd construction for
 //    index and value arrays — verbose compared to Python's list syntax.
@@ -37,7 +37,13 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition
@@ -79,24 +85,24 @@ int main() {
     HyperSens ode(0.0); // dummy parameter (macro requires >=1 type arg)
 
     auto phase = std::make_shared<ODEPhase<HyperSens>>(ode, TranscriptionModes::LGL7);
-    phase->setTraj(trajIG, nSeg);
+    phase->set_traj(trajIG, nSeg);
 
     // Control mode
-    phase->setControlMode(ControlModes::NoSpline);
+    phase->set_control_mode(ControlModes::NoSpline);
 
     // Boundary conditions
     Eigen::VectorXi front_idx(2);
     front_idx << 0, 1;
     Eigen::VectorXd front_val(2);
     front_val << xt0, 0.0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val,
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
                             ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xtf, tf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val,
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
                             ScaleModes::AUTO);
 
     // Integral objective: minimize integral of (x^2 + u^2) / 2
@@ -105,34 +111,34 @@ int main() {
         auto obj_expr = obj_args.squared_norm() / 2.0;
         Eigen::VectorXi obj_vars(2);
         obj_vars << 0, 2;
-        phase->addIntegralObjective(GenericFunction<-1, 1>(obj_expr), obj_vars,
+        phase->add_integral_objective(GenericFunction<-1, 1>(obj_expr), obj_vars,
                                     ScaleModes::AUTO);
     }
 
     // Variable bounds
-    phase->addLUVarBound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
-    phase->addLUVarBound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
 
     // Solver settings
-    phase->optimizer->set_OptLSMode("L1");
-    phase->optimizer->set_SoeLSMode("L1");
-    phase->optimizer->set_MaxLSIters(2);
-    phase->optimizer->PrintLevel = 2;
-    phase->setNumPartitions(1);
+    phase->optimizer_->set_opt_ls_mode("L1");
+    phase->optimizer_->set_soe_ls_mode("L1");
+    phase->optimizer_->set_max_ls_iters(2);
+    phase->optimizer_->print_level_ = 2;
+    phase->set_num_partitions(1);
 
     // MINDEG ordering — required for stability at tf=10000
-    phase->optimizer->set_QPOrderingMode("MINDEG");
+    phase->optimizer_->set_qp_ordering_mode("MINDEG");
 
     // Adaptive mesh refinement
-    phase->setAdaptiveMesh(true);
-    phase->setMeshTol(1.0e-7);
-    phase->optimizer->set_EContol(1.0e-7);
-    phase->setMaxMeshIters(10);
-    phase->setMeshErrorEstimator(MeshErrorEstimators::DEBOOR);
-    phase->setMeshErrorCriteria(MeshErrorAggregation::MAX);
-    phase->setMeshIncFactor(5.0);
-    phase->setMeshRedFactor(0.5);
-    phase->setMeshErrFactor(10.0);
+    phase->set_adaptive_mesh(true);
+    phase->set_mesh_tol(1.0e-7);
+    phase->optimizer_->set_econ_tol(1.0e-7);
+    phase->set_max_mesh_iters(10);
+    phase->set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
+    phase->set_mesh_error_criteria(MeshErrorAggregation::MAX);
+    phase->set_mesh_inc_factor(5.0);
+    phase->set_mesh_red_factor(0.5);
+    phase->set_mesh_err_factor(10.0);
 
     // Solve
     std::cout << "Solving HyperSensitive problem (tf=" << std::fixed
@@ -141,7 +147,7 @@ int main() {
 
     const auto flag = phase->optimize_solve();
 
-    if (phase->MeshConverged) {
+    if (phase->mesh_converged_) {
         std::cout << "HyperSens: mesh CONVERGED\n";
     } else {
         std::cerr << "HyperSens: mesh did NOT converge\n";
@@ -154,7 +160,7 @@ int main() {
     }
 
     // Print trajectory summary
-    auto traj = phase->returnTraj();
+    auto traj = phase->return_traj();
     if (!traj.empty()) {
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "  x(0)  = " << traj.front()[0] << "\n";
@@ -162,10 +168,10 @@ int main() {
         std::cout << "  segments = " << traj.size() - 1 << "\n";
     }
 
-    if (phase->MeshConverged) {
+    if (phase->mesh_converged_) {
         std::cout << "HyperSens: PASS\n";
     } else {
         std::cout << "HyperSens: FAIL (mesh did not converge)\n";
     }
-    return phase->MeshConverged ? 0 : 1;
+    return phase->mesh_converged_ ? 0 : 1;
 }

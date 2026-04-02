@@ -131,41 +131,41 @@ def navigate(Points, vM=1, wF=uniformWind):
         B = Points[i + 1]
         phase = Zermelo(vM, wF).phase(tModes.LGL3)
 
-        phase.NumPartitions = 8
+        phase.num_partitions = 8
 
-        phase.setTraj(trajG[i], nSeg)
+        phase.set_traj(trajG[i], nSeg)
 
         # 3. Enforce start and end point
         if i == 0:
-            phase.addBoundaryValue("Front", [0, 1], A)
-            phase.addBoundaryValue("Front", [2], [0.0])
-            phase.addBoundaryValue("Back", [0, 1], B)
+            phase.add_boundary_value("Front", [0, 1], A)
+            phase.add_boundary_value("Front", [2], [0.0])
+            phase.add_boundary_value("Back", [0, 1], B)
         else:
-            phase.addBoundaryValue("Back", [0, 1], B)
+            phase.add_boundary_value("Back", [0, 1], B)
 
-        phase.addLUVarBound("Path", 3, -np.pi, np.pi, 1)
+        phase.add_lu_var_bound("Path", 3, -np.pi, np.pi, 1)
 
         # 4. Add objective function
-        phase.addDeltaTimeObjective(1.0)
-        phase.addLowerDeltaTimeBound(0)
+        phase.add_delta_time_objective(1.0)
+        phase.add_lower_delta_time_bound(0)
 
         # 5. Optimize
-        phase.optimizer.set_EContol(tol)
-        phase.optimizer.set_KKTtol(tol)
+        phase.optimizer.set_eq_con_tol(tol)
+        phase.optimizer.set_kkt_tol(tol)
 
         # 6. add each phase to the optimal control problem
-        ocp.addPhase(phase)
+        ocp.add_phase(phase)
 
     # Add a link constraint from the first phase to the last phase
     # This enforces that at the point between the phases the positions and time must be the
     # same as we assign it to state variables 0 and 1, and 2.
-    ocp.addForwardLinkEqualCon(0, -1, [0, 1, 2])
+    ocp.add_forward_link_equal_con(0, -1, [0, 1, 2])
 
     ocp.solve_optimize()
 
     out = []
-    for ph in ocp.Phases:
-        out += ph.returnTraj()
+    for ph in ocp.phases:
+        out += ph.return_traj()
 
     return out
 

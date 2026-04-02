@@ -38,9 +38,9 @@ class MountainCar(oc.ODEBase):
     def __init__(self):
 
         args = oc.ODEArguments(2, 1)
-        x = args.XVar(0)
-        v = args.XVar(1)
-        u = args.UVar(0)
+        x = args.x_var(0)
+        v = args.x_var(1)
+        u = args.u_var(0)
 
         xdot = v
         vdot = 0.001 * u - 0.0025 * vf.cos(3 * x)
@@ -160,19 +160,19 @@ if __name__ == "__main__":
     ]
 
     phase = ode.phase("LGL3", IG, 128)
-    phase.addBoundaryValue("First", [0, 1, 2], [x0, v0, 0])
-    phase.addBoundaryValue("Last", [0], [xf])
-    phase.addLowerVarBound("Back", 1, 0.0, 1.0)
-    phase.addLUVarBound("Path", 0, -1.2, 0.55, 1.0)
-    phase.addLUVarBound("Path", 1, -0.07, 0.07, 100.0)  # Scale to Be order 1
-    phase.addLUVarBound("Path", 3, -1, 1, 1.0)
-    phase.addDeltaTimeObjective(0.01)  # Scale to Be order 1
+    phase.add_boundary_value("First", [0, 1, 2], [x0, v0, 0])
+    phase.add_boundary_value("Last", [0], [xf])
+    phase.add_lower_var_bound("Back", 1, 0.0, 1.0)
+    phase.add_lu_var_bound("Path", 0, -1.2, 0.55, 1.0)
+    phase.add_lu_var_bound("Path", 1, -0.07, 0.07, 100.0)  # Scale to Be order 1
+    phase.add_lu_var_bound("Path", 3, -1, 1, 1.0)
+    phase.add_delta_time_objective(0.01)  # Scale to Be order 1
 
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_PrintLevel(1)
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_print_level(1)
     phase.solve_optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     Plot(Traj)
     Animate(Traj)

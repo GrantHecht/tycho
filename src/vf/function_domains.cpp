@@ -1,0 +1,59 @@
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+// Source: https://github.com/AlabamaASRL/asset_asrl
+// Original Developer: James B. Pezent
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
+// =============================================================================
+
+#include "tycho/detail/vf/core/function_domains.h"
+
+// void tycho::vf::DomainHolder<-1>::set_input_domain(int irr, const std::vector<DomainMatrix>&
+// sub_domains) {
+//     if (sub_domains.size() == 1) {
+//         this->sub_domains = sub_domains[0];
+//         return;
+//     }
+//     Eigen::VectorXi full(irr);
+//     full.setZero();
+//
+//     for (auto& dmn : sub_domains) {
+//         for (int i = 0; i < dmn.cols(); i++) {
+//             full.segment(dmn(0, i), dmn(1, i)).setOnes();
+//         }
+//         if (full.sum() == irr) {
+//             this->sub_domains.resize(2, 1);
+//             this->sub_domains(0, 0) = 0;
+//             this->sub_domains(1, 0) = irr;
+//
+//             return;
+//         }
+//     }
+//     std::vector<std::array<int, 2>> sds;
+//
+//     bool find = true;
+//     for (int i = 0; i < irr; i++) {
+//         if (full[i] == 1) {
+//             if (find) {
+//                 sds.emplace_back(std::array<int, 2>{i, 1});
+//                 find = false;
+//             }
+//             else
+//                 sds.back()[1]++;
+//         }
+//         else
+//             find = true;
+//     }
+//
+//     this->sub_domains.resize(2, sds.size());
+//     for (int i = 0; i < sds.size(); i++) {
+//         this->sub_domains(0, i) = sds[i][0];
+//         this->sub_domains(1, i) = sds[i][1];
+//     }
+// }

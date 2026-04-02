@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int Size, int Major>
 struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
@@ -28,13 +27,13 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
                                 SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
     template <class Scalar> using Mat = Eigen::Matrix<Scalar, Size, Size>;
 
     int size;
 
     MatrixInverse() {};
-    MatrixInverse(int size) : size(size) { this->setIORows(size * size, size * size); }
+    MatrixInverse(int size) : size(size) { this->set_io_rows(size * size, size * size); }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
@@ -59,8 +58,9 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -102,8 +102,9 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -178,9 +179,10 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             adjgrad.noalias() = (adjvars.transpose() * jx_).transpose();
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    TempSpec<Mat<Scalar>>(this->size, this->size),
-                                    TempSpec<Mat<Scalar>>(this->size, this->size));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
+            tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
 };
-} // namespace Tycho
+} // namespace tycho::vf

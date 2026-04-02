@@ -21,7 +21,7 @@
 #include <windows.h>
 #endif
 
-namespace Tycho {
+namespace tycho::utils {
 
 // =============================================================================
 // Worker thread identification + per-dispatch synchronization
@@ -475,9 +475,11 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     nparts = std::min(nparts, count);
     if (nparts > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
-            throw std::logic_error("Tycho::parallel_blocks: nested dispatch from pool worker");
+            throw std::logic_error(
+                "tycho::utils::parallel_blocks: nested dispatch from pool worker");
         if (pool_configuring())
-            throw std::logic_error("Tycho::parallel_blocks: dispatch during set_num_threads");
+            throw std::logic_error(
+                "tycho::utils::parallel_blocks: dispatch during set_num_threads");
         int pool_tasks = nparts - 1;
         detail::DispatchContext ctx(pool_tasks);
         int block_size = count / nparts;
@@ -518,9 +520,11 @@ template <typename F> void parallel_sequence(int n, F &&func) {
         return;
     if (n > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
-            throw std::logic_error("Tycho::parallel_sequence: nested dispatch from pool worker");
+            throw std::logic_error(
+                "tycho::utils::parallel_sequence: nested dispatch from pool worker");
         if (pool_configuring())
-            throw std::logic_error("Tycho::parallel_sequence: dispatch during set_num_threads");
+            throw std::logic_error(
+                "tycho::utils::parallel_sequence: dispatch during set_num_threads");
         int pool_tasks = n - 1;
         detail::DispatchContext ctx(pool_tasks);
         for (int i = 0; i < pool_tasks; ++i)
@@ -557,9 +561,9 @@ template <typename FTask, typename FInline>
 void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {
         if (detail::g_is_pool_worker)
-            throw std::logic_error("Tycho::parallel_task: nested dispatch from pool worker");
+            throw std::logic_error("tycho::utils::parallel_task: nested dispatch from pool worker");
         if (pool_configuring())
-            throw std::logic_error("Tycho::parallel_task: dispatch during set_num_threads");
+            throw std::logic_error("tycho::utils::parallel_task: dispatch during set_num_threads");
         detail::DispatchContext ctx(1);
         thread_pool().enqueue_work([f = std::forward<FTask>(pool_work), &ctx] {
             try {
@@ -591,4 +595,4 @@ void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     }
 }
 
-} // namespace Tycho
+} // namespace tycho::utils

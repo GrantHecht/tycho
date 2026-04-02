@@ -136,7 +136,7 @@ Tycho doesn't rely on CRTP alone. It uses a **two-layer architecture**:
 1. **CRTP layer** -- for building and evaluating expressions at full speed during the hot loop (solver iterations).
 2. **Type erasure layer** -- `GenericFunction<IR, OR>` wraps any CRTP expression into a uniform runtime type using `rubber_types::TypeErasure`, with virtual dispatch (see [Section 10](#10-type-erasure-genericfunction)).
 
-The type erasure boundary is where CRTP expressions enter the solver. When you call `phase.addEqualCon(...)` or `vf.stack(...)`, the concrete expression type is erased into a `GenericFunction`. From that point on, the solver calls through virtual dispatch -- but the virtual call is at the *function* level, not the *element* level. Inside each virtual call, the full CRTP expression tree is inlined.
+The type erasure boundary is where CRTP expressions enter the solver. When you call `phase.add_equal_con(...)` or `vf.stack(...)`, the concrete expression type is erased into a `GenericFunction`. From that point on, the solver calls through virtual dispatch -- but the virtual call is at the *function* level, not the *element* level. Inside each virtual call, the full CRTP expression tree is inlined.
 
 #### Alternative Designs
 
@@ -160,7 +160,7 @@ template <class Derived, int IR, int OR>
 struct ComputableBase : CRTPBase<Derived> {
     template <class InType, class OutType>
     void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
-        if constexpr (!Derived::IsVectorizable) { /* ... */ }
+        if constexpr (!Derived::is_vectorizable) { /* ... */ }
         this->derived().compute_impl(x, fx_);
     }
 };
@@ -171,7 +171,7 @@ struct ComputableBase {
     template <class Self, class InType, class OutType>
     void compute(this Self const& self, ConstVectorBaseRef<InType> x,
                  ConstVectorBaseRef<OutType> fx_) {
-        if constexpr (!Self::IsVectorizable) { /* ... */ }
+        if constexpr (!Self::is_vectorizable) { /* ... */ }
         self.compute_impl(x, fx_);
     }
 };
@@ -210,7 +210,7 @@ Concrete types would simplify from `VectorFunction<Norm<IR>, IR, 1>` to `VectorF
 | -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Readability**      | Simpler class declarations; no `CRTPBase`/`derived()` boilerplate | Class-scope type aliases must become local computations                                             |
 | **Compilation**      | Marginally fewer template parameters per class                    | Expression type nesting still dominates compile time                                                |
-| **Refactor scope**   | N/A                                                               | Massive refactor touching every file in `include/tycho/detail/vf/` and `src/Bindings/`              |
+| **Refactor scope**   | N/A                                                               | Massive refactor touching every file in `include/tycho/detail/vf/` and `src/bindings/`              |
 | **Compatibility**    | N/A                                                               | Requires C++23; must verify Clang/LLVM, GCC, and MSVC support                                       |
 | **Performance**      | Identical runtime performance (same inlining guarantees)          | N/A                                                                                                 |
 | **Correctness risk** | N/A                                                               | Subtle behavioral differences in overload resolution between CRTP hiding and deducing this dispatch |
@@ -245,14 +245,14 @@ When `IR` and `OR` are known at compile time (e.g., `IR=6, OR=3`), Eigen can use
 ```cpp
 // Static sizing (preferred for performance when dimensions are known):
 template <> struct InputOutputSize<6, 3> {
-    static const int InputRows = 6;
-    static const int OutputRows = 3;
+    static const int input_rows_val = 6;
+    static const int output_rows_val = 3;
 };
 
 // Dynamic sizing (required when dimensions vary at runtime):
 template <> struct InputOutputSize<-1, -1> {
-    int InputRows = 0;  // Mutable, set at construction
-    int OutputRows = 0;
+    int input_rows_val = 0;  // Mutable, set at construction
+    int output_rows_val = 0;
 };
 ```
 
@@ -285,19 +285,19 @@ You can override these `static const bool` flags to enable optimizations:
 
 | Flag                  | Default | Meaning                                                                                                     |
 | --------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
-| `IsVectorizable`      | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
-| `IsLinearFunction`    | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
-| `HasDiagonalJacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
-| `IsGenericFunction`   | `false` | Set only by `GenericFunction`                                                                               |
+| `is_vectorizable`     | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
+| `is_linear_function`  | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
+| `has_diagonal_jacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
+| `is_generic_function` | `false` | Set only by `GenericFunction`                                                                               |
 
 ### Minimal Example: A Power Function
 
 Here's a complete C++ VectorFunction that computes `f(x) = [x_0^2, x_1^2, ..., x_{n-1}^2]`:
 
 ```cpp
-#include "VectorFunction.h"
+#include <tycho/tycho.h>
 
-namespace Tycho {
+namespace tycho {
 
 // Square each element of the input vector
 template <int IR>
@@ -306,10 +306,10 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     // Enable batch evaluation with DefaultSuperScalar
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     CwiseSquareExample() {}
-    CwiseSquareExample(int ir) { this->setIORows(ir, ir); }
+    CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
 
     // --- Required: compute f(x) ---
     template <class InType, class OutType>
@@ -354,7 +354,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho
 ```
 
 ### Using AutodiffFwd Instead of Manual Derivatives
@@ -368,10 +368,10 @@ struct CwiseSquareAD : VectorFunction<CwiseSquareAD<IR>, IR, IR,
     using Base = VectorFunction<CwiseSquareAD<IR>, IR, IR, AutodiffFwd, AutodiffFwd>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     CwiseSquareAD() {}
-    CwiseSquareAD(int ir) { this->setIORows(ir, ir); }
+    CwiseSquareAD(int ir) { this->set_io_rows(ir, ir); }
 
     // Only compute_impl is needed -- autodiff generates Jacobians and Hessians
     template <class InType, class OutType>
@@ -406,6 +406,8 @@ BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 ```
 
 The `Definition` static method returns a VectorFunction expression, and the macro wraps it in a proper ODE type that can be used with `ODEPhase`.
+
+> **Note:** `BUILD_ODE_FROM_EXPRESSION` is defined in `<tycho/optimal_control.h>`, not in `<tycho/vector_functions.h>`. Use `#include <tycho/tycho.h>` (the umbrella header) or `#include <tycho/optimal_control.h>` when using this macro.
 
 ---
 
@@ -490,12 +492,12 @@ Uses the `autodiff` library's dual numbers. For the Jacobian, each input variabl
 template <class InType, class OutType, class JacType>
 void compute_jacobian_impl(x, fx_, jx_) {
     Input<dual<Scalar>> xdual = x.cast<dual<Scalar>>();
-    Output<dual<Scalar>> fdual(ORows());
+    Output<dual<Scalar>> fdual(output_rows());
 
-    for (int i = 0; i < IRows(); i++) {
+    for (int i = 0; i < input_rows(); i++) {
         xdual[i].grad = 1.0;          // Seed input i
         compute(xdual, fdual);          // Evaluate with dual numbers
-        for (int j = 0; j < ORows(); j++)
+        for (int j = 0; j < output_rows(); j++)
             jx(j, i) = fdual[j].grad;  // Extract partial derivative
         xdual[i].grad = 0.0;           // Reset seed
         fdual.setZero();
@@ -585,15 +587,15 @@ template <class InType, class OutType>
 inline void compute(x, fx_) const {
     typedef typename InType::Scalar Scalar;
 
-    if constexpr (!Derived::IsVectorizable) {
+    if constexpr (!Derived::is_vectorizable) {
         // Case 1: Function does NOT support vectorization
         if constexpr (Is_SuperScalar<Scalar>::value) {
             // But caller passed SuperScalar input! Must unpack and call one at a time.
             for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                for (int j = 0; j < IRows(); j++)
+                for (int j = 0; j < input_rows(); j++)
                     x_r[j] = x[j][i];           // Extract the i-th scalar from each input
                 compute_impl(x_r, fx_r);          // Scalar evaluation
-                for (int j = 0; j < ORows(); j++)
+                for (int j = 0; j < output_rows(); j++)
                     fx[j][i] = fx_r[j];           // Pack scalar result back
             }
         } else {
@@ -608,9 +610,9 @@ inline void compute(x, fx_) const {
 }
 ```
 
-**Key insight:** When `IsVectorizable = true`, the function's `compute_impl` is written to work correctly with *both* scalar types (`double`) and SuperScalar types (`Eigen::Array<double, N>`). Eigen's expression templates make this work automatically -- operations like `+`, `*`, `.sin()`, `.cos()` are overloaded for both scalars and arrays.
+**Key insight:** When `is_vectorizable = true`, the function's `compute_impl` is written to work correctly with *both* scalar types (`double`) and SuperScalar types (`Eigen::Array<double, N>`). Eigen's expression templates make this work automatically -- operations like `+`, `*`, `.sin()`, `.cos()` are overloaded for both scalars and arrays.
 
-When `IsVectorizable = false` but the solver calls with a SuperScalar, the base class automatically unpacks the array, calls `compute_impl` N times with plain `double`, and repacks the results. This is correct but slower.
+When `is_vectorizable = false` but the solver calls with a SuperScalar, the base class automatically unpacks the array, calls `compute_impl` N times with plain `double`, and repacks the results. This is correct but slower.
 
 ### The Solver-Level Batching
 
@@ -620,18 +622,18 @@ The `constraints()` method in `ComputableBase` implements the batch loop:
 void constraints(X, FX, data) const {
     // ...
     auto VectorImpl = [&]() {
-        using SuperScalar = Tycho::DefaultSuperScalar;
+        using SuperScalar = tycho::DefaultSuperScalar;
         constexpr int vsize = SuperScalar::SizeAtCompileTime;  // 2 on ARM, 4 on x86
-        int Packs = data.NumAppl() / vsize;
+        int Packs = data.num_appl() / vsize;
 
-        Input<SuperScalar> x_vect(IRows());
-        Output<SuperScalar> fx_vect(ORows());
+        Input<SuperScalar> x_vect(input_rows());
+        Output<SuperScalar> fx_vect(output_rows());
 
         for (int i = 0; i < Packs; i++) {
             // Pack vsize independent inputs into x_vect
             for (int j = 0; j < vsize; j++) {
                 gatherInput(X, x, i * vsize + j, data);
-                for (int k = 0; k < IRows(); k++)
+                for (int k = 0; k < input_rows(); k++)
                     x_vect[k][j] = x[k];
             }
             // Single batched evaluation
@@ -643,30 +645,30 @@ void constraints(X, FX, data) const {
             }
         }
         // Handle remainder (< vsize applications) with scalar fallback
-        ScalarImpl(Packs * vsize, data.NumAppl());
+        ScalarImpl(Packs * vsize, data.num_appl());
     };
 
-    if constexpr (Derived::IsVectorizable) {
-        if (EnableVectorization)
+    if constexpr (Derived::is_vectorizable) {
+        if (enable_vectorization_)
             VectorImpl();
         else
-            ScalarImpl(0, data.NumAppl());
+            ScalarImpl(0, data.num_appl());
     } else {
-        ScalarImpl(0, data.NumAppl());
+        ScalarImpl(0, data.num_appl());
     }
 }
 ```
 
-### Guidelines for IsVectorizable
+### Guidelines for is_vectorizable
 
-Set `IsVectorizable = true` when your `compute_impl` (and `compute_jacobian_impl`, etc.) works correctly with `Eigen::Array<double, N, 1>` as the scalar type. This is automatic if you:
+Set `is_vectorizable = true` when your `compute_impl` (and `compute_jacobian_impl`, etc.) works correctly with `Eigen::Array<double, N, 1>` as the scalar type. This is automatic if you:
 - Use only Eigen array/matrix operations (`.sin()`, `.cos()`, `+`, `*`, etc.)
 - Avoid branches that depend on the scalar value (no `if (x[0] > 0)`)
 - Avoid calling external functions that expect `double`
 
 **If your function calls Python code or external C libraries, it is NOT vectorizable.**
 
-For composite functions (`NestedFunction`, `StackedOutputs`, etc.), `IsVectorizable` is the logical AND of all sub-functions' vectorizability.
+For composite functions (`NestedFunction`, `StackedOutputs`, etc.), `is_vectorizable` is the logical AND of all sub-functions' vectorizability.
 
 ---
 
@@ -685,7 +687,7 @@ Segment<8, 3, 2>:  R^8 --> R^3
                     x  |-->  [x[2], x[3], x[4]]
 ```
 
-Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `IsLinearFunction = true` and `IsVectorizable = true`.
+Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `is_linear_function = true` and `is_vectorizable = true`.
 
 `Arguments<IR>` is a special case: a Segment that passes the entire input through unchanged.
 
@@ -697,7 +699,7 @@ struct Arguments : Segment_Impl<Arguments<IR_OR>, IR_OR, IR_OR, 0> { ... };
 
 #### `Constant<IR, OR>` and `ConstantScalar<IR>`
 
-Returns a fixed vector regardless of input. `IsLinearFunction = true`, Jacobian is all zeros.
+Returns a fixed vector regardless of input. `is_linear_function = true`, Jacobian is all zeros.
 
 #### `Scaled<Func>`, `RowScaled<Func>`, `StaticScaled<Func, Value>`
 
@@ -714,8 +716,8 @@ Represents `f(x) = Outer(Inner(x))`:
 
 ```
 NestedFunction<Outer, Inner>:
-    IRows = Inner.IRows
-    ORows = Outer.ORows
+    input_rows = Inner.input_rows
+    output_rows = Outer.output_rows
     Jacobian: J_f = J_outer * J_inner  (chain rule)
 ```
 
@@ -727,7 +729,7 @@ Stacks the outputs of multiple functions into a single output vector:
 
 ```
 StackedOutputs{f1, f2, f3}:
-    ORows = f1.ORows + f2.ORows + f3.ORows
+    output_rows = f1.output_rows + f2.output_rows + f3.output_rows
     f(x) = [f1(x); f2(x); f3(x)]
     J(x) = [J1(x); J2(x); J3(x)]    // vertical concatenation
 ```
@@ -843,7 +845,7 @@ The `operator()` on `DenseFunctionBase` creates a `NestedFunction`:
 
 ```cpp
 auto composed = outer(inner);  // NestedFunction<OuterFunc, InnerFunc>
-// Requirement: inner.ORows() == outer.IRows()
+// Requirement: inner.output_rows() == outer.input_rows()
 ```
 
 ### Python DSL
@@ -851,8 +853,8 @@ auto composed = outer(inner);  // NestedFunction<OuterFunc, InnerFunc>
 In Python, the same operators and functions are available:
 
 ```python
-import tycho as ast
-vf = ast.VectorFunctions
+import tychopy as typy
+vf = typy.VectorFunctions
 Args = vf.Arguments
 
 args = Args(3)
@@ -933,7 +935,7 @@ The `vf.stack()`, `vf.sum()`, etc. functions also return `GenericFunction`.
 
 ### How VectorFunctions Become Constraints
 
-When you call `phase.addEqualCon(...)`, the phase creates a `ConstraintFunction` wrapper that pairs the VectorFunction with a `SolverIndexingData` struct describing:
+When you call `phase.add_equal_con(...)`, the phase creates a `ConstraintFunction` wrapper that pairs the VectorFunction with a `SolverIndexingData` struct describing:
 
 1. **Which variables** from the full NLP decision vector to pass as inputs (for each collocation node)
 2. **Where to write** the constraint outputs in the full constraint vector
@@ -943,17 +945,17 @@ When you call `phase.addEqualCon(...)`, the phase creates a `ConstraintFunction`
 
 ```cpp
 struct SolverIndexingData {
-    MatrixXi Vindex;  // Columns = function applications, rows = input variable indices
-    MatrixXi Cindex;  // Columns = function applications, rows = constraint indices
+    MatrixXi v_index_;  // Columns = function applications, rows = input variable indices
+    MatrixXi c_index_;  // Columns = function applications, rows = constraint indices
 
     // Pre-computed metadata
-    VectorXi InnerConstraintStarts;  // Where each constraint block starts in FX
-    VectorXi InnerGradientStarts;    // Where each gradient block starts in AGX
-    VectorXi InnerKKTStarts;         // Where each KKT block starts in the sparse matrix
+    VectorXi inner_constraint_starts_;  // Where each constraint block starts in FX
+    VectorXi inner_gradient_starts_;    // Where each gradient block starts in AGX
+    VectorXi inner_kkt_starts_;         // Where each KKT block starts in the sparse matrix
 
-    int NumAppl();   // Number of times this function is applied (e.g., # collocation nodes)
-    int VLoc(i, V);  // Input variable index i for application V
-    int CLoc(j, V);  // Constraint index j for application V
+    int num_appl();   // Number of times this function is applied (e.g., # collocation nodes)
+    int v_loc(i, V);  // Input variable index i for application V
+    int c_loc(j, V);  // Constraint index j for application V
 };
 ```
 
@@ -963,13 +965,13 @@ Before each function evaluation, the solver gathers the relevant variables from 
 
 ```cpp
 void gatherInput(X, xt, V, data) {
-    if (data.VindexContinuity[V] == Contiguous) {
+    if (data.v_index_continuity_[V] == Contiguous) {
         // Variables are contiguous in X -- fast memcpy-like operation
-        xt = X.segment<IR>(data.VLoc(0, V), IRows());
+        xt = X.segment<IR>(data.v_loc(0, V), input_rows());
     } else {
         // Variables are scattered -- gather one by one
-        for (int i = 0; i < IRows(); i++)
-            xt(i) = X(data.VLoc(i, V));
+        for (int i = 0; i < input_rows(); i++)
+            xt(i) = X(data.v_loc(i, V));
     }
 }
 ```
@@ -993,12 +995,12 @@ KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data):
 During a single PSIOPT iteration:
 
 1. PSIOPT calls `constraints_jacobian_adjointgradient_adjointhessian(X, L, FX, AGX, KKTmat, ...)`
-2. For each of `data.NumAppl()` applications:
+2. For each of `data.num_appl()` applications:
    a. `gatherInput(X, x, V, data)` -- extract local inputs from global vector
    b. `gatherMult(L, l, V, data)` -- extract local multipliers
    c. `compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, agx, hx, l)` -- evaluate
    d. `KKTFillAll(V, jx, hx, ...)` -- scatter into KKT matrix
-3. If `IsVectorizable && EnableVectorization`, step 2 is batched using `DefaultSuperScalar`
+3. If `is_vectorizable && enable_vectorization_`, step 2 is batched using `DefaultSuperScalar`
 
 ---
 
@@ -1007,9 +1009,9 @@ During a single PSIOPT iteration:
 ### Import Convention
 
 ```python
-import tycho as ast
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+import tychopy as typy
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 Args = vf.Arguments
 ```
 
@@ -1020,7 +1022,7 @@ Args = vf.Arguments
 args = Args(n)          # n-dimensional input
 
 # ODE-specific input variable (separates state, control, parameters)
-ode_args = oc.ODEArguments(XVars=3, UVars=1, PVars=0)
+ode_args = oc.ODEArguments(3, 1, 0)
 ```
 
 ### Indexing and Slicing
@@ -1095,9 +1097,6 @@ f = vf.sin(Args(1)[0])
 val = f.compute([0.5])         # Returns numpy array: [sin(0.5)]
 jac = f.jacobian([0.5])        # Returns numpy matrix: [[cos(0.5)]]
 fx, jx = f.compute_jacobian([0.5])  # Both at once
-
-# Performance testing
-f.rpt([1.0, 2.0, 3.0], 100000)  # Run 100k evaluations and print timing
 ```
 
 ### Type Conversion
@@ -1106,7 +1105,7 @@ f.rpt([1.0, 2.0, 3.0], 100000)  # Run 100k evaluations and print timing
 f = vf.sin(Args(1)[0]) * Args(1)[0]  # Compile-time expression type
 
 gf = f.vf()   # Convert to GenericFunction<-1, -1> (vector)
-sf = f.sf()   # Convert to GenericFunction<-1, 1> (scalar, only if ORows==1)
+sf = f.sf()   # Convert to GenericFunction<-1, 1> (scalar, only if output_rows()==1)
 ```
 
 ### Defining ODEs in Python
@@ -1118,8 +1117,8 @@ class MyODE(oc.ODEBase):
         UVars = 1
         XtU = oc.ODEArguments(XVars, UVars)
 
-        x, y, v = XtU.XVec().tolist()   # State variables
-        theta = XtU.UVar(0)              # Control variable
+        x, y, v = XtU.x_vec().tolist()   # State variables
+        theta = XtU.u_var(0)              # Control variable
 
         # Build symbolic dynamics
         xdot = vf.sin(theta) * v
@@ -1146,7 +1145,7 @@ def orbit_constraint(a_target, e_target):
     e = ...  # compute eccentricity from r, v
     return vf.stack([a - a_target, e - e_target])
 
-phase.addEqualCon("Back", orbit_constraint(a_t, e_t), range(0, 6))
+phase.add_equal_con("Back", orbit_constraint(a_t, e_t), range(0, 6))
 #                  ^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^
 #                  where   VectorFunction (must=0)     which variables to pass
 
@@ -1156,7 +1155,7 @@ class ControlEffort(vf.ScalarFunction):
         u = Args(3)
         super().__init__(u.squared_norm())
 
-phase.addIntegralObjective(ControlEffort(), [7, 8, 9])
+phase.add_integral_objective(ControlEffort(), [7, 8, 9])
 #                                            ^^^^^^^^^
 #                                            indices into the phase vector
 ```
@@ -1171,10 +1170,10 @@ The classic minimum-time brachistochrone: find the wire shape that lets a bead s
 
 ```python
 import numpy as np
-import tycho as ast
+import tychopy as typy
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = typy.VectorFunctions
+oc = typy.OptimalControl
 
 class Brachistochrone(oc.ODEBase):
     def __init__(self, g):
@@ -1182,8 +1181,8 @@ class Brachistochrone(oc.ODEBase):
         UVars = 1   # Control: [theta]
 
         XtU = oc.ODEArguments(XVars, UVars)
-        x, y, v = XtU.XVec().tolist()
-        theta = XtU.UVar(0)
+        x, y, v = XtU.x_vec().tolist()
+        theta = XtU.u_var(0)
 
         # Dynamics
         xdot = vf.sin(theta) * v
@@ -1212,14 +1211,14 @@ for t in ts:
 
 # Create phase and add constraints
 phase = ode.phase("LGL3", Xs, 32)
-phase.addBoundaryValue("Front", range(0, 4), [0, 10, 0, 0])
-phase.addBoundaryValue("Back", [0, 1], [10, 5])
-phase.addLUVarBound("Path", 4, -0.1, 2.0)
-phase.addDeltaTimeObjective(1.0)
+phase.add_boundary_value("Front", range(0, 4), [0, 10, 0, 0])
+phase.add_boundary_value("Back", [0, 1], [10, 5])
+phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+phase.add_delta_time_objective(1.0)
 
 # Solve
 phase.optimize()
-Traj = phase.returnTraj()
+Traj = phase.return_traj()
 print(f"Optimal time: {Traj[-1][3]:.4f} s")  # ~1.8013 s
 ```
 
@@ -1256,14 +1255,14 @@ class LowThrust(oc.ODEBase):
 # Usage
 ode = LowThrust(mu=1.0, accel=0.01)
 phase = ode.phase("LGL5", initial_guess, 64)
-phase.addIntegralObjective(LowThrust.effort_obj(), [7, 8, 9])
+phase.add_integral_objective(LowThrust.effort_obj(), [7, 8, 9])
 ```
 
 ### Example 3: Brachistochrone (C++)
 
 ```cpp
 #include <tycho/tycho.h>
-using namespace Tycho;
+using namespace tycho;
 
 // Define ODE dynamics as a VectorFunction expression
 struct Brach_Impl : ODESize<3, 1, 0> {
@@ -1300,14 +1299,14 @@ int main() {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << 0, 10, 0, 0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, std::string("auto"));
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, std::string("auto"));
 
     Eigen::VectorXi back_idx(2); back_idx << 0, 1;
     Eigen::VectorXd back_val(2); back_val << 10, 5;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, std::string("auto"));
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, std::string("auto"));
 
-    phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
-    phase->addDeltaTimeObjective(1.0, std::string("auto"));
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_delta_time_objective(1.0, std::string("auto"));
 
     phase->solve_optimize();
     return 0;
@@ -1495,7 +1494,7 @@ include/tycho/detail/vf/
         generic_comparative.h     GenericComparative (type-erased comparisons)
         generic_conditional.h     GenericConditional (type-erased conditionals)
 
-src/VectorFunctions/
+src/vf/
     tycho_vector_functions.h      Aggregate include (pulls in all detail/vf/ headers)
     function_domains.cpp          FunctionDomains implementation
 ```

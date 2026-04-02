@@ -90,7 +90,7 @@ static void BM_PSIOPT_Brach_32seg_MTMetis(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
         auto phase = make_brach_phase(32, 3);
-        phase->optimizer->set_QPOrderingMode(PSIOPT::QPOrderingModes::PARMETIS);
+        phase->optimizer_->set_qp_ordering_mode(PSIOPT::QPOrderingModes::PARMETIS);
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
@@ -107,7 +107,7 @@ static void BM_PSIOPT_PolarLT_128seg_MTMetis(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
         auto phase = make_polar_lt_phase(128, 3);
-        phase->optimizer->set_QPOrderingMode(PSIOPT::QPOrderingModes::PARMETIS);
+        phase->optimizer_->set_qp_ordering_mode(PSIOPT::QPOrderingModes::PARMETIS);
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {

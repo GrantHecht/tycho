@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -35,18 +34,28 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Solvers types
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::OptimizationProblemBase;
+using tycho::solvers::PSIOPT;
+
+// VF types
+using vf::Arguments;
+using vf::GenericFunction;
+using vf::StackedOutputs;
 
 struct OptimalControlProblem : OptimizationProblemBase {
     using VectorXi = Eigen::VectorXi;
@@ -80,52 +89,52 @@ struct OptimalControlProblem : OptimizationProblemBase {
     std::vector<PhasePtr> phases;
     std::vector<std::string> phase_names;
 
-    bool doTranscription = true;
-    void resetTranscription() { this->doTranscription = true; };
+    bool do_transcription_ = true;
+    void reset_transcription() { this->do_transcription_ = true; };
 
-    std::map<int, LinkConstraint> LinkEqualities;
-    std::map<int, LinkConstraint> LinkInequalities;
-    std::map<int, LinkObjective> LinkObjectives;
+    std::map<int, LinkConstraint> link_equalities_;
+    std::map<int, LinkConstraint> link_inequalities_;
+    std::map<int, LinkObjective> link_objectives_;
 
-    VectorXd ActiveLinkParams;
-    Eigen::VectorXd LPUnits;
-    bool AutoScaling = false;
-    bool SyncObjectiveScales = true;
+    VectorXd active_link_params_;
+    Eigen::VectorXd lp_units_;
+    bool auto_scaling_ = false;
+    bool sync_objective_scales_ = true;
 
     std::map<std::string, Eigen::VectorXi> LPidxs;
 
-    void setLinkParams(VectorXd parm, VectorXd units) {
+    void set_link_params(VectorXd parm, VectorXd units) {
         if (units.size() != parm.size()) {
             throw std::invalid_argument(
                 "Size of link parameter vector and scaling units vector must match");
         }
 
-        this->ActiveLinkParams = parm;
-        this->numLinkParams = parm.size();
-        this->resetTranscription();
-        this->LPUnits = units;
+        this->active_link_params_ = parm;
+        this->num_link_params_ = parm.size();
+        this->reset_transcription();
+        this->lp_units_ = units;
     }
-    void setLinkParams(VectorXd parm) {
+    void set_link_params(VectorXd parm) {
         VectorXd units(parm.size());
         units.setOnes();
-        return this->setLinkParams(parm, units);
+        return this->set_link_params(parm, units);
     }
 
-    void setLinkParamVgroups(std::map<std::string, Eigen::VectorXi> lpidxs) {
+    void set_link_param_vgroups(std::map<std::string, Eigen::VectorXi> lpidxs) {
         this->LPidxs = lpidxs;
     }
-    void addLinkParamVgroups(std::map<std::string, Eigen::VectorXi> lpidxs) {
+    void add_link_param_vgroups(std::map<std::string, Eigen::VectorXi> lpidxs) {
         for (auto &[key, value] : lpidxs) {
             this->LPidxs[key] = value;
         }
     }
-    void addLinkParamVgroup(Eigen::VectorXi idx, std::string key) { this->LPidxs[key] = idx; }
-    void addLinkParamVgroup(int idx, std::string key) {
+    void add_link_param_vgroup(Eigen::VectorXi idx, std::string key) { this->LPidxs[key] = idx; }
+    void add_link_param_vgroup(int idx, std::string key) {
         VectorXi tmp(1);
         tmp << idx;
         this->LPidxs[key] = tmp;
     }
-    VectorXi getLPidx(std::string key) const {
+    VectorXi get_lp_idx(std::string key) const {
         if (LPidxs.count(key) == 0) {
             throw std::invalid_argument(
                 fmt::format("No LinkParam variable index group with name: {0:} exists.", key));
@@ -133,138 +142,138 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return this->LPidxs.at(key);
     }
 
-    VectorXd returnLinkParams() { return this->ActiveLinkParams; }
+    VectorXd return_link_params() { return this->active_link_params_; }
 
-    bool MultipliersLoaded = false;
-    bool PostOptInfoValid = false;
+    bool multipliers_loaded_ = false;
+    bool post_opt_info_valid_ = false;
 
-    void invalidatePostOptInfo() { this->PostOptInfoValid = false; };
+    void invalidate_post_opt_info() { this->post_opt_info_valid_ = false; };
 
-    VectorXd ActiveEqLmults;
-    VectorXd ActiveIqLmults;
-    VectorXd ActiveEqCons;
-    VectorXd ActiveIqCons;
+    VectorXd active_eq_lmults_;
+    VectorXd active_iq_lmults_;
+    VectorXd active_eq_cons_;
+    VectorXd active_iq_cons_;
 
-    VectorXi LinkParamLocs;
+    VectorXi link_param_locs_;
 
-    VectorXi numPhaseVars;
-    VectorXi numPhaseEqCons;
-    VectorXi numPhaseIqCons;
+    VectorXi num_phase_vars_;
+    VectorXi num_phase_eq_cons_;
+    VectorXi num_phase_iq_cons_;
 
-    int numLinkParams = 0;
-    int numLinkEqCons = 0;
-    int numLinkIqCons = 0;
+    int num_link_params_ = 0;
+    int num_link_eq_cons_ = 0;
+    int num_link_iq_cons_ = 0;
 
-    int StartObj = 0;
-    int StartEq = 0;
-    int StartIq = 0;
+    int start_obj_ = 0;
+    int start_eq_ = 0;
+    int start_iq_ = 0;
 
-    int numObjFuns = 0;
-    int numEqFuns = 0;
-    int numIqFuns = 0;
+    int num_obj_funs_ = 0;
+    int num_eq_funs_ = 0;
+    int num_iq_funs_ = 0;
 
-    int numProbVars = 0;
-    int numProbEqCons = 0;
-    int numProbIqCons = 0;
+    int num_prob_vars_ = 0;
+    int num_prob_eq_cons_ = 0;
+    int num_prob_iq_cons_ = 0;
 
     ///////////////////////////////
-    bool AdaptiveMesh = false;
-    bool PrintMeshInfo = true;
-    bool SolveOnlyFirst = true;
+    bool adaptive_mesh_ = false;
+    bool print_mesh_info_ = true;
+    bool solve_only_first_ = true;
 
-    int MaxMeshIters = 10;
-    PSIOPT::ConvergenceFlags MeshAbortFlag = PSIOPT::ConvergenceFlags::DIVERGING;
+    int max_mesh_iters_ = 10;
+    PSIOPT::ConvergenceFlags mesh_abort_flag_ = PSIOPT::ConvergenceFlags::DIVERGING;
 
-    bool MeshConverged = false;
+    bool mesh_converged_ = false;
 
-    void setAutoScaling(bool autoscale, bool applytophases) {
-        this->AutoScaling = autoscale;
+    void set_auto_scaling(bool autoscale, bool applytophases) {
+        this->auto_scaling_ = autoscale;
         if (applytophases) {
             for (auto phase : this->phases) {
-                phase->setAutoScaling(autoscale);
+                phase->set_auto_scaling(autoscale);
             }
         }
-        this->resetTranscription();
-        this->invalidatePostOptInfo();
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
     }
 
-    void setAdaptiveMesh(bool amesh, bool applytophases) {
-        this->AdaptiveMesh = amesh;
+    void set_adaptive_mesh(bool amesh, bool applytophases) {
+        this->adaptive_mesh_ = amesh;
         if (applytophases) {
             for (auto phase : this->phases) {
-                phase->setAdaptiveMesh(amesh);
+                phase->set_adaptive_mesh(amesh);
             }
         }
     }
 
-    void setMeshTol(double t) {
+    void set_mesh_tol(double t) {
         for (auto phase : this->phases) {
-            phase->setMeshTol(t);
+            phase->set_mesh_tol(t);
         }
     }
-    void setMeshRedFactor(double t) {
+    void set_mesh_red_factor(double t) {
         for (auto phase : this->phases) {
-            phase->setMeshRedFactor(t);
+            phase->set_mesh_red_factor(t);
         }
     }
-    void setMeshIncFactor(double t) {
+    void set_mesh_inc_factor(double t) {
         for (auto phase : this->phases) {
-            phase->setMeshIncFactor(t);
+            phase->set_mesh_inc_factor(t);
         }
     }
-    void setMeshErrFactor(double t) {
+    void set_mesh_err_factor(double t) {
         for (auto phase : this->phases) {
-            phase->setMeshErrFactor(t);
+            phase->set_mesh_err_factor(t);
         }
     }
-    void setMaxMeshIters(int it) { this->MaxMeshIters = it; }
-    void setMinSegments(int it) {
+    void set_max_mesh_iters(int it) { this->max_mesh_iters_ = it; }
+    void set_min_segments(int it) {
         for (auto phase : this->phases) {
-            phase->setMinSegments(it);
+            phase->set_min_segments(it);
         }
     }
-    void setMaxSegments(int it) {
+    void set_max_segments(int it) {
         for (auto phase : this->phases) {
-            phase->setMaxSegments(it);
+            phase->set_max_segments(it);
         }
     }
-    void setMeshErrorCriteria(MeshErrorAggregation m) {
+    void set_mesh_error_criteria(MeshErrorAggregation m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorCriteria(m);
+            phase->set_mesh_error_criteria(m);
         }
     }
-    void setMeshErrorCriteria(const std::string &m) {
+    void set_mesh_error_criteria(const std::string &m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorCriteria(m);
+            phase->set_mesh_error_criteria(m);
         }
     }
-    void setMeshErrorEstimator(MeshErrorEstimators m) {
+    void set_mesh_error_estimator(MeshErrorEstimators m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorEstimator(m);
+            phase->set_mesh_error_estimator(m);
         }
     }
-    void setMeshErrorEstimator(const std::string &m) {
+    void set_mesh_error_estimator(const std::string &m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorEstimator(m);
+            phase->set_mesh_error_estimator(m);
         }
     }
-    void setMeshErrorDistributor(MeshErrorAggregation m) {
+    void set_mesh_error_distributor(MeshErrorAggregation m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorDistributor(m);
+            phase->set_mesh_error_distributor(m);
         }
     }
-    void setMeshErrorDistributor(const std::string &m) {
+    void set_mesh_error_distributor(const std::string &m) {
         for (auto phase : this->phases) {
-            phase->setMeshErrorDistributor(m);
+            phase->set_mesh_error_distributor(m);
         }
     }
 
     ///////////////////////////////
     OptimalControlProblem() {}
-    OptimalControlProblem(std::vector<PhasePtr> ps) { this->addPhases(ps); }
+    OptimalControlProblem(std::vector<PhasePtr> ps) { this->add_phases(ps); }
 
-    int addPhase(PhasePtr p) {
-        this->resetTranscription();
+    int add_phase(PhasePtr p) {
+        this->reset_transcription();
         this->phases.push_back(p);
         int index = int(this->phases.size()) - 1;
         this->phase_names.push_back(std::to_string(index));
@@ -272,16 +281,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return index;
     }
 
-    std::vector<int> addPhases(std::vector<PhasePtr> ps) {
+    std::vector<int> add_phases(std::vector<PhasePtr> ps) {
         std::vector<int> idxs;
         for (auto p : ps) {
-            idxs.push_back(this->addPhase(p));
+            idxs.push_back(this->add_phase(p));
         }
         return idxs;
     }
 
-    int addPhase(PhasePtr p, const std::string &name) {
-        this->resetTranscription();
+    int add_phase(PhasePtr p, const std::string &name) {
+        this->reset_transcription();
         this->phases.push_back(p);
         int index = int(this->phases.size()) - 1;
         this->phase_names.push_back(name);
@@ -289,7 +298,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return index;
     }
 
-    int getPhaseNum(const std::string &name) {
+    int get_phase_num(const std::string &name) {
         auto nameit = std::find(phase_names.begin(), phase_names.end(), name);
         if (nameit == phase_names.end()) {
             fmt::print(fmt::fg(fmt::color::red),
@@ -301,7 +310,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return int(nameit - phase_names.begin());
     }
 
-    int getPhaseNum(PhasePtr p) {
+    int get_phase_num(PhasePtr p) {
         auto ptrit = std::find_if(phases.begin(), phases.end(),
                                   [&](PhasePtr pt) { return pt.get() == p.get(); });
         if (ptrit == phases.end()) {
@@ -313,15 +322,15 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return int(ptrit - phases.begin());
     }
 
-    int getPhaseNum(PhaseRefType phase_t) {
+    int get_phase_num(PhaseRefType phase_t) {
         int phasenum;
 
         if (std::holds_alternative<int>(phase_t)) {
             phasenum = std::get<int>(phase_t);
         } else if (std::holds_alternative<PhasePtr>(phase_t)) {
-            phasenum = this->getPhaseNum(std::get<PhasePtr>(phase_t));
+            phasenum = this->get_phase_num(std::get<PhasePtr>(phase_t));
         } else if (std::holds_alternative<std::string>(phase_t)) {
-            phasenum = this->getPhaseNum(std::get<std::string>(phase_t));
+            phasenum = this->get_phase_num(std::get<std::string>(phase_t));
         }
         return phasenum;
     }
@@ -331,7 +340,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (auto &appl : ptlnamevec) {
             VectorXi ptlv(appl.size());
             for (int i = 0; i < appl.size(); i++) {
-                ptlv[i] = this->getPhaseNum(appl[i]);
+                ptlv[i] = this->get_phase_num(appl[i]);
             }
             ptl.push_back(ptlv);
         }
@@ -343,27 +352,27 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (auto &appl : ptlnamevec) {
             VectorXi ptlv(appl.size());
             for (int i = 0; i < appl.size(); i++) {
-                ptlv[i] = this->getPhaseNum(appl[i]);
+                ptlv[i] = this->get_phase_num(appl[i]);
             }
             ptl.push_back(ptlv);
         }
         return ptl;
     }
 
-    void removePhase(int ith) {
-        this->resetTranscription();
+    void remove_phase(int ith) {
+        this->reset_transcription();
         if (ith < 0)
             ith = (this->phases.size() + ith);
         this->phases.erase(this->phases.begin() + ith);
         this->phase_names.erase(this->phase_names.begin() + ith);
     }
-    PhasePtr Phase(int ith) {
+    PhasePtr phase(int ith) {
         if (ith < 0)
             ith = (this->phases.size() + ith);
         return this->phases[ith];
     }
 
-    VectorXi getLPVars(VarIndexType LPvars_t) const {
+    VectorXi get_lp_vars(VarIndexType LPvars_t) const {
 
         VectorXi LPvars;
 
@@ -373,13 +382,13 @@ struct OptimalControlProblem : OptimizationProblemBase {
         } else if (std::holds_alternative<VectorXi>(LPvars_t)) {
             LPvars = std::get<VectorXi>(LPvars_t);
         } else if (std::holds_alternative<std::string>(LPvars_t)) {
-            LPvars = this->getLPidx(std::get<std::string>(LPvars_t));
+            LPvars = this->get_lp_idx(std::get<std::string>(LPvars_t));
         } else if (std::holds_alternative<std::vector<std::string>>(LPvars_t)) {
             std::vector<VectorXi> varvec;
             int size = 0;
             auto tmpvars = std::get<std::vector<std::string>>(LPvars_t);
             for (auto tmpv : tmpvars) {
-                varvec.push_back(this->getLPidx(tmpv));
+                varvec.push_back(this->get_lp_idx(tmpv));
                 size += varvec.back().size();
             }
             LPvars.resize(size);
@@ -396,8 +405,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
     template <class FuncHolder, class FuncType>
-    FuncHolder makeFuncImpl(FuncType fun, std::vector<PhasePack> packs, VarIndexType lv,
-                            ScaleType scale_t) {
+    FuncHolder make_func_impl(FuncType fun, std::vector<PhasePack> packs, VarIndexType lv,
+                              ScaleType scale_t) {
 
         int npacks = packs.size();
         std::vector<Eigen::VectorXi> PTL;
@@ -410,7 +419,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         for (int i = 0; i < npacks; i++) {
 
             auto phase_t = std::get<0>(packs[i]); // Name of phase, either phaseptr,int, or string
-            int phasenum = getPhaseNum(phase_t);
+            int phasenum = get_phase_num(phase_t);
 
             if (phasenum < 0 || phasenum >= this->phases.size()) {
                 throw std::invalid_argument(
@@ -419,14 +428,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
             phasenums[i] = phasenum;
 
-            RegFlags[i] = this->phases[phasenum]->getRegion(std::get<1>(packs[i]));
-            xtvs[i] = this->phases[phasenum]->getXtUPVars(RegFlags[i], std::get<2>(packs[i]));
-            opvs[i] = this->phases[phasenum]->getOPVars(RegFlags[i], std::get<3>(packs[i]));
-            spvs[i] = this->phases[phasenum]->getSPVars(RegFlags[i], std::get<4>(packs[i]));
+            RegFlags[i] = this->phases[phasenum]->get_region(std::get<1>(packs[i]));
+            xtvs[i] = this->phases[phasenum]->get_xt_up_vars(RegFlags[i], std::get<2>(packs[i]));
+            opvs[i] = this->phases[phasenum]->get_op_vars(RegFlags[i], std::get<3>(packs[i]));
+            spvs[i] = this->phases[phasenum]->get_sp_vars(RegFlags[i], std::get<4>(packs[i]));
         }
 
         std::vector<Eigen::VectorXi> lvs;
-        lvs.push_back(getLPVars(lv));
+        lvs.push_back(get_lp_vars(lv));
         PTL.push_back(phasenums);
 
         auto func = FuncHolder(fun, RegFlags, PTL, xtvs, opvs, spvs, lvs, scale_t);
@@ -434,22 +443,22 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
     template <class FuncHolder, class FuncType>
-    FuncHolder makeFuncImpl(FuncType fun, PhaseRefType p0, RegionType reg0, VarIndexType XtUV0,
-                            VarIndexType OPV0, VarIndexType SPV0, PhaseRefType p1, RegionType reg1,
-                            VarIndexType XtUV1, VarIndexType OPV1, VarIndexType SPV1,
-                            VarIndexType lv, ScaleType scale_t) {
+    FuncHolder make_func_impl(FuncType fun, PhaseRefType p0, RegionType reg0, VarIndexType XtUV0,
+                              VarIndexType OPV0, VarIndexType SPV0, PhaseRefType p1,
+                              RegionType reg1, VarIndexType XtUV1, VarIndexType OPV1,
+                              VarIndexType SPV1, VarIndexType lv, ScaleType scale_t) {
 
         auto pack0 = PhasePack{p0, reg0, XtUV0, OPV0, SPV0};
         auto pack1 = PhasePack{p1, reg1, XtUV1, OPV1, SPV1};
 
         auto packs = std::vector{pack0, pack1};
-        return makeFuncImpl<FuncHolder, FuncType>(fun, packs, lv, scale_t);
+        return make_func_impl<FuncHolder, FuncType>(fun, packs, lv, scale_t);
     }
 
     template <class FuncHolder, class FuncType>
-    FuncHolder makeFuncImpl(FuncType fun, PhaseRefType p0, RegionType reg0_t, VarIndexType v0,
-                            PhaseRefType p1, RegionType reg1_t, VarIndexType v1, VarIndexType lv,
-                            ScaleType scale_t) {
+    FuncHolder make_func_impl(FuncType fun, PhaseRefType p0, RegionType reg0_t, VarIndexType v0,
+                              PhaseRefType p1, RegionType reg1_t, VarIndexType v1, VarIndexType lv,
+                              ScaleType scale_t) {
 
         VarIndexType xtv0, opv0, spv0, xtv1, opv1, spv1;
 
@@ -493,26 +502,26 @@ struct OptimalControlProblem : OptimizationProblemBase {
         auto pack1 = PhasePack{p1, reg1, xtv1, opv1, spv1};
         auto packs = std::vector{pack0, pack1};
 
-        return makeFuncImpl<FuncHolder, FuncType>(fun, packs, lv, scale_t);
+        return make_func_impl<FuncHolder, FuncType>(fun, packs, lv, scale_t);
     }
 
     template <class FuncHolder, class FuncType>
-    FuncHolder makeFuncImpl(FuncType fun, PhaseRefType p0, RegionType reg0_t, VarIndexType v0,
-                            PhaseRefType p1, RegionType reg1_t, VarIndexType v1,
-                            ScaleType scale_t) {
+    FuncHolder make_func_impl(FuncType fun, PhaseRefType p0, RegionType reg0_t, VarIndexType v0,
+                              PhaseRefType p1, RegionType reg1_t, VarIndexType v1,
+                              ScaleType scale_t) {
 
         VectorXi empty;
 
-        return makeFuncImpl<FuncHolder, FuncType>(fun, p0, reg0_t, v0, p1, reg1_t, v1, empty,
-                                                  scale_t);
+        return make_func_impl<FuncHolder, FuncType>(fun, p0, reg0_t, v0, p1, reg1_t, v1, empty,
+                                                    scale_t);
     }
 
     /////////////////////////////////////////////////
 
     template <class FuncMap>
-    void removeFuncImpl(FuncMap &map, int index, const std::string &funcstr) {
-        this->resetTranscription();
-        this->invalidatePostOptInfo();
+    void remove_func_impl(FuncMap &map, int index, const std::string &funcstr) {
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         if (index == -1 && map.size() > 0) {
             index = map.rbegin()->first;
         }
@@ -525,62 +534,62 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
     template <class FuncType, class FuncMap>
-    int addFuncImpl(FuncType func, FuncMap &map, const std::string &funcstr) {
-        this->resetTranscription();
-        this->invalidatePostOptInfo();
+    int add_func_impl(FuncType func, FuncMap &map, const std::string &funcstr) {
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
         map[index] = func;
-        map[index].StorageIndex = index;
+        map[index].storage_index_ = index;
 
         check_function_size(map.at(index), funcstr);
         return index;
     }
 
     ////////////////////////////////////////////////
-    int addLinkEqualCon(LinkConstraint lc) {
-        return addFuncImpl(lc, this->LinkEqualities, "Link Equality Constraint");
+    int add_link_equal_con(LinkConstraint lc) {
+        return add_func_impl(lc, this->link_equalities_, "Link Equality Constraint");
     }
     ////////////////////////////////////////////
 
     /////////////// THE NEW EQUALCON INTERFACE//////////////////////////////
 
-    int addLinkEqualCon(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
-                        ScaleType scale_t) {
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
-        return addFuncImpl(Func, this->LinkEqualities, "Link Equality Constraint");
+    int add_link_equal_con(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
+                           ScaleType scale_t) {
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType XtUV0,
-                        VarIndexType OPV0, VarIndexType SPV0, PhaseRefType p1, RegionType reg1,
-                        VarIndexType XtUV1, VarIndexType OPV1, VarIndexType SPV1, VarIndexType lv,
-                        ScaleType scale_t) {
+    int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
+                           VarIndexType XtUV0, VarIndexType OPV0, VarIndexType SPV0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType XtUV1, VarIndexType OPV1,
+                           VarIndexType SPV1, VarIndexType lv, ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkEqualities, "Link Equality Constraint");
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                        PhaseRefType p1, RegionType reg1, VarIndexType v1, VarIndexType lv,
-                        ScaleType scale_t) {
+    int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType v1, VarIndexType lv,
+                           ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
-                                                                          reg1, v1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkEqualities, "Link Equality Constraint");
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                            reg1, v1, lv, scale_t);
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
-    int addLinkEqualCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                        PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
+    int add_link_equal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
-                                                                          reg1, v1, scale_t);
-        return addFuncImpl(Func, this->LinkEqualities, "Link Equality Constraint");
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                            reg1, v1, scale_t);
+        return add_func_impl(Func, this->link_equalities_, "Link Equality Constraint");
     }
 
-    std::vector<int> addForwardLinkEqualCon(PhaseRefType iphase_t, PhaseRefType fphase_t,
-                                            VarIndexType vars, ScaleType scale_t) {
+    std::vector<int> add_forward_link_equal_con(PhaseRefType iphase_t, PhaseRefType fphase_t,
+                                                VarIndexType vars, ScaleType scale_t) {
 
-        int iphase = getPhaseNum(iphase_t);
-        int fphase = getPhaseNum(fphase_t);
+        int iphase = get_phase_num(iphase_t);
+        int fphase = get_phase_num(fphase_t);
 
         if (iphase < 0)
             iphase = (this->phases.size() + iphase);
@@ -592,7 +601,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 "Link Equality constraint references non-existent phase:{0:}\n", iphase));
         }
 
-        int vsize = this->phases[iphase]->getXtUPVars(PhaseRegionFlags::Front, vars).size();
+        int vsize = this->phases[iphase]->get_xt_up_vars(PhaseRegionFlags::Front, vars).size();
 
         auto args = Arguments<-1>(2 * vsize);
         auto func = args.head<-1>(vsize) - args.tail<-1>(vsize);
@@ -600,7 +609,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
         std::vector<int> idxs;
         for (int i = iphase; i < fphase; i++) {
 
-            int idx = this->addLinkEqualCon(func, i, "Last", vars, i + 1, "First", vars, scale_t);
+            int idx =
+                this->add_link_equal_con(func, i, "Last", vars, i + 1, "First", vars, scale_t);
 
             idxs.push_back(idx);
         }
@@ -608,10 +618,11 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return idxs;
     }
 
-    int addDirectLinkEqualCon(PhaseRefType p0, RegionType reg0_t, VarIndexType v0, PhaseRefType p1,
-                              RegionType reg1_t, VarIndexType v1, ScaleType scale_t) {
+    int add_direct_link_equal_con(PhaseRefType p0, RegionType reg0_t, VarIndexType v0,
+                                  PhaseRefType p1, RegionType reg1_t, VarIndexType v1,
+                                  ScaleType scale_t) {
 
-        int phase = getPhaseNum(p0);
+        int phase = get_phase_num(p0);
 
         if (phase < 0)
             phase = (this->phases.size() + phase);
@@ -623,16 +634,17 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         PhaseRegionFlags reg0 = get_PhaseRegion(reg0_t);
 
-        int vsize = this->phases[phase]->getXtUPVars(reg0, v0).size();
+        int vsize = this->phases[phase]->get_xt_up_vars(reg0, v0).size();
 
         auto args = Arguments<-1>(2 * vsize);
         auto func = args.head<-1>(vsize) - args.tail<-1>(vsize);
 
-        return this->addLinkEqualCon(func, p0, reg0_t, v0, p1, reg1_t, v1, scale_t);
+        return this->add_link_equal_con(func, p0, reg0_t, v0, p1, reg1_t, v1, scale_t);
     }
 
-    std::vector<int> addParamLinkEqualCon(PhaseRefType iphase_t, PhaseRefType fphase_t,
-                                          RegionType reg0_t, VarIndexType vars, ScaleType scale_t) {
+    std::vector<int> add_param_link_equal_con(PhaseRefType iphase_t, PhaseRefType fphase_t,
+                                              RegionType reg0_t, VarIndexType vars,
+                                              ScaleType scale_t) {
 
         PhaseRegionFlags reg0 = get_PhaseRegion(reg0_t);
 
@@ -640,8 +652,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
             throw std::invalid_argument("Phase Region must be ODEParams or StaticParams");
         }
 
-        int iphase = getPhaseNum(iphase_t);
-        int fphase = getPhaseNum(fphase_t);
+        int iphase = get_phase_num(iphase_t);
+        int fphase = get_phase_num(fphase_t);
 
         if (iphase < 0)
             iphase = (this->phases.size() + iphase);
@@ -656,7 +668,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         std::vector<int> idxs;
         for (int i = iphase; i < fphase; i++) {
 
-            int idx = this->addDirectLinkEqualCon(i, reg0, vars, i + 1, reg0, vars, scale_t);
+            int idx = this->add_direct_link_equal_con(i, reg0, vars, i + 1, reg0, vars, scale_t);
 
             idxs.push_back(idx);
         }
@@ -664,130 +676,133 @@ struct OptimalControlProblem : OptimizationProblemBase {
         return idxs;
     }
 
-    int addLinkParamEqualCon(VectorFunctionalX lc, std::vector<VectorXi> lpvs, ScaleType scale_t) {
+    int add_link_param_equal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs,
+                                 ScaleType scale_t) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkEqualCon(
+        return this->add_link_equal_con(
             LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs, scale_t));
     }
-    int addLinkParamEqualCon(VectorFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
+    int add_link_param_equal_con(VectorFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
         std::vector<Eigen::VectorXi> lpvs;
         lpvs.push_back(lpv);
-        return this->addLinkParamEqualCon(lc, lpvs, scale_t);
+        return this->add_link_param_equal_con(lc, lpvs, scale_t);
     }
 
     //////////////////////////////////////////////////////////////
 
-    int addLinkEqualCon(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                        std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, std::vector<std::string> regs,
-                        std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
-                        std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                        std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, std::vector<std::string> regs,
+                           std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                        std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                        std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                        std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, RegVec regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, std::vector<std::string> regs,
-                        std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                        std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                        std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, std::vector<std::string> regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, LinkFlags regs,
-                        std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                        std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                        std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, LinkFlags regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, std::string regs,
-                        std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                        std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                        std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, std::string regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
     ////////////////////////////////////////////////
 
-    int addLinkEqualCon(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
+    int add_link_equal_con(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
         empty.resize(regs.size());
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, empty, empty, lpvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                        std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
-        return this->addLinkEqualCon(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
+    int add_link_equal_con(VectorFunctionalX lc, RegVec regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> lpvs) {
+        return this->add_link_equal_con(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                        VectorXi xtuvs) {
+    int add_link_equal_con(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                           VectorXi xtuvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
-    int addLinkEqualCon(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                        VectorXi xtuvs) {
+    int add_link_equal_con(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                           VectorXi xtuvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs);
-        return this->addLinkEqualCon(LC);
+        return this->add_link_equal_con(LC);
     }
 
-    int addLinkEqualCon(VectorFunctionalX lc, LinkFlags regs,
-                        std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkEqualCon(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_equal_con(VectorFunctionalX lc, LinkFlags regs,
+                           std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_equal_con(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
-    int addLinkEqualCon(VectorFunctionalX lc, std::string regs,
-                        std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkEqualCon(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_equal_con(VectorFunctionalX lc, std::string regs,
+                           std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_equal_con(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
 
     /////////////////////////////////////////////////////////////
 
     /////////////////////////////////////////////////////////////
 
-    int addLinkParamEqualCon(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
+    int add_link_param_equal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkEqualCon(
+        return this->add_link_equal_con(
             LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs));
     }
-    int addLinkParamEqualCon(VectorFunctionalX lc, VectorXi lpvs) {
+    int add_link_param_equal_con(VectorFunctionalX lc, VectorXi lpvs) {
         std::vector<Eigen::VectorXi> lpvss;
         lpvss.push_back(lpvs);
-        return this->addLinkParamEqualCon(lc, lpvss);
+        return this->add_link_param_equal_con(lc, lpvss);
     }
 
-    int addForwardLinkEqualCon(int iphase, int fphase, VectorXi vars) {
+    int add_forward_link_equal_con(int iphase, int fphase, VectorXi vars) {
         if (iphase < 0)
             iphase = (this->phases.size() + iphase);
         if (fphase < 0)
@@ -807,16 +822,16 @@ struct OptimalControlProblem : OptimizationProblemBase {
         auto args = Arguments<-1>(2 * vars.size());
         auto func = args.head<-1>(vars.size()) - args.tail<-1>(vars.size());
 
-        return this->addLinkEqualCon(LinkConstraint(func, LinkFlags::BackToFront, PTL, xtv));
+        return this->add_link_equal_con(LinkConstraint(func, LinkFlags::BackToFront, PTL, xtv));
     }
 
-    int addForwardLinkEqualCon(PhasePtr iphase, PhasePtr fphase, VectorXi vars) {
-        return this->addForwardLinkEqualCon(getPhaseNum(iphase), getPhaseNum(fphase), vars);
+    int add_forward_link_equal_con(PhasePtr iphase, PhasePtr fphase, VectorXi vars) {
+        return this->add_forward_link_equal_con(get_phase_num(iphase), get_phase_num(fphase), vars);
     }
     /////////////////////////////////////////////////////////////////////////
 
-    int addDirectLinkEqualCon(LinkFlags LinkFlag, int iphase, VectorXi v1, int fphase,
-                              VectorXi v2) {
+    int add_direct_link_equal_con(LinkFlags LinkFlag, int iphase, VectorXi v1, int fphase,
+                                  VectorXi v2) {
         if (iphase < 0)
             iphase = (this->phases.size() + iphase);
         if (fphase < 0)
@@ -834,11 +849,11 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         auto args = Arguments<-1>(2 * v1.size());
         auto func = args.head<-1>(v1.size()) - args.tail<-1>(v2.size());
-        return this->addLinkEqualCon(LinkConstraint(func, LinkFlag, PTL, xtv));
+        return this->add_link_equal_con(LinkConstraint(func, LinkFlag, PTL, xtv));
     }
 
-    int addDirectLinkEqualCon(VectorFunctionalX lc, int iphase, PhaseRegionFlags f1, VectorXi v1,
-                              int fphase, PhaseRegionFlags f2, VectorXi v2) {
+    int add_direct_link_equal_con(VectorFunctionalX lc, int iphase, PhaseRegionFlags f1,
+                                  VectorXi v1, int fphase, PhaseRegionFlags f2, VectorXi v2) {
         if (iphase < 0)
             iphase = (this->phases.size() + iphase);
         if (fphase < 0)
@@ -874,493 +889,500 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
         std::vector<Eigen::VectorXi> lv(1);
 
-        return this->addLinkEqualCon(LinkConstraint(lc, RegFlags, PTL, xtv, opv, spv, lv));
+        return this->add_link_equal_con(LinkConstraint(lc, RegFlags, PTL, xtv, opv, spv, lv));
     }
 
-    int addDirectLinkEqualCon(VectorFunctionalX lc, int iphase, std::string f1, VectorXi v1,
-                              int fphase, std::string f2, VectorXi v2) {
-        return this->addDirectLinkEqualCon(lc, iphase, strto_PhaseRegionFlag(f1), v1, fphase,
-                                           strto_PhaseRegionFlag(f2), v2);
+    int add_direct_link_equal_con(VectorFunctionalX lc, int iphase, std::string f1, VectorXi v1,
+                                  int fphase, std::string f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(lc, iphase, strto_PhaseRegionFlag(f1), v1, fphase,
+                                               strto_PhaseRegionFlag(f2), v2);
     }
 
-    int addDirectLinkEqualCon(int iphase, PhaseRegionFlags f1, VectorXi v1, int fphase,
-                              PhaseRegionFlags f2, VectorXi v2) {
+    int add_direct_link_equal_con(int iphase, PhaseRegionFlags f1, VectorXi v1, int fphase,
+                                  PhaseRegionFlags f2, VectorXi v2) {
         auto args = Arguments<-1>(2 * v1.size());
         auto func = args.head<-1>(v1.size()) - args.tail<-1>(v2.size());
-        return this->addDirectLinkEqualCon(func, iphase, f1, v1, fphase, f2, v2);
+        return this->add_direct_link_equal_con(func, iphase, f1, v1, fphase, f2, v2);
     }
 
-    int addDirectLinkEqualCon(int iphase, std::string f1, VectorXi v1, int fphase, std::string f2,
-                              VectorXi v2) {
-        return this->addDirectLinkEqualCon(iphase, strto_PhaseRegionFlag(f1), v1, fphase,
-                                           strto_PhaseRegionFlag(f2), v2);
+    int add_direct_link_equal_con(int iphase, std::string f1, VectorXi v1, int fphase,
+                                  std::string f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(iphase, strto_PhaseRegionFlag(f1), v1, fphase,
+                                               strto_PhaseRegionFlag(f2), v2);
     }
 
-    int addDirectLinkEqualCon(PhasePtr iphase, PhaseRegionFlags f1, VectorXi v1, PhasePtr fphase,
-                              PhaseRegionFlags f2, VectorXi v2) {
-        return this->addDirectLinkEqualCon(getPhaseNum(iphase), f1, v1, getPhaseNum(fphase), f2,
-                                           v2);
+    int add_direct_link_equal_con(PhasePtr iphase, PhaseRegionFlags f1, VectorXi v1,
+                                  PhasePtr fphase, PhaseRegionFlags f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(get_phase_num(iphase), f1, v1, get_phase_num(fphase),
+                                               f2, v2);
     }
 
-    int addDirectLinkEqualCon(PhasePtr iphase, std::string f1, VectorXi v1, PhasePtr fphase,
-                              std::string f2, VectorXi v2) {
-        return this->addDirectLinkEqualCon(getPhaseNum(iphase), f1, v1, getPhaseNum(fphase), f2,
-                                           v2);
+    int add_direct_link_equal_con(PhasePtr iphase, std::string f1, VectorXi v1, PhasePtr fphase,
+                                  std::string f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(get_phase_num(iphase), f1, v1, get_phase_num(fphase),
+                                               f2, v2);
     }
 
-    int addDirectLinkEqualCon(VectorFunctionalX lc, PhasePtr iphase, PhaseRegionFlags f1,
-                              VectorXi v1, PhasePtr fphase, PhaseRegionFlags f2, VectorXi v2) {
-        return this->addDirectLinkEqualCon(lc, getPhaseNum(iphase), f1, v1, getPhaseNum(fphase), f2,
-                                           v2);
+    int add_direct_link_equal_con(VectorFunctionalX lc, PhasePtr iphase, PhaseRegionFlags f1,
+                                  VectorXi v1, PhasePtr fphase, PhaseRegionFlags f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(lc, get_phase_num(iphase), f1, v1,
+                                               get_phase_num(fphase), f2, v2);
     }
-    int addDirectLinkEqualCon(VectorFunctionalX lc, PhasePtr iphase, std::string f1, VectorXi v1,
-                              PhasePtr fphase, std::string f2, VectorXi v2) {
-        return this->addDirectLinkEqualCon(lc, getPhaseNum(iphase), f1, v1, getPhaseNum(fphase), f2,
-                                           v2);
+    int add_direct_link_equal_con(VectorFunctionalX lc, PhasePtr iphase, std::string f1,
+                                  VectorXi v1, PhasePtr fphase, std::string f2, VectorXi v2) {
+        return this->add_direct_link_equal_con(lc, get_phase_num(iphase), f1, v1,
+                                               get_phase_num(fphase), f2, v2);
     }
 
     ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////
 
-    int addLinkInequalCon(LinkConstraint lc) {
-        return addFuncImpl(lc, this->LinkInequalities, "Link Inequality Constraint");
+    int add_link_inequal_con(LinkConstraint lc) {
+        return add_func_impl(lc, this->link_inequalities_, "Link Inequality Constraint");
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
-                          ScaleType scale_t) {
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
-        return addFuncImpl(Func, this->LinkInequalities, "Link Inequality Constraint");
+    int add_link_inequal_con(VectorFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
+                             ScaleType scale_t) {
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, packs, lv, scale_t);
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
-                          VarIndexType XtUV0, VarIndexType OPV0, VarIndexType SPV0, PhaseRefType p1,
-                          RegionType reg1, VarIndexType XtUV1, VarIndexType OPV1, VarIndexType SPV1,
-                          VarIndexType lv, ScaleType scale_t) {
+    int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
+                             VarIndexType XtUV0, VarIndexType OPV0, VarIndexType SPV0,
+                             PhaseRefType p1, RegionType reg1, VarIndexType XtUV1,
+                             VarIndexType OPV1, VarIndexType SPV1, VarIndexType lv,
+                             ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                          PhaseRefType p1, RegionType reg1, VarIndexType v1, VarIndexType lv,
-                          ScaleType scale_t) {
+    int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
+                             VarIndexType v0, PhaseRefType p1, RegionType reg1, VarIndexType v1,
+                             VarIndexType lv, ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
-                                                                          reg1, v1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                            reg1, v1, lv, scale_t);
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
-    int addLinkInequalCon(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                          PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
+    int add_link_inequal_con(VectorFunctionalX lc, PhaseRefType p0, RegionType reg0,
+                             VarIndexType v0, PhaseRefType p1, RegionType reg1, VarIndexType v1,
+                             ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
-                                                                          reg1, v1, scale_t);
-        return addFuncImpl(Func, this->LinkInequalities, "Link Inequality Constraint");
+        auto Func = this->make_func_impl<LinkConstraint, VectorFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                            reg1, v1, scale_t);
+        return add_func_impl(Func, this->link_inequalities_, "Link Inequality Constraint");
     }
-    int addLinkParamInequalCon(VectorFunctionalX lc, std::vector<VectorXi> lpvs,
-                               ScaleType scale_t) {
+    int add_link_param_inequal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs,
+                                   ScaleType scale_t) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkInequalCon(
+        return this->add_link_inequal_con(
             LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs, scale_t));
     }
-    int addLinkParamInequalCon(VectorFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
+    int add_link_param_inequal_con(VectorFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
         std::vector<Eigen::VectorXi> lpvs;
         lpvs.push_back(lpv);
-        return this->addLinkParamInequalCon(lc, lpvs, scale_t);
+        return this->add_link_param_inequal_con(lc, lpvs, scale_t);
     }
 
     //////////////////////////
 
-    int addLinkInequalCon(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                          std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                             std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                             std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::vector<std::string> regs,
-                          std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
-                          std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                          std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, std::vector<std::string> regs,
+                             std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                             std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                          std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                             std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                             std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                          std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                             std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                             std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                          std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, RegVec regs,
+                             std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                             std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::vector<std::string> regs,
-                          std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                          std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                          std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, std::vector<std::string> regs,
+                             std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                             std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, LinkFlags regs,
-                          std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                          std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                          std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, LinkFlags regs,
+                             std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                             std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::string regs,
-                          std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                          std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                          std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, std::string regs,
+                             std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                             std::vector<VectorXi> lpvs) {
         auto LC = LinkConstraint(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
     ////////////////////////////////////////////////
 
-    int addLinkInequalCon(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                          VectorXi xtuvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                             VectorXi xtuvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, LinkFlags regs,
-                          std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkInequalCon(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_inequal_con(VectorFunctionalX lc, LinkFlags regs,
+                             std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_inequal_con(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                          VectorXi xtuvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                             VectorXi xtuvs) {
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, std::string regs,
-                          std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkInequalCon(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_inequal_con(VectorFunctionalX lc, std::string regs,
+                             std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_inequal_con(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
+    int add_link_inequal_con(VectorFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                             std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
         empty.resize(regs.size());
         auto LC = LinkConstraint(lc, regs, ptl, xtuvs, empty, empty, lpvs);
-        return this->addLinkInequalCon(LC);
+        return this->add_link_inequal_con(LC);
     }
 
-    int addLinkInequalCon(VectorFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                          std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
-        return this->addLinkInequalCon(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
+    int add_link_inequal_con(VectorFunctionalX lc, RegVec regs,
+                             std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                             std::vector<VectorXi> lpvs) {
+        return this->add_link_inequal_con(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
     }
 
-    int addLinkParamInequalCon(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
+    int add_link_param_inequal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkInequalCon(
+        return this->add_link_inequal_con(
             LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs));
     }
-    int addLinkParamInequalCon(VectorFunctionalX lc, VectorXi lpvs) {
+    int add_link_param_inequal_con(VectorFunctionalX lc, VectorXi lpvs) {
         std::vector<Eigen::VectorXi> lpvss;
         lpvss.push_back(lpvs);
-        return this->addLinkParamInequalCon(lc, lpvss);
+        return this->add_link_param_inequal_con(lc, lpvss);
     }
     ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////
 
-    int addLinkObjective(LinkObjective lc) {
-        return addFuncImpl(lc, this->LinkObjectives, "Link Objective");
+    int add_link_objective(LinkObjective lc) {
+        return add_func_impl(lc, this->link_objectives_, "Link Objective");
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
-                         ScaleType scale_t) {
-        auto Func = this->makeFuncImpl<LinkObjective, ScalarFunctionalX>(lc, packs, lv, scale_t);
-        return addFuncImpl(Func, this->LinkObjectives, "Link Objective");
+    int add_link_objective(ScalarFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
+                           ScaleType scale_t) {
+        auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, packs, lv, scale_t);
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType XtUV0,
-                         VarIndexType OPV0, VarIndexType SPV0, PhaseRefType p1, RegionType reg1,
-                         VarIndexType XtUV1, VarIndexType OPV1, VarIndexType SPV1, VarIndexType lv,
-                         ScaleType scale_t) {
+    int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0,
+                           VarIndexType XtUV0, VarIndexType OPV0, VarIndexType SPV0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType XtUV1, VarIndexType OPV1,
+                           VarIndexType SPV1, VarIndexType lv, ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkObjective, ScalarFunctionalX>(
+        auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(
             lc, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, XtUV1, OPV1, SPV1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkObjectives, "Link Objective");
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                         PhaseRefType p1, RegionType reg1, VarIndexType v1, VarIndexType lv,
-                         ScaleType scale_t) {
+    int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType v1, VarIndexType lv,
+                           ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1, reg1,
-                                                                         v1, lv, scale_t);
-        return addFuncImpl(Func, this->LinkObjectives, "Link Objective");
+        auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                           reg1, v1, lv, scale_t);
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
-    int addLinkObjective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
-                         PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
+    int add_link_objective(ScalarFunctionalX lc, PhaseRefType p0, RegionType reg0, VarIndexType v0,
+                           PhaseRefType p1, RegionType reg1, VarIndexType v1, ScaleType scale_t) {
 
-        auto Func = this->makeFuncImpl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1, reg1,
-                                                                         v1, scale_t);
-        return addFuncImpl(Func, this->LinkObjectives, "Link Objective");
+        auto Func = this->make_func_impl<LinkObjective, ScalarFunctionalX>(lc, p0, reg0, v0, p1,
+                                                                           reg1, v1, scale_t);
+        return add_func_impl(Func, this->link_objectives_, "Link Objective");
     }
-    int addLinkParamObjective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs, ScaleType scale_t) {
+    int add_link_param_objective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs,
+                                 ScaleType scale_t) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkObjective(
+        return this->add_link_objective(
             LinkObjective(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs, scale_t));
     }
-    int addLinkParamObjective(ScalarFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
+    int add_link_param_objective(ScalarFunctionalX lc, VectorXi lpv, ScaleType scale_t) {
         std::vector<Eigen::VectorXi> lpvs;
         lpvs.push_back(lpv);
-        return this->addLinkParamObjective(lc, lpvs, scale_t);
+        return this->add_link_param_objective(lc, lpvs, scale_t);
     }
 
     //////////////////////////
 
-    int addLinkObjective(ScalarFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                         std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::vector<std::string> regs,
-                         std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
-                         std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                         std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, std::vector<std::string> regs,
+                           std::vector<VectorXi> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                         std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                         std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
+                           std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> opvs,
-                         std::vector<VectorXi> spvs, std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, RegVec regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::vector<std::string> regs,
-                         std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                         std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                         std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, std::vector<std::string> regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, LinkFlags regs,
-                         std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                         std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                         std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, LinkFlags regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::string regs,
-                         std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
-                         std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
-                         std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, std::string regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> opvs, std::vector<VectorXi> spvs,
+                           std::vector<VectorXi> lpvs) {
         auto LC = LinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs, opvs, spvs, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
     ////////////////////////////////////////////////
 
-    int addLinkObjective(ScalarFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
-                         VectorXi xtuvs) {
+    int add_link_objective(ScalarFunctionalX lc, LinkFlags regs, std::vector<VectorXi> ptl,
+                           VectorXi xtuvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, LinkFlags regs,
-                         std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_objective(ScalarFunctionalX lc, LinkFlags regs,
+                           std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_objective(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
-                         VectorXi xtuvs) {
+    int add_link_objective(ScalarFunctionalX lc, std::string regs, std::vector<VectorXi> ptl,
+                           VectorXi xtuvs) {
         auto LC = LinkObjective(lc, regs, ptl, xtuvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, std::string regs,
-                         std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
-        return this->addLinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs);
+    int add_link_objective(ScalarFunctionalX lc, std::string regs,
+                           std::vector<std::vector<PhasePtr>> ptl, VectorXi xtuvs) {
+        return this->add_link_objective(lc, regs, ptl_from_phases(ptl), xtuvs);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
+    int add_link_objective(ScalarFunctionalX lc, RegVec regs, std::vector<VectorXi> ptl,
+                           std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
         empty.resize(regs.size());
         auto LC = LinkObjective(lc, regs, ptl, xtuvs, empty, empty, lpvs);
-        return this->addLinkObjective(LC);
+        return this->add_link_objective(LC);
     }
 
-    int addLinkObjective(ScalarFunctionalX lc, RegVec regs, std::vector<std::vector<PhasePtr>> ptl,
-                         std::vector<VectorXi> xtuvs, std::vector<VectorXi> lpvs) {
-        return this->addLinkObjective(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
+    int add_link_objective(ScalarFunctionalX lc, RegVec regs,
+                           std::vector<std::vector<PhasePtr>> ptl, std::vector<VectorXi> xtuvs,
+                           std::vector<VectorXi> lpvs) {
+        return this->add_link_objective(lc, regs, ptl_from_phases(ptl), xtuvs, lpvs);
     }
 
-    int addLinkParamObjective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs) {
+    int add_link_param_objective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs) {
         std::vector<Eigen::VectorXi> empty;
-        return this->addLinkObjective(
+        return this->add_link_objective(
             LinkObjective(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs));
     }
-    int addLinkParamObjective(ScalarFunctionalX lc, VectorXi lpvs) {
+    int add_link_param_objective(ScalarFunctionalX lc, VectorXi lpvs) {
         std::vector<Eigen::VectorXi> lpvss;
         lpvss.push_back(lpvs);
-        return this->addLinkParamObjective(lc, lpvss);
+        return this->add_link_param_objective(lc, lpvss);
     }
 
     ///////////////////////////////////////////////////
 
-    void removeLinkEqualCon(int index) {
-        this->removeFuncImpl(this->LinkEqualities, index, "Equality Constraint");
+    void remove_link_equal_con(int index) {
+        this->remove_func_impl(this->link_equalities_, index, "Equality Constraint");
     }
-    void removeLinkInequalCon(int index) {
-        this->removeFuncImpl(this->LinkInequalities, index, "Inequality Constraint");
+    void remove_link_inequal_con(int index) {
+        this->remove_func_impl(this->link_inequalities_, index, "Inequality Constraint");
     }
-    void removeLinkObjective(int index) {
-        this->removeFuncImpl(this->LinkObjectives, index, "Link Objective");
+    void remove_link_objective(int index) {
+        this->remove_func_impl(this->link_objectives_, index, "Link Objective");
     }
     ///////////////////////////////////////////////////
 
-    std::vector<Eigen::VectorXd> returnLinkEqualConVals(int index) const {
-        if (!this->PostOptInfoValid) {
+    std::vector<Eigen::VectorXd> return_link_equal_con_vals(int index) const {
+        if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkEqualities.count(index) == 0) {
+        if (this->link_equalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Equality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkEqualities.at(index).GlobalIndex;
-        auto Cindex = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
-        int offset = this->numPhaseEqCons.sum();
+        int Gindex = this->link_equalities_.at(index).global_index_;
+        auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
+        int offset = this->num_phase_eq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
-                vals[j] = this->ActiveEqCons[idx];
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
+                vals[j] = this->active_eq_cons_[idx];
             }
             Allvals.push_back(vals);
         }
         return Allvals;
     }
 
-    std::vector<Eigen::VectorXd> returnLinkEqualConLmults(int index) const {
-        if (!this->PostOptInfoValid) {
+    std::vector<Eigen::VectorXd> return_link_equal_con_lmults(int index) const {
+        if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkEqualities.count(index) == 0) {
+        if (this->link_equalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Equality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkEqualities.at(index).GlobalIndex;
-        auto Cindex = this->nlp->EqualityConstraints[Gindex].index_data.Cindex;
-        int offset = this->numPhaseEqCons.sum();
+        int Gindex = this->link_equalities_.at(index).global_index_;
+        auto c_index_ = this->nlp_->equality_constraints_[Gindex].index_data_.c_index_;
+        int offset = this->num_phase_eq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
-                vals[j] = this->ActiveEqLmults[idx];
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
+                vals[j] = this->active_eq_lmults_[idx];
             }
             Allvals.push_back(vals);
         }
         return Allvals;
     }
 
-    std::vector<Eigen::VectorXd> returnLinkInequalConVals(int index) const {
-        if (!this->PostOptInfoValid) {
+    std::vector<Eigen::VectorXd> return_link_inequal_con_vals(int index) const {
+        if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkInequalities.count(index) == 0) {
+        if (this->link_inequalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Inequality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
-        int Gindex = this->LinkInequalities.at(index).GlobalIndex;
-        auto Cindex = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
-        int offset = this->numPhaseIqCons.sum();
+        int Gindex = this->link_inequalities_.at(index).global_index_;
+        auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
+        int offset = this->num_phase_iq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
-                vals[j] = this->ActiveIqCons[idx];
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
+                vals[j] = this->active_iq_cons_[idx];
             }
             Allvals.push_back(vals);
         }
         return Allvals;
     }
 
-    std::vector<Eigen::VectorXd> returnLinkInequalConLmults(int index) const {
-        if (!this->PostOptInfoValid) {
+    std::vector<Eigen::VectorXd> return_link_inequal_con_lmults(int index) const {
+        if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(" Post optimization info unavailable.");
         }
-        if (this->LinkInequalities.count(index) == 0) {
+        if (this->link_inequalities_.count(index) == 0) {
             throw std::invalid_argument(fmt::format(
                 "No Inequality Constraint with index {0:} exists in Optimal Control Problem.",
                 index));
         }
 
-        int Gindex = this->LinkInequalities.at(index).GlobalIndex;
-        auto Cindex = this->nlp->InequalityConstraints[Gindex].index_data.Cindex;
-        int offset = this->numPhaseIqCons.sum();
+        int Gindex = this->link_inequalities_.at(index).global_index_;
+        auto c_index_ = this->nlp_->inequality_constraints_[Gindex].index_data_.c_index_;
+        int offset = this->num_phase_iq_cons_.sum();
 
         std::vector<Eigen::VectorXd> Allvals;
-        for (int i = 0; i < Cindex.cols(); i++) {
-            VectorXd vals(Cindex.rows());
-            for (int j = 0; j < Cindex.rows(); j++) {
-                int idx = Cindex(j, i) - offset;
-                vals[j] = this->ActiveIqLmults[idx];
+        for (int i = 0; i < c_index_.cols(); i++) {
+            VectorXd vals(c_index_.rows());
+            for (int j = 0; j < c_index_.rows(); j++) {
+                int idx = c_index_(j, i) - offset;
+                vals[j] = this->active_iq_lmults_[idx];
             }
             Allvals.push_back(vals);
         }
         return Allvals;
     }
 
-    Eigen::VectorXd returnLinkEqualConScales(int index) {
-        return this->LinkEqualities.at(index).OutputScales;
+    Eigen::VectorXd return_link_equal_con_scales(int index) {
+        return this->link_equalities_.at(index).output_scales_;
     }
-    Eigen::VectorXd returnLinkInequalConScales(int index) {
-        return this->LinkInequalities.at(index).OutputScales;
+    Eigen::VectorXd return_link_inequal_con_scales(int index) {
+        return this->link_inequalities_.at(index).output_scales_;
     }
-    Eigen::VectorXd returnLinkObjectiveScales(int index) {
-        return this->LinkObjectives.at(index).OutputScales;
+    Eigen::VectorXd return_link_objective_scales(int index) {
+        return this->link_objectives_.at(index).output_scales_;
     }
 
     ///////////////////////////////////////////////////
@@ -1376,10 +1398,10 @@ struct OptimalControlProblem : OptimizationProblemBase {
                     std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
                     std::vector<VectorXi> LVars);
 
-    void checkTranscriptions() {
+    void check_transcriptions() {
         for (int i = 0; i < this->phases.size(); i++) {
-            if (this->phases[i]->doTranscription) {
-                this->doTranscription = true;
+            if (this->phases[i]->do_transcription_) {
+                this->do_transcription_ = true;
             }
         }
     }
@@ -1415,8 +1437,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
     void check_functions();
 
     template <class T> void check_function_size(const T &func, std::string ftype) {
-        int irows = func.Func.IRows();
-        switch (func.LinkFlag) {
+        int irows = func.func_.input_rows();
+        switch (func.link_flag_) {
         case LinkFlags::BackToFront:
         case LinkFlags::FrontToBack:
         case LinkFlags::FrontToFront:
@@ -1426,8 +1448,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
         case LinkFlags::PathToPath:
         case LinkFlags::ReadRegions: {
 
-            if (func.LinkParams.size() != func.PhasesTolink.size() &&
-                func.PhasesTolink.size() > 0) {
+            if (func.link_params_.size() != func.phases_to_link_.size() &&
+                func.phases_to_link_.size() > 0) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Transcription Error!!!\n"
                            "LinkParam Vector Must be same size as PTL Vector "
@@ -1435,9 +1457,9 @@ struct OptimalControlProblem : OptimizationProblemBase {
                 throw std::invalid_argument("");
             }
 
-            if (func.LinkParams.size() > 0 && func.PhasesTolink.size() == 0) {
-                for (int i = 0; i < func.LinkParams.size(); i++) {
-                    int isize = func.LinkParams[i].size();
+            if (func.link_params_.size() > 0 && func.phases_to_link_.size() == 0) {
+                for (int i = 0; i < func.link_params_.size(); i++) {
+                    int isize = func.link_params_[i].size();
                     if (irows != isize) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
@@ -1449,39 +1471,39 @@ struct OptimalControlProblem : OptimizationProblemBase {
                     }
                 }
             } else {
-                for (int i = 0; i < func.PhasesTolink.size(); i++) {
-                    int isize = func.LinkParams[i].size();
+                for (int i = 0; i < func.phases_to_link_.size(); i++) {
+                    int isize = func.link_params_[i].size();
 
-                    if (func.PhasesTolink[i].size() != func.XtUVars.size()) {
+                    if (func.phases_to_link_[i].size() != func.xtu_vars_.size()) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
                                    "Size of PTL vector element must equal size of Phase State "
                                    "Variables Vector");
                         throw std::invalid_argument("");
                     }
-                    if (func.PhasesTolink[i].size() != func.OPVars.size()) {
+                    if (func.phases_to_link_[i].size() != func.op_vars_.size()) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
                                    "Size of PTL vector element must equal size of Phase ODEParam "
                                    "Variables Vector");
                         throw std::invalid_argument("");
                     }
-                    if (func.PhasesTolink[i].size() != func.SPVars.size()) {
+                    if (func.phases_to_link_[i].size() != func.sp_vars_.size()) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
                                    "Size of PTL vector element must equal size of Phase "
                                    "StaticParam Variables Vector");
                         throw std::invalid_argument("");
                     }
-                    if (func.PhasesTolink[i].size() != func.PhaseRegFlags.size()) {
+                    if (func.phases_to_link_[i].size() != func.phase_reg_flags_.size()) {
                         fmt::print(fmt::fg(fmt::color::red),
                                    "Transcription Error!!!\n"
                                    "Size of PTL vector element must equal size of Phase Region "
                                    "Flag Vector");
                         throw std::invalid_argument("");
                     }
-                    for (int j = 0; j < func.PhasesTolink[i].size(); j++) {
-                        auto flag = func.PhaseRegFlags[j];
+                    for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
+                        auto flag = func.phase_reg_flags_[j];
                         int xmult = 1;
                         switch (flag) {
                         case PhaseRegionFlags::Front:
@@ -1509,8 +1531,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
                             break;
                         }
                         }
-                        isize += func.XtUVars[j].size() * xmult + func.OPVars[j].size() +
-                                 func.SPVars[j].size();
+                        isize += func.xtu_vars_[j].size() * xmult + func.op_vars_[j].size() +
+                                 func.sp_vars_[j].size();
                     }
                     if (irows != isize) {
                         fmt::print(fmt::fg(fmt::color::red),
@@ -1544,60 +1566,60 @@ struct OptimalControlProblem : OptimizationProblemBase {
     void transcribe() { this->transcribe(false, false); }
 
     void jet_initialize() {
-        this->setNumPartitions(1, 1);
-        this->optimizer->PrintLevel = 10;
-        this->PrintMeshInfo = false;
+        this->set_num_partitions(1, 1);
+        this->optimizer_->print_level_ = 10;
+        this->print_mesh_info_ = false;
         this->transcribe();
     }
     void jet_release() {
-        this->optimizer->release();
-        this->initPartitions();
-        this->optimizer->PrintLevel = 0;
-        this->PrintMeshInfo = true;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
+        this->optimizer_->release();
+        this->init_partitions();
+        this->optimizer_->print_level_ = 0;
+        this->print_mesh_info_ = true;
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
         for (auto &phase : this->phases)
             phase->jet_release();
-        this->resetTranscription();
-        this->invalidatePostOptInfo();
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
     }
 
     ////////////////////////////////////////////////////////////
   protected:
-    void initMeshs() {
-        this->MeshConverged = false;
+    void init_meshs() {
+        this->mesh_converged_ = false;
         for (auto &phase : this->phases) {
-            if (phase->AdaptiveMesh) {
-                phase->initMeshRefinement();
+            if (phase->adaptive_mesh_) {
+                phase->init_mesh_refinement();
             }
         }
     }
 
-    bool checkMeshs(bool printinfo) {
-        this->MeshConverged = true;
+    bool check_meshs(bool printinfo) {
+        this->mesh_converged_ = true;
         for (auto &phase : this->phases) {
-            if (phase->AdaptiveMesh) {
-                if (!phase->checkMesh())
-                    MeshConverged = false;
+            if (phase->adaptive_mesh_) {
+                if (!phase->check_mesh())
+                    mesh_converged_ = false;
             }
         }
 
-        return this->MeshConverged;
+        return this->mesh_converged_;
     }
-    void updateMeshs(bool printinfo) {
+    void update_meshs(bool printinfo) {
         for (auto &phase : this->phases) {
-            if (phase->AdaptiveMesh) {
-                if (!phase->MeshConverged) {
-                    phase->updateMesh();
+            if (phase->adaptive_mesh_) {
+                if (!phase->mesh_converged_) {
+                    phase->update_mesh();
                 }
             }
         }
     }
 
-    void printMeshs(int iter) {
+    void print_meshs(int iter) {
         MeshIterateInfo::print_header(iter);
         for (int i = 0; i < this->phases.size(); i++) {
-            if (this->phases[i]->AdaptiveMesh) {
-                this->phases[i]->MeshIters.back().print(i);
+            if (this->phases[i]->adaptive_mesh_) {
+                this->phases[i]->mesh_iters_.back().print(i);
             }
         }
     }
@@ -1612,74 +1634,77 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     PSIOPT::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
-    VectorXd makeSolverInput() const {
-        VectorXd Vars(this->numProbVars);
+    VectorXd make_solver_input() const {
+        VectorXd Vars(this->num_prob_vars_);
 
         for (int i = 0; i < this->phases.size(); i++) {
             int Start = 0;
             if (i > 0)
-                Start = this->numPhaseVars.segment(0, i).sum();
-            Vars.segment(Start, this->numPhaseVars[i]) = this->phases[i]->makeSolverInput();
+                Start = this->num_phase_vars_.segment(0, i).sum();
+            Vars.segment(Start, this->num_phase_vars_[i]) = this->phases[i]->make_solver_input();
         }
-        if (this->AutoScaling && this->LPUnits.size() > 0) {
-            Vars.tail(this->numLinkParams) = this->ActiveLinkParams.cwiseQuotient(this->LPUnits);
+        if (this->auto_scaling_ && this->lp_units_.size() > 0) {
+            Vars.tail(this->num_link_params_) =
+                this->active_link_params_.cwiseQuotient(this->lp_units_);
         } else {
-            Vars.tail(this->numLinkParams) = this->ActiveLinkParams;
+            Vars.tail(this->num_link_params_) = this->active_link_params_;
         }
 
         return Vars;
     }
 
-    void collectSolverOutput(const VectorXd &Vars) {
+    void collect_solver_output(const VectorXd &Vars) {
         for (int i = 0; i < this->phases.size(); i++) {
             int Start = 0;
             if (i > 0)
-                Start = this->numPhaseVars.segment(0, i).sum();
-            this->phases[i]->collectSolverOutput(Vars.segment(Start, this->numPhaseVars[i]));
+                Start = this->num_phase_vars_.segment(0, i).sum();
+            this->phases[i]->collect_solver_output(Vars.segment(Start, this->num_phase_vars_[i]));
         }
-        if (this->AutoScaling && this->LPUnits.size() > 0) {
-            this->ActiveLinkParams = Vars.tail(this->numLinkParams).cwiseProduct(this->LPUnits);
+        if (this->auto_scaling_ && this->lp_units_.size() > 0) {
+            this->active_link_params_ =
+                Vars.tail(this->num_link_params_).cwiseProduct(this->lp_units_);
         } else {
-            this->ActiveLinkParams = Vars.tail(this->numLinkParams);
+            this->active_link_params_ = Vars.tail(this->num_link_params_);
         }
     }
-    void collectSolverMultipliers(const VectorXd &EM, const VectorXd &IM) {
-        this->MultipliersLoaded = true;
+    void collect_solver_multipliers(const VectorXd &EM, const VectorXd &IM) {
+        this->multipliers_loaded_ = true;
         for (int i = 0; i < this->phases.size(); i++) {
             int EStart = 0;
             if (i > 0)
-                EStart = this->numPhaseEqCons.segment(0, i).sum();
+                EStart = this->num_phase_eq_cons_.segment(0, i).sum();
             int IStart = 0;
             if (i > 0)
-                IStart = this->numPhaseIqCons.segment(0, i).sum();
-            this->phases[i]->collectSolverMultipliers(EM.segment(EStart, this->numPhaseEqCons[i]),
-                                                      IM.segment(IStart, this->numPhaseIqCons[i]));
+                IStart = this->num_phase_iq_cons_.segment(0, i).sum();
+            this->phases[i]->collect_solver_multipliers(
+                EM.segment(EStart, this->num_phase_eq_cons_[i]),
+                IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->ActiveEqLmults = EM.tail(this->numLinkEqCons);
-        this->ActiveIqLmults = IM.tail(this->numLinkIqCons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
     }
 
-    void collectPostOptInfo(const VectorXd &EC, const VectorXd &EM, const VectorXd &IC,
-                            const VectorXd &IM) {
-        this->MultipliersLoaded = true;
-        this->PostOptInfoValid = true;
+    void collect_post_opt_info(const VectorXd &EC, const VectorXd &EM, const VectorXd &IC,
+                               const VectorXd &IM) {
+        this->multipliers_loaded_ = true;
+        this->post_opt_info_valid_ = true;
 
         for (int i = 0; i < this->phases.size(); i++) {
             int EStart = 0;
             if (i > 0)
-                EStart = this->numPhaseEqCons.segment(0, i).sum();
+                EStart = this->num_phase_eq_cons_.segment(0, i).sum();
             int IStart = 0;
             if (i > 0)
-                IStart = this->numPhaseIqCons.segment(0, i).sum();
-            this->phases[i]->collectPostOptInfo(EC.segment(EStart, this->numPhaseEqCons[i]),
-                                                EM.segment(EStart, this->numPhaseEqCons[i]),
-                                                IC.segment(IStart, this->numPhaseIqCons[i]),
-                                                IM.segment(IStart, this->numPhaseIqCons[i]));
+                IStart = this->num_phase_iq_cons_.segment(0, i).sum();
+            this->phases[i]->collect_post_opt_info(EC.segment(EStart, this->num_phase_eq_cons_[i]),
+                                                   EM.segment(EStart, this->num_phase_eq_cons_[i]),
+                                                   IC.segment(IStart, this->num_phase_iq_cons_[i]),
+                                                   IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->ActiveEqLmults = EM.tail(this->numLinkEqCons);
-        this->ActiveIqLmults = IM.tail(this->numLinkIqCons);
-        this->ActiveEqCons = EC.tail(this->numLinkEqCons);
-        this->ActiveIqCons = IC.tail(this->numLinkIqCons);
+        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
+        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
+        this->active_eq_cons_ = EC.tail(this->num_link_eq_cons_);
+        this->active_iq_cons_ = IC.tail(this->num_link_iq_cons_);
     }
 
   public:
@@ -1694,5 +1719,4 @@ struct OptimalControlProblem : OptimizationProblemBase {
     void print_stats(bool showfuns);
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

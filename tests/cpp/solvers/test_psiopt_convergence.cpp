@@ -5,7 +5,7 @@
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
@@ -13,7 +13,7 @@ TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     double tf = result.back()[3];
     EXPECT_NEAR(tf, 1.8013, 0.01);
 }
@@ -37,7 +37,7 @@ TEST_F(SolverTest, ConvergenceFlagOrdering) {
 
 TEST_F(SolverTest, PrintLevelZeroSilent) {
     auto phase = make_brach_solver_phase(16);
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer_->print_level_ = 0;
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 }

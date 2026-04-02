@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR, class Func, class Data = std::integral_constant<bool, false>>
 struct LambdaFunction
@@ -29,20 +28,20 @@ struct LambdaFunction
     DENSE_FUNCTION_BASE_TYPES(Base);
     using Base::compute;
 
-    std::shared_ptr<Func> compute_func;
+    std::shared_ptr<Func> compute_func_;
     // LambdaFunction() = default;
-    LambdaFunction(InputOutputSize<IR, OR> io, Func f) : compute_func(std::make_shared<Func>(f)) {
-        this->setIORows(io.InputRows, io.OutputRows);
+    LambdaFunction(InputOutputSize<IR, OR> io, Func f) : compute_func_(std::make_shared<Func>(f)) {
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     LambdaFunction(Data dat, InputOutputSize<IR, OR> io, Func f)
-        : compute_func(std::make_shared<Func>(f)), Data(dat) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        : compute_func_(std::make_shared<Func>(f)), Data(dat) {
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->compute_func->operator()(this, x, fx);
+        this->compute_func_->operator()(this, x, fx);
     }
 };
 
@@ -57,24 +56,24 @@ struct LambdaFunction2
     DENSE_FUNCTION_BASE_TYPES(Base);
     using Base::compute;
 
-    std::shared_ptr<Func> compute_func;
-    std::shared_ptr<JacFunc> compute_jacobian_func;
+    std::shared_ptr<Func> compute_func_;
+    std::shared_ptr<JacFunc> compute_jacobian_func_;
     // LambdaFunction2() = default;
 
     LambdaFunction2(InputOutputSize<IR, OR> io, Func f, JacFunc jf)
-        : compute_func(std::make_shared<Func>(f)),
-          compute_jacobian_func(std::make_shared<JacFunc>(jf)) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        : compute_func_(std::make_shared<Func>(f)),
+          compute_jacobian_func_(std::make_shared<JacFunc>(jf)) {
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     LambdaFunction2(Data dat, InputOutputSize<IR, OR> io, Func f, JacFunc jf)
-        : compute_func(std::make_shared<Func>(f)),
-          compute_jacobian_func(std::make_shared<JacFunc>(jf)), Data(dat) {
-        this->setIORows(io.InputRows, io.OutputRows);
+        : compute_func_(std::make_shared<Func>(f)),
+          compute_jacobian_func_(std::make_shared<JacFunc>(jf)), Data(dat) {
+        this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        this->compute_func->operator()(this, x, fx);
+        this->compute_func_->operator()(this, x, fx);
     }
 
     template <class InType, class OutType, class JacType>
@@ -83,7 +82,7 @@ struct LambdaFunction2
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        this->compute_jacobian_func->operator()(this, x, fx, jx);
+        this->compute_jacobian_func_->operator()(this, x, fx, jx);
     }
 };
 
@@ -103,4 +102,4 @@ auto make_lambda_func(Data dat, InputOutputSize<IR, OR> io, Func f, JacFunc jf) 
     return LambdaFunction2{dat, io, f, jf};
 }
 
-} // namespace Tycho
+} // namespace tycho::vf

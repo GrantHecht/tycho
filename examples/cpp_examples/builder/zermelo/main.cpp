@@ -21,7 +21,13 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // navigate() — not templated!  Works with any RuntimeODE.
@@ -49,22 +55,22 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
 
     // Construct phase with named variables
     auto phase = ode.phase(TranscriptionModes::LGL3, trajG, nSeg);
-    phase.setNumPartitions(10);
+    phase.set_num_partitions(10);
 
     // Boundary conditions — named variables
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y"}, A);
-    phase.addBoundaryValue(PhaseRegionFlags::Front, "t", 0.0);
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, B);
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"}, A);
+    phase.add_boundary_value(PhaseRegionFlags::Front, "t", 0.0);
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, B);
 
     // Control bounds
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
     // Minimise travel time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     // Solver settings
-    phase.optimizer().set_EContol(tol);
-    phase.optimizer().set_KKTtol(tol);
+    phase.optimizer().set_econ_tol(tol);
+    phase.optimizer().set_kkt_tol(tol);
 
     const auto status = phase.solve_optimize();
     if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
@@ -72,7 +78,7 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
                   << ")\n";
         return {};
     }
-    return phase.returnTraj();
+    return phase.return_traj();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -82,7 +88,7 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
 RuntimeODE make_no_wind(double vMax) {
     return ODEBuilder(2, 1)
         .define([vMax](auto &args) {
-            auto theta = args.UVar(0);
+            auto theta = args.u_var(0);
             return stack(vMax * cos(theta), vMax * sin(theta));
         })
         .var_names({{"x", 0}, {"y", 1}, {"t", 2}, {"theta", 3}})
@@ -94,7 +100,7 @@ RuntimeODE make_uniform_wind(double vMax, double wVel, double wAng) {
     double wy = wVel * std::sin(wAng);
     return ODEBuilder(2, 1)
         .define([vMax, wx, wy](auto &args) {
-            auto theta = args.UVar(0);
+            auto theta = args.u_var(0);
             return stack(vMax * cos(theta) + wx, vMax * sin(theta) + wy);
         })
         .var_names({{"x", 0}, {"y", 1}, {"t", 2}, {"theta", 3}})
@@ -111,7 +117,7 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
     // so we use ODEArguments + from() to build the expression directly.
     auto XtU = ODEArguments(2, 1, 0);
     auto pos = XtU.segment(0, 2);
-    auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);
+    auto theta = XtU.segment(XtU.xt_vars(), 1).coeff(0);
     auto vel = cos(pos.norm());
 
     auto expr = stack(vMax * cos(theta) + vel * cwAng, vMax * sin(theta) + vel * swAng);
@@ -129,7 +135,7 @@ RuntimeODE make_var_wind(double vMax) {
     auto pos = XtU.segment(0, 2);
     auto x = XtU.segment(0, 2).coeff(0);
     auto y = XtU.segment(0, 2).coeff(1);
-    auto theta = XtU.segment(XtU.XtVars(), 1).coeff(0);
+    auto theta = XtU.segment(XtU.xt_vars(), 1).coeff(0);
     auto vel = sin(pos.norm());
     auto ang = 2.0 * (x + y);
 

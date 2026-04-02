@@ -10,7 +10,7 @@
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -39,8 +39,8 @@ TEST_F(GenericFunctionTest, MoveConstruct) {
     BrachODE ode(9.81);
     GenericFunction<-1, -1> gf1(ode);
     GenericFunction<-1, -1> gf2(std::move(gf1));
-    EXPECT_EQ(gf2.IRows(), 5);
-    EXPECT_EQ(gf2.ORows(), 3);
+    EXPECT_EQ(gf2.input_rows(), 5);
+    EXPECT_EQ(gf2.output_rows(), 3);
 
     Eigen::VectorXd x(5);
     x << 1, 2, 3, 0, 0.5;
@@ -58,11 +58,11 @@ TEST_F(GenericFunctionTest, CopyAssign) {
     GenericFunction<-1, -1> gf1(ode);
     auto args = Arguments<3>();
     GenericFunction<-1, -1> gf2(args);
-    EXPECT_EQ(gf2.IRows(), 3);
+    EXPECT_EQ(gf2.input_rows(), 3);
 
     gf2 = gf1;
-    EXPECT_EQ(gf2.IRows(), 5);
-    EXPECT_EQ(gf2.ORows(), 3);
+    EXPECT_EQ(gf2.input_rows(), 5);
+    EXPECT_EQ(gf2.output_rows(), 3);
 }
 
 TEST_F(GenericFunctionTest, MoveAssign) {
@@ -72,8 +72,8 @@ TEST_F(GenericFunctionTest, MoveAssign) {
     GenericFunction<-1, -1> gf2(args);
 
     gf2 = std::move(gf1);
-    EXPECT_EQ(gf2.IRows(), 5);
-    EXPECT_EQ(gf2.ORows(), 3);
+    EXPECT_EQ(gf2.input_rows(), 5);
+    EXPECT_EQ(gf2.output_rows(), 3);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -85,8 +85,8 @@ TEST_F(GenericFunctionTest, CrossTypeErasure) {
     auto scaled = 2.0 * args;
     GenericFunction<5, 5> gf_fixed(scaled);
     GenericFunction<-1, -1> gf_dynamic(gf_fixed);
-    EXPECT_EQ(gf_dynamic.IRows(), 5);
-    EXPECT_EQ(gf_dynamic.ORows(), 5);
+    EXPECT_EQ(gf_dynamic.input_rows(), 5);
+    EXPECT_EQ(gf_dynamic.output_rows(), 5);
 
     Eigen::VectorXd x(5);
     x << 1, 2, 3, 4, 5;
@@ -109,8 +109,8 @@ TEST_F(GenericFunctionTest, SmallFunctionInline) {
     // Arguments<3> is small (< 128 bytes), should fit in SBO
     auto args = Arguments<3>();
     GenericFunction<3, 3> gf(args);
-    EXPECT_EQ(gf.IRows(), 3);
-    EXPECT_EQ(gf.ORows(), 3);
+    EXPECT_EQ(gf.input_rows(), 3);
+    EXPECT_EQ(gf.output_rows(), 3);
 
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 3.0;
@@ -134,10 +134,10 @@ TEST_F(GenericFunctionTest, SmallFunctionInline) {
 TEST_F(GenericFunctionTest, LargeFunctionHeap) {
     // Build a deeply nested expression that should exceed 128-byte SBO buffer
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf(f);
-    EXPECT_EQ(gf.IRows(), 3);
-    EXPECT_EQ(gf.ORows(), 1);
+    EXPECT_EQ(gf.input_rows(), 3);
+    EXPECT_EQ(gf.output_rows(), 1);
 
     Eigen::VectorXd x(3);
     x << 0.5, 1.0, 1.5;
@@ -151,7 +151,7 @@ TEST_F(GenericFunctionTest, LargeFunctionHeap) {
 
 TEST_F(GenericFunctionTest, CopyLargeFunction) {
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf1(f);
     GenericFunction<-1, -1> gf2(gf1); // copy
 
@@ -167,7 +167,7 @@ TEST_F(GenericFunctionTest, CopyLargeFunction) {
 
 TEST_F(GenericFunctionTest, MoveLargeFunction) {
     auto args = Arguments<3>();
-    auto f = args.Sin().Square().Sin().Square().Sin().Square().norm();
+    auto f = args.sin().square().sin().square().sin().square().norm();
     GenericFunction<-1, -1> gf1(f);
 
     // Compute reference before move

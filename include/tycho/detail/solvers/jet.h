@@ -8,11 +8,10 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
-//   - Thread pool replaced with global Tycho::thread_pool() singleton
-//   - Removed `nt` parameter: parallelism is controlled by Tycho::set_num_threads()
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
+//   - Thread pool replaced with global tycho::utils::thread_pool() singleton
+//   - Removed `nt` parameter: parallelism is controlled by tycho::utils::set_num_threads()
 // =============================================================================
 
 #pragma once
@@ -28,8 +27,8 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/utils/timer.h"
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_utils.h"
@@ -37,7 +36,7 @@
 #include "mkl.h"
 #endif
 
-namespace Tycho {
+namespace tycho::solvers {
 
 namespace detail {
 
@@ -140,7 +139,7 @@ struct Jet {
         int NumDiv = 0;
 
         std::vector<std::shared_ptr<T>> optprobs(NumJobs);
-        Utils::Timer t;
+        tycho::utils::Timer t;
 
         auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
@@ -163,20 +162,20 @@ struct Jet {
             print_beginning();
         t.start();
 
-        auto track = [&](PSIOPT::ConvergenceFlags flag, int i) {
+        auto track = [&](tycho::ConvergenceFlags flag, int i) {
             if (!verbose)
                 return;
             switch (flag) {
-            case PSIOPT::ConvergenceFlags::CONVERGED:
+            case tycho::ConvergenceFlags::CONVERGED:
                 NumConv++;
                 break;
-            case PSIOPT::ConvergenceFlags::ACCEPTABLE:
+            case tycho::ConvergenceFlags::ACCEPTABLE:
                 NumAcc++;
                 break;
-            case PSIOPT::ConvergenceFlags::NOTCONVERGED:
+            case tycho::ConvergenceFlags::NOTCONVERGED:
                 NumNoConv++;
                 break;
-            case PSIOPT::ConvergenceFlags::DIVERGING:
+            case tycho::ConvergenceFlags::DIVERGING:
                 NumDiv++;
                 break;
             }
@@ -184,11 +183,12 @@ struct Jet {
             print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
         };
 
-        if (Tycho::use_thread_pool()) {
-            std::vector<std::future<PSIOPT::ConvergenceFlags>> results;
+        if (tycho::utils::use_thread_pool()) {
+            std::vector<std::future<tycho::ConvergenceFlags>> results;
             results.reserve(NumJobs);
             for (int i = 0; i < NumJobs; i++)
-                results.push_back(Tycho::thread_pool().submit_task([&Job, i] { return Job(i); }));
+                results.push_back(
+                    tycho::utils::thread_pool().submit_task([&Job, i] { return Job(i); }));
             // track() mutates local counters — must be called sequentially.
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&Job, etc.).
@@ -256,4 +256,4 @@ struct Jet {
     ////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

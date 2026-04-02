@@ -37,7 +37,13 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definitions — one per wind model
@@ -123,8 +129,8 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
 
     // Phase
     auto phase = std::make_shared<ODEPhase<ODE>>(ode, TranscriptionModes::LGL3);
-    phase->setTraj(trajG, nSeg);
-    phase->setNumPartitions(10);
+    phase->set_traj(trajG, nSeg);
+    phase->set_num_partitions(10);
 
     // Boundary conditions
     Eigen::VectorXi xy_idx(2);
@@ -134,19 +140,19 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
     Eigen::VectorXd t0_val(1);
     t0_val << 0.0;
 
-    phase->addBoundaryValue(PhaseRegionFlags::Front, xy_idx, A, ScaleModes::AUTO);
-    phase->addBoundaryValue(PhaseRegionFlags::Front, t_idx, t0_val, ScaleModes::AUTO);
-    phase->addBoundaryValue(PhaseRegionFlags::Back, xy_idx, B, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, xy_idx, A, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, t_idx, t0_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, xy_idx, B, ScaleModes::AUTO);
 
     // Control bounds
-    phase->addLUVarBound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
 
     // Minimise travel time
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Solver settings (match Python: only tolerances)
-    phase->optimizer->set_EContol(tol);
-    phase->optimizer->set_KKTtol(tol);
+    phase->optimizer_->set_econ_tol(tol);
+    phase->optimizer_->set_kkt_tol(tol);
 
     const auto status = phase->solve_optimize();
     if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
@@ -154,7 +160,7 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
                   << static_cast<int>(status) << ")\n";
         return {};
     }
-    return phase->returnTraj();
+    return phase->return_traj();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

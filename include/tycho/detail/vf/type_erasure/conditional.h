@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 enum class ConditionalFlags {
     LessThanFlag,
@@ -32,30 +31,30 @@ enum class ConditionalFlags {
 template <class LHS, class RHS> struct ConditionalStatement {
 
     static const int IRC = SZ_MAX<LHS::IRC, RHS::IRC>::value;
-    static const bool IsConditional = true;
-    static const bool MetaConditional = LHS::IsConditional && RHS::IsConditional;
+    static const bool is_conditional = true;
+    static const bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
 
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IRC, 1>;
     template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
 
     ConditionalStatement() {}
     ConditionalStatement(LHS lhss, ConditionalFlags flagss, RHS rhss)
-        : lhs(std::move(lhss)), flag(flagss), rhs(std::move(rhss)) {
-        this->InputRows = lhs.IRows();
-        if (lhs.IRows() != rhs.IRows()) {
+        : lhs_(std::move(lhss)), flag_(flagss), rhs_(std::move(rhss)) {
+        this->input_rows_val_ = lhs_.input_rows();
+        if (lhs_.input_rows() != rhs_.input_rows()) {
             throw std::invalid_argument(
                 "LHS and RHS of conditional statement must have same input rows");
         }
-        if constexpr (!MetaConditional) {
-            if (lhs.ORows() > 1 || rhs.ORows() > 1) {
+        if constexpr (!meta_conditional) {
+            if (lhs_.output_rows() > 1 || rhs_.output_rows() > 1) {
                 throw std::invalid_argument(
                     "LHS and RHS of conditional statement must be scalar functions");
             }
-            if (flag == ConditionalFlags::ANDFlag || flag == ConditionalFlags::ORFlag) {
+            if (flag_ == ConditionalFlags::ANDFlag || flag_ == ConditionalFlags::ORFlag) {
                 throw std::invalid_argument("AND OR not defined for scalar conditionals");
             }
         } else {
-            if (flag != ConditionalFlags::ANDFlag && flag != ConditionalFlags::ORFlag) {
+            if (flag_ != ConditionalFlags::ANDFlag && flag_ != ConditionalFlags::ORFlag) {
                 throw std::invalid_argument("Comparisons not defined for meta conditionals");
             }
         }
@@ -63,13 +62,13 @@ template <class LHS, class RHS> struct ConditionalStatement {
 
     template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
-        if constexpr (MetaConditional) {
-            bool left = this->lhs.compute(x);
-            bool right = this->rhs.compute(x);
+        if constexpr (meta_conditional) {
+            bool left = this->lhs_.compute(x);
+            bool right = this->rhs_.compute(x);
             bool result = false;
-            if (this->flag == ConditionalFlags::ANDFlag) {
+            if (this->flag_ == ConditionalFlags::ANDFlag) {
                 result = left && right;
-            } else if (this->flag == ConditionalFlags::ORFlag) {
+            } else if (this->flag_ == ConditionalFlags::ORFlag) {
                 result = left || right;
             } else {
             }
@@ -77,10 +76,10 @@ template <class LHS, class RHS> struct ConditionalStatement {
         } else {
             Vector1<Scalar> left;
             Vector1<Scalar> right;
-            this->lhs.compute(x, left);
-            this->rhs.compute(x, right);
+            this->lhs_.compute(x, left);
+            this->rhs_.compute(x, right);
             bool result = false;
-            switch (this->flag) {
+            switch (this->flag_) {
             case ConditionalFlags::LessThanFlag: {
                 result = left[0] < right[0];
                 break;
@@ -109,13 +108,13 @@ template <class LHS, class RHS> struct ConditionalStatement {
         }
     }
 
-    int IRows() const { return this->InputRows; }
+    int input_rows() const { return this->input_rows_val_; }
 
   protected:
-    ConditionalFlags flag;
-    LHS lhs;
-    RHS rhs;
-    int InputRows = 0;
+    ConditionalFlags flag_;
+    LHS lhs_;
+    RHS rhs_;
+    int input_rows_val_ = 0;
 };
 
 struct ConstantConditional {
@@ -123,17 +122,17 @@ struct ConstantConditional {
     template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
 
     ConstantConditional() {}
-    ConstantConditional(int irows, bool value) : InputRows(irows), value(value) {}
-    ConstantConditional(bool value) : value(value) {}
+    ConstantConditional(int irows, bool val) : input_rows_val_(irows), value_(val) {}
+    ConstantConditional(bool val) : value_(val) {}
     template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
-        return this->value;
+        return this->value_;
     }
 
-    int IRows() const { return this->InputRows; }
+    int input_rows() const { return this->input_rows_val_; }
 
   protected:
-    bool value;
-    int InputRows = 0;
+    bool value_;
+    int input_rows_val_ = 0;
 };
 
 template <class TestFunc, class TrueFunc, class FalseFunc>
@@ -147,28 +146,29 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
                                          typename FalseFunc::INPUT_DOMAIN>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
-    TestFunc test_func;
-    TrueFunc true_func;
-    FalseFunc false_func;
+    TestFunc test_func_;
+    TrueFunc true_func_;
+    FalseFunc false_func_;
     IfElseFunction() {}
 
     IfElseFunction(TestFunc test, TrueFunc _true, FalseFunc _false)
-        : test_func(std::move(test)), true_func(std::move(_true)), false_func(std::move(_false)) {
-        this->setIORows(this->true_func.IRows(), this->true_func.ORows());
+        : test_func_(std::move(test)), true_func_(std::move(_true)),
+          false_func_(std::move(_false)) {
+        this->set_io_rows(this->true_func_.input_rows(), this->true_func_.output_rows());
 
-        this->set_input_domain(this->IRows(),
-                               {this->true_func.input_domain(), this->false_func.input_domain()});
-        if (this->true_func.ORows() != this->false_func.ORows()) {
+        this->set_input_domain(this->input_rows(),
+                               {this->true_func_.input_domain(), this->false_func_.input_domain()});
+        if (this->true_func_.output_rows() != this->false_func_.output_rows()) {
             throw std::invalid_argument("True and false functions in conditional statement must "
                                         "have same number of outputrows.");
         }
-        if (this->true_func.IRows() != this->false_func.IRows()) {
+        if (this->true_func_.input_rows() != this->false_func_.input_rows()) {
             throw std::invalid_argument("True and false functions in conditional statement must "
                                         "have same number of inputrows.");
         }
-        if (this->test_func.IRows() != this->false_func.IRows()) {
+        if (this->test_func_.input_rows() != this->false_func_.input_rows()) {
 
             throw std::invalid_argument("Test,True,and False functions in conditional statement "
                                         "must have same number of inputrows.");
@@ -180,19 +180,19 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
 
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        if (this->test_func.compute(x)) {
-            this->true_func.compute(x, fx);
+        if (this->test_func_.compute(x)) {
+            this->true_func_.compute(x, fx);
         } else {
-            this->false_func.compute(x, fx);
+            this->false_func_.compute(x, fx);
         }
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
                                       ConstMatrixBaseRef<JacType> jx_) const {
-        if (this->test_func.compute(x)) {
-            this->true_func.compute_jacobian(x, fx_, jx_);
+        if (this->test_func_.compute(x)) {
+            this->true_func_.compute_jacobian(x, fx_, jx_);
         } else {
-            this->false_func.compute_jacobian(x, fx_, jx_);
+            this->false_func_.compute_jacobian(x, fx_, jx_);
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -201,14 +201,14 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
         ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
         ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
-        if (this->test_func.compute(x)) {
-            this->true_func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                            adjhess_, adjvars);
-        } else {
-            this->false_func.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+        if (this->test_func_.compute(x)) {
+            this->true_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                              adjhess_, adjvars);
+        } else {
+            this->false_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                                                                              adjhess_, adjvars);
         }
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

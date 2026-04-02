@@ -5,7 +5,7 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
@@ -13,21 +13,21 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
     auto phase2 = make_brach_phase(50, 16);
 
     OptimalControlProblem ocp;
-    ocp.addPhase(phase1);
-    ocp.addPhase(phase2);
+    ocp.add_phase(phase1);
+    ocp.add_phase(phase2);
     // Should construct without error
     SUCCEED();
 }
 
 TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer_->print_level_ = 0;
 
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED)
         << "Brachistochrone should converge to optimal";
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     double tf = result.back()[3];
     // Known optimal time ~1.8013 s
     EXPECT_NEAR(tf, 1.8013, 0.01) << "Optimal time should be near 1.8013 s, got " << tf;
@@ -35,12 +35,12 @@ TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
 
 TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer_->print_level_ = 0;
 
     auto status = phase->solve_optimize();
     ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
 
-    auto result = phase->returnTraj();
+    auto result = phase->return_traj();
     // Check final boundary conditions: x(tf)=10, y(tf)=5
     EXPECT_NEAR(result.back()[0], 10.0, 1e-4);
     EXPECT_NEAR(result.back()[1], 5.0, 1e-4);

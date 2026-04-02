@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include <Eigen/Core>
 
-namespace Tycho {
+namespace tycho {
 
 template <class Scalar, int rows> using Vector = Eigen::Matrix<Scalar, rows, 1>;
 
@@ -74,4 +73,4 @@ using DefaultSuperScalar = SuperScalarType<double, 4>; // 256-bit = 4 doubles
 using DefaultSuperScalar = SuperScalarType<double, 2>; // 128-bit = 2 doubles (SSE2/NEON)
 #endif
 
-} // namespace Tycho
+} // namespace tycho

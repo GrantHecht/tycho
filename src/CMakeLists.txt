@@ -1,12 +1,12 @@
 set(_TYCHO_SRC_INCLUDES
   ${PROJECT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/OptimalControl
-  ${CMAKE_CURRENT_SOURCE_DIR}/Solvers
-  ${CMAKE_CURRENT_SOURCE_DIR}/TypeDefs
-  ${CMAKE_CURRENT_SOURCE_DIR}/Utils
-  ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions
-  ${CMAKE_CURRENT_SOURCE_DIR}/Integrators
+  ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
+  ${CMAKE_CURRENT_SOURCE_DIR}/solvers
+  ${CMAKE_CURRENT_SOURCE_DIR}/typedefs
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils
+  ${CMAKE_CURRENT_SOURCE_DIR}/vf
+  ${CMAKE_CURRENT_SOURCE_DIR}/integrators
 )
 set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 
@@ -14,7 +14,7 @@ set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 ## PCH
 add_library(pch STATIC pch.h pch.cpp)
 target_precompile_headers(pch PRIVATE pch.h
-    VectorFunctions/tycho_vector_functions.h)
+    vf/tycho_vector_functions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 
@@ -26,7 +26,7 @@ target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 # expose it as an INTERFACE library so dependents get the include path.
 add_library(vectorfunctions INTERFACE)
 target_include_directories(vectorfunctions INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctions>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vf>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -34,12 +34,12 @@ target_include_directories(vectorfunctions INTERFACE
 
 
 add_library(optimalcontrol STATIC
-    OptimalControl/tycho_optimal_control.h
-    OptimalControl/ode_phase_base.cpp
-    OptimalControl/phase_indexer.cpp
-    OptimalControl/optimal_control_problem.cpp
-    OptimalControl/lgl_interp_table.cpp
-    OptimalControl/runtime_ode.cpp
+    optimal_control/tycho_optimal_control.h
+    optimal_control/ode_phase_base.cpp
+    optimal_control/phase_indexer.cpp
+    optimal_control/optimal_control_problem.cpp
+    optimal_control/lgl_interp_table.cpp
+    optimal_control/runtime_ode.cpp
 )
 
 target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
@@ -52,10 +52,10 @@ target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 
 
 add_library(psiopt STATIC
-    Solvers/psiopt.cpp
-    Solvers/non_linear_program.cpp
-    Solvers/optimization_problem.cpp
-    Solvers/solver_init.cpp
+    solvers/psiopt.cpp
+    solvers/non_linear_program.cpp
+    solvers/optimization_problem.cpp
+    solvers/solver_init.cpp
 )
 target_include_directories(psiopt PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
@@ -67,10 +67,10 @@ endif()
 
 
 add_library(utils STATIC
-    Utils/color_text.h Utils/color_text.cpp
-    Utils/get_core_count.cpp
-    Utils/memory_management.cpp
-    Utils/thread_pool.cpp
+    utils/color_text.h utils/color_text.cpp
+    utils/get_core_count.cpp
+    utils/memory_management.cpp
+    utils/thread_pool.cpp
 )
 target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
@@ -81,9 +81,9 @@ target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
 
 
 add_library(astro STATIC
-    Astro/tycho_astro.h
-    Astro/lambert_solvers.cpp
-    Astro/accelleration_models.cpp
+    astro/tycho_astro.h
+    astro/lambert_solvers.cpp
+    astro/accelleration_models.cpp
 )
 
 target_precompile_headers(astro REUSE_FROM pch)
@@ -123,7 +123,7 @@ if(APPLE)
     target_compile_definitions(tycho INTERFACE USE_ACCELERATE_SPARSE)
 endif()
 # Note: TYCHO_DEFAULT_ARENA_SIZE is intentionally omitted — it is only
-# used in src/Utils/MemoryManagement.cpp (not in any public header).
+# used in src/utils/memory_management.cpp (not in any public header).
 
 # fmt, autodiff, and sparse-solver include paths for build-tree consumers
 # (FetchContent). Install-tree consumers get these via tychoConfig.cmake.in.
@@ -194,5 +194,5 @@ install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions
 #-------------------------------------------------------------------------------
 
 if(ENABLE_PYTHON_BINDINGS)
-    add_subdirectory(Bindings)
+    add_subdirectory(bindings)
 endif()

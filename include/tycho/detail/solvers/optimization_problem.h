@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -29,7 +28,10 @@
 #include "tycho/detail/solvers/psiopt.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::solvers {
+
+// Import cross-namespace types used by OptimizationProblem.
+using vf::GenericFunction;
 
 struct OptimizationProblem : OptimizationProblemBase {
 
@@ -43,36 +45,36 @@ struct OptimizationProblem : OptimizationProblemBase {
     using ScalarFunctionalX = GenericFunction<-1, 1>;
 
     template <class Func> struct FuncIndexHolder {
-        Func func;
-        std::vector<VectorXi> indices;
+        Func func_;
+        std::vector<VectorXi> indices_;
         FuncIndexHolder() {}
         FuncIndexHolder(Func func, const std::vector<VectorXi> &indices)
-            : func(func), indices(indices) {}
+            : func_(func), indices_(indices) {}
     };
 
-    bool doTranscription = true;
-    void resetTranscription() { this->doTranscription = true; };
-    bool EnableVectorization = true;
+    bool do_transcription_ = true;
+    void reset_transcription() { this->do_transcription_ = true; };
+    bool enable_vectorization_ = true;
 
-    VectorXd ActiveVariables;
-    bool MultipliersLoaded = false;
+    VectorXd active_variables_;
+    bool multipliers_loaded_ = false;
 
-    VectorXd ActiveEqLmults;
-    VectorXd ActiveIqLmults;
+    VectorXd active_eq_lmults_;
+    VectorXd active_iq_lmults_;
 
-    std::vector<FuncIndexHolder<ConstraintInterface>> userEqualities;
-    std::vector<FuncIndexHolder<ConstraintInterface>> userInequalities;
-    std::vector<FuncIndexHolder<ObjectiveInterface>> userObjectives;
+    std::vector<FuncIndexHolder<ConstraintInterface>> user_equalities_;
+    std::vector<FuncIndexHolder<ConstraintInterface>> user_inequalities_;
+    std::vector<FuncIndexHolder<ObjectiveInterface>> user_objectives_;
 
-    OptimizationProblem() { this->setNumPartitions(1, 1); }
+    OptimizationProblem() { this->set_num_partitions(1, 1); }
     virtual ~OptimizationProblem() = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     template <class T> static void check_function_size(const T &func, std::string ftype) {
-        int irows = func.func.IRows();
-        for (auto &index : func.indices) {
+        int irows = func.func_.input_rows();
+        for (auto &index : func.indices_) {
             int isize = index.size();
             if (irows != isize) {
                 fmt::print(fmt::fg(fmt::color::red),
@@ -89,54 +91,54 @@ struct OptimizationProblem : OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    void setVars(const VectorXd &v) { this->ActiveVariables = v; }
-    VectorXd returnVars() const { return this->ActiveVariables; }
+    void set_vars(const VectorXd &v) { this->active_variables_ = v; }
+    VectorXd return_vars() const { return this->active_variables_; }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addEqualCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userEqualities.size());
-        this->userEqualities.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
-        check_function_size(this->userEqualities.back(), "Equality Constraint");
+    int add_equal_con(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
+        this->reset_transcription();
+        int index = int(this->user_equalities_.size());
+        this->user_equalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
+        check_function_size(this->user_equalities_.back(), "Equality Constraint");
         return index;
     }
-    int addEqualCon(VectorFunctionalX fun, VectorXi index) {
+    int add_equal_con(VectorFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addEqualCon(fun, indices);
+        return this->add_equal_con(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addInequalCon(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userInequalities.size());
-        this->userInequalities.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
-        check_function_size(this->userInequalities.back(), "Inequality Constraint");
+    int add_inequal_con(VectorFunctionalX fun, const std::vector<VectorXi> &indices) {
+        this->reset_transcription();
+        int index = int(this->user_inequalities_.size());
+        this->user_inequalities_.emplace_back(FuncIndexHolder<ConstraintInterface>(fun, indices));
+        check_function_size(this->user_inequalities_.back(), "Inequality Constraint");
         return index;
     }
 
-    int addInequalCon(VectorFunctionalX fun, VectorXi index) {
+    int add_inequal_con(VectorFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addInequalCon(fun, indices);
+        return this->add_inequal_con(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    int addObjective(ScalarFunctionalX fun, const std::vector<VectorXi> &indices) {
-        this->resetTranscription();
-        int index = int(this->userObjectives.size());
-        this->userObjectives.emplace_back(FuncIndexHolder<ObjectiveInterface>(fun, indices));
-        check_function_size(this->userObjectives.back(), "Objective");
+    int add_objective(ScalarFunctionalX fun, const std::vector<VectorXi> &indices) {
+        this->reset_transcription();
+        int index = int(this->user_objectives_.size());
+        this->user_objectives_.emplace_back(FuncIndexHolder<ObjectiveInterface>(fun, indices));
+        check_function_size(this->user_objectives_.back(), "Objective");
 
         return index;
     }
-    int addObjective(ScalarFunctionalX fun, VectorXi index) {
+    int add_objective(ScalarFunctionalX fun, VectorXi index) {
         std::vector<VectorXi> indices = {index};
-        return this->addObjective(fun, indices);
+        return this->add_objective(fun, indices);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -145,62 +147,62 @@ struct OptimizationProblem : OptimizationProblemBase {
     void transcribe();
 
     void jet_initialize() {
-        this->setNumPartitions(1, 1);
-        this->optimizer->PrintLevel = 10;
+        this->set_num_partitions(1, 1);
+        this->optimizer_->print_level_ = 10;
         this->transcribe();
     }
     void jet_release() {
-        this->optimizer->release();
-        this->setNumPartitions(1, 1);
-        this->optimizer->PrintLevel = 0;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
-        this->resetTranscription();
+        this->optimizer_->release();
+        this->set_num_partitions(1, 1);
+        this->optimizer_->print_level_ = 0;
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
+        this->reset_transcription();
     }
 
     PSIOPT::ConvergenceFlags solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->LastEqLmults;
-        this->ActiveIqLmults = this->optimizer->LastIqLmults;
-        return this->optimizer->ConvergeFlag;
+        this->active_variables_ = this->optimizer_->solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->optimize(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->LastEqLmults;
-        this->ActiveIqLmults = this->optimizer->LastIqLmults;
-        return this->optimizer->ConvergeFlag;
+        this->active_variables_ = this->optimizer_->optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve_optimize(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->LastEqLmults;
-        this->ActiveIqLmults = this->optimizer->LastIqLmults;
-        return this->optimizer->ConvergeFlag;
+        this->active_variables_ = this->optimizer_->solve_optimize(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->solve_optimize_solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->LastEqLmults;
-        this->ActiveIqLmults = this->optimizer->LastIqLmults;
-        return this->optimizer->ConvergeFlag;
+        this->active_variables_ = this->optimizer_->solve_optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize_solve() {
-        if (this->doTranscription)
+        if (this->do_transcription_)
             this->transcribe();
-        this->ActiveVariables = this->optimizer->optimize_solve(this->ActiveVariables);
-        this->ActiveEqLmults = this->optimizer->LastEqLmults;
-        this->ActiveIqLmults = this->optimizer->LastIqLmults;
-        return this->optimizer->ConvergeFlag;
+        this->active_variables_ = this->optimizer_->optimize_solve(this->active_variables_);
+        this->active_eq_lmults_ = this->optimizer_->last_eq_lmults_;
+        this->active_iq_lmults_ = this->optimizer_->last_iq_lmults_;
+        return this->optimizer_->converge_flag_;
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

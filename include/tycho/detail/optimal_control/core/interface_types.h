@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -36,11 +35,11 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/std_extensions.h"
 #include "tycho/detail/utils/type_name.h"
 
-namespace Tycho {
+namespace tycho::oc {
 
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
 using ScaleType = std::variant<double, Eigen::VectorXd, ScaleModes, std::string>;
@@ -96,4 +95,4 @@ static std::tuple<ScaleModes, bool, Eigen::VectorXd> get_scale_info(int orows, S
     return std::tuple{ScaleMode, ScalesSet, OutputScales};
 }
 
-} // namespace Tycho
+} // namespace tycho::oc

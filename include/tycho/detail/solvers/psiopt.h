@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -32,10 +31,10 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/get_core_count.h"
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
@@ -43,8 +42,31 @@
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
 
+namespace tycho {
 
-namespace Tycho {
+/// Optimizer convergence status — extracted to root namespace so that callers
+/// outside tycho::solvers can reference it without a full PSIOPT qualification.
+enum class ConvergenceFlags {
+    CONVERGED,
+    ACCEPTABLE,
+    NOTCONVERGED,
+    DIVERGING,
+};
+
+// Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
+constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
+    return static_cast<int>(a) <=> static_cast<int>(b);
+}
+
+} // namespace tycho
+
+namespace tycho::solvers {
+
+// Pull root-namespace Eigen type aliases into tycho::solvers so that PSIOPT
+// member declarations (EigenRef<VectorXd>, ConstEigenRef<VectorXd>, …) resolve
+// without full qualification inside this namespace.
+using tycho::ConstEigenRef;
+using tycho::EigenRef;
 
 struct IterateInfo;
 
@@ -53,17 +75,9 @@ struct PSIOPT {
     enum class BarrierModes { PROBE, LOQO, FIACCO, BARDISABLED };
     enum class LineSearchModes { AUGLANG, LANG, L1, L2, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
-    enum class ConvergenceFlags {
-        CONVERGED,
-        ACCEPTABLE,
-        NOTCONVERGED,
-        DIVERGING,
-    };
 
-    // Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
-    friend constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
-        return static_cast<int>(a) <=> static_cast<int>(b);
-    }
+    /// Alias so existing callers using PSIOPT::ConvergenceFlags continue to work.
+    using ConvergenceFlags = tycho::ConvergenceFlags;
 
     enum class QPAlgModes {
         Classic = 0,
@@ -140,280 +154,282 @@ struct PSIOPT {
         else if (str == "Obj" || str == "Prim Obj")
             return BestCriteriaModes::OBJ;
         else {
-            throw std::invalid_argument(fmt::format("Unrecognized BestCriteria: {0}", str));
+            throw std::invalid_argument(fmt::format("Unrecognized BestCriteriaMode: {0}", str));
         }
     }
 
     using VectorXd = Eigen::VectorXd;
-    std::shared_ptr<NonLinearProgram> nlp;
+    std::shared_ptr<NonLinearProgram> nlp_;
 
-    int PrimalVars = 0;
-    int SlackVars = 0;
-    int EqualCons = 0;
-    int InequalCons = 0;
-    int KKTdim = 0;
+    int primal_vars_ = 0;
+    int slack_vars_ = 0;
+    int equal_cons_ = 0;
+    int inequal_cons_ = 0;
+    int kkt_dim_ = 0;
 
 #ifdef USE_ACCELERATE_SPARSE
-    Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> KKTSol;
+    Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
 #else
-    Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> KKTSol;
+    Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
 #endif
 
-    int QPThreads = TYCHO_DEFAULT_QP_THREADS;
-    QPAlgModes QPAlg = QPAlgModes::Classic;
-    QPOrderingModes QPOrd = QPOrderingModes::METIS;
-    QPPivotModes QPPivotStrategy = QPPivotModes::TwoByTwo;
+    int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;
+    QPAlgModes qp_alg_ = QPAlgModes::Classic;
+    QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
+    QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
 
-    void set_QPOrderingMode(QPOrderingModes mode) { this->QPOrd = mode; }
-    void set_QPOrderingMode(const std::string &str) { this->QPOrd = strto_OrderingMode(str); }
+    void set_qp_ordering_mode(QPOrderingModes mode) { this->qp_ord_ = mode; }
+    void set_qp_ordering_mode(const std::string &str) { this->qp_ord_ = strto_OrderingMode(str); }
 
-    int QPMatching = 1;
-    int QPScaling = 0;
-    int QPPivotPerturb = 8;
-    int QPRefSteps = 0;
+    int qp_matching_ = 1;
+    int qp_scaling_ = 0;
+    int qp_pivot_perturb_ = 8;
+    int qp_ref_steps_ = 0;
 #ifdef USE_ACCELERATE_SPARSE
-    double AccelPivotTolerance = 0.01;
-    double AccelZeroTolerance = 1e-4 * std::numeric_limits<double>::epsilon();
+    double accel_pivot_tolerance_ = 0.01;
+    double accel_zero_tolerance_ = 1e-4 * std::numeric_limits<double>::epsilon();
 
-    void set_AccelPivotTolerance(double tol) { this->AccelPivotTolerance = tol; }
-    void set_AccelZeroTolerance(double tol) { this->AccelZeroTolerance = tol; }
+    void set_accel_pivot_tolerance(double tol) { this->accel_pivot_tolerance_ = tol; }
+    void set_accel_zero_tolerance(double tol) { this->accel_zero_tolerance_ = tol; }
 #endif
-    bool QPPrint = false;
-    bool QPanalyzed = false;
-    bool ForceQPanalysis = false;
-    bool Diagnostic = false;
-    int QPParSolve = 0;
+    bool qp_print_ = false;
+    bool qp_analyzed_ = false;
+    bool force_qp_analysis_ = false;
+    bool diagnostic_ = false;
+    int qp_par_solve_ = 0;
 
     /////////////////////////////////////////////////////////////////////
-    int MaxIters = 500;
-    int MaxLSIters = 2;
-    int MaxAccIters = 50;
+    int max_iters_ = 500;
+    int max_ls_iters_ = 2;
+    int max_acc_iters_ = 50;
 
-    void set_MaxIters(int MaxIters) {
-        if (MaxIters < 1) {
-            throw std::invalid_argument("MaxIters must be greater than 0.");
+    void set_max_iters(int max_iters) {
+        if (max_iters < 1) {
+            throw std::invalid_argument("max_iters must be greater than 0.");
         }
-        this->MaxIters = MaxIters;
+        this->max_iters_ = max_iters;
     }
-    void set_MaxAccIters(int MaxAccIters) {
-        if (MaxAccIters < 1) {
-            throw std::invalid_argument("MaxAccIters must be greater than 0.");
+    void set_max_acc_iters(int max_acc_iters) {
+        if (max_acc_iters < 1) {
+            throw std::invalid_argument("max_acc_iters must be greater than 0.");
         }
-        this->MaxAccIters = MaxAccIters;
+        this->max_acc_iters_ = max_acc_iters;
     }
-    void set_MaxLSIters(int MaxLSIters) {
-        if (MaxLSIters < 0) {
-            throw std::invalid_argument("MaxLSIters must be positive.");
+    void set_max_ls_iters(int max_ls_iters) {
+        if (max_ls_iters < 0) {
+            throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
         }
-        this->MaxLSIters = MaxLSIters;
+        this->max_ls_iters_ = max_ls_iters;
     }
-    void set_AllMaxIters(int m1, int m2) {
-        set_MaxIters(m1);
-        set_MaxAccIters(m2);
+    void set_all_max_iters(int m1, int m2) {
+        set_max_iters(m1);
+        set_max_acc_iters(m2);
     }
 
-    int MaxRefac = 15;
+    int max_refac_ = 15;
 
-    int MaxSOC = 1;
-    int MaxFeasRest = 2;
+    int max_soc_ = 1;
+    int max_feas_rest_ = 2;
 
-    AlgorithmModes SoeMode = AlgorithmModes::SOE;
+    AlgorithmModes soe_mode_ = AlgorithmModes::SOE;
 
-    BarrierModes OptBarMode = BarrierModes::LOQO;
-    BarrierModes SoeBarMode = BarrierModes::LOQO;
+    BarrierModes opt_bar_mode_ = BarrierModes::LOQO;
+    BarrierModes soe_bar_mode_ = BarrierModes::LOQO;
 
-    void set_OptBarMode(BarrierModes mode) { this->OptBarMode = mode; }
-    void set_OptBarMode(const std::string &str) { this->OptBarMode = strto_BarrierMode(str); }
-    void set_SoeBarMode(BarrierModes mode) { this->SoeBarMode = mode; }
-    void set_SoeBarMode(const std::string &str) { this->SoeBarMode = strto_BarrierMode(str); }
+    void set_opt_bar_mode(BarrierModes mode) { this->opt_bar_mode_ = mode; }
+    void set_opt_bar_mode(const std::string &str) { this->opt_bar_mode_ = strto_BarrierMode(str); }
+    void set_soe_bar_mode(BarrierModes mode) { this->soe_bar_mode_ = mode; }
+    void set_soe_bar_mode(const std::string &str) { this->soe_bar_mode_ = strto_BarrierMode(str); }
 
-    LineSearchModes OptLSMode = LineSearchModes::AUGLANG;
-    LineSearchModes SoeLSMode = LineSearchModes::NOLS;
+    LineSearchModes opt_ls_mode_ = LineSearchModes::AUGLANG;
+    LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
 
-    void set_OptLSMode(LineSearchModes mode) { this->OptLSMode = mode; }
-    void set_OptLSMode(const std::string &str) { this->OptLSMode = strto_LineSearchMode(str); }
-    void set_SoeLSMode(LineSearchModes mode) { this->SoeLSMode = mode; }
-    void set_SoeLSMode(const std::string &str) { this->SoeLSMode = strto_LineSearchMode(str); }
+    void set_opt_ls_mode(LineSearchModes mode) { this->opt_ls_mode_ = mode; }
+    void set_opt_ls_mode(const std::string &str) { this->opt_ls_mode_ = strto_LineSearchMode(str); }
+    void set_soe_ls_mode(LineSearchModes mode) { this->soe_ls_mode_ = mode; }
+    void set_soe_ls_mode(const std::string &str) { this->soe_ls_mode_ = strto_LineSearchMode(str); }
 
-    double MaxCPUtime = 1200;
-    double ObjScale = 1.0;
+    double max_cpu_time_ = 1200;
+    double obj_scale_ = 1.0;
 
     /////////////////////////////////////////////////////////////////////////
-    double KKTtol = 1.0e-6;
-    double EContol = 1.0e-6;
-    double IContol = 1.0e-6;
-    double Bartol = 1.0e-6;
+    double kkt_tol_ = 1.0e-6;
+    double econ_tol_ = 1.0e-6;
+    double icon_tol_ = 1.0e-6;
+    double bar_tol_ = 1.0e-6;
 
-    void set_KKTtol(double KKTtol) { this->KKTtol = std::abs(KKTtol); }
-    void set_Bartol(double Bartol) { this->Bartol = std::abs(Bartol); }
-    void set_EContol(double EContol) { this->EContol = std::abs(EContol); }
-    void set_IContol(double IContol) { this->IContol = std::abs(IContol); }
-    void set_tols(double KKTtol, double EContol, double IContol, double Bartol) {
-        this->set_KKTtol(KKTtol);
-        this->set_EContol(EContol);
-        this->set_IContol(IContol);
-        this->set_Bartol(Bartol);
+    void set_kkt_tol(double kkt_tol) { this->kkt_tol_ = std::abs(kkt_tol); }
+    void set_bar_tol(double bar_tol) { this->bar_tol_ = std::abs(bar_tol); }
+    void set_econ_tol(double econ_tol) { this->econ_tol_ = std::abs(econ_tol); }
+    void set_icon_tol(double icon_tol) { this->icon_tol_ = std::abs(icon_tol); }
+    void set_tols(double kkt_tol, double econ_tol, double icon_tol, double bar_tol) {
+        this->set_kkt_tol(kkt_tol);
+        this->set_econ_tol(econ_tol);
+        this->set_icon_tol(icon_tol);
+        this->set_bar_tol(bar_tol);
     }
 
-    double AccKKTtol = 1.0e-2;
-    double AccEContol = 1.0e-3;
-    double AccIContol = 1.0e-3;
-    double AccBartol = 1.0e-3;
+    double acc_kkt_tol_ = 1.0e-2;
+    double acc_econ_tol_ = 1.0e-3;
+    double acc_icon_tol_ = 1.0e-3;
+    double acc_bar_tol_ = 1.0e-3;
 
-    void set_AccKKTtol(double AccKKTtol) { this->AccKKTtol = std::abs(AccKKTtol); }
-    void set_AccBartol(double AccBartol) { this->AccBartol = std::abs(AccBartol); }
-    void set_AccEContol(double AccEContol) { this->AccEContol = std::abs(AccEContol); }
-    void set_AccIContol(double AccIContol) { this->AccIContol = std::abs(AccIContol); }
-    void set_Acctols(double AccKKTtol, double AccEContol, double AccIContol, double AccBartol) {
-        this->set_AccKKTtol(AccKKTtol);
-        this->set_AccEContol(AccEContol);
-        this->set_AccIContol(AccIContol);
-        this->set_AccBartol(AccBartol);
+    void set_acc_kkt_tol(double acc_kkt_tol) { this->acc_kkt_tol_ = std::abs(acc_kkt_tol); }
+    void set_acc_bar_tol(double acc_bar_tol) { this->acc_bar_tol_ = std::abs(acc_bar_tol); }
+    void set_acc_econ_tol(double acc_econ_tol) { this->acc_econ_tol_ = std::abs(acc_econ_tol); }
+    void set_acc_icon_tol(double acc_icon_tol) { this->acc_icon_tol_ = std::abs(acc_icon_tol); }
+    void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
+                      double acc_bar_tol) {
+        this->set_acc_kkt_tol(acc_kkt_tol);
+        this->set_acc_econ_tol(acc_econ_tol);
+        this->set_acc_icon_tol(acc_icon_tol);
+        this->set_acc_bar_tol(acc_bar_tol);
     }
 
-    double UnAccKKTtol = 10;
-    double UnAccEContol = 2;
-    double UnAccIContol = 2;
-    double UnAccBartol = 2;
+    double unacc_kkt_tol_ = 10;
+    double unacc_econ_tol_ = 2;
+    double unacc_icon_tol_ = 2;
+    double unacc_bar_tol_ = 2;
 
-    void set_UnAcctols(double kktol, double etol, double itol, double bartol) {
-        this->UnAccKKTtol = kktol;
-        this->UnAccBartol = bartol;
-        this->UnAccEContol = etol;
-        this->UnAccIContol = itol;
+    void set_unacc_tols(double kktol, double etol, double itol, double bartol) {
+        this->unacc_kkt_tol_ = kktol;
+        this->unacc_bar_tol_ = bartol;
+        this->unacc_econ_tol_ = etol;
+        this->unacc_icon_tol_ = itol;
     }
 
-    double DivKKTtol = 1.0e15;
-    double DivEContol = 1.0e15;
-    double DivIContol = 1.0e15;
-    double DivBartol = 1.0e15;
+    double div_kkt_tol_ = 1.0e15;
+    double div_econ_tol_ = 1.0e15;
+    double div_icon_tol_ = 1.0e15;
+    double div_bar_tol_ = 1.0e15;
 
-    void set_DivKKTtol(double DivKKTtol) { this->DivKKTtol = std::abs(DivKKTtol); }
-    void set_DivBartol(double DivBartol) { this->DivBartol = std::abs(DivBartol); }
-    void set_DivEContol(double DivEContol) { this->DivEContol = std::abs(DivEContol); }
-    void set_DivIContol(double DivIContol) { this->DivIContol = std::abs(DivIContol); }
-    void set_Divtols(double DivKKTtol, double DivEContol, double DivIContol, double DivBartol) {
-        this->set_DivKKTtol(DivKKTtol);
-        this->set_DivEContol(DivEContol);
-        this->set_DivIContol(DivIContol);
-        this->set_DivBartol(DivBartol);
+    void set_div_kkt_tol(double div_kkt_tol) { this->div_kkt_tol_ = std::abs(div_kkt_tol); }
+    void set_div_bar_tol(double div_bar_tol) { this->div_bar_tol_ = std::abs(div_bar_tol); }
+    void set_div_econ_tol(double div_econ_tol) { this->div_econ_tol_ = std::abs(div_econ_tol); }
+    void set_div_icon_tol(double div_icon_tol) { this->div_icon_tol_ = std::abs(div_icon_tol); }
+    void set_div_tols(double div_kkt_tol, double div_econ_tol, double div_icon_tol,
+                      double div_bar_tol) {
+        this->set_div_kkt_tol(div_kkt_tol);
+        this->set_div_econ_tol(div_econ_tol);
+        this->set_div_icon_tol(div_icon_tol);
+        this->set_div_bar_tol(div_bar_tol);
     }
 
     /////////////////////////////////////////////////////////////////////////
 
-    double ExObjVal = -1.0e20;
+    double ex_obj_val_ = -1.0e20;
 
-    double BoundFraction = 0.99;
+    double bound_fraction_ = 0.99;
 
-    void set_BoundFraction(double BoundFraction) {
-        if (BoundFraction >= 1.0 || BoundFraction <= 0.0) {
-            throw std::invalid_argument("BoundFraction must be between 0 and 1.");
+    void set_bound_fraction(double bound_fraction) {
+        if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
+            throw std::invalid_argument("bound_fraction must be between 0 and 1.");
         }
-        this->BoundFraction = BoundFraction;
+        this->bound_fraction_ = bound_fraction;
     }
 
-    double BoundPush = 1.0e-3;
-    void set_BoundPush(double BoundPush) {
-        if (BoundPush <= 0.0) {
-            throw std::invalid_argument("BoundPush must be greater than 0.");
+    double bound_push_ = 1.0e-3;
+    void set_bound_push(double bound_push) {
+        if (bound_push <= 0.0) {
+            throw std::invalid_argument("bound_push must be greater than 0.");
         }
-        this->BoundPush = BoundPush;
+        this->bound_push_ = bound_push;
     }
 
-    double NegSlackReset = 1.0e-12;
+    double neg_slack_reset_ = 1.0e-12;
 
-    double SOEboundRelax = 1.0e-8;
-    double minLSstep = .01;
-    double alphaRed = 2.0;
+    double soe_bound_relax_ = 1.0e-8;
+    double min_ls_step_ = .01;
+    double alpha_red_ = 2.0;
 
-    void set_alphaRed(double ared) {
+    void set_alpha_red(double ared) {
         if (ared <= 1.0) {
-            throw std::invalid_argument("alphaRed must be greater than 1.0");
+            throw std::invalid_argument("alpha_red must be greater than 1.0");
         }
-        this->alphaRed = ared;
+        this->alpha_red_ = ared;
     }
 
     /////////////////////////////////////////////////////////////////////////
-    double deltaH = 1.0e-5;
-    double incrH = 8.00;
-    double decrH = 0.333333;
+    double delta_h_ = 1.0e-5;
+    double incr_h_ = 8.00;
+    double decr_h_ = 0.333333;
 
-    void set_deltaH(double deltaH) {
-        if (deltaH <= 0.0) {
-            throw std::invalid_argument("deltaH must be greater than 0.");
+    void set_delta_h(double delta_h) {
+        if (delta_h <= 0.0) {
+            throw std::invalid_argument("delta_h must be greater than 0.");
         }
-        this->deltaH = deltaH;
+        this->delta_h_ = delta_h;
     }
-    void set_incrH(double incrH) {
-        if (incrH <= 1.0) {
-            throw std::invalid_argument("incrH must  greater than 1.0.");
+    void set_incr_h(double incr_h) {
+        if (incr_h <= 1.0) {
+            throw std::invalid_argument("incr_h must be greater than 1.0.");
         }
-        this->incrH = incrH;
+        this->incr_h_ = incr_h;
     }
-    void set_decrH(double decrH) {
-        if (decrH >= 1.0 || decrH <= 0) {
-            throw std::invalid_argument("decrH must be between 0 and 1.");
+    void set_decr_h(double decr_h) {
+        if (decr_h >= 1.0 || decr_h <= 0) {
+            throw std::invalid_argument("decr_h must be between 0 and 1.");
         }
-        this->decrH = decrH;
+        this->decr_h_ = decr_h;
     }
-    void set_HpertParams(double deltaH, double incrH, double decrH) {
-        this->set_deltaH(deltaH);
-        this->set_incrH(incrH);
-        this->set_decrH(decrH);
+    void set_hpert_params(double delta_h, double incr_h, double decr_h) {
+        this->set_delta_h(delta_h);
+        this->set_incr_h(incr_h);
+        this->set_decr_h(decr_h);
     }
     /////////////////////////////////////////////////////////////////////////
-    ConvergenceFlags ConvergeFlag = ConvergenceFlags::NOTCONVERGED;
-    ConvergenceFlags get_ConvergenceFlag() const { return this->ConvergeFlag; }
+    ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
+    ConvergenceFlags get_convergence_flag() const { return this->converge_flag_; }
 
-    double initMu = 0.001;
-    double MaxMu = 100.0;
-    double MinMu = 1.0e-12;
+    double init_mu_ = 0.001;
+    double max_mu_ = 100.0;
+    double min_mu_ = 1.0e-12;
 
-    bool CNRMode = false;
-    int PrintLevel = 0;
-    void set_PrintLevel(int plevel) { this->PrintLevel = plevel; }
+    bool cnr_mode_ = false;
+    int print_level_ = 0;
+    void set_print_level(int plevel) { this->print_level_ = plevel; }
 
-    PDStepStrategies PDStepStrategy = PDStepStrategies::PrimSlackEq_Iq;
-    bool storespmat = false;
+    PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
+    bool store_sp_mat_ = false;
     Eigen::SparseMatrix<double, Eigen::RowMajor> spmat;
-    double LastObjVal = 0.0;
-    bool FastFactorAlg = true;
+    double last_obj_val_ = 0.0;
+    bool fast_factor_alg_ = true;
 
-    double LastTotalTime = 0;
-    double LastPreTime = 0;
-    double LastMiscTime = 0;
-    double LastFuncTime = 0;
-    double LastKKTTime = 0;
-    double LastPrintTime = 0;
-    double LastSolverInitTime = 0;
-    int LastIterNum = 0;
+    double last_total_time_ = 0;
+    double last_pre_time_ = 0;
+    double last_misc_time_ = 0;
+    double last_func_time_ = 0;
+    double last_kkt_time_ = 0;
+    double last_print_time_ = 0;
+    double last_solver_init_time_ = 0;
+    int last_iter_num_ = 0;
 
     void zero_timing_stats() {
-        this->LastTotalTime = 0;
-        this->LastPreTime = 0;
-        this->LastMiscTime = 0;
-        this->LastFuncTime = 0;
-        this->LastKKTTime = 0;
-        this->LastPrintTime = 0;
-        this->LastSolverInitTime = 0;
-        this->LastIterNum = 0;
+        this->last_total_time_ = 0;
+        this->last_pre_time_ = 0;
+        this->last_misc_time_ = 0;
+        this->last_func_time_ = 0;
+        this->last_kkt_time_ = 0;
+        this->last_print_time_ = 0;
+        this->last_solver_init_time_ = 0;
+        this->last_iter_num_ = 0;
     }
 
-    bool WideConsole = false;
-    int FactorMem = 0;
-    int FactorFlops = 0;
-    Eigen::VectorXd LastEqLmults;
-    Eigen::VectorXd LastIqLmults;
+    bool wide_console_ = false;
+    int factor_mem_ = 0;
+    int factor_flops_ = 0;
+    Eigen::VectorXd last_eq_lmults_;
+    Eigen::VectorXd last_iq_lmults_;
 
-    Eigen::VectorXd LastEqCons;
-    Eigen::VectorXd LastIqCons;
+    Eigen::VectorXd last_eq_cons_;
+    Eigen::VectorXd last_iq_cons_;
 
-    bool ReturnBest = false;
-    BestCriteriaModes BestCriteria = BestCriteriaModes::ECONS;
+    bool return_best_ = false;
+    BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
 
-    void set_BestCriteria(BestCriteriaModes mode) { this->BestCriteria = mode; }
-    void set_BestCriteria(const std::string &str) {
-        this->BestCriteria = strto_BestCriteriaMode(str);
+    void set_best_criteria(BestCriteriaModes mode) { this->best_criteria_ = mode; }
+    void set_best_criteria(const std::string &str) {
+        this->best_criteria_ = strto_BestCriteriaMode(str);
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -425,139 +441,141 @@ struct PSIOPT {
     using LateCallBackType =
         std::function<int(const IterateInfo &, ConstEigenRef<VectorXd>, ConstEigenRef<VectorXd>)>;
 
-    EarlyCallBackType EarlyCallBack; // = [](int i, EigenRef<VectorXd> XSL, EigenRef<VectorXd>
-                                     // GX, EigenRef<VectorXd> AGXFX) {return 0; };
-    bool EarlyCallBackEnabled = false;
-    LateCallBackType LateCallBack; // = [](const IterateInfo& i, EigenRef<VectorXd> XSL,
-                                   // EigenRef<VectorXd> AGXFX) {return 0; };
-    bool LateCallBackEnabled = false;
+    EarlyCallBackType early_callback_; // = [](int i, EigenRef<VectorXd> XSL, EigenRef<VectorXd>
+                                       // GX, EigenRef<VectorXd> AGXFX) {return 0; };
+    bool early_callback_enabled_ = false;
+    LateCallBackType late_callback_; // = [](const IterateInfo& i, EigenRef<VectorXd> XSL,
+                                     // EigenRef<VectorXd> AGXFX) {return 0; };
+    bool late_callback_enabled_ = false;
 
     ////////////////////////////////////////////////////////////////////
 
-    PSIOPT() { this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count()); }
+    PSIOPT() {
+        this->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+    }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        this->QPThreads = std::min(TYCHO_DEFAULT_QP_THREADS, get_core_count());
-        this->setNLP(np);
+        this->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+        this->set_nlp(np);
     }
 
     void release() {
-        this->KKTSol.release();
-        this->QPanalyzed = false;
-        this->nlp = std::shared_ptr<NonLinearProgram>();
-        this->LastEqLmults.resize(0);
-        this->LastIqLmults.resize(0);
+        this->kkt_sol_.release();
+        this->qp_analyzed_ = false;
+        this->nlp_ = std::shared_ptr<NonLinearProgram>();
+        this->last_eq_lmults_.resize(0);
+        this->last_iq_lmults_.resize(0);
     }
 
-    void setNLP(std::shared_ptr<NonLinearProgram> np);
-    Eigen::MatrixXd getSPmat() { return this->spmat.toDense(); }
-    Eigen::MatrixXd getSPmat2() { return this->KKTSol.getMatrixTwisted(this->spmat); }
+    void set_nlp(std::shared_ptr<NonLinearProgram> np);
+    Eigen::MatrixXd get_sp_mat() { return this->spmat.toDense(); }
+    Eigen::MatrixXd get_sp_mat2() { return this->kkt_sol_.get_matrix_twisted(this->spmat); }
 
-    void setQPParams() {
+    void set_qp_params() {
 #ifdef USE_ACCELERATE_SPARSE
         // Accelerate interface uses different configuration methods
-        switch (QPOrd) {
+        switch (qp_ord_) {
         case QPOrderingModes::MINDEG:
-            this->KKTSol.setOrder(SparseOrderAMD);
+            this->kkt_sol_.set_order(SparseOrderAMD);
             break;
         case QPOrderingModes::METIS:
             // Serial METIS: faster than MT-METIS at all tested scales (up to
             // ~5400 primal variables) due to per-call thread coordination overhead.
-            this->KKTSol.setOrder(SparseOrderMetis);
+            this->kkt_sol_.set_order(SparseOrderMetis);
             break;
         case QPOrderingModes::PARMETIS:
             // MT-METIS (macOS 26+): currently slower than serial METIS at tested
             // scales. Retained for tracking Apple's improvements across releases.
 #ifdef TYCHO_HAS_MTMETIS
-            this->KKTSol.setOrder(SparseOrderMTMetis);
+            this->kkt_sol_.set_order(SparseOrderMTMetis);
 #else
-            this->KKTSol.setOrder(SparseOrderMetis);
+            this->kkt_sol_.set_order(SparseOrderMetis);
 #endif
             break;
         }
-        this->KKTSol.setNumThreads(QPThreads);
-        this->KKTSol.setIterativeRefinement(QPRefSteps > 0);
-        this->KKTSol.setIterativeRefinementIterations(QPRefSteps);
-        this->KKTSol.setPivotTolerance(AccelPivotTolerance);
-        this->KKTSol.setZeroTolerance(AccelZeroTolerance);
+        this->kkt_sol_.set_num_threads(qp_threads_);
+        this->kkt_sol_.set_iterative_refinement(qp_ref_steps_ > 0);
+        this->kkt_sol_.set_iterative_refinement_iterations(qp_ref_steps_);
+        this->kkt_sol_.set_pivot_tolerance(accel_pivot_tolerance_);
+        this->kkt_sol_.set_zero_tolerance(accel_zero_tolerance_);
 #else
-        this->KKTSol.m_ord = static_cast<int>(QPOrd);
-        this->KKTSol.m_pivotstrat = static_cast<int>(QPPivotStrategy);
-        this->KKTSol.m_pivotpert = QPPivotPerturb;
-        this->KKTSol.m_matching = QPMatching;
-        this->KKTSol.m_scaling = QPScaling;
-        this->KKTSol.m_iterref = QPRefSteps;
-        this->KKTSol.m_alg = static_cast<int>(QPAlg);
-        this->KKTSol.m_msglvl = QPPrint;
+        this->kkt_sol_.ord_ = static_cast<int>(qp_ord_);
+        this->kkt_sol_.pivotstrat_ = static_cast<int>(qp_pivot_strategy_);
+        this->kkt_sol_.pivotpert_ = qp_pivot_perturb_;
+        this->kkt_sol_.matching_ = qp_matching_;
+        this->kkt_sol_.scaling_ = qp_scaling_;
+        this->kkt_sol_.iterref_ = qp_ref_steps_;
+        this->kkt_sol_.alg_ = static_cast<int>(qp_alg_);
+        this->kkt_sol_.msglvl_ = qp_print_;
 
-        if (this->CNRMode)
-            this->KKTSol.m_threads = this->QPThreads;
-        this->KKTSol.m_parsolve = this->QPParSolve;
-        this->KKTSol.setParams();
+        if (this->cnr_mode_)
+            this->kkt_sol_.threads_ = this->qp_threads_;
+        this->kkt_sol_.parsolve_ = this->qp_par_solve_;
+        this->kkt_sol_.set_params();
 #endif
     }
 
     void set_early_callback(const EarlyCallBackType &f) {
-        this->EarlyCallBackEnabled = true;
-        this->EarlyCallBack = f;
+        this->early_callback_enabled_ = true;
+        this->early_callback_ = f;
     }
-    void disable_early_callback() { this->EarlyCallBackEnabled = false; }
+    void disable_early_callback() { this->early_callback_enabled_ = false; }
     void set_late_callback(const LateCallBackType &f) {
-        this->LateCallBackEnabled = true;
-        this->LateCallBack = f;
+        this->late_callback_enabled_ = true;
+        this->late_callback_ = f;
     }
-    void disable_late_callback() { this->LateCallBackEnabled = false; }
+    void disable_late_callback() { this->late_callback_enabled_ = false; }
     /////////////////////////////////////////////////////////////////////////////////////////
-    EigenRef<VectorXd> getPrimals(EigenRef<VectorXd> XSL) const {
-        return XSL.head(this->PrimalVars);
+    EigenRef<VectorXd> get_primals(EigenRef<VectorXd> XSL) const {
+        return XSL.head(this->primal_vars_);
     }
-    EigenRef<VectorXd> getSlacks(EigenRef<VectorXd> XSL) const {
-        return XSL.segment(this->PrimalVars, this->SlackVars);
+    EigenRef<VectorXd> get_slacks(EigenRef<VectorXd> XSL) const {
+        return XSL.segment(this->primal_vars_, this->slack_vars_);
     }
-    EigenRef<VectorXd> getPrimalsSlacks(EigenRef<VectorXd> XSL) const {
-        return XSL.head(this->PrimalVars + this->SlackVars);
-    }
-
-    EigenRef<VectorXd> getLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.tail(this->EqualCons + this->InequalCons);
+    EigenRef<VectorXd> get_primals_slacks(EigenRef<VectorXd> XSL) const {
+        return XSL.head(this->primal_vars_ + this->slack_vars_);
     }
 
-    EigenRef<VectorXd> getEqLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons);
+    EigenRef<VectorXd> get_lmults(EigenRef<VectorXd> XSL) const {
+        return XSL.tail(this->equal_cons_ + this->inequal_cons_);
     }
-    EigenRef<VectorXd> getIqLmults(EigenRef<VectorXd> XSL) const {
-        return XSL.tail(this->InequalCons);
+
+    EigenRef<VectorXd> get_eq_lmults(EigenRef<VectorXd> XSL) const {
+        return XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_);
+    }
+    EigenRef<VectorXd> get_iq_lmults(EigenRef<VectorXd> XSL) const {
+        return XSL.tail(this->inequal_cons_);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////
-    EigenRef<VectorXd> getPrimGrad(EigenRef<VectorXd> GX_or_AGX_FX) const {
-        return GX_or_AGX_FX.head(this->PrimalVars);
+    EigenRef<VectorXd> get_prim_grad(EigenRef<VectorXd> GX_or_AGX_FX) const {
+        return GX_or_AGX_FX.head(this->primal_vars_);
     }
-    EigenRef<VectorXd> getDualGrad(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.segment(this->PrimalVars, this->SlackVars);
+    EigenRef<VectorXd> get_dual_grad(EigenRef<VectorXd> AGX_FX) const {
+        return AGX_FX.segment(this->primal_vars_, this->slack_vars_);
     }
-    EigenRef<VectorXd> getPrimDualGrad(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.head(this->PrimalVars + this->SlackVars);
+    EigenRef<VectorXd> get_prim_dual_grad(EigenRef<VectorXd> AGX_FX) const {
+        return AGX_FX.head(this->primal_vars_ + this->slack_vars_);
     }
-    EigenRef<VectorXd> getEqCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.segment(this->PrimalVars + this->SlackVars, this->EqualCons);
+    EigenRef<VectorXd> get_eq_cons(EigenRef<VectorXd> AGX_FX) const {
+        return AGX_FX.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_);
     }
-    EigenRef<VectorXd> getIqCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.tail(this->InequalCons);
+    EigenRef<VectorXd> get_iq_cons(EigenRef<VectorXd> AGX_FX) const {
+        return AGX_FX.tail(this->inequal_cons_);
     }
-    EigenRef<VectorXd> getAllCons(EigenRef<VectorXd> AGX_FX) const {
-        return AGX_FX.tail(this->InequalCons + this->EqualCons);
+    EigenRef<VectorXd> get_all_cons(EigenRef<VectorXd> AGX_FX) const {
+        return AGX_FX.tail(this->inequal_cons_ + this->equal_cons_);
     }
     /////////////////////////////////////////////////////////////////////////////////////////////
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const {
-        for (int i = 0; i < this->SlackVars; i++) {
+        for (int i = 0; i < this->slack_vars_; i++) {
             double fxi = FXI[i];
             double si = S[i];
-            if (si < NegSlackReset) {
-                si = NegSlackReset;
+            if (si < neg_slack_reset_) {
+                si = neg_slack_reset_;
             }
 
             if (fxi < 0.0) {
                 FXI[i] = 0.0;
-                S[i] = std::max(std::abs(fxi), NegSlackReset);
+                S[i] = std::max(std::abs(fxi), neg_slack_reset_);
             } else {
                 FXI[i] += si;
             }
@@ -566,7 +584,7 @@ struct PSIOPT {
     double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
                                 double bfrac) const {
         double alpha = 1.0;
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             if (dSLI[i] < -bfrac * SLI[i]) {
                 double an = -bfrac * SLI[i] / dSLI[i];
                 if (an < alpha)
@@ -585,7 +603,7 @@ struct PSIOPT {
 
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
         double psi = 0;
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             psi += -mu * std::log(S[i]);
         }
         return psi;
@@ -601,23 +619,23 @@ struct PSIOPT {
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu) {
         Eigen::VectorXd hp = LI.cwiseQuotient(S);
-        for (int i = 0; i < this->InequalCons; i++) {
+        for (int i = 0; i < this->inequal_cons_; i++) {
             if (hp[i] < 0.0) {
                 hp[i] = mu / (S[i] * S[i]);
             }
         }
-        this->nlp->assignKKTSlackHessian(hp, KKTmat);
+        this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
     }
 
-    double LOQOMu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                  double mincomp) const {
+    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                   double mincomp) const {
         double eta = mincomp / avgcomp;
         double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
         double sigma = std::min(0.8, abs(sigmat));
         return sigma * avgcomp;
     }
-    double MPCMu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                 double mincomp) const {
+    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                  double mincomp) const {
         double navgcomp = 0;
         double nmincomp = 0;
         double nmaxcomp = 0;
@@ -626,50 +644,54 @@ struct PSIOPT {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void evalKKT(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalKKT(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp_->eval_kkt(obj_scale, XSL.head(this->primal_vars_),
+                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
+                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
+                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void evalKKTNO(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                   EigenRef<VectorXd> AGXS_FX,
-                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalKKTNO(ObjScale, XSL.head(this->PrimalVars),
-                             XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                             XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                             this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                             this->getIqCons(AGXS_FX), KKTmat);
+    void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp_->eval_kkt_no(
+            obj_scale, XSL.head(this->primal_vars_),
+            XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+            XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
+            this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX), this->get_iq_cons(AGXS_FX),
+            KKTmat);
     }
 
-    void evalAUG(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalAUG(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp_->eval_aug(obj_scale, XSL.head(this->primal_vars_),
+                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
+                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
+                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void evalSOE(double ObjScale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                 EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->evalSOE(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX), KKTmat);
+    void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+        this->nlp_->eval_soe(obj_scale, XSL.head(this->primal_vars_),
+                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
+                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
+                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void evalRHS(double ObjScale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                 Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
-        this->nlp->evalRHS(ObjScale, XSL.head(this->PrimalVars),
-                           XSL.segment(this->PrimalVars + this->SlackVars, this->EqualCons),
-                           XSL.tail(this->InequalCons), val, this->getPrimGrad(GX),
-                           this->getPrimGrad(AGXS_FX), this->getEqCons(AGXS_FX),
-                           this->getIqCons(AGXS_FX));
+    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
+        this->nlp_->eval_rhs(obj_scale, XSL.head(this->primal_vars_),
+                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
+                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
+                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
+                             this->get_iq_cons(AGXS_FX));
     }
 
     void max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> DXSL,
@@ -678,48 +700,48 @@ struct PSIOPT {
     void fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
                         double pobj, double bobj, double mu, IterateInfo &iter) const;
 
-    void evalNLP(AlgorithmModes algmode, double ObjScale, ConstEigenRef<VectorXd> XSL, double &val,
-                 EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                 Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+    void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
+                  double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
-    ConvergenceFlags convergeCheck(std::vector<IterateInfo> &iters);
+    ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
 
-    static void printPSIOPT();
+    static void print_psiopt();
 
     void print_settings();
     void print_matrixinfo();
     void print_stats();
     void print_last_iterate(const std::vector<IterateInfo> &iters);
 
-    static void print_Header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
-    void print_Beginning(std::string msg) const;
-    void print_Finished(std::string msg) const;
-    void print_ExitStats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                         double tottime, double nlptime, double qptime, double printtime);
+    static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
+    void print_beginning(std::string msg) const;
+    void print_finished(std::string msg) const;
+    void print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
+                          double tottime, double nlptime, double qptime, double printtime);
 
     fmt::text_style calculate_color(double val, double targ, double acc);
 
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
                     double &finalpert);
 
-    bool analyze_KKT_Matrix() {
+    bool analyze_kkt_matrix() {
         bool docompute = true;
-        if (this->QPanalyzed && !(this->ForceQPanalysis)) {
+        if (this->qp_analyzed_ && !(this->force_qp_analysis_)) {
             docompute = false;
         } else {
-            this->QPanalyzed = true;
+            this->qp_analyzed_ = true;
             docompute = true;
         }
         return docompute;
     }
 
     Eigen::VectorXd alg_impl(AlgorithmModes algmode, BarrierModes barmode, LineSearchModes lsmode,
-                             double ObjScale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
+                             double obj_scale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    double ls_impl(LineSearchModes lsmode, double ObjScale, double Mu, double PrimObj,
-                   double BarrObj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
+    double ls_impl(LineSearchModes lsmode, double obj_scale, double Mu, double prim_obj,
+                   double barr_obj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
@@ -737,4 +759,4 @@ struct PSIOPT {
     Eigen::VectorXd solve(const Eigen::VectorXd &x);
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

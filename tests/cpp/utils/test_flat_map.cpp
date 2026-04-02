@@ -10,7 +10,7 @@
 #include <gtest/gtest.h>
 #include <string>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(FlatMapTest, DefaultConstructEmpty) {
     FlatMap<std::string, int> fm;

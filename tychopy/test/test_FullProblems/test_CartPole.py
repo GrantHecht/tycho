@@ -15,14 +15,14 @@ class CartPole(oc.ode_x_u.ode):
 
         args = oc.ODEArguments(4, 1)
 
-        q1 = args.XVar(0)
-        q2 = args.XVar(1)
-        q1d = args.XVar(2)
-        q2d = args.XVar(3)
+        q1 = args.x_var(0)
+        q2 = args.x_var(1)
+        q1d = args.x_var(2)
+        q2d = args.x_var(3)
 
-        q1, q2, q1d, q2d = args.XVec().tolist()
+        q1, q2, q1d, q2d = args.x_vec().tolist()
 
-        u = args.UVar(0)
+        u = args.u_var(0)
 
         q1dd = (
             l * m2 * vf.sin(q2) * (q2d**2) + u + m2 * g * vf.cos(q2) * vf.sin(q2)
@@ -67,20 +67,20 @@ class test_CartPole(unittest.TestCase):
         ode = CartPole(l, m1, m2, g)
 
         phase = ode.phase(tmode, IG, nsegs)
-        phase.setControlMode(cmode)
-        phase.addBoundaryValue("Front", range(0, 5), [0, 0, 0, 0, 0])
-        phase.addBoundaryValue("Back", range(0, 5), [d, np.pi, 0, 0, tf])
-        phase.addLUVarBound("Path", 5, -umax, umax, 1.0)
-        phase.addLUVarBound("Path", 0, -dmax, dmax, 1.0)
-        phase.addIntegralObjective(Args(1)[0] ** 2, [5])
-        phase.optimizer.PrintLevel = 3
+        phase.set_control_mode(cmode)
+        phase.add_boundary_value("Front", range(0, 5), [0, 0, 0, 0, 0])
+        phase.add_boundary_value("Back", range(0, 5), [d, np.pi, 0, 0, tf])
+        phase.add_lu_var_bound("Path", 5, -umax, umax, 1.0)
+        phase.add_lu_var_bound("Path", 0, -dmax, dmax, 1.0)
+        phase.add_integral_objective(Args(1)[0] ** 2, [5])
+        phase.optimizer.print_level = 3
         Flag = phase.optimize()
 
-        Obj = phase.optimizer.LastObjVal
+        Obj = phase.optimizer.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

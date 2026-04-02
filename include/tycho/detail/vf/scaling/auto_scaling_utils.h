@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -33,41 +32,41 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func>
 Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd &input_scales,
                                          std::vector<Eigen::VectorXd> &test_inputs) {
 
-    Eigen::MatrixXd rownorms(func.ORows(), test_inputs.size());
-    Eigen::VectorXd output_scales(func.ORows());
+    Eigen::MatrixXd rownorms(func.output_rows(), test_inputs.size());
+    Eigen::VectorXd output_scales(func.output_rows());
     output_scales.setOnes();
     IOScaled<Func> scaled_func(func, input_scales, output_scales);
 
-    Eigen::VectorXd fx(func.ORows());
-    Eigen::MatrixXd jx(func.ORows(), func.IRows());
+    Eigen::VectorXd fx(func.output_rows());
+    Eigen::MatrixXd jx(func.output_rows(), func.input_rows());
 
     for (int i = 0; i < test_inputs.size(); i++) {
         fx.setZero();
         jx.setZero();
         scaled_func.compute_jacobian(test_inputs[i], fx, jx);
-        for (int j = 0; j < func.ORows(); j++) {
+        for (int j = 0; j < func.output_rows(); j++) {
             rownorms(j, i) = jx.row(j).norm();
         }
     }
 
-    for (int j = 0; j < func.ORows(); j++) {
+    for (int j = 0; j < func.output_rows(); j++) {
         double avg = 1.0;
         if (rownorms.row(j).mean() < 1.0e-12) {
 
@@ -83,5 +82,4 @@ Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd
     return output_scales;
 }
 
-} // namespace Tycho
-
+} // namespace tycho::vf

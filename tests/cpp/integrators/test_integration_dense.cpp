@@ -9,14 +9,14 @@
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(IntegratorTest, DenseOutputBoundaryConsistency) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, "DOPRI87", 0.01);
-    integ.setAbsTol(1e-13);
-    integ.setRelTol(1e-13);
+    integ.set_abs_tol(1e-13);
+    integ.set_rel_tol(1e-13);
 
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0;
@@ -38,8 +38,8 @@ TEST_F(IntegratorTest, DenseOutputBoundaryConsistency) {
 TEST_F(IntegratorTest, DenseOutputVsAnalytical) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, "DOPRI87", 0.01);
-    integ.setAbsTol(1e-13);
-    integ.setRelTol(1e-13);
+    integ.set_abs_tol(1e-13);
+    integ.set_rel_tol(1e-13);
 
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0;

@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include <type_traits>
 
-namespace Tycho {
+namespace tycho::utils {
 
 template <int J1, int J2, int J3> struct LambdaJumpTable {
     template <class Ftype> static void run(Ftype &f, int crit_size) {
@@ -33,4 +32,4 @@ template <int J1, int J2, int J3> struct LambdaJumpTable {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::utils

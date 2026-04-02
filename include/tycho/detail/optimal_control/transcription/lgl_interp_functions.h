@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,18 @@
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 #include "tycho/detail/utils/lambda_jump_table.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::LambdaJumpTable;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 template <int OR>
 struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
@@ -36,23 +46,23 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         this->table = tab;
         this->vars = v;
 
-        if (v.maxCoeff() + 1 > tab->XtUVars) {
+        if (v.maxCoeff() + 1 > tab->xtu_vars_) {
             throw std::invalid_argument("Interpolation table has incorrect dimensions");
         }
 
-        this->setIORows(1, this->vars.size());
-        // this->setHessFDSteps(tab->DeltaT/10.0);
+        this->set_io_rows(1, this->vars.size());
+        // this->setHessFDSteps(tab->delta_t_/10.0);
     }
     InterpFunction(std::shared_ptr<LGLInterpTable> tab) {
         this->table = tab;
-        if (this->table->XVars != OR || this->table->UVars > 0) {
+        if (this->table->x_vars_ != OR || this->table->u_vars_ > 0) {
             throw std::invalid_argument("Interpolation table has incorrect dimensions");
         }
-        this->vars.resize(tab->XVars);
+        this->vars.resize(tab->x_vars_);
         for (int i = 0; i < this->vars.size(); i++)
             this->vars[i] = i;
-        this->setIORows(1, this->vars.size());
-        // this->setHessFDSteps(tab->DeltaT / 10.0);
+        this->set_io_rows(1, this->vars.size());
+        // this->setHessFDSteps(tab->delta_t_ / 10.0);
     }
 
     template <class InType, class OutType>
@@ -63,9 +73,9 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         auto Impl = [&](auto maxsize) {
             Scalar t = x[0];
             Eigen::Matrix<Scalar, TempSize, 1, 0, maxsize.value, 1> state;
-            state.resize(this->table->XtUVars);
-            this->table->InterpolateRef(t, state);
-            for (int i = 0; i < this->ORows(); i++) {
+            state.resize(this->table->xtu_vars_);
+            this->table->interpolate_ref(t, state);
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = state[this->vars[i]];
             }
         };
@@ -73,7 +83,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         if constexpr (OR > 0)
             Impl(std::integral_constant<int, TempSize>());
         else
-            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->XtUVars);
+            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->xtu_vars_);
     }
 
     template <class InType, class OutType, class JacType>
@@ -86,9 +96,9 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         auto Impl = [&](auto maxsize) {
             Scalar t = x[0];
             Eigen::Matrix<Scalar, TempSize, 2, 0, maxsize.value, 2> state;
-            state.resize(this->table->XtUVars, 2);
-            this->table->InterpolateDerivRef(t, state);
-            for (int i = 0; i < this->ORows(); i++) {
+            state.resize(this->table->xtu_vars_, 2);
+            this->table->interpolate_deriv_ref(t, state);
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] = state(this->vars[i], 0);
                 jx(i, 0) = state(this->vars[i], 1);
             }
@@ -97,7 +107,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         if constexpr (OR > 0)
             Impl(std::integral_constant<int, TempSize>());
         else
-            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->XtUVars);
+            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->xtu_vars_);
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -115,12 +125,12 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         MatrixBaseRef<AdjHessType> hx = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto maxsize) {
-            if (this->table->Method == TranscriptionModes::LGL3) {
+            if (this->table->method_ == TranscriptionModes::LGL3) {
                 Scalar t = x[0];
                 Eigen::Matrix<Scalar, TempSize, 3, 0, maxsize.value, 3> state;
-                state.resize(this->table->XtUVars, 3);
-                this->table->Interpolate2ndDerivRef(t, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                state.resize(this->table->xtu_vars_, 3);
+                this->table->interpolate_2nd_deriv_ref(t, state);
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i] = state(this->vars[i], 0);
                     jx(i, 0) = state(this->vars[i], 1);
                     adjgrad[0] += jx(i, 0) * adjvars[i];
@@ -129,17 +139,17 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
             } else {
                 Scalar t = x[0];
                 Eigen::Matrix<Scalar, TempSize, 2, 0, maxsize.value, 2> state;
-                state.resize(this->table->XtUVars, 2);
-                this->table->InterpolateDerivRef(t, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                state.resize(this->table->xtu_vars_, 2);
+                this->table->interpolate_deriv_ref(t, state);
+                for (int i = 0; i < this->output_rows(); i++) {
                     fx[i] = state(this->vars[i], 0);
                     jx(i, 0) = state(this->vars[i], 1);
                     adjgrad[0] += jx(i, 0) * adjvars[i];
                 }
                 state.setZero();
-                Scalar h = Scalar(this->table->DeltaT / 10.0);
-                this->table->InterpolateDerivRef(t + h, state);
-                for (int i = 0; i < this->ORows(); i++) {
+                Scalar h = Scalar(this->table->delta_t_ / 10.0);
+                this->table->interpolate_deriv_ref(t + h, state);
+                for (int i = 0; i < this->output_rows(); i++) {
                     hx(0, 0) += (state(this->vars[i], 1) - jx(i, 0)) * adjvars[i] / h;
                 }
             }
@@ -148,9 +158,8 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         if constexpr (OR > 0)
             Impl(std::integral_constant<int, TempSize>());
         else
-            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->XtUVars);
+            LambdaJumpTable<4, 8, 16>::run(Impl, this->table->xtu_vars_);
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

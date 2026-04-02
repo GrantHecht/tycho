@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -19,7 +18,7 @@
 #include <tuple>      // std::tuple
 #include <type_traits>
 
-namespace Tycho {
+namespace tycho::utils {
 
 //////////////////////////////////////////////////////////////////////////////////
 template <typename TupleType, typename FunctionType>
@@ -163,4 +162,4 @@ constexpr auto make_array(Function f)
     return make_array_helper(f, std::make_index_sequence<N>{});
 }
 
-} // namespace Tycho
+} // namespace tycho::utils

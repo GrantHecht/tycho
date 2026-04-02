@@ -57,18 +57,18 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
 
     # 2: Create optimal control phase and assign guess
     odePhase = ode.phase("LGL3")  # LGL-3 collocation
-    odePhase.NumPartitions = 8
+    odePhase.num_partitions = 8
 
     nSeg = 150  # number of segments
-    odePhase.setTraj(trajGuess, nSeg)
+    odePhase.set_traj(trajGuess, nSeg)
     for idx in fixInit:
-        odePhase.addBoundaryValue("Front", [idx], [ig[idx]])
-    odePhase.addBoundaryValue(
+        odePhase.add_boundary_value("Front", [idx], [ig[idx]])
+    odePhase.add_boundary_value(
         "Front",
         [3, 6],
         [0.0, 0.0],  # Initial y, vx, t = 0
     )
-    odePhase.addBoundaryValue(
+    odePhase.add_boundary_value(
         "Back",
         [1, 3, 5],
         [0.0, 0.0, 0.0],  # Final y, vx = 0
@@ -76,11 +76,11 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
 
     # 4: Solve
     tol = 1e-12
-    odePhase.optimizer.set_EContol(tol)  # Equality constraint tolerance
+    odePhase.optimizer.set_eq_con_tol(tol)  # Equality constraint tolerance
     odePhase.solve()
 
     # 5: Get solution and return
-    trajSol = odePhase.returnTraj()
+    trajSol = odePhase.return_traj()
 
     return trajSol
 

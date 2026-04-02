@@ -1,6 +1,6 @@
 # Binding Layer Developer Guide
 
-This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `Tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
+This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
 
 This guide assumes familiarity with the [VectorFunction Developer Guide](VectorFunction.md). The binding layer is the bridge between that C++ system and the Python API users interact with.
 
@@ -9,8 +9,8 @@ This guide assumes familiarity with the [VectorFunction Developer Guide](VectorF
 1. [Overview -- What the Binding Layer Does](#1-overview----what-the-binding-layer-does)
 2. [Module Structure](#2-module-structure)
 3. [The `TychoBind<T>` Trait Pattern](#3-the-tychobindt-trait-pattern)
-4. [`Bind::` Free-Function Helpers](#4-bind-free-function-helpers)
-5. [Type Casters (`TypeCasters.h`)](#5-type-casters-typecastersH)
+4. [`bind::` Free-Function Helpers](#4-bind-free-function-helpers)
+5. [Type Casters (`type_casters.h`)](#5-type-casters-type_castersh)
 6. [Precompiled Header Setup](#6-precompiled-header-setup)
 7. [File Organization](#7-file-organization)
 8. [Build System Integration](#8-build-system-integration)
@@ -25,7 +25,7 @@ This guide assumes familiarity with the [VectorFunction Developer Guide](VectorF
 
 The binding layer is the translation layer between Tycho's C++ core and its Python API. It has three responsibilities:
 
-1. **Map C++ types to Python classes** -- every `VectorFunction`, ODE, `Phase`, `Integrator`, and solver type visible in Python is bound in `src/Bindings/`.
+1. **Map C++ types to Python classes** -- every `VectorFunction`, ODE, `Phase`, `Integrator`, and solver type visible in Python is bound in `src/bindings/`.
 2. **Convert Python objects to C++ types** -- custom type casters handle `numpy.ndarray <-> Eigen::VectorXd`, `list/tuple -> VectorXd`, `None -> "none"` sentinel, and variant dispatch.
 3. **Provide ergonomic wrappers** -- the pure-Python `tychopy/` package re-exports the C++ bindings and adds thin wrappers to coerce Python types that nanobind cannot handle natively (e.g., `list` to `numpy.ndarray` for fixed-size Eigen types).
 
@@ -59,11 +59,11 @@ Key API differences from pybind11 that affect the binding code:
 +-----------------------------+
 |  _tychopy  (nanobind C++)   |  <-- All C++ bindings live here
 +-----------------------------+
-|  Tycho:: C++ core           |  <-- No nanobind code
+|  tycho:: C++ core           |  <-- No nanobind code
 +-----------------------------+
 ```
 
-**Strict separation rule:** Core C++ source under `src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, `src/Solvers/`, and `src/Utils/` contains **zero** nanobind code. All binding code lives exclusively in `src/Bindings/`.
+**Strict separation rule:** Core C++ source under `src/vf/`, `src/optimal_control/`, `src/integrators/`, `src/astro/`, `src/solvers/`, and `src/utils/` contains **zero** nanobind code. All binding code lives exclusively in `src/bindings/`.
 
 ---
 
@@ -71,13 +71,13 @@ Key API differences from pybind11 that affect the binding code:
 
 ### Entry Point
 
-The module is defined in `src/Bindings/TychoModule.cpp`:
+The module is defined in `src/bindings/tycho_module.cpp`:
 
 ```cpp
 NB_MODULE(_tychopy, m) {
     m.doc() = "Tycho";
-    m.def("PyMain", &main);
-    m.def("SoftwareInfo", &SoftwareInfo);
+    m.def("py_main", &main);
+    m.def("software_info", &SoftwareInfo);
 
     FunctionRegistry reg(m);     // Must be built first
     VectorFunctionBuild(reg, m); // Must be built second
@@ -107,7 +107,7 @@ The `Astro` submodule is created inside `AstroBuild()` rather than in the regist
 
 ### The `FunctionRegistry` Struct
 
-Defined in `src/Bindings/FunctionRegistry.h`, `FunctionRegistry` is the central state object passed through the build pipeline. It holds:
+Defined in `src/bindings/function_registry.h`, `FunctionRegistry` is the central state object passed through the build pipeline. It holds:
 
 - **Module references** -- `mod` (root), `vfmod`, `ocmod`, `solmod`, `extmod`.
 - **Base class objects** -- `vfuncx` (`nb::class_<VectorFunctionalX>`) and `sfuncx` (`nb::class_<ScalarFunctionalX>`), the type-erased `GenericFunction<-1,-1>` and `GenericFunction<-1,1>` wrappers.
@@ -137,11 +137,11 @@ The binding layer uses a **compile-time trait pattern** to dispatch binding cons
 
 ### Primary Template
 
-Declared in `src/Bindings/FunctionRegistry.h`:
+Declared in `src/bindings/function_registry.h`:
 
 ```cpp
-namespace Tycho {
-// Primary template -- undefined; specializations in *Bind.h files
+namespace tycho {
+// Primary template -- undefined; specializations in *_bind.h files
 template <class T> struct TychoBind;
 }
 ```
@@ -152,10 +152,10 @@ The primary template is deliberately left undefined. Any attempt to bind a type 
 
 ### Specializations
 
-Full and partial specializations are defined in `*Bind.h` headers throughout `src/Bindings/`:
+Full and partial specializations are defined in `*_bind.h` headers throughout `src/bindings/`:
 
 ```cpp
-// Full specialization (src/Bindings/OptimalControl/ODEPhaseBind.h)
+// Full specialization (src/bindings/optimal_control/ode_phase_bind.h)
 template <> struct TychoBind<ODEPhaseBase> {
     static void Build(nb::module_ &m);
 };
@@ -164,17 +164,17 @@ template <> struct TychoBind<ODEPhaseBase> {
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
     static void Build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
-        Bind::ODEPhaseBuildImpl<DODE>(phase);
+        bind::ODEPhaseBuildImpl<DODE>(phase);
         // ...
     }
 };
 
-// Partial specialization for VectorFunction types (CommonFunctionsBind.h)
+// Partial specialization for VectorFunction types (common_functions_bind.h)
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
-        Bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
-        Bind::SegBuild<Segment<IR, OR, ST>>(obj);
+        bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
+        bind::SegBuild<Segment<IR, OR, ST>>(obj);
     }
 };
 ```
@@ -195,12 +195,26 @@ This is the primary entry point for registering VectorFunction types. It:
 1. Calls `TychoBind<T>::Build(m, name)` to create the `nb::class_<T>` and define its methods.
 2. Calls `RegSelector<T::IRC, T::ORC>::Register<T>(this)` to register implicit conversions to the type-erased base classes.
 
+Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::Build`:
+
 ```cpp
-template <class Derived> void Build_Register(nb::module_ &m, const char *name) {
-    TychoBind<Derived>::Build(m, name);
-    RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
-}
+// Overload 1: name hardcoded in TychoBind<Derived>::Build(m) — no name argument needed
+template <class Derived>
+    requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
+void Build_Register(nb::module_ &m);
+
+// Overload 2: name passed explicitly; type registered into the registry's root module
+template <class Derived>
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+void Build_Register(const char *name);
+
+// Overload 3: name and target module both passed explicitly (most common)
+template <class Derived>
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
+void Build_Register(nb::module_ &m, const char *name);
 ```
+
+All three overloads call `RegSelector<Derived::IRC, Derived::ORC>::Register<Derived>(this)` after building to register implicit conversions.
 
 ### `RegSelector<IR, OR>` -- Implicit Conversion Registration
 
@@ -227,17 +241,17 @@ template <int IR> struct RegSelector<IR, 1> {
 };
 ```
 
-This is how Python code like `phase.addEqualityConstraint(my_segment_func)` works -- the `Segment` is implicitly converted to a `VectorFunction` (the type-erased `GenericFunction<-1,-1>`).
+This is how Python code like `phase.add_equal_con(my_segment_func)` works -- the `Segment` is implicitly converted to a `VectorFunction` (the type-erased `GenericFunction<-1,-1>`).
 
 ---
 
-## 4. `Bind::` Free-Function Helpers
+## 4. `bind::` Free-Function Helpers
 
-The `Bind::` namespace (inside `Tycho::Bind`) contains reusable free-function templates that register common method sets on `nb::class_` objects. These avoid duplicating binding code across the many VectorFunction types.
+The `bind::` namespace (inside `tycho::bind`) contains reusable free-function templates that register common method sets on `nb::class_` objects. These avoid duplicating binding code across the many VectorFunction types.
 
 ### `DenseBaseBuild<Derived>(obj)` -- Core Methods
 
-Defined in `src/Bindings/VectorFunctions/DenseFunctionBaseBind.h`. Registers the fundamental methods that every VectorFunction type exposes to Python:
+Defined in `src/bindings/vf/dense_function_base_bind.h`. Registers the fundamental methods that every VectorFunction type exposes to Python:
 
 | Method | Python signature | Description |
 |---|---|---|
@@ -248,12 +262,11 @@ Defined in `src/Bindings/VectorFunctions/DenseFunctionBaseBind.h`. Registers the
 | `adjointgradient(x, lm)` | `-> numpy.ndarray` | J^T * lambda |
 | `adjointhessian(x, lm)` | `-> numpy.ndarray` | Adjoint Hessian |
 | `computeall(x, lm)` | `-> (fx, Jx, gx, Hx)` | All derivatives at once |
-| `IRows()` | `-> int` | Input dimension |
-| `ORows()` | `-> int` | Output dimension |
+| `input_rows()` | `-> int` | Input dimension |
+| `output_rows()` | `-> int` | Output dimension |
 | `name()` | `-> str` | Type name string |
 | `input_domain()` | `-> ...` | Domain information |
 | `is_linear()` | `-> bool` | Linearity flag |
-| `rpt(...)` | | Repeat/tile |
 | `vf()` | `-> VectorFunction` | Convert to type-erased VectorFunction |
 | `sf()` | `-> ScalarFunction` | Convert to ScalarFunction (OR=1 only) |
 
@@ -269,7 +282,7 @@ obj.def("compute",
     [=](const Derived &f, VectorXd x) { return compute_body(f, x); });
 ```
 
-The `ConstEigenRef<VectorXd>` overload uses nanobind's built-in Eigen caster for zero-copy numpy access. The `VectorXd` (by-value) overload triggers our custom type caster (see [Section 5](#5-type-casters-typecastersH)) which accepts lists, tuples, and other sequences. Without both overloads, either numpy calls would copy or list/tuple calls would fail.
+The `ConstEigenRef<VectorXd>` overload uses nanobind's built-in Eigen caster for zero-copy numpy access. The `VectorXd` (by-value) overload triggers our custom type caster (see [Section 5](#5-type-casters-type_castersh)) which accepts lists, tuples, and other sequences. Without both overloads, either numpy calls would copy or list/tuple calls would fail.
 
 ### Math Builder Hierarchy
 
@@ -279,23 +292,23 @@ These helpers build the Python operator overloads and math methods for VectorFun
 |---|---|
 | `DoubleMathBuild<T>(obj)` | `__add__`/`__sub__` with VectorXd, `__mul__`/`__truediv__` with double, `__neg__`, `__array_ufunc__ = None` |
 | `UnaryMathBuild<T>(obj)` | `norm`, `squared_norm`, `normalized`, `sin`, `cos`, `tan`, `sqrt`, `exp`, `log`, `squared`, `pow`, `arcsin`/`arccos`/`arctan`, `sinh`/`cosh`/`tanh`, `__abs__`, `sign` |
-| `BinaryMathBuild<T>(obj)` | `cross`, `dot`, `cwiseProduct`, `cwiseQuotient` (with other VF types and VectorXd constants) |
+| `BinaryMathBuild<T>(obj)` | `cross`, `dot`, `cwise_product`, `cwise_quotient` (with other VF types and VectorXd constants) |
 | `BinaryOperatorsBuild<T>(obj)` | `eval`, `apply`, `__add__`/`__sub__`/`__mul__`/`__truediv__` with other VF types |
 | `FunctionIndexingBuild<T>(obj)` | `segment`, `head`, `tail`, `coeff`, `__getitem__` (int and slice), `padded_lower`/`padded_upper`/`padded`, fixed-size `segment_2`/`segment_3` aliases |
 | `ConditionalOperatorsBuild<T>(obj)` | `__lt__`, `__gt__`, `__le__`, `__ge__` (returns `GenericConditional`) |
 
 ### `SegBuild<Derived>(obj)` -- The All-in-One Combiner
 
-Defined in `src/Bindings/VectorFunctions/CommonFunctionsBind.h`, `SegBuild` calls all the math builders in sequence:
+Defined in `src/bindings/vf/common_functions_bind.h`, `SegBuild` calls all the math builders in sequence:
 
 ```cpp
 template <class Derived, class PyClass> void SegBuild(PyClass &obj) {
-    Bind::DoubleMathBuild<Derived>(obj);
-    Bind::UnaryMathBuild<Derived>(obj);
-    Bind::BinaryMathBuild<Derived>(obj);
-    Bind::BinaryOperatorsBuild<Derived>(obj);
-    Bind::FunctionIndexingBuild<Derived>(obj);
-    Bind::ConditionalOperatorsBuild<Derived>(obj);
+    bind::DoubleMathBuild<Derived>(obj);
+    bind::UnaryMathBuild<Derived>(obj);
+    bind::BinaryMathBuild<Derived>(obj);
+    bind::BinaryOperatorsBuild<Derived>(obj);
+    bind::FunctionIndexingBuild<Derived>(obj);
+    bind::ConditionalOperatorsBuild<Derived>(obj);
 
     obj.def("tolist", ...);  // Convert to list of Element/Segment objects
 }
@@ -305,7 +318,7 @@ Types that need the full VectorFunction Python API (like `Arguments`, `Segment`,
 
 ### `GenericBuild<Derived>(obj)`
 
-For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-from-self, `SuperTest`, `SpeedTest`, and then calls `DenseBaseBuild`.
+For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-from-self and then calls `DenseBaseBuild`.
 
 ### ODE and Phase Builders
 
@@ -313,7 +326,7 @@ For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-fr
 |---|---|
 | `ODEPhaseBuildImpl<DODE>(phase)` | Registers all `ODEPhase` constructors (TranscriptionModes, string mode, trajectory data) |
 | `IntegratorBuildConstructors<DODE>(obj)` | Adds `.integrator(...)` factory methods to an ODE class |
-| `ODESizeBuild<XV,UV,PV,Derived>(obj)` | Registers ODE dimension accessors: `XVars()`, `UVars()`, `PVars()`, `TVar()`, index helpers |
+| `ODESizeBuild<XV,UV,PV,Derived>(obj)` | Registers ODE dimension accessors: `x_vars()`, `u_vars()`, `p_vars()`, `t_var()`, index helpers |
 | `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` | Creates a complete ODE submodule with `ode`, `integrator`, `phase` classes |
 | `BuildODEModule<BaseType,Derived,XV,UV,PV>(name, mod, reg)` | Same but for concrete (non-generic) ODE types |
 | `ODE_ExpressionBuild<Derived,ExprImpl,Ts...>(m, name)` | Registers an ODE expression type with DenseBaseBuild + phase factory + integrator constructors |
@@ -329,9 +342,9 @@ For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-fr
 
 ---
 
-## 5. Type Casters (`TypeCasters.h`)
+## 5. Type Casters (`type_casters.h`)
 
-Custom type casters in `src/Bindings/TypeCasters.h` handle the automatic conversion between Python objects and C++ types that nanobind cannot handle natively.
+Custom type casters in `src/bindings/type_casters.h` handle the automatic conversion between Python objects and C++ types that nanobind cannot handle natively.
 
 ### Why Explicit Full Specializations?
 
@@ -344,14 +357,17 @@ template <> struct type_caster<Eigen::VectorXi> { ... };   // Full spec -- wins
 
 ### Include Ordering Requirement
 
-`TypeCasters.h` **must** be included **before** any nanobind STL caster headers (`stl/vector.h`, `stl/variant.h`, etc.). Explicit specializations must be visible before the compiler implicitly instantiates the corresponding partial specializations from the STL casters. Violating this rule is ill-formed per C++14 [temp.expl.spec]/6.
+`type_casters.h` **must** be included **before** any nanobind STL caster headers (`stl/vector.h`, `stl/variant.h`, etc.). Explicit specializations must be visible before the compiler implicitly instantiates the corresponding partial specializations from the STL casters. Violating this rule is ill-formed per C++14 [temp.expl.spec]/6.
 
 This ordering is enforced in `pch_nb.h`:
 ```cpp
-#include "TypeCasters.h"        // BEFORE stl/ casters
-#include <nanobind/stl/vector.h>
+#include "type_casters.h"             // BEFORE stl/ casters
+#include <nanobind/stl/function.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/variant.h>
-// ...
+#include <nanobind/stl/vector.h>
 ```
 
 ### Caster Reference
@@ -454,17 +470,17 @@ The `pch_bindings` static library defines the PCH order:
 
 ```
 src/pch.h                              # STL headers, Eigen, fmt, autodiff
-  -> src/Bindings/pch_nb.h             # nanobind headers, TypeCasters.h, FunctionRegistry.h, JetBind.h
-    -> src/VectorFunctions/tycho_vector_functions.h  # All VF type definitions
-      -> src/Bindings/VectorFunctionsBind.h          # VF binding helpers
+  -> src/bindings/pch_nb.h             # nanobind headers, type_casters.h, function_registry.h, jet_bind.h
+    -> src/vf/tycho_vector_functions.h # All VF type definitions
+      -> src/bindings/vector_functions_bind.h        # VF binding helpers
 ```
 
 **Why this order?**
 
 - `pch.h` provides all standard library and Eigen types.
-- `pch_nb.h` brings in nanobind and the type casters. `TypeCasters.h` must come before STL casters (see [Section 5](#5-type-casters-typecastersH)).
+- `pch_nb.h` brings in nanobind and the type casters. `type_casters.h` must come before STL casters (see [Section 5](#5-type-casters-type_castersh)).
 - `tycho_vector_functions.h` defines all VectorFunction types (GenericFunction, Segment, etc.) that the binding headers need.
-- `VectorFunctionsBind.h` aggregates the VF binding headers that depend on all of the above.
+- `vector_functions_bind.h` aggregates the VF binding headers that depend on all of the above.
 
 ### `pch_nb.h` Contents
 
@@ -474,7 +490,7 @@ src/pch.h                              # STL headers, Eigen, fmt, autodiff
 #include <nanobind/ndarray.h>
 namespace nb = nanobind;
 
-#include "TypeCasters.h"              // BEFORE stl/ casters
+#include "type_casters.h"             // BEFORE stl/ casters
 
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/shared_ptr.h>
@@ -483,8 +499,8 @@ namespace nb = nanobind;
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
 
-#include "FunctionRegistry.h"         // TychoBind<T> primary template
-#include "Solvers/JetBind.h"          // JetInvoker partial spec for nb::args
+#include "function_registry.h"        // TychoBind<T> primary template
+#include "solvers/jet_bind.h"         // JetInvoker partial spec for nb::args
 ```
 
 ### `TYCHO_PYTHON_BINDINGS` Macro Scope
@@ -495,7 +511,7 @@ The `TYCHO_PYTHON_BINDINGS` preprocessor macro is defined **only** for:
 - `_tychopy` nanobind module
 - `tycho_extensions` module
 
-It is **not** defined globally. This ensures that core C++ headers never see nanobind types. All `*Bind.h` files are guarded with `#ifdef TYCHO_PYTHON_BINDINGS`, making them safe to include from aggregate headers -- the guarded content is simply empty when compiled without the macro.
+It is **not** defined globally. This ensures that core C++ headers never see nanobind types. All `*_bind.h` files are guarded with `#ifdef TYCHO_PYTHON_BINDINGS`, making them safe to include from aggregate headers -- the guarded content is simply empty when compiled without the macro.
 
 ### `_tychopy` Reuses `pch_bindings`
 
@@ -513,65 +529,65 @@ This means `_tychopy` TUs must use **exactly the same compile flags** as `pch_bi
 
 ### Directory Structure
 
-`src/Bindings/` mirrors the structure of `src/` with matching subdirectories:
+`src/bindings/` mirrors the structure of `src/` with matching subdirectories:
 
 ```
-src/Bindings/
+src/bindings/
   CMakeLists.txt                  Build rules for pch_bindings + _tychopy
-  TychoModule.cpp                 NB_MODULE entry point
-  FunctionRegistry.h              TychoBind<T> primary template, FunctionRegistry struct
-  TypeCasters.h                   Custom nanobind type casters (Eigen, variants)
+  tycho_module.cpp                NB_MODULE entry point
+  function_registry.h             TychoBind<T> primary template, FunctionRegistry struct
+  type_casters.h                  Custom nanobind type casters (Eigen, variants)
   pch_nb.h                        Binding-specific PCH (nanobind + type casters)
-  VectorFunctionsBind.h           Aggregate: includes all VF binding headers
-  UtilsBind.cpp                   Thread pool, timer, memory utilities
-  BumpAllocatorBind.cpp/.h        Bump allocator / memory manager binding
-  VectorFunctions/
-    DenseFunctionBaseBind.h       Core binding helpers: DenseBaseBuild, math builders, SegBuild
-    CommonFunctionsBind.h         TychoBind<> for Segment, Arguments, Constant, etc.
-    GenericFunctionBind.h         GenericBuild, ComparativeBuild, ConditionalBuild, IfElseBuild
-    VectorFunctionBind.h          TychoBind<> for VectorFunction base types
-    InterpTableBind.h             InterpTable1D/2D/3D/4D build functions
-    PythonFunctions.h             PyVectorFunction/PyScalarFunction (Python-callable VFs)
+  vector_functions_bind.h         Aggregate: includes all VF binding headers
+  utils_bind.cpp                  Thread pool, timer, memory utilities
+  bump_allocator_bind.cpp/.h      Bump allocator / memory manager binding
+  vf/
+    dense_function_base_bind.h    Core binding helpers: DenseBaseBuild, math builders, SegBuild
+    common_functions_bind.h       TychoBind<> for Segment, Arguments, Constant, etc.
+    generic_function_bind.h       GenericBuild, ComparativeBuild, ConditionalBuild, IfElseBuild
+    vector_function_bind.h        TychoBind<> for VectorFunction base types
+    interp_table_bind.h           InterpTable1D/2D/3D/4D build functions
+    python_functions.h            PyVectorFunction/PyScalarFunction (Python-callable VFs)
     python_arg_parsing.h          ParsePythonArgs, ParsePythonArgsScalar declarations
-    PythonArgParsing.cpp          ParsePythonArgs/ParsePythonArgsScalar implementations
-    Tycho_VectorFunctions.cpp     VectorFunctionBuild() orchestrator
-    VectorFunctionBuildPart1.cpp  VF type registrations (part 1)
-    VectorFunctionBuildPart2.cpp  VF type registrations (part 2)
-    ArgsSegBuildPart1..5.cpp      Arguments/Segment instantiations (split for compile time)
-    BulkOperationsBuild.cpp       Stack, Sum, SumElems, etc.
-    FreeFunctionsBuild.cpp        Module-level free functions (cross, dot, etc.)
-    MatrixFunctionBuild.cpp       ColMatrix, RowMatrix types
-  OptimalControl/
-    ODEPhaseBind.h                TychoBind<> for ODEPhase, StateFunction, LinkFunction, etc.
-    ODEBind.h                     ODE_ExpressionBuild, BuildODEModule, BuildGenODEModule
-    ODESizesBind.h                ODESizeBuild<XV,UV,PV,Derived> helper
-    ODEArgumentsBind.h            ODEArguments binding
-    MeshIterateInfoBind.h/.cpp    MeshIterateInfo binding
-    Tycho_OptimalControl.cpp      OptimalControlBuild() orchestrator
-    GenericODESBuildPart1..6.cpp  GenericODE instantiations (split for compile time)
-    ODEPhaseBaseBind.cpp          Out-of-line TychoBind<ODEPhaseBase>::Build
-    OptimalControlProblemBind.cpp Out-of-line TychoBind<OptimalControlProblem>::Build
-    LGLInterpTableBind.cpp        Out-of-line TychoBind<LGLInterpTable>::Build
-  Solvers/
-    JetBind.h/.cpp                TychoBind<Jet>, JetInvoker partial spec for nb::args
-    PSIOPTBind.h/.cpp             TychoBind<PSIOPT>
-    OptimizationProblemBind.h/.cpp TychoBind<OptimizationProblem>
-    OptimizationProblemBase.cpp   OptimizationProblemBase binding
-    Tycho_Solvers.cpp             SolversBuild() orchestrator
-  Astro/
-    Tycho_Astro.cpp               AstroBuild() orchestrator
-    KeplerUtils.cpp               Kepler utility function bindings
-    KeplerModel.cpp               Kepler ODE model bindings
-    LambertSolversBind.cpp        Lambert solver bindings
-  Integrators/
-    IntegratorBind.h              TychoBind<Integrator<DODE>>, IntegratorBuildConstructors
-    RKCoeffsBind.cpp              Runge-Kutta coefficient table bindings
+    python_arg_parsing.cpp        ParsePythonArgs/ParsePythonArgsScalar implementations
+    tycho_vector_functions.cpp    VectorFunctionBuild() orchestrator
+    vector_function_build_part1.cpp  VF type registrations (part 1)
+    vector_function_build_part2.cpp  VF type registrations (part 2)
+    args_seg_build_part1..5.cpp   Arguments/Segment instantiations (split for compile time)
+    bulk_operations_build.cpp     Stack, Sum, SumElems, etc.
+    free_functions_build.cpp      Module-level free functions (cross, dot, etc.)
+    matrix_function_build.cpp     ColMatrix, RowMatrix types
+  optimal_control/
+    ode_phase_bind.h              TychoBind<> for ODEPhase, StateFunction, LinkFunction, etc.
+    ode_bind.h                    ODE_ExpressionBuild, BuildODEModule, BuildGenODEModule
+    ode_sizes_bind.h              ODESizeBuild<XV,UV,PV,Derived> helper
+    ode_arguments_bind.h          ODEArguments binding
+    mesh_iterate_info_bind.h/.cpp MeshIterateInfo binding
+    tycho_optimal_control.cpp     OptimalControlBuild() orchestrator
+    generic_odes_build_part1..6.cpp  GenericODE instantiations (split for compile time)
+    ode_phase_base_bind.cpp       Out-of-line TychoBind<ODEPhaseBase>::Build
+    optimal_control_problem_bind.cpp Out-of-line TychoBind<OptimalControlProblem>::Build
+    lgl_interp_table_bind.cpp     Out-of-line TychoBind<LGLInterpTable>::Build
+  solvers/
+    jet_bind.h/.cpp               TychoBind<Jet>, JetInvoker partial spec for nb::args
+    psiopt_bind.h/.cpp            TychoBind<PSIOPT>
+    optimization_problem_bind.h/.cpp TychoBind<OptimizationProblem>
+    optimization_problem_base.cpp OptimizationProblemBase binding
+    tycho_solvers.cpp             SolversBuild() orchestrator
+  astro/
+    tycho_astro.cpp               AstroBuild() orchestrator
+    kepler_utils.cpp              Kepler utility function bindings
+    kepler_model.cpp              Kepler ODE model bindings
+    lambert_solvers_bind.cpp      Lambert solver bindings
+  integrators/
+    integrator_bind.h             TychoBind<Integrator<DODE>>, IntegratorBuildConstructors
+    rk_coeffs_bind.cpp            Runge-Kutta coefficient table bindings
 ```
 
-### `*Bind.h` vs `*Bind.cpp`
+### `*_bind.h` vs `*_bind.cpp`
 
-- **`*Bind.h` headers** -- contain template code (TychoBind partial specializations, Bind:: helpers). Included via the PCH chain so they are available in every binding TU without explicit `#include`.
-- **`*Bind.cpp` files** -- contain out-of-line implementations for non-template specializations and the heavy registration functions that would bloat the PCH if included as headers.
+- **`*_bind.h` headers** -- contain template code (TychoBind partial specializations, bind:: helpers). Included via the PCH chain so they are available in every binding TU without explicit `#include`.
+- **`*_bind.cpp` files** -- contain out-of-line implementations for non-template specializations and the heavy registration functions that would bloat the PCH if included as headers.
 
 The split is driven by compile-time performance: template code must be in headers, but large non-template binding functions should be in `.cpp` files.
 
@@ -579,7 +595,7 @@ The split is driven by compile-time performance: template code must be in header
 
 ## 8. Build System Integration
 
-### `src/Bindings/CMakeLists.txt`
+### `src/bindings/CMakeLists.txt`
 
 This file defines two targets:
 
@@ -590,8 +606,8 @@ add_library(pch_bindings STATIC ${CMAKE_SOURCE_DIR}/src/pch.cpp)
 target_precompile_headers(pch_bindings PRIVATE
     ${CMAKE_SOURCE_DIR}/src/pch.h
     ${CMAKE_CURRENT_SOURCE_DIR}/pch_nb.h
-    ${CMAKE_SOURCE_DIR}/src/VectorFunctions/tycho_vector_functions.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/VectorFunctionsBind.h
+    ${CMAKE_SOURCE_DIR}/src/vf/tycho_vector_functions.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions_bind.h
 )
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
 target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
@@ -602,10 +618,10 @@ target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
 ```cmake
 nanobind_add_module(_tychopy
-    TychoModule.cpp
-    UtilsBind.cpp
-    BumpAllocatorBind.cpp
-    VectorFunctions/Tycho_VectorFunctions.cpp
+    tycho_module.cpp
+    utils_bind.cpp
+    bump_allocator_bind.cpp
+    vf/tycho_vector_functions.cpp
     # ... all .cpp files listed explicitly
 )
 target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})
@@ -636,7 +652,7 @@ Set `OPTIMIZE_BINDINGS=ON` if you need `-O3` for profiling or if binding dispatc
 | Compiler cache | Automatic | `ccache` auto-detected via `find_program` |
 | Split TUs | N/A (hardcoded) | Heavy templates split across Part1..N files |
 
-The `ArgsSegBuildPart1..5.cpp` and `GenericODESBuildPart1..6.cpp` files exist purely to split template-heavy instantiations across multiple translation units, reducing peak memory usage and enabling parallel compilation.
+The `args_seg_build_part1..5.cpp` and `generic_odes_build_part1..6.cpp` files exist purely to split template-heavy instantiations across multiple translation units, reducing peak memory usage and enabling parallel compilation.
 
 ### Install Targets
 
@@ -721,7 +737,7 @@ Re-exports all C++ optimal control types and adds the pure-Python `ODEBase` clas
 
 ### `#ifdef TYCHO_PYTHON_BINDINGS` Guard
 
-Every `*Bind.h` file is wrapped in this guard:
+Every `*_bind.h` file is wrapped in this guard:
 
 ```cpp
 #pragma once
@@ -734,43 +750,43 @@ This makes them safe to include from aggregate headers that are used by both bin
 
 ### Header Shadowing Rule
 
-When including a `Bindings/` header from another `Bindings/` file, **always use the explicit subdirectory path**:
+When including a `bindings/` header from another `bindings/` file, **always use the explicit subdirectory path**:
 
 ```cpp
 // CORRECT:
-#include "VectorFunctions/python_arg_parsing.h"
-#include "Solvers/JetBind.h"
+#include "vf/python_arg_parsing.h"
+#include "solvers/jet_bind.h"
 
 // WRONG (may resolve to a file in another src/ subdirectory):
 #include "python_arg_parsing.h"
 ```
 
-Because `src/Bindings/` subdirectories are added to the include path alongside the core `src/` subdirectories, flat names can be shadowed by files in the core directories.
+Because `src/bindings/` subdirectories are added to the include path alongside the core `src/` subdirectories, flat names can be shadowed by files in the core directories.
 
 ### Out-of-Line `TychoBind` Implementations
 
 When a `TychoBind` specialization's `Build()` body is too large for a header, declare it in the header and define it in a `.cpp` file:
 
 ```cpp
-// ODEPhaseBind.h
+// ode_phase_bind.h
 template <> struct TychoBind<ODEPhaseBase> {
     static void Build(nb::module_ &m);  // declaration only
 };
 
-// ODEPhaseBaseBind.cpp
+// ode_phase_base_bind.cpp
 void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     // ... large implementation ...
 }
 ```
 
-In the `.cpp` file, use `using namespace Tycho;` and explicit type aliases (`using VectorXd = Eigen::VectorXd;` etc.) since class-scope aliases from the header are not available in the out-of-line definition context.
+In the `.cpp` file, use `using namespace tycho;` and explicit type aliases (`using VectorXd = Eigen::VectorXd;` etc.) since class-scope aliases from the header are not available in the out-of-line definition context.
 
 ### `nb::arg(...).none()` on AutoScale Parameters
 
 All parameters typed as `ScaleType` must use `.none()`:
 
 ```cpp
-obj.def("setAutoScale", &T::setAutoScale, nb::arg("scale").none());
+obj.def("add_equal_con", ..., nb::arg("auto_scale").none() = std::string("auto"));
 ```
 
 Without `.none()`, nanobind rejects Python `None` before the `ScaleType` type caster can convert it to the `"none"` sentinel string.
@@ -781,7 +797,7 @@ Any method that runs C++ code in parallel (e.g., `integrate_parallel`, `integrat
 
 ```cpp
 obj.def("integrate_parallel", ...,
-    nb::arg("Xt0UPs"), nb::arg("tfs"), nb::arg("threads"),
+    nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
     nb::call_guard<nb::gil_scoped_release>());
 ```
 
@@ -813,17 +829,17 @@ This prevents numpy from hijacking `__radd__` and `__rmul__` when a VectorFuncti
 
 ### Adding a New VectorFunction Type
 
-1. **Implement the C++ type** in `include/tycho/detail/vf/` as a `VectorFunction<Derived, IR, OR, Jm, Hm>` subclass (see [VectorFunction Developer Guide](VectorFunction.md)), then include it from the appropriate aggregate header in `src/VectorFunctions/tycho_vector_functions.h`.
+1. **Implement the C++ type** in `include/tycho/detail/vf/` as a `VectorFunction<Derived, IR, OR, Jm, Hm>` subclass (see [VectorFunction Developer Guide](VectorFunction.md)), then include it from the appropriate aggregate header in `src/vf/tycho_vector_functions.h`.
 
-2. **Add a `TychoBind<T>` specialization** in an appropriate `*Bind.h` file (or create a new one in `src/Bindings/VectorFunctions/`):
+2. **Add a `TychoBind<T>` specialization** in an appropriate `*_bind.h` file (or create a new one in `src/bindings/vf/`):
 
 ```cpp
 template <> struct TychoBind<MyNewFunction> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<MyNewFunction>(m, name);
         obj.def(nb::init</* constructor args */>());
-        Bind::DenseBaseBuild<MyNewFunction>(obj);
-        // Optional: Bind::SegBuild if it needs full math/indexing API
+        bind::DenseBaseBuild<MyNewFunction>(obj);
+        // Optional: bind::SegBuild if it needs full math/indexing API
     }
 };
 ```
@@ -834,7 +850,7 @@ template <> struct TychoBind<MyNewFunction> {
 reg.Build_Register<MyNewFunction>(reg.vfmod, "MyNewFunction");
 ```
 
-4. **Update CMakeLists.txt** if you created a new `.cpp` file -- add it to the `nanobind_add_module(_tychopy ...)` list.
+4. **Update CMakeLists.txt** if you created a new `.cpp` file -- add it to the `nanobind_add_module(_tychopy ...)` list in `src/bindings/CMakeLists.txt`.
 
 5. **Re-export in Python** -- add to `tychopy/VectorFunctions/__init__.py`:
 
@@ -848,14 +864,14 @@ Use `BuildGenODEModule` for a generic ODE (accepts any VectorFunction as dynamic
 
 ```cpp
 // In the appropriate build function:
-Bind::BuildGenODEModule<BaseType, XV, UV, PV>("my_ode", reg.ocmod, reg);
+tycho::bind::BuildGenODEModule<BaseType, XV, UV, PV>("my_ode", reg.ocmod, reg);
 ```
 
 This creates a submodule `_tychopy.OptimalControl.my_ode` with `ode`, `integrator`, and `phase` classes.
 
 ### Adding a New Type Caster
 
-1. Add the specialization to `TypeCasters.h`:
+1. Add the specialization to `type_casters.h`:
 
 ```cpp
 template <> struct type_caster<MyType> {
@@ -865,16 +881,16 @@ template <> struct type_caster<MyType> {
 };
 ```
 
-2. Place it **before** the STL caster includes in `TypeCasters.h` if any STL caster might reference it.
+2. Place it **before** the STL caster includes in `type_casters.h` if any STL caster might reference it.
 
 3. Rebuild -- the PCH will pick it up automatically.
 
 ### Checklist for Any New Binding
 
-- [ ] File is in `src/Bindings/` (not in core `src/` directories)
+- [ ] File is in `src/bindings/` (not in core `src/` directories)
 - [ ] Header is guarded with `#ifdef TYCHO_PYTHON_BINDINGS`
 - [ ] Include paths use explicit subdirectory names (no shadowing)
-- [ ] New `.cpp` files added to `nanobind_add_module(_tychopy ...)` in `src/Bindings/CMakeLists.txt`
+- [ ] New `.cpp` files added to `nanobind_add_module(_tychopy ...)` in `src/bindings/CMakeLists.txt`
 - [ ] `nb::arg(...).none()` used for any parameter that accepts Python `None`
 - [ ] `nb::is_operator()` used for all dunder methods
 - [ ] `nb::call_guard<nb::gil_scoped_release>()` used for parallel methods
@@ -885,71 +901,71 @@ template <> struct type_caster<MyType> {
 
 ## 12. Reference: Complete File Listing
 
-Every file in `src/Bindings/` with a one-line description:
+Every file in `src/bindings/` with a one-line description:
 
 | File | Purpose |
 |---|---|
 | **Top-level** | |
 | `CMakeLists.txt` | Build rules for `pch_bindings` and `_tychopy` targets |
-| `TychoModule.cpp` | `NB_MODULE(_tychopy, m)` entry point; orchestrates all build functions |
-| `FunctionRegistry.h` | `TychoBind<T>` primary template; `FunctionRegistry` struct with submodule refs |
-| `TypeCasters.h` | Custom type casters: VectorXd, VectorXi, Tensor, VarIndexType, ScaleType, variants |
-| `pch_nb.h` | Binding PCH: nanobind headers, TypeCasters, FunctionRegistry, JetBind |
-| `VectorFunctionsBind.h` | Aggregate include for VF binding headers (CommonFunctions, DenseBase, Generic, etc.) |
-| `UtilsBind.cpp` | Thread pool, timers, color console, memory utilities |
-| `BumpAllocatorBind.cpp` | Bump allocator / memory manager binding implementation |
-| `BumpAllocatorBind.h` | Bump allocator / memory manager binding declaration |
-| **VectorFunctions/** | |
-| `DenseFunctionBaseBind.h` | `DenseBaseBuild`, `DoubleMathBuild`, `UnaryMathBuild`, `BinaryMathBuild`, `BinaryOperatorsBuild`, `FunctionIndexingBuild`, `ConditionalOperatorsBuild` |
-| `CommonFunctionsBind.h` | `SegBuild`; `TychoBind` for Segment, Arguments, Constant, NestedFunction, ParsedInput, TwoFunctionSum, NormalizedPower, IntegralNorm |
-| `GenericFunctionBind.h` | `GenericBuild`, `MinMaxBuild`, `ComparativeBuild`, `ConditionalBuild`, `IfElseBuild` |
-| `VectorFunctionBind.h` | `TychoBind` specializations for VectorFunction wrapper types |
-| `InterpTableBind.h` | `InterpTable1DBuild`, `InterpTable2DBuild`, `InterpTable3DBuild`, `InterpTable4DBuild` |
-| `PythonFunctions.h` | `PyVectorFunction` / `PyScalarFunction` -- Python-callable VF wrappers using FD derivatives |
+| `tycho_module.cpp` | `NB_MODULE(_tychopy, m)` entry point; orchestrates all build functions |
+| `function_registry.h` | `TychoBind<T>` primary template; `FunctionRegistry` struct with submodule refs |
+| `type_casters.h` | Custom type casters: VectorXd, VectorXi, Tensor, VarIndexType, ScaleType, variants |
+| `pch_nb.h` | Binding PCH: nanobind headers, type_casters, function_registry, jet_bind |
+| `vector_functions_bind.h` | Aggregate include for VF binding headers (common_functions, dense_function_base, generic, etc.) |
+| `utils_bind.cpp` | Thread pool, timers, color console, memory utilities |
+| `bump_allocator_bind.cpp` | Bump allocator / memory manager binding implementation |
+| `bump_allocator_bind.h` | Bump allocator / memory manager binding declaration |
+| **vf/** | |
+| `dense_function_base_bind.h` | `DenseBaseBuild`, `DoubleMathBuild`, `UnaryMathBuild`, `BinaryMathBuild`, `BinaryOperatorsBuild`, `FunctionIndexingBuild`, `ConditionalOperatorsBuild` |
+| `common_functions_bind.h` | `SegBuild`; `TychoBind` for Segment, Arguments, Constant, NestedFunction, ParsedInput, TwoFunctionSum, NormalizedPower, IntegralNorm |
+| `generic_function_bind.h` | `GenericBuild`, `MinMaxBuild`, `ComparativeBuild`, `ConditionalBuild`, `IfElseBuild` |
+| `vector_function_bind.h` | `TychoBind` specializations for VectorFunction wrapper types |
+| `interp_table_bind.h` | `InterpTable1DBuild`, `InterpTable2DBuild`, `InterpTable3DBuild`, `InterpTable4DBuild` |
+| `python_functions.h` | `PyVectorFunction` / `PyScalarFunction` -- Python-callable VF wrappers using FD derivatives |
 | `python_arg_parsing.h` | `ParsePythonArgs()`, `ParsePythonArgsScalar()` declarations |
-| `PythonArgParsing.cpp` | Implementations of ParsePythonArgs/ParsePythonArgsScalar |
-| `Tycho_VectorFunctions.cpp` | `VectorFunctionBuild()` orchestrator |
-| `VectorFunctionBuildPart1.cpp` | VF type registrations (first half) |
-| `VectorFunctionBuildPart2.cpp` | VF type registrations (second half) |
-| `ArgsSegBuildPart1.cpp` | Arguments/Segment template instantiations (part 1 of 5) |
-| `ArgsSegBuildPart2.cpp` | Arguments/Segment template instantiations (part 2 of 5) |
-| `ArgsSegBuildPart3.cpp` | Arguments/Segment template instantiations (part 3 of 5) |
-| `ArgsSegBuildPart4.cpp` | Arguments/Segment template instantiations (part 4 of 5) |
-| `ArgsSegBuildPart5.cpp` | Arguments/Segment template instantiations (part 5 of 5) |
-| `BulkOperationsBuild.cpp` | Stack, Sum, SumElems, StackScalar, SumScalar bindings |
-| `FreeFunctionsBuild.cpp` | Module-level free functions (cross, dot, arctan2, etc.) |
-| `MatrixFunctionBuild.cpp` | ColMatrix, RowMatrix type bindings |
-| **OptimalControl/** | |
-| `ODEPhaseBind.h` | `TychoBind` for ODEPhase, StateFunction, LinkFunction, FDDerivArbitrary; `ODEPhaseBuildImpl` helper; forward declarations for ODEPhaseBase, LGLInterpTable, OptimalControlProblem |
-| `ODEBind.h` | `ODE_ExpressionBuild`, `BuildODEModule`, `BuildGenODEModule`, `TychoBind<InterpFunction>` |
-| `ODESizesBind.h` | `ODESizeBuild<XV,UV,PV,Derived>` helper |
-| `ODEArgumentsBind.h` | ODEArguments binding |
-| `MeshIterateInfoBind.h` | MeshIterateInfo binding declaration |
-| `MeshIterateInfoBind.cpp` | MeshIterateInfo binding implementation |
-| `Tycho_OptimalControl.cpp` | `OptimalControlBuild()` orchestrator |
-| `GenericODESBuildPart1.cpp` | GenericODE instantiations (part 1 of 6) |
-| `GenericODESBuildPart2.cpp` | GenericODE instantiations (part 2 of 6) |
-| `GenericODESBuildPart3.cpp` | GenericODE instantiations (part 3 of 6) |
-| `GenericODESBuildPart4.cpp` | GenericODE instantiations (part 4 of 6) |
-| `GenericODESBuildPart5.cpp` | GenericODE instantiations (part 5 of 6) |
-| `GenericODESBuildPart6.cpp` | GenericODE instantiations (part 6 of 6) |
-| `ODEPhaseBaseBind.cpp` | Out-of-line `TychoBind<ODEPhaseBase>::Build` implementation |
-| `OptimalControlProblemBind.cpp` | Out-of-line `TychoBind<OptimalControlProblem>::Build` implementation |
-| `LGLInterpTableBind.cpp` | Out-of-line `TychoBind<LGLInterpTable>::Build` implementation |
-| **Solvers/** | |
-| `JetBind.h` | `TychoBind<Jet>` declaration; `JetInvoker` partial spec for `nb::args` |
-| `JetBind.cpp` | `TychoBind<Jet>::Build` implementation |
-| `PSIOPTBind.h` | `TychoBind<PSIOPT>` declaration |
-| `PSIOPTBind.cpp` | `TychoBind<PSIOPT>::Build` implementation |
-| `OptimizationProblemBind.h` | `TychoBind<OptimizationProblem>` declaration |
-| `OptimizationProblemBind.cpp` | `TychoBind<OptimizationProblem>::Build` implementation |
-| `OptimizationProblemBase.cpp` | OptimizationProblemBase binding |
-| `Tycho_Solvers.cpp` | `SolversBuild()` orchestrator |
-| **Astro/** | |
-| `Tycho_Astro.cpp` | `AstroBuild()` orchestrator |
-| `KeplerUtils.cpp` | Kepler utility function bindings (cartesian/classic/modified conversions, propagation) |
-| `KeplerModel.cpp` | Kepler ODE model bindings (Kepler.ode, Kepler.phase, etc.) |
-| `LambertSolversBind.cpp` | Lambert solver bindings (includes `Astro/LambertSolvers.h` directly, not the full aggregate) |
-| **Integrators/** | |
-| `IntegratorBind.h` | `TychoBind<Integrator<DODE>>` with all integrate/integrate_dense/integrate_stm methods; `IntegratorBuildConstructors` |
-| `RKCoeffsBind.cpp` | Runge-Kutta coefficient table and method selection bindings |
+| `python_arg_parsing.cpp` | Implementations of ParsePythonArgs/ParsePythonArgsScalar |
+| `tycho_vector_functions.cpp` | `VectorFunctionBuild()` orchestrator |
+| `vector_function_build_part1.cpp` | VF type registrations (first half) |
+| `vector_function_build_part2.cpp` | VF type registrations (second half) |
+| `args_seg_build_part1.cpp` | Arguments/Segment template instantiations (part 1 of 5) |
+| `args_seg_build_part2.cpp` | Arguments/Segment template instantiations (part 2 of 5) |
+| `args_seg_build_part3.cpp` | Arguments/Segment template instantiations (part 3 of 5) |
+| `args_seg_build_part4.cpp` | Arguments/Segment template instantiations (part 4 of 5) |
+| `args_seg_build_part5.cpp` | Arguments/Segment template instantiations (part 5 of 5) |
+| `bulk_operations_build.cpp` | Stack, Sum, SumElems, StackScalar, SumScalar bindings |
+| `free_functions_build.cpp` | Module-level free functions (cross, dot, arctan2, etc.) |
+| `matrix_function_build.cpp` | ColMatrix, RowMatrix type bindings |
+| **optimal_control/** | |
+| `ode_phase_bind.h` | `TychoBind` for ODEPhase, StateFunction, LinkFunction, FDDerivArbitrary; `ODEPhaseBuildImpl` helper; forward declarations for ODEPhaseBase, LGLInterpTable, OptimalControlProblem |
+| `ode_bind.h` | `ODE_ExpressionBuild`, `BuildODEModule`, `BuildGenODEModule`, `TychoBind<InterpFunction>` |
+| `ode_sizes_bind.h` | `ODESizeBuild<XV,UV,PV,Derived>` helper |
+| `ode_arguments_bind.h` | ODEArguments binding |
+| `mesh_iterate_info_bind.h` | MeshIterateInfo binding declaration |
+| `mesh_iterate_info_bind.cpp` | MeshIterateInfo binding implementation |
+| `tycho_optimal_control.cpp` | `OptimalControlBuild()` orchestrator |
+| `generic_odes_build_part1.cpp` | GenericODE instantiations (part 1 of 6) |
+| `generic_odes_build_part2.cpp` | GenericODE instantiations (part 2 of 6) |
+| `generic_odes_build_part3.cpp` | GenericODE instantiations (part 3 of 6) |
+| `generic_odes_build_part4.cpp` | GenericODE instantiations (part 4 of 6) |
+| `generic_odes_build_part5.cpp` | GenericODE instantiations (part 5 of 6) |
+| `generic_odes_build_part6.cpp` | GenericODE instantiations (part 6 of 6) |
+| `ode_phase_base_bind.cpp` | Out-of-line `TychoBind<ODEPhaseBase>::Build` implementation |
+| `optimal_control_problem_bind.cpp` | Out-of-line `TychoBind<OptimalControlProblem>::Build` implementation |
+| `lgl_interp_table_bind.cpp` | Out-of-line `TychoBind<LGLInterpTable>::Build` implementation |
+| **solvers/** | |
+| `jet_bind.h` | `TychoBind<Jet>` declaration; `JetInvoker` partial spec for `nb::args` |
+| `jet_bind.cpp` | `TychoBind<Jet>::Build` implementation |
+| `psiopt_bind.h` | `TychoBind<PSIOPT>` declaration |
+| `psiopt_bind.cpp` | `TychoBind<PSIOPT>::Build` implementation |
+| `optimization_problem_bind.h` | `TychoBind<OptimizationProblem>` declaration |
+| `optimization_problem_bind.cpp` | `TychoBind<OptimizationProblem>::Build` implementation |
+| `optimization_problem_base.cpp` | OptimizationProblemBase binding |
+| `tycho_solvers.cpp` | `SolversBuild()` orchestrator |
+| **astro/** | |
+| `tycho_astro.cpp` | `AstroBuild()` orchestrator |
+| `kepler_utils.cpp` | Kepler utility function bindings (cartesian/classic/modified conversions, propagation) |
+| `kepler_model.cpp` | Kepler ODE model bindings (Kepler.ode, Kepler.phase, etc.) |
+| `lambert_solvers_bind.cpp` | Lambert solver bindings (includes `astro/lambert_solvers.h` directly, not the full aggregate) |
+| **integrators/** | |
+| `integrator_bind.h` | `TychoBind<Integrator<DODE>>` with all integrate/integrate_dense/integrate_stm methods; `IntegratorBuildConstructors` |
+| `rk_coeffs_bind.cpp` | Runge-Kutta coefficient table and method selection bindings |

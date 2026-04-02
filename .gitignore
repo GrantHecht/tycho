@@ -553,3 +553,5 @@ examples/python_examples/Plots/**
 
 # Claude Code planning artifacts
 docs/superpowers/
+# Git worktrees
+.worktrees/

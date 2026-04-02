@@ -32,11 +32,11 @@ def PhaseMeshErrorPlot(phase, show=True):
     axs[1].grid(True)
     axs[2].grid(True)
 
-    Miters = phase.getMeshIters()
+    Miters = phase.get_mesh_iters()
 
     cols = sns.color_palette("plasma", len(Miters))
 
-    tol = phase.MeshTol
+    tol = phase.mesh_tol
     axs[0].plot(
         [0, 1],
         [tol, tol],
@@ -81,7 +81,7 @@ def PhaseMeshErrorPlot(phase, show=True):
 
 def OCPMeshErrorPlot(ocp, show=True):
 
-    for phase in ocp.Phases:
+    for phase in ocp.phases:
         PhaseMeshErrorPlot(phase, show=False)
 
     if show:

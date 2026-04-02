@@ -8,14 +8,13 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 struct DirectAssignment {};
 struct PlusEqualsAssignment {};
@@ -32,4 +31,4 @@ template <class Scalar> struct ScaledPlusEqualsAssignment {
     ScaledPlusEqualsAssignment(Scalar v) : value(v) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -8,25 +8,28 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+using vf::Arguments;
 
 template <int _XV = -1, int _UV = -1, int _PV = -1>
 struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV, _PV> {
 
     using Base = Arguments<ODESize<_XV, _UV, _PV>::XtUPV>;
 
-    ODEArguments(int Xv, int Uv, int Pv) : Base(Xv + Uv + Pv + 1) { this->setXtUPVars(Xv, Uv, Pv); }
+    ODEArguments(int Xv, int Uv, int Pv) : Base(Xv + Uv + Pv + 1) {
+        this->set_xt_up_vars(Xv, Uv, Pv);
+    }
     ODEArguments(int Xv, int Uv) : ODEArguments(Xv, Uv, 0) {}
     ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::oc

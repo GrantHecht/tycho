@@ -13,9 +13,15 @@
 #include <numbers>
 #include <random>
 
-namespace TychoTest {
+// Bring all sub-namespaces into file scope so every test translation unit
+// that includes this header can use unqualified names.
+using namespace tycho;
+using namespace tycho::utils;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
 
-using namespace Tycho;
+namespace TychoTest {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Deterministic pseudo-random vector
@@ -47,10 +53,10 @@ class VectorFunctionFixture : public ::testing::Test {
 
 struct ScopedThreadCount {
     int prev;
-    explicit ScopedThreadCount(int n) : prev(Tycho::get_num_threads()) {
-        Tycho::set_num_threads(n);
+    explicit ScopedThreadCount(int n) : prev(tycho::utils::get_num_threads()) {
+        tycho::utils::set_num_threads(n);
     }
-    ~ScopedThreadCount() { Tycho::set_num_threads(prev); }
+    ~ScopedThreadCount() { tycho::utils::set_num_threads(prev); }
     ScopedThreadCount(const ScopedThreadCount &) = delete;
     ScopedThreadCount &operator=(const ScopedThreadCount &) = delete;
 };
@@ -63,8 +69,8 @@ struct ScopedThreadCount {
 template <class Func>
 void verify_jacobian_analytical(Func &func, const Eigen::VectorXd &x,
                                 const Eigen::MatrixXd &expected_jx, double tol = 1e-12) {
-    const int ir = func.IRows();
-    const int or_ = func.ORows();
+    const int ir = func.input_rows();
+    const int or_ = func.output_rows();
     Eigen::VectorXd fx(or_);
     Eigen::MatrixXd jx(or_, ir);
     fx.setZero();
@@ -86,8 +92,8 @@ void verify_jacobian_analytical(Func &func, const Eigen::VectorXd &x,
 template <class Func>
 void verify_adjoint_consistency(Func &func, const Eigen::VectorXd &x, const Eigen::VectorXd &lm,
                                 double tol = 1e-12) {
-    const int ir = func.IRows();
-    const int or_ = func.ORows();
+    const int ir = func.input_rows();
+    const int or_ = func.output_rows();
 
     // Forward: compute jacobian
     Eigen::VectorXd fx1(or_);
@@ -118,8 +124,8 @@ void verify_adjoint_consistency(Func &func, const Eigen::VectorXd &x, const Eige
 template <class Func>
 void verify_hessian_consistency(Func &func, const Eigen::VectorXd &x, const Eigen::VectorXd &lm,
                                 double tol = 1e-12) {
-    const int ir = func.IRows();
-    const int or_ = func.ORows();
+    const int ir = func.input_rows();
+    const int or_ = func.output_rows();
 
     Eigen::VectorXd fx(or_);
     Eigen::MatrixXd jx(or_, ir);

@@ -12,9 +12,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 //   - PR 9: Removed dead Model<>/ExternalInterface<> boilerplate
 // =============================================================================
 
@@ -37,18 +36,18 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::solvers {
 
 struct SizableSpec {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -57,11 +56,11 @@ struct SizableSpec {
         // Your (internal) interface goes here.
         virtual std::string name() const = 0;
 
-        virtual int IRows() const = 0;
-        virtual int ORows() const = 0;
+        virtual int input_rows() const = 0;
+        virtual int output_rows() const = 0;
         virtual bool thread_safe() const = 0;
     };
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

@@ -81,20 +81,20 @@ class RelDynModel(oc.ODEBase):
         args = oc.ODEArguments(Xvars, Uvars)
 
         ## Position Velocity of Servicer
-        X = args.XVec().head3()
-        V = args.XVec().segment3(3)
+        X = args.x_vec().head3()
+        V = args.x_vec().segment3(3)
 
         ## Body Frame quat and angvel of Servicer
-        q = args.XVec().segment(6, 4).normalized()
-        w = args.XVec().segment3(10)
+        q = args.x_vec().segment(6, 4).normalized()
+        w = args.x_vec().segment3(10)
 
         ## Body Frame quat and angvel of Target
-        p = args.XVec().segment(13, 4).normalized()
-        phi = args.XVec().segment3(17)
+        p = args.x_vec().segment(13, 4).normalized()
+        phi = args.x_vec().segment3(17)
 
         ## Body Frame Thrust and Torque of Servicer
-        Thrust = args.UVec().head3()
-        Torque = args.UVec().tail3()
+        Thrust = args.u_vec().head3()
+        Torque = args.u_vec().tail3()
 
         Xdot = V
 
@@ -102,16 +102,16 @@ class RelDynModel(oc.ODEBase):
             [2 * n * V[1] + (3 * n**2) * X[0], -2 * n * V[0], -(n**2) * X[2]]
         )
 
-        Thrust_global = vf.quatRotate(q, Thrust)
+        Thrust_global = vf.quat_rotate(q, Thrust)
         Vdot = Vdoto + Thrust_global / m
 
-        qdot = vf.quatProduct(q, w.padded_lower(1)) / 2.0
-        L1 = w.cwiseProduct(I1)
-        wdot = (L1.cross(w) + Torque).cwiseQuotient(I1)
+        qdot = vf.quat_product(q, w.padded_lower(1)) / 2.0
+        L1 = w.cwise_product(I1)
+        wdot = (L1.cross(w) + Torque).cwise_quotient(I1)
 
-        pdot = vf.quatProduct(p, phi.padded_lower(1)) / 2.0
-        L2 = phi.cwiseProduct(I2)
-        phidot = (L2.cross(phi)).cwiseQuotient(I2)
+        pdot = vf.quat_product(p, phi.padded_lower(1)) / 2.0
+        L2 = phi.cwise_product(I2)
+        phidot = (L2.cross(phi)).cwise_quotient(I2)
 
         ode = vf.stack([Xdot, Vdot, qdot, wdot, pdot, phidot])
 
@@ -128,28 +128,28 @@ class RelDynModel2(oc.ODEBase):
         args = oc.ODEArguments(Xvars, Uvars)
 
         ## Position Velocity of Servicer
-        X = args.XVec().head3()
-        V = args.XVec().segment3(3)
+        X = args.x_vec().head3()
+        V = args.x_vec().segment3(3)
 
         ## Body Frame quat and angvel of Servicer
-        q = args.XVec().segment(6, 4).normalized()
-        w = args.XVec().segment3(10)
+        q = args.x_vec().segment(6, 4).normalized()
+        w = args.x_vec().segment3(10)
 
         ## Body Frame Thrust and Torque of Servicer
-        Thrust = args.UVec().head3()
-        Torque = args.UVec().tail3()
+        Thrust = args.u_vec().head3()
+        Torque = args.u_vec().tail3()
 
         Xdot = V
         Vdoto = vf.stack(
             [2 * n * V[1] + (3 * n**2) * X[0], -2 * n * V[0], -(n**2) * X[2]]
         )
 
-        Thrust_global = vf.quatRotate(q, Thrust)
+        Thrust_global = vf.quat_rotate(q, Thrust)
         Vdot = Vdoto + Thrust_global / m
 
-        qdot = vf.quatProduct(q, w.padded_lower(1)) / 2.0
-        L1 = w.cwiseProduct(I1)
-        wdot = (L1.cross(w) + Torque).cwiseQuotient(I1)
+        qdot = vf.quat_product(q, w.padded_lower(1)) / 2.0
+        L1 = w.cwise_product(I1)
+        wdot = (L1.cross(w) + Torque).cwise_quotient(I1)
 
         ode = vf.stack([Xdot, Vdot, qdot, wdot])
 
@@ -166,12 +166,12 @@ class TorqueFree(oc.ODEBase):
         args = oc.ODEArguments(Xvars, Uvars)
 
         ## Body Frame quat and angvel of Target
-        p = args.XVec().head(4).normalized()
-        phi = args.XVec().segment3(4)
+        p = args.x_vec().head(4).normalized()
+        phi = args.x_vec().segment3(4)
 
-        pdot = vf.quatProduct(p, phi.padded_lower(1)) / 2.0
-        L2 = phi.cwiseProduct(I2)
-        phidot = (L2.cross(phi)).cwiseQuotient(I2)
+        pdot = vf.quat_product(p, phi.padded_lower(1)) / 2.0
+        L2 = phi.cwise_product(I2)
+        phidot = (L2.cross(phi)).cwise_quotient(I2)
 
         ode = vf.stack([pdot, phidot])
 
@@ -191,12 +191,12 @@ def RendCon(ud):
     q = q.normalized()
     p = p.normalized()
 
-    Xdq = vf.quatRotate(q, ud)
-    vdq = vf.quatRotate(q, w)
+    Xdq = vf.quat_rotate(q, ud)
+    vdq = vf.quat_rotate(q, w)
     Vdq = -Xdq.cross(vdq)
 
-    Xdp = vf.quatRotate(p, ud)
-    vdp = vf.quatRotate(p, phi)
+    Xdp = vf.quat_rotate(p, ud)
+    vdp = vf.quat_rotate(p, phi)
     Vdp = -Xdp.cross(vdp)
 
     return vf.stack([X + Xdq - Xdp, V + Vdq - Vdp])
@@ -344,20 +344,20 @@ def Form1():
     IG = integ.integrate_dense(X0, 200 / Tstar, 1000)
 
     phase = ode.phase("LGL3", IG, 384)
-    phase.setControlMode("BlockConstant")
+    phase.set_control_mode("BlockConstant")
 
-    phase.addBoundaryValue("Front", range(0, 21), X0[0:21])
-    phase.addLUVarBounds("Path", [21, 22, 23], -MaxThrust, MaxThrust, 0.1)
-    phase.addLUVarBounds("Path", [24, 25, 26], -MaxTorque, MaxTorque, 1)
-    phase.addLowerNormBound("Path", [0, 1, 2], 2 * Srad, 1.0)
-    phase.addEqualCon("Back", RendCon(Udvec), range(0, 20))
-    phase.addDeltaTimeObjective(1.0)
-    phase.optimizer.set_BoundFraction(0.995)
-    phase.optimizer.set_PrintLevel(1)
+    phase.add_boundary_value("Front", range(0, 21), X0[0:21])
+    phase.add_lu_var_bounds("Path", [21, 22, 23], -MaxThrust, MaxThrust, 0.1)
+    phase.add_lu_var_bounds("Path", [24, 25, 26], -MaxTorque, MaxTorque, 1)
+    phase.add_lower_norm_bound("Path", [0, 1, 2], 2 * Srad, 1.0)
+    phase.add_equal_con("Back", RendCon(Udvec), range(0, 20))
+    phase.add_delta_time_objective(1.0)
+    phase.optimizer.set_bound_fraction(0.995)
+    phase.optimizer.set_print_level(1)
 
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     tf = Traj[-1][20] * Tstar
 
@@ -371,7 +371,7 @@ def Form2():
     ode_torquefree = TorqueFree(Ivec)
 
     integ_torquefree = ode_torquefree.integrator(0.01)
-    integ_torquefree.Adaptive = True
+    integ_torquefree.adaptive = True
 
     ## generate target trajectory for boundary condition
     SimTime = 600 / Tstar
@@ -399,25 +399,25 @@ def Form2():
     ode = RelDynModel2(Ivec, n, m)
 
     integ = ode.integrator(0.01)
-    integ.Adaptive = True
+    integ.adaptive = True
 
     Traj = integ.integrate_dense(X0, 200 / Tstar, 1000)
 
     phase = ode.phase("LGL3", Traj, 384)
-    phase.setControlMode("BlockConstant")
-    phase.addBoundaryValue("Front", range(0, 14), X0[0:14])
-    phase.addLUVarBounds("Path", [14, 15, 16], -MaxThrust, MaxThrust, 0.1)
-    phase.addLUVarBounds("Path", [17, 18, 19], -MaxTorque, MaxTorque, 1)
-    phase.addLowerNormBound("Path", [0, 1, 2], 2 * Srad, 1.0)
-    phase.addEqualCon("Last", RendCon2(Udvec, TargetTab), range(0, 14))
-    phase.addUpperDeltaTimeBound(SimTime)
-    phase.addDeltaTimeObjective(1.0)
-    phase.optimizer.set_BoundFraction(0.995)
+    phase.set_control_mode("BlockConstant")
+    phase.add_boundary_value("Front", range(0, 14), X0[0:14])
+    phase.add_lu_var_bounds("Path", [14, 15, 16], -MaxThrust, MaxThrust, 0.1)
+    phase.add_lu_var_bounds("Path", [17, 18, 19], -MaxTorque, MaxTorque, 1)
+    phase.add_lower_norm_bound("Path", [0, 1, 2], 2 * Srad, 1.0)
+    phase.add_equal_con("Last", RendCon2(Udvec, TargetTab), range(0, 14))
+    phase.add_upper_delta_time_bound(SimTime)
+    phase.add_delta_time_objective(1.0)
+    phase.optimizer.set_bound_fraction(0.995)
 
-    phase.optimizer.set_PrintLevel(1)
+    phase.optimizer.set_print_level(1)
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     tf = Traj[-1][13] * Tstar
 

@@ -33,11 +33,11 @@ ScalarFunction = _tychopy.VectorFunctions.ScalarFunction
 Segment = _tychopy.VectorFunctions.Segment
 Segment2 = _tychopy.VectorFunctions.Segment2
 Segment3 = _tychopy.VectorFunctions.Segment3
-Stack = _tychopy.VectorFunctions.Stack
-StackScalar = _tychopy.VectorFunctions.StackScalar
-Sum = _tychopy.VectorFunctions.Sum
-SumElems = _tychopy.VectorFunctions.SumElems
-SumScalar = _tychopy.VectorFunctions.SumScalar
+Stack = _tychopy.VectorFunctions.stack
+StackScalar = _tychopy.VectorFunctions.stack_scalar
+Sum = _tychopy.VectorFunctions.sum
+SumElems = _tychopy.VectorFunctions.sum_elems
+SumScalar = _tychopy.VectorFunctions.sum_scalar
 VectorFunction = _tychopy.VectorFunctions.VectorFunction
 
 arccos = _tychopy.VectorFunctions.arccos
@@ -55,8 +55,8 @@ def cross(a, b):
     return _cross_cpp(a, b)
 
 
-cwiseProduct = _tychopy.VectorFunctions.cwiseProduct
-cwiseQuotient = _tychopy.VectorFunctions.cwiseQuotient
+cwise_product = _tychopy.VectorFunctions.cwise_product
+cwise_quotient = _tychopy.VectorFunctions.cwise_quotient
 dot = _tychopy.VectorFunctions.dot
 doublecross = _tychopy.VectorFunctions.doublecross
 exp = _tychopy.VectorFunctions.exp
@@ -67,7 +67,7 @@ matmul = _tychopy.VectorFunctions.matmul
 norm = _tychopy.VectorFunctions.norm
 normalize = _tychopy.VectorFunctions.normalize
 pow = _tychopy.VectorFunctions.pow
-quatProduct = _tychopy.VectorFunctions.quatProduct
+quat_product = _tychopy.VectorFunctions.quat_product
 sin = _tychopy.VectorFunctions.sin
 sinh = _tychopy.VectorFunctions.sinh
 sqrt = _tychopy.VectorFunctions.sqrt

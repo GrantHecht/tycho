@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int MRows, int MCols> struct MatrixRowsCols;
 
@@ -39,7 +38,7 @@ struct ColMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func
     using Base = MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func1::ORC,
                                     1 + sizeof...(Funcs), Eigen::ColMajor>;
     ColMajorMatrix(Func1 f1, Funcs... fs)
-        : Base(StackedOutputs{f1, fs...}, f1.ORows(), 1 + sizeof...(Funcs)) {}
+        : Base(StackedOutputs{f1, fs...}, f1.output_rows(), 1 + sizeof...(Funcs)) {}
 };
 
 template <class Func1, class... Funcs>
@@ -48,33 +47,33 @@ struct RowMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + 
     using Base = MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + sizeof...(Funcs),
                                     Func1::ORC, Eigen::RowMajor>;
     RowMajorMatrix(Func1 f1, Funcs... fs)
-        : Base(StackedOutputs{f1, fs...}, 1 + sizeof...(Funcs), f1.ORows()) {}
+        : Base(StackedOutputs{f1, fs...}, 1 + sizeof...(Funcs), f1.output_rows()) {}
 };
 
 template <int MRows, int MCols> struct MatrixRowsCols {
-    static const int MatrixRows = MRows;
-    static const int MatrixCols = MCols;
+    static const int matrix_rows_ = MRows;
+    static const int matrix_cols_ = MCols;
 
     MatrixRowsCols(int rows, int cols) {}
 };
 
 template <> struct MatrixRowsCols<-1, -1> {
-    int MatrixRows = 0;
-    int MatrixCols = 0;
+    int matrix_rows_ = 0;
+    int matrix_cols_ = 0;
 
-    MatrixRowsCols(int rows, int cols) : MatrixRows(rows), MatrixCols(cols) {}
+    MatrixRowsCols(int rows, int cols) : matrix_rows_(rows), matrix_cols_(cols) {}
 };
 
 template <int MCols> struct MatrixRowsCols<-1, MCols> {
-    int MatrixRows = 0;
-    static const int MatrixCols = MCols;
-    MatrixRowsCols(int rows, int cols) : MatrixRows(rows) {}
+    int matrix_rows_ = 0;
+    static const int matrix_cols_ = MCols;
+    MatrixRowsCols(int rows, int cols) : matrix_rows_(rows) {}
 };
 
 template <int MRows> struct MatrixRowsCols<MRows, -1> {
-    static const int MatrixRows = MRows;
-    int MatrixCols = 0;
-    MatrixRowsCols(int rows, int cols) : MatrixCols(cols) {}
+    static const int matrix_rows_ = MRows;
+    int matrix_cols_ = 0;
+    MatrixRowsCols(int rows, int cols) : matrix_cols_(cols) {}
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

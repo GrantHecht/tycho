@@ -16,9 +16,11 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+using namespace tycho::solvers;
+
 namespace TychoTest {
 
-using namespace Tycho;
+using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Test fixture
@@ -32,7 +34,7 @@ class SolverTest : public VectorFunctionFixture {};
 
 inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 16) {
     auto phase = make_brach_phase(n_segs * 3 + 1, n_segs);
-    phase->optimizer->PrintLevel = 0;
+    phase->optimizer_->print_level_ = 0;
     return phase;
 }
 

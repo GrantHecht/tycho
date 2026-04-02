@@ -19,7 +19,7 @@
 #include <cstring>
 #include <utility>
 
-namespace Tycho {
+namespace tycho::utils {
 
 template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
     static constexpr std::size_t SBO_ALIGN = alignof(std::max_align_t);
@@ -165,4 +165,4 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
 template <typename C, std::size_t N>
 concept TypeStorageBase = requires(const C &c, TypeStorage<C, N> &s) { c.clone_into(s); };
 
-} // namespace Tycho
+} // namespace tycho::utils

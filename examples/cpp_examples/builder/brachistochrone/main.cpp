@@ -18,7 +18,13 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
+using namespace tycho::astro;
+using namespace tycho::utils;
 
 int main() {
     constexpr double g = 9.81;
@@ -36,8 +42,8 @@ int main() {
     // ── Define ODE via Builder API ──────────────────────────────────────
     auto ode = ODEBuilder(3, 1)
                    .define([g](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -61,23 +67,23 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
     // Front boundary: fix x, y, v, t
-    phase.addBoundaryValue(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
                            Eigen::Vector4d(x0, y0, v0, 0.0));
 
     // Back boundary: fix x, y
-    phase.addBoundaryValue(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase.addLUVarBound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
 
     // Objective: minimise flight time
-    phase.addDeltaTimeObjective(1.0);
+    phase.add_delta_time_objective(1.0);
 
     // ── Solve ───────────────────────────────────────────────────────────
     const auto status = phase.solve_optimize();
 
     if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        const auto result = phase.returnTraj();
+        const auto result = phase.return_traj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone (builder): optimal solution found\n";
         std::cout << "  Optimal time : " << result.back()[3] << " s\n";

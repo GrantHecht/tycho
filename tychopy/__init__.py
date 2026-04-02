@@ -23,10 +23,10 @@ import tychopy.Solvers
 import tychopy.Utils
 import tychopy.VectorFunctions
 
-SoftwareInfo = _tychopy.SoftwareInfo
+software_info = _tychopy.software_info
 
 if __name__ == "__main__":
-    _tychopy.SoftwareInfo()
+    _tychopy.software_info()
     mlist = inspect.getmembers(_tychopy)
     for m in mlist:
         print(m[0], "= _tychopy." + str(m[0]))

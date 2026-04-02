@@ -94,8 +94,8 @@ class CR3BP(oc.ode_6.ode):
         CR3BPFrame.__init__(self, P1mu, P2mu, lstar)
         ###################################
         args = oc.ODEArguments(6, 0)
-        r = args.XVec().head3()
-        v = args.XVec().tail3()
+        r = args.x_vec().head3()
+        v = args.x_vec().tail3()
         ode = self.CR3BPEOMs(r, v, otherAccs=[], otherEOMs=[])
         oc.ode_6.ode.__init__(self, ode, 6)
         ###################################
@@ -199,8 +199,8 @@ class CR3BP_LT(ODEBase, CR3BPFrame):
         CR3BPFrame.__init__(self, P1mu, P2mu, lstar)
         ###################################
         args = oc.ODEArguments(6, 3)
-        r = args.XVec().head3()
-        v = args.XVec().tail3()
+        r = args.x_vec().head3()
+        v = args.x_vec().tail3()
         u = args.tail3()
         otherAccs = [self.thruster.ThrustExpr(u, self.astar)]
 
@@ -325,8 +325,8 @@ class CR3BP_SolarSail(ODEBase, CR3BPFrame):
 
         ####################################
         args = oc.ODEArguments(6, 3)
-        r = args.XVec().head3()
-        v = args.XVec().tail3()
+        r = args.x_vec().head3()
+        v = args.x_vec().tail3()
         u = args.tail3()
         thrust = self.SailModel.ThrustExpr(r - self.P1, u, 1.0 - self.mu)
         ode = self.CR3BPEOMs(r, v, otherAccs=[thrust], otherEOMs=[])
@@ -348,8 +348,8 @@ class CR3BP_SolarSail_ZeroAlpha(ODEBase, CR3BPFrame):
 
         ####################################
         args = oc.ODEArguments(6, 0)
-        r = args.XVec().head3()
-        v = args.XVec().tail3()
+        r = args.x_vec().head3()
+        v = args.x_vec().tail3()
 
         thrust = (
             (r - self.P1).normalized_power3()

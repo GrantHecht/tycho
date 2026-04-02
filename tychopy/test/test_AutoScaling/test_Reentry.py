@@ -48,16 +48,16 @@ class ShuttleReentry(oc.ODEBase):
         ############################################################
         args = oc.ODEArguments(5, 2)
 
-        h = args.XVar(0)
-        theta = args.XVar(1)
-        v = args.XVar(2)
-        gamma = args.XVar(3)
-        psi = args.XVar(4)
+        h = args.x_var(0)
+        theta = args.x_var(1)
+        v = args.x_var(2)
+        gamma = args.x_var(3)
+        psi = args.x_var(4)
 
-        h, theta, v, gamma, psi = args.XVec().tolist()
+        h, theta, v, gamma, psi = args.x_vec().tolist()
 
-        alpha = args.UVar(0)
-        beta = args.UVar(1)
+        alpha = args.u_var(0)
+        beta = args.u_var(1)
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -96,7 +96,7 @@ class ShuttleReentry(oc.ODEBase):
         Vgroups["psi"] = psi
         Vgroups[("alpha", "AoA")] = alpha
         Vgroups["beta"] = beta
-        Vgroups[("t", "time")] = args.TVar()
+        Vgroups[("t", "time")] = args.t_var()
 
         ##############################################################
         super().__init__(ode, 5, 2, Vgroups=Vgroups)
@@ -160,33 +160,33 @@ class test_Reentry(unittest.TestCase):
 
         phase = ode.phase(tmode, TrajIG, self.NumSegments1)
 
-        phase.setAutoScaling(True)
-        phase.setUnits(h=Lstar, v=Vstar, t=Tstar)
+        phase.set_auto_scaling(True)
+        phase.set_units(h=Lstar, v=Vstar, t=Tstar)
 
-        phase.setControlMode(cmode)
-        phase.setAdaptiveMesh(True)
+        phase.set_control_mode(cmode)
+        phase.set_adaptive_mesh(True)
 
-        phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
-        phase.addLUVarBound("Path", "theta", np.deg2rad(-89.0), np.deg2rad(89.0))
-        phase.addLUVarBound("Path", "gamma", np.deg2rad(-89.0), np.deg2rad(89.0))
-        phase.addLUVarBound("Path", "AoA", np.deg2rad(-90.0), np.deg2rad(90.0))
-        phase.addLUVarBound("Path", "beta", np.deg2rad(-90.0), np.deg2rad(1.0))
-        phase.addUpperDeltaTimeBound(tmax, 1.0)
+        phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
+        phase.add_lu_var_bound("Path", "theta", np.deg2rad(-89.0), np.deg2rad(89.0))
+        phase.add_lu_var_bound("Path", "gamma", np.deg2rad(-89.0), np.deg2rad(89.0))
+        phase.add_lu_var_bound("Path", "AoA", np.deg2rad(-90.0), np.deg2rad(90.0))
+        phase.add_lu_var_bound("Path", "beta", np.deg2rad(-90.0), np.deg2rad(1.0))
+        phase.add_upper_delta_time_bound(tmax, 1.0)
 
-        phase.addBoundaryValue("Back", ["h", "v", "gamma"], [htf, vtf, gammatf])
+        phase.add_boundary_value("Back", ["h", "v", "gamma"], [htf, vtf, gammatf])
 
-        phase.addDeltaVarObjective("theta", -1.0)
+        phase.add_delta_var_objective("theta", -1.0)
 
-        phase.optimizer.set_SoeLSMode("L1")
-        phase.optimizer.set_OptLSMode("L1")
+        phase.optimizer.set_soe_ls_mode("L1")
+        phase.optimizer.set_opt_ls_mode("L1")
 
-        phase.optimizer.MaxLSIters = 2
-        phase.optimizer.MaxAccIters = 100
-        phase.optimizer.PrintLevel = 3
-        phase.setNumPartitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.PrintMeshInfo = False
-        phase.setMeshTol(mtol)
+        phase.optimizer.max_ls_iters = 2
+        phase.optimizer.max_acc_iters = 100
+        phase.optimizer.print_level = 3
+        phase.set_num_partitions(1, 1)
+        phase.optimizer.cnr_mode = True
+        phase.print_mesh_info = False
+        phase.set_mesh_tol(mtol)
 
         Flag1 = phase.solve_optimize()
 
@@ -194,7 +194,7 @@ class test_Reentry(unittest.TestCase):
             Flag1, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
-        Traj1 = phase.returnTraj()
+        Traj1 = phase.return_traj()
 
         Obj1 = Traj1[-1][1]
         ObjError1 = abs(Obj1 - self.FinalObj1)
@@ -204,11 +204,11 @@ class test_Reentry(unittest.TestCase):
             "Final objective significantly differs from known answer",
         )
 
-        phase.addUpperFuncBound(
+        phase.add_upper_func_bound(
             "Path", QFunc(), ["h", "v", "alpha"], Qlimit, 1 / Qlimit
         )
         Flag2 = phase.optimize()
-        Traj2 = phase.returnTraj()
+        Traj2 = phase.return_traj()
 
         self.assertEqual(
             Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"

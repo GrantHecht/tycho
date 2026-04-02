@@ -45,9 +45,9 @@ class BikeODE(oc.ODEBase):
         # acc is accelleration of bike
         # alpha is steering angle
 
-        x, y, psi, v = args.XVec().tolist()
+        x, y, psi, v = args.x_vec().tolist()
 
-        acc, alpha = args.UVec().tolist()
+        acc, alpha = args.u_vec().tolist()
 
         beta = vf.arctan((la / (la + lb)) * vf.tan(alpha))
 
@@ -120,18 +120,18 @@ for t in np.linspace(0, tfIG, 100):
 ode = BikeODE(la, lb)
 
 phase = ode.phase("LGL3", TrajIG, 128)
-phase.addBoundaryValue("Front", [0, 1, 2, 3, 4], [x0, y0, psi0, v0, t0])
-phase.addLUVarBound("Path", 3, vlbound, vubound)
-phase.addLUVarBound("Path", 5, -accbound, accbound)
-phase.addLUVarBound("Path", 6, -np.pi / 6, np.pi / 6)
-phase.addInequalCon("Path", ObstacleConstraint(xobs, yobs, obsrad, m), [0, 1])
-phase.addBoundaryValue("Back", [0, 1], [xf, yf])
-phase.addDeltaTimeObjective(1.0)
+phase.add_boundary_value("Front", [0, 1, 2, 3, 4], [x0, y0, psi0, v0, t0])
+phase.add_lu_var_bound("Path", 3, vlbound, vubound)
+phase.add_lu_var_bound("Path", 5, -accbound, accbound)
+phase.add_lu_var_bound("Path", 6, -np.pi / 6, np.pi / 6)
+phase.add_inequal_con("Path", ObstacleConstraint(xobs, yobs, obsrad, m), [0, 1])
+phase.add_boundary_value("Back", [0, 1], [xf, yf])
+phase.add_delta_time_objective(1.0)
 phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
 phase.optimize()
 
 
-TrajF = phase.returnTraj()
+TrajF = phase.return_traj()
 
 #########################################
 TT = np.array(TrajF).T

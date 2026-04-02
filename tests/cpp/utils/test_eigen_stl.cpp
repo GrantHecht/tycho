@@ -4,11 +4,11 @@
 // Tests Eigen<->std::vector conversion utilities from src/Utils/EigenSTL.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Utils/eigen_stl.h"
+#include "utils/eigen_stl.h"
 #include <Eigen/Core>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho::utils;
 
 TEST(EigenSTLTest, EigenToStdDynamic) {
     Eigen::VectorXd ev(3);

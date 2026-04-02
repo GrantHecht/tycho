@@ -42,8 +42,8 @@ class CartPole(oc.ODEBase):
         ####################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        x, theta, xdot, thetadot = XtU.XVec().tolist()
-        F = XtU.UVar(0)
+        x, theta, xdot, thetadot = XtU.x_vec().tolist()
+        F = XtU.u_var(0)
 
         Q = vf.stack([-g * vf.sin(theta), F + m2 * l * vf.sin(theta) * thetadot**2])
 
@@ -207,41 +207,45 @@ if __name__ == "__main__":
 
     phase = ode.phase("LGL5", IG, 64)
     # Fix first state (x,theta,xdot,thetadot) and time
-    phase.addBoundaryValue("First", range(0, 5), [0, 0, 0, 0, 0])
+    phase.add_boundary_value("First", range(0, 5), [0, 0, 0, 0, 0])
     # Fix last state (x,theta,xdot,thetadot) and time
-    phase.addBoundaryValue("Last", range(0, 5), [xf, np.pi, 0, 0, tf])
+    phase.add_boundary_value("Last", range(0, 5), [xf, np.pi, 0, 0, tf])
     # Bound control forces
-    phase.addLUVarBound("Path", 5, -Fmax, Fmax)
-    phase.addLUVarBound("Path", 0, -xmax, xmax)
+    phase.add_lu_var_bound("Path", 5, -Fmax, Fmax)
+    phase.add_lu_var_bound("Path", 0, -xmax, xmax)
     # Minimize the "control effort", the integral of square of applied force
-    phase.addIntegralObjective(Args(1)[0] ** 2, [5])
+    phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
-    phase.setNumPartitions(8, 8)
-    phase.optimizer.set_PrintLevel(1)
+    phase.set_num_partitions(8, 8)
+    phase.optimizer.set_print_level(1)
     phase.optimize()
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     ## Example of how to get exact timing statistics should you need to
     print(
         "Total Time (Sum of all below)             :",
-        phase.optimizer.LastTotalTime,
+        phase.optimizer.last_total_time,
         " s",
     )
     print(
         "Function/Derivative Eval Time             :",
-        phase.optimizer.LastFuncTime,
+        phase.optimizer.last_func_time,
         " s",
     )
     print(
-        "KKT Matrix Factor/Solve Time              :", phase.optimizer.LastKKTTime, " s"
+        "KKT Matrix Factor/Solve Time              :",
+        phase.optimizer.last_kkt_time,
+        " s",
     )
     print(
-        "KKT Matrix Pre-Analysis/Mem Alloc Time    :", phase.optimizer.LastPreTime, " s"
+        "KKT Matrix Pre-Analysis/Mem Alloc Time    :",
+        phase.optimizer.last_pre_time,
+        " s",
     )
     print(
         "Miscellaneous (Mostly Console Print) Time :",
-        phase.optimizer.LastMiscTime,
+        phase.optimizer.last_misc_time,
         " s",
     )
 

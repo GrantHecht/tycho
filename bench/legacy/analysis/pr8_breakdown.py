@@ -5,7 +5,7 @@ Break down transcription vs solve time for representative PR 8 workloads.
 Run with a built `_tychopy` on `PYTHONPATH`, for example:
 
   conda run -n tycho env \
-    PYTHONPATH=/path/to/build/src/Bindings:/path/to/repo \
+    PYTHONPATH=/path/to/build/src/bindings:/path/to/repo \
     python bench/analysis/pr8_breakdown.py --case brachistochrone --runs 5
 """
 
@@ -28,8 +28,8 @@ def build_brachistochrone():
     class Brachistochrone(oc.ODEBase):
         def __init__(self, g):
             xtu = oc.ODEArguments(3, 1)
-            _, _, v = xtu.XVec().tolist()
-            theta = xtu.UVar(0)
+            _, _, v = xtu.x_vec().tolist()
+            theta = xtu.u_var(0)
             ode = vf.stack(
                 [vf.sin(theta) * v, -1.0 * vf.cos(theta) * v, g * vf.cos(theta)]
             )
@@ -54,10 +54,10 @@ def build_brachistochrone():
         traj.append(x)
 
     phase = ode.phase("LGL3", traj, 32)
-    phase.addBoundaryValue("Front", range(0, 4), [x0, y0, v0, 0])
-    phase.addLUVarBound("Path", 4, -0.1, 2.0)
-    phase.addBoundaryValue("Back", [0, 1], [xf, yf])
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+    phase.add_boundary_value("Back", [0, 1], [xf, yf])
+    phase.add_delta_time_objective(1.0)
     phase.optimizer.PrintLevel = 4
     return phase
 
@@ -139,10 +139,10 @@ def build_delta3():
     class RocketODE(oc.ODEBase):
         def __init__(self, thrust, mdot):
             xtu = oc.ODEArguments(7, 3)
-            r = xtu.XVec().head3()
-            v = xtu.XVec().segment3(3)
-            mass = xtu.XVar(6)
-            u = xtu.UVec().normalized()
+            r = xtu.x_vec().head3()
+            v = xtu.x_vec().segment3(3)
+            mass = xtu.x_var(6)
+            u = xtu.u_vec().normalized()
             h = r.norm() - re
             rho = rho_air * vf.exp(-h / h_scale)
             vr = v + r.cross(np.array([0, 0, we]))
@@ -217,41 +217,41 @@ def build_delta3():
     ode4 = RocketODE(thrust_phase4, mdot_phase4)
 
     phase1 = ode1.phase("LGL3", ig1, 40)
-    phase1.setControlMode("HighestOrderSpline")
-    phase1.addLUNormBound("Path", [8, 9, 10], 0.5, 1.5)
-    phase1.addBoundaryValue("Front", range(0, 8), ig1[0][0:8])
-    phase1.addLowerNormBound("Path", [0, 1, 2], re * 0.999999)
-    phase1.addBoundaryValue("Back", [7], [tf_phase1])
+    phase1.set_control_mode("HighestOrderSpline")
+    phase1.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
+    phase1.add_boundary_value("Front", range(0, 8), ig1[0][0:8])
+    phase1.add_lower_norm_bound("Path", [0, 1, 2], re * 0.999999)
+    phase1.add_boundary_value("Back", [7], [tf_phase1])
 
     phase2 = ode2.phase("LGL3", ig2, 40)
-    phase2.setControlMode("HighestOrderSpline")
-    phase2.addLowerNormBound("Path", [0, 1, 2], re)
-    phase2.addLUNormBound("Path", [8, 9, 10], 0.5, 1.5)
-    phase2.addBoundaryValue("Front", [6], [m0_phase2])
-    phase2.addBoundaryValue("Back", [7], [tf_phase2])
+    phase2.set_control_mode("HighestOrderSpline")
+    phase2.add_lower_norm_bound("Path", [0, 1, 2], re)
+    phase2.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
+    phase2.add_boundary_value("Front", [6], [m0_phase2])
+    phase2.add_boundary_value("Back", [7], [tf_phase2])
 
     phase3 = ode3.phase("LGL3", ig3, 40)
-    phase3.setControlMode("HighestOrderSpline")
-    phase3.addLowerNormBound("Path", [0, 1, 2], re)
-    phase3.addLUNormBound("Path", [8, 9, 10], 0.5, 1.5)
-    phase3.addBoundaryValue("Front", [6], [m0_phase3])
-    phase3.addBoundaryValue("Back", [7], [tf_phase3])
+    phase3.set_control_mode("HighestOrderSpline")
+    phase3.add_lower_norm_bound("Path", [0, 1, 2], re)
+    phase3.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
+    phase3.add_boundary_value("Front", [6], [m0_phase3])
+    phase3.add_boundary_value("Back", [7], [tf_phase3])
 
     phase4 = ode4.phase("LGL3", ig4, 40)
-    phase4.setControlMode("HighestOrderSpline")
-    phase4.addLowerNormBound("Path", [0, 1, 2], re)
-    phase4.addLUNormBound("Path", [8, 9, 10], 0.5, 1.5)
-    phase4.addBoundaryValue("Front", [6], [m0_phase4])
-    phase4.addUpperVarBound("Back", 7, tf_phase4, 1.0)
-    phase4.addEqualCon("Back", target_orbit(at, et, inc, om, argp), range(0, 6))
-    phase4.addValueObjective("Back", 6, -1.0)
+    phase4.set_control_mode("HighestOrderSpline")
+    phase4.add_lower_norm_bound("Path", [0, 1, 2], re)
+    phase4.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
+    phase4.add_boundary_value("Front", [6], [m0_phase4])
+    phase4.add_upper_var_bound("Back", 7, tf_phase4, 1.0)
+    phase4.add_equal_con("Back", target_orbit(at, et, inc, om, argp), range(0, 6))
+    phase4.add_value_objective("Back", 6, -1.0)
 
     ocp = oc.OptimalControlProblem()
-    ocp.addPhase(phase1)
-    ocp.addPhase(phase2)
-    ocp.addPhase(phase3)
-    ocp.addPhase(phase4)
-    ocp.addForwardLinkEqualCon(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+    ocp.add_phase(phase1)
+    ocp.add_phase(phase2)
+    ocp.add_phase(phase3)
+    ocp.add_phase(phase4)
+    ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
     ocp.optimizer.set_OptLSMode("L1")
     ocp.optimizer.set_SoeLSMode("L1")
     ocp.optimizer.set_MaxLSIters(2)
@@ -285,11 +285,11 @@ def build_cannon():
     class Cannon(oc.ODEBase):
         def __init__(self):
             args = oc.ODEArguments(4, 0, 1)
-            v = args.XVar(0)
-            gamma = args.XVar(1)
-            h = args.XVar(2)
-            r = args.XVar(3)
-            rad = args.PVar(0)
+            v = args.x_var(0)
+            gamma = args.x_var(1)
+            h = args.x_var(2)
+            r = args.x_var(3)
+            rad = args.p_var(0)
             area = area_func(rad)
             mass = mass_func(rad)
             rho = rho_air * vf.exp(-h / h_scale)
@@ -316,7 +316,7 @@ def build_cannon():
 
     ode = Cannon()
     integ = ode.integrator(0.01)
-    integ.setAbsTol(1.0e-14)
+    integ.set_abs_tol(1.0e-14)
 
     ig = np.zeros(6)
     ig[0] = v0
@@ -337,21 +337,21 @@ def build_cannon():
     )[0]
 
     aphase = ode.phase("LGL5", ascent_ig, 128)
-    aphase.addLowerVarBound("ODEParams", 0, 0.0, 1)
-    aphase.addLowerVarBound("Front", 1, 0.0, 1.0)
-    aphase.addBoundaryValue("Front", [2, 3, 4], [h0, r0, 0])
-    aphase.addInequalCon("Front", energy_constraint() * 0.01, [0], [0], [])
-    aphase.addBoundaryValue("Back", [1], [0.0])
+    aphase.add_lower_var_bound("ODEParams", 0, 0.0, 1)
+    aphase.add_lower_var_bound("Front", 1, 0.0, 1.0)
+    aphase.add_boundary_value("Front", [2, 3, 4], [h0, r0, 0])
+    aphase.add_inequal_con("Front", energy_constraint() * 0.01, [0], [0], [])
+    aphase.add_boundary_value("Back", [1], [0.0])
 
     dphase = ode.phase("LGL5", descent_ig, 128)
-    dphase.addBoundaryValue("Back", [2], [0.0])
-    dphase.addValueObjective("Back", 3, -1.0)
+    dphase.add_boundary_value("Back", [2], [0.0])
+    dphase.add_value_objective("Back", 3, -1.0)
 
     ocp = oc.OptimalControlProblem()
-    ocp.addPhase(aphase)
-    ocp.addPhase(dphase)
-    ocp.addForwardLinkEqualCon(aphase, dphase, [0, 1, 2, 3, 4])
-    ocp.addDirectLinkEqualCon(0, "ODEParams", [0], 1, "ODEParams", [0])
+    ocp.add_phase(aphase)
+    ocp.add_phase(dphase)
+    ocp.add_forward_link_equal_con(aphase, dphase, [0, 1, 2, 3, 4])
+    ocp.add_direct_link_equal_con(0, "ODEParams", [0], 1, "ODEParams", [0])
     ocp.optimizer.set_OptLSMode("L1")
     ocp.optimizer.PrintLevel = 4
     return ocp
@@ -383,12 +383,12 @@ def build_optimal_docking():
     class RelDynModel2(oc.ODEBase):
         def __init__(self):
             args = oc.ODEArguments(13, 6)
-            x = args.XVec().head3()
-            v = args.XVec().segment3(3)
-            q = args.XVec().segment(6, 4).normalized()
-            w = args.XVec().segment3(10)
-            thrust = args.UVec().head3()
-            torque = args.UVec().tail3()
+            x = args.x_vec().head3()
+            v = args.x_vec().segment3(3)
+            q = args.x_vec().segment(6, 4).normalized()
+            w = args.x_vec().segment3(10)
+            thrust = args.u_vec().head3()
+            torque = args.u_vec().tail3()
             xdot = v
             vdoto = vf.stack(
                 [2 * n * v[1] + (3 * n**2) * x[0], -2 * n * v[0], -(n**2) * x[2]]
@@ -404,8 +404,8 @@ def build_optimal_docking():
     class TorqueFree(oc.ODEBase):
         def __init__(self):
             args = oc.ODEArguments(7, 0)
-            p = args.XVec().head(4).normalized()
-            phi = args.XVec().segment3(4)
+            p = args.x_vec().head(4).normalized()
+            phi = args.x_vec().segment3(4)
             pdot = vf.quatProduct(p, phi.padded_lower(1)) / 2.0
             l2 = phi.cwiseProduct(ivec)
             phidot = (l2.cross(phi)).cwiseQuotient(ivec)
@@ -458,14 +458,14 @@ def build_optimal_docking():
     traj = integ.integrate_dense(x0, 200 / tstar, 1000)
 
     phase = ode.phase("LGL3", traj, 384)
-    phase.setControlMode("BlockConstant")
-    phase.addBoundaryValue("Front", range(0, 14), x0[0:14])
-    phase.addLUVarBounds("Path", [14, 15, 16], -max_thrust, max_thrust, 0.1)
-    phase.addLUVarBounds("Path", [17, 18, 19], -max_torque, max_torque, 1)
-    phase.addLowerNormBound("Path", [0, 1, 2], 2 * srad, 1.0)
-    phase.addEqualCon("Last", rend_con2(udvec, target_tab), range(0, 14))
-    phase.addUpperDeltaTimeBound(sim_time)
-    phase.addDeltaTimeObjective(1.0)
+    phase.set_control_mode("BlockConstant")
+    phase.add_boundary_value("Front", range(0, 14), x0[0:14])
+    phase.add_lu_var_bounds("Path", [14, 15, 16], -max_thrust, max_thrust, 0.1)
+    phase.add_lu_var_bounds("Path", [17, 18, 19], -max_torque, max_torque, 1)
+    phase.add_lower_norm_bound("Path", [0, 1, 2], 2 * srad, 1.0)
+    phase.add_equal_con("Last", rend_con2(udvec, target_tab), range(0, 14))
+    phase.add_upper_delta_time_bound(sim_time)
+    phase.add_delta_time_objective(1.0)
     phase.optimizer.set_BoundFraction(0.995)
     phase.optimizer.PrintLevel = 4
     return phase

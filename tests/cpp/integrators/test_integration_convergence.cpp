@@ -8,7 +8,7 @@
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(IntegratorTest, DOPRI54ConvergenceOrder) {

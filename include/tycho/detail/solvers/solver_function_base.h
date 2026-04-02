@@ -15,9 +15,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -27,20 +26,23 @@
 
 #include <Eigen/Core>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/solver_interface_specs.h"
+#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/vf/core/functional_flags.h"
 
-namespace Tycho {
+namespace tycho::solvers {
+
+// Import cross-namespace types used by the solver function base.
+using vf::ThreadingFlags;
 
 template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
 
-    FuncType function;
-    SolverIndexingData index_data;
-    ThreadingFlags ThreadMode = ThreadingFlags::ByApplication;
+    FuncType function_;
+    SolverIndexingData index_data_;
+    ThreadingFlags thread_mode_ = ThreadingFlags::ByApplication;
 
     SolverFunctionBase() {}
 
@@ -48,34 +50,38 @@ template <class FuncType> struct SolverFunctionBase {
         using std::cout;
         using std::endl;
 
-        cout << "Name: " << this->function.name() << endl << endl;
-        cout << "Input  Rows:" << this->function.IRows() << endl << endl;
-        cout << "Output Rows:" << this->function.ORows() << endl << endl;
-        cout << "Thread Policy:" << static_cast<int>(ThreadMode) << endl << endl;
+        cout << "Name: " << this->function_.name() << endl << endl;
+        cout << "Input  Rows:" << this->function_.input_rows() << endl << endl;
+        cout << "Output Rows:" << this->function_.output_rows() << endl << endl;
+        cout << "Thread Policy:" << static_cast<int>(thread_mode_) << endl << endl;
 
-        cout << "Vindex: " << endl << this->index_data.getVindex() << endl << endl;
-        if (this->index_data.cindex_init) {
-            cout << "Cindex: " << endl << this->index_data.getCindex() << endl << endl;
+        cout << "v_index_: " << endl << this->index_data_.get_v_index() << endl << endl;
+        if (this->index_data_.cindex_init_) {
+            cout << "c_index_: " << endl << this->index_data_.get_c_index() << endl << endl;
         }
     }
 
-    int numKKTEles(bool dojac, bool dohess) {
-        return this->function.numKKTEles(dojac, dohess) * this->index_data.NumAppl();
+    int num_kkt_elements(bool dojac, bool dohess) {
+        return this->function_.num_kkt_elements(dojac, dohess) * this->index_data_.num_appl();
     }
-    int numConEles() const { return this->function.ORows() * this->index_data.NumAppl(); }
-    int numGradEles() const { return this->function.IRows() * this->index_data.NumAppl(); }
-    ThreadingFlags getThreadMode() const { return this->ThreadMode; }
-    void getKKTSpace(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
-                     int conoffset, bool dojac, bool dohess) {
-        this->function.getKKTSpace(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
-                                   this->index_data);
+    int num_con_eles() const {
+        return this->function_.output_rows() * this->index_data_.num_appl();
     }
-    void getGradientSpace(EigenRef<VectorXi> GXrows, int &freeloc) {
-        this->index_data.getGradientSpace(GXrows, freeloc);
+    int num_grad_eles() const {
+        return this->function_.input_rows() * this->index_data_.num_appl();
     }
-    void getConstraintSpace(EigenRef<VectorXi> FXrows, int &freeloc) {
-        this->index_data.getConstraintSpace(FXrows, freeloc);
+    ThreadingFlags get_thread_mode() const { return this->thread_mode_; }
+    void get_kkt_space(EigenRef<VectorXi> KKTrows, EigenRef<VectorXi> KKTcols, int &freeloc,
+                       int conoffset, bool dojac, bool dohess) {
+        this->function_.get_kkt_space(KKTrows, KKTcols, freeloc, conoffset, dojac, dohess,
+                                      this->index_data_);
+    }
+    void get_gradient_space(EigenRef<VectorXi> GXrows, int &freeloc) {
+        this->index_data_.get_gradient_space(GXrows, freeloc);
+    }
+    void get_constraint_space(EigenRef<VectorXi> FXrows, int &freeloc) {
+        this->index_data_.get_constraint_space(FXrows, freeloc);
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::solvers

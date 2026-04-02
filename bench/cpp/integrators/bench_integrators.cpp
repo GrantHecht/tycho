@@ -40,7 +40,7 @@ static void BM_Integrate_SHO_FixedStep(benchmark::State &state) {
     double tf = 2.0 * std::numbers::pi;
     for (auto _ : state) {
         Integrator<SHO> integ(ode, "DOPRI87", 0.01);
-        integ.Adaptive = false;
+        integ.adaptive_ = false;
         Eigen::Vector3d x0;
         x0 << 1.0, 0.0, 0.0;
         auto xf = integ.integrate(x0, tf);

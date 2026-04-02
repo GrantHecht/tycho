@@ -108,7 +108,7 @@ class ODEBase:
         units : np.ndarray
             Vector of units.
         """
-        units = np.ones((self.XtUPVars()))
+        units = np.ones((self.xtup_vars()))
 
         for key, value in kwargs.items():
             idx = self.idx(key)
@@ -141,7 +141,7 @@ class ODEBase:
             ODE input vector.
 
         """
-        state = np.zeros((self.XtUPVars()))
+        state = np.zeros((self.xtup_vars()))
         for key, value in kwargs.items():
             idx = self.idx(key)
 
@@ -226,47 +226,81 @@ class ODEBase:
     def vf(self):
         return self.ode.vf()
 
+    def x_vars(self):
+        return self.ode.x_vars()
+
+    def u_vars(self):
+        return self.ode.u_vars()
+
+    def p_vars(self):
+        return self.ode.p_vars()
+
+    def t_var(self):
+        return self.ode.t_var()
+
+    def xt_vars(self):
+        return self.ode.xt_vars()
+
+    def xtu_vars(self):
+        return self.ode.xtu_vars()
+
+    def xtup_vars(self):
+        return self.ode.xtup_vars()
+
+    # Legacy camelCase aliases for backward compatibility
     def XVars(self):
-        return self.ode.XVars()
+        return self.ode.x_vars()
 
     def UVars(self):
-        return self.ode.UVars()
+        return self.ode.u_vars()
 
     def PVars(self):
-        return self.ode.PVars()
+        return self.ode.p_vars()
 
     def TVar(self):
-        return self.ode.TVar()
+        return self.ode.t_var()
 
     def XtVars(self):
-        return self.ode.XtVars()
+        return self.ode.xt_vars()
 
     def XtUVars(self):
-        return self.ode.XtUVars()
+        return self.ode.xtu_vars()
 
-    def XtUPVars(self):
-        return self.ode.XtUPVars()
+    def xtup_vars(self):
+        return self.ode.xtup_vars()
+
+    def x_idxs(self, *args):
+        if len(args) > 1:
+            return self.ode.x_idxs(list(args))
+        else:
+            return self.ode.x_idxs(*args)
+
+    def xt_idxs(self, *args):
+        if len(args) > 1:
+            return self.ode.xt_idxs(list(args))
+        else:
+            return self.ode.xt_idxs(*args)
+
+    def xtu_idxs(self, *args):
+        if len(args) > 1:
+            return self.ode.xtu_idxs(list(args))
+        else:
+            return self.ode.xtu_idxs(*args)
+
+    def u_idxs(self, *args):
+        if len(args) > 1:
+            return self.ode.u_idxs(list(args))
+        else:
+            return self.ode.u_idxs(*args)
 
     def Xidxs(self, *args):
-        if len(args) > 1:
-            return self.ode.Xidxs(list(args))
-        else:
-            return self.ode.Xidxs(*args)
+        return self.x_idxs(*args)
 
     def Xtidxs(self, *args):
-        if len(args) > 1:
-            return self.ode.Xtidxs(list(args))
-        else:
-            return self.ode.Xtidxs(*args)
+        return self.xt_idxs(*args)
 
     def XtUidxs(self, *args):
-        if len(args) > 1:
-            return self.ode.XtUidxs(list(args))
-        else:
-            return self.ode.XtUidxs(*args)
+        return self.xtu_idxs(*args)
 
     def Uidxs(self, *args):
-        if len(args) > 1:
-            return self.ode.Uidxs(list(args))
-        else:
-            return self.ode.Uidxs(*args)
+        return self.u_idxs(*args)

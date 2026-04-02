@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Tycho {
+namespace tycho::solvers {
 
 /// Ensure the math runtime is initialized (thread pool, CPU dispatch, memory
 /// allocators).  Thread-safe (std::call_once).
@@ -13,4 +13,4 @@ namespace Tycho {
 /// or 0.0 if already initialized.
 double ensure_solver_initialized();
 
-} // namespace Tycho
+} // namespace tycho::solvers

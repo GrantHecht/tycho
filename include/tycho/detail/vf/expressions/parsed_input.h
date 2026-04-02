@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func, int IRC, int ORC>
 struct ParsedInput
@@ -28,37 +27,37 @@ struct ParsedInput
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     SUB_FUNCTION_IO_TYPES(Func);
-    Func func;
-    Func_Input<int> varlocs;
-    bool contiguous = false;
+    Func func_;
+    Func_Input<int> varlocs_;
+    bool contiguous_ = false;
 
     ParsedInput() {}
-    ParsedInput(Func f, const Func_Input<int> &varlocs, int irr)
-        : func(std::move(f)), varlocs(varlocs) {
-        this->setIORows(irr, this->func.ORows());
+    ParsedInput(Func f, const Func_Input<int> &vlocs, int irr)
+        : func_(std::move(f)), varlocs_(vlocs) {
+        this->set_io_rows(irr, this->func_.output_rows());
 
-        this->contiguous = true;
-        for (int i = 0; i < varlocs.size() - 1; i++) {
-            int delta = varlocs[i + 1] - varlocs[i];
+        this->contiguous_ = true;
+        for (int i = 0; i < varlocs_.size() - 1; i++) {
+            int delta = varlocs_[i + 1] - varlocs_[i];
             if (delta != 1)
-                this->contiguous = false;
+                this->contiguous_ = false;
         }
-        // this->set_input_domain(irr, func.input_domain());
+        // this->set_input_domain(irr, func_.input_domain());
     }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
 
-        if (this->contiguous) {
-            this->func.compute(x.segment(varlocs[0], this->func.IRows()), fx_);
+        if (this->contiguous_) {
+            this->func_.compute(x.segment(varlocs_[0], this->func_.input_rows()), fx_);
 
         } else {
-            Func_Input<Scalar> xin(this->func.IRows());
-            for (int i = 0; i < this->func.IRows(); i++) {
-                xin[i] = x[this->varlocs[i]];
+            Func_Input<Scalar> xin(this->func_.input_rows());
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                xin[i] = x[this->varlocs_[i]];
             }
-            this->func.compute(xin, fx_);
+            this->func_.compute(xin, fx_);
         }
     }
     template <class InType, class OutType, class JacType>
@@ -68,19 +67,19 @@ struct ParsedInput
 
         using Scalar = typename InType::Scalar;
 
-        if (this->contiguous) {
-            this->func.compute_jacobian(x.segment(varlocs[0], this->func.IRows()), fx_,
-                                        jx.middleCols(varlocs[0], this->func.IRows()));
+        if (this->contiguous_) {
+            this->func_.compute_jacobian(x.segment(varlocs_[0], this->func_.input_rows()), fx_,
+                                         jx.middleCols(varlocs_[0], this->func_.input_rows()));
         } else {
-            Func_Input<Scalar> xin(this->func.IRows());
-            Func_jacobian<Scalar> jxin(this->func.ORows(), this->func.IRows());
+            Func_Input<Scalar> xin(this->func_.input_rows());
+            Func_jacobian<Scalar> jxin(this->func_.output_rows(), this->func_.input_rows());
             jxin.setZero();
-            for (int i = 0; i < this->func.IRows(); i++) {
-                xin[i] = x[this->varlocs[i]];
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                xin[i] = x[this->varlocs_[i]];
             }
-            this->func.compute_jacobian(xin, fx_, jxin);
-            for (int i = 0; i < this->func.IRows(); i++) {
-                jx.col(this->varlocs[i]) = jxin.col(i);
+            this->func_.compute_jacobian(xin, fx_, jxin);
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                jx.col(this->varlocs_[i]) = jxin.col(i);
             }
         }
     }
@@ -96,37 +95,38 @@ struct ParsedInput
 
         using Scalar = typename InType::Scalar;
 
-        if (this->contiguous) {
-            this->func.compute_jacobian_adjointgradient_adjointhessian(
-                x.segment(varlocs[0], this->func.IRows()), fx_,
-                jx.middleCols(varlocs[0], this->func.IRows()),
-                adjgrad.segment(varlocs[0], this->func.IRows()),
-                adjhess.block(varlocs[0], varlocs[0], this->func.IRows(), this->func.IRows()),
+        if (this->contiguous_) {
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(
+                x.segment(varlocs_[0], this->func_.input_rows()), fx_,
+                jx.middleCols(varlocs_[0], this->func_.input_rows()),
+                adjgrad.segment(varlocs_[0], this->func_.input_rows()),
+                adjhess.block(varlocs_[0], varlocs_[0], this->func_.input_rows(),
+                              this->func_.input_rows()),
                 adjvars);
 
         } else {
-            Func_Input<Scalar> xin(this->func.IRows());
-            Func_jacobian<Scalar> jxin(this->func.ORows(), this->func.IRows());
-            Func_gradient<Scalar> gxin(this->func.IRows());
-            Func_hessian<Scalar> hxin(this->func.IRows(), this->func.IRows());
+            Func_Input<Scalar> xin(this->func_.input_rows());
+            Func_jacobian<Scalar> jxin(this->func_.output_rows(), this->func_.input_rows());
+            Func_gradient<Scalar> gxin(this->func_.input_rows());
+            Func_hessian<Scalar> hxin(this->func_.input_rows(), this->func_.input_rows());
             jxin.setZero();
             hxin.setZero();
             gxin.setZero();
 
-            for (int i = 0; i < this->func.IRows(); i++) {
-                xin[i] = x[this->varlocs[i]];
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                xin[i] = x[this->varlocs_[i]];
             }
 
-            this->func.compute_jacobian_adjointgradient_adjointhessian(xin, fx_, jxin, gxin, hxin,
-                                                                       adjvars);
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(xin, fx_, jxin, gxin, hxin,
+                                                                        adjvars);
 
-            for (int i = 0; i < this->func.IRows(); i++) {
-                jx.col(this->varlocs[i]) = jxin.col(i);
-                adjgrad[this->varlocs[i]] = gxin[i];
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                jx.col(this->varlocs_[i]) = jxin.col(i);
+                adjgrad[this->varlocs_[i]] = gxin[i];
             }
-            for (int i = 0; i < this->func.IRows(); i++) {
-                for (int j = 0; j < this->func.IRows(); j++) {
-                    adjhess(this->varlocs[j], this->varlocs[i]) = hxin(j, i);
+            for (int i = 0; i < this->func_.input_rows(); i++) {
+                for (int j = 0; j < this->func_.input_rows(); j++) {
+                    adjhess(this->varlocs_[j], this->varlocs_[i]) = hxin(j, i);
                 }
             }
         }
@@ -137,4 +137,4 @@ struct ParsedInput
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

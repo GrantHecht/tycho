@@ -9,12 +9,13 @@ and space trajectory optimization. The built-in optimizer is called **PSIOPT**
 (a high-performance interior-point solver).
 
 The Python-facing module is `_tychopy` (nanobind extension) imported via the `tychopy` package.
-The C++ namespace is `Tycho`.
+The top-level C++ namespace is `tycho`.
 
 ## A Word of Caution for Multi-Agent Workloads
-Compiling tycho is very computationally expensive, and you MUST therefore be careful about 
+
+Compiling tycho is very computationally expensive, and you MUST therefore be careful about
 how many parallel jobs are being used in any given build, and how many agents are building
-simultaneously. 
+simultaneously.
 
 As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j2 for builds
@@ -29,14 +30,14 @@ Top-level files of note: `CMakeLists.txt` (root build), `CMakePresets.json`, `CM
 ```
 include/                Public C++ API headers
   tycho/
-    tycho.h             Umbrella header — includes all public modules
-    typedefs.h          Eigen type aliases and SIMD detection
-    utils.h             Thread pool, type storage, sizing helpers, CRTP base
-    vector_functions.h  Core VectorFunction DSL
-    integrators.h       Runge-Kutta steppers and coefficients
-    optimal_control.h   Phase/ODE transcription, collocation, mesh refinement
-    solvers.h           PSIOPT optimizer, NLP layer
-    astro.h             Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
+    tycho.h             Master umbrella — includes all public modules
+    vector_functions.h  VectorFunction subsystem umbrella
+    typedefs.h          Eigen type aliases umbrella
+    utils.h             Utilities umbrella
+    integrators.h       Integrators umbrella
+    optimal_control.h   Optimal control umbrella
+    solvers.h           Solvers umbrella
+    astro.h             Astrodynamics umbrella
     detail/             Template implementation bodies (included automatically)
       utils/            Threading, math helpers, type utilities, CRTP base
       typedefs/         Eigen type aliases
@@ -51,20 +52,18 @@ include/                Public C++ API headers
 src/                    C++ source code (private implementation)
   tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
   pch.h / pch.cpp       Precompiled header
-  Bindings/             ALL Python binding code — nanobind .cpp files, *Bind.h
-                          headers, FunctionRegistry.h (TychoBind<T> trait),
-                          TypeCasters.h, TychoModule.cpp
-  VectorFunctions/      tycho_vector_functions.h aggregate + function_domains.cpp
-  OptimalControl/       tycho_optimal_control.h aggregate + snake_case .cpp files
-  Solvers/              tycho_solvers.h aggregate + snake_case .cpp files
-  Astro/                tycho_astro.h aggregate + snake_case .cpp files
-  Integrators/          tycho_integrators.h aggregate (header-only)
-  Utils/                tycho_utils.h aggregate + private utility .cpp files
-  TypeDefs/             tycho_typedefs.h aggregate (header-only)
-  PyDocString/          C++-side Python docstring literals
+  bindings/             ALL Python binding code — nanobind .cpp files, *_bind.h
+                          headers, function_registry.h (TychoBind<T> trait),
+                          type_casters.h, tycho_module.cpp
+  vf/                   tycho_vector_functions.h aggregate + function_domains.cpp
+  optimal_control/      tycho_optimal_control.h aggregate + snake_case .cpp files
+  solvers/              tycho_solvers.h aggregate + snake_case .cpp files
+  astro/                tycho_astro.h aggregate + snake_case .cpp files
+  integrators/          tycho_integrators.h aggregate (header-only)
+  utils/                tycho_utils.h aggregate + private utility .cpp files
+  typedefs/             tycho_typedefs.h aggregate (header-only)
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
-  __init__.py           Package entry point
   VectorFunctions/      Python-side VectorFunction utilities
   OptimalControl/       Pure-Python ODE base class, mesh-error plotting
   Solvers/              Python solver helpers
@@ -80,170 +79,21 @@ dep/                    Vendored submodule dependencies
   fmt/                  {fmt} (MIT)
   nanobind/             nanobind (BSD)
 
-cmake/                  CMake helper modules
-  Find*.cmake           Finders for MKL, Accelerate sparse, Python env, Sphinx
-  clang-format.cmake    clang-format integration
-  cppcheck.cmake        cppcheck integration
-  git-submodule-*.cmake Submodule init/update helpers
-
-tests/                  C++ test suite (Google Test)
-  cpp/                  Test source files organised by subsystem
-    astro/              Kepler, Lambert, CR3BP tests
-    integrators/        RK stepper, STM, dense output tests
-    optimal_control/    Phase construction, collocation, mesh refinement tests
-    solvers/            PSIOPT convergence, NLP structure, Jet tests
-    utils/              TypeStorage, ThreadPool, BumpAllocator tests
-    vector_functions/   VF DSL, composition, Hessian, generic function tests
-
+tests/                  C++ unit tests (Google Test, organised by subsystem)
 bench/                  Benchmark suite and tracking
   MACBENCH.md           macOS benchmarking procedure
   WINBENCH.md           Windows benchmarking procedure
   bench_track.sh        Benchmark tracking script (record, compare, list)
-  results/              Stored benchmark results (gitignored)
   cpp/                  Google Benchmark source files
-    bench_common.h      Shared ODE definitions and helpers
-    kepler/             Kepler/Lambert astrodynamics benchmarks
-    vector_functions/   VF DSL evaluation benchmarks
-    type_erasure/       GenericFunction VJP dispatch, GFStorage clone
-    integrators/        RK stepper throughput benchmarks
-    optimal_control/    Phase construction + transcription benchmarks
-    solvers/            PSIOPT end-to-end convergence benchmarks
-    utils/              TypeStorage, BumpAllocator, ThreadPool benchmarks
 
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Example programs
   cpp_examples/         C++ example programs
-    brachistochrone/    C++ Brachistochrone optimal control example
-  python_examples/      Python example scripts (Brachistochrone, Zermelo, low-thrust, etc.)
-    MeshRefinement/     Mesh-refinement examples
-    UpdatedInterface/   Examples for updated API
-    Plots/              Shared plotting helpers
-scripts/                Build, test, and packaging helper scripts
-dockerfiles/            Dockerfiles for Ubuntu 18.04 / 20.04 CI images
-misc/                   Code generation utilities (CodeGen.py, CodeGenExample.py)
-pypiwheel/              PyPI wheel packaging (CMakeLists.txt, setup.py.in)
-doc/                    Sphinx + Doxygen documentation source
+  python_examples/      Python example scripts (38 examples)
 notices/                Third-party license notices — DO NOT modify or delete
 ```
 
-## Technical Details
-**Vector Function Implementation**
-- `doc/VectorFunction.md`
-**Python Bindings Implementation (nanobind)**
-- `doc/Bindings.md`
-
-## Build System
-
-This is a CMake + nanobind project. The output is a nanobind shared library
-(`_tychopy.cpython-<ver>-<platform>.so`) plus the pure-Python `tychopy/` package, both
-installed directly into the active Python environment's site-packages by the build step.
-
-Each platform has a corresponding CMake preset in `CMakePresets.json` that defines
-compiler paths, parallelism, and output directories. **Always use the preset for
-your platform** — do not configure manually.
-
-| Platform         | Configure preset        | Build parallelism |
-| ---------------- | ----------------------- | ----------------- |
-| macOS (Apple Si) | `macos-llvm-release`    | `-j2`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
-| Windows x64      | `x64-Clang-Release`    | `-j6`             |
-
-The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
-first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
-
-### macOS (Apple Silicon)
-
-**System tools required (install once via Homebrew):**
-```
-brew install llvm ninja ccache jq
-```
-Current versions in use: LLVM 22+, Ninja 1.13+.
-
-**Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
-
-**Python environment — conda env named `tycho` (Python 3.13):**
-```bash
-conda create -n tycho python=3.13
-conda activate tycho
-pip install numpy scipy matplotlib spiceypy
-```
-
-**First-time build:**
-```bash
-mkdir build
-cmake --preset macos-llvm-release
-cd build && ninja -j2 all
-```
-
-**Note:** The macOS preset uses the stable Homebrew symlink `/opt/homebrew/opt/llvm`
-for the compiler. The libomp paths in `CMakeLists.txt` also use the stable symlink
-`/opt/homebrew/opt/libomp` — neither requires manual updating when Homebrew upgrades
-LLVM. Presets do not hardcode Python paths; activate your conda/venv before configuring.
-
-### Linux / WSL2 (Ubuntu)
-
-**System tools required:**
-```bash
-sudo apt install clang llvm llvm-dev libomp-dev lld ninja-build ccache
-```
-
-**Sparse solver — Intel MKL (via oneAPI):**
-```bash
-# Add Intel APT repository
-wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-  | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-sudo apt update
-sudo apt install intel-oneapi-mkl-devel
-
-# Set MKLROOT (add to ~/.bashrc)
-source /opt/intel/oneapi/setvars.sh
-# or: export MKLROOT=/opt/intel/oneapi/mkl/latest
-```
-
-**Python environment:** Use system Python 3.12+ or a conda/venv environment.
-If not using conda, install dependencies globally or in a venv:
-```bash
-pip install numpy scipy matplotlib spiceypy
-```
-
-**First-time build:**
-```bash
-mkdir build
-cmake --preset linux-clang-release
-cd build && ninja -j6 all
-```
-
-**Note:** The Linux preset does not hardcode `Python_EXECUTABLE` — CMake will
-auto-detect the active Python from `$PATH`. To target a specific interpreter,
-pass `-DPython_EXECUTABLE=/path/to/python` during configure, or set it in the preset.
-
-### Windows x64
-
-Uses LLVM/Clang with clang-cl frontend. Preset: `x64-Clang-Release`.
-See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
-
-### Subsequent builds (all platforms)
-
-After C++ source changes, rebuild from the `build` directory:
-```bash
-cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
-```
-
-### Key CMake variables
-
-| Variable                   | Purpose                                                                                      |
-| -------------------------- | -------------------------------------------------------------------------------------------- |
-| `Python_EXECUTABLE`        | Path to Python interpreter to build against                                                  |
-| `PYTHON_LOCAL_INSTALL_DIR` | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
-| `TYCHO_FP_MODE`            | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
-| `BUILD_SPHINX_DOCS`        | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
-| `BUILD_CPP_EXAMPLES`       | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
-| `BUILD_CPP_TESTS`          | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
-| `BUILD_CPP_BENCHMARKS`     | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
-| `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                    |
-
-## Key Concepts and Domain Language
+## Key Concepts
 
 - **VectorFunction** — the core DSL for defining dynamics, constraints, and objectives.
   Everything in the problem definition layer is expressed as a VectorFunction.
@@ -252,68 +102,103 @@ cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
   for multi-phase trajectory problems.
 - **PSIOPT** — the bundled interior-point nonlinear optimizer.
 - **Collocation** — the transcription method used to convert continuous optimal control
-  problems into finite-dimensional NLPs. The tool is method-agnostic at the API level
-  but collocation is the primary implementation.
+  problems into finite-dimensional NLPs.
 - **Astrodynamics** — the primary application domain, though the library is general.
 
-## Binding Architecture
+## Technical Details
 
-All Python binding code lives exclusively in `src/Bindings/`. Core C++ source under
-`src/VectorFunctions/`, `src/OptimalControl/`, `src/Integrators/`, `src/Astro/`, etc.
-contains no nanobind code.
+- **VectorFunction implementation:** `doc/VectorFunction.md`
+- **Python bindings (nanobind):** `doc/Bindings.md`
 
-**`TychoBind<T>` trait pattern** — the central dispatch mechanism:
-- Primary template declared in `src/Bindings/FunctionRegistry.h`
-- `FunctionRegistry::Build_Register<T>(m, name)` calls `TychoBind<T>::Build(m, name)`
-- Full/partial specializations defined in `*Bind.h` headers or binding `.cpp` files
+## Build System
 
-**`Bind::` free-function helpers** (in `src/Bindings/*Bind.h`):
-- `DenseBaseBuild<T>(obj)` — registers standard VectorFunction methods
-- `IntegratorBuildConstructors<DODE>(obj)` — registers integrator constructors
-- `ODEPhaseBuildImpl<DODE>(phase)` — registers phase constraints/objectives
-- `ODESizeBuild<XV,UV,PV,Derived>(obj)` — registers ODE size accessors
-- `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` — builds a GenericODE submodule
+This is a CMake + nanobind project. The output is a nanobind shared library
+(`_tychopy.cpython-<ver>-<platform>.so`) plus the pure-Python `tychopy/` package, both
+installed directly into the active Python environment's site-packages by the build step.
 
-**Key rules for binding `.cpp` files:**
-- Must include aggregate headers (`tycho_astro.h`, `tycho_optimal_control.h`) rather than
-  raw core headers — function declarations like `KeplerUtilsBuild`, `BuildKeplerMod`
-  live in aggregate headers under `#ifdef TYCHO_PYTHON_BINDINGS`
-- `TYCHO_PYTHON_BINDINGS` is defined only for `_tychopy` and `tycho_extensions` targets
-  (scoped via `pch_bindings` precompiled header), not globally
+**Always use the `tycho` conda environment** for all Python and build operations.
+Activate it before configuring — CMake auto-detects Python from `$PATH`:
 
-**`*Bind.h` files** (included from aggregate headers):
-- `DenseFunctionBaseBind.h`, `VectorFunctionBind.h`, `CommonFunctionsBind.h`
-- `InterpTableBind.h`, `GenericFunctionBind.h`
-- `IntegratorBind.h`, `ODEPhaseBind.h`, `ODEBind.h`, `ODESizesBind.h`
-- `PythonFunctions.h`, `python_arg_parsing.h` (moved from core headers)
+```bash
+conda activate tycho
+```
 
-## Third-Party Dependencies and License Obligations
+Each platform has a corresponding CMake preset in `CMakePresets.json`. **Always use the
+preset for your platform** — do not configure manually.
 
-The project is licensed under **Apache 2.0**. The `notices/` directory contains
-copyright and license notices for all bundled third-party libraries. Key ones to
-be aware of during development:
+| Platform         | Configure preset        | Build parallelism |
+| ---------------- | ----------------------- | ----------------- |
+| macOS (Apple Si) | `macos-llvm-release`    | `-j2`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
+| Windows x64      | `x64-Clang-Release`     | `-j6`             |
 
-- **Eigen** (MPL-2.0) — any Eigen *source files* directly modified must remain MPL-2.0
-- **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
-  flag any changes touching MKL integration for manual review
-- **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT), **boost-threads** (Boost),
-  **rubber_types** (MIT), **kepler propagator** (MIT) — all permissive, just preserve notices
+The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
+first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
-**Never delete or modify files in `notices/`.**
-If a new dependency is added, its license notice must be added to `notices/` as well.
+**Python environment (all platforms) — conda env named `tycho`:**
+```bash
+conda create -n tycho python=3.13
+conda activate tycho
+pip install numpy scipy matplotlib spiceypy
+```
 
-## Naming Migration (asset_asrl → tycho)
+### macOS (Apple Silicon)
 
-The naming migration is substantially complete:
-- Repository: `tycho` ✅
-- C++ namespace: `Tycho` ✅
-- Python extension module: `_tychopy` ✅
-- Python package: `tychopy` ✅
-- PyPI package: not yet published
+**System tools:** `brew install llvm ninja ccache jq`
 
-Do not do a bulk find-and-replace of any remaining `asset_asrl` or `ASSET` identifiers
-without explicit instruction — residual uses may be load-bearing (CMake targets, internal
-type names, etc.) and require coordinated changes.
+**Sparse solver:** Apple Accelerate (ships with macOS, detected automatically).
+
+**First-time build:**
+```bash
+mkdir build && conda activate tycho
+cmake --preset macos-llvm-release
+cd build && ninja -j2 all
+```
+
+### Linux / WSL2 (Ubuntu)
+
+**System tools:** `sudo apt install clang llvm llvm-dev libomp-dev lld ninja-build ccache`
+
+**Sparse solver — Intel MKL (via oneAPI):**
+```bash
+wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+  | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+  | sudo tee /etc/apt/sources.list.d/oneAPI.list
+sudo apt update && sudo apt install intel-oneapi-mkl-devel
+source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
+```
+
+**First-time build:**
+```bash
+mkdir build && conda activate tycho
+cmake --preset linux-clang-release
+cd build && ninja -j6 all
+```
+
+### Windows x64
+
+Uses LLVM/Clang with clang-cl frontend. Preset: `x64-Clang-Release`.
+See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
+
+### Subsequent builds (all platforms)
+
+```bash
+cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
+```
+
+### Key CMake variables
+
+| Variable                      | Purpose                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| `Python_EXECUTABLE`           | Path to Python interpreter to build against                                                  |
+| `PYTHON_LOCAL_INSTALL_DIR`    | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
+| `TYCHO_FP_MODE`               | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
+| `BUILD_SPHINX_DOCS`           | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
+| `BUILD_CPP_EXAMPLES`          | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
+| `BUILD_CPP_TESTS`             | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
+| `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
+| `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
 
 ## Code Style
 
@@ -322,182 +207,147 @@ committing.** Do not introduce new external dependencies without discussion.
 Prefer modifying existing files over creating new ones unless the feature is
 clearly self-contained.
 
+### Naming Conventions
+
+- Types and classes: `PascalCase` (e.g., `DenseFunction`, `ODEPhase`)
+- Member functions: `snake_case` (e.g., `set_io_rows()`, `add_equal_con()`)
+- Member variables: `snake_case_` with trailing underscore (e.g., `num_defects_`)
+- Free functions: `snake_case`
+
+**Python API:** All method and property names exposed via nanobind use `snake_case`,
+matching the C++ member function names (e.g., `phase.add_boundary_value()`,
+`ocp.return_traj()`). Grandfathered exceptions: `"adjointgradient"`, `"adjointhessian"`,
+`"computeall"`.
+
+Do **not** bulk find-and-replace remaining `asset_asrl` or `ASSET` identifiers without
+explicit instruction — residual uses may be load-bearing (CMake targets, internal type
+names) and require coordinated changes.
+
 ### C++ — clang-format (LLVM style)
 
 Config: `.clang-format` at the repo root (LLVM base, 4-space indent, 100-column limit).
-The CMake `clang-format` target applies it to `src/` and `extensions/`.
+The CMake `clang-format` target applies it to `src/`, `extensions/`, and `include/tycho/detail/`.
 
-**Format all C++ source files (preferred — uses CMake target):**
 ```bash
 cd build && ninja clang-format
 ```
 
-Or manually (uses whichever `clang-format` is on `$PATH`):
-```bash
-find src extensions \( -name "*.cpp" -o -name "*.h" \) -print0 \
-  | xargs -0 clang-format -style=file -i
-```
-
 Do **not** add or modify `.clang-format` files inside `src/` — the root config is
-authoritative. The `dep/` vendored dependencies have their own configs and must
-not be reformatted.
+authoritative. Do not reformat `dep/` vendored dependencies.
 
 ### Python — ruff (Black-compatible format + isort)
 
 Config: `pyproject.toml` at the repo root.
-Required packages: `ruff`, `isort` (`pip install ruff isort`).
 
-**Format all Python files:**
 ```bash
-ruff format .          # Black-compatible formatting
-ruff check --select I --fix .  # isort import sorting
+conda run -n tycho ruff format .
+conda run -n tycho ruff check --select I --fix .
 ```
 
 Line length: 88 (Black default). `dep/` and `build/` are excluded automatically.
 
-## What to Preserve from the Original ASSET
+### Commit Conventions
 
-- All content in `notices/` and `LICENSE.txt`
-- Copyright headers in original source files
+Use descriptive commit messages with these prefixes:
 
-## Commit Conventions
+| Prefix | Use for |
+| ------ | ------- |
+| `feat:` | New features or capabilities |
+| `fix:` | Bug fixes |
+| `refactor:` | Code restructuring without behavior change |
+| `docs:` | Documentation-only changes |
+| `chore:` | Build system, CI, dependency, or tooling changes |
 
-Use descriptive commit messages. Prefix with type where clear:
-- `feat:` new functionality
-- `fix:` bug fixes
-- `refactor:` restructuring without behavior change
-- `docs:` documentation only
-- `chore:` build system, tooling, dependency updates
+## License and Notices
+
+The project is licensed under **Apache 2.0**. The `notices/` directory contains
+copyright and license notices for all bundled third-party libraries.
+
+**Never delete or modify files in `notices/`.** If a new dependency is added, its
+license notice must be added to `notices/` as well. Preserve copyright headers in
+original source files.
+
+Key obligations:
+- **Eigen** (MPL-2.0) — any Eigen *source files* directly modified must remain MPL-2.0
+- **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
+  flag any changes touching MKL integration for manual review
+- **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT) — all permissive, just preserve notices
+- **boost-threads** (Boost Software License 1.0), **rubber_types** (MIT), **kepler propagator** (MIT),
+  **lambert** (MIT), **ctpl** (Apache 2.0) — all permissive; see `notices/` for full list
+
+## Things to Flag for Human Review
+
+Changes in the following areas require explicit human review before merging:
+
+- **PSIOPT optimizer internals** — algorithmic changes can silently degrade convergence
+- **Intel MKL / Apple Accelerate integration** — redistribution terms and initialization are sensitive
+- **Public API changes** — any Python-facing rename or removal breaks downstream user code
+- **New third-party dependencies** — must add license notice to `notices/` and get approval
+- **PyPI / packaging** — changes to `setup.py`, `pyproject.toml`, or wheel metadata
 
 ## Testing
 
 ### C++ unit tests (Google Test)
 
-The project has a C++ unit test suite under `tests/cpp/` using Google Test
-(fetched automatically via FetchContent). 42 test files across 6 subdirectories
-(astro, integrators, optimal_control, solvers, utils, vector_functions),
-compiled into a single `tycho_tests` executable.
-
-**Build and run:**
 ```bash
-# Reconfigure with tests enabled (one-time, use your platform's preset)
-cmake --preset <preset> -DBUILD_CPP_TESTS=ON
-
-# Build test executable
+cmake --preset <preset> -DBUILD_CPP_TESTS=ON   # one-time reconfigure
 cd build && ninja -j<N> tycho_tests
-
-# Run all tests via CTest
 ctest --output-on-failure
-```
-
-### C++ benchmarks (Google Benchmark)
-
-46 micro-benchmarks live under `bench/cpp/` using Google Benchmark
-(fetched automatically via FetchContent), compiled into a single `bench_all`
-executable. A local tracking script (`bench/bench_track.sh`) records results
-by commit hash and detects regressions. See `bench/<SYS>BENCH.md` for the full
-benchmarking procedure on your platform (e.g., `MACBENCH.md` for macOS,
-`WINBENCH.md` for Windows).
-
-**Build and run:**
-```bash
-# Reconfigure with benchmarks enabled (one-time, use your platform's preset)
-cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON
-
-# Build
-cd build && ninja -j2 bench_all    # -j2 required for benchmark builds
-
-# Run all benchmarks
-./bench/cpp/bench_all
-
-# Track performance across commits
-bench/bench_track.sh baseline   # record baseline
-bench/bench_track.sh record     # record after changes
-bench/bench_track.sh compare    # compare HEAD vs baseline
 ```
 
 ### Python examples (integration tests)
 
-The 38 Python example scripts under `examples/python_examples/` serve as the **integration test
-suite** and act as the acceptance gate for all changes merged into `main`.
+The 38 Python example scripts under `examples/python_examples/` serve as the **integration
+test suite** and acceptance gate for all changes merged into `main`.
 
 ```bash
-python scripts/run_examples.py
+conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
 ```
 
-The runner (`scripts/run_examples.py`) executes all 38 example scripts
-non-interactively (using the `Agg` matplotlib backend), enforces per-example
-timeouts, and exits with code 0 only if every example passes.
+Options: `--timeout SECONDS`, `--filter SUBSTRING`.
 
-Options:
-```
---timeout SECONDS   Override the default 300 s per-example limit.
---filter SUBSTRING  Run only examples whose path contains SUBSTRING.
+Required packages for all 38 examples to run (none skipped):
+```bash
+conda run -n tycho pip install numpy scipy matplotlib seaborn spiceypy
+conda install -n tycho -c conda-forge basemap
 ```
 
-### C++ examples
+### C++ brachistochrone example
 
 ```bash
-./build/examples/cpp_examples/brachistochrone/brachistochrone_cpp
+./build/examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
+# Builder-API variant (equivalent convergence check):
+# ./build/examples/cpp_examples/builder/brachistochrone/brachistochrone_cpp
 ```
 
-The C++ brachistochrone example must converge to an optimal solution (PSIOPT prints
-"Optimal Solution Found") with an objective near 1.8013 s.
+Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
+
+### Pre-Merge Verification Sequence
+
+Run all four steps in order before opening or merging any PR into `main`:
+
+1. **C++ unit tests** — `ctest --output-on-failure` — all must pass
+2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 38 must exit 0
+3. **C++ brachistochrone** — see path above — must print "Optimal Solution Found", obj ≈ 1.8013 s
+4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy
 
 **All C++ unit tests must pass, all 38 Python examples must pass, the C++
 brachistochrone example must converge, and benchmarks must show no unexplained
-regressions before any pull request can be merged into `main`.** This is the
-project's definition of a green build. Reviewers must verify that `ctest`
-reports no failures, `python scripts/run_examples.py` exits 0,
-`brachistochrone_cpp` reports "Optimal Solution Found", and
-`bench/bench_track.sh compare` reports no regressions before approving.
+regressions before any pull request can be merged into `main`.** Fix broken examples
+or justify benchmark regressions in the same PR.
 
-If a change intentionally breaks an example (e.g. an API change that requires
-updating an example), the example must be fixed in the same PR. If a change
-introduces a benchmark regression, it must be explicitly justified in the PR.
+## Benchmarking
 
-### Required dependencies for the test environment
+```bash
+cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
+cd build && ninja -j2 bench_all                      # -j2 required for benchmark builds
+./bench/cpp/bench_all
 
-The following packages must be present in the Python environment for all
-examples to run (none will be skipped):
+bench/bench_track.sh baseline   # record baseline
+bench/bench_track.sh record     # record after changes
+bench/bench_track.sh compare    # compare HEAD vs baseline
+```
 
-| Package                  | Install                                     |
-| ------------------------ | ------------------------------------------- |
-| numpy, scipy, matplotlib | `pip install numpy scipy matplotlib`        |
-| seaborn                  | `pip install seaborn`                       |
-| spiceypy                 | `pip install spiceypy`                      |
-| basemap                  | `conda install -c conda-forge basemap`      |
-
-## Development Workflow
-
-Before implementing a change in Tycho, follow this procedure:
-
-1. **Run benchmarks to establish a pre-update baseline if necessary.**
-   This is only required if the most recent benchmark result does not correspond
-   to the current code. Exercise caution before deciding to skip this step — when
-   in doubt, record a fresh baseline. Refer to `bench/<SYS>BENCH.md` for the
-   benchmarking procedure on your platform (e.g., `bench/MACBENCH.md` for macOS).
-
-2. **Check out a new branch** from `main` for the work.
-
-3. **Develop the code and iterate on the design as necessary.** Iteration may
-   involve running benchmarks and tests during development, but this is not
-   strictly required at every step.
-
-4. **Before merging a PR into `main`, you MUST:**
-   - Run benchmarks and compare against baseline (see `bench/<SYS>BENCH.md`).
-   - Run all C++ unit tests (`ctest --output-on-failure`).
-   - Run all 38 Python examples (`python scripts/run_examples.py`).
-   - Verify the C++ brachistochrone example converges.
-   - Ensure no performance regressions are introduced (or that any regressions
-     are explicitly justified and acknowledged in the PR).
-
-## Things to Flag for Human Review
-
-- Any change to the PSIOPT optimizer internals
-- Any change touching Intel MKL / Apple Accelerate integration
-- Adding new third-party dependencies
-- Changes to the public APIs
-- Anything affecting PyPI packaging (pypiwheel/, setup.py)
+See `bench/MACBENCH.md` (macOS) or `bench/WINBENCH.md` (Windows) for the full procedure.

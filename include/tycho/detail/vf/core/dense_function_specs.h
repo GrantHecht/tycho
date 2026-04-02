@@ -15,9 +15,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 //   - PR 9: Removed dead Model<>/ExternalInterface<> boilerplate
 // =============================================================================
 
@@ -42,17 +41,17 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
-namespace Tycho {
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
+namespace tycho::vf {
 
 template <int IR, int OR> struct DenseFunctionSpec {
     template <class Scalar> using Output = Eigen::Matrix<Scalar, OR, 1>;
@@ -79,24 +78,24 @@ template <int IR, int OR> struct DenseFunctionSpec {
     using AdjVarType = Eigen::Ref<const Output<double>>;
     using AdjHessType = Eigen::Ref<Hessian<double>>;
 
-    using SuperInType = Eigen::Ref<const Input<Tycho::DefaultSuperScalar>>;
-    using SuperOutType = Eigen::Ref<Output<Tycho::DefaultSuperScalar>>;
+    using SuperInType = Eigen::Ref<const Input<tycho::DefaultSuperScalar>>;
+    using SuperOutType = Eigen::Ref<Output<tycho::DefaultSuperScalar>>;
 
     using SuperJacType = typename std::conditional<
         OR == 1,
-        Eigen::Ref<Eigen::Matrix<Tycho::DefaultSuperScalar, -1, IR>, 0, Eigen::Stride<-1, -1>>,
-        Eigen::Ref<Jacobian<Tycho::DefaultSuperScalar>>>::type;
+        Eigen::Ref<Eigen::Matrix<tycho::DefaultSuperScalar, -1, IR>, 0, Eigen::Stride<-1, -1>>,
+        Eigen::Ref<Jacobian<tycho::DefaultSuperScalar>>>::type;
 
-    using SuperAdjGradType = Eigen::Ref<Input<Tycho::DefaultSuperScalar>>;
-    using SuperAdjVarType = Eigen::Ref<const Output<Tycho::DefaultSuperScalar>>;
-    using SuperAdjHessType = Eigen::Ref<Hessian<Tycho::DefaultSuperScalar>>;
+    using SuperAdjGradType = Eigen::Ref<Input<tycho::DefaultSuperScalar>>;
+    using SuperAdjVarType = Eigen::Ref<const Output<tycho::DefaultSuperScalar>>;
+    using SuperAdjHessType = Eigen::Ref<Hessian<tycho::DefaultSuperScalar>>;
 
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
     using LeftJacMatrix = Eigen::Ref<const Eigen::Matrix<double, -1, OR>>;
     using LeftDiagMatrix = Eigen::DiagonalMatrix<double, OR>;
 
-    using SuperLeftJacMatrix = Eigen::Ref<const Eigen::Matrix<Tycho::DefaultSuperScalar, -1, OR>>;
-    using SuperRightJacTarget = Eigen::Ref<Eigen::Matrix<Tycho::DefaultSuperScalar, -1, IR>>;
+    using SuperLeftJacMatrix = Eigen::Ref<const Eigen::Matrix<tycho::DefaultSuperScalar, -1, OR>>;
+    using SuperRightJacTarget = Eigen::Ref<Eigen::Matrix<tycho::DefaultSuperScalar, -1, IR>>;
 
     struct Concept { // abstract base class for model.
         virtual ~Concept() = default;
@@ -217,4 +216,4 @@ template <int IR, int OR> struct DenseFunctionSpec {
     };
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

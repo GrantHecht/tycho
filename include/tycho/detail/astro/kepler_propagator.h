@@ -1,7 +1,19 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_SUM;
+using vf::Arguments;
+using vf::Constant;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::IfElseFunction;
+using vf::ScalarRootFinder;
+using vf::SignFunction;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 /*
 Kepler propagator implementation is partly based on the implementation found at
@@ -245,7 +257,7 @@ struct KeperPropagator_Impl {
 
         auto FG = FGs(mu, conictol).eval(XF);
 
-        constexpr bool d = FG.IsVectorizable;
+        constexpr bool d = FG.is_vectorizable;
 
         return ApplyRVFG().eval(stack(RVdt.head<6>(), FG));
     }
@@ -258,24 +270,24 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
 
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    GenericFunction<-1, -1> propfunc;
-    double mu = 1.0;
-    double tol = 1.0e-12;
-    int iters = 19;
-    double conictol = 1.0e-11;
-    const double Pi = 3.14159265358979;
-    double t0 = 0.0;
+    GenericFunction<-1, -1> propfunc_;
+    double mu_ = 1.0;
+    double tol_ = 1.0e-12;
+    int iters_ = 19;
+    double conictol_ = 1.0e-11;
+    const double pi_ = 3.14159265358979;
+    double t0_ = 0.0;
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     KeplerPropagator(double m) {
-        this->mu = m;
-        this->propfunc =
-            KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
+        this->mu_ = m;
+        this->propfunc_ =
+            KeperPropagator_Impl::Definition(this->mu_, this->conictol_, this->tol_, this->iters_);
     }
     KeplerPropagator() {
-        this->propfunc =
-            KeperPropagator_Impl::Definition(this->mu, this->conictol, this->tol, this->iters);
+        this->propfunc_ =
+            KeperPropagator_Impl::Definition(this->mu_, this->conictol_, this->tol_, this->iters_);
     }
 
     template <class Scalar> static Scalar CBRT(Scalar x) {
@@ -291,7 +303,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
                              Eigen::MatrixBase<OutType> const &fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        this->propfunc.compute(x, fx_);
+        this->propfunc_.compute(x, fx_);
     }
 
     template <class InType, class OutType, class JacType>
@@ -299,7 +311,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
                                       Eigen::MatrixBase<OutType> const &fx_,
                                       Eigen::MatrixBase<JacType> const &jx_) const {
         typedef typename InType::Scalar Scalar;
-        this->propfunc.compute_jacobian(x, fx_, jx_);
+        this->propfunc_.compute_jacobian(x, fx_, jx_);
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -310,8 +322,8 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
 
-        this->propfunc.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                       adjhess_, adjvars);
+        this->propfunc_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                                                                        adjhess_, adjvars);
     }
 
     /*
@@ -539,4 +551,4 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     }*/
 };
 
-} // namespace Tycho
+} // namespace tycho::astro

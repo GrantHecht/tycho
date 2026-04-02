@@ -9,7 +9,7 @@
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class RuntimeODETest : public OptimalControlTest {};
@@ -17,8 +17,8 @@ class RuntimeODETest : public OptimalControlTest {};
 TEST_F(RuntimeODETest, ConstructFromExpression) {
     // Build Brachistochrone dynamics using the VF DSL
     auto args = ODEArguments(3, 1, 0);
-    auto v = args.segment(0, 3).coeff(2);     // XVar(2)
-    auto theta = args.segment(4, 1).coeff(0); // UVar(0)
+    auto v = args.segment(0, 3).coeff(2);     // x_var(2)
+    auto theta = args.segment(4, 1).coeff(0); // u_var(0)
 
     auto xdot = sin(theta) * v;
     auto ydot = cos(theta) * v * (-1.0);
@@ -61,9 +61,9 @@ TEST_F(RuntimeODETest, GenericODEConstruction) {
     RuntimeODE ode(ode_expr, 3, 1, 0);
     auto gen_ode = ode.generic_ode();
 
-    EXPECT_EQ(gen_ode.XVars(), 3);
-    EXPECT_EQ(gen_ode.UVars(), 1);
-    EXPECT_EQ(gen_ode.PVars(), 0);
+    EXPECT_EQ(gen_ode.x_vars(), 3);
+    EXPECT_EQ(gen_ode.u_vars(), 1);
+    EXPECT_EQ(gen_ode.p_vars(), 0);
 }
 
 TEST_F(RuntimeODETest, SizeMismatchThrows) {
@@ -101,8 +101,8 @@ TEST_F(RuntimeODETest, InputSizeMismatchThrows) {
 TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
@@ -152,8 +152,8 @@ TEST_F(RuntimeODETest, MakeUnitsWithoutRegistryThrows) {
 TEST_F(RuntimeODETest, EmptyTrajectoryThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .build();
@@ -165,8 +165,8 @@ TEST_F(RuntimeODETest, EmptyTrajectoryThrows) {
 TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .build();
@@ -179,8 +179,8 @@ TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
 TEST_F(RuntimeODETest, ZeroSegmentsThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .build();
@@ -192,8 +192,8 @@ TEST_F(RuntimeODETest, ZeroSegmentsThrows) {
 TEST_F(RuntimeODETest, NegativeSegmentsThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
-                       auto v = args.XVar(2);
-                       auto theta = args.UVar(0);
+                       auto v = args.x_var(2);
+                       auto theta = args.u_var(0);
                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
                    })
                    .build();

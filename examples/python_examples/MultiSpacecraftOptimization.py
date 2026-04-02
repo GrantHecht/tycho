@@ -90,23 +90,23 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         ## Create a phase for Each Spacecraft
         phase = ode.phase("LGL5")
         ## Set Initial Guess
-        phase.setTraj(T, NSegs)
+        phase.set_traj(T, NSegs)
 
         ##Use block constant control
-        phase.setControlMode("BlockConstant")
+        phase.set_control_mode("BlockConstant")
 
         ##Specify that initial state and time are locked at
         ##whatever value is passed to optimizer
-        phase.addValueLock("Front", range(0, 7))
+        phase.add_value_lock("Front", range(0, 7))
 
         ## Bound Norm of Control Vector over the whole phase
-        phase.addLUNormBound("Path", [7, 8, 9], 0.01, 1.0, 1)
+        phase.add_lu_norm_bound("Path", [7, 8, 9], 0.01, 1.0, 1)
 
         # Add TOF objective
-        phase.addDeltaTimeObjective(1.0)
+        phase.add_delta_time_objective(1.0)
 
         ## add phase to the OCP
-        ocp.addPhase(phase)
+        ocp.add_phase(phase)
 
     ####################################################
     # Section 2:
@@ -120,7 +120,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
     # First we add an initial guess for the linkParams, which we be a free
     # terminal position,velocity and time that all phases must hit
     # The ocp now has 7 link params indexed 0->6
-    ocp.setLinkParams(SetPointIG[0:7])
+    ocp.set_link_params(SetPointIG[0:7])
 
     # Now we need to define the function and varibales needed to express
     # the constraint
@@ -130,16 +130,16 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 
     # Forward the back state in each phase and the linkParams to the function
     for i in range(0, len(Trajs)):
-        ocp.addLinkEqualCon(LinkFun, [(i, "Back", range(0, 7), [], [])], range(0, 7))
+        ocp.add_link_equal_con(LinkFun, [(i, "Back", range(0, 7), [], [])], range(0, 7))
 
-    ocp.addLinkParamEqualCon(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
+    ocp.add_link_param_equal_con(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
 
-    ocp.optimizer.set_OptLSMode("L1")
-    ocp.optimizer.set_deltaH(5.0e-8)
-    ocp.optimizer.set_KKTtol(1.0e-9)
-    ocp.optimizer.set_BoundFraction(0.997)
-    ocp.optimizer.PrintLevel = 1
-    ocp.optimizer.set_MaxLSIters(1)
+    ocp.optimizer.set_opt_ls_mode("L1")
+    ocp.optimizer.set_delta_h(5.0e-8)
+    ocp.optimizer.set_kkt_tol(1.0e-9)
+    ocp.optimizer.set_bound_fraction(0.997)
+    ocp.optimizer.print_level = 1
+    ocp.optimizer.set_max_ls_iters(1)
 
     Data = []
 
@@ -155,8 +155,8 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         ## For each set Initial condtions subsitute the fixed intial conditions
         ## to each phase, Because we locked them, they will be fixed at these values
         ## this avoids having to retranscribe to the problem for every optimize
-        for i, phase in enumerate(ocp.Phases):
-            phase.subVariables("Front", range(0, 7), Ist[i][0:7])
+        for i, phase in enumerate(ocp.phases):
+            phase.sub_variables("Front", range(0, 7), Ist[i][0:7])
 
         # force a retranscription peridically to keep problem well conditioned
         # This is not strictly necessary
@@ -174,7 +174,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
             ocp.solve_optimize()
 
         Data.append(
-            [[phase.returnTraj() for phase in ocp.Phases], ocp.returnLinkParams()]
+            [[phase.return_traj() for phase in ocp.phases], ocp.return_link_params()]
         )
     return Data
 

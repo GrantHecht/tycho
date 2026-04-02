@@ -16,8 +16,8 @@ class ODE(oc.ODEBase):
         UVars = 1
 
         args = oc.ODEArguments(XVars, UVars)
-        x = args.XVar(0)
-        u = args.UVar(0)
+        x = args.x_var(0)
+        u = args.u_var(0)
         xdot = 0.5 * x + u
         super().__init__(xdot, XVars, UVars)
 
@@ -63,148 +63,148 @@ class test_ObjScaling(unittest.TestCase):
 
         #### Ground Truth, No AutoScaling #################
         phase = ode.phase(tmode, TrajIG, nsegs)
-        phase.setAdaptiveMesh(True)
-        phase.setControlMode(cmode)
-        phase.setMeshTol(mtol)
+        phase.set_adaptive_mesh(True)
+        phase.set_control_mode(cmode)
+        phase.set_mesh_tol(mtol)
 
-        phase.addBoundaryValue("Front", [0, 1], [x0, t0])
-        phase.addBoundaryValue("Back", [1], [tf])
-        phase.addIntegralObjective(ODE.obj() * iscale, [0, 2])
-        phase.addValueObjective("Back", 0, vscale)
+        phase.add_boundary_value("Front", [0, 1], [x0, t0])
+        phase.add_boundary_value("Back", [1], [tf])
+        phase.add_integral_objective(ODE.obj() * iscale, [0, 2])
+        phase.add_value_objective("Back", 0, vscale)
 
-        phase.setNumPartitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.set_num_partitions(1, 1)
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
 
-        xf1 = phase.returnTraj()[-1][0]
+        xf1 = phase.return_traj()[-1][0]
         ###################################################
 
         #### AutoScaling, Value + Integral ###############
         phase = ode.phase(tmode, TrajIG, nsegs)
-        phase.setAdaptiveMesh(True)
-        phase.setMeshTol(mtol)
+        phase.set_adaptive_mesh(True)
+        phase.set_mesh_tol(mtol)
 
-        phase.setUnits([xstar, tstar, ustar])
-        phase.addBoundaryValue("Front", [0, 1], [x0, t0])
-        phase.addBoundaryValue("Back", [1], [tf])
-        phase.addIntegralObjective(ODE.obj() * iscale, [0, 2])
-        phase.addValueObjective("Back", 0, vscale)
+        phase.set_units([xstar, tstar, ustar])
+        phase.add_boundary_value("Front", [0, 1], [x0, t0])
+        phase.add_boundary_value("Back", [1], [tf])
+        phase.add_integral_objective(ODE.obj() * iscale, [0, 2])
+        phase.add_value_objective("Back", 0, vscale)
 
-        phase.setAutoScaling(True)
-        phase.setNumPartitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.set_auto_scaling(True)
+        phase.set_num_partitions(1, 1)
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
-        xf2 = phase.returnTraj()[-1][0]
+        xf2 = phase.return_traj()[-1][0]
         ###################################################
 
         #### AutoScaling, Value + IntegralParam ###############
         phase = ode.phase(tmode, TrajIG, nsegs)
-        phase.setAdaptiveMesh(True)
-        phase.setMeshTol(mtol)
+        phase.set_adaptive_mesh(True)
+        phase.set_mesh_tol(mtol)
 
-        phase.setUnits([xstar, tstar, ustar])
-        phase.setStaticParams([0.0], [pstar])
+        phase.set_units([xstar, tstar, ustar])
+        phase.set_static_params([0.0], [pstar])
 
-        phase.addBoundaryValue("Front", [0, 1], [x0, t0])
-        phase.addBoundaryValue("Back", [1], [tf])
-        phase.addIntegralParamFunction(ODE.obj(), [0, 2], 0)
-        phase.addValueObjective("Back", 0, vscale)
-        phase.addValueObjective("StaticParams", 0, iscale)
+        phase.add_boundary_value("Front", [0, 1], [x0, t0])
+        phase.add_boundary_value("Back", [1], [tf])
+        phase.add_integral_param_function(ODE.obj(), [0, 2], 0)
+        phase.add_value_objective("Back", 0, vscale)
+        phase.add_value_objective("StaticParams", 0, iscale)
 
-        phase.setAutoScaling(True)
+        phase.set_auto_scaling(True)
 
-        phase.setNumPartitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.set_num_partitions(1, 1)
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
-        xf3 = phase.returnTraj()[-1][0]
+        xf3 = phase.return_traj()[-1][0]
         ###################################################
 
         #### AutoScaling, Value + IntegralParam style 2 ###############
         phase = ode.phase(tmode, TrajIG, nsegs)
-        phase.setAdaptiveMesh(True)
-        phase.setMeshTol(mtol)
+        phase.set_adaptive_mesh(True)
+        phase.set_mesh_tol(mtol)
 
-        phase.setUnits([xstar, tstar, ustar])
-        phase.setStaticParams([0.0], [pstar])
+        phase.set_units([xstar, tstar, ustar])
+        phase.set_static_params([0.0], [pstar])
 
-        phase.addBoundaryValue("Front", [0, 1], [x0, t0])
-        phase.addBoundaryValue("Back", [1], [tf])
-        phase.addIntegralParamFunction(ODE.obj(), [0, 2], 0)
+        phase.add_boundary_value("Front", [0, 1], [x0, t0])
+        phase.add_boundary_value("Back", [1], [tf])
+        phase.add_integral_param_function(ODE.obj(), [0, 2], 0)
 
-        phase.addStateObjective("Back", Args(2).dot([vscale, iscale]), [0], [], [0])
+        phase.add_state_objective("Back", Args(2).dot([vscale, iscale]), [0], [], [0])
 
-        phase.setAutoScaling(True)
+        phase.set_auto_scaling(True)
 
-        phase.setNumPartitions(1, 1)
-        phase.optimizer.CNRMode = True
-        phase.optimizer.set_QPOrderingMode("MINDEG")
+        phase.set_num_partitions(1, 1)
+        phase.optimizer.cnr_mode = True
+        phase.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            phase.optimizer.PrintLevel = 3
-            phase.PrintMeshInfo = False
+            phase.optimizer.print_level = 3
+            phase.print_mesh_info = False
 
         phase.optimize()
-        xf4 = phase.returnTraj()[-1][0]
+        xf4 = phase.return_traj()[-1][0]
         ###################################################
 
         #### AutoScaling, Multi Phase Value + Integral ###############
         phase1 = ode.phase(tmode, TrajIG[0 : int(nsegs / 2)], nsegs)
-        phase1.setAdaptiveMesh(True)
-        phase1.setMeshTol(mtol)
+        phase1.set_adaptive_mesh(True)
+        phase1.set_mesh_tol(mtol)
 
-        phase1.setUnits([xstar, tstar, ustar])
-        phase1.addBoundaryValue("Front", [0, 1], [x0, t0])
-        phase1.addIntegralObjective(ODE.obj() * iscale, [0, 2])
-        phase1.addDeltaTimeEqualCon(tf / 2.0)
+        phase1.set_units([xstar, tstar, ustar])
+        phase1.add_boundary_value("Front", [0, 1], [x0, t0])
+        phase1.add_integral_objective(ODE.obj() * iscale, [0, 2])
+        phase1.add_delta_time_equal_con(tf / 2.0)
 
         phase2 = ode.phase(tmode, TrajIG[int(nsegs / 2) :], nsegs)
-        phase2.setAdaptiveMesh(True)
-        phase2.setMeshTol(mtol)
+        phase2.set_adaptive_mesh(True)
+        phase2.set_mesh_tol(mtol)
 
-        phase2.setUnits([xstar * 0.99, tstar * 0.783, ustar * 1.1])
-        phase2.setAdaptiveMesh(True)
-        phase2.setMeshTol(mtol)
+        phase2.set_units([xstar * 0.99, tstar * 0.783, ustar * 1.1])
+        phase2.set_adaptive_mesh(True)
+        phase2.set_mesh_tol(mtol)
 
-        phase2.addIntegralObjective(ODE.obj() * iscale, [0, 2])
-        phase2.addBoundaryValue("Back", [1], [tf])
-        phase2.addValueObjective("Back", 0, vscale)
+        phase2.add_integral_objective(ODE.obj() * iscale, [0, 2])
+        phase2.add_boundary_value("Back", [1], [tf])
+        phase2.add_value_objective("Back", 0, vscale)
 
         ocp = oc.OptimalControlProblem()
 
-        ocp.addPhase(phase1)
-        ocp.addPhase(phase2)
+        ocp.add_phase(phase1)
+        ocp.add_phase(phase2)
 
-        ocp.addForwardLinkEqualCon(phase1, phase2, range(0, 3))
+        ocp.add_forward_link_equal_con(phase1, phase2, range(0, 3))
 
-        ocp.setAutoScaling(True, True)
-        ocp.setNumPartitions(1, 1)
-        ocp.optimizer.CNRMode = True
-        ocp.optimizer.set_QPOrderingMode("MINDEG")
+        ocp.set_auto_scaling(True, True)
+        ocp.set_num_partitions(1, 1)
+        ocp.optimizer.cnr_mode = True
+        ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
         if __name__ != "__main__":
-            ocp.optimizer.PrintLevel = 3
-            ocp.PrintMeshInfo = False
+            ocp.optimizer.print_level = 3
+            ocp.print_mesh_info = False
 
         ocp.optimize()
-        xf5 = phase2.returnTraj()[-1][0]
+        xf5 = phase2.return_traj()[-1][0]
         ###################################################
 
         xferr1 = abs(xf1 - self.FinalState)

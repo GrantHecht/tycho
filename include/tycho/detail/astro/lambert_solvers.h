@@ -1,7 +1,7 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
-namespace Tycho {
+namespace tycho::astro {
 
 /*
   Dario Izzo's Lambert algorithm vectorizable with Eigen::Array types. 2x increase in throughput
@@ -457,4 +457,4 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
     return std::array<Vector3<Scalar>, 2>{V1, V2};
 }
 
-} // namespace Tycho
+} // namespace tycho::astro

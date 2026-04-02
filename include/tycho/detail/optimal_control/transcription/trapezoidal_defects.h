@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,19 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::BumpAllocator;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using utils::TempSpec;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 template <class DODE>
 struct TrapezoidalDefects
@@ -41,93 +52,94 @@ struct TrapezoidalDefects
     template <class Scalar> using ODEGrad = typename DODE::template Gradient<Scalar>;
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
     template <class Scalar> using ODEHessian = typename DODE::template Hessian<Scalar>;
-    DODE ode;
-    bool EnableHessianSparsity = false;
-    Eigen::MatrixXi nzlocs;
-    static const bool IsVectorizable = DODE::IsVectorizable;
+    DODE ode_;
+    bool enable_hessian_sparsity_ = false;
+    Eigen::MatrixXi nz_locs_;
+    static const bool is_vectorizable = DODE::is_vectorizable;
 
-    void exactHessianSparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
+    void exact_hessian_sparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
 
-        Input<double> xin(this->IRows());
-        xin.head(this->ode.XtUVars()) = xtup1.head(this->ode.XtUVars());
-        xin.segment(this->ode.XtUVars(), this->ode.XtUVars()) = xtup2.head(this->ode.XtUVars());
-        xin.tail(this->ode.PVars()) = xtup2.tail(this->ode.PVars());
+        Input<double> xin(this->input_rows());
+        xin.head(this->ode_.xtu_vars()) = xtup1.head(this->ode_.xtu_vars());
+        xin.segment(this->ode_.xtu_vars(), this->ode_.xtu_vars()) =
+            xtup2.head(this->ode_.xtu_vars());
+        xin.tail(this->ode_.p_vars()) = xtup2.tail(this->ode_.p_vars());
 
-        Eigen::VectorXd ran(this->IRows());
+        Eigen::VectorXd ran(this->input_rows());
         ran.setRandom();
         ran *= 1.0e-10;
 
         xin += ran;
 
-        Output<double> lm(this->ORows());
+        Output<double> lm(this->output_rows());
         lm.setRandom();
 
         Hessian<double> hess = this->adjointhessian(xin, lm);
 
-        for (int i = 0; i < this->IRows(); i++) {
-            for (int j = 0; j < this->IRows(); j++) {
-                if (nzlocs(i, j) == 1) {
+        for (int i = 0; i < this->input_rows(); i++) {
+            for (int j = 0; j < this->input_rows(); j++) {
+                if (nz_locs_(i, j) == 1) {
                     if (abs(hess(i, j)) == 0.0) {
-                        nzlocs(i, j) = 0;
+                        nz_locs_(i, j) = 0;
                     }
                 }
             }
         }
     }
 
-    TrapezoidalDefects(const DODE &od) { this->setODE(od); }
-    void setODE(const DODE &od) {
-        this->ode = od;
-        this->setOutputRows(this->ode.ORows() * (CS - 1));
-        this->setInputRows(CS * this->ode.XtUVars() + this->ode.PVars());
+    TrapezoidalDefects(const DODE &od) { this->set_ode(od); }
+    void set_ode(const DODE &od) {
+        this->ode_ = od;
+        this->set_output_rows(this->ode_.output_rows() * (CS - 1));
+        this->set_input_rows(CS * this->ode_.xtu_vars() + this->ode_.p_vars());
 
-        nzlocs.resize(this->IRows(), this->IRows());
-        nzlocs.setZero();
+        nz_locs_.resize(this->input_rows(), this->input_rows());
+        nz_locs_.setZero();
 
-        int xtu = this->ode.XtUVars();
-        nzlocs.topLeftCorner(xtu, xtu).setOnes();
-        nzlocs.block(xtu, xtu, xtu, xtu).setOnes();
-        nzlocs.bottomRightCorner(this->ode.PVars(), this->ode.PVars()).setOnes();
+        int xtu = this->ode_.xtu_vars();
+        nz_locs_.topLeftCorner(xtu, xtu).setOnes();
+        nz_locs_.block(xtu, xtu, xtu, xtu).setOnes();
+        nz_locs_.bottomRightCorner(this->ode_.p_vars(), this->ode_.p_vars()).setOnes();
 
         int j = 0;
-        int Cardinals = 2;
-        nzlocs
-            .block(j * this->ode.XtUVars(), Cardinals * this->ode.XtUVars(), this->ode.XtUVars(),
-                   this->ode.PVars())
+        int cardinals = 2;
+        nz_locs_
+            .block(j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(),
+                   this->ode_.xtu_vars(), this->ode_.p_vars())
             .setOnes();
 
-        nzlocs
-            .block(Cardinals * this->ode.XtUVars(), j * this->ode.XtUVars(), this->ode.PVars(),
-                   this->ode.XtUVars())
+        nz_locs_
+            .block(cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(),
+                   this->ode_.p_vars(), this->ode_.xtu_vars())
             .setOnes();
         j = 1;
-        nzlocs
-            .block(j * this->ode.XtUVars(), Cardinals * this->ode.XtUVars(), this->ode.XtUVars(),
-                   this->ode.PVars())
+        nz_locs_
+            .block(j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(),
+                   this->ode_.xtu_vars(), this->ode_.p_vars())
             .setOnes();
 
-        nzlocs
-            .block(Cardinals * this->ode.XtUVars(), j * this->ode.XtUVars(), this->ode.PVars(),
-                   this->ode.XtUVars())
+        nz_locs_
+            .block(cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(),
+                   this->ode_.p_vars(), this->ode_.xtu_vars())
             .setOnes();
 
-        nzlocs.col(this->ode.TVar()).setOnes();
-        nzlocs.col(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)).setOnes();
-        nzlocs.row(this->ode.TVar()).setOnes();
-        nzlocs.row(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)).setOnes();
+        nz_locs_.col(this->ode_.t_var()).setOnes();
+        nz_locs_.col(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)).setOnes();
+        nz_locs_.row(this->ode_.t_var()).setOnes();
+        nz_locs_.row(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)).setOnes();
     }
 
-    inline bool HessianElemIsNonZero(int row, int col) const {
-        if (this->EnableHessianSparsity) {
-            return bool(this->nzlocs(row, col));
+    inline bool hessian_elem_is_non_zero(int row, int col) const {
+        if (this->enable_hessian_sparsity_) {
+            return bool(this->nz_locs_(row, col));
         } else {
             return true;
         }
     }
-    inline void AddHessianElem(double v, int row, int col, double *mpt, const int *lpt,
-                               int &freeloc) const {
-        if (this->EnableHessianSparsity) {
-            if (bool(this->nzlocs(row, col))) {
+    inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
+                                 int &freeloc) const {
+        if (this->enable_hessian_sparsity_) {
+            if (bool(this->nz_locs_(row, col))) {
                 mpt[lpt[freeloc]] += v;
                 freeloc++;
             }
@@ -143,30 +155,30 @@ struct TrapezoidalDefects
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1) {
-            X0.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(0, this->ode.XtUVars());
-            X0.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+        auto impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1) {
+            X0.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(0, this->ode_.xtu_vars());
+            X0.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
 
-            X1.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(this->ode.XtUVars(), this->ode.XtUVars());
-            X1.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
-            Scalar h = X1[this->ode.TVar()] - X0[this->ode.TVar()];
+            X1.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(this->ode_.xtu_vars(), this->ode_.xtu_vars());
+            X1.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
+            Scalar h = X1[this->ode_.t_var()] - X0[this->ode_.t_var()];
 
-            this->ode.compute(X0, FX0);
-            this->ode.compute(X1, FX1);
+            this->ode_.compute(X0, FX0);
+            this->ode_.compute(X1, FX1);
 
-            fx = (X1.template segment<DODE::XV>(0, this->ode.XVars()) -
-                  X0.template segment<DODE::XV>(0, this->ode.XVars())) -
+            fx = (X1.template segment<DODE::XV>(0, this->ode_.x_vars()) -
+                  X0.template segment<DODE::XV>(0, this->ode_.x_vars())) -
                  (h / 2.0) * (FX0 + FX1);
         };
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode_.input_rows();
+        const int orows = this->ode_.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
 
-        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1));
         fx *= Scalar(-1.0);
     }
@@ -179,62 +191,63 @@ struct TrapezoidalDefects
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        Scalar One_Half(0.5);
-        Scalar One(1.0);
-        auto Impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1, auto &JX0, auto &JX1) {
-            X0.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(0, this->ode.XtUVars());
-            X0.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+        Scalar one_half(0.5);
+        Scalar one(1.0);
+        auto impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1, auto &JX0, auto &JX1) {
+            X0.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(0, this->ode_.xtu_vars());
+            X0.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
 
-            X1.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(this->ode.XtUVars(), this->ode.XtUVars());
-            X1.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
-            Scalar h = X1[this->ode.TVar()] - X0[this->ode.TVar()];
+            X1.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(this->ode_.xtu_vars(), this->ode_.xtu_vars());
+            X1.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
+            Scalar h = X1[this->ode_.t_var()] - X0[this->ode_.t_var()];
 
-            this->ode.compute_jacobian(X0, FX0, JX0);
-            this->ode.compute_jacobian(X1, FX1, JX1);
+            this->ode_.compute_jacobian(X0, FX0, JX0);
+            this->ode_.compute_jacobian(X1, FX1, JX1);
 
-            fx = (X1.template segment<DODE::XV>(0, this->ode.XVars()) -
-                  X0.template segment<DODE::XV>(0, this->ode.XVars())) -
+            fx = (X1.template segment<DODE::XV>(0, this->ode_.x_vars()) -
+                  X0.template segment<DODE::XV>(0, this->ode_.x_vars())) -
                  (h / 2.0) * (FX0 + FX1);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            jx.template block<DODE::XV, DODE::XV>(0, 0, this->ode.XVars(), this->ode.XVars())
+            jx.template block<DODE::XV, DODE::XV>(0, 0, this->ode_.x_vars(), this->ode_.x_vars())
                 .diagonal()
-                .setConstant(-One);
-            jx.template block<DODE::XV, DODE::XV>(0, this->ode.XtUVars(), this->ode.XVars(),
-                                                  this->ode.XVars())
+                .setConstant(-one);
+            jx.template block<DODE::XV, DODE::XV>(0, this->ode_.xtu_vars(), this->ode_.x_vars(),
+                                                  this->ode_.x_vars())
                 .diagonal()
-                .setConstant(One);
+                .setConstant(one);
 
-            ODEOutput<Scalar> Tds = -One_Half * (FX0 + FX1);
-            jx.col(this->ode.TVar()) -= Tds;
-            jx.col(this->ode.XtUVars() + this->ode.TVar()) += Tds;
+            ODEOutput<Scalar> tds = -one_half * (FX0 + FX1);
+            jx.col(this->ode_.t_var()) -= tds;
+            jx.col(this->ode_.xtu_vars() + this->ode_.t_var()) += tds;
 
-            jx.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(), this->ode.XtUVars()) +=
-                (-h / 2.0) * JX0.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(),
-                                                                      this->ode.XtUVars());
+            jx.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                    this->ode_.xtu_vars()) +=
+                (-h / 2.0) * JX0.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                                      this->ode_.xtu_vars());
 
-            jx.template block<DODE::XV, DODE::XtUV>(0, this->ode.XtUVars(), this->ode.XVars(),
-                                                    this->ode.XtUVars()) +=
-                (-h / 2.0) * JX1.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(),
-                                                                      this->ode.XtUVars());
+            jx.template block<DODE::XV, DODE::XtUV>(0, this->ode_.xtu_vars(), this->ode_.x_vars(),
+                                                    this->ode_.xtu_vars()) +=
+                (-h / 2.0) * JX1.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                                      this->ode_.xtu_vars());
 
-            jx.template rightCols<DODE::PV>(this->ode.PVars()) =
-                (-h / 2.0) * (JX0.template rightCols<DODE::PV>(this->ode.PVars()) +
-                              JX1.template rightCols<DODE::PV>(this->ode.PVars()));
+            jx.template rightCols<DODE::PV>(this->ode_.p_vars()) =
+                (-h / 2.0) * (JX0.template rightCols<DODE::PV>(this->ode_.p_vars()) +
+                              JX1.template rightCols<DODE::PV>(this->ode_.p_vars()));
 
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         };
 
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode_.input_rows();
+        const int orows = this->ode_.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
         using JType = ODEJacobian<Scalar>;
 
-        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1),
                                     TempSpec<JType>(orows, irows), TempSpec<JType>(orows, irows));
 
@@ -255,52 +268,53 @@ struct TrapezoidalDefects
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        Scalar One_Half(0.5);
-        Scalar One(1.0);
-        auto Impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1, auto &JX0, auto &JX1, auto &AGX0,
+        Scalar one_half(0.5);
+        Scalar one(1.0);
+        auto impl = [&](auto &X0, auto &X1, auto &FX0, auto &FX1, auto &JX0, auto &JX1, auto &AGX0,
                         auto &AGX1, auto &HX0, auto &HX1) {
-            X0.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(0, this->ode.XtUVars());
-            X0.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+            X0.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(0, this->ode_.xtu_vars());
+            X0.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
 
-            X1.template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                x.template segment<DODE::XtUV>(this->ode.XtUVars(), this->ode.XtUVars());
-            X1.tail(this->ode.PVars()) = x.tail(this->ode.PVars());
-            Scalar h = X1[this->ode.TVar()] - X0[this->ode.TVar()];
+            X1.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                x.template segment<DODE::XtUV>(this->ode_.xtu_vars(), this->ode_.xtu_vars());
+            X1.tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
+            Scalar h = X1[this->ode_.t_var()] - X0[this->ode_.t_var()];
 
-            this->ode.compute_jacobian_adjointgradient_adjointhessian(X0, FX0, JX0, AGX0, HX0,
-                                                                      adjvars);
-            this->ode.compute_jacobian_adjointgradient_adjointhessian(X1, FX1, JX1, AGX1, HX1,
-                                                                      adjvars);
-            fx = (X1.template segment<DODE::XV>(0, this->ode.XVars()) -
-                  X0.template segment<DODE::XV>(0, this->ode.XVars())) -
+            this->ode_.compute_jacobian_adjointgradient_adjointhessian(X0, FX0, JX0, AGX0, HX0,
+                                                                       adjvars);
+            this->ode_.compute_jacobian_adjointgradient_adjointhessian(X1, FX1, JX1, AGX1, HX1,
+                                                                       adjvars);
+            fx = (X1.template segment<DODE::XV>(0, this->ode_.x_vars()) -
+                  X0.template segment<DODE::XV>(0, this->ode_.x_vars())) -
                  (h / 2.0) * (FX0 + FX1);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            jx.template block<DODE::XV, DODE::XV>(0, 0, this->ode.XVars(), this->ode.XVars())
+            jx.template block<DODE::XV, DODE::XV>(0, 0, this->ode_.x_vars(), this->ode_.x_vars())
                 .diagonal()
-                .setConstant(-One);
-            jx.template block<DODE::XV, DODE::XV>(0, this->ode.XtUVars(), this->ode.XVars(),
-                                                  this->ode.XVars())
+                .setConstant(-one);
+            jx.template block<DODE::XV, DODE::XV>(0, this->ode_.xtu_vars(), this->ode_.x_vars(),
+                                                  this->ode_.x_vars())
                 .diagonal()
-                .setConstant(One);
+                .setConstant(one);
 
-            ODEOutput<Scalar> Tds = -One_Half * (FX0 + FX1);
-            jx.col(this->ode.TVar()) -= Tds;
-            jx.col(this->ode.XtUVars() + this->ode.TVar()) += Tds;
+            ODEOutput<Scalar> tds = -one_half * (FX0 + FX1);
+            jx.col(this->ode_.t_var()) -= tds;
+            jx.col(this->ode_.xtu_vars() + this->ode_.t_var()) += tds;
 
-            jx.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(), this->ode.XtUVars()) +=
-                (-h / 2.0) * JX0.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(),
-                                                                      this->ode.XtUVars());
+            jx.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                    this->ode_.xtu_vars()) +=
+                (-h / 2.0) * JX0.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                                      this->ode_.xtu_vars());
 
-            jx.template block<DODE::XV, DODE::XtUV>(0, this->ode.XtUVars(), this->ode.XVars(),
-                                                    this->ode.XtUVars()) +=
-                (-h / 2.0) * JX1.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode.XVars(),
-                                                                      this->ode.XtUVars());
+            jx.template block<DODE::XV, DODE::XtUV>(0, this->ode_.xtu_vars(), this->ode_.x_vars(),
+                                                    this->ode_.xtu_vars()) +=
+                (-h / 2.0) * JX1.template block<DODE::XV, DODE::XtUV>(0, 0, this->ode_.x_vars(),
+                                                                      this->ode_.xtu_vars());
 
-            jx.template rightCols<DODE::PV>(this->ode.PVars()) =
-                (-h / 2.0) * (JX0.template rightCols<DODE::PV>(this->ode.PVars()) +
-                              JX1.template rightCols<DODE::PV>(this->ode.PVars()));
+            jx.template rightCols<DODE::PV>(this->ode_.p_vars()) =
+                (-h / 2.0) * (JX0.template rightCols<DODE::PV>(this->ode_.p_vars()) +
+                              JX1.template rightCols<DODE::PV>(this->ode_.p_vars()));
 
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -308,65 +322,69 @@ struct TrapezoidalDefects
 
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            adjhess.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode.XtUVars(),
-                                                           this->ode.XtUVars()) =
-                (-h / 2.0) * HX0.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode.XtUVars(),
-                                                                        this->ode.XtUVars());
-            adjhess.template block<DODE::XtUV, DODE::XtUV>(this->ode.XtUVars(), this->ode.XtUVars(),
-                                                           this->ode.XtUVars(),
-                                                           this->ode.XtUVars()) =
-                (-h / 2.0) * HX1.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode.XtUVars(),
-                                                                        this->ode.XtUVars());
+            adjhess.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode_.xtu_vars(),
+                                                           this->ode_.xtu_vars()) =
+                (-h / 2.0) * HX0.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode_.xtu_vars(),
+                                                                        this->ode_.xtu_vars());
+            adjhess.template block<DODE::XtUV, DODE::XtUV>(
+                this->ode_.xtu_vars(), this->ode_.xtu_vars(), this->ode_.xtu_vars(),
+                this->ode_.xtu_vars()) =
+                (-h / 2.0) * HX1.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode_.xtu_vars(),
+                                                                        this->ode_.xtu_vars());
 
-            adjhess.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode.PVars(),
-                                                                   this->ode.PVars()) =
+            adjhess.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode_.p_vars(),
+                                                                   this->ode_.p_vars()) =
                 (-h / 2.0) * (HX0.template bottomRightCorner<DODE::PV, DODE::PV>(
-                                  this->ode.PVars(), this->ode.PVars()) +
+                                  this->ode_.p_vars(), this->ode_.p_vars()) +
                               HX1.template bottomRightCorner<DODE::PV, DODE::PV>(
-                                  this->ode.PVars(), this->ode.PVars()));
+                                  this->ode_.p_vars(), this->ode_.p_vars()));
 
             int j = 0;
-            constexpr int Cardinals = 2;
-            Input<Scalar> HTpar(this->IRows());
-            HTpar.setZero();
+            constexpr int cardinals = 2;
+            Input<Scalar> ht_par(this->input_rows());
+            ht_par.setZero();
 
-            adjhess.template block<DODE::XtUV, DODE::PV>(j * this->ode.XtUVars(),
-                                                         Cardinals * this->ode.XtUVars(),
-                                                         this->ode.XtUVars(), this->ode.PVars()) +=
-                (-h / 2.0) * HX0.template block<DODE::XtUV, DODE::PV>(
-                                 0, this->ode.XtUVars(), this->ode.XtUVars(), this->ode.PVars());
-            adjhess.template block<DODE::PV, DODE::XtUV>(Cardinals * this->ode.XtUVars(),
-                                                         j * this->ode.XtUVars(), this->ode.PVars(),
-                                                         this->ode.XtUVars()) +=
-                (-h / 2.0) * HX0.template block<DODE::PV, DODE::XtUV>(
-                                 this->ode.XtUVars(), 0, this->ode.PVars(), this->ode.XtUVars());
-            HTpar.template segment<DODE::XtUV>(j * this->ode.XtUVars(), this->ode.XtUVars()) +=
-                -AGX0.template segment<DODE::XtUV>(0, this->ode.XtUVars()) * One_Half;
-            HTpar.tail(this->ode.PVars()) += -AGX0.tail(this->ode.PVars()) * One_Half;
+            adjhess.template block<DODE::XtUV, DODE::PV>(
+                j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(), this->ode_.xtu_vars(),
+                this->ode_.p_vars()) +=
+                (-h / 2.0) * HX0.template block<DODE::XtUV, DODE::PV>(0, this->ode_.xtu_vars(),
+                                                                      this->ode_.xtu_vars(),
+                                                                      this->ode_.p_vars());
+            adjhess.template block<DODE::PV, DODE::XtUV>(
+                cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(), this->ode_.p_vars(),
+                this->ode_.xtu_vars()) +=
+                (-h / 2.0) * HX0.template block<DODE::PV, DODE::XtUV>(this->ode_.xtu_vars(), 0,
+                                                                      this->ode_.p_vars(),
+                                                                      this->ode_.xtu_vars());
+            ht_par.template segment<DODE::XtUV>(j * this->ode_.xtu_vars(), this->ode_.xtu_vars()) +=
+                -AGX0.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) * one_half;
+            ht_par.tail(this->ode_.p_vars()) += -AGX0.tail(this->ode_.p_vars()) * one_half;
 
             j = 1;
-            adjhess.template block<DODE::XtUV, DODE::PV>(j * this->ode.XtUVars(),
-                                                         Cardinals * this->ode.XtUVars(),
-                                                         this->ode.XtUVars(), this->ode.PVars()) +=
-                (-h / 2.0) * HX1.template block<DODE::XtUV, DODE::PV>(
-                                 0, this->ode.XtUVars(), this->ode.XtUVars(), this->ode.PVars());
-            adjhess.template block<DODE::PV, DODE::XtUV>(Cardinals * this->ode.XtUVars(),
-                                                         j * this->ode.XtUVars(), this->ode.PVars(),
-                                                         this->ode.XtUVars()) +=
-                (-h / 2.0) * HX1.template block<DODE::PV, DODE::XtUV>(
-                                 this->ode.XtUVars(), 0, this->ode.PVars(), this->ode.XtUVars());
-            HTpar.template segment<DODE::XtUV>(j * this->ode.XtUVars(), this->ode.XtUVars()) +=
-                -AGX1.template segment<DODE::XtUV>(0, this->ode.XtUVars()) * One_Half;
-            HTpar.tail(this->ode.PVars()) += -AGX1.tail(this->ode.PVars()) * One_Half;
+            adjhess.template block<DODE::XtUV, DODE::PV>(
+                j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(), this->ode_.xtu_vars(),
+                this->ode_.p_vars()) +=
+                (-h / 2.0) * HX1.template block<DODE::XtUV, DODE::PV>(0, this->ode_.xtu_vars(),
+                                                                      this->ode_.xtu_vars(),
+                                                                      this->ode_.p_vars());
+            adjhess.template block<DODE::PV, DODE::XtUV>(
+                cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(), this->ode_.p_vars(),
+                this->ode_.xtu_vars()) +=
+                (-h / 2.0) * HX1.template block<DODE::PV, DODE::XtUV>(this->ode_.xtu_vars(), 0,
+                                                                      this->ode_.p_vars(),
+                                                                      this->ode_.xtu_vars());
+            ht_par.template segment<DODE::XtUV>(j * this->ode_.xtu_vars(), this->ode_.xtu_vars()) +=
+                -AGX1.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) * one_half;
+            ht_par.tail(this->ode_.p_vars()) += -AGX1.tail(this->ode_.p_vars()) * one_half;
 
-            adjhess.col(this->ode.TVar()) -= HTpar;
-            adjhess.col(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)) += HTpar;
-            adjhess.row(this->ode.TVar()) -= HTpar;
-            adjhess.row(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)) += HTpar;
+            adjhess.col(this->ode_.t_var()) -= ht_par;
+            adjhess.col(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)) += ht_par;
+            adjhess.row(this->ode_.t_var()) -= ht_par;
+            adjhess.row(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)) += ht_par;
         };
 
-        const int irows = this->ode.IRows();
-        const int orows = this->ode.ORows();
+        const int irows = this->ode_.input_rows();
+        const int orows = this->ode_.output_rows();
 
         using IType = ODEInput<Scalar>;
         using OType = ODEOutput<Scalar>;
@@ -374,7 +392,7 @@ struct TrapezoidalDefects
         using GType = ODEGrad<Scalar>;
         using HType = ODEHessian<Scalar>;
 
-        BumpAllocator::allocate_run(Impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
+        BumpAllocator::allocate_run(impl, TempSpec<IType>(irows, 1), TempSpec<IType>(irows, 1),
 
                                     TempSpec<OType>(orows, 1), TempSpec<OType>(orows, 1),
 
@@ -391,5 +409,4 @@ struct TrapezoidalDefects
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

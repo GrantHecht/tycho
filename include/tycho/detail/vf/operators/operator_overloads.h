@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,7 @@
 #include "tycho/detail/vf/common/common_functions.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 /////////////////////// Scalar Multiplication and
 /// Division//////////////////////////////////////
@@ -60,26 +59,26 @@ decltype(auto) operator*(const Eigen::MatrixBase<OutType> &s,
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 template <class Derived> decltype(auto) operator*(const Scaled<Derived> &func, double s) {
-    return Scaled<Derived>(func.Scaled_func, func.Scale_value * s);
+    return Scaled<Derived>(func.func, func.scale_value_ * s);
 }
 template <class Derived> decltype(auto) operator*(double s, const Scaled<Derived> &func) {
-    return Scaled<Derived>(func.Scaled_func, func.Scale_value * s);
+    return Scaled<Derived>(func.func, func.scale_value_ * s);
 }
 template <class Derived> decltype(auto) operator*(const RowScaled<Derived> &func, double s) {
-    return RowScaled<Derived>(func.RowScaled_func, func.RowScale_values * s);
+    return RowScaled<Derived>(func.func, func.row_scale_values_ * s);
 }
 template <class Derived> decltype(auto) operator*(double s, const RowScaled<Derived> &func) {
-    return RowScaled<Derived>(func.RowScaled_func, func.RowScale_values * s);
+    return RowScaled<Derived>(func.func, func.row_scale_values_ * s);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class Derived, class OutType>
 decltype(auto) operator*(const RowScaled<Derived> &func, const Eigen::MatrixBase<OutType> &s) {
-    return RowScaled<Derived>(func.RowScaled_func, func.RowScale_values.cwiseProduct(s));
+    return RowScaled<Derived>(func.func, func.row_scale_values_.cwiseProduct(s));
 }
 template <class Derived, class OutType>
 decltype(auto) operator*(const Eigen::MatrixBase<OutType> &s, const RowScaled<Derived> &func) {
-    return RowScaled<Derived>(func.RowScaled_func, func.RowScale_values.cwiseProduct(s));
+    return RowScaled<Derived>(func.func, func.row_scale_values_.cwiseProduct(s));
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -93,7 +92,7 @@ decltype(auto) operator/(const DenseFunctionBase<Derived, IR, OR> &func,
     return RowScaled<Derived>(func.derived(), s.cwiseInverse());
 }
 template <class Derived> decltype(auto) operator/(const Scaled<Derived> &func, double s) {
-    return Scaled<Derived>(func.func, func.Scale_value / s);
+    return Scaled<Derived>(func.func_, func.scale_value_ / s);
 }
 
 template <class Derived, int IR>
@@ -222,22 +221,22 @@ decltype(auto) operator+(const DenseFunctionBase<Func1, IR1, OR1> &f1,
 template <class Func1, int IR, int OR, class Func2, class Func3>
 decltype(auto) operator+(const DenseFunctionBase<Func3, IR, OR> &f2,
                          const TwoFunctionSum<Func1, Func2> &f1) {
-    static_assert(IR == TwoFunctionSum<Func1, Func2>::IRC ||
-                      IR < 0 || TwoFunctionSum<Func1, Func2>::IRC < 0,
+    static_assert(IR == TwoFunctionSum<Func1, Func2>::IRC || IR < 0 ||
+                      TwoFunctionSum<Func1, Func2>::IRC < 0,
                   "VF operator+: input size mismatch with sum operand");
-    static_assert(OR == TwoFunctionSum<Func1, Func2>::ORC ||
-                      OR < 0 || TwoFunctionSum<Func1, Func2>::ORC < 0,
+    static_assert(OR == TwoFunctionSum<Func1, Func2>::ORC || OR < 0 ||
+                      TwoFunctionSum<Func1, Func2>::ORC < 0,
                   "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3>(f1.func1, f1.func2, f2.derived());
 }
 template <class Func1, int IR, int OR, class Func2, class Func3, class Func4>
 decltype(auto) operator+(const DenseFunctionBase<Func4, IR, OR> &f2,
                          const MultiFunctionSum<Func1, Func2, Func3> &f1) {
-    static_assert(IR == MultiFunctionSum<Func1, Func2, Func3>::IRC ||
-                      IR < 0 || MultiFunctionSum<Func1, Func2, Func3>::IRC < 0,
+    static_assert(IR == MultiFunctionSum<Func1, Func2, Func3>::IRC || IR < 0 ||
+                      MultiFunctionSum<Func1, Func2, Func3>::IRC < 0,
                   "VF operator+: input size mismatch with sum operand");
-    static_assert(OR == MultiFunctionSum<Func1, Func2, Func3>::ORC ||
-                      OR < 0 || MultiFunctionSum<Func1, Func2, Func3>::ORC < 0,
+    static_assert(OR == MultiFunctionSum<Func1, Func2, Func3>::ORC || OR < 0 ||
+                      MultiFunctionSum<Func1, Func2, Func3>::ORC < 0,
                   "VF operator+: output size mismatch with sum operand");
     return MultiFunctionSum<Func1, Func2, Func3, Func4>(f1.func1, f1.func2, std::get<0>(f1.funcs),
                                                         f2.derived());
@@ -303,7 +302,7 @@ template <class Func1, int IR>
 auto operator<(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::LessThanFlag, rhs.derived());
 }
@@ -311,7 +310,7 @@ template <class Func1, int IR>
 auto operator<=(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::LessThanEqualToFlag, rhs.derived());
 }
@@ -319,7 +318,7 @@ template <class Func1, int IR>
 auto operator>(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::GreaterThanFlag, rhs.derived());
 }
@@ -327,7 +326,7 @@ template <class Func1, int IR>
 auto operator>=(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::GreaterThanEqualToFlag, rhs.derived());
 }
@@ -335,7 +334,7 @@ template <class Func1, int IR>
 auto operator==(const DenseFunctionBase<Func1, IR, 1> &lhs, double rhsv) {
     Vector1<double> tmp;
     tmp[0] = rhsv;
-    Constant<IR, 1> rhs(lhs.IRows(), tmp);
+    Constant<IR, 1> rhs(lhs.input_rows(), tmp);
     return ConditionalStatement<Func1, Constant<IR, 1>>(
         lhs.derived(), ConditionalFlags::EqualToFlag, rhs.derived());
 }
@@ -384,4 +383,4 @@ GenericFunction<IR, OR> DenseFunctionBase<Derived, IR, OR>::pack() const {
     return GenericFunction<IR, OR>(this->derived());
 }
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -8,33 +8,32 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR> struct InputOutputSize {
-    static const int InputRows = IR;
-    static const int OutputRows = OR;
+    static const int input_rows_val = IR;
+    static const int output_rows_val = OR;
 };
 
 template <> struct InputOutputSize<-1, -1> {
-    int InputRows = 0;
-    int OutputRows = 0;
+    int input_rows_val = 0;
+    int output_rows_val = 0;
 };
 
 template <int OR> struct InputOutputSize<-1, OR> {
-    int InputRows = 0;
-    static const int OutputRows = OR;
+    int input_rows_val = 0;
+    static const int output_rows_val = OR;
 };
 
 template <int IR> struct InputOutputSize<IR, -1> {
-    static const int InputRows = IR;
-    int OutputRows = 0;
+    static const int input_rows_val = IR;
+    int output_rows_val = 0;
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

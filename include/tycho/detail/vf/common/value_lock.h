@@ -8,22 +8,21 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     using Base = VectorFunction<LockArgs<USZ>, USZ, USZ>;
 
-    static const bool IsLinearFunction = true;
+    static const bool is_linear_function = true;
 
-    LockArgs(int usz) { this->setIORows(usz, usz); }
+    LockArgs(int usz) { this->set_io_rows(usz, usz); }
     LockArgs() {}
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
@@ -57,4 +56,4 @@ template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

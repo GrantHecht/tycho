@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class MatFunc1, class MatFunc2> struct MatrixFunctionProduct_Impl;
 
@@ -62,26 +61,26 @@ struct MatrixFunctionProduct_Impl
     using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename MatFunc1::INPUT_DOMAIN,
                                          typename MatFunc2::INPUT_DOMAIN>;
 
-    static const bool IsVectorizable = MatFunc1::IsVectorizable && MatFunc2::IsVectorizable;
-    // static const bool IsVectorizable = false;
+    static const bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
+    // static const bool is_vectorizable = false;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     MatrixFunctionProduct_Impl() {}
     MatrixFunctionProduct_Impl(MatFunc1 mf1, MatFunc2 mf2) : matrix_func1(mf1), matrix_func2(mf2) {
-        m1rows = this->matrix_func1.MatrixRows;
-        m1cols_m2rows = this->matrix_func2.MatrixRows;
-        m2cols = this->matrix_func2.MatrixCols;
+        m1rows = this->matrix_func1.matrix_rows_;
+        m1cols_m2rows = this->matrix_func2.matrix_rows_;
+        m2cols = this->matrix_func2.matrix_cols_;
 
-        if (this->matrix_func1.MatrixCols != this->matrix_func2.MatrixRows) {
+        if (this->matrix_func1.matrix_cols_ != this->matrix_func2.matrix_rows_) {
             throw std::invalid_argument(
                 "Invalid matrix product. Number of columns in matrix 1 does not match "
                 "number of rows in matrix 2.");
         }
 
-        this->setIORows(this->matrix_func1.IRows(), m1rows * m2cols);
+        this->set_io_rows(this->matrix_func1.input_rows(), m1rows * m2cols);
 
-        this->set_input_domain(this->IRows(),
+        this->set_input_domain(this->input_rows(),
                                {matrix_func1.input_domain(), matrix_func2.input_domain()});
     }
 
@@ -103,13 +102,14 @@ struct MatrixFunctionProduct_Impl
             fx = fxmd;
         };
 
-        const int o1 = this->matrix_func1.ORows();
-        const int o2 = this->matrix_func2.ORows();
-        const int orows = this->ORows();
+        const int o1 = this->matrix_func1.output_rows();
+        const int o2 = this->matrix_func2.output_rows();
+        const int orows = this->output_rows();
 
-        BumpAllocator::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    TempSpec<Output<Scalar>>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -167,17 +167,18 @@ struct MatrixFunctionProduct_Impl
             }
         };
 
-        const int o1 = this->matrix_func1.ORows();
-        const int o2 = this->matrix_func2.ORows();
-        const int irows = this->IRows();
-        const int orows = this->ORows();
+        const int o1 = this->matrix_func1.output_rows();
+        const int o2 = this->matrix_func2.output_rows();
+        const int irows = this->input_rows();
+        const int orows = this->output_rows();
 
-        BumpAllocator::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
-                                    TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
-                                    TempSpec<Output<Scalar>>(orows, 1),
-                                    TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+            tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -286,7 +287,7 @@ struct MatrixFunctionProduct_Impl
             // typedef typename std::remove_reference<decltype(jxm2)>::type Jac2type;
 
             // Jac2type jttemp;
-            // jttemp.resize(this->matrix_func2.ORows(), this->IRows());
+            // jttemp.resize(this->matrix_func2.output_rows(), this->input_rows());
 
             if constexpr (M2Major == Eigen::ColMajor) {
                 if constexpr (M1Major == Eigen::ColMajor) {
@@ -353,25 +354,25 @@ struct MatrixFunctionProduct_Impl
                 hxm2, jttemp.transpose(), jxm2, DirectAssignment(), std::bool_constant<false>());
 
             if constexpr (MatFunc2::InputIsDynamic) {
-                const int sds = this->matrix_func2.SubDomains.cols();
+                const int sds = this->matrix_func2.sub_domains.cols();
                 if (sds == 0) {
                     adjhess += hxm2 + hxm2.transpose();
                 } else {
                     for (int i = 0; i < sds; i++) {
-                        int Start1 = this->matrix_func2.SubDomains(0, i);
-                        int Size1 = this->matrix_func2.SubDomains(1, i);
+                        int Start1 = this->matrix_func2.sub_domains(0, i);
+                        int Size1 = this->matrix_func2.sub_domains(1, i);
                         adjhess.middleCols(Start1, Size1) += hxm2.middleCols(Start1, Size1);
                         adjhess.middleRows(Start1, Size1) +=
                             hxm2.middleCols(Start1, Size1).transpose();
                     }
                 }
             } else {
-                constexpr int sds = MatFunc2::INPUT_DOMAIN::SubDomains.size();
-                Tycho::constexpr_for_loop(
+                constexpr int sds = MatFunc2::INPUT_DOMAIN::sub_domains.size();
+                tycho::utils::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
-                        constexpr int Start1 = MatFunc2::INPUT_DOMAIN::SubDomains[i.value][0];
-                        constexpr int Size1 = MatFunc2::INPUT_DOMAIN::SubDomains[i.value][1];
+                        constexpr int Start1 = MatFunc2::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int Size1 = MatFunc2::INPUT_DOMAIN::sub_domains[i.value][1];
                         adjhess.template middleCols<Size1>(Start1, Size1) +=
                             hxm2.template middleCols<Size1>(Start1, Size1);
                         adjhess.template middleRows<Size1>(Start1, Size1) +=
@@ -380,25 +381,26 @@ struct MatrixFunctionProduct_Impl
             }
         };
 
-        const int o1 = this->matrix_func1.ORows();
-        const int o2 = this->matrix_func2.ORows();
-        const int irows = this->IRows();
-        const int orows = this->ORows();
+        const int o1 = this->matrix_func1.output_rows();
+        const int o2 = this->matrix_func2.output_rows();
+        const int irows = this->input_rows();
+        const int orows = this->output_rows();
 
-        BumpAllocator::allocate_run(Impl, TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-                                    TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
 
-                                    TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-                                    TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
-                                    TempSpec<MatFunc2_gradient<Scalar>>(irows, 1),
-                                    TempSpec<MatFunc2_hessian<Scalar>>(irows, irows),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
+            tycho::utils::TempSpec<MatFunc2_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<MatFunc2_hessian<Scalar>>(irows, irows),
 
-                                    TempSpec<Output<Scalar>>(orows, 1),
-                                    TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1),
-                                    TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows));
+            tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+            tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1),
+            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -5,7 +5,7 @@
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 TEST_F(OptimalControlTest, LGLCoeffsIntegralWeights) {
@@ -31,12 +31,12 @@ TEST_F(OptimalControlTest, LGLCoeffsIntegralWeights) {
 
 TEST_F(OptimalControlTest, LGLDefectsDimensions) {
     // BrachODE: XV=3, UV=1, PV=0
-    // For CS=2: input = 2 * XtUVars + PVars = 2 * 5 + 0 = 10
-    //           output = ORows * (CS-1) = 3 * 1 = 3
+    // For CS=2: input = 2 * xtu_vars + p_vars = 2 * 5 + 0 = 10
+    //           output = output_rows * (CS-1) = 3 * 1 = 3
     BrachODE ode(9.81);
     LGLDefects<BrachODE, 2> defects(ode);
-    EXPECT_EQ(defects.IRows(), 10);
-    EXPECT_EQ(defects.ORows(), 3);
+    EXPECT_EQ(defects.input_rows(), 10);
+    EXPECT_EQ(defects.output_rows(), 3);
 }
 
 TEST_F(OptimalControlTest, LGLDefectsAdjointConsistency) {

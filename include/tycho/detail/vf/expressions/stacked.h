@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,7 @@
 #include "tycho/detail/vf/core/vector_function.h"
 #include "tycho/detail/vf/core/vector_function_concepts.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func1, class Func2>
     requires Stackable<Func1, Func2>
@@ -80,13 +79,13 @@ RetType make_dynamic_stack(const std::vector<FuncType> &funcs) {
     } else if (size == 5) {
         stacked = StackedOutputs{funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]};
     } else {
-        RetType stackedT = StackedOutputs{funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]};
+        RetType stacked_t = StackedOutputs{funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]};
         std::vector<FuncType> nfuncs;
         for (int i = 5; i < funcs.size(); i++) {
             nfuncs.push_back(funcs[i]);
         }
-        RetType rest = Tycho::make_dynamic_stack<RetType, FuncType>(nfuncs);
-        stacked = StackedOutputs{stackedT, rest};
+        RetType rest = make_dynamic_stack<RetType, FuncType>(nfuncs);
+        stacked = StackedOutputs{stacked_t, rest};
     }
     return stacked;
 }
@@ -103,8 +102,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     SUB_FUNCTION_IO_TYPES(Func1);
     SUB_FUNCTION_IO_TYPES(Func2);
 
-    static const bool IsLinearFunction = Func1::IsLinearFunction && Func2::IsLinearFunction;
-    static const bool IsVectorizable = Func1::IsVectorizable && Func2::IsVectorizable;
+    static const bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     Func1 func1;
     Func2 func2;
@@ -114,19 +113,19 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
     StackTwoOutputs_Impl() {}
     StackTwoOutputs_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
-        this->setIORows(irtemp, this->func1.ORows() + this->func2.ORows());
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
+        this->set_io_rows(irtemp, this->func1.output_rows() + this->func2.output_rows());
 
-        if (this->func1.IRows() != this->func2.IRows()) {
+        if (this->func1.input_rows() != this->func2.input_rows()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Math Error in StackOutputs/vf.stack method !!!\n"
                        "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
                        "(IRows = {1:}).\n",
-                       this->func1.IRows(), this->func2.IRows());
+                       this->func1.input_rows(), this->func2.input_rows());
             throw std::invalid_argument("");
         }
 
-        this->set_input_domain(this->IRows(), {func1.input_domain(), func2.input_domain()});
+        this->set_input_domain(this->input_rows(), {func1.input_domain(), func2.input_domain()});
     }
 
     bool is_linear() const { return func1.is_linear() && func2.is_linear(); }
@@ -137,9 +136,9 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         // typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
-        this->func1.compute(x, fx.template segment<Func1::ORC>(0, this->func1.ORows()));
-        this->func2.compute(
-            x, fx.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()));
+        this->func1.compute(x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()));
+        this->func2.compute(x, fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                               this->func2.output_rows()));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -148,12 +147,14 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
-        this->func1.compute_jacobian(x, fx.template segment<Func1::ORC>(0, this->func1.ORows()),
-                                     jx.template topRows<Func1::ORC>(this->func1.ORows()));
+        this->func1.compute_jacobian(x,
+                                     fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
+                                     jx.template topRows<Func1::ORC>(this->func1.output_rows()));
 
         this->func2.compute_jacobian(
-            x, fx.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()),
-            jx.template bottomRows<Func2::ORC>(this->func2.ORows()));
+            x,
+            fx.template segment<Func2::ORC>(this->func1.output_rows(), this->func2.output_rows()),
+            jx.template bottomRows<Func2::ORC>(this->func2.output_rows()));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -168,36 +169,40 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &func2_adjgrad, auto &func2_adjhess) {
-            if constexpr (Func1::IsGenericFunction && Func2::IsGenericFunction) {
+            if constexpr (Func1::is_generic_function && Func2::is_generic_function) {
                 if (this->func1.is_linear()) {
                     this->func1.compute_jacobian_adjointgradient_adjointhessian(
-                        x, fx.template segment<Func1::ORC>(0, this->func1.ORows()),
-                        jx.template topRows<Func1::ORC>(this->func1.ORows()), func2_adjgrad,
+                        x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
+                        jx.template topRows<Func1::ORC>(this->func1.output_rows()), func2_adjgrad,
                         func2_adjhess,
-                        adjvars.template segment<Func1::ORC>(0, this->func1.ORows()));
+                        adjvars.template segment<Func1::ORC>(0, this->func1.output_rows()));
 
                     this->func2.compute_jacobian_adjointgradient_adjointhessian(
                         x,
-                        fx.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()),
-                        jx.template bottomRows<Func2::ORC>(this->func2.ORows()), adjgrad, adjhess,
-                        adjvars.template segment<Func2::ORC>(this->func1.ORows(),
-                                                             this->func2.ORows()));
+                        fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                        this->func2.output_rows()),
+                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), adjgrad,
+                        adjhess,
+                        adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                             this->func2.output_rows()));
 
                     this->func1.accumulate_gradient(adjgrad, func2_adjgrad, PlusEqualsAssignment());
 
                 } else {
                     this->func1.compute_jacobian_adjointgradient_adjointhessian(
-                        x, fx.template segment<Func1::ORC>(0, this->func1.ORows()),
-                        jx.template topRows<Func1::ORC>(this->func1.ORows()), adjgrad, adjhess,
-                        adjvars.template segment<Func1::ORC>(0, this->func1.ORows()));
+                        x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
+                        jx.template topRows<Func1::ORC>(this->func1.output_rows()), adjgrad,
+                        adjhess,
+                        adjvars.template segment<Func1::ORC>(0, this->func1.output_rows()));
 
                     this->func2.compute_jacobian_adjointgradient_adjointhessian(
                         x,
-                        fx.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()),
-                        jx.template bottomRows<Func2::ORC>(this->func2.ORows()), func2_adjgrad,
-                        func2_adjhess,
-                        adjvars.template segment<Func2::ORC>(this->func1.ORows(),
-                                                             this->func2.ORows()));
+                        fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                        this->func2.output_rows()),
+                        jx.template bottomRows<Func2::ORC>(this->func2.output_rows()),
+                        func2_adjgrad, func2_adjhess,
+                        adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                             this->func2.output_rows()));
 
                     // if (!this->func2.is_linear())
                     this->func2.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
@@ -206,24 +211,28 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
             } else {
                 this->func1.compute_jacobian_adjointgradient_adjointhessian(
-                    x, fx.template segment<Func1::ORC>(0, this->func1.ORows()),
-                    jx.template topRows<Func1::ORC>(this->func1.ORows()), adjgrad, adjhess,
-                    adjvars.template segment<Func1::ORC>(0, this->func1.ORows()));
+                    x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
+                    jx.template topRows<Func1::ORC>(this->func1.output_rows()), adjgrad, adjhess,
+                    adjvars.template segment<Func1::ORC>(0, this->func1.output_rows()));
 
                 this->func2.compute_jacobian_adjointgradient_adjointhessian(
-                    x, fx.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()),
-                    jx.template bottomRows<Func2::ORC>(this->func2.ORows()), func2_adjgrad,
+                    x,
+                    fx.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                    this->func2.output_rows()),
+                    jx.template bottomRows<Func2::ORC>(this->func2.output_rows()), func2_adjgrad,
                     func2_adjhess,
-                    adjvars.template segment<Func2::ORC>(this->func1.ORows(), this->func2.ORows()));
+                    adjvars.template segment<Func2::ORC>(this->func1.output_rows(),
+                                                         this->func2.output_rows()));
 
                 this->func2.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
                 this->func2.accumulate_gradient(adjgrad, func2_adjgrad, PlusEqualsAssignment());
             }
         };
 
-        const int irows = this->func2.IRows();
-        BumpAllocator::allocate_run(Impl, TempSpec<Func2_gradient<Scalar>>(irows, 1),
-                                    TempSpec<Func2_hessian<Scalar>>(irows, irows));
+        const int irows = this->func2.input_rows();
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Func2_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Func2_hessian<Scalar>>(irows, irows));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -240,17 +249,17 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
             MatrixBaseRef<Left> left_ref = left.const_cast_derived();
 
             this->func1.right_jacobian_product(
-                target_, left_ref.template leftCols<Func1::ORC>(this->func1.ORows()),
-                right_ref.template topRows<Func1::ORC>(this->func1.ORows()), assign, aliased);
+                target_, left_ref.template leftCols<Func1::ORC>(this->func1.output_rows()),
+                right_ref.template topRows<Func1::ORC>(this->func1.output_rows()), assign, aliased);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 this->func2.right_jacobian_product(
-                    target_, left_ref.template rightCols<Func2::ORC>(this->func2.ORows()),
-                    right_ref.template bottomRows<Func2::ORC>(this->func2.ORows()),
+                    target_, left_ref.template rightCols<Func2::ORC>(this->func2.output_rows()),
+                    right_ref.template bottomRows<Func2::ORC>(this->func2.output_rows()),
                     PlusEqualsAssignment(), aliased);
             } else {
                 this->func2.right_jacobian_product(
-                    target_, left_ref.template rightCols<Func2::ORC>(this->func2.ORows()),
-                    right_ref.template bottomRows<Func2::ORC>(this->func2.ORows()), assign,
+                    target_, left_ref.template rightCols<Func2::ORC>(this->func2.output_rows()),
+                    right_ref.template bottomRows<Func2::ORC>(this->func2.output_rows()), assign,
                     aliased);
             }
         }
@@ -259,8 +268,10 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     template <class Target, class Scalar>
     inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
         MatrixBaseRef<Target> target = target_.const_cast_derived();
-        this->func1.scale_jacobian(target.template topRows<Func1::ORC>(this->func1.ORows()), s);
-        this->func2.scale_jacobian(target.template bottomRows<Func2::ORC>(this->func2.ORows()), s);
+        this->func1.scale_jacobian(target.template topRows<Func1::ORC>(this->func1.output_rows()),
+                                   s);
+        this->func2.scale_jacobian(
+            target.template bottomRows<Func2::ORC>(this->func2.output_rows()), s);
     }
 
     template <class Target, class JacType, class Assignment>
@@ -271,20 +282,20 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
         // typedef typename Target::Scalar Scalar;
 
-        this->func1.accumulate_jacobian(target.template topRows<Func1::ORC>(this->func1.ORows()),
-                                        right_ref.template topRows<Func1::ORC>(this->func1.ORows()),
-                                        assign);
+        this->func1.accumulate_jacobian(
+            target.template topRows<Func1::ORC>(this->func1.output_rows()),
+            right_ref.template topRows<Func1::ORC>(this->func1.output_rows()), assign);
         this->func2.accumulate_jacobian(
-            target.template bottomRows<Func2::ORC>(this->func2.ORows()),
-            right_ref.template bottomRows<Func2::ORC>(this->func2.ORows()), assign);
+            target.template bottomRows<Func2::ORC>(this->func2.output_rows()),
+            right_ref.template bottomRows<Func2::ORC>(this->func2.output_rows()), assign);
     }
 
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        if constexpr (Func1::IsLinearFunction) {
+        if constexpr (Func1::is_linear_function) {
             this->func2.accumulate_hessian(target_, right, assign);
-        } else if constexpr (Func2::IsLinearFunction) {
+        } else if constexpr (Func2::is_linear_function) {
             this->func1.accumulate_hessian(target_, right, assign);
         } else {
             Base::accumulate_hessian(target_, right, assign);
@@ -302,8 +313,8 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);
 
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
 
     std::vector<Func> funcs;
 
@@ -316,18 +327,18 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
             throw std::invalid_argument("Empty List passed to Dynamic Stack");
         }
         int ortemp = 0;
-        int irtemp = this->funcs[0].IRows();
+        int irtemp = this->funcs[0].input_rows();
 
         std::vector<DomainMatrix> dmn;
 
         for (auto &func : this->funcs) {
-            ortemp += func.ORows();
+            ortemp += func.output_rows();
             dmn.push_back(func.input_domain());
 
             if (!func.is_linear())
                 this->_linear = false;
 
-            if (func.IRows() != irtemp) {
+            if (func.input_rows() != irtemp) {
                 fmt::print(fmt::fg(fmt::color::red),
                            "Math Error in StackOutputs/vf.stack method !!!\n"
                            "Input Size of all Functions must match.\n");
@@ -335,8 +346,8 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
             }
         }
 
-        this->setIORows(irtemp, ortemp);
-        this->set_input_domain(this->IRows(), dmn);
+        this->set_io_rows(irtemp, ortemp);
+        this->set_input_domain(this->input_rows(), dmn);
     }
 
     bool is_linear() const { return this->_linear; }
@@ -348,7 +359,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
         int start = 0;
         for (auto &func : this->funcs) {
-            int orows = func.ORows();
+            int orows = func.output_rows();
             func.compute(x, fx.template segment<Func::ORC>(start, orows));
             start += orows;
         }
@@ -362,7 +373,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
 
         int start = 0;
         for (auto &func : this->funcs) {
-            int orows = func.ORows();
+            int orows = func.output_rows();
             func.compute_jacobian(x, fx.template segment<Func::ORC>(start, orows),
                                   jx.template middleRows<Func::ORC>(start, orows));
             start += orows;
@@ -383,7 +394,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
         auto Impl = [&](auto &func_adjgrad, auto &func_adjhess) {
             int start = 0;
             for (auto &func : this->funcs) {
-                int orows = func.ORows();
+                int orows = func.output_rows();
 
                 if (start == 0) {
                     func.compute_jacobian_adjointgradient_adjointhessian(
@@ -406,12 +417,13 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
             }
         };
 
-        const int irows = this->IRows();
-        BumpAllocator::allocate_run(Impl, TempSpec<Func_gradient<Scalar>>(irows, 1),
-                                    TempSpec<Func_hessian<Scalar>>(irows, irows));
+        const int irows = this->input_rows();
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Func_gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<Func_hessian<Scalar>>(irows, irows));
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

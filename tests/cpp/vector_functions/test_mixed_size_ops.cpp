@@ -10,7 +10,7 @@
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 class MixedSizeOpsTest : public VectorFunctionFixture {};
@@ -32,8 +32,8 @@ TEST_F(MixedSizeOpsTest, DynamicSegmentPlusStaticCrossProduct) {
     // This is the line that previously failed to compile
     auto Vr = V + R.cross(omega);
 
-    EXPECT_EQ(Vr.IRows(), 11);
-    EXPECT_EQ(Vr.ORows(), 3);
+    EXPECT_EQ(Vr.input_rows(), 11);
+    EXPECT_EQ(Vr.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(11, 100, -5.0, 5.0);
     verify_jacobian_fd(Vr, x);
@@ -49,7 +49,7 @@ TEST_F(MixedSizeOpsTest, StaticSegmentPlusStaticCrossProduct) {
     auto omega = Constant<-1, 3>(11, omega_val);
 
     auto Vr = V + R.cross(omega);
-    EXPECT_EQ(Vr.ORows(), 3);
+    EXPECT_EQ(Vr.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(11, 101, -5.0, 5.0);
     verify_jacobian_fd(Vr, x);
@@ -64,7 +64,7 @@ TEST_F(MixedSizeOpsTest, DynamicSegmentMinusStaticCrossProduct) {
     auto omega = Constant<-1, 3>(11, omega_val);
 
     auto Vr = V - R.cross(omega);
-    EXPECT_EQ(Vr.ORows(), 3);
+    EXPECT_EQ(Vr.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(11, 102, -5.0, 5.0);
     verify_jacobian_fd(Vr, x);
@@ -82,10 +82,10 @@ TEST_F(MixedSizeOpsTest, DynamicVectorTimesStaticScalar) {
     auto stat_args = Arguments<6>();
     auto scl = stat_args.coeff<5>();      // IRC=6, ORC=1
 
-    // Both have the same runtime IRows (6) but different compile-time IRC
+    // Both have the same runtime input_rows (6) but different compile-time IRC
     auto result = vec * scl;
-    EXPECT_EQ(result.IRows(), 6);
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.input_rows(), 6);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 103, 0.5, 5.0);
     verify_jacobian_fd(result, x);
@@ -99,7 +99,7 @@ TEST_F(MixedSizeOpsTest, DynamicVectorDividedByStaticScalar) {
     auto scl = stat_args.coeff<5>();
 
     auto result = vec / scl;
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 104, 0.5, 5.0);
     verify_jacobian_fd(result, x);
@@ -127,8 +127,8 @@ TEST_F(MixedSizeOpsTest, FullDynamicODEExpression) {
     auto Vdot = grav + Vr / m;            // mixed operations
 
     auto ode = StackedOutputs{Rdot, Vdot};
-    EXPECT_EQ(ode.IRows(), 11);
-    EXPECT_EQ(ode.ORows(), 6);
+    EXPECT_EQ(ode.input_rows(), 11);
+    EXPECT_EQ(ode.output_rows(), 6);
 
     Eigen::VectorXd x = deterministic_random_vector(11, 105, 1.0, 10.0);
     // Ensure position vector norm > 0 for normalized()
@@ -150,8 +150,8 @@ TEST_F(MixedSizeOpsTest, PackPreservesValue) {
     auto cross_expr = a.cross(b);
 
     auto packed = cross_expr.pack();  // GenericFunction<6, 3>
-    EXPECT_EQ(packed.IRows(), 6);
-    EXPECT_EQ(packed.ORows(), 3);
+    EXPECT_EQ(packed.input_rows(), 6);
+    EXPECT_EQ(packed.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 106, -5.0, 5.0);
     Eigen::VectorXd fx_orig(3), fx_packed(3);
@@ -185,7 +185,7 @@ TEST_F(MixedSizeOpsTest, PackedExpressionComposable) {
     auto cross_packed = a.cross(b).pack();    // GenericFunction<6, 3>
     auto result = cross_packed + a;           // should compile: both ORC=3
 
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 108, -5.0, 5.0);
     verify_jacobian_fd(result, x);
@@ -196,8 +196,8 @@ TEST_F(MixedSizeOpsTest, PackDynamicSizes) {
     auto args = Arguments<-1>(6);
     auto seg = args.segment(0, 3);
     auto packed = seg.pack();  // GenericFunction<-1, -1>
-    EXPECT_EQ(packed.IRows(), 6);
-    EXPECT_EQ(packed.ORows(), 3);
+    EXPECT_EQ(packed.input_rows(), 6);
+    EXPECT_EQ(packed.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 109, -5.0, 5.0);
     Eigen::VectorXd fx(3);
@@ -229,7 +229,7 @@ TEST_F(MixedSizeOpsTest, StaticMatchStillWorks) {
     auto a = args.head<3>();
     auto b = args.tail<3>();
     auto sum = a + b;  // ORC=3 + ORC=3 — was and still is valid
-    EXPECT_EQ(sum.ORows(), 3);
+    EXPECT_EQ(sum.output_rows(), 3);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -246,8 +246,8 @@ TEST_F(MixedSizeOpsTest, ThreeOperandMixedSizeSum) {
     auto c = stat_args.tail<3>();    // IRC=6, ORC=3
 
     auto result = a + b + c;
-    EXPECT_EQ(result.IRows(), 6);
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.input_rows(), 6);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 200, -5.0, 5.0);
     verify_jacobian_fd(result, x);
@@ -266,8 +266,8 @@ TEST_F(MixedSizeOpsTest, FourOperandMixedSizeSum) {
     auto d = Constant<-1, 3>(6, offset);
 
     auto result = a + b + c + d;
-    EXPECT_EQ(result.IRows(), 6);
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.input_rows(), 6);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 201, -5.0, 5.0);
     verify_jacobian_fd(result, x);
@@ -278,7 +278,7 @@ TEST_F(MixedSizeOpsTest, FourOperandMixedSizeSum) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRC) {
-    // Dynamic segment (IRC=-1) - static segment (IRC=6), same runtime IRows
+    // Dynamic segment (IRC=-1) - static segment (IRC=6), same runtime input_rows
     auto dyn_args = Arguments<-1>(6);
     auto a = dyn_args.segment(0, 3); // IRC=-1
 
@@ -286,8 +286,8 @@ TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRC) {
     auto b = stat_args.head<3>();    // IRC=6
 
     auto result = a - b;
-    EXPECT_EQ(result.IRows(), 6);
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.input_rows(), 6);
+    EXPECT_EQ(result.output_rows(), 3);
 
     // Both select the same elements: a - b should be zero
     Eigen::VectorXd x = deterministic_random_vector(6, 202, -5.0, 5.0);
@@ -309,8 +309,8 @@ TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRCNonOverlapping) {
     auto b = stat_args.tail<3>();    // IRC=6, selects [3,4,5]
 
     auto result = a - b;
-    EXPECT_EQ(result.IRows(), 6);
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.input_rows(), 6);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 203, -5.0, 5.0);
     Eigen::VectorXd fx(3);
@@ -364,31 +364,31 @@ TEST_F(MixedSizeOpsTest, EmptyDynamicSumThrows) {
 }
 
 TEST_F(MixedSizeOpsTest, RuntimeIRowsMismatchThrows) {
-    // Two dynamic functions with different runtime IRows
+    // Two dynamic functions with different runtime input_rows
     auto args6 = Arguments<-1>(6);
-    auto seg6 = args6.segment(0, 3);   // IRC=-1, IRows=6, ORows=3
+    auto seg6 = args6.segment(0, 3);   // IRC=-1, input_rows=6, output_rows=3
 
     auto args8 = Arguments<-1>(8);
-    auto seg8 = args8.segment(0, 3);   // IRC=-1, IRows=8, ORows=3
+    auto seg8 = args8.segment(0, 3);   // IRC=-1, input_rows=8, output_rows=3
 
-    // Same ORC, different IRows — should throw at construction time
+    // Same ORC, different input_rows — should throw at construction time
     EXPECT_THROW(seg6 + seg8, std::invalid_argument);
     EXPECT_THROW(seg6 - seg8, std::invalid_argument);
 }
 
 TEST_F(MixedSizeOpsTest, RuntimeORowsMismatchThrows) {
-    // Two dynamic functions with different runtime ORows
+    // Two dynamic functions with different runtime output_rows
     auto args = Arguments<-1>(6);
-    auto seg2 = args.segment(0, 2);   // IRC=-1, ORows=2
-    auto seg3 = args.segment(0, 3);   // IRC=-1, ORows=3
+    auto seg2 = args.segment(0, 2);   // IRC=-1, output_rows=2
+    auto seg3 = args.segment(0, 3);   // IRC=-1, output_rows=3
 
     EXPECT_THROW(seg2 + seg3, std::invalid_argument);
 }
 
 TEST_F(MixedSizeOpsTest, DivisionInputMismatchThrows) {
-    // Vector (IRows=6) / Scalar (IRows=8) — runtime IRows mismatch
-    auto f6 = Arguments<-1>(6).segment(0, 3);     // IRows=6, ORows=3
-    auto f8 = Arguments<-1>(8).coeff(0);           // IRows=8, ORows=1
+    // Vector (input_rows=6) / Scalar (input_rows=8) — runtime input_rows mismatch
+    auto f6 = Arguments<-1>(6).segment(0, 3);     // input_rows=6, output_rows=3
+    auto f8 = Arguments<-1>(8).coeff(0);           // input_rows=8, output_rows=1
     EXPECT_THROW(f6 / f8, std::invalid_argument);
 }
 
@@ -398,8 +398,8 @@ TEST_F(MixedSizeOpsTest, DynamicScalarTimesStaticScalar) {
     auto stat = Arguments<6>().coeff<5>();                          // IRC=6, ORC=1
 
     auto product = dyn * stat;
-    EXPECT_EQ(product.IRows(), 6);
-    EXPECT_EQ(product.ORows(), 1);
+    EXPECT_EQ(product.input_rows(), 6);
+    EXPECT_EQ(product.output_rows(), 1);
 
     Eigen::VectorXd x = deterministic_random_vector(6, 300, 0.5, 5.0);
     verify_jacobian_fd(product, x);

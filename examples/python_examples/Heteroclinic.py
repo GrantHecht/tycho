@@ -56,21 +56,21 @@ def MakeOrbit(ode, OrbitIG, Jconst, nsegs=100):
     phase = ode.phase("LGL5", OrbitIG, nsegs)
 
     # Enforce planar perpendicular crossing
-    phase.addBoundaryValue("First", [1, 2, 3, 5, 6], [0, 0, 0, 0, 0])
-    phase.addBoundaryValue("Last", [1, 3], [0, 0])
+    phase.add_boundary_value("First", [1, 2, 3, 5, 6], [0, 0, 0, 0, 0])
+    phase.add_boundary_value("Last", [1, 3], [0, 0])
 
     # Specifying Jacobi constant, not amplitude of orbit
-    phase.addEqualCon("First", JacobiFunc(ode.mu) - Jconst, range(0, 6))
-    phase.optimizer.set_EContol(1.0e-12)
-    phase.optimizer.PrintLevel = 1
+    phase.add_equal_con("First", JacobiFunc(ode.mu) - Jconst, range(0, 6))
+    phase.optimizer.set_eq_con_tol(1.0e-12)
+    phase.optimizer.print_level = 1
     phase.solve()  # Solve the orbit
 
-    return phase.returnTraj()
+    return phase.return_traj()
 
 
 def GetManifold(ode, OrbitIn, dx, dt, nman=50, Stable=True):
     integ = ode.integrator("DOPRI87", 0.01)
-    integ.setAbsTol(1.0e-13)
+    integ.set_abs_tol(1.0e-13)
 
     Period = OrbitIn[-1][6]
     Orbit = integ.integrate_dense(OrbitIn[0], Period, nman)
@@ -150,10 +150,10 @@ def FindClosestConnection(Orbs1, Orbs2):
 
 def MakeHeteroclinic(ode, Man1, Man2, L1Orbit, L2Orbit):
     OrbitTab1 = oc.LGLInterpTable(L1Orbit)
-    OrbitTab1.makePeriodic()
+    OrbitTab1.make_periodic()
 
     OrbitTab2 = oc.LGLInterpTable(L2Orbit)
-    OrbitTab2.makePeriodic()
+    OrbitTab2.make_periodic()
 
     # Enforces that position should lie somewhere along orbit
     def PosCon(OrbitTab):
@@ -173,35 +173,35 @@ def MakeHeteroclinic(ode, Man1, Man2, L1Orbit, L2Orbit):
 
     phase1 = ode.phase("LGL7", Man1[1::], 50)
 
-    phase1.addLowerVarBound("Front", 6, -L1Orbit[-1][6])
-    phase1.addUpperVarBound("Front", 6, 2 * L1Orbit[-1][6])
+    phase1.add_lower_var_bound("Front", 6, -L1Orbit[-1][6])
+    phase1.add_upper_var_bound("Front", 6, 2 * L1Orbit[-1][6])
 
     # Departing from Orbit1
-    phase1.addEqualCon("First", PosCon(OrbitTab1), [0, 1, 2, 6])
-    phase1.addStateObjective("First", DVObj(OrbitTab1), [3, 4, 5, 6])
+    phase1.add_equal_con("First", PosCon(OrbitTab1), [0, 1, 2, 6])
+    phase1.add_state_objective("First", DVObj(OrbitTab1), [3, 4, 5, 6])
 
     phase2 = ode.phase("LGL7", Man2[0:-1], 50)
     # Arriving at Orbit2
-    phase2.addEqualCon("Last", PosCon(OrbitTab2), [0, 1, 2, 6])
-    phase2.addStateObjective("Last", DVObj(OrbitTab2), [3, 4, 5, 6])
+    phase2.add_equal_con("Last", PosCon(OrbitTab2), [0, 1, 2, 6])
+    phase2.add_state_objective("Last", DVObj(OrbitTab2), [3, 4, 5, 6])
 
-    phase1.addLowerVarBound("Last", 6, -L2Orbit[-1][6])
-    phase1.addUpperVarBound("Last", 6, 2 * L2Orbit[-1][6])
+    phase1.add_lower_var_bound("Last", 6, -L2Orbit[-1][6])
+    phase1.add_upper_var_bound("Last", 6, 2 * L2Orbit[-1][6])
 
     ocp = oc.OptimalControlProblem()
-    ocp.addPhase(phase1)
-    ocp.addPhase(phase2)
+    ocp.add_phase(phase1)
+    ocp.add_phase(phase2)
 
     # Enforce continuity in position and velocity between phases
-    ocp.addForwardLinkEqualCon(phase1, phase2, range(0, 6))
-    ocp.setAdaptiveMesh()
+    ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6))
+    ocp.set_adaptive_mesh()
 
-    ocp.optimizer.set_EContol(1.0e-9)
-    ocp.optimizer.set_OptLSMode("L1")
+    ocp.optimizer.set_eq_con_tol(1.0e-9)
+    ocp.optimizer.set_opt_ls_mode("L1")
     ocp.optimize()
 
-    Traj1 = phase1.returnTraj()
-    Traj2 = phase2.returnTraj()
+    Traj1 = phase1.return_traj()
+    Traj2 = phase2.return_traj()
 
     DV1 = np.linalg.norm(Traj1[0][3:6] - OrbitTab1(Traj1[0][6])[3:6])
     DV2 = np.linalg.norm(Traj2[-1][3:6] - OrbitTab2(Traj2[-1][6])[3:6])

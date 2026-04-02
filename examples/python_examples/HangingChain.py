@@ -66,21 +66,21 @@ def Job(a, b, n, L):
     ode = Chain()
 
     phase = ode.phase("LGL5", IG, n)
-    phase.setStaticParams([L])
+    phase.set_static_params([L])
 
-    phase.addBoundaryValue("Front", [0, 1], [a, 0])
-    phase.addBoundaryValue("Back", [0, 1], [b, 1])
-    phase.addBoundaryValue("StaticParams", [0], [L])
+    phase.add_boundary_value("Front", [0, 1], [a, 0])
+    phase.add_boundary_value("Back", [0, 1], [b, 1])
+    phase.add_boundary_value("StaticParams", [0], [L])
 
-    phase.addUpperVarBound("Path", 0, max(a, b) + 0.001)
+    phase.add_upper_var_bound("Path", 0, max(a, b) + 0.001)
 
-    phase.addIntegralObjective(Energy(), [0, 2])
-    phase.addIntegralParamFunction(Length(), [2], 0)
+    phase.add_integral_objective(Energy(), [0, 2])
+    phase.add_integral_param_function(Length(), [2], 0)
 
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_MaxLSIters(2)
-    phase.optimizer.PrintLevel = 1
-    phase.JetJobMode = typy.Solvers.JetJobModes.SolveOptimize
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_max_ls_iters(2)
+    phase.optimizer.print_level = 1
+    phase.jet_job_mode = typy.Solvers.JetJobModes.SolveOptimize
 
     return phase
 
@@ -100,7 +100,7 @@ JArgs = [(a, b, n, L) for L in Ls]
 Res = solvs.Jet.map(Job, JArgs, True)
 
 for i, res in enumerate(Res):
-    Traj = res.returnTraj()
+    Traj = res.return_traj()
 
     TT = np.array(Traj).T
 

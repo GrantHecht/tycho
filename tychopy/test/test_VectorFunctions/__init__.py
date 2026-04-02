@@ -24,8 +24,8 @@ class test_VectorFunctions(unittest.TestCase):
 
         np.set_printoptions(precision=3, linewidth=200)
 
-        IRows = Fun.IRows()
-        ORows = Fun.ORows()
+        IRows = Fun.input_rows()
+        ORows = Fun.output_rows()
 
         def Value(X):
             return Fun.compute(X)
@@ -129,7 +129,7 @@ class test_VectorFunctions(unittest.TestCase):
 
         Fun = MProd.vf()
 
-        L = range(2, Fun.ORows() + 2)
+        L = range(2, Fun.output_rows() + 2)
 
         with self.subTest("Derivatives"):
             self.function_test_impl(

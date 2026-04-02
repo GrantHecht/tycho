@@ -11,15 +11,14 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func> struct CwiseFunctionOperator;
 
@@ -131,7 +130,7 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
     using Base = CwiseFunctionOperator<CwiseArcSin<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -170,7 +169,7 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
     using Base = CwiseFunctionOperator<CwiseArcCos<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = false;
+    static const bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -210,7 +209,7 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
     using Base = CwiseFunctionOperator<CwiseArcTan<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -678,7 +677,7 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -748,7 +747,7 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool IsVectorizable = true;
+    static const bool is_vectorizable = true;
     double power = 1;
 
     CwisePow(Func f, double power) : Base(f), power(power) {}
@@ -855,12 +854,12 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    Func func;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    Func func_;
+    static const bool is_vectorizable = Func::is_vectorizable;
     CwiseFunctionOperator() {}
-    CwiseFunctionOperator(Func f) : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {func.input_domain()});
+    CwiseFunctionOperator(Func f) : func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
 
     template <class InType, class OutType>
@@ -869,10 +868,10 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> fxt;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
+            fxt.resize(this->func_.output_rows());
         }
 
-        this->func.compute(x, fxt);
+        this->func_.compute(x, fxt);
         this->derived().cwise_compute(fxt, fx_);
     }
     template <class InType, class OutType, class JacType>
@@ -884,18 +883,18 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> jxdiag;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
-            jxdiag.resize(this->func.ORows());
+            fxt.resize(this->func_.output_rows());
+            jxdiag.resize(this->func_.output_rows());
         }
 
-        this->func.compute_jacobian(x, fxt, jx_);
+        this->func_.compute_jacobian(x, fxt, jx_);
         this->derived().cwise_compute_jacobian(fxt, fx_, jxdiag);
         if constexpr (Func::ORC == 1) {
-            this->func.right_jacobian_product(jx_, jxdiag, jx_, DirectAssignment(),
-                                              std::bool_constant<true>());
+            this->func_.right_jacobian_product(jx_, jxdiag, jx_, DirectAssignment(),
+                                               std::bool_constant<true>());
         } else {
-            this->func.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx_, DirectAssignment(),
-                                              std::bool_constant<true>());
+            this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx_, DirectAssignment(),
+                                               std::bool_constant<true>());
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -914,32 +913,32 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         Output<Scalar> hxdiag;
 
         if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func.ORows());
-            jxdiag.resize(this->func.ORows());
-            hxdiag.resize(this->func.ORows());
+            fxt.resize(this->func_.output_rows());
+            jxdiag.resize(this->func_.output_rows());
+            hxdiag.resize(this->func_.output_rows());
         }
 
-        this->func.compute(x, fxt);
+        this->func_.compute(x, fxt);
         this->derived().cwise_compute_jacobian_hessian(fxt, fx_, jxdiag, hxdiag);
 
         fxt.setZero();
         Output<Scalar> adjtemp = jxdiag.cwiseProduct(adjvars);
         hxdiag = hxdiag.cwiseProduct(adjvars);
-        this->func.compute_jacobian_adjointgradient_adjointhessian(x, fxt, jx_, adjgrad_, adjhess_,
-                                                                   adjtemp);
+        this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxt, jx_, adjgrad_, adjhess_,
+                                                                    adjtemp);
         if constexpr (Func::ORC == 1) {
 
-            this->func.symetric_jacobian_product(adjhess, hxdiag, jx, PlusEqualsAssignment(),
-                                                 std::bool_constant<false>());
+            this->func_.symetric_jacobian_product(adjhess, hxdiag, jx, PlusEqualsAssignment(),
+                                                  std::bool_constant<false>());
 
-            this->func.right_jacobian_product(jx_, jxdiag, jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+            this->func_.right_jacobian_product(jx_, jxdiag, jx, DirectAssignment(),
+                                               std::bool_constant<true>());
         } else {
-            this->func.symetric_jacobian_product(adjhess, hxdiag.asDiagonal(), jx,
-                                                 PlusEqualsAssignment(),
-                                                 std::bool_constant<false>());
-            this->func.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx, DirectAssignment(),
-                                              std::bool_constant<true>());
+            this->func_.symetric_jacobian_product(adjhess, hxdiag.asDiagonal(), jx,
+                                                  PlusEqualsAssignment(),
+                                                  std::bool_constant<false>());
+            this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx, DirectAssignment(),
+                                               std::bool_constant<true>());
         }
     }
 };
@@ -977,4 +976,4 @@ template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, 
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

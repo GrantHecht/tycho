@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class VecFunc, class ScalFunc> struct VectorScalarFunctionProduct_Impl;
 
@@ -46,22 +45,22 @@ struct VectorScalarFunctionProduct_Impl
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename VecFunc::INPUT_DOMAIN, typename ScalFunc::INPUT_DOMAIN>;
-    static const bool IsVectorizable = VecFunc::IsVectorizable && ScalFunc::IsVectorizable;
+    static const bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
 
     VectorScalarFunctionProduct_Impl() {}
     VectorScalarFunctionProduct_Impl(VecFunc f1, ScalFunc f2)
         : vectorfunc(std::move(f1)), scalarfunc(std::move(f2)) {
-        int irtemp = std::max(this->vectorfunc.IRows(), this->scalarfunc.IRows());
-        this->setIORows(irtemp, this->vectorfunc.ORows());
+        int irtemp = std::max(this->vectorfunc.input_rows(), this->scalarfunc.input_rows());
+        this->set_io_rows(irtemp, this->vectorfunc.output_rows());
 
-        this->set_input_domain(this->IRows(),
+        this->set_input_domain(this->input_rows(),
                                {scalarfunc.input_domain(), vectorfunc.input_domain()});
 
-        if (this->scalarfunc.IRows() != this->vectorfunc.IRows()) {
-            throw std::invalid_argument(fmt::format(
-                "VectorScalarFunctionProduct: input size mismatch "
-                "(VectorFunc IRows={}, ScalarFunc IRows={})",
-                this->vectorfunc.IRows(), this->scalarfunc.IRows()));
+        if (this->scalarfunc.input_rows() != this->vectorfunc.input_rows()) {
+            throw std::invalid_argument(
+                fmt::format("VectorScalarFunctionProduct: input size mismatch "
+                            "(VectorFunc IRows={}, ScalarFunc IRows={})",
+                            this->vectorfunc.input_rows(), this->scalarfunc.input_rows()));
         }
     }
 
@@ -98,9 +97,9 @@ struct VectorScalarFunctionProduct_Impl
             fx *= fxs[0];
         };
 
-        const int irows = this->scalarfunc.IRows();
+        const int irows = this->scalarfunc.input_rows();
         using JType = ScalFunc_jacobian<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<JType>(1, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -119,7 +118,7 @@ struct VectorScalarFunctionProduct_Impl
         auto Impl = [&](auto &jxs, auto &gxs, auto &hxs, auto &adjtemp) {
             Vector1<Scalar> fxs;
             adjtemp = adjvars;
-            if constexpr (ScalFunc::IsLinearFunction && false) {
+            if constexpr (ScalFunc::is_linear_function && false) {
                 this->scalarfunc.compute(x, fxs);
                 adjtemp *= fxs[0];
                 fxs[0] = 0;
@@ -134,7 +133,7 @@ struct VectorScalarFunctionProduct_Impl
             this->scalarfunc.compute_jacobian_adjointgradient_adjointhessian(x, fxs, jxs, gxs, hxs,
                                                                              ls);
 
-            if constexpr (ScalFunc::IsLinearFunction &&
+            if constexpr (ScalFunc::is_linear_function &&
                           false) { // This is dangerous, might divide by zeros
                 this->vectorfunc.scale_gradient(adjgrad, Scalar(1.0 / fxs[0]));
             } else {
@@ -144,55 +143,54 @@ struct VectorScalarFunctionProduct_Impl
             this->scalarfunc.accumulate_hessian(adjhess, hxs, PlusEqualsAssignment());
 
             if constexpr (ScalFunc::InputIsDynamic) {
-                const int sds = this->scalarfunc.SubDomains.cols();
+                const int sds = this->scalarfunc.sub_domains.cols();
 
                 if (sds == 0) {
                     hxs.setZero();
                 } else {
                     for (int i = 0; i < sds; i++) {
-                        int start = this->scalarfunc.SubDomains(0, i);
-                        int size = this->scalarfunc.SubDomains(1, i);
+                        int start = this->scalarfunc.sub_domains(0, i);
+                        int size = this->scalarfunc.sub_domains(1, i);
                         hxs.middleCols(start, size).setZero();
                     }
                 }
             } else {
-                constexpr int sds = ScalFunc::INPUT_DOMAIN::SubDomains.size();
-                Tycho::constexpr_for_loop(std::integral_constant<int, 0>(),
-                                          std::integral_constant<int, sds>(), [&](auto i) {
-                                              constexpr int start =
-                                                  ScalFunc::INPUT_DOMAIN::SubDomains[i.value][0];
-                                              constexpr int size =
-                                                  ScalFunc::INPUT_DOMAIN::SubDomains[i.value][1];
-                                              hxs.template middleCols<size>(start, size).setZero();
-                                          });
+                constexpr int sds = ScalFunc::INPUT_DOMAIN::sub_domains.size();
+                tycho::utils::constexpr_for_loop(
+                    std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
+                    [&](auto i) {
+                        constexpr int start = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int size = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
+                        hxs.template middleCols<size>(start, size).setZero();
+                    });
             }
 
             this->scalarfunc.right_jacobian_product(hxs, adjgrad, jxs, DirectAssignment(),
                                                     std::bool_constant<false>());
 
             if constexpr (ScalFunc::InputIsDynamic) {
-                const int sds = this->scalarfunc.SubDomains.cols();
+                const int sds = this->scalarfunc.sub_domains.cols();
 
                 if (sds == 0) {
                     adjhess += hxs + hxs.transpose();
 
                 } else {
                     for (int i = 0; i < sds; i++) {
-                        int start = this->scalarfunc.SubDomains(0, i);
-                        int size = this->scalarfunc.SubDomains(1, i);
+                        int start = this->scalarfunc.sub_domains(0, i);
+                        int size = this->scalarfunc.sub_domains(1, i);
                         adjhess.middleCols(start, size) += hxs.middleCols(start, size);
                         adjhess.middleRows(start, size) += hxs.middleCols(start, size).transpose();
                     }
                 }
 
             } else {
-                constexpr int sds = ScalFunc::INPUT_DOMAIN::SubDomains.size();
+                constexpr int sds = ScalFunc::INPUT_DOMAIN::sub_domains.size();
 
-                Tycho::constexpr_for_loop(
+                tycho::utils::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                     [&](auto i) {
-                        constexpr int start = ScalFunc::INPUT_DOMAIN::SubDomains[i.value][0];
-                        constexpr int size = ScalFunc::INPUT_DOMAIN::SubDomains[i.value][1];
+                        constexpr int start = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][0];
+                        constexpr int size = ScalFunc::INPUT_DOMAIN::sub_domains[i.value][1];
                         adjhess.template middleCols<size>(start, size) +=
                             hxs.template middleCols<size>(start, size);
                         adjhess.template middleRows<size>(start, size) +=
@@ -211,17 +209,18 @@ struct VectorScalarFunctionProduct_Impl
             fx *= fxs[0];
         };
 
-        const int irows = this->scalarfunc.IRows();
-        const int orows = this->ORows();
+        const int irows = this->scalarfunc.input_rows();
+        const int orows = this->output_rows();
         using JType = ScalFunc_jacobian<Scalar>;
         using GType = ScalFunc_gradient<Scalar>;
         using HType = ScalFunc_hessian<Scalar>;
         using AType = Output<Scalar>;
 
-        BumpAllocator::allocate_run(Impl, TempSpec<JType>(1, irows), TempSpec<GType>(irows, 1),
-                                    TempSpec<HType>(irows, irows), TempSpec<AType>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<JType>(1, irows), tycho::utils::TempSpec<GType>(irows, 1),
+            tycho::utils::TempSpec<HType>(irows, irows), tycho::utils::TempSpec<AType>(orows, 1));
     }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

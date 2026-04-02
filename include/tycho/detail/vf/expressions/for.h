@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/expressions/nested_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 //! Declaration of For_Impl
 template <class Derived, int N, class StartFunc, class BodyFunc> struct For_Impl;
@@ -70,4 +69,4 @@ struct For_Impl<Derived, 0, StartFunc, BodyFunc>
     For_Impl(StartFunc inner) : Base::NestedFunction_Impl(OFuncType(), inner) {};
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

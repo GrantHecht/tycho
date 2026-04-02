@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,17 @@
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 template <class Derived, int CSC, int USZ, int Order>
 struct LGLControlSplineSize : VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1), USZ * Order> {
@@ -26,15 +35,15 @@ struct LGLControlSplineSize : VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1),
     using Base::Base;
 
     static const int Usz = USZ;
-    static const int tUsz = USZ + 1;
+    static const int t_usz = USZ + 1;
 
-    const int tUsize() const { return tUsz; }
+    const int t_usize() const { return t_usz; }
     const int Usize() const { return Usz; }
 
-    template <class Scalar> using tUVec = Eigen::Matrix<Scalar, USZ + 1, 1>;
+    template <class Scalar> using TUVec = Eigen::Matrix<Scalar, USZ + 1, 1>;
     template <class Scalar> using UVec = Eigen::Matrix<Scalar, USZ, 1>;
 
-    void setUsize(int u) {}
+    void set_usize(int u) {}
 };
 
 template <class Derived, int CSC, int Order>
@@ -43,23 +52,23 @@ struct LGLControlSplineSize<Derived, CSC, -1, Order> : VectorFunction<Derived, -
     using Base::Base;
 
     static const int Usz = -1;
-    static const int tUsz = -1;
+    static const int t_usz = -1;
 
-    int Uszd = -1;
-    int tUszd = -1;
+    int usz_d_ = -1;
+    int t_usz_d_ = -1;
 
-    int tUsize() const { return tUszd; }
-    int Usize() const { return Uszd; }
+    int t_usize() const { return t_usz_d_; }
+    int Usize() const { return usz_d_; }
 
-    template <class Scalar> using tUVec = Eigen::Matrix<Scalar, -1, 1>;
+    template <class Scalar> using TUVec = Eigen::Matrix<Scalar, -1, 1>;
     template <class Scalar> using UVec = Eigen::Matrix<Scalar, -1, 1>;
 
-    void setUsize(int u) {
-        this->Uszd = u;
-        this->tUszd = u + 1;
+    void set_usize(int u) {
+        this->usz_d_ = u;
+        this->t_usz_d_ = u + 1;
         int irr = (2 * CSC - 1) * (u + 1);
         int orr = u * Order;
-        this->setIORows(irr, orr);
+        this->set_io_rows(irr, orr);
     }
 };
 
@@ -67,18 +76,18 @@ template <int CSC, int USZ, int Order = CSC - 2>
 struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>, CSC, USZ, Order> {
     using SplineBase = LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>, CSC, USZ, Order>;
 
-    template <class Scalar> using tUVec = typename SplineBase::template tUVec<Scalar>;
+    template <class Scalar> using TUVec = typename SplineBase::template TUVec<Scalar>;
     template <class Scalar> using UVec = typename SplineBase::template UVec<Scalar>;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
     using Coeffs = LGLCoeffs<CSC>;
 
-    static const int tUNum = (2 * CSC - 1);
+    static const int t_u_num = (2 * CSC - 1);
     static const int UeqNum = Order;
 
     LGLControlSpline() {}
 
-    LGLControlSpline(int usize) { this->setUsize(usize); }
+    LGLControlSpline(int usize) { this->set_usize(usize); }
 
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
@@ -86,21 +95,21 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        STDarray<tUVec<Scalar>, tUNum> tUVs;
+        STDarray<TUVec<Scalar>, t_u_num> t_u_vs;
 
-        for (int i = 0; i < tUNum; i++) {
-            tUVs[i] = x.template segment<SplineBase::tUsz>(i * this->tUsize(), this->tUsize());
+        for (int i = 0; i < t_u_num; i++) {
+            t_u_vs[i] = x.template segment<SplineBase::t_usz>(i * this->t_usize(), this->t_usize());
         }
-        Scalar h0 = tUVs[CSC - 1][0] - tUVs[0][0];
-        Scalar h1 = tUVs.back()[0] - tUVs[CSC - 1][0];
+        Scalar h0 = t_u_vs[CSC - 1][0] - t_u_vs[0][0];
+        Scalar h1 = t_u_vs.back()[0] - t_u_vs[CSC - 1][0];
 
         for (int j = 0; j < UeqNum;
              j++) { // j = 0-> 1st order continuity, j=1 2nd order continuity ...
             for (int i = 0; i < CSC; i++) {
                 fx.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
-                    (Coeffs::UOneSpline_Weights[j][i] * tUVs[i].tail(this->Usize()) /
+                    (Coeffs::UOneSpline_Weights[j][i] * t_u_vs[i].tail(this->Usize()) /
                          (pow(h0, Scalar(j + 1))) -
-                     Coeffs::UZeroSpline_Weights[j][i] * tUVs[i + CSC - 1].tail(this->Usize()) /
+                     Coeffs::UZeroSpline_Weights[j][i] * t_u_vs[i + CSC - 1].tail(this->Usize()) /
                          (pow(h1, Scalar(j + 1))));
             }
         }
@@ -114,14 +123,14 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        STDarray<tUVec<Scalar>, tUNum> tUVs;
+        STDarray<TUVec<Scalar>, t_u_num> t_u_vs;
 
-        for (int i = 0; i < tUNum; i++) {
-            tUVs[i] = x.template segment<SplineBase::tUsz>(i * this->tUsize(), this->tUsize());
+        for (int i = 0; i < t_u_num; i++) {
+            t_u_vs[i] = x.template segment<SplineBase::t_usz>(i * this->t_usize(), this->t_usize());
         }
 
-        Scalar h0 = tUVs[CSC - 1][0] - tUVs[0][0];
-        Scalar h1 = tUVs.back()[0] - tUVs[CSC - 1][0];
+        Scalar h0 = t_u_vs[CSC - 1][0] - t_u_vs[0][0];
+        Scalar h1 = t_u_vs.back()[0] - t_u_vs[CSC - 1][0];
 
         for (int j = 0; j < UeqNum;
              j++) { // j = 0-> 1st order continuity, j=1 2nd order continuity ...
@@ -131,33 +140,33 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
 
             for (int i = 0; i < CSC; i++) {
                 fx.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
-                    ((Coeffs::UOneSpline_Weights[j][i] * h0pow) * tUVs[i].tail(this->Usize()) -
+                    ((Coeffs::UOneSpline_Weights[j][i] * h0pow) * t_u_vs[i].tail(this->Usize()) -
                      (Coeffs::UZeroSpline_Weights[j][i] * h1pow) *
-                         tUVs[i + CSC - 1].tail(this->Usize()));
+                         t_u_vs[i + CSC - 1].tail(this->Usize()));
 
                 jx.col(0).template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     (Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0) *
-                    tUVs[i].tail(this->Usize());
+                    t_u_vs[i].tail(this->Usize());
 
-                jx.col((CSC - 1) * this->tUsize())
+                jx.col((CSC - 1) * this->t_usize())
                     .template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     -(Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0) *
-                        tUVs[i].tail(this->Usize()) -
+                        t_u_vs[i].tail(this->Usize()) -
                     (Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1) *
-                        tUVs[i + CSC - 1].tail(this->Usize());
+                        t_u_vs[i + CSC - 1].tail(this->Usize());
 
-                jx.col((2 * CSC - 2) * this->tUsize())
+                jx.col((2 * CSC - 2) * this->t_usize())
                     .template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     (Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1) *
-                    tUVs[i + CSC - 1].tail(this->Usize());
+                    t_u_vs[i + CSC - 1].tail(this->Usize());
 
                 jx.template block<SplineBase::Usz, SplineBase::Usz>(
-                      j * this->Usize(), i * this->tUsize() + 1, this->Usize(), this->Usize())
+                      j * this->Usize(), i * this->t_usize() + 1, this->Usize(), this->Usize())
                     .diagonal() +=
                     UVec<Scalar>::Constant(this->Usize(), Coeffs::UOneSpline_Weights[j][i] * h0pow);
 
                 jx.template block<SplineBase::Usz, SplineBase::Usz>(
-                      j * this->Usize(), (i + CSC - 1) * this->tUsize() + 1, this->Usize(),
+                      j * this->Usize(), (i + CSC - 1) * this->t_usize() + 1, this->Usize(),
                       this->Usize())
                     .diagonal() += UVec<Scalar>::Constant(
                     this->Usize(), -Coeffs::UZeroSpline_Weights[j][i] * h1pow);
@@ -188,14 +197,14 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        STDarray<tUVec<Scalar>, tUNum> tUVs;
+        STDarray<TUVec<Scalar>, t_u_num> t_u_vs;
 
-        for (int i = 0; i < tUNum; i++) {
-            tUVs[i] = x.template segment<SplineBase::tUsz>(i * this->tUsize(), this->tUsize());
+        for (int i = 0; i < t_u_num; i++) {
+            t_u_vs[i] = x.template segment<SplineBase::t_usz>(i * this->t_usize(), this->t_usize());
         }
 
-        Scalar h0 = tUVs[CSC - 1][0] - tUVs[0][0];
-        Scalar h1 = tUVs.back()[0] - tUVs[CSC - 1][0];
+        Scalar h0 = t_u_vs[CSC - 1][0] - t_u_vs[0][0];
+        Scalar h1 = t_u_vs.back()[0] - t_u_vs[CSC - 1][0];
 
         for (int j = 0; j < UeqNum;
              j++) { // j = 0-> 1st order continuity, j=1 2nd order continuity ...
@@ -208,99 +217,99 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
 
             for (int i = 0; i < CSC; i++) {
                 fx.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
-                    ((Coeffs::UOneSpline_Weights[j][i] * h0pow) * tUVs[i].tail(this->Usize()) -
+                    ((Coeffs::UOneSpline_Weights[j][i] * h0pow) * t_u_vs[i].tail(this->Usize()) -
                      (Coeffs::UZeroSpline_Weights[j][i] * h1pow) *
-                         tUVs[i + CSC - 1].tail(this->Usize()));
+                         t_u_vs[i + CSC - 1].tail(this->Usize()));
 
                 OTH += (Coeffs::UOneSpline_Weights[j][i] * hdt * h2dt * h0pow / (h0 * h0)) *
-                       tUVs[i]
+                       t_u_vs[i]
                            .tail(this->Usize())
                            .dot(adjvars.template segment<SplineBase::Usz>(j * this->Usize(),
                                                                           this->Usize()));
                 ZTH += (Coeffs::UZeroSpline_Weights[j][i] * hdt * h2dt * h1pow / (h1 * h1)) *
-                       tUVs[i + CSC - 1]
+                       t_u_vs[i + CSC - 1]
                            .tail(this->Usize())
                            .dot(adjvars.template segment<SplineBase::Usz>(j * this->Usize(),
                                                                           this->Usize()));
 
                 jx.col(0).template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     (Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0) *
-                    tUVs[i].tail(this->Usize());
+                    t_u_vs[i].tail(this->Usize());
 
-                jx.col((CSC - 1) * this->tUsize())
+                jx.col((CSC - 1) * this->t_usize())
                     .template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     -(Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0) *
-                        tUVs[i].tail(this->Usize()) -
+                        t_u_vs[i].tail(this->Usize()) -
                     (Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1) *
-                        tUVs[i + CSC - 1].tail(this->Usize());
+                        t_u_vs[i + CSC - 1].tail(this->Usize());
 
-                jx.col((2 * CSC - 2) * this->tUsize())
+                jx.col((2 * CSC - 2) * this->t_usize())
                     .template segment<SplineBase::Usz>(j * this->Usize(), this->Usize()) +=
                     (Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1) *
-                    tUVs[i + CSC - 1].tail(this->Usize());
+                    t_u_vs[i + CSC - 1].tail(this->Usize());
 
                 jx.template block<SplineBase::Usz, SplineBase::Usz>(
-                      j * this->Usize(), i * this->tUsize() + 1, this->Usize(), this->Usize())
+                      j * this->Usize(), i * this->t_usize() + 1, this->Usize(), this->Usize())
                     .diagonal() +=
                     UVec<Scalar>::Constant(this->Usize(), Coeffs::UOneSpline_Weights[j][i] * h0pow);
 
                 jx.template block<SplineBase::Usz, SplineBase::Usz>(
-                      j * this->Usize(), (i + CSC - 1) * this->tUsize() + 1, this->Usize(),
+                      j * this->Usize(), (i + CSC - 1) * this->t_usize() + 1, this->Usize(),
                       this->Usize())
                     .diagonal() += UVec<Scalar>::Constant(
                     this->Usize(), -Coeffs::UZeroSpline_Weights[j][i] * h1pow);
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                adjhess.row(0).template segment<SplineBase::Usz>(i * this->tUsize() + 1,
+                adjhess.row(0).template segment<SplineBase::Usz>(i * this->t_usize() + 1,
                                                                  this->Usize()) +=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0))
                         .transpose();
 
-                adjhess.row((CSC - 1) * this->tUsize())
-                    .template segment<SplineBase::Usz>(i * this->tUsize() + 1, this->Usize()) -=
+                adjhess.row((CSC - 1) * this->t_usize())
+                    .template segment<SplineBase::Usz>(i * this->t_usize() + 1, this->Usize()) -=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0))
                         .transpose();
 
-                adjhess.col(0).template segment<SplineBase::Usz>(i * this->tUsize() + 1,
+                adjhess.col(0).template segment<SplineBase::Usz>(i * this->t_usize() + 1,
                                                                  this->Usize()) +=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0));
 
-                adjhess.col((CSC - 1) * this->tUsize())
-                    .template segment<SplineBase::Usz>(i * this->tUsize() + 1, this->Usize()) -=
+                adjhess.col((CSC - 1) * this->t_usize())
+                    .template segment<SplineBase::Usz>(i * this->t_usize() + 1, this->Usize()) -=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UOneSpline_Weights[j][i] * hdt * h0pow / h0));
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                adjhess.row((CSC - 1) * this->tUsize())
-                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->tUsize() + 1,
+                adjhess.row((CSC - 1) * this->t_usize())
+                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->t_usize() + 1,
                                                        this->Usize()) -=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1))
                         .transpose();
 
-                adjhess.row((2 * CSC - 2) * this->tUsize())
-                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->tUsize() + 1,
+                adjhess.row((2 * CSC - 2) * this->t_usize())
+                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->t_usize() + 1,
                                                        this->Usize()) +=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1))
                         .transpose();
 
-                adjhess.col((CSC - 1) * this->tUsize())
-                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->tUsize() + 1,
+                adjhess.col((CSC - 1) * this->t_usize())
+                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->t_usize() + 1,
                                                        this->Usize()) -=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
                             this->Usize(), Coeffs::UZeroSpline_Weights[j][i] * hdt * h1pow / h1));
 
-                adjhess.col((2 * CSC - 2) * this->tUsize())
-                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->tUsize() + 1,
+                adjhess.col((2 * CSC - 2) * this->t_usize())
+                    .template segment<SplineBase::Usz>((i + CSC - 1) * this->t_usize() + 1,
                                                        this->Usize()) +=
                     adjvars.template segment<SplineBase::Usz>(j * this->Usize(), this->Usize())
                         .cwiseProduct(UVec<Scalar>::Constant(
@@ -308,14 +317,14 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
             }
 
             adjhess(0, 0) += OTH;
-            adjhess((CSC - 1) * this->tUsize(), (CSC - 1) * this->tUsize()) += OTH;
-            adjhess(0, (CSC - 1) * this->tUsize()) += -OTH;
-            adjhess((CSC - 1) * this->tUsize(), 0) += -OTH;
+            adjhess((CSC - 1) * this->t_usize(), (CSC - 1) * this->t_usize()) += OTH;
+            adjhess(0, (CSC - 1) * this->t_usize()) += -OTH;
+            adjhess((CSC - 1) * this->t_usize(), 0) += -OTH;
 
-            adjhess((CSC - 1) * this->tUsize(), (CSC - 1) * this->tUsize()) -= ZTH;
-            adjhess((2 * CSC - 2) * this->tUsize(), (2 * CSC - 2) * this->tUsize()) -= ZTH;
-            adjhess((2 * CSC - 2) * this->tUsize(), (CSC - 1) * this->tUsize()) += ZTH;
-            adjhess((CSC - 1) * this->tUsize(), (2 * CSC - 2) * this->tUsize()) += ZTH;
+            adjhess((CSC - 1) * this->t_usize(), (CSC - 1) * this->t_usize()) -= ZTH;
+            adjhess((2 * CSC - 2) * this->t_usize(), (2 * CSC - 2) * this->t_usize()) -= ZTH;
+            adjhess((2 * CSC - 2) * this->t_usize(), (CSC - 1) * this->t_usize()) += ZTH;
+            adjhess((CSC - 1) * this->t_usize(), (2 * CSC - 2) * this->t_usize()) += ZTH;
         }
 
         adjgrad = (adjvars.transpose() * jx).transpose();
@@ -324,5 +333,4 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

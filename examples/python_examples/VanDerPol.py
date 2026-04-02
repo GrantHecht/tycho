@@ -55,19 +55,19 @@ if __name__ == "__main__":
     integ = ode.integrator(0.001)
 
     phase = ode.phase("LGL3", TrajIG, 256)
-    phase.integrator.setStepSizes(0.25, 0.001, 3)
-    phase.setControlMode("BlockConstant")
-    phase.addBoundaryValue("Front", range(0, 3), [0, 1, 0])
-    phase.addLUVarBound("Path", 3, -0.75, 1.0, 1.0)
+    phase.integrator.set_step_sizes(0.25, 0.001, 3)
+    phase.set_control_mode("BlockConstant")
+    phase.add_boundary_value("Front", range(0, 3), [0, 1, 0])
+    phase.add_lu_var_bound("Path", 3, -0.75, 1.0, 1.0)
 
-    phase.addIntegralObjective(Args(3).squared_norm(), [0, 1, 3])
-    phase.addBoundaryValue("Back", [0, 1, 2], [0.0, 0.0, tf])
-    phase.optimizer.PrintLevel = 0
-    phase.setNumPartitions(8, 8)
+    phase.add_integral_objective(Args(3).squared_norm(), [0, 1, 3])
+    phase.add_boundary_value("Back", [0, 1, 2], [0.0, 0.0, tf])
+    phase.optimizer.print_level = 0
+    phase.set_num_partitions(8, 8)
     phase.optimizer.set_tols(1.0e-8, 1.0e-8, 1.0e-8)
 
     phase.optimize()
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
     T = np.array(Traj).T
     plt.plot(T[2], T[0], label=r"$x_0$")
     plt.plot(T[2], T[1], label=r"$x_1$")

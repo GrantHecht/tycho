@@ -49,12 +49,12 @@ class Cannon(oc.ode_x_u_p.ode):
         ############################################################
         args = oc.ODEArguments(4, 0, 1)
 
-        v = args.XVar(0)
-        gamma = args.XVar(1)
-        h = args.XVar(2)
-        r = args.XVar(3)
+        v = args.x_var(0)
+        gamma = args.x_var(1)
+        h = args.x_var(2)
+        r = args.x_var(3)
 
-        rad = args.PVar(0)
+        rad = args.p_var(0)
 
         S = SFunc(rad)
         M = MFunc(rad, RhoIron)
@@ -102,7 +102,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
 
         ode = Cannon(CD, RhoAir, RhoIron, h_scale, g)
         integ = ode.integrator(0.01)
-        integ.Adaptive = True
+        integ.adaptive = True
 
         IG = np.zeros((6))
         IG[0] = v0
@@ -121,36 +121,38 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ##########################################################################
 
         aphase = ode.phase(tmode, AscentIG, nsegs)
-        aphase.addLowerVarBound("ODEParams", 0, 0.01 / Lstar, 1)
-        aphase.addLowerVarBound("Front", 1, 0.0, 1.0)
-        aphase.addBoundaryValue("Front", [2, 3, 4], [h0, r0, 0])
+        aphase.add_lower_var_bound("ODEParams", 0, 0.01 / Lstar, 1)
+        aphase.add_lower_var_bound("Front", 1, 0.0, 1.0)
+        aphase.add_boundary_value("Front", [2, 3, 4], [h0, r0, 0])
 
-        aphase.addInequalCon("Front", EFunc() * 0.01, [0], [0], [])
-        aphase.addBoundaryValue("Back", [1], [0.0])
+        aphase.add_inequal_con("Front", EFunc() * 0.01, [0], [0], [])
+        aphase.add_boundary_value("Back", [1], [0.0])
 
         dphase = ode.phase(tmode, DescentIG, nsegs)
-        dphase.addBoundaryValue("Back", [2], [0.0])
-        dphase.addValueObjective("Back", 3, -1.0)
+        dphase.add_boundary_value("Back", [2], [0.0])
+        dphase.add_value_objective("Back", 3, -1.0)
 
         ocp = oc.OptimalControlProblem()
-        ocp.addPhase(aphase)
-        ocp.addPhase(dphase)
+        ocp.add_phase(aphase)
+        ocp.add_phase(dphase)
 
-        ocp.addForwardLinkEqualCon(aphase, dphase, [0, 1, 2, 3, 4])
-        ocp.addDirectLinkEqualCon(aphase, "ODEParams", [0], dphase, "ODEParams", [0])
+        ocp.add_forward_link_equal_con(aphase, dphase, [0, 1, 2, 3, 4])
+        ocp.add_direct_link_equal_con(
+            aphase, "ODEParams", [0], dphase, "ODEParams", [0]
+        )
 
-        ocp.optimizer.set_OptLSMode("L1")
-        ocp.optimizer.MaxLSIters = 2
-        ocp.optimizer.PrintLevel = 3
-        ocp.setNumPartitions(1, 1)
-        ocp.optimizer.set_QPOrderingMode("MINDEG")
+        ocp.optimizer.set_opt_ls_mode("L1")
+        ocp.optimizer.max_ls_iters = 2
+        ocp.optimizer.print_level = 3
+        ocp.set_num_partitions(1, 1)
+        ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
         Flag = ocp.optimize()
 
-        Ascent = aphase.returnTraj()
-        Descent = dphase.returnTraj()
+        Ascent = aphase.return_traj()
+        Descent = dphase.return_traj()
 
-        Obj = ocp.optimizer.LastObjVal * Lstar
+        Obj = ocp.optimizer.last_obj_val * Lstar
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
@@ -158,7 +160,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
         )
 
         self.assertLess(
-            ocp.optimizer.LastIterNum,
+            ocp.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

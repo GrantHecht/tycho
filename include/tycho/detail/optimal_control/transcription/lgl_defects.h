@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -19,7 +18,20 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::ArrayOfTempSpecs;
+using utils::BumpAllocator;
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using utils::TempSpec;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
@@ -46,14 +58,14 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
     using Coeffs = LGLCoeffs<CS>;
     /////////////////////////////////////////////////////////////////////////////
-    DODE ode;
-    static const bool IsVectorizable = DODE::IsVectorizable;
+    DODE ode_;
+    static const bool is_vectorizable = DODE::is_vectorizable;
 
-    LGLDefects(const DODE &od) { this->setODE(od); }
-    void setODE(const DODE &od) {
-        this->ode = od;
-        this->setOutputRows(this->ode.ORows() * (CS - 1));
-        this->setInputRows(CS * this->ode.XtUVars() + this->ode.PVars());
+    LGLDefects(const DODE &od) { this->set_ode(od); }
+    void set_ode(const DODE &od) {
+        this->ode_ = od;
+        this->set_output_rows(this->ode_.output_rows() * (CS - 1));
+        this->set_input_rows(CS * this->ode_.xtu_vars() + this->ode_.p_vars());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -63,48 +75,50 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &C_XS, auto &C_DXS, auto &I_XS, auto &I_DXS) {
+        auto impl = [&](auto &C_XS, auto &C_DXS, auto &I_XS, auto &I_DXS) {
             for (int i = 0; i < Cardinals; i++) {
-                C_XS[i].template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                    x.template segment<DODE::XtUV>(i * this->ode.XtUVars(), this->ode.XtUVars());
+                C_XS[i].template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                    x.template segment<DODE::XtUV>(i * this->ode_.xtu_vars(),
+                                                   this->ode_.xtu_vars());
                 if constexpr (DODE::PV >= 0) {
-                    C_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    C_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    C_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    C_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
 
-                this->ode.compute(C_XS[i], C_DXS[i]);
+                this->ode_.compute(C_XS[i], C_DXS[i]);
             }
 
-            Scalar h = C_XS.back()[this->ode.TVar()] - C_XS[0][this->ode.TVar()];
+            Scalar h = C_XS.back()[this->ode_.t_var()] - C_XS[0][this->ode_.t_var()];
 
             for (int i = 0; i < Interiors; i++) {
-                I_XS[i][this->ode.TVar()] =
-                    C_XS[0][this->ode.TVar()] + h * Coeffs::InteriorSpacings[i];
+                I_XS[i][this->ode_.t_var()] =
+                    C_XS[0][this->ode_.t_var()] + h * Coeffs::InteriorSpacings[i];
 
                 if constexpr (DODE::PV >= 0) {
-                    I_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    I_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    I_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    I_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
                 for (int j = 0; j < Cardinals; j++) {
-                    I_XS[i].template segment<DODE::XV>(0, this->ode.XVars()) +=
+                    I_XS[i].template segment<DODE::XV>(0, this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XInterp_Weights[i][j]) *
-                             C_XS[j].template segment<DODE::XV>(0, this->ode.XVars()) +
+                             C_XS[j].template segment<DODE::XV>(0, this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) * C_DXS[j]);
-                    I_XS[i].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars()) +=
+                    I_XS[i].template segment<DODE::UV>(this->ode_.xt_vars(), this->ode_.u_vars()) +=
                         Scalar(Coeffs::Cardinal_UPoly_Weights[i][j]) *
-                        C_XS[j].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars());
+                        C_XS[j].template segment<DODE::UV>(this->ode_.xt_vars(),
+                                                           this->ode_.u_vars());
 
-                    fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                    fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XDef_Weights[i][j]) *
-                             C_XS[j].template segment<DODE::XV>(0, this->ode.XVars()) +
+                             C_XS[j].template segment<DODE::XV>(0, this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXDef_Weights[i][j] * h) * C_DXS[j]);
                 }
-                this->ode.compute(I_XS[i], I_DXS[i]);
-                fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                this->ode_.compute(I_XS[i], I_DXS[i]);
+                fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     (h * Coeffs::Interior_DXDef_Weights[i] * I_DXS[i]);
             }
         };
@@ -112,10 +126,10 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         using XType = ODEInput<Scalar>;
         using FXType = ODEOutput<Scalar>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode_.input_rows();
+        const int orowsode = this->ode_.output_rows();
 
-        BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        BumpAllocator::allocate_run(impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1));
@@ -128,135 +142,139 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &C_XS, auto &C_DXS, auto &C_JDXS, auto &I_XS, auto &I_DXS,
+        auto impl = [&](auto &C_XS, auto &C_DXS, auto &C_JDXS, auto &I_XS, auto &I_DXS,
                         auto &I_JDXS, auto &DI_DCS) {
             for (int i = 0; i < Cardinals; i++) {
-                C_XS[i].template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                    x.template segment<DODE::XtUV>(i * this->ode.XtUVars(), this->ode.XtUVars());
+                C_XS[i].template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                    x.template segment<DODE::XtUV>(i * this->ode_.xtu_vars(),
+                                                   this->ode_.xtu_vars());
                 if constexpr (DODE::PV >= 0) {
-                    C_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    C_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    C_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    C_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
 
-                this->ode.compute_jacobian(C_XS[i], C_DXS[i], C_JDXS[i]);
+                this->ode_.compute_jacobian(C_XS[i], C_DXS[i], C_JDXS[i]);
             }
 
-            Scalar h = C_XS.back()[this->ode.TVar()] - C_XS[0][this->ode.TVar()];
+            Scalar h = C_XS.back()[this->ode_.t_var()] - C_XS[0][this->ode_.t_var()];
 
             for (int i = 0; i < Interiors; i++) {
 
-                I_XS[i][this->ode.TVar()] =
-                    C_XS[0][this->ode.TVar()] + h * Coeffs::InteriorSpacings[i];
+                I_XS[i][this->ode_.t_var()] =
+                    C_XS[0][this->ode_.t_var()] + h * Coeffs::InteriorSpacings[i];
                 if constexpr (DODE::PV >= 0) {
-                    I_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    I_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    I_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    I_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
 
                 if (i > 0) {
                     DI_DCS.setZero();
                 }
 
-                DI_DCS(this->ode.TVar(), this->ode.TVar()) =
+                DI_DCS(this->ode_.t_var(), this->ode_.t_var()) =
                     Scalar(1.0 - Coeffs::InteriorSpacings[i]);
-                DI_DCS(this->ode.TVar(), this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar()) =
-                    Coeffs::InteriorSpacings[i];
+                DI_DCS(this->ode_.t_var(), this->ode_.xtu_vars() * (Cardinals - 1) +
+                                               this->ode_.t_var()) = Coeffs::InteriorSpacings[i];
                 DI_DCS
-                    .template block<DODE::PV, DODE::PV>(this->ode.XtUVars(),
-                                                        Cardinals * this->ode.XtUVars(),
-                                                        this->ode.PVars(), this->ode.PVars())
+                    .template block<DODE::PV, DODE::PV>(this->ode_.xtu_vars(),
+                                                        Cardinals * this->ode_.xtu_vars(),
+                                                        this->ode_.p_vars(), this->ode_.p_vars())
                     .diagonal()
                     .setConstant(Scalar(1.0));
 
                 for (int j = 0; j < Cardinals; j++) {
                     ////////////////////////////// Sum up Cardinal Interpolation
                     /// Terms/////////////////////////////////////////
-                    I_XS[i].template segment<DODE::XV>(0, this->ode.XVars()) +=
+                    I_XS[i].template segment<DODE::XV>(0, this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XInterp_Weights[i][j]) *
-                             C_XS[j].template segment<DODE::XV>(0, this->ode.XVars()) +
+                             C_XS[j].template segment<DODE::XV>(0, this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) * C_DXS[j]);
 
                     DI_DCS
-                        .template block<DODE::XV, DODE::XV>(0, j * this->ode.XtUVars(),
-                                                            this->ode.XVars(), this->ode.XVars())
+                        .template block<DODE::XV, DODE::XV>(
+                            0, j * this->ode_.xtu_vars(), this->ode_.x_vars(), this->ode_.x_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_XInterp_Weights[i][j]));
 
                     DI_DCS.template block<DODE::XV, DODE::XtUV>(
-                        0, j * this->ode.XtUVars(), this->ode.XVars(), this->ode.XtUVars()) +=
+                        0, j * this->ode_.xtu_vars(), this->ode_.x_vars(), this->ode_.xtu_vars()) +=
                         (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) *
-                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode.XtUVars());
+                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode_.xtu_vars());
 
-                    DI_DCS.template block<DODE::XV, DODE::PV>(
-                        0, Cardinals * this->ode.XtUVars(), this->ode.XVars(), this->ode.PVars()) +=
+                    DI_DCS.template block<DODE::XV, DODE::PV>(0, Cardinals * this->ode_.xtu_vars(),
+                                                              this->ode_.x_vars(),
+                                                              this->ode_.p_vars()) +=
                         (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) *
-                        C_JDXS[j].template rightCols<DODE::PV>(this->ode.PVars());
+                        C_JDXS[j].template rightCols<DODE::PV>(this->ode_.p_vars());
 
-                    DI_DCS.col(this->ode.TVar()).template segment<DODE::XV>(0, this->ode.XVars()) -=
+                    DI_DCS.col(this->ode_.t_var())
+                        .template segment<DODE::XV>(0, this->ode_.x_vars()) -=
                         Scalar(Coeffs::Cardinal_DXInterp_Weights[i][j]) * C_DXS[j];
-                    DI_DCS.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                        .template segment<DODE::XV>(0, this->ode.XVars()) +=
+                    DI_DCS.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                        .template segment<DODE::XV>(0, this->ode_.x_vars()) +=
                         Scalar(Coeffs::Cardinal_DXInterp_Weights[i][j]) * C_DXS[j];
 
-                    I_XS[i].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars()) +=
+                    I_XS[i].template segment<DODE::UV>(this->ode_.xt_vars(), this->ode_.u_vars()) +=
                         Scalar(Coeffs::Cardinal_UPoly_Weights[i][j]) *
-                        C_XS[j].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars());
+                        C_XS[j].template segment<DODE::UV>(this->ode_.xt_vars(),
+                                                           this->ode_.u_vars());
 
                     DI_DCS
                         .template block<DODE::UV, DODE::UV>(
-                            this->ode.XtVars(), j * this->ode.XtUVars() + this->ode.XtVars(),
-                            this->ode.UVars(), this->ode.UVars())
+                            this->ode_.xt_vars(), j * this->ode_.xtu_vars() + this->ode_.xt_vars(),
+                            this->ode_.u_vars(), this->ode_.u_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_UPoly_Weights[i][j]));
 
                     ////////////////////////////// Sum up Cardinal Output
                     /// Terms/////////////////////////////////////////
-                    fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                    fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XDef_Weights[i][j]) *
-                             C_XS[j].template head<DODE::XV>(this->ode.XVars()) +
+                             C_XS[j].template head<DODE::XV>(this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXDef_Weights[i][j] * h) * C_DXS[j]);
 
-                    jx.template block<DODE::XV, DODE::XV>(i * this->ode.XVars(),
-                                                          j * this->ode.XtUVars(),
-                                                          this->ode.XVars(), this->ode.XVars())
+                    jx.template block<DODE::XV, DODE::XV>(i * this->ode_.x_vars(),
+                                                          j * this->ode_.xtu_vars(),
+                                                          this->ode_.x_vars(), this->ode_.x_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_XDef_Weights[i][j]));
 
                     jx.template block<DODE::XV, DODE::XtUV>(
-                        i * this->ode.XVars(), j * this->ode.XtUVars(), this->ode.XVars(),
-                        this->ode.XtUVars()) +=
+                        i * this->ode_.x_vars(), j * this->ode_.xtu_vars(), this->ode_.x_vars(),
+                        this->ode_.xtu_vars()) +=
                         (Coeffs::Cardinal_DXDef_Weights[i][j] * h) *
-                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode.XtUVars());
+                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode_.xtu_vars());
 
-                    jx.template block<DODE::XV, DODE::PV>(i * this->ode.XVars(),
-                                                          Cardinals * this->ode.XtUVars(),
-                                                          this->ode.XVars(), this->ode.PVars()) +=
+                    jx.template block<DODE::XV, DODE::PV>(
+                        i * this->ode_.x_vars(), Cardinals * this->ode_.xtu_vars(),
+                        this->ode_.x_vars(), this->ode_.p_vars()) +=
                         (Coeffs::Cardinal_DXDef_Weights[i][j] * h) *
-                        C_JDXS[j].template rightCols<DODE::PV>(this->ode.PVars());
+                        C_JDXS[j].template rightCols<DODE::PV>(this->ode_.p_vars());
 
-                    jx.col(this->ode.TVar())
-                        .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) -=
+                    jx.col(this->ode_.t_var())
+                        .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) -=
                         Scalar(Coeffs::Cardinal_DXDef_Weights[i][j]) * C_DXS[j];
-                    jx.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                        .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                    jx.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                        .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                         Scalar(Coeffs::Cardinal_DXDef_Weights[i][j]) * C_DXS[j];
                 }
 
-                this->ode.compute_jacobian(I_XS[i], I_DXS[i], I_JDXS[i]);
+                this->ode_.compute_jacobian(I_XS[i], I_DXS[i], I_JDXS[i]);
 
-                fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     (h * Coeffs::Interior_DXDef_Weights[i] * I_DXS[i]);
-                jx.template middleRows<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                jx.template middleRows<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     ((h * Coeffs::Interior_DXDef_Weights[i]) * I_JDXS[i]) * (DI_DCS);
 
-                jx.col(this->ode.TVar())
-                    .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) -=
+                jx.col(this->ode_.t_var())
+                    .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) -=
                     Scalar(Coeffs::Interior_DXDef_Weights[i]) * I_DXS[i];
-                jx.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                    .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                jx.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                    .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     Scalar(Coeffs::Interior_DXDef_Weights[i]) * I_DXS[i];
             }
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -268,16 +286,16 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
 
         using DIType = Eigen::Matrix<Scalar, DODE::IRC, Base::IRC>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode_.input_rows();
+        const int orowsode = this->ode_.output_rows();
 
-        BumpAllocator::allocate_run(Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+        BumpAllocator::allocate_run(impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
                                     ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode),
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1),
                                     ArrayOfTempSpecs<JXType, Interiors>(orowsode, irowsode),
-                                    TempSpec<DIType>(irowsode, this->IRows()));
+                                    TempSpec<DIType>(irowsode, this->input_rows()));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -294,7 +312,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        auto Impl = [&](auto &C_XS, auto &C_DXS, auto &C_JDXS,
+        auto impl = [&](auto &C_XS, auto &C_DXS, auto &C_JDXS,
                         auto &C_AGXS, // Not an array
                         auto &C_AVS,
                         auto &C_HDXS, // Not an array
@@ -303,55 +321,57 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             for (int i = 0; i < Cardinals; i++) {
 
-                C_XS[i].template segment<DODE::XtUV>(0, this->ode.XtUVars()) =
-                    x.template segment<DODE::XtUV>(i * this->ode.XtUVars(), this->ode.XtUVars());
+                C_XS[i].template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) =
+                    x.template segment<DODE::XtUV>(i * this->ode_.xtu_vars(),
+                                                   this->ode_.xtu_vars());
                 if constexpr (DODE::PV >= 0) {
-                    C_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    C_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    C_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    C_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
 
-                this->ode.compute(C_XS[i], C_DXS[i]);
+                this->ode_.compute(C_XS[i], C_DXS[i]);
             }
             //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            Scalar h = C_XS.back()[this->ode.TVar()] - C_XS[0][this->ode.TVar()];
+            Scalar h = C_XS.back()[this->ode_.t_var()] - C_XS[0][this->ode_.t_var()];
 
             for (int i = 0; i < Interiors; i++) {
 
-                I_XS[i][this->ode.TVar()] =
-                    C_XS[0][this->ode.TVar()] + h * Coeffs::InteriorSpacings[i];
+                I_XS[i][this->ode_.t_var()] =
+                    C_XS[0][this->ode_.t_var()] + h * Coeffs::InteriorSpacings[i];
                 if constexpr (DODE::PV >= 0) {
-                    I_XS[i].template tail<DODE::PV>(this->ode.PVars()) =
-                        x.template tail<DODE::PV>(this->ode.PVars());
+                    I_XS[i].template tail<DODE::PV>(this->ode_.p_vars()) =
+                        x.template tail<DODE::PV>(this->ode_.p_vars());
                 } else {
-                    I_XS[i].tail(this->ode.PVars()) = x.tail(this->ode.PVars());
+                    I_XS[i].tail(this->ode_.p_vars()) = x.tail(this->ode_.p_vars());
                 }
 
-                I_AVS[i] =
-                    adjvars.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars());
+                I_AVS[i] = adjvars.template segment<DODE::XV>(i * this->ode_.x_vars(),
+                                                              this->ode_.x_vars());
 
                 for (int j = 0; j < Cardinals; j++) {
                     ////////////////////////////// Sum up Cardinal Interpolation
                     /// Terms/////////////////////////////////////////
-                    I_XS[i].template segment<DODE::XV>(0, this->ode.XVars()) +=
+                    I_XS[i].template segment<DODE::XV>(0, this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XInterp_Weights[i][j]) *
-                             C_XS[j].template segment<DODE::XV>(0, this->ode.XVars()) +
+                             C_XS[j].template segment<DODE::XV>(0, this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) * C_DXS[j]);
 
-                    I_XS[i].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars()) +=
+                    I_XS[i].template segment<DODE::UV>(this->ode_.xt_vars(), this->ode_.u_vars()) +=
                         Scalar(Coeffs::Cardinal_UPoly_Weights[i][j]) *
-                        C_XS[j].template segment<DODE::UV>(this->ode.XtVars(), this->ode.UVars());
+                        C_XS[j].template segment<DODE::UV>(this->ode_.xt_vars(),
+                                                           this->ode_.u_vars());
                 }
 
-                this->ode.compute_jacobian_adjointgradient_adjointhessian(
+                this->ode_.compute_jacobian_adjointgradient_adjointhessian(
                     I_XS[i], I_DXS[i], I_JDXS[i], I_AGXS[i], I_HDXS[i], I_AVS[i]);
 
                 for (int j = 0; j < Cardinals; j++) {
                     Scalar scale = Scalar(Coeffs::Interior_DXDef_Weights[i] *
                                           Coeffs::Cardinal_DXInterp_Weights[i][j]);
                     C_AVS[j] +=
-                        I_AGXS[i].template head<DODE::XV>(this->ode.XVars()) * (scale * h * h);
+                        I_AGXS[i].template head<DODE::XV>(this->ode_.x_vars()) * (scale * h * h);
                     C_AVS[j] += I_AVS[i] * (Coeffs::Cardinal_DXDef_Weights[i][j] * h);
                 }
             }
@@ -362,50 +382,52 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                     C_AGXS.setZero();
                     C_HDXS.setZero();
                 }
-                this->ode.compute_jacobian_adjointgradient_adjointhessian(
+                this->ode_.compute_jacobian_adjointgradient_adjointhessian(
                     C_XS[j], C_DXS[j], C_JDXS[j], C_AGXS, C_HDXS, C_AVS[j]);
 
                 adjhess.template block<DODE::XtUV, DODE::XtUV>(
-                    j * this->ode.XtUVars(), j * this->ode.XtUVars(), this->ode.XtUVars(),
-                    this->ode.XtUVars()) +=
-                    C_HDXS.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode.XtUVars(),
-                                                                  this->ode.XtUVars());
+                    j * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(), this->ode_.xtu_vars(),
+                    this->ode_.xtu_vars()) +=
+                    C_HDXS.template block<DODE::XtUV, DODE::XtUV>(0, 0, this->ode_.xtu_vars(),
+                                                                  this->ode_.xtu_vars());
                 adjhess.template block<DODE::XtUV, DODE::PV>(
-                    j * this->ode.XtUVars(), Cardinals * this->ode.XtUVars(), this->ode.XtUVars(),
-                    this->ode.PVars()) +=
+                    j * this->ode_.xtu_vars(), Cardinals * this->ode_.xtu_vars(),
+                    this->ode_.xtu_vars(), this->ode_.p_vars()) +=
                     C_HDXS.template block<DODE::XtUV, DODE::PV>(
-                        0, this->ode.XtUVars(), this->ode.XtUVars(), this->ode.PVars());
+                        0, this->ode_.xtu_vars(), this->ode_.xtu_vars(), this->ode_.p_vars());
                 adjhess.template block<DODE::PV, DODE::XtUV>(
-                    Cardinals * this->ode.XtUVars(), j * this->ode.XtUVars(), this->ode.PVars(),
-                    this->ode.XtUVars()) +=
+                    Cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(),
+                    this->ode_.p_vars(), this->ode_.xtu_vars()) +=
                     C_HDXS.template block<DODE::PV, DODE::XtUV>(
-                        this->ode.XtUVars(), 0, this->ode.PVars(), this->ode.XtUVars());
-                adjhess.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode.PVars(),
-                                                                       this->ode.PVars()) +=
-                    C_HDXS.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode.PVars(),
-                                                                          this->ode.PVars());
-                HTpar.template segment<DODE::XtUV>(j * this->ode.XtUVars(), this->ode.XtUVars()) +=
-                    C_AGXS.template segment<DODE::XtUV>(0, this->ode.XtUVars()) * (1.0 / h);
+                        this->ode_.xtu_vars(), 0, this->ode_.p_vars(), this->ode_.xtu_vars());
+                adjhess.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode_.p_vars(),
+                                                                       this->ode_.p_vars()) +=
+                    C_HDXS.template bottomRightCorner<DODE::PV, DODE::PV>(this->ode_.p_vars(),
+                                                                          this->ode_.p_vars());
+                HTpar.template segment<DODE::XtUV>(j * this->ode_.xtu_vars(),
+                                                   this->ode_.xtu_vars()) +=
+                    C_AGXS.template segment<DODE::XtUV>(0, this->ode_.xtu_vars()) * (1.0 / h);
 
                 if constexpr (DODE::PV >= 0) {
-                    HTpar.template tail<DODE::PV>(this->ode.PVars()) +=
-                        C_AGXS.template tail<DODE::PV>(this->ode.PVars()) * (1.0 / h);
+                    HTpar.template tail<DODE::PV>(this->ode_.p_vars()) +=
+                        C_AGXS.template tail<DODE::PV>(this->ode_.p_vars()) * (1.0 / h);
                 } else {
-                    HTpar.tail(this->ode.PVars()) += C_AGXS.tail(this->ode.PVars()) * (1.0 / h);
+                    HTpar.tail(this->ode_.p_vars()) += C_AGXS.tail(this->ode_.p_vars()) * (1.0 / h);
                 }
             }
 
             for (int i = 0; i < Interiors; i++) {
                 if (i > 0)
                     DI_DCS.setZero();
-                DI_DCS(this->ode.TVar(), this->ode.TVar()) =
+                DI_DCS(this->ode_.t_var(), this->ode_.t_var()) =
                     Scalar(1.0 - Coeffs::InteriorSpacings[i]);
-                DI_DCS(this->ode.TVar(), this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar()) =
+                DI_DCS(this->ode_.t_var(),
+                       this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var()) =
                     Scalar(Coeffs::InteriorSpacings[i]);
                 DI_DCS
-                    .template block<DODE::PV, DODE::PV>(this->ode.XtUVars(),
-                                                        Cardinals * this->ode.XtUVars(),
-                                                        this->ode.PVars(), this->ode.PVars())
+                    .template block<DODE::PV, DODE::PV>(this->ode_.xtu_vars(),
+                                                        Cardinals * this->ode_.xtu_vars(),
+                                                        this->ode_.p_vars(), this->ode_.p_vars())
                     .diagonal()
                     .setConstant(Scalar(1.0));
 
@@ -414,77 +436,78 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                     /// Terms/////////////////////////////////////////
 
                     DI_DCS
-                        .template block<DODE::XV, DODE::XV>(0, j * this->ode.XtUVars(),
-                                                            this->ode.XVars(), this->ode.XVars())
+                        .template block<DODE::XV, DODE::XV>(
+                            0, j * this->ode_.xtu_vars(), this->ode_.x_vars(), this->ode_.x_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_XInterp_Weights[i][j]));
 
                     DI_DCS.template block<DODE::XV, DODE::XtUV>(
-                        0, j * this->ode.XtUVars(), this->ode.XVars(), this->ode.XtUVars()) +=
+                        0, j * this->ode_.xtu_vars(), this->ode_.x_vars(), this->ode_.xtu_vars()) +=
                         (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) *
-                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode.XtUVars());
+                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode_.xtu_vars());
 
-                    DI_DCS.template block<DODE::XV, DODE::PV>(
-                        0, Cardinals * this->ode.XtUVars(), this->ode.XVars(), this->ode.PVars()) +=
+                    DI_DCS.template block<DODE::XV, DODE::PV>(0, Cardinals * this->ode_.xtu_vars(),
+                                                              this->ode_.x_vars(),
+                                                              this->ode_.p_vars()) +=
                         (Coeffs::Cardinal_DXInterp_Weights[i][j] * h) *
-                        C_JDXS[j].template rightCols<DODE::PV>(this->ode.PVars());
+                        C_JDXS[j].template rightCols<DODE::PV>(this->ode_.p_vars());
 
-                    DI_DCS.col(this->ode.TVar()).template head<DODE::XV>(this->ode.XVars()) -=
+                    DI_DCS.col(this->ode_.t_var()).template head<DODE::XV>(this->ode_.x_vars()) -=
                         Scalar(Coeffs::Cardinal_DXInterp_Weights[i][j]) * C_DXS[j];
-                    DI_DCS.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                        .template head<DODE::XV>(this->ode.XVars()) +=
+                    DI_DCS.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                        .template head<DODE::XV>(this->ode_.x_vars()) +=
                         Scalar(Coeffs::Cardinal_DXInterp_Weights[i][j]) * C_DXS[j];
 
                     DI_DCS
                         .template block<DODE::UV, DODE::UV>(
-                            this->ode.XtVars(), j * this->ode.XtUVars() + this->ode.XtVars(),
-                            this->ode.UVars(), this->ode.UVars())
+                            this->ode_.xt_vars(), j * this->ode_.xtu_vars() + this->ode_.xt_vars(),
+                            this->ode_.u_vars(), this->ode_.u_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_UPoly_Weights[i][j]));
 
                     ////////////////////////////// Sum up Cardinal Output
                     /// Terms/////////////////////////////////////////
-                    fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                    fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                         (Scalar(Coeffs::Cardinal_XDef_Weights[i][j]) *
-                             C_XS[j].template head<DODE::XV>(this->ode.XVars()) +
+                             C_XS[j].template head<DODE::XV>(this->ode_.x_vars()) +
                          (Coeffs::Cardinal_DXDef_Weights[i][j] * h) * C_DXS[j]);
 
-                    jx.template block<DODE::XV, DODE::XV>(i * this->ode.XVars(),
-                                                          j * this->ode.XtUVars(),
-                                                          this->ode.XVars(), this->ode.XVars())
+                    jx.template block<DODE::XV, DODE::XV>(i * this->ode_.x_vars(),
+                                                          j * this->ode_.xtu_vars(),
+                                                          this->ode_.x_vars(), this->ode_.x_vars())
                         .diagonal()
                         .setConstant(Scalar(Coeffs::Cardinal_XDef_Weights[i][j]));
 
                     jx.template block<DODE::XV, DODE::XtUV>(
-                        i * this->ode.XVars(), j * this->ode.XtUVars(), this->ode.XVars(),
-                        this->ode.XtUVars()) +=
+                        i * this->ode_.x_vars(), j * this->ode_.xtu_vars(), this->ode_.x_vars(),
+                        this->ode_.xtu_vars()) +=
                         (Coeffs::Cardinal_DXDef_Weights[i][j] * h) *
-                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode.XtUVars());
+                        C_JDXS[j].template leftCols<DODE::XtUV>(this->ode_.xtu_vars());
 
-                    jx.template block<DODE::XV, DODE::PV>(i * this->ode.XVars(),
-                                                          Cardinals * this->ode.XtUVars(),
-                                                          this->ode.XVars(), this->ode.PVars()) +=
+                    jx.template block<DODE::XV, DODE::PV>(
+                        i * this->ode_.x_vars(), Cardinals * this->ode_.xtu_vars(),
+                        this->ode_.x_vars(), this->ode_.p_vars()) +=
                         (Coeffs::Cardinal_DXDef_Weights[i][j] * h) *
-                        C_JDXS[j].template rightCols<DODE::PV>(this->ode.PVars());
+                        C_JDXS[j].template rightCols<DODE::PV>(this->ode_.p_vars());
 
-                    jx.col(this->ode.TVar())
-                        .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) -=
+                    jx.col(this->ode_.t_var())
+                        .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) -=
                         Scalar(Coeffs::Cardinal_DXDef_Weights[i][j]) * C_DXS[j];
-                    jx.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                        .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                    jx.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                        .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                         Scalar(Coeffs::Cardinal_DXDef_Weights[i][j]) * C_DXS[j];
                 }
 
-                fx.template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                fx.template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     (h * Coeffs::Interior_DXDef_Weights[i] * I_DXS[i]);
-                jx.template middleRows<DODE::XV>(i * this->ode.XVars(), this->ode.XVars())
+                jx.template middleRows<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars())
                     .noalias() += ((h * Coeffs::Interior_DXDef_Weights[i]) * I_JDXS[i]) * (DI_DCS);
 
-                jx.col(this->ode.TVar())
-                    .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) -=
+                jx.col(this->ode_.t_var())
+                    .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) -=
                     Scalar(Coeffs::Interior_DXDef_Weights[i]) * I_DXS[i];
-                jx.col(this->ode.XtUVars() * (Cardinals - 1) + this->ode.TVar())
-                    .template segment<DODE::XV>(i * this->ode.XVars(), this->ode.XVars()) +=
+                jx.col(this->ode_.xtu_vars() * (Cardinals - 1) + this->ode_.t_var())
+                    .template segment<DODE::XV>(i * this->ode_.x_vars(), this->ode_.x_vars()) +=
                     Scalar(Coeffs::Interior_DXDef_Weights[i]) * I_DXS[i];
 
                 adjhess.noalias() += DI_DCS.transpose() *
@@ -494,10 +517,10 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                         .transpose();
             }
 
-            adjhess.col(this->ode.TVar()) -= HTpar;
-            adjhess.col(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)) += HTpar;
-            adjhess.row(this->ode.TVar()) -= HTpar;
-            adjhess.row(this->ode.TVar() + this->ode.XtUVars() * (Cardinals - 1)) += HTpar;
+            adjhess.col(this->ode_.t_var()) -= HTpar;
+            adjhess.col(this->ode_.t_var() + this->ode_.xtu_vars() * (Cardinals - 1)) += HTpar;
+            adjhess.row(this->ode_.t_var()) -= HTpar;
+            adjhess.row(this->ode_.t_var() + this->ode_.xtu_vars() * (Cardinals - 1)) += HTpar;
             adjgrad.noalias() = (adjvars.transpose() * jx).transpose();
             // QED
         };
@@ -512,11 +535,11 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
         using DIType = Eigen::Matrix<Scalar, DODE::IRC, Base::IRC>;
         using HTParType = Input<Scalar>;
 
-        const int irowsode = this->ode.IRows();
-        const int orowsode = this->ode.ORows();
+        const int irowsode = this->ode_.input_rows();
+        const int orowsode = this->ode_.output_rows();
 
         BumpAllocator::allocate_run(
-            Impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
+            impl, ArrayOfTempSpecs<XType, Cardinals>(irowsode, 1),
             ArrayOfTempSpecs<FXType, Cardinals>(orowsode, 1),
             ArrayOfTempSpecs<JXType, Cardinals>(orowsode, irowsode), TempSpec<AGXType>(irowsode, 1),
             ArrayOfTempSpecs<AVType, Cardinals>(orowsode, 1), TempSpec<HType>(irowsode, irowsode),
@@ -528,9 +551,9 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
             ArrayOfTempSpecs<AVType, Interiors>(orowsode, 1),
             ArrayOfTempSpecs<HType, Interiors>(irowsode, irowsode),
 
-            TempSpec<DIType>(irowsode, this->IRows()), TempSpec<HTParType>(this->IRows(), 1));
+            TempSpec<DIType>(irowsode, this->input_rows()),
+            TempSpec<HTParType>(this->input_rows(), 1));
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

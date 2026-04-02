@@ -10,7 +10,7 @@
 #include "vf_test_utils.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -23,8 +23,8 @@ TEST_F(GenericFunctionTest, PackIntoConstraintInterface) {
     GenericFunction<-1, -1> gf(scaled);
     ConstraintInterface ci(gf);
 
-    EXPECT_EQ(ci.IRows(), 5);
-    EXPECT_EQ(ci.ORows(), 5);
+    EXPECT_EQ(ci.input_rows(), 5);
+    EXPECT_EQ(ci.output_rows(), 5);
 }
 
 TEST_F(GenericFunctionTest, PackIntoObjectiveInterface) {
@@ -33,8 +33,8 @@ TEST_F(GenericFunctionTest, PackIntoObjectiveInterface) {
     GenericFunction<-1, 1> gf(n);
     ObjectiveInterface oi(gf);
 
-    EXPECT_EQ(oi.IRows(), 3);
-    EXPECT_EQ(oi.ORows(), 1);
+    EXPECT_EQ(oi.input_rows(), 3);
+    EXPECT_EQ(oi.output_rows(), 1);
 }
 
 TEST_F(GenericFunctionTest, CopyConstraintInterface) {
@@ -44,8 +44,8 @@ TEST_F(GenericFunctionTest, CopyConstraintInterface) {
     ConstraintInterface ci1(gf);
     ConstraintInterface ci2(ci1);
 
-    EXPECT_EQ(ci2.IRows(), 4);
-    EXPECT_EQ(ci2.ORows(), 1);
+    EXPECT_EQ(ci2.input_rows(), 4);
+    EXPECT_EQ(ci2.output_rows(), 1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

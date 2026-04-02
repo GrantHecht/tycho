@@ -74,9 +74,9 @@ class ShuttleReentry(oc.ODEBase):
         ############################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        h, theta, v, gamma, psi = XtU.XVec().tolist()
+        h, theta, v, gamma, psi = XtU.x_vec().tolist()
 
-        alpha, beta = XtU.UVec().tolist()
+        alpha, beta = XtU.u_vec().tolist()
 
         alphadeg = (180.0 / np.pi) * alpha
 
@@ -235,34 +235,34 @@ if __name__ == "__main__":
 
     phase = ode.phase("LGL3", TrajIG, 40)
 
-    phase.addBoundaryValue("Front", range(0, 6), TrajIG[0][0:6])
-    phase.addLUVarBounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
-    phase.addLUVarBound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
-    phase.addLUVarBound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
-    phase.addUpperDeltaTimeBound(tmax, 1.0)
-    phase.addBoundaryValue("Back", [0, 2, 3], [htf, vtf, gammatf])
-    phase.addDeltaVarObjective(1, -1.0)
-    phase.setNumPartitions(8, 8)
+    phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
+    phase.add_lu_var_bounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0)
+    phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
+    phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
+    phase.add_upper_delta_time_bound(tmax, 1.0)
+    phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
+    phase.add_delta_var_objective(1, -1.0)
+    phase.set_num_partitions(8, 8)
 
     ## Our IG is bad, so i turn on line search
-    phase.optimizer.set_SoeLSMode("L1")
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_PrintLevel(1)
+    phase.optimizer.set_soe_ls_mode("L1")
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_print_level(1)
 
     ## IG is bad, solve first before optimize
     phase.solve_optimize()
 
     # Refine to more segments and Reoptimize
-    phase.refineTrajManual(300)
+    phase.refine_traj_manual(300)
     phase.optimize()
 
-    Traj1 = phase.returnTraj()
+    Traj1 = phase.return_traj()
 
     ## Add in Heating Rate Constraint, scale so rhs is order 1
-    phase.addUpperFuncBound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
+    phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
     phase.optimize()
 
-    Traj2 = phase.returnTraj()
+    Traj2 = phase.return_traj()
 
     print(
         "Final Time:",

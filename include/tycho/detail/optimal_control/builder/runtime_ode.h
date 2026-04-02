@@ -9,16 +9,19 @@
 
 #pragma once
 
-#include "tycho/detail/vf/type_erasure/generic_function.h"
-#include "tycho/detail/optimal_control/phase/ode.h"
-#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/builder/var_registry.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/optimal_control/phase/ode.h"
+#include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace Tycho {
+namespace tycho {
+
+using oc::GenericODE;
+using vf::GenericFunction;
 
 class Phase; // forward
 
@@ -125,15 +128,16 @@ class RuntimeODE {
 
     void validate() const {
         int expected_ir = xvars_ + 1 + uvars_ + pvars_;
-        if (func_.IRows() != expected_ir) {
+        if (func_.input_rows() != expected_ir) {
             throw std::invalid_argument(
                 fmt::format("RuntimeODE: function input size {} does not match XtUP size {} "
                             "(xv={}, uv={}, pv={})",
-                            func_.IRows(), expected_ir, xvars_, uvars_, pvars_));
+                            func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
         }
-        if (func_.ORows() != xvars_) {
-            throw std::invalid_argument(fmt::format(
-                "RuntimeODE: function output size {} does not match XV={}", func_.ORows(), xvars_));
+        if (func_.output_rows() != xvars_) {
+            throw std::invalid_argument(
+                fmt::format("RuntimeODE: function output size {} does not match XV={}",
+                            func_.output_rows(), xvars_));
         }
     }
 
@@ -150,4 +154,4 @@ class RuntimeODE {
     }
 };
 
-} // namespace Tycho
+} // namespace tycho

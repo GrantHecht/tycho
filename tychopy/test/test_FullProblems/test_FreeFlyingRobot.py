@@ -20,7 +20,7 @@ class FreeFlyingRobotODE(oc.ode_x_u.ode):
         args = oc.ODEArguments(6, 4)
         theta = args[4]
         omega = args[5]
-        u = args.UVec()
+        u = args.u_vec()
         xdot = args.segment2(2)
         vscale = vf.SumElems([u[0], u[1], u[2], u[3]], [1, -1, 1, -1])
 
@@ -66,18 +66,18 @@ class test_FreeFlyingRobot(unittest.TestCase):
             IG.append(T)
 
         phase = ode.phase(tmode, IG, nsegs)
-        phase.setControlMode(cmode)
-        phase.addBoundaryValue("Front", range(0, 7), X0)
-        phase.addBoundaryValue("Back", range(0, 7), XF)
-        phase.addLUVarBounds("Path", range(7, 11), 0.0, 1.0, 1)
-        phase.addIntegralObjective(Args(4).sum(), range(7, 11))
-        phase.optimizer.PrintLevel = 3
-        phase.optimizer.OptLSMode = sol.LineSearchModes.L1
-        phase.optimizer.MaxLSIters = 1
+        phase.set_control_mode(cmode)
+        phase.add_boundary_value("Front", range(0, 7), X0)
+        phase.add_boundary_value("Back", range(0, 7), XF)
+        phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0, 1)
+        phase.add_integral_objective(Args(4).sum(), range(7, 11))
+        phase.optimizer.print_level = 3
+        phase.optimizer.opt_ls_mode = sol.LineSearchModes.L1
+        phase.optimizer.max_ls_iters = 1
         phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
         Flag = phase.optimize()
 
-        Obj = phase.optimizer.LastObjVal
+        Obj = phase.optimizer.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
@@ -85,7 +85,7 @@ class test_FreeFlyingRobot(unittest.TestCase):
         )
 
         self.assertLess(
-            phase.optimizer.LastIterNum,
+            phase.optimizer.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

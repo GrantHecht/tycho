@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -21,7 +20,7 @@
 
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::AutodiffFwd>
@@ -39,19 +38,19 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::AutodiffFwd>
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         Input<dual<Scalar>> xdual = x.template cast<dual<Scalar>>();
-        Output<dual<Scalar>> fdual(this->ORows());
+        Output<dual<Scalar>> fdual(this->output_rows());
         fdual.setZero();
 
-        for (int i = 0; i < this->IRows(); i++) {
+        for (int i = 0; i < this->input_rows(); i++) {
             xdual[i].grad = Scalar(1.0);
             this->derived().compute(xdual, fdual);
 
-            for (int j = 0; j < this->ORows(); j++) {
+            for (int j = 0; j < this->output_rows(); j++) {
                 jx(j, i) = fdual[j].grad;
             }
 
             if (i == 0) {
-                for (int j = 0; j < this->ORows(); j++) {
+                for (int j = 0; j < this->output_rows(); j++) {
                     fx[j] = fdual[j].val;
                 }
             }
@@ -87,14 +86,14 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Autod
         MatrixBaseRef<AdjHessType> hx = adjhess_.const_cast_derived();
 
         Input<dual<Scalar>> xdual = x.template cast<dual<Scalar>>();
-        Output<dual<Scalar>> fdual(this->ORows());
+        Output<dual<Scalar>> fdual(this->output_rows());
 
-        for (int i = 0; i < this->IRows(); i++) {
+        for (int i = 0; i < this->input_rows(); i++) {
 
             xdual[i].grad.val = 1.0;
             dual<Scalar> vv;
 
-            for (int j = i; j < this->IRows(); j++) {
+            for (int j = i; j < this->input_rows(); j++) {
 
                 fdual.setZero();
 
@@ -105,7 +104,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Autod
                 xdual[j].val.grad = 0.0;
 
                 vv = 0.0;
-                for (int k = 0; k < this->ORows(); k++) {
+                for (int k = 0; k < this->output_rows(); k++) {
 
                     vv += fdual[k] * adjvars[k];
                 }
@@ -114,11 +113,11 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Autod
                 hx(j, i) = hx(i, j);
             }
             gx[i] = vv.grad.val;
-            for (int k = 0; k < this->ORows(); k++) {
+            for (int k = 0; k < this->output_rows(); k++) {
                 jx(k, i) = fdual[k].grad.val;
             }
             if (i == 0) {
-                for (int j = 0; j < this->ORows(); j++) {
+                for (int j = 0; j < this->output_rows(); j++) {
                     fx[j] = fdual[j].val.val;
                 }
             }
@@ -128,4 +127,4 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Autod
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

@@ -8,34 +8,33 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR, OR> {
     using Base = VectorFunction<Constant<IR, OR>, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    static const bool IsLinearFunction = true;
-    static const bool IsVectorizable = true;
+    static const bool is_linear_function = true;
+    static const bool is_vectorizable = true;
 
-    Output<double> value;
+    Output<double> value_;
 
     Constant(int ir, Output<double> val) {
-        this->setIORows(ir, val.size());
-        value = val;
+        this->set_io_rows(ir, val.size());
+        value_ = val;
 
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = 0;
-        this->set_input_domain(this->IRows(), {dmn});
+        this->set_input_domain(this->input_rows(), {dmn});
     }
 
     Constant() {}
@@ -44,14 +43,14 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
                                       ConstMatrixBaseRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -62,8 +61,8 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = this->value.template cast<Scalar>();
+        fx = this->value_.template cast<Scalar>();
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

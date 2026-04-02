@@ -18,13 +18,13 @@ import numpy as np
 
 
 def FiniteDiffCheck(Fun, X, L, jsize=1.0e-6, hsize=1.0e-6):
-    IRows = Fun.IRows()
-    ORows = Fun.ORows()
+    IRows = Fun.input_rows()
+    ORows = Fun.output_rows()
 
 
 def FDDerivChecker(Fun, X):
-    IRows = Fun.IRows()
-    ORows = Fun.ORows()
+    IRows = Fun.input_rows()
+    ORows = Fun.output_rows()
     L = np.random.rand((ORows))
     L = np.ones((ORows))
 

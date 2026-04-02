@@ -16,7 +16,7 @@ PhaseRegs = oc.PhaseRegionFlags
 class LorenzODE(oc.ode_x.ode):
     def __init__(self, sigma, rho, beta):
 
-        x, y, z = oc.ODEArguments(3).XVec().tolist()
+        x, y, z = oc.ODEArguments(3).x_vec().tolist()
 
         ode = vf.stack([sigma * (y - x), x * (rho - z) - y, x * y - beta * z])
 
@@ -30,9 +30,9 @@ class CauchyEulerODE(oc.ode_x.ode):
         self.b = b
 
         args = oc.ODEArguments(2)
-        x = args.XVar(0)
-        xdot = args.XVar(1)
-        t = args.TVar()
+        x = args.x_var(0)
+        xdot = args.x_var(1)
+        t = args.t_var()
 
         xddot = -a * xdot / t - b * x / t**2
 
@@ -108,10 +108,10 @@ class QuatModel(oc.ode_7_3.ode):
         w = args.segment3(4)
         T = args.tail3()
 
-        qdot = vf.quatProduct(q, w.padded_lower(1)) / 2.0
+        qdot = vf.quat_product(q, w.padded_lower(1)) / 2.0
 
-        L = w.cwiseProduct(I)
-        wdot = (L.cross(w) + T).cwiseQuotient(I)
+        L = w.cwise_product(I)
+        wdot = (L.cross(w) + T).cwise_quotient(I)
         ode = vf.stack(qdot, wdot)
 
         ##############################################################
@@ -119,7 +119,7 @@ class QuatModel(oc.ode_7_3.ode):
 
     def DetumbleLaw(self):
         w = Args(3).head3()
-        Lhat = w.cwiseProduct(self.Ivec).normalized()
+        Lhat = w.cwise_product(self.Ivec).normalized()
         return -Lhat
 
 
@@ -143,9 +143,9 @@ class test_Integrators(unittest.TestCase):
         ode = LorenzODE(sigma, rho, beta)
 
         integ = ode.integrator(defstepsize)
-        integ.setAbsTol(abstol)
-        integ.MinStepSize = minstepsize
-        integ.Adaptive = True
+        integ.set_abs_tol(abstol)
+        integ.min_step_size = minstepsize
+        integ.adaptive = True
 
         Traj = integ.integrate_dense(X0, tf, n)
 
@@ -184,9 +184,9 @@ class test_Integrators(unittest.TestCase):
         ode = CauchyEulerODE(a, b)
 
         integ = ode.integrator("DOPRI54", defstepsize)
-        integ.setAbsTol(abstol)
-        integ.MinStepSize = minstepsize
-        integ.Adaptive = True
+        integ.set_abs_tol(abstol)
+        integ.min_step_size = minstepsize
+        integ.adaptive = True
 
         n = 100
 
@@ -230,8 +230,8 @@ class test_Integrators(unittest.TestCase):
 
         ode = QuatModel(Ivec)
         integ = ode.integrator(0.01, ode.DetumbleLaw(), range(4, 7))
-        integ.Adaptive = True
-        integ.setAbsTol(1.0e-14)
+        integ.adaptive = True
+        integ.set_abs_tol(1.0e-14)
         tf = np.linalg.norm(W0 * Ivec)
 
         n = 1000
@@ -266,9 +266,9 @@ class test_Integrators(unittest.TestCase):
         kprop = ast.Astro.Kepler.KeplerPropagator(1.0)  # Ground Truth
 
         integ = ode.integrator(0.01)
-        integ.setAbsTol(1.0e-13)
-        integ.Adaptive = True
-        integ.FastAdaptiveSTM = False
+        integ.set_abs_tol(1.0e-13)
+        integ.adaptive = True
+        integ.fast_adaptive_stm = False
 
         Xtol = 1.0e-10
         Jtol = 1.0e-9
@@ -347,12 +347,12 @@ class test_Integrators(unittest.TestCase):
         ode = ast.Astro.Kepler.ode(1)
 
         integ = ode.integrator(0.01)
-        integ.setAbsTol(1.0e-13)
-        integ.Adaptive = True
-        integ.FastAdaptiveSTM = False
+        integ.set_abs_tol(1.0e-13)
+        integ.adaptive = True
+        integ.fast_adaptive_stm = False
 
-        integ.EventTol = 1.0e-10
-        integ.MaxEventIters = 12
+        integ.event_tol = 1.0e-10
+        integ.max_event_iters = 12
 
         Xf, EventLocs1 = integ.integrate(X0t0, tf, Events)
         Xf, EventLocs2 = integ.integrate(X0t0, tf, Events)
@@ -379,7 +379,7 @@ class test_Integrators(unittest.TestCase):
                 )
 
                 self.assertLess(
-                    Fxerr, integ.EventTol, "Event root error exceeds tolerance"
+                    Fxerr, integ.event_tol, "Event root error exceeds tolerance"
                 )
 
     def test_BatchCalls1(self):
@@ -401,9 +401,9 @@ class test_Integrators(unittest.TestCase):
         ode = CauchyEulerODE(a, b)
 
         integ = ode.integrator("DOPRI87", defstepsize)
-        integ.setAbsTol(abstol)
-        integ.setStepSizes(defstepsize, minstepsize, 10)
-        integ.VectorizeBatchCalls = True
+        integ.set_abs_tol(abstol)
+        integ.set_step_sizes(defstepsize, minstepsize, 10)
+        integ.vectorize_batch_calls = True
 
         batchsizes = [1, 3, 4, 15, 100, 1003]
         X0 = [x0, xdot0, t0]
@@ -438,8 +438,8 @@ class test_Integrators(unittest.TestCase):
 
         for ode in [ode1, ode2, ode3, ode4, ode5]:
             integ = ode.integrator(0.001)
-            integ.setAbsTol(1.0e-13)
-            integ.VectorizeBatchCalls = True
+            integ.set_abs_tol(1.0e-13)
+            integ.vectorize_batch_calls = True
 
             Xtol = 1.0e-11
             Jtol = 1.0e-10

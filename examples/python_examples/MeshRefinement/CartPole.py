@@ -43,8 +43,8 @@ class CartPole(oc.ODEBase):
         ####################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        x, theta, xdot, thetadot = XtU.XVec().tolist()
-        F = XtU.UVar(0)
+        x, theta, xdot, thetadot = XtU.x_vec().tolist()
+        F = XtU.u_var(0)
 
         Q = vf.stack([-g * vf.sin(theta), F + m2 * l * vf.sin(theta) * thetadot**2])
 
@@ -200,20 +200,20 @@ if __name__ == "__main__":
     phase = ode.phase("LGL7", IG, 10)
 
     # Fix first state (x,theta,xdot,thetadot) and time
-    phase.addBoundaryValue("First", range(0, 5), [0, 0, 0, 0, 0])
+    phase.add_boundary_value("First", range(0, 5), [0, 0, 0, 0, 0])
     # Fix last state (x,theta,xdot,thetadot) and time
-    phase.addBoundaryValue("Last", range(0, 5), [xf, np.pi, 0, 0, tf])
+    phase.add_boundary_value("Last", range(0, 5), [xf, np.pi, 0, 0, tf])
     # Bound control forces
-    phase.addLUVarBound("Path", 5, -Fmax, Fmax)
-    phase.addLUVarBound("Path", 0, -xmax, xmax)
+    phase.add_lu_var_bound("Path", 5, -Fmax, Fmax)
+    phase.add_lu_var_bound("Path", 0, -xmax, xmax)
     # Minimize the "control effort", the integral of square of applied force
-    phase.addIntegralObjective(Args(1)[0] ** 2, [5])
+    phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
-    phase.setNumPartitions(8, 8)
-    phase.optimizer.set_PrintLevel(1)
-    phase.optimizer.EContol = 1.0e-8
+    phase.set_num_partitions(8, 8)
+    phase.optimizer.set_print_level(1)
+    phase.optimizer.eq_con_tol = 1.0e-8
 
-    phase.setAdaptiveMesh(True)
+    phase.set_adaptive_mesh(True)
 
     """
     Integrator estimator works best on this problem, it provides clean and consistent
@@ -223,14 +223,14 @@ if __name__ == "__main__":
     help it converge but it doesnt eliminate the noise, which effects the placement of points.
     LGL5 and LGL7 however, work well with both estimators.
     """
-    phase.setMeshErrorEstimator(oc.MeshErrorEstimators.INTEGRATOR)
-    phase.setMeshTol(1.0e-7)
-    phase.setMeshErrFactor(10)
+    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
+    phase.set_mesh_tol(1.0e-7)
+    phase.set_mesh_err_factor(10)
     phase.optimize()
 
     PhaseMeshErrorPlot(phase, show=True)
 
-    Traj = phase.returnTraj()
+    Traj = phase.return_traj()
 
     Plot(Traj)
     Animate(Traj, False)

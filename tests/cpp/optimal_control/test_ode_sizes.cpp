@@ -1,13 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
 // ODESize tests
 //
-// Tests ODESize idx methods and the Pidxs() bug fix.
+// Tests ODESize idx methods and the p_idxs() bug fix.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::oc;
+using namespace tycho::utils;
 
 TEST(ODESizeTest, AddIdxSingleInt) {
     // Tests the bug fix: add_idx(string, int) previously dropped the name
@@ -28,12 +30,12 @@ TEST(ODESizeTest, AddIdxDuplicateThrows) {
 }
 
 TEST(ODESizeTest, PidxsUsesCorrectSize) {
-    // Regression test: Pidxs() previously used UVars() instead of PVars()
+    // Regression test: p_idxs() previously used u_vars() instead of p_vars()
     ODESize<3, 2, 4> ode;
-    auto pidxs = ode.Pidxs();
-    EXPECT_EQ(pidxs.size(), 4);  // PVars=4, not UVars=2
+    auto pidxs = ode.p_idxs();
+    EXPECT_EQ(pidxs.size(), 4);  // p_vars=4, not u_vars=2
 
-    // Verify actual index values: iota starting at XtUVars()=6
+    // Verify actual index values: iota starting at xtu_vars()=6
     EXPECT_EQ(pidxs[0], 6);
     EXPECT_EQ(pidxs[1], 7);
     EXPECT_EQ(pidxs[2], 8);
@@ -63,10 +65,10 @@ TEST(ODESizeTest, PidxsWithSubindexing) {
     ODESize<3, 2, 4> ode;
     Eigen::VectorXi sub(2);
     sub << 0, 3;
-    auto result = ode.Pidxs(sub);
+    auto result = ode.p_idxs(sub);
     EXPECT_EQ(result.size(), 2);
-    EXPECT_EQ(result[0], 6);   // XtUVars() + 0
-    EXPECT_EQ(result[1], 9);   // XtUVars() + 3
+    EXPECT_EQ(result[0], 6);   // xtu_vars() + 0
+    EXPECT_EQ(result[1], 9);   // xtu_vars() + 3
 }
 
 TEST(ODESizeTest, SetGetIdxsRoundtrip) {

@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Func>
 struct IOScaled
@@ -26,10 +25,10 @@ struct IOScaled
         VectorFunction<IOScaled<Func>, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    Func func;
+    Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool IsLinearFunction = Func::IsLinearFunction;
-    static const bool IsVectorizable = Func::IsVectorizable;
+    static const bool is_linear_function = Func::is_linear_function;
+    static const bool is_vectorizable = Func::is_vectorizable;
 
     Input<double> input_scales;
     Output<double> output_scales;
@@ -37,14 +36,14 @@ struct IOScaled
     IOScaled() {}
 
     IOScaled(Func f, const Input<double> &input_scales, const Output<double> &output_scales)
-        : func(std::move(f)) {
-        this->setIORows(this->func.IRows(), this->func.ORows());
-        this->set_input_domain(this->IRows(), {this->func.input_domain()});
+        : func_(std::move(f)) {
+        this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
 
         this->input_scales = input_scales;
         this->output_scales = output_scales;
 
-        this->EnableVectorization = this->func.EnableVectorization;
+        this->enable_vectorization_ = this->func_.enable_vectorization_;
     }
 
     template <class InType, class OutType>
@@ -53,18 +52,19 @@ struct IOScaled
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 x_scaled[i] = this->input_scales[i] * x[i];
             }
 
-            this->func.compute(x_scaled, fx);
+            this->func_.compute(x_scaled, fx);
 
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -75,22 +75,23 @@ struct IOScaled
         MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 x_scaled[i] = this->input_scales[i] * x[i];
             }
 
-            this->func.compute_jacobian(x_scaled, fx, jx);
+            this->func_.compute_jacobian(x_scaled, fx, jx);
 
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];
                 jx.row(i) *= Scalar(this->output_scales[i]);
             }
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 jx.col(i) *= Scalar(this->input_scales[i]);
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -107,33 +108,34 @@ struct IOScaled
         MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled, auto &l_scaled) {
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 x_scaled[i] = this->input_scales[i] * x[i];
             }
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 l_scaled[i] = this->output_scales[i] * adjvars[i];
             }
-            this->func.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
-                                                                       adjhess, l_scaled);
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
+                                                                        adjhess, l_scaled);
 
-            for (int i = 0; i < this->ORows(); i++) {
+            for (int i = 0; i < this->output_rows(); i++) {
                 fx[i] *= this->output_scales[i];
                 jx.row(i) *= Scalar(this->output_scales[i]);
             }
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 jx.col(i) *= Scalar(this->input_scales[i]);
                 adjhess.col(i) *= Scalar(this->input_scales[i]);
                 adjgrad[i] *= this->input_scales[i];
             }
 
-            for (int i = 0; i < this->IRows(); i++) {
+            for (int i = 0; i < this->input_rows(); i++) {
                 adjhess.row(i) *= Scalar(this->input_scales[i]);
             }
         };
 
-        BumpAllocator::allocate_run(Impl, TempSpec<Input<Scalar>>(this->IRows(), 1),
-                                    TempSpec<Output<Scalar>>(this->ORows(), 1));
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Input<Scalar>>(this->input_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
 };
 
-} // namespace Tycho
+} // namespace tycho::vf

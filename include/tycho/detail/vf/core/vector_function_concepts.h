@@ -27,18 +27,32 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/crtp_base.h"
+#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/utils/std_extensions.h"
+#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/utils/type_storage.h"
 
-namespace Tycho {
+namespace tycho::vf {
+
+// Import commonly-used utils helpers so that downstream vf headers can reference
+// them without the utils:: prefix (they lived in the same flat namespace before
+// the migration).
+using utils::return_type_t;
+using utils::SZ_BINOP;
+using utils::SZ_MAX;
+using utils::SZ_MAXOP;
+using utils::SZ_MIN;
+using utils::SZ_MINOP;
+using utils::SZ_PROD;
+using utils::SZ_PRODOP;
+using utils::SZ_SUM;
+using utils::SZ_SUMOP;
 
 namespace detail {
 
@@ -59,19 +73,19 @@ concept IsDoubleScalar = std::same_as<detail::VectorFunctionType<T>, double>;
 
 template <typename T>
 concept Vectorizable =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsVectorizable); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_vectorizable); };
 
 template <typename T>
 concept LinearVF =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsLinearFunction); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_linear_function); };
 
 template <typename T>
 concept HasDiagonalJac =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::HasDiagonalJacobian); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::has_diagonal_jacobian); };
 
 template <typename T>
 concept IsGenericVF =
-    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::IsGenericFunction); };
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_generic_function); };
 
 template <typename T>
 concept StaticallySized = requires {
@@ -86,8 +100,8 @@ concept DynamicallySized = requires {
 
 template <typename T>
 concept VFSized = requires(const detail::VectorFunctionType<T> &t) {
-    { t.IRows() } -> std::same_as<int>;
-    { t.ORows() } -> std::same_as<int>;
+    { t.input_rows() } -> std::same_as<int>;
+    { t.output_rows() } -> std::same_as<int>;
 };
 
 template <typename Inner, typename Outer>
@@ -126,4 +140,4 @@ struct AllPairsStackableHelper<Head, Tail...>
 template <class... Fs>
 concept MutuallyStackable = detail::AllPairsStackableHelper<Fs...>::value;
 
-} // namespace Tycho
+} // namespace tycho::vf

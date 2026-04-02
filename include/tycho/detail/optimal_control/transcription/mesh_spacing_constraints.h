@@ -8,9 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
@@ -18,7 +17,17 @@
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::oc {
+
+// Import cross-namespace types from vf and utils.
+using utils::SZ_MAX;
+using utils::SZ_PROD;
+using utils::SZ_SUM;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
+using vf::ThreadingFlags;
+using vf::VectorExpression;
+using vf::VectorFunction;
 
 struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     using Base = VectorFunction<SingleMeshSpacing, 3, 1>;
@@ -27,22 +36,22 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
 
-    double CardinalSpacing;
-    double Scale = 1.0;
+    double cardinal_spacing_;
+    double scale_ = 1.0;
     static const bool IsLinearFunction = true;
 
     SingleMeshSpacing() {}
-    SingleMeshSpacing(double cs) { CardinalSpacing = cs; }
+    SingleMeshSpacing(double cs) { cardinal_spacing_ = cs; }
 
-    void setSpacing(double cs) { CardinalSpacing = cs; }
+    void set_spacing(double cs) { cardinal_spacing_ = cs; }
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
     }
 
     template <class InType, class OutType, class JacType>
@@ -53,13 +62,13 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
 
-        jx(0, 0) = (1.0 - CardinalSpacing);
+        jx(0, 0) = (1.0 - cardinal_spacing_);
         jx(0, 1) = -1.0;
-        jx(0, 2) = CardinalSpacing;
-        jx *= Scale;
+        jx(0, 2) = cardinal_spacing_;
+        jx *= scale_;
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
@@ -85,13 +94,13 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
 
         Scalar h = x[2] - x[0];
-        fx[0] = CardinalSpacing * h - (x[1] - x[0]);
-        fx[0] *= Scale;
+        fx[0] = cardinal_spacing_ * h - (x[1] - x[0]);
+        fx[0] *= scale_;
 
-        jx(0, 0) = (1.0 - CardinalSpacing);
+        jx(0, 0) = (1.0 - cardinal_spacing_);
         jx(0, 1) = -1.0;
-        jx(0, 2) = CardinalSpacing;
-        jx *= Scale;
+        jx(0, 2) = cardinal_spacing_;
+        jx *= scale_;
         adjgrad = (adjvars.transpose() * jx_).transpose();
     }
 };
@@ -180,5 +189,4 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
     }
 };
 
-} // namespace Tycho
-
+} // namespace tycho::oc

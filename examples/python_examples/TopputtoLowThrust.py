@@ -37,9 +37,9 @@ class LTModel(oc.ODEBase):
         ############################################################
         XtU = oc.ODEArguments(Xvars, Uvars)
 
-        r, theta, vr, vt = XtU.XVec().tolist()
+        r, theta, vr, vt = XtU.x_vec().tolist()
 
-        u, alpha = XtU.UVec().tolist()
+        u, alpha = XtU.u_vec().tolist()
 
         rdot = vr
         thetadot = vt / r
@@ -152,36 +152,36 @@ if __name__ == "__main__":
     MoptIG = integ.integrate_dense(IState, 160, 1000, RFunc)
 
     phase = ode.phase("LGL3", ToptIG, 400)
-    phase.addBoundaryValue("Front", range(0, 5), IState[0:5])
-    phase.addLUVarBound("Path", 5, 0.0001, 1, 100.0)
-    phase.addLUVarBound("Path", 6, -2 * np.pi, 2 * np.pi, 1.0)
+    phase.add_boundary_value("Front", range(0, 5), IState[0:5])
+    phase.add_lu_var_bound("Path", 5, 0.0001, 1, 100.0)
+    phase.add_lu_var_bound("Path", 6, -2 * np.pi, 2 * np.pi, 1.0)
 
-    phase.addBoundaryValue("Back", [0, 2, 3], [RF, 0, VF])
+    phase.add_boundary_value("Back", [0, 2, 3], [RF, 0, VF])
 
-    phase.optimizer.set_PrintLevel(1)
-    phase.optimizer.set_MaxAccIters(500)
-    phase.optimizer.set_MaxIters(1000)
-    phase.optimizer.set_BoundFraction(0.995)
-    phase.optimizer.deltaH = 1.0e-5
+    phase.optimizer.set_print_level(1)
+    phase.optimizer.set_max_acc_iters(500)
+    phase.optimizer.set_max_iters(1000)
+    phase.optimizer.set_bound_fraction(0.995)
+    phase.optimizer.delta_h = 1.0e-5
 
     # Scale to be order 1 based on initial guess
-    phase.addDeltaTimeObjective(1 / 100)
+    phase.add_delta_time_objective(1 / 100)
     phase.solve_optimize_solve()
 
-    TimeOptimal = phase.returnTraj()
+    TimeOptimal = phase.return_traj()
 
-    phase.removeStateObjective(0)
+    phase.remove_state_objective(0)
 
-    phase.setTraj(MoptIG, 400)
+    phase.set_traj(MoptIG, 400)
 
-    phase.addIntegralObjective(Args(1)[0] / 100, [5])
+    phase.add_integral_objective(Args(1)[0] / 100, [5])
 
     ## This problem likes to grind, could probabably
     # be improved by making integral a state variable
     phase.optimize_solve()
-    phase.refineTrajManual(800)
+    phase.refine_traj_manual(800)
     phase.optimize_solve()
-    MassOptimal = phase.returnTraj()
+    MassOptimal = phase.return_traj()
 
     Plot(TimeOptimal, MassOptimal)
 

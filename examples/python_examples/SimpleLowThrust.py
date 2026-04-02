@@ -104,39 +104,39 @@ if __name__ == "__main__":
     TrajIG = integ.integrate_dense(XIG, 6.4 * np.pi, 100)
 
     phase = ode.phase("LGL3", TrajIG, 256)
-    phase.addBoundaryValue("Front", range(0, 7), X0)
-    phase.addLUNormBound("Path", [7, 8, 9], 0.001, 1, 1.0)
-    phase.addBoundaryValue("Back", range(0, 6), Xf[0:6])
+    phase.add_boundary_value("Front", range(0, 7), X0)
+    phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
+    phase.add_boundary_value("Back", range(0, 6), Xf[0:6])
 
-    phase.optimizer.set_PrintLevel(1)
-    phase.optimizer.set_BoundFraction(0.995)
-    phase.optimizer.set_OptLSMode("L1")
-    phase.optimizer.set_MaxLSIters(2)
-    phase.optimizer.set_deltaH(1.0e-6)
+    phase.optimizer.set_print_level(1)
+    phase.optimizer.set_bound_fraction(0.995)
+    phase.optimizer.set_opt_ls_mode("L1")
+    phase.optimizer.set_max_ls_iters(2)
+    phase.optimizer.set_delta_h(1.0e-6)
     ########################################
-    phase.addDeltaTimeObjective(1.0)
+    phase.add_delta_time_objective(1.0)
 
     phase.optimize()
-    phase.optimizer.MaxLSIters = 0
+    phase.optimizer.max_ls_iters = 0
 
-    TimeOptimal = phase.returnTraj()
-    TimeCostates = phase.returnCostateTraj()
+    TimeOptimal = phase.return_traj()
+    TimeCostates = phase.return_costate_traj()
 
-    phase.removeStateObjective(-1)
+    phase.remove_state_objective(-1)
     ########################################
-    phase.addIntegralObjective(LTModel.powerobj(0.5), [7, 8, 9])
+    phase.add_integral_objective(LTModel.powerobj(0.5), [7, 8, 9])
     phase.optimize()
 
-    PowerOptimal = phase.returnTraj()
-    PowerCostates = phase.returnCostateTraj()
-    phase.removeIntegralObjective(-1)
+    PowerOptimal = phase.return_traj()
+    PowerCostates = phase.return_costate_traj()
+    phase.remove_integral_objective(-1)
     #######################################
 
-    phase.addIntegralObjective(LTModel.massobj(1.0), [7, 8, 9])
+    phase.add_integral_objective(LTModel.massobj(1.0), [7, 8, 9])
     phase.optimize()
 
-    MassOptimal = phase.returnTraj()
-    MassCostates = phase.returnCostateTraj()
+    MassOptimal = phase.return_traj()
+    MassCostates = phase.return_costate_traj()
 
     ###########################################
     Plot(TrajIG, "Initial Guess", "blue")

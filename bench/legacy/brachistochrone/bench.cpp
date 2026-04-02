@@ -10,7 +10,13 @@
 #include <iostream>
 #include <vector>
 
-using namespace Tycho;
+using namespace tycho;
+using namespace tycho::utils;
+using namespace tycho::vf;
+using namespace tycho::oc;
+using namespace tycho::astro;
+using namespace tycho::integrators;
+using namespace tycho::solvers;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODE definition via the VectorFunction DSL
@@ -72,21 +78,21 @@ int main() {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase->addBoundaryValue(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
-    phase->addLUVarBound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
 
     // ---- Objective ---------------------------------------------------------
-    phase->addDeltaTimeObjective(1.0, ScaleModes::AUTO);
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Suppress optimizer output
-    phase->optimizer->PrintLevel = 3;
+    phase->optimizer_->print_level_ = 3;
 
     // ---- Solve (timed) -----------------------------------------------------
     auto start = std::chrono::high_resolution_clock::now();

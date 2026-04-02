@@ -8,7 +8,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using namespace Tycho;
+using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -21,7 +21,7 @@ TEST_F(CommonFunctionsTest, SumAdjointConsistency) {
     auto a = args.template head<2>();
     auto b = args.template tail<2>();
     auto sum = a + b; // element-wise sum: head(2) + tail(2), both OR=2
-    EXPECT_EQ(sum.ORows(), 2);
+    EXPECT_EQ(sum.output_rows(), 2);
 
     Eigen::VectorXd x = deterministic_random_vector(4, 42, 1.0, 10.0);
     Eigen::VectorXd lm = deterministic_random_vector(2, 43, -1.0, 1.0);
@@ -34,7 +34,7 @@ TEST_F(CommonFunctionsTest, ScaledSumAdjointConsistency) {
     auto a = 2.0 * args;
     auto b = 3.0 * args;
     auto result = a + b;
-    EXPECT_EQ(result.ORows(), 3);
+    EXPECT_EQ(result.output_rows(), 3);
 
     Eigen::VectorXd x = deterministic_random_vector(3, 44, 1.0, 10.0);
     Eigen::VectorXd lm = deterministic_random_vector(3, 45, -1.0, 1.0);
@@ -50,8 +50,8 @@ TEST_F(CommonFunctionsTest, DotProductDimensions) {
     auto a = args.template head<3>();
     auto b = args.template tail<3>();
     auto dp = a.dot(b);
-    EXPECT_EQ(dp.IRows(), 6);
-    EXPECT_EQ(dp.ORows(), 1);
+    EXPECT_EQ(dp.input_rows(), 6);
+    EXPECT_EQ(dp.output_rows(), 1);
 }
 
 TEST_F(CommonFunctionsTest, DotProductKnownValue) {
@@ -90,8 +90,8 @@ TEST_F(CommonFunctionsTest, CrossProductDimensions) {
     auto a = args.template head<3>();
     auto b = args.template tail<3>();
     auto cp = a.cross(b);
-    EXPECT_EQ(cp.IRows(), 6);
-    EXPECT_EQ(cp.ORows(), 3);
+    EXPECT_EQ(cp.input_rows(), 6);
+    EXPECT_EQ(cp.output_rows(), 3);
 }
 
 TEST_F(CommonFunctionsTest, CrossProductKnownValue) {

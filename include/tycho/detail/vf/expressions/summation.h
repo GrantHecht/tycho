@@ -8,16 +8,15 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Namespace renamed: asset -> Tycho
-//   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
-//   - pybind11 header references removed
+//   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
+//   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
 #pragma once
 
 #include "tycho/detail/vf/core/vector_function.h"
 
-namespace Tycho {
+namespace tycho::vf {
 
 template <class Derived, class Func1, class Func2, bool DoDifference> struct TwoFunctionSum_Impl;
 
@@ -96,13 +95,13 @@ RetType make_dynamic_sum(const std::vector<FuncType> &funcs) {
     } else if (size == 5) {
         summed = make_sum(funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]);
     } else {
-        RetType summedT = make_sum(funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]);
+        RetType summed_t = make_sum(funcs[0], funcs[1], funcs[2], funcs[3], funcs[4]);
         std::vector<FuncType> nfuncs;
         for (int i = 5; i < funcs.size(); i++) {
             nfuncs.push_back(funcs[i]);
         }
-        RetType rest = Tycho::make_dynamic_sum<RetType, FuncType>(nfuncs);
-        summed = make_sum(summedT, rest);
+        RetType rest = make_dynamic_sum<RetType, FuncType>(nfuncs);
+        summed = make_sum(summed_t, rest);
     }
     return summed;
 }
@@ -135,29 +134,29 @@ struct TwoFunctionSum_Impl
     static const bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
     static const bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
 
-    static const bool IsLinearFunction = Func1::IsLinearFunction && Func2::IsLinearFunction;
-    static const bool IsVectorizable = Func1::IsVectorizable && Func2::IsVectorizable;
+    static const bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
     TwoFunctionSum_Impl() {}
     TwoFunctionSum_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
 
-        if (this->func1.ORows() != this->func2.ORows()) {
-            throw std::invalid_argument(fmt::format(
-                "TwoFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
-                this->func1.ORows(), this->func2.ORows()));
+        if (this->func1.output_rows() != this->func2.output_rows()) {
+            throw std::invalid_argument(
+                fmt::format("TwoFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
+                            this->func1.output_rows(), this->func2.output_rows()));
         }
-        if (this->func1.IRows() != this->func2.IRows()) {
-            throw std::invalid_argument(fmt::format(
-                "TwoFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
-                this->func1.IRows(), this->func2.IRows()));
+        if (this->func1.input_rows() != this->func2.input_rows()) {
+            throw std::invalid_argument(
+                fmt::format("TwoFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
+                            this->func1.input_rows(), this->func2.input_rows()));
         }
 
-        this->setIORows(irtemp, this->func1.ORows());
-        this->set_input_domain(this->IRows(), {func1.input_domain(), func2.input_domain()});
+        this->set_io_rows(irtemp, this->func1.output_rows());
+        this->set_input_domain(this->input_rows(), {func1.input_domain(), func2.input_domain()});
     }
 
     bool is_linear() const { return func1.is_linear() && func2.is_linear(); }
@@ -177,9 +176,9 @@ struct TwoFunctionSum_Impl
             }
         };
 
-        const int orows = this->func2.ORows();
+        const int orows = this->func2.output_rows();
         using FType = Func2_Output<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -200,11 +199,12 @@ struct TwoFunctionSum_Impl
             }
         };
 
-        const int orows = this->func2.ORows();
-        const int irows = this->func2.IRows();
+        const int orows = this->func2.output_rows();
+        const int irows = this->func2.input_rows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -242,15 +242,17 @@ struct TwoFunctionSum_Impl
             }
         };
 
-        const int orows = this->func2.ORows();
-        const int irows = this->func2.IRows();
+        const int orows = this->func2.output_rows();
+        const int irows = this->func2.input_rows();
 
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
-                                    TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows),
+                                                  tycho::utils::TempSpec<GType>(irows, 1),
+                                                  tycho::utils::TempSpec<HType>(irows, irows));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -332,13 +334,13 @@ struct MultiFunctionSum_Impl
     Func2 func2;
     std::tuple<Funcs...> funcs;
 
-    static const bool IsLinearFunction =
-        SZ_PROD<int(Func1::IsLinearFunction), int(Func2::IsLinearFunction),
-                int(Funcs::IsLinearFunction)...>::value == 1;
+    static const bool is_linear_function =
+        SZ_PROD<int(Func1::is_linear_function), int(Func2::is_linear_function),
+                int(Funcs::is_linear_function)...>::value == 1;
 
-    static const bool IsVectorizable =
-        SZ_PROD<int(Func1::IsVectorizable), int(Func2::IsVectorizable),
-                int(Funcs::IsVectorizable)...>::value == 1;
+    static const bool is_vectorizable =
+        SZ_PROD<int(Func1::is_vectorizable), int(Func2::is_vectorizable),
+                int(Funcs::is_vectorizable)...>::value == 1;
 
     static const bool IsSumofSegments =
         SZ_PROD<int(Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value),
@@ -352,27 +354,27 @@ struct MultiFunctionSum_Impl
     MultiFunctionSum_Impl() {}
     MultiFunctionSum_Impl(Func1 f1, Func2 f2, Funcs... fs)
         : func1(std::move(f1)), func2(std::move(f2)), funcs(fs...) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
 
-        this->setIORows(irtemp, this->func1.ORows());
+        this->set_io_rows(irtemp, this->func1.output_rows());
         setdmn();
     }
     MultiFunctionSum_Impl(Func1 f1, Func2 f2, std::tuple<Funcs...> fs)
         : func1(std::move(f1)), func2(std::move(f2)), funcs(fs) {
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
-        this->setIORows(irtemp, this->func1.ORows());
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
+        this->set_io_rows(irtemp, this->func1.output_rows());
         setdmn();
     }
 
     MultiFunctionSum_Impl(std::tuple<Func1, Func2, Funcs...> fs) {
         this->func1 = std::get<0>(fs);
         this->func2 = std::get<1>(fs);
-        Tycho::constexpr_for_loop(
+        tycho::utils::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(Funcs)>(),
             [&](auto i) { std::get<i.value>(this->funcs) = std::get<i.value + 2>(fs); });
 
-        int irtemp = std::max(this->func1.IRows(), this->func2.IRows());
-        this->setIORows(irtemp, this->func1.ORows());
+        int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
+        this->set_io_rows(irtemp, this->func1.output_rows());
         setdmn();
     }
 
@@ -381,37 +383,37 @@ struct MultiFunctionSum_Impl
         tmp.push_back(func1.input_domain());
         tmp.push_back(func2.input_domain());
 
-        if (this->func1.ORows() != this->func2.ORows()) {
+        if (this->func1.output_rows() != this->func2.output_rows()) {
             throw std::invalid_argument(fmt::format(
                 "MultiFunctionSum: output size mismatch (Func1 ORows={}, Func2 ORows={})",
-                this->func1.ORows(), this->func2.ORows()));
+                this->func1.output_rows(), this->func2.output_rows()));
         }
-        if (this->func1.IRows() != this->func2.IRows()) {
+        if (this->func1.input_rows() != this->func2.input_rows()) {
             throw std::invalid_argument(fmt::format(
                 "MultiFunctionSum: input size mismatch (Func1 IRows={}, Func2 IRows={})",
-                this->func1.IRows(), this->func2.IRows()));
+                this->func1.input_rows(), this->func2.input_rows()));
         }
 
-        Tycho::constexpr_for_loop(
+        tycho::utils::constexpr_for_loop(
             std::integral_constant<int, 0>(), std::integral_constant<int, sizeof...(Funcs)>(),
             [&](auto i) {
                 tmp.push_back(std::get<i.value>(this->funcs).input_domain());
-                if (this->func1.ORows() != std::get<i.value>(this->funcs).ORows()) {
-                    throw std::invalid_argument(fmt::format(
-                        "MultiFunctionSum: output size mismatch "
-                        "(Func1 ORows={}, Func{} ORows={})",
-                        this->func1.ORows(), i.value + 3,
-                        std::get<i.value>(this->funcs).ORows()));
+                if (this->func1.output_rows() != std::get<i.value>(this->funcs).output_rows()) {
+                    throw std::invalid_argument(
+                        fmt::format("MultiFunctionSum: output size mismatch "
+                                    "(Func1 ORows={}, Func{} ORows={})",
+                                    this->func1.output_rows(), i.value + 3,
+                                    std::get<i.value>(this->funcs).output_rows()));
                 }
-                if (this->func1.IRows() != std::get<i.value>(this->funcs).IRows()) {
-                    throw std::invalid_argument(fmt::format(
-                        "MultiFunctionSum: input size mismatch "
-                        "(Func1 IRows={}, Func{} IRows={})",
-                        this->func1.IRows(), i.value + 3,
-                        std::get<i.value>(this->funcs).IRows()));
+                if (this->func1.input_rows() != std::get<i.value>(this->funcs).input_rows()) {
+                    throw std::invalid_argument(
+                        fmt::format("MultiFunctionSum: input size mismatch "
+                                    "(Func1 IRows={}, Func{} IRows={})",
+                                    this->func1.input_rows(), i.value + 3,
+                                    std::get<i.value>(this->funcs).input_rows()));
                 }
             });
-        this->set_input_domain(this->IRows(), tmp);
+        this->set_input_domain(this->input_rows(), tmp);
     }
 
     template <class InType, class OutType>
@@ -425,16 +427,16 @@ struct MultiFunctionSum_Impl
             this->func2.compute(x, func2_fx);
             fx += func2_fx;
 
-            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
+            tycho::utils::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
                 funci.compute(x, func2_fx);
                 fx += func2_fx;
             });
         };
 
-        const int orows = this->func2.ORows();
+        const int orows = this->func2.output_rows();
         using FType = Func2_Output<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
@@ -449,19 +451,19 @@ struct MultiFunctionSum_Impl
             fx += func2_fx;
             this->func2.accumulate_jacobian(jx, func2_jx, PlusEqualsAssignment());
 
-            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
+            tycho::utils::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
 
                 typedef typename std::remove_reference<decltype(funci)>::type FunciType;
                 if constexpr (FunciType::InputIsDynamic) {
                     func2_jx.setZero();
                 } else {
-                    constexpr int sds = FunciType::INPUT_DOMAIN::SubDomains.size();
-                    Tycho::constexpr_for_loop(
+                    constexpr int sds = FunciType::INPUT_DOMAIN::sub_domains.size();
+                    tycho::utils::constexpr_for_loop(
                         std::integral_constant<int, 0>(), std::integral_constant<int, sds>(),
                         [&](auto i) {
-                            constexpr int Start1 = FunciType::INPUT_DOMAIN::SubDomains[i.value][0];
-                            constexpr int Size1 = FunciType::INPUT_DOMAIN::SubDomains[i.value][1];
+                            constexpr int Start1 = FunciType::INPUT_DOMAIN::sub_domains[i.value][0];
+                            constexpr int Size1 = FunciType::INPUT_DOMAIN::sub_domains[i.value][1];
                             func2_jx.template middleCols<Size1>(Start1, Size1).setZero();
                         });
                 }
@@ -472,11 +474,12 @@ struct MultiFunctionSum_Impl
             });
         };
 
-        const int orows = this->func2.ORows();
-        const int irows = this->func2.IRows();
+        const int orows = this->func2.output_rows();
+        const int irows = this->func2.input_rows();
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -504,7 +507,7 @@ struct MultiFunctionSum_Impl
             this->func2.accumulate_gradient(adjgrad_, func2_adjgrad, PlusEqualsAssignment());
             this->func2.accumulate_hessian(adjhess_, func2_adjhess, PlusEqualsAssignment());
 
-            Tycho::tuple_for_each(this->funcs, [&](const auto &funci) {
+            tycho::utils::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();
                 func2_adjgrad.setZero();
 
@@ -512,7 +515,7 @@ struct MultiFunctionSum_Impl
 
                 // func2_jx.setZero();
                 funci.zero_matrix_domain(func2_jx);
-                if constexpr (!FunciType::IsLinearFunction) {
+                if constexpr (!FunciType::is_linear_function) {
                     // func2_adjhess.setZero();
                     funci.zero_matrix_domain(func2_adjhess);
                 }
@@ -522,20 +525,22 @@ struct MultiFunctionSum_Impl
                 fx += func2_fx;
                 funci.accumulate_jacobian(jx, func2_jx, PlusEqualsAssignment());
                 funci.accumulate_gradient(adjgrad, func2_adjgrad, PlusEqualsAssignment());
-                if constexpr (!FunciType::IsLinearFunction)
+                if constexpr (!FunciType::is_linear_function)
                     funci.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
             });
         };
 
-        const int orows = this->func2.ORows();
-        const int irows = this->func2.IRows();
+        const int orows = this->func2.output_rows();
+        const int irows = this->func2.input_rows();
 
         using FType = Func2_Output<Scalar>;
         using JType = Func2_jacobian<Scalar>;
         using GType = Func2_gradient<Scalar>;
         using HType = Func2_hessian<Scalar>;
-        BumpAllocator::allocate_run(Impl, TempSpec<FType>(orows, 1), TempSpec<JType>(orows, irows),
-                                    TempSpec<GType>(irows, 1), TempSpec<HType>(irows, irows));
+        tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
+                                                  tycho::utils::TempSpec<JType>(orows, irows),
+                                                  tycho::utils::TempSpec<GType>(irows, 1),
+                                                  tycho::utils::TempSpec<HType>(irows, irows));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -553,21 +558,21 @@ struct MultiFunctionSum_Impl
                     // non-overlapping columns, so DirectAssignment is correct.
                     this->func2.right_jacobian_product(target_, left, right, DirectAssignment(),
                                                        aliased);
-                    Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
+                    tycho::utils::tuple_for_each(this->funcs, [&](const auto &func) {
                         func.right_jacobian_product(target_, left, right, DirectAssignment(),
                                                     aliased);
                     });
                 } else {
                     this->func2.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
                                                        aliased);
-                    Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
+                    tycho::utils::tuple_for_each(this->funcs, [&](const auto &func) {
                         func.right_jacobian_product(target_, left, right, PlusEqualsAssignment(),
                                                     aliased);
                     });
                 }
             } else {
                 this->func2.right_jacobian_product(target_, left, right, assign, aliased);
-                Tycho::tuple_for_each(this->funcs, [&](const auto &func) {
+                tycho::utils::tuple_for_each(this->funcs, [&](const auto &func) {
                     func.right_jacobian_product(target_, left, right, assign, aliased);
                 });
             }
@@ -578,4 +583,4 @@ struct MultiFunctionSum_Impl
     ///////////////////////////////////////////////////////////////////////////////////////
 };
 
-} // namespace Tycho
+} // namespace tycho::vf
