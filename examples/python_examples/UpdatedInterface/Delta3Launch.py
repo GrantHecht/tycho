@@ -278,7 +278,7 @@ def Plot(Phase1, Phase2, Phase3, Phase4):
 ###############################################################################
 
 if __name__ == "__main__":
-    typy.SoftwareInfo()
+    typy.software_info()
 
     # Target orbital elements
     at = 24361140
