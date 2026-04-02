@@ -89,7 +89,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     Integrator<DODE> integrator_;
     bool enable_hessian_sparsity_ = false;
-    bool OldShootingDefect = false;
+    bool old_shooting_defect_ = false;
 
     ODEPhase(const DODE &ode, TranscriptionModes Tmode)
         : ODEPhaseBase(ode.x_vars(), ode.u_vars(), ode.p_vars()) {
@@ -383,7 +383,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.enable_vectorization_ = this->enable_vectorization_;
             Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
-            if (OldShootingDefect) {
+            if (old_shooting_defect_) {
                 auto shooter = ShootingDefect{this->ode_scaled_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);
@@ -405,7 +405,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.enable_vectorization_ = this->enable_vectorization_;
             Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
-            if (OldShootingDefect) {
+            if (old_shooting_defect_) {
                 auto shooter = ShootingDefect{this->ode_, Integ};
                 shooter.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 return tycho::solvers::ConstraintInterface(shooter);

@@ -267,7 +267,6 @@ Defined in `src/bindings/vf/dense_function_base_bind.h`. Registers the fundament
 | `name()` | `-> str` | Type name string |
 | `input_domain()` | `-> ...` | Domain information |
 | `is_linear()` | `-> bool` | Linearity flag |
-
 | `vf()` | `-> VectorFunction` | Convert to type-erased VectorFunction |
 | `sf()` | `-> ScalarFunction` | Convert to ScalarFunction (OR=1 only) |
 

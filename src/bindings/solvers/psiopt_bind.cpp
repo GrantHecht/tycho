@@ -140,7 +140,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def_rw("max_soc", &PSIOPT::max_soc_, "");
 
     obj.def_rw("pd_step_strategy", &PSIOPT::pd_step_strategy_, "");
-    obj.def_rw("so_ebound_relax", &PSIOPT::soe_bound_relax_, "");
+    obj.def_rw("soe_bound_relax", &PSIOPT::soe_bound_relax_, "");
     obj.def_rw("qp_par_solve", &PSIOPT::qp_par_solve_, "");
 
     obj.def_rw("soe_mode", &PSIOPT::soe_mode_, "");
@@ -166,7 +166,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    obj.def_rw("force_q_panalysis", &PSIOPT::force_qp_analysis_, "");
+    obj.def_rw("force_qp_analysis", &PSIOPT::force_qp_analysis_, "");
     obj.def_rw("qp_ref_steps", &PSIOPT::qp_ref_steps_, "");
 
     obj.def_rw("qp_pivot_perturb", &PSIOPT::qp_pivot_perturb_, "");
@@ -208,7 +208,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_best_criteria",
             nb::overload_cast<const std::string &>(&PSIOPT::set_best_criteria));
 
-    obj.def_rw("store_sp_mat_", &PSIOPT::store_sp_mat_, "");
+    obj.def_rw("store_sp_mat", &PSIOPT::store_sp_mat_, "");
     obj.def("get_sp_mat", &PSIOPT::get_sp_mat, "");
     obj.def("get_sp_mat2", &PSIOPT::get_sp_mat2, "");
 

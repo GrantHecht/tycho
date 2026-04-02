@@ -82,7 +82,7 @@ TEST_F(MixedSizeOpsTest, DynamicVectorTimesStaticScalar) {
     auto stat_args = Arguments<6>();
     auto scl = stat_args.coeff<5>();      // IRC=6, ORC=1
 
-    // Both have the same runtime IRows (6) but different compile-time IRC
+    // Both have the same runtime input_rows (6) but different compile-time IRC
     auto result = vec * scl;
     EXPECT_EQ(result.input_rows(), 6);
     EXPECT_EQ(result.output_rows(), 3);
@@ -278,7 +278,7 @@ TEST_F(MixedSizeOpsTest, FourOperandMixedSizeSum) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(MixedSizeOpsTest, DifferenceWithMixedIRC) {
-    // Dynamic segment (IRC=-1) - static segment (IRC=6), same runtime IRows
+    // Dynamic segment (IRC=-1) - static segment (IRC=6), same runtime input_rows
     auto dyn_args = Arguments<-1>(6);
     auto a = dyn_args.segment(0, 3); // IRC=-1
 
@@ -364,31 +364,31 @@ TEST_F(MixedSizeOpsTest, EmptyDynamicSumThrows) {
 }
 
 TEST_F(MixedSizeOpsTest, RuntimeIRowsMismatchThrows) {
-    // Two dynamic functions with different runtime IRows
+    // Two dynamic functions with different runtime input_rows
     auto args6 = Arguments<-1>(6);
-    auto seg6 = args6.segment(0, 3);   // IRC=-1, IRows=6, ORows=3
+    auto seg6 = args6.segment(0, 3);   // IRC=-1, input_rows=6, output_rows=3
 
     auto args8 = Arguments<-1>(8);
-    auto seg8 = args8.segment(0, 3);   // IRC=-1, IRows=8, ORows=3
+    auto seg8 = args8.segment(0, 3);   // IRC=-1, input_rows=8, output_rows=3
 
-    // Same ORC, different IRows — should throw at construction time
+    // Same ORC, different input_rows — should throw at construction time
     EXPECT_THROW(seg6 + seg8, std::invalid_argument);
     EXPECT_THROW(seg6 - seg8, std::invalid_argument);
 }
 
 TEST_F(MixedSizeOpsTest, RuntimeORowsMismatchThrows) {
-    // Two dynamic functions with different runtime ORows
+    // Two dynamic functions with different runtime output_rows
     auto args = Arguments<-1>(6);
-    auto seg2 = args.segment(0, 2);   // IRC=-1, ORows=2
-    auto seg3 = args.segment(0, 3);   // IRC=-1, ORows=3
+    auto seg2 = args.segment(0, 2);   // IRC=-1, output_rows=2
+    auto seg3 = args.segment(0, 3);   // IRC=-1, output_rows=3
 
     EXPECT_THROW(seg2 + seg3, std::invalid_argument);
 }
 
 TEST_F(MixedSizeOpsTest, DivisionInputMismatchThrows) {
-    // Vector (IRows=6) / Scalar (IRows=8) — runtime IRows mismatch
-    auto f6 = Arguments<-1>(6).segment(0, 3);     // IRows=6, ORows=3
-    auto f8 = Arguments<-1>(8).coeff(0);           // IRows=8, ORows=1
+    // Vector (input_rows=6) / Scalar (input_rows=8) — runtime input_rows mismatch
+    auto f6 = Arguments<-1>(6).segment(0, 3);     // input_rows=6, output_rows=3
+    auto f8 = Arguments<-1>(8).coeff(0);           // input_rows=8, output_rows=1
     EXPECT_THROW(f6 / f8, std::invalid_argument);
 }
 

@@ -23,7 +23,7 @@ import tychopy.Solvers
 import tychopy.Utils
 import tychopy.VectorFunctions
 
-SoftwareInfo = _tychopy.software_info
+software_info = _tychopy.software_info
 
 if __name__ == "__main__":
     _tychopy.software_info()

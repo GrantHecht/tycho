@@ -19,7 +19,7 @@ using namespace tycho;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Simple Harmonic Oscillator ODE: x'' = -x
-// State: [x, v, t], augmented: [x, v, t], XVars=2, UVars=0, PVars=0
+// State: [x, v, t], augmented: [x, v, t], x_vars=2, u_vars=0, p_vars=0
 // ODE: dx/dt = v, dv/dt = -x
 // Exact solution: x(t) = cos(t), v(t) = -sin(t) with x(0)=1, v(0)=0
 ///////////////////////////////////////////////////////////////////////////////

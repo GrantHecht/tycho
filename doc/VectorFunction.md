@@ -1097,9 +1097,6 @@ f = vf.sin(Args(1)[0])
 val = f.compute([0.5])         # Returns numpy array: [sin(0.5)]
 jac = f.jacobian([0.5])        # Returns numpy matrix: [[cos(0.5)]]
 fx, jx = f.compute_jacobian([0.5])  # Both at once
-
-# Performance testing
-f.rpt([1.0, 2.0, 3.0], 100000)  # Run 100k evaluations and print timing
 ```
 
 ### Type Conversion

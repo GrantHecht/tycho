@@ -50,12 +50,12 @@ void tycho::solvers::PSIOPT::print_timing_summary() {
 }
 
 void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
-    this->nlp = np;
-    this->primal_vars_ = this->nlp->primal_vars_;
-    this->equal_cons_ = this->nlp->equal_cons_;
-    this->inequal_cons_ = this->nlp->inequal_cons_;
-    this->slack_vars_ = this->nlp->slack_vars_;
-    this->kkt_dim_ = this->nlp->kkt_dim_;
+    this->nlp_ = np;
+    this->primal_vars_ = this->nlp_->primal_vars_;
+    this->equal_cons_ = this->nlp_->equal_cons_;
+    this->inequal_cons_ = this->nlp_->inequal_cons_;
+    this->slack_vars_ = this->nlp_->slack_vars_;
+    this->kkt_dim_ = this->nlp_->kkt_dim_;
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(qp_threads_);
@@ -63,7 +63,7 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     mkl_set_num_threads(qp_threads_);
 #endif
 
-    this->nlp->analyze_sparsity(this->kkt_sol_.get_matrix());
+    this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
 #ifdef USE_ACCELERATE_SPARSE
     // we need to call this to update the internal AccelSparseMatrix since
     // we changed the sparsity pattern via the reference returned from get_matrix.
@@ -164,9 +164,9 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         eval_aug(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::SOE:
-        this->nlp->set_primal_diags(1.0);
+        this->nlp_->set_primal_diags(1.0);
         eval_soe(0.0, XSL, val, GX, AGXS_FX, KKTmat);
-        this->nlp->set_primal_diags(0.0);
+        this->nlp_->set_primal_diags(0.0);
         this->get_prim_grad(GX).setZero();
         this->get_prim_grad(AGXS_FX).setZero();
         break;
@@ -460,7 +460,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         }
     };
     auto Perturb = [&](double p) {
-        this->nlp->perturb_kkt_p_diags(p, this->kkt_sol_.get_matrix());
+        this->nlp_->perturb_kkt_p_diags(p, this->kkt_sol_.get_matrix());
     };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
@@ -724,7 +724,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     } else {
         Funtimer.start();
         this->last_obj_val_ = 0;
-        this->nlp->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->last_obj_val_);
+        this->nlp_->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->last_obj_val_);
         Funtimer.stop();
     }
 
@@ -771,9 +771,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     Eigen::VectorXd RHS(this->kkt_dim_);
     RHS.setZero();
     double val = 0;
-    this->nlp->set_primal_diags(1.0);
+    this->nlp_->set_primal_diags(1.0);
     if (this->inequal_cons_ > 0) {
-        this->nlp->set_slacks_ones();
+        this->nlp_->set_slacks_ones();
     }
     this->eval_nlp(AlgorithmModes::INIT, this->obj_scale_, XSL, val, RHS.head(this->primal_vars_),
                    RHS, this->kkt_sol_.get_matrix());
@@ -794,7 +794,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     RHS.tail(this->equal_cons_ + this->inequal_cons_).setZero();
 
     if (this->inequal_cons_ > 0)
-        this->nlp->assign_kkt_slack_hessian(hp, this->kkt_sol_.get_matrix());
+        this->nlp_->assign_kkt_slack_hessian(hp, this->kkt_sol_.get_matrix());
     if (this->print_level_ < 2) {
         print_beginning("KKT-Matrix Analysis ");
     }
@@ -831,8 +831,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     if (equal_cons_ > 0)
         this->get_eq_lmults(XSL) = this->get_eq_lmults(dx);
     if (this->inequal_cons_ > 0)
-        this->nlp->set_slack_diags(0.0);
-    this->nlp->set_primal_diags(0.0);
+        this->nlp_->set_slack_diags(0.0);
+    this->nlp_->set_primal_diags(0.0);
 
     return XSL;
 }
@@ -890,7 +890,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->nlp->eval_occ(
+            this->nlp_->eval_occ(
                 obj_scale, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
@@ -937,7 +937,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->nlp->eval_occ(
+            this->nlp_->eval_occ(
                 obj_scale, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
