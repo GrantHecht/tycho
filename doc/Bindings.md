@@ -169,7 +169,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
     }
 };
 
-// Partial specialization for VectorFunction types (CommonFunctionsBind.h)
+// Partial specialization for VectorFunction types (common_functions_bind.h)
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
@@ -293,7 +293,7 @@ These helpers build the Python operator overloads and math methods for VectorFun
 |---|---|
 | `DoubleMathBuild<T>(obj)` | `__add__`/`__sub__` with VectorXd, `__mul__`/`__truediv__` with double, `__neg__`, `__array_ufunc__ = None` |
 | `UnaryMathBuild<T>(obj)` | `norm`, `squared_norm`, `normalized`, `sin`, `cos`, `tan`, `sqrt`, `exp`, `log`, `squared`, `pow`, `arcsin`/`arccos`/`arctan`, `sinh`/`cosh`/`tanh`, `__abs__`, `sign` |
-| `BinaryMathBuild<T>(obj)` | `cross`, `dot`, `cwiseProduct`, `cwiseQuotient` (with other VF types and VectorXd constants) |
+| `BinaryMathBuild<T>(obj)` | `cross`, `dot`, `cwise_product`, `cwise_quotient` (with other VF types and VectorXd constants) |
 | `BinaryOperatorsBuild<T>(obj)` | `eval`, `apply`, `__add__`/`__sub__`/`__mul__`/`__truediv__` with other VF types |
 | `FunctionIndexingBuild<T>(obj)` | `segment`, `head`, `tail`, `coeff`, `__getitem__` (int and slice), `padded_lower`/`padded_upper`/`padded`, fixed-size `segment_2`/`segment_3` aliases |
 | `ConditionalOperatorsBuild<T>(obj)` | `__lt__`, `__gt__`, `__le__`, `__ge__` (returns `GenericConditional`) |
@@ -327,7 +327,7 @@ For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-fr
 |---|---|
 | `ODEPhaseBuildImpl<DODE>(phase)` | Registers all `ODEPhase` constructors (TranscriptionModes, string mode, trajectory data) |
 | `IntegratorBuildConstructors<DODE>(obj)` | Adds `.integrator(...)` factory methods to an ODE class |
-| `ODESizeBuild<XV,UV,PV,Derived>(obj)` | Registers ODE dimension accessors: `XVars()`, `UVars()`, `PVars()`, `TVar()`, index helpers |
+| `ODESizeBuild<XV,UV,PV,Derived>(obj)` | Registers ODE dimension accessors: `x_vars()`, `u_vars()`, `p_vars()`, `t_var()`, index helpers |
 | `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` | Creates a complete ODE submodule with `ode`, `integrator`, `phase` classes |
 | `BuildODEModule<BaseType,Derived,XV,UV,PV>(name, mod, reg)` | Same but for concrete (non-generic) ODE types |
 | `ODE_ExpressionBuild<Derived,ExprImpl,Ts...>(m, name)` | Registers an ODE expression type with DenseBaseBuild + phase factory + integrator constructors |
@@ -653,7 +653,7 @@ Set `OPTIMIZE_BINDINGS=ON` if you need `-O3` for profiling or if binding dispatc
 | Compiler cache | Automatic | `ccache` auto-detected via `find_program` |
 | Split TUs | N/A (hardcoded) | Heavy templates split across Part1..N files |
 
-The `ArgsSegBuildPart1..5.cpp` and `GenericODESBuildPart1..6.cpp` files exist purely to split template-heavy instantiations across multiple translation units, reducing peak memory usage and enabling parallel compilation.
+The `args_seg_build_part1..5.cpp` and `generic_odes_build_part1..6.cpp` files exist purely to split template-heavy instantiations across multiple translation units, reducing peak memory usage and enabling parallel compilation.
 
 ### Install Targets
 
@@ -769,12 +769,12 @@ Because `src/bindings/` subdirectories are added to the include path alongside t
 When a `TychoBind` specialization's `Build()` body is too large for a header, declare it in the header and define it in a `.cpp` file:
 
 ```cpp
-// ODEPhaseBind.h
+// ode_phase_bind.h
 template <> struct TychoBind<ODEPhaseBase> {
     static void Build(nb::module_ &m);  // declaration only
 };
 
-// ODEPhaseBaseBind.cpp
+// ode_phase_base_bind.cpp
 void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
     // ... large implementation ...
 }
@@ -787,7 +787,7 @@ In the `.cpp` file, use `using namespace tycho;` and explicit type aliases (`usi
 All parameters typed as `ScaleType` must use `.none()`:
 
 ```cpp
-obj.def("setAutoScale", &T::setAutoScale, nb::arg("scale").none());
+obj.def("add_equal_con", ..., nb::arg("auto_scale").none() = std::string("auto"));
 ```
 
 Without `.none()`, nanobind rejects Python `None` before the `ScaleType` type caster can convert it to the `"none"` sentinel string.
@@ -798,7 +798,7 @@ Any method that runs C++ code in parallel (e.g., `integrate_parallel`, `integrat
 
 ```cpp
 obj.def("integrate_parallel", ...,
-    nb::arg("Xt0UPs"), nb::arg("tfs"), nb::arg("threads"),
+    nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
     nb::call_guard<nb::gil_scoped_release>());
 ```
 

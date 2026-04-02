@@ -124,13 +124,13 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
              int numdef, bool LerpIG)
         : ODEPhase(ode, strto_TranscriptionMode(Tmode), Traj, numdef, LerpIG) {}
 
-    void set_units(const Eigen::VectorXd &XtUPUnits_) {
+    void set_units(const Eigen::VectorXd &xtup_units) {
 
-        if (XtUPUnits_.size() != this->xtu_p_vars()) {
+        if (xtup_units.size() != this->xtu_p_vars()) {
             throw std::invalid_argument("Incorrect size for input units vector");
         }
 
-        this->xtup_units_ = XtUPUnits_;
+        this->xtup_units_ = xtup_units;
         VectorXd output_scales = this->xtup_units_.head(this->x_vars()).cwiseInverse() *
                                  this->xtup_units_[this->x_vars()];
         VectorFunctionalX odetemp;

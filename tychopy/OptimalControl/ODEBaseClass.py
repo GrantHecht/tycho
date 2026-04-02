@@ -266,7 +266,7 @@ class ODEBase:
     def XtUVars(self):
         return self.ode.xtu_vars()
 
-    def XtUPVars(self):
+    def xtup_vars(self):
         return self.ode.xtup_vars()
 
     def x_idxs(self, *args):

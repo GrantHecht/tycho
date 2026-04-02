@@ -124,7 +124,7 @@ int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType va
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
-                                               VarIndexType XtUPvars, VarIndexType OPvars,
+                                               VarIndexType xtup_vars, VarIndexType OPvars,
                                                VarIndexType SPvars, double lowerbound,
                                                double upperbound, double lbscale, double ubscale,
                                                ScaleType scale_t) {
@@ -141,11 +141,11 @@ int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX
     auto x = Arguments<1>();
     auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
     auto lufun = lubound.eval(func);
-    return this->add_inequal_con(reg, lufun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, lufun, xtup_vars, OPvars, SPvars, scale_t);
 }
 
 int tycho::oc::ODEPhaseBase::add_lower_func_bound(RegionType reg, ScalarFunctionalX func,
-                                                  VarIndexType XtUPvars, VarIndexType OPvars,
+                                                  VarIndexType xtup_vars, VarIndexType OPvars,
                                                   VarIndexType SPvars, double lowerbound,
                                                   double lbscale, ScaleType scale_t) {
     check_lbscale(lbscale);
@@ -154,11 +154,11 @@ int tycho::oc::ODEPhaseBase::add_lower_func_bound(RegionType reg, ScalarFunction
     rhs[0] = lowerbound;
     auto lbfun = ((-1.0 * func) + rhs) * lbscale;
 
-    return this->add_inequal_con(reg, lbfun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, lbfun, xtup_vars, OPvars, SPvars, scale_t);
 }
 
 int tycho::oc::ODEPhaseBase::add_upper_func_bound(RegionType reg, ScalarFunctionalX func,
-                                                  VarIndexType XtUPvars, VarIndexType OPvars,
+                                                  VarIndexType xtup_vars, VarIndexType OPvars,
                                                   VarIndexType SPvars, double upperbound,
                                                   double ubscale, ScaleType scale_t) {
 
@@ -167,10 +167,10 @@ int tycho::oc::ODEPhaseBase::add_upper_func_bound(RegionType reg, ScalarFunction
     Vector1<double> rhs;
     rhs[0] = -upperbound;
     auto ubfun = ((func) + rhs) * ubscale;
-    return this->add_inequal_con(reg, ubfun, XtUPvars, OPvars, SPvars, scale_t);
+    return this->add_inequal_con(reg, ubfun, xtup_vars, OPvars, SPvars, scale_t);
 }
 
-int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                double lowerbound, double upperbound, double lbscale,
                                                double ubscale, ScaleType scale_t) {
     if (lowerbound > upperbound) {
@@ -183,13 +183,13 @@ int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUP
     check_lbscale(lbscale);
     check_ubscale(ubscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
 
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
         auto normfun = lubound.eval(Arguments<sz.value>(size).norm());
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
 
     switch (size) {
@@ -205,7 +205,7 @@ int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType XtUP
     return 0;
 }
 
-int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                        double lowerbound, double upperbound,
                                                        double lbscale, double ubscale,
                                                        ScaleType scale_t) {
@@ -219,13 +219,13 @@ int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexT
     check_lbscale(lbscale);
     check_ubscale(ubscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
 
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto lubound = StackedOutputs{(lowerbound - x) * lbscale, (x - upperbound) * ubscale};
         auto normfun = lubound.eval(Arguments<sz.value>(size).squared_norm());
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
 
     switch (size) {
@@ -241,16 +241,16 @@ int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexT
     return 0;
 }
 
-int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                   double lowerbound, double lbscale,
                                                   ScaleType scale_t) {
     check_lbscale(lbscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (lowerbound - Arguments<sz.value>(size).norm()) * lbscale;
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
     switch (size) {
     case 2:
@@ -264,16 +264,16 @@ int tycho::oc::ODEPhaseBase::add_lower_norm_bound(RegionType reg, VarIndexType X
     }
 }
 
-int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                           double lowerbound, double lbscale,
                                                           ScaleType scale_t) {
     check_lbscale(lbscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (lowerbound - Arguments<sz.value>(size).squared_norm()) * lbscale;
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
     switch (size) {
     case 2:
@@ -287,16 +287,16 @@ int tycho::oc::ODEPhaseBase::add_lower_squared_norm_bound(RegionType reg, VarInd
     }
 }
 
-int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                   double upperbound, double ubscale,
                                                   ScaleType scale_t) {
     check_ubscale(ubscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (Arguments<sz.value>(size).norm() - upperbound) * ubscale;
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
     switch (size) {
     case 2:
@@ -311,16 +311,16 @@ int tycho::oc::ODEPhaseBase::add_upper_norm_bound(RegionType reg, VarIndexType X
     return 0;
 }
 
-int tycho::oc::ODEPhaseBase::add_upper_squared_norm_bound(RegionType reg, VarIndexType XtUPvars,
+int tycho::oc::ODEPhaseBase::add_upper_squared_norm_bound(RegionType reg, VarIndexType xtup_vars,
                                                           double upperbound, double ubscale,
                                                           ScaleType scale_t) {
     check_ubscale(ubscale);
 
-    int size = this->get_xt_up_vars(get_region(reg), XtUPvars).size();
+    int size = this->get_xt_up_vars(get_region(reg), xtup_vars).size();
     auto impl = [&](auto sz) {
         auto x = Arguments<1>();
         auto normfun = (Arguments<sz.value>(size).squared_norm() - upperbound) * ubscale;
-        return this->add_inequal_con(reg, normfun, XtUPvars, scale_t);
+        return this->add_inequal_con(reg, normfun, xtup_vars, scale_t);
     };
     switch (size) {
     case 2:

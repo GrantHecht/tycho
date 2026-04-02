@@ -154,7 +154,7 @@ struct PSIOPT {
         else if (str == "Obj" || str == "Prim Obj")
             return BestCriteriaModes::OBJ;
         else {
-            throw std::invalid_argument(fmt::format("Unrecognized best_criteria_: {0}", str));
+            throw std::invalid_argument(fmt::format("Unrecognized BestCriteriaMode: {0}", str));
         }
     }
 
@@ -217,7 +217,7 @@ struct PSIOPT {
     }
     void set_max_ls_iters(int max_ls_iters) {
         if (max_ls_iters < 0) {
-            throw std::invalid_argument("max_ls_iters must be positive.");
+            throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
         }
         this->max_ls_iters_ = max_ls_iters;
     }
@@ -644,50 +644,50 @@ struct PSIOPT {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void eval_kkt(double obj_scale_, ConstEigenRef<VectorXd> XSL, double &val,
-                  EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+    void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->eval_kkt(obj_scale_, XSL.head(this->primal_vars_),
+        this->nlp->eval_kkt(obj_scale, XSL.head(this->primal_vars_),
                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void eval_kkt_no(double obj_scale_, ConstEigenRef<VectorXd> XSL, double &val,
+    void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
         this->nlp->eval_kkt_no(
-            obj_scale_, XSL.head(this->primal_vars_),
+            obj_scale, XSL.head(this->primal_vars_),
             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX), this->get_iq_cons(AGXS_FX),
             KKTmat);
     }
 
-    void eval_aug(double obj_scale_, ConstEigenRef<VectorXd> XSL, double &val,
-                  EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+    void eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->eval_aug(obj_scale_, XSL.head(this->primal_vars_),
+        this->nlp->eval_aug(obj_scale, XSL.head(this->primal_vars_),
                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void eval_soe(double obj_scale_, ConstEigenRef<VectorXd> XSL, double &val,
-                  EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+    void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp->eval_soe(obj_scale_, XSL.head(this->primal_vars_),
+        this->nlp->eval_soe(obj_scale, XSL.head(this->primal_vars_),
                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
                             this->get_iq_cons(AGXS_FX), KKTmat);
     }
 
-    void eval_rhs(double obj_scale_, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
                   Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
-        this->nlp->eval_rhs(obj_scale_, XSL.head(this->primal_vars_),
+        this->nlp->eval_rhs(obj_scale, XSL.head(this->primal_vars_),
                             XSL.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                             XSL.tail(this->inequal_cons_), val, this->get_prim_grad(GX),
                             this->get_prim_grad(AGXS_FX), this->get_eq_cons(AGXS_FX),
@@ -700,7 +700,7 @@ struct PSIOPT {
     void fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL, Eigen::Ref<Eigen::VectorXd> RHS,
                         double pobj, double bobj, double mu, IterateInfo &iter) const;
 
-    void eval_nlp(AlgorithmModes algmode, double obj_scale_, ConstEigenRef<VectorXd> XSL,
+    void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
@@ -736,12 +736,12 @@ struct PSIOPT {
     }
 
     Eigen::VectorXd alg_impl(AlgorithmModes algmode, BarrierModes barmode, LineSearchModes lsmode,
-                             double obj_scale_, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
+                             double obj_scale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    double ls_impl(LineSearchModes lsmode, double obj_scale_, double Mu, double prim_obj_,
-                   double barr_obj_, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
+    double ls_impl(LineSearchModes lsmode, double obj_scale, double Mu, double prim_obj,
+                   double barr_obj, EigenRef<VectorXd> XSL, EigenRef<VectorXd> DXSL,
                    EigenRef<VectorXd> XSL2, EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 

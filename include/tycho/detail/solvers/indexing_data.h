@@ -171,7 +171,7 @@ struct SolverIndexingData {
         this->num_funcappl_ = this->v_index_.cols();
         this->v_index_continuity_.resize(this->v_index_.cols());
         for (int i = 0; i < this->v_index_.cols(); i++) {
-            this->v_index_continuity_[i] = this->checkContinuity(this->v_index_.col(i));
+            this->v_index_continuity_[i] = this->check_continuity(this->v_index_.col(i));
         }
     }
     void set_c_index(const MatrixXi &ct) {
@@ -180,7 +180,7 @@ struct SolverIndexingData {
         this->cindex_init_ = true;
 
         for (int i = 0; i < this->c_index_.cols(); i++) {
-            this->c_index_continuity_[i] = this->checkContinuity(this->c_index_.col(i));
+            this->c_index_continuity_[i] = this->check_continuity(this->c_index_.col(i));
         }
     }
     const MatrixXi &get_v_index() const { return this->v_index_; }
@@ -208,7 +208,7 @@ struct SolverIndexingData {
     inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
     inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }
 
-    static vf::ParsedIOFlags checkContinuity(const Eigen::VectorXi &ix) {
+    static vf::ParsedIOFlags check_continuity(const Eigen::VectorXi &ix) {
         int s = 0;
         for (int i = 0; i < (ix.size() - 1); i++) {
             s = ix[i + 1] - ix[i] - 1;

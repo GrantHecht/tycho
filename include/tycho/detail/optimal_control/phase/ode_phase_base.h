@@ -225,7 +225,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     //////////////////////////////////////////////////
 
-    virtual void set_units(const Eigen::VectorXd &XtUPUnits_) = 0;
+    virtual void set_units(const Eigen::VectorXd &xtup_units) = 0;
 
     virtual void set_control_mode(ControlModes m) {
         this->reset_transcription();
@@ -326,34 +326,34 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         return reg;
     }
 
-    VectorXi get_xt_up_vars(PhaseRegionFlags reg, VarIndexType XtUPvars_t) const {
+    VectorXi get_xt_up_vars(PhaseRegionFlags reg, VarIndexType xtup_vars_t) const {
 
-        VectorXi XtUPvars;
+        VectorXi xtup_vars;
 
         /////////////////////////////////////////////////
-        if (std::holds_alternative<int>(XtUPvars_t)) {
-            XtUPvars.resize(1);
-            XtUPvars[0] = std::get<int>(XtUPvars_t);
-        } else if (std::holds_alternative<VectorXi>(XtUPvars_t)) {
-            XtUPvars = std::get<VectorXi>(XtUPvars_t);
-        } else if (std::holds_alternative<std::string>(XtUPvars_t)) {
+        if (std::holds_alternative<int>(xtup_vars_t)) {
+            xtup_vars.resize(1);
+            xtup_vars[0] = std::get<int>(xtup_vars_t);
+        } else if (std::holds_alternative<VectorXi>(xtup_vars_t)) {
+            xtup_vars = std::get<VectorXi>(xtup_vars_t);
+        } else if (std::holds_alternative<std::string>(xtup_vars_t)) {
             if (reg != PhaseRegionFlags::StaticParams) {
-                XtUPvars = this->idx(std::get<std::string>(XtUPvars_t));
+                xtup_vars = this->idx(std::get<std::string>(xtup_vars_t));
             } else {
-                XtUPvars = this->get_sp_idx(std::get<std::string>(XtUPvars_t));
+                xtup_vars = this->get_sp_idx(std::get<std::string>(xtup_vars_t));
             }
             if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
-                for (int i = 0; i < XtUPvars.size(); i++) {
-                    XtUPvars[i] -= this->xtu_vars();
+                for (int i = 0; i < xtup_vars.size(); i++) {
+                    xtup_vars[i] -= this->xtu_vars();
                 }
             }
-        } else if (std::holds_alternative<std::vector<std::string>>(XtUPvars_t)) {
+        } else if (std::holds_alternative<std::vector<std::string>>(xtup_vars_t)) {
 
             std::vector<VectorXi> varvec;
             int size = 0;
 
-            auto tmpvars = std::get<std::vector<std::string>>(XtUPvars_t);
+            auto tmpvars = std::get<std::vector<std::string>>(xtup_vars_t);
 
             for (auto tmpv : tmpvars) {
                 if (reg != PhaseRegionFlags::StaticParams) {
@@ -364,24 +364,24 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
                 size += varvec.back().size();
             }
-            XtUPvars.resize(size);
+            xtup_vars.resize(size);
 
             int next = 0;
             for (auto varv : varvec) {
                 for (int i = 0; i < varv.size(); i++) {
-                    XtUPvars[next] = varv[i];
+                    xtup_vars[next] = varv[i];
                     next++;
                 }
             }
 
             if (reg == PhaseRegionFlags::ODEParams) {
                 // Convert to 0 based index
-                for (int i = 0; i < XtUPvars.size(); i++) {
-                    XtUPvars[i] -= this->xtu_vars();
+                for (int i = 0; i < xtup_vars.size(); i++) {
+                    xtup_vars[i] -= this->xtu_vars();
                 }
             }
         }
-        return XtUPvars;
+        return xtup_vars;
     }
 
     VectorXi get_op_vars(PhaseRegionFlags reg, VarIndexType OPvars_t) const {
@@ -456,40 +456,40 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     }
 
     template <class FuncHolder, class FuncType>
-    FuncHolder make_func_impl(RegionType reg_t, FuncType fun, VarIndexType XtUPvars_t,
+    FuncHolder make_func_impl(RegionType reg_t, FuncType fun, VarIndexType xtup_vars_t,
                               VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
         PhaseRegionFlags reg = get_region(reg_t);
         FuncHolder func;
 
-        if (std::holds_alternative<std::string>(XtUPvars_t)) {
-            std::string vars = std::get<std::string>(XtUPvars_t);
+        if (std::holds_alternative<std::string>(xtup_vars_t)) {
+            std::string vars = std::get<std::string>(xtup_vars_t);
             if (vars == "All" || vars == "all" || vars == "XtUP") {
                 // Default case where the function has same inputs and order as ODE
-                VectorXi XtUPvars;
+                VectorXi xtup_vars;
                 VectorXi OPvars;
                 VectorXi SPvars;
-                XtUPvars.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
+                xtup_vars.setLinSpaced(this->xtu_vars(), 0, this->xtu_vars() - 1);
                 if (this->p_vars() > 0) {
                     OPvars.setLinSpaced(this->p_vars(), 0, this->p_vars() - 1);
                 }
-                func = FuncHolder(fun, reg, XtUPvars, OPvars, SPvars, scale_t);
+                func = FuncHolder(fun, reg, xtup_vars, OPvars, SPvars, scale_t);
                 return func; // return early
             }
         }
 
-        VectorXi XtUPvars = this->get_xt_up_vars(reg, XtUPvars_t);
+        VectorXi xtup_vars = this->get_xt_up_vars(reg, xtup_vars_t);
         VectorXi OPvars;
         VectorXi SPvars;
         /////////////////////////////////////////////////
         if (reg != PhaseRegionFlags::ODEParams && reg != PhaseRegionFlags::StaticParams) {
-            // If region is Params then the indices are held in XtUPvars_t and the others are emtpy
+            // If region is Params then the indices are held in xtup_vars_t and the others are emtpy
             OPvars = this->get_op_vars(reg, OPvars_t);
             SPvars = this->get_sp_vars(reg, SPvars_t);
-            func = FuncHolder(fun, reg, XtUPvars, OPvars, SPvars, scale_t);
+            func = FuncHolder(fun, reg, xtup_vars, OPvars, SPvars, scale_t);
 
         } else {
-            func = FuncHolder(fun, reg, XtUPvars, scale_t);
+            func = FuncHolder(fun, reg, xtup_vars, scale_t);
         }
 
         return func;
@@ -501,21 +501,21 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
-    int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType xtup_vars_t,
                       VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
+        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, xtup_vars_t,
                                                                       OPvars_t, SPvars_t, scale_t);
         return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
-    int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_equal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType xtup_vars_t,
                       ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
-                                                                      empty, scale_t);
+        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, xtup_vars_t,
+                                                                      empty, empty, scale_t);
         return add_func_impl(con, this->user_equalities_, "Equality Constraint");
     }
 
@@ -535,21 +535,21 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     int add_inequal_con(StateConstraint con) {
         return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
-    int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType xtup_vars_t,
                         VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t,
+        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, xtup_vars_t,
                                                                       OPvars_t, SPvars_t, scale_t);
         return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
 
-    int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_inequal_con(RegionType reg_t, VectorFunctionalX fun, VarIndexType xtup_vars_t,
                         ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, XtUPvars_t, empty,
-                                                                      empty, scale_t);
+        auto con = make_func_impl<StateConstraint, VectorFunctionalX>(reg_t, fun, xtup_vars_t,
+                                                                      empty, empty, scale_t);
         return add_func_impl(con, this->user_inequalities_, "Inequality Constraint");
     }
 
@@ -572,87 +572,87 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
                             ScaleType scale_t);
 
-    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                           VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
                           double upperbound, double lbscale, double ubscale, ScaleType scale_t);
 
-    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                           double lowerbound, double upperbound, double lbscale, double ubscale,
                           ScaleType scale_t) {
 
         VectorXi empty;
 
-        return add_lu_func_bound(reg, func, XtUPvars, empty, empty, lowerbound, upperbound, lbscale,
-                                 ubscale, scale_t);
+        return add_lu_func_bound(reg, func, xtup_vars, empty, empty, lowerbound, upperbound,
+                                 lbscale, ubscale, scale_t);
     }
 
-    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                           VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
                           double upperbound, double scale, ScaleType scale_t) {
-        return add_lu_func_bound(reg, func, XtUPvars, OPvars, SPvars, lowerbound, upperbound, scale,
-                                 scale, scale_t);
+        return add_lu_func_bound(reg, func, xtup_vars, OPvars, SPvars, lowerbound, upperbound,
+                                 scale, scale, scale_t);
     }
 
-    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lu_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                           double lowerbound, double upperbound, double scale, ScaleType scale_t) {
         VectorXi empty;
-        return add_lu_func_bound(reg, func, XtUPvars, empty, empty, lowerbound, upperbound, scale,
+        return add_lu_func_bound(reg, func, xtup_vars, empty, empty, lowerbound, upperbound, scale,
                                  scale, scale_t);
     }
 
-    int add_lower_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lower_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                              VarIndexType OPvars, VarIndexType SPvars, double lowerbound,
                              double lbscale, ScaleType scale_t);
 
-    int add_lower_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_lower_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                              double lowerbound, double lbscale, ScaleType scale_t) {
         VectorXi empty;
 
-        return this->add_lower_func_bound(reg, func, XtUPvars, empty, empty, lowerbound, lbscale,
+        return this->add_lower_func_bound(reg, func, xtup_vars, empty, empty, lowerbound, lbscale,
                                           scale_t);
     }
 
-    int add_upper_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_upper_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                              VarIndexType OPvars, VarIndexType SPvars, double upperbound,
                              double ubscale, ScaleType scale_t);
 
-    int add_upper_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType XtUPvars,
+    int add_upper_func_bound(RegionType reg, ScalarFunctionalX func, VarIndexType xtup_vars,
                              double upperbound, double ubscale, ScaleType scale_t) {
         VectorXi empty;
 
-        return this->add_upper_func_bound(reg, func, XtUPvars, empty, empty, upperbound, ubscale,
+        return this->add_upper_func_bound(reg, func, xtup_vars, empty, empty, upperbound, ubscale,
                                           scale_t);
     }
 
-    int add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lu_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                           double upperbound, double lbscale, double ubscale, ScaleType scale_t);
 
-    int add_lu_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lu_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                           double upperbound, double scale, ScaleType scale_t) {
-        return this->add_lu_norm_bound(reg, XtUPvars, lowerbound, upperbound, scale, scale,
+        return this->add_lu_norm_bound(reg, xtup_vars, lowerbound, upperbound, scale, scale,
                                        scale_t);
     }
 
-    int add_lu_squared_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lu_squared_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                                   double upperbound, double lbscale, double ubscale,
                                   ScaleType scale_t);
 
-    int add_lu_squared_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lu_squared_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                                   double upperbound, double scale, ScaleType scale_t) {
-        return this->add_lu_squared_norm_bound(reg, XtUPvars, lowerbound, upperbound, scale, scale,
+        return this->add_lu_squared_norm_bound(reg, xtup_vars, lowerbound, upperbound, scale, scale,
                                                scale_t);
     }
 
-    int add_lower_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lower_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                              double lbscale, ScaleType scale_t);
 
-    int add_lower_squared_norm_bound(RegionType reg, VarIndexType XtUPvars, double lowerbound,
+    int add_lower_squared_norm_bound(RegionType reg, VarIndexType xtup_vars, double lowerbound,
                                      double lbscale, ScaleType scale_t);
 
-    int add_upper_norm_bound(RegionType reg, VarIndexType XtUPvars, double upperbound,
+    int add_upper_norm_bound(RegionType reg, VarIndexType xtup_vars, double upperbound,
                              double ubscale, ScaleType scale_t);
 
-    int add_upper_squared_norm_bound(RegionType reg, VarIndexType XtUPvars, double upperbound,
+    int add_upper_squared_norm_bound(RegionType reg, VarIndexType xtup_vars, double upperbound,
                                      double ubscale, ScaleType scale_t);
     //
     int add_lower_delta_var_bound(RegionType reg, VarIndexType var, double lowerbound,
@@ -711,20 +711,20 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     int add_state_objective(StateObjective obj) {
         return add_func_impl(obj, this->user_state_objectives_, "State Objective");
     }
-    int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType xtup_vars_t,
                             VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
-        auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t,
+        auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, xtup_vars_t,
                                                                      OPvars_t, SPvars_t, scale_t);
         return add_func_impl(con, this->user_state_objectives_, "State Objective");
     }
 
-    int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_state_objective(RegionType reg_t, ScalarFunctionalX fun, VarIndexType xtup_vars_t,
                             ScaleType scale_t) {
 
         VectorXi empty;
 
-        auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, XtUPvars_t, empty,
+        auto con = make_func_impl<StateObjective, ScalarFunctionalX>(reg_t, fun, xtup_vars_t, empty,
                                                                      empty, scale_t);
         return add_func_impl(con, this->user_state_objectives_, "State Objective");
     }
@@ -741,20 +741,20 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         return add_func_impl(obj, this->user_integrands_, "Integral Objective");
     }
 
-    int add_integral_objective(ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_integral_objective(ScalarFunctionalX fun, VarIndexType xtup_vars_t,
                                VarIndexType OPvars_t, VarIndexType SPvars_t, ScaleType scale_t) {
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
-            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+            PhaseRegionFlags::Path, fun, xtup_vars_t, OPvars_t, SPvars_t, scale_t);
         return add_func_impl(con, this->user_integrands_, "Integral Objective");
     }
 
-    int add_integral_objective(ScalarFunctionalX fun, VarIndexType XtUPvars_t, ScaleType scale_t) {
+    int add_integral_objective(ScalarFunctionalX fun, VarIndexType xtup_vars_t, ScaleType scale_t) {
 
         VectorXi empty;
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
-            PhaseRegionFlags::Path, fun, XtUPvars_t, empty, empty, scale_t);
+            PhaseRegionFlags::Path, fun, xtup_vars_t, empty, empty, scale_t);
         return add_func_impl(con, this->user_integrands_, "Integral Objective");
     }
 
@@ -767,7 +767,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         return index;
     }
 
-    int add_integral_param_function(ScalarFunctionalX fun, VarIndexType XtUPvars_t,
+    int add_integral_param_function(ScalarFunctionalX fun, VarIndexType xtup_vars_t,
                                     VarIndexType OPvars_t, VarIndexType SPvars_t, int accum_parm,
                                     ScaleType scale_t) {
 
@@ -775,16 +775,16 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         epv[0] = accum_parm;
 
         auto con = make_func_impl<StateObjective, ScalarFunctionalX>(
-            PhaseRegionFlags::Path, fun, XtUPvars_t, OPvars_t, SPvars_t, scale_t);
+            PhaseRegionFlags::Path, fun, xtup_vars_t, OPvars_t, SPvars_t, scale_t);
         int index = add_func_impl(con, this->user_param_integrands_, "Integral Parameter Function");
         this->user_param_integrands_[index].ext_vars_ = epv;
         return index;
     }
 
-    int add_integral_param_function(ScalarFunctionalX fun, VarIndexType XtUPvars_t, int accum_parm,
+    int add_integral_param_function(ScalarFunctionalX fun, VarIndexType xtup_vars_t, int accum_parm,
                                     ScaleType scale_t) {
         VectorXi empty;
-        return add_integral_param_function(fun, XtUPvars_t, empty, empty, accum_parm, scale_t);
+        return add_integral_param_function(fun, xtup_vars_t, empty, empty, accum_parm, scale_t);
     }
 
     /////////////////////////////////////////////////

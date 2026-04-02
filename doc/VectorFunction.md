@@ -286,9 +286,9 @@ You can override these `static const bool` flags to enable optimizations:
 | Flag                  | Default | Meaning                                                                                                     |
 | --------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
 | `is_vectorizable`     | `false` | Function supports SuperScalar evaluation (see [Section 7](#7-defaultsuperscalar-and-vectorized-evaluation)) |
-| `IsLinearFunction`    | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
-| `HasDiagonalJacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
-| `IsGenericFunction`   | `false` | Set only by `GenericFunction`                                                                               |
+| `is_linear_function`  | `false` | Jacobian is constant (independent of x). Hessian is identically zero.                                       |
+| `has_diagonal_jacobian` | `false` | Jacobian is diagonal (enables optimized products)                                                           |
+| `is_generic_function` | `false` | Set only by `GenericFunction`                                                                               |
 
 ### Minimal Example: A Power Function
 
@@ -687,7 +687,7 @@ Segment<8, 3, 2>:  R^8 --> R^3
                     x  |-->  [x[2], x[3], x[4]]
 ```
 
-Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `IsLinearFunction = true` and `is_vectorizable = true`.
+Its Jacobian is a selector matrix (1s on the diagonal in columns `[ST..ST+OR)`, zeros elsewhere). It is `is_linear_function = true` and `is_vectorizable = true`.
 
 `Arguments<IR>` is a special case: a Segment that passes the entire input through unchanged.
 
@@ -699,7 +699,7 @@ struct Arguments : Segment_Impl<Arguments<IR_OR>, IR_OR, IR_OR, 0> { ... };
 
 #### `Constant<IR, OR>` and `ConstantScalar<IR>`
 
-Returns a fixed vector regardless of input. `IsLinearFunction = true`, Jacobian is all zeros.
+Returns a fixed vector regardless of input. `is_linear_function = true`, Jacobian is all zeros.
 
 #### `Scaled<Func>`, `RowScaled<Func>`, `StaticScaled<Func, Value>`
 
@@ -1022,7 +1022,7 @@ Args = vf.Arguments
 args = Args(n)          # n-dimensional input
 
 # ODE-specific input variable (separates state, control, parameters)
-ode_args = oc.ODEArguments(XVars=3, UVars=1, PVars=0)
+ode_args = oc.ODEArguments(3, 1, 0)
 ```
 
 ### Indexing and Slicing

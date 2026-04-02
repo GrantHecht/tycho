@@ -146,7 +146,7 @@ void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL,
         iter.all_con_norm_err_ = this->get_all_cons(RHS).norm();
 }
 
-void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale_,
+void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       ConstEigenRef<VectorXd> XSL, double &val,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
@@ -154,14 +154,14 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale_,
 
     switch (algmode) {
     case AlgorithmModes::OPT:
-        eval_kkt(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_kkt(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::OPTNO:
-        eval_kkt_no(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_kkt_no(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
 
         break;
     case AlgorithmModes::INIT:
-        eval_aug(obj_scale_, XSL, val, GX, AGXS_FX, KKTmat);
+        eval_aug(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::SOE:
         this->nlp->set_primal_diags(1.0);
@@ -498,7 +498,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
-                                                 LineSearchModes lsmode, double obj_scale_,
+                                                 LineSearchModes lsmode, double obj_scale,
                                                  double MuI, Eigen::Ref<Eigen::VectorXd> xsl) {
     Eigen::VectorXd XSL = xsl;
     Eigen::VectorXd RHS(this->kkt_dim_);
@@ -550,7 +550,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Funtimer.start();
         /////////////////////////////////////////////////////////////
 
-        this->eval_nlp(algmode, obj_scale_, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
+        this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
 
         if (this->inequal_cons_ > 0) {
             this->apply_reset_slacks(this->get_slacks(XSL), this->get_iq_cons(RHS));
@@ -564,7 +564,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Funtimer.stop();
         if (this->early_callback_enabled_) {
             CBtimer.start();
-            this->early_callback_(i, obj_scale_, XSL, prim_obj, PGX, RHS,
+            this->early_callback_(i, obj_scale, XSL, prim_obj, PGX, RHS,
                                   this->kkt_sol_.get_matrix());
             CBtimer.stop();
         }
@@ -643,8 +643,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
-            alpha = ls_impl(lsmode, obj_scale_ * lsobjscale, mu, prim_obj, barr_obj, XSL, DXSL,
-                            Temp, RHS, RHS2, Citer, iters);
+            alpha = ls_impl(lsmode, obj_scale * lsobjscale, mu, prim_obj, barr_obj, XSL, DXSL, Temp,
+                            RHS, RHS2, Citer, iters);
 
         } else {
             Citer.h_facs_ = -1;
@@ -724,7 +724,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     } else {
         Funtimer.start();
         this->last_obj_val_ = 0;
-        this->nlp->eval_obj(obj_scale_, XSL.head(this->primal_vars_), this->last_obj_val_);
+        this->nlp->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->last_obj_val_);
         Funtimer.stop();
     }
 
@@ -837,7 +837,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
-double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale_, double mu,
+double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
                                        double prim_obj, double barr_obj, EigenRef<VectorXd> XSL,
                                        EigenRef<VectorXd> DXSL, EigenRef<VectorXd> XSL2,
                                        EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
@@ -856,7 +856,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale_
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->eval_rhs(obj_scale_, XSL2, ptest, RHS2, RHS2);
+            this->eval_rhs(obj_scale, XSL2, ptest, RHS2, RHS2);
             this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
             btest = this->barrier_objective(this->get_slacks(XSL2), mu);
             this->barrier_gradient(this->get_slacks(XSL2), this->get_iq_lmults(XSL2), mu,
@@ -891,7 +891,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale_
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
             this->nlp->eval_occ(
-                obj_scale_, XSL2.head(this->primal_vars_), ptest,
+                obj_scale, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
 
@@ -938,7 +938,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale_
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
             this->nlp->eval_occ(
-                obj_scale_, XSL2.head(this->primal_vars_), ptest,
+                obj_scale, XSL2.head(this->primal_vars_), ptest,
                 RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
                 RHS2.tail(this->inequal_cons_));
 
