@@ -90,6 +90,17 @@ struct ODE_DerivModeWrapper
         this->set_uvars(inner_.u_vars());
         this->set_pvars(inner_.p_vars());
         this->set_io_rows(inner_.input_rows(), inner_.output_rows());
+        // Re-initialize FD step-size vectors now that IO rows are known.
+        // The FD base constructor ran before set_io_rows, so for dynamic-size
+        // inner ODEs (IRC == -1) the step vectors were initialized to length 0.
+        if constexpr (Jm == DenseDerivativeMode::FDiffFwd ||
+                      Jm == DenseDerivativeMode::FDiffCentArray) {
+            this->set_jac_fd_steps(1.0e-7);
+        }
+        if constexpr (Hm == DenseDerivativeMode::FDiffFwd ||
+                      Hm == DenseDerivativeMode::FDiffCentArray) {
+            this->set_hess_fd_steps(1.0e-7);
+        }
     }
 
     template <class InType, class OutType>
