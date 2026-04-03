@@ -140,6 +140,17 @@ struct BrachistochroneFD_Impl : ODESize<3, 1, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION_FD(BrachistochroneFD, BrachistochroneFD_Impl, double);
 
+// Option B — Forward-AD variant
+struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
+    static auto Definition(double g) {
+        auto args = Arguments<5>();
+        auto v = args[XVar<2>];
+        auto theta = args[XVar<4>];
+        return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta)};
+    }
+};
+BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, double);
+
 } // namespace OptionB
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -242,6 +253,51 @@ TEST_F(VFCompositionTest, OptionB_FD_JacobianMatchesAnalytic) {
         for (int j = 0; j < 5; ++j)
             EXPECT_NEAR(jx_a(i, j), jx_fd(i, j), 1e-6)
                 << "Jacobian mismatch at (" << i << "," << j << ")";
+}
+
+TEST_F(VFCompositionTest, OptionB_FWAD_ComputeMatchesAnalytic) {
+    OptionB::Brachistochrone analytic(9.81);
+    OptionB::BrachistochroneFWAD fwad(9.81);
+
+    EXPECT_EQ(fwad.input_rows(), 5);
+    EXPECT_EQ(fwad.output_rows(), 3);
+
+    Eigen::VectorXd x(5);
+    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
+    Eigen::VectorXd fx_a(3), fx_fwad(3);
+    fx_a.setZero();
+    fx_fwad.setZero();
+    analytic.compute(x, fx_a);
+    fwad.compute(x, fx_fwad);
+
+    for (int i = 0; i < 3; ++i)
+        EXPECT_NEAR(fx_a[i], fx_fwad[i], 1e-14);
+}
+
+TEST_F(VFCompositionTest, OptionB_FWAD_JacobianMatchesAnalytic) {
+    OptionB::Brachistochrone analytic(9.81);
+    OptionB::BrachistochroneFWAD fwad(9.81);
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+
+    Eigen::VectorXd fx_a(3);
+    Eigen::MatrixXd jx_a(3, 5);
+    fx_a.setZero();
+    jx_a.setZero();
+    analytic.compute_jacobian(x, fx_a, jx_a);
+
+    Eigen::VectorXd fx_fwad(3);
+    Eigen::MatrixXd jx_fwad(3, 5);
+    fx_fwad.setZero();
+    jx_fwad.setZero();
+    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
+
+    // Forward-AD should be more accurate than FD
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 5; ++j)
+            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-10)
+                << "FWAD Jacobian mismatch at (" << i << "," << j << ")";
 }
 
 ///////////////////////////////////////////////////////////////////////////////

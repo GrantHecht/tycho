@@ -25,7 +25,7 @@ TEST_F(CommonFunctionsTest, DoubleScaleCollapse_ScaledTimesDouble) {
     auto twice = once * 2.0;
 
     // Type check: twice should be Scaled<Segment<...>>, NOT Scaled<Scaled<Segment<...>>>
-    static_assert(!std::is_same_v<decltype(twice), decltype(2.0 * once)> == false,
+    static_assert(std::is_same_v<decltype(twice), decltype(2.0 * once)>,
                   "double * Scaled and Scaled * double should produce the same type");
 
     Eigen::VectorXd input(3);
@@ -103,4 +103,84 @@ TEST_F(CommonFunctionsTest, ScaledNesting_FDCrossCheck) {
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 3.0;
     verify_jacobian_fd(scaled, x);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// RowScaled nesting — verify collapse when chaining vector scales
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CommonFunctionsTest, RowScaledTimesDouble) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto row_scaled = args * sv; // RowScaled<Arguments<3>>
+    auto chained = row_scaled * 5.0; // should collapse to RowScaled with combined scale
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 1.0, 1.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    chained.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 10.0); // 2 * 5
+    EXPECT_DOUBLE_EQ(fx[1], 15.0); // 3 * 5
+    EXPECT_DOUBLE_EQ(fx[2], 20.0); // 4 * 5
+}
+
+TEST_F(CommonFunctionsTest, DoubleTimesRowScaled) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto row_scaled = args * sv;
+    auto chained = 5.0 * row_scaled;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 1.0, 1.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    chained.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 10.0);
+    EXPECT_DOUBLE_EQ(fx[1], 15.0);
+    EXPECT_DOUBLE_EQ(fx[2], 20.0);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledTimesVector) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv1(2.0, 3.0, 4.0);
+    Eigen::Vector3d sv2(10.0, 20.0, 30.0);
+    auto row_scaled = args * sv1;
+    auto chained = row_scaled * sv2; // cwiseProduct of scales
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 1.0, 1.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    chained.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 20.0);  // 2 * 10
+    EXPECT_DOUBLE_EQ(fx[1], 60.0);  // 3 * 20
+    EXPECT_DOUBLE_EQ(fx[2], 120.0); // 4 * 30
+}
+
+TEST_F(CommonFunctionsTest, VectorTimesRowScaled) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv1(2.0, 3.0, 4.0);
+    Eigen::Vector3d sv2(10.0, 20.0, 30.0);
+    auto row_scaled = args * sv1;
+    auto chained = sv2 * row_scaled;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 1.0, 1.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    chained.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 20.0);
+    EXPECT_DOUBLE_EQ(fx[1], 60.0);
+    EXPECT_DOUBLE_EQ(fx[2], 120.0);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto chained = 5.0 * (args * sv);
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 3.0;
+    verify_jacobian_fd(chained, x);
 }

@@ -18,6 +18,7 @@ namespace tycho::vf {
 
 // Raw index tag — maps directly to coeff<I>() on any Arguments<N>.
 template <int I> struct VarTag {
+    static_assert(I >= 0, "Variable index must be non-negative");
     static constexpr int index = I;
 };
 

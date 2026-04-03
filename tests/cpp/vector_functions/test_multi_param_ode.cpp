@@ -118,3 +118,44 @@ TEST_F(VFCompositionTest, MultiParamODE_TwoParam_Integrator) {
     EXPECT_EQ(integ.input_rows(), 6);
     EXPECT_EQ(integ.output_rows(), 5);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Zero-parameter ODE — exercises __VA_OPT__ fix
+///////////////////////////////////////////////////////////////////////////////
+
+struct SHO_ZeroParam_Impl : ODESize<2, 0, 0> {
+    static auto Definition() {
+        auto args = Arguments<3>(); // [x, v, t]
+        auto x = args.coeff<0>();
+        auto v = args.coeff<1>();
+        return StackedOutputs{v, -1.0 * x}; // xdot = v, vdot = -x
+    }
+};
+BUILD_ODE_FROM_EXPRESSION(SHO_ZeroParam, SHO_ZeroParam_Impl);
+
+TEST_F(VFCompositionTest, ZeroParamODE_Constructs) {
+    SHO_ZeroParam ode;
+    EXPECT_EQ(ode.input_rows(), 3);
+    EXPECT_EQ(ode.output_rows(), 2);
+    EXPECT_EQ(ode.x_vars(), 2);
+    EXPECT_EQ(ode.u_vars(), 0);
+    EXPECT_EQ(ode.p_vars(), 0);
+}
+
+TEST_F(VFCompositionTest, ZeroParamODE_Compute) {
+    SHO_ZeroParam ode;
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 0.0; // [x=1, v=2, t=0]
+    Eigen::VectorXd fx(2);
+    fx.setZero();
+    ode.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 2.0);  // xdot = v = 2
+    EXPECT_DOUBLE_EQ(fx[1], -1.0); // vdot = -x = -1
+}
+
+TEST_F(VFCompositionTest, ZeroParamODE_AdjointConsistency) {
+    SHO_ZeroParam ode;
+    Eigen::VectorXd x = deterministic_random_vector(3, 500, 0.1, 5.0);
+    Eigen::VectorXd lm = deterministic_random_vector(2, 501, -1.0, 1.0);
+    verify_adjoint_consistency(ode, x, lm, 1e-11);
+}

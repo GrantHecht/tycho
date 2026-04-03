@@ -84,7 +84,7 @@ struct ODE_DerivModeWrapper
 
     InnerODE inner_;
 
-    template <class... Args>
+    template <class... Args, std::enable_if_t<std::is_constructible_v<InnerODE, Args...>, int> = 0>
     ODE_DerivModeWrapper(Args &&...args) : inner_(std::forward<Args>(args)...) {
         this->set_xvars(inner_.x_vars());
         this->set_uvars(inner_.u_vars());
