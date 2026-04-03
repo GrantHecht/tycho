@@ -30,6 +30,31 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
     }
     ODEArguments(int Xv, int Uv) : ODEArguments(Xv, Uv, 0) {}
     ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
+
+    // Default constructor for compile-time-sized ODEArguments (XV, UV, PV all >= 0).
+    ODEArguments()
+        requires(_XV >= 0 && _UV >= 0 && _PV >= 0)
+        : ODEArguments(_XV, _UV, _PV) {}
+
+    // Offset-aware access via semantic variable tags.
+    // XVar<I> → index I          (states start at 0)
+    // UVar<I> → index XV + 1 + I (controls after states + time)
+    // PVar<I> → index XV + 1 + UV + I (params after controls)
+
+    template <int I> decltype(auto) operator[](vf::XVarTag<I>) const {
+        static_assert(_XV >= 0 && I < _XV, "XVar index out of range for this ODE sizing");
+        return this->template coeff<I>();
+    }
+
+    template <int I> decltype(auto) operator[](vf::UVarTag<I>) const {
+        static_assert(_UV >= 0 && I < _UV, "UVar index out of range for this ODE sizing");
+        return this->template coeff<_XV + 1 + I>();
+    }
+
+    template <int I> decltype(auto) operator[](vf::PVarTag<I>) const {
+        static_assert(_PV >= 0 && I < _PV, "PVar index out of range for this ODE sizing");
+        return this->template coeff<_XV + 1 + _UV + I>();
+    }
 };
 
 } // namespace tycho::oc

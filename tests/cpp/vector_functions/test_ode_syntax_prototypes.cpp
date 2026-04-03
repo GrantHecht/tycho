@@ -48,12 +48,10 @@ template <class Derived, int XV, int UV, int PV> struct StaticODE_Impl : ODESize
 namespace OptionA {
 
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
-    double g;
-
     static auto Definition(double g_) {
-        auto args = Arguments<5>();
+        auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
-        auto theta = args[XVar<4>];
+        auto theta = args[UVar<0>]; // offset-aware: resolves to index 4
         return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0), g_ * cos(theta)};
     }
 };
@@ -62,9 +60,9 @@ BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 // Option A — multi-parameter variant (drag brachistochrone)
 struct DragBrach_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g, double drag) {
-        auto args = Arguments<5>();
+        auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
-        auto theta = args[XVar<4>];
+        auto theta = args[UVar<0>];
         return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0),
                               g * cos(theta) - drag * v};
     }

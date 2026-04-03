@@ -165,7 +165,9 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                               this->derived());
     }
 
-    template <int I> decltype(auto) operator[](VarTag<I>) const { return this->template coeff<I>(); }
+    template <int I> decltype(auto) operator[](XVarTag<I>) const {
+        return this->template coeff<I>();
+    }
 
     template <int EL1, int... ELS> decltype(auto) elements() const {
         return FWDOP<Elements<OR, EL1, ELS...>>::make_nested(
