@@ -24,28 +24,19 @@ endif()
 include(GoogleTest)
 
 #-------------------------------------------------------------------------------
-# Test PCH: pre-parse Tycho.h (the full aggregate header) so that each test TU
-# doesn't independently re-instantiate the entire template library.  Without
-# this, every test that includes Tycho.h re-parses ODEPhase.h,
-# DenseFunctionBase.h, all solvers, integrators, etc. — the dominant build cost.
+# Test sources — split into two executables by memory weight.
 #
-# Uses the same COMPILE_FLAGS as production code so tests are compiled under
-# identical optimizations.
+# tycho_tests_light: utility and leaf-header tests that do NOT include the
+#   full tycho/tycho.h umbrella.  Compiled WITHOUT a precompiled header so
+#   each TU only parses what it actually needs (~200 MB per TU instead of
+#   the ~6 GB PCH baseline).
+#
+# tycho_tests: VF, OC, integrator, astro, and solver tests that include
+#   tycho/tycho.h (directly or via test_utils.h).  Also compiled without
+#   a PCH — measurements show that per-TU RSS drops ~30% for most of
+#   these tests when the full-library PCH is not force-loaded.
 #-------------------------------------------------------------------------------
-add_library(pch_tests STATIC ${PROJECT_SOURCE_DIR}/src/pch.cpp)
-target_include_directories(pch_tests PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
-target_compile_options(pch_tests PRIVATE ${COMPILE_FLAGS})
-target_precompile_headers(pch_tests PRIVATE
-    ${PROJECT_SOURCE_DIR}/src/pch.h
-    ${PROJECT_SOURCE_DIR}/src/tycho_internal.h
-)
-
-#-------------------------------------------------------------------------------
-# Single test executable with all TUs — 42 small source files compile in
-# parallel with low per-TU RAM, but only one link step (linking is ~5GB).
-#-------------------------------------------------------------------------------
-set(TYCHO_TEST_SOURCES
-    # Utils
+set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_timer.cpp
     utils/test_math_functions.cpp
     utils/test_sizing_helpers.cpp
@@ -54,10 +45,15 @@ set(TYCHO_TEST_SOURCES
     utils/test_misc_utils.cpp
     utils/test_flat_map.cpp
     utils/test_type_storage.cpp
-    utils/test_thread_pool.cpp
     utils/test_tuple_iterator.cpp
-    utils/test_memory_management.cpp
     utils/test_var_registry.cpp
+    optimal_control/test_ode_sizes.cpp
+)
+
+set(TYCHO_TEST_HEAVY_SOURCES
+    # Utils (include test_utils.h -> tycho/tycho.h)
+    utils/test_thread_pool.cpp
+    utils/test_memory_management.cpp
 
     # VectorFunctions
     vector_functions/test_args_segment.cpp
@@ -97,7 +93,6 @@ set(TYCHO_TEST_SOURCES
     optimal_control/test_ocp_multiphase.cpp
     optimal_control/test_lgl_collocation.cpp
     optimal_control/test_mesh_refinement.cpp
-    optimal_control/test_ode_sizes.cpp
     optimal_control/test_runtime_ode.cpp
     optimal_control/test_ode_builder.cpp
     optimal_control/test_phase_wrapper.cpp
@@ -111,12 +106,29 @@ set(TYCHO_TEST_SOURCES
     solvers/test_nlp_structure.cpp
 )
 
-add_executable(tycho_tests ${TYCHO_TEST_SOURCES})
-# Match PIC mode with pch_tests (static lib gets -fPIC, executable gets -fPIE
-# by default — clang 20+ rejects the AST mismatch in reused PCH).
-set_target_properties(tycho_tests PROPERTIES POSITION_INDEPENDENT_CODE OFF)
-target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS}
-    $<$<NOT:$<PLATFORM_ID:Windows>>:-fPIC>)
+#-------------------------------------------------------------------------------
+# Light test executable — no PCH, ~200 MB per TU
+#-------------------------------------------------------------------------------
+add_executable(tycho_tests_light ${TYCHO_TEST_LIGHT_SOURCES})
+target_compile_options(tycho_tests_light PRIVATE ${COMPILE_FLAGS})
+target_include_directories(tycho_tests_light PRIVATE
+    ${INCLUDE_DIRS}
+    ${TYCHO_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
+)
+target_link_libraries(tycho_tests_light PRIVATE tycho GTest::gtest_main)
+if(UNIX)
+    target_link_options(tycho_tests_light PRIVATE ${LINKER_FLAGS})
+endif()
+gtest_discover_tests(tycho_tests_light)
+
+#-------------------------------------------------------------------------------
+# Heavy test executable — no PCH, ~4-7 GB per TU (still better than the
+# ~6 GB uniform cost when a full-library PCH was force-loaded on every TU)
+#-------------------------------------------------------------------------------
+add_executable(tycho_tests ${TYCHO_TEST_HEAVY_SOURCES})
+target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
 target_include_directories(tycho_tests PRIVATE
     ${INCLUDE_DIRS}
     ${TYCHO_INCLUDES}
@@ -128,7 +140,7 @@ target_include_directories(tycho_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
 target_link_libraries(tycho_tests PRIVATE tycho GTest::gtest_main)
-target_precompile_headers(tycho_tests REUSE_FROM pch_tests)
+set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 if(UNIX)
     target_link_options(tycho_tests PRIVATE ${LINKER_FLAGS})
 endif()

@@ -128,9 +128,31 @@ preset for your platform** — do not configure manually.
 
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
-| macOS (Apple Si) | `macos-llvm-release`    | `-j2`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
-| Windows x64      | `x64-Clang-Release`     | `-j6`             |
+| macOS (Apple Si) | `macos-llvm-release`    | `-j4`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
+| Windows x64      | `x64-Clang-Release`     | `-j8`             |
+
+**Note:** The `-j` values above are upper bounds — use lower values on
+RAM-constrained systems. On 32 GB, `-j4` is safe; on 16 GB, use `-j2`.
+
+**Build memory and ninja job pools:** Many binding, test, benchmark, and example
+TUs consume 3-8 GB RAM each due to heavy template instantiation. A ninja job
+pool named `heavy_compile` limits concurrent compilation of these TUs so they
+cannot OOM the system. The pool depth is **auto-detected** from system RAM
+(1 slot per 12 GB, minimum 1) and can be overridden:
+
+```bash
+cmake --preset <preset> -DTYCHO_HEAVY_COMPILE_JOBS=3   # e.g. for a 48 GB machine
+```
+
+Light TUs (~200 MB - 1 GB) run at the full `-j` level. This means you can
+safely use higher `-j` values — ninja automatically throttles the heavy TUs
+while keeping light TUs parallel.
+
+```bash
+cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
+                               # use -j4 on 32 GB systems
+```
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
@@ -152,7 +174,7 @@ pip install numpy scipy matplotlib spiceypy
 ```bash
 mkdir build && conda activate tycho
 cmake --preset macos-llvm-release
-cd build && ninja -j2 all
+cd build && ninja -j4 all
 ```
 
 ### Linux / WSL2 (Ubuntu)
@@ -173,7 +195,7 @@ source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
 ```bash
 mkdir build && conda activate tycho
 cmake --preset linux-clang-release
-cd build && ninja -j6 all
+cd build && ninja -j8 all
 ```
 
 ### Windows x64
@@ -184,7 +206,7 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 ### Subsequent builds (all platforms)
 
 ```bash
-cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
+cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
 ```
 
 ### Key CMake variables
@@ -199,6 +221,7 @@ cd build && ninja -j<N> all    # N = 2 on macOS, 6 on Linux/Windows
 | `BUILD_CPP_TESTS`             | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
+| `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 12 GB RAM). Override for your system.  |
 
 ## Code Style
 
@@ -291,7 +314,7 @@ Changes in the following areas require explicit human review before merging:
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_TESTS=ON   # one-time reconfigure
-cd build && ninja -j<N> tycho_tests
+cd build && ninja -j<N> tycho_tests tycho_tests_light
 ctest --output-on-failure
 ```
 
@@ -342,7 +365,7 @@ or justify benchmark regressions in the same PR.
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
-cd build && ninja -j2 bench_all                      # -j2 required for benchmark builds
+cd build && ninja -j8 bench_all                      # heavy_compile pool limits to 2 concurrent
 ./bench/cpp/bench_all
 
 bench/bench_track.sh baseline   # record baseline

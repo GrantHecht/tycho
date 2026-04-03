@@ -23,6 +23,7 @@ using namespace tycho::astro;
 using namespace tycho::integrators;
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
 void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
+void BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m);
 void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
 void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
@@ -31,6 +32,7 @@ void tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     auto mod = m.def_submodule("Astro");
 
     BuildKeplerMod(reg, mod);
+    BuildKeplerIntegrator(reg, mod);
     KeplerUtilsBuild(reg, mod);
     LambertSolversBuild(reg, mod);
 

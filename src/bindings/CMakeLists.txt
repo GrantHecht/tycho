@@ -24,8 +24,32 @@ target_include_directories(pch_bindings PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_
 target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
-nanobind_add_module(_tychopy
+#-------------------------------------------------------------------------------
+# Heavy binding TUs (>2.5 GB RSS) — compiled in the heavy_compile ninja pool
+# so at most 2 run concurrently, preventing OOM on 32 GB systems.
+#-------------------------------------------------------------------------------
+add_library(_tychopy_heavy OBJECT
     tycho_module.cpp
+    optimal_control/generic_odes_build_part3.cpp
+    optimal_control/generic_odes_build_part4.cpp
+    optimal_control/generic_odes_build_part5.cpp
+    optimal_control/generic_odes_build_part6.cpp
+    astro/tycho_astro.cpp
+    astro/kepler_utils.cpp
+    astro/kepler_model.cpp
+    astro/kepler_integrator.cpp
+)
+target_compile_options(_tychopy_heavy PRIVATE ${BINDING_COMPILE_FLAGS})
+target_compile_definitions(_tychopy_heavy PRIVATE TYCHO_PYTHON_BINDINGS)
+set_target_properties(_tychopy_heavy PROPERTIES DEFINE_SYMBOL "")
+target_include_directories(_tychopy_heavy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
+target_precompile_headers(_tychopy_heavy REUSE_FROM pch_bindings)
+set_property(TARGET _tychopy_heavy PROPERTY JOB_POOL_COMPILE heavy_compile)
+
+#-------------------------------------------------------------------------------
+# _tychopy nanobind module — light/medium binding TUs plus heavy objects.
+#-------------------------------------------------------------------------------
+nanobind_add_module(_tychopy
     # Utils bindings
     utils_bind.cpp
     bump_allocator_bind.cpp
@@ -46,10 +70,12 @@ nanobind_add_module(_tychopy
     optimal_control/tycho_optimal_control.cpp
     optimal_control/generic_odes_build_part1.cpp
     optimal_control/generic_odes_build_part2.cpp
-    optimal_control/generic_odes_build_part3.cpp
-    optimal_control/generic_odes_build_part4.cpp
-    optimal_control/generic_odes_build_part5.cpp
-    optimal_control/generic_odes_build_part6.cpp
+    optimal_control/generic_odes_integrator_part1.cpp
+    optimal_control/generic_odes_integrator_part2.cpp
+    optimal_control/generic_odes_integrator_part3.cpp
+    optimal_control/generic_odes_integrator_part4.cpp
+    optimal_control/generic_odes_integrator_part5.cpp
+    optimal_control/generic_odes_integrator_part6.cpp
     optimal_control/ode_phase_base_bind.cpp
     optimal_control/optimal_control_problem_bind.cpp
     optimal_control/lgl_interp_table_bind.cpp
@@ -61,9 +87,6 @@ nanobind_add_module(_tychopy
     solvers/optimization_problem_bind.cpp
     solvers/jet_bind.cpp
     # Astro bindings
-    astro/tycho_astro.cpp
-    astro/kepler_utils.cpp
-    astro/kepler_model.cpp
     astro/lambert_solvers_bind.cpp
     # Integrators bindings
     integrators/rk_coeffs_bind.cpp
@@ -75,6 +98,7 @@ target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
 set_target_properties(_tychopy PROPERTIES DEFINE_SYMBOL "")
 target_link_libraries(_tychopy PUBLIC tycho tycho_extensions_bindings)
+target_sources(_tychopy PRIVATE $<TARGET_OBJECTS:_tychopy_heavy>)
 target_include_directories(_tychopy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(_tychopy REUSE_FROM pch_bindings)
 
