@@ -38,6 +38,7 @@
 #include "tycho/detail/vf/core/expression_fwd_declarations.h"
 #include "tycho/detail/vf/core/function_domains.h"
 #include "tycho/detail/vf/core/function_type_def_macros.h"
+#include "tycho/detail/vf/core/var_tags.h"
 #include "tycho/detail/vf/operators/binary_math.h"
 
 namespace tycho::vf {
@@ -163,6 +164,8 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ELE),
                                               this->derived());
     }
+
+    template <int I> decltype(auto) operator[](VarTag<I>) const { return this->template coeff<I>(); }
 
     template <int EL1, int... ELS> decltype(auto) elements() const {
         return FWDOP<Elements<OR, EL1, ELS...>>::make_nested(

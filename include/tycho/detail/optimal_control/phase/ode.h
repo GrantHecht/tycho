@@ -63,8 +63,69 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
 };
 
 #define BUILD_ODE_FROM_EXPRESSION(NAME, IMPL, ...)                                                 \
-    struct NAME : ODE_Expression<NAME, IMPL, __VA_ARGS__> {                                        \
-        using Base = ODE_Expression<NAME, IMPL, __VA_ARGS__>;                                      \
+    struct NAME : ODE_Expression<NAME, IMPL __VA_OPT__(, ) __VA_ARGS__> {                          \
+        using Base = ODE_Expression<NAME, IMPL __VA_OPT__(, ) __VA_ARGS__>;                        \
+        using Base::Base;                                                                          \
+    };
+
+// Wraps an expression-based ODE with a different derivative mode.
+// The inner ODE is built from the expression tree (Analytic mode),
+// but compute_jacobian uses the specified mode (FD/forward-AD),
+// avoiding instantiation of the expression tree's Jacobian templates.
+template <class Derived, class InnerODE,
+          DenseDerivativeMode Jm = DenseDerivativeMode::FDiffFwd,
+          DenseDerivativeMode Hm = DenseDerivativeMode::FDiffFwd>
+struct ODE_DerivModeWrapper
+    : ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived, InnerODE::XV,
+              InnerODE::UV, InnerODE::PV> {
+    using Base = ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived,
+                         InnerODE::XV, InnerODE::UV, InnerODE::PV>;
+    DENSE_FUNCTION_BASE_TYPES(Base);
+
+    InnerODE inner_;
+
+    template <class... Args>
+    ODE_DerivModeWrapper(Args &&...args) : inner_(std::forward<Args>(args)...) {
+        this->set_xvars(inner_.x_vars());
+        this->set_uvars(inner_.u_vars());
+        this->set_pvars(inner_.p_vars());
+        this->set_io_rows(inner_.input_rows(), inner_.output_rows());
+    }
+
+    template <class InType, class OutType>
+    inline void compute_impl(ConstVectorBaseRef<InType> x,
+                             ConstVectorBaseRef<OutType> fx_) const {
+        inner_.compute(x, fx_);
+    }
+};
+
+#define BUILD_ODE_FROM_EXPRESSION_FD(NAME, IMPL, ...)                                              \
+    struct NAME##_AnalyticBase_                                                                     \
+        : ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__> {                  \
+        using Base = ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__>;        \
+        using Base::Base;                                                                          \
+    };                                                                                             \
+    struct NAME                                                                                    \
+        : ODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_, DenseDerivativeMode::FDiffFwd,          \
+                               DenseDerivativeMode::FDiffFwd> {                                    \
+        using Base = ODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                              \
+                                          DenseDerivativeMode::FDiffFwd,                           \
+                                          DenseDerivativeMode::FDiffFwd>;                          \
+        using Base::Base;                                                                          \
+    };
+
+#define BUILD_ODE_FROM_EXPRESSION_FWAD(NAME, IMPL, ...)                                            \
+    struct NAME##_AnalyticBase_                                                                     \
+        : ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__> {                  \
+        using Base = ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__>;        \
+        using Base::Base;                                                                          \
+    };                                                                                             \
+    struct NAME                                                                                    \
+        : ODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_, DenseDerivativeMode::AutodiffFwd,       \
+                               DenseDerivativeMode::AutodiffFwd> {                                 \
+        using Base = ODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                              \
+                                          DenseDerivativeMode::AutodiffFwd,                        \
+                                          DenseDerivativeMode::AutodiffFwd>;                       \
         using Base::Base;                                                                          \
     };
 

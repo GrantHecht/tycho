@@ -55,6 +55,10 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # VectorFunctions
     vector_functions/test_args_segment.cpp
     vector_functions/test_constant_scaled.cpp
+    vector_functions/test_scaled_nesting.cpp
+    vector_functions/test_multi_param_ode.cpp
+    vector_functions/test_var_tags.cpp
+    vector_functions/test_ode_syntax_prototypes.cpp
     vector_functions/test_sum_dot_cross.cpp
     vector_functions/test_norms.cpp
     vector_functions/test_normalized_stacked_padded.cpp
