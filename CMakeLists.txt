@@ -10,6 +10,33 @@ else()
 endif()
 
 set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
+
+################################################################################
+# Ninja job pool for memory-heavy translation units.
+# Many binding, test, example, and core library TUs consume 3-8 GB RAM each.  Limiting
+# concurrent heavy compiles prevents OOM while still allowing light TUs to
+# build in parallel at the full -j level.
+#
+# TYCHO_HEAVY_COMPILE_JOBS controls the pool depth (max concurrent heavy TUs).
+# Default: auto-detected from system RAM (1 per 12 GB, minimum 1).
+# Override: cmake -DTYCHO_HEAVY_COMPILE_JOBS=<N> ...
+################################################################################
+if(NOT DEFINED TYCHO_HEAVY_COMPILE_JOBS)
+    cmake_host_system_information(RESULT _TYCHO_TOTAL_RAM_MB QUERY TOTAL_PHYSICAL_MEMORY)
+    math(EXPR _TYCHO_POOL_DEPTH "${_TYCHO_TOTAL_RAM_MB} / 12288")
+    if(_TYCHO_POOL_DEPTH LESS 1)
+        set(_TYCHO_POOL_DEPTH 1)
+    endif()
+    set(TYCHO_HEAVY_COMPILE_JOBS ${_TYCHO_POOL_DEPTH} CACHE STRING
+        "Max concurrent compilations of memory-heavy TUs (auto: 1 per 12 GB RAM)")
+endif()
+if(TYCHO_HEAVY_COMPILE_JOBS LESS 1)
+    message(WARNING "TYCHO_HEAVY_COMPILE_JOBS=${TYCHO_HEAVY_COMPILE_JOBS} is invalid (must be >= 1), resetting to 1.")
+    set(TYCHO_HEAVY_COMPILE_JOBS 1 CACHE STRING
+        "Max concurrent compilations of memory-heavy TUs" FORCE)
+endif()
+message(STATUS "Heavy compile pool depth: ${TYCHO_HEAVY_COMPILE_JOBS} (override with -DTYCHO_HEAVY_COMPILE_JOBS=N)")
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS heavy_compile=${TYCHO_HEAVY_COMPILE_JOBS})
 ################################################################################
 ################## Includes ####################################################
 ################################################################################

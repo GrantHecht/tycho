@@ -2,7 +2,7 @@
 
 // Tycho — Astrodynamics models (Kepler, CR3BP, Lambert, etc.)
 
-#include "tycho/optimal_control.h"
+#include "tycho/vector_functions.h"
 
 #include "tycho/detail/astro/kepler_model.h"
 #include "tycho/detail/astro/kepler_propagator.h"

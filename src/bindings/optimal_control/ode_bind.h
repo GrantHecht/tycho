@@ -94,8 +94,6 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
         new (self) GenericFunction<-1, -1>(ode.func_);
     });
 
-    reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
-
     IntegratorBuildConstructors<Derived>(obj);
 
     ODESizeBuild<_XV, _UV, _PV, Derived>(obj);
@@ -106,6 +104,13 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
         auto shooter = CentralShootingDefect<Derived, Integrator<Derived>>(ode, integ);
         return GenericFunction<-1, -1>(shooter);
     });
+}
+
+template <class BaseType, int _XV, int _UV, int _PV>
+void BuildGenODEIntegrator(const char *name, nb::module_ &mod, FunctionRegistry &reg) {
+    using Derived = GenericODE<BaseType, _XV, _UV, _PV>;
+    auto odemod = nb::borrow<nb::module_>(mod.attr(name));
+    reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
 }
 
 } // namespace tycho::bind

@@ -18,8 +18,8 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Building tycho_tests and bench_all (-j6)..."
-& $cmake --build --preset x64-Clang-Release --parallel 6 --target tycho_tests --target bench_all 2>&1
+Write-Host "Building tycho_tests, tycho_tests_light, and bench_all (-j6)..."
+& $cmake --build --preset x64-Clang-Release --parallel 6 --target tycho_tests --target tycho_tests_light --target bench_all 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed (exit code $LASTEXITCODE)"

@@ -46,6 +46,7 @@ target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLU
 target_precompile_headers(optimalcontrol REUSE_FROM pch)
 target_link_libraries(optimalcontrol PRIVATE psiopt)
 target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
+set_property(TARGET optimalcontrol PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 
 

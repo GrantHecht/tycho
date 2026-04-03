@@ -29,6 +29,13 @@ void GenericODESBuildPart4(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart5(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart6(FunctionRegistry &reg, nb::module_ &m);
 
+void GenericODESIntegratorPart1(FunctionRegistry &reg, nb::module_ &m);
+void GenericODESIntegratorPart2(FunctionRegistry &reg, nb::module_ &m);
+void GenericODESIntegratorPart3(FunctionRegistry &reg, nb::module_ &m);
+void GenericODESIntegratorPart4(FunctionRegistry &reg, nb::module_ &m);
+void GenericODESIntegratorPart5(FunctionRegistry &reg, nb::module_ &m);
+void GenericODESIntegratorPart6(FunctionRegistry &reg, nb::module_ &m);
+
 void RKFlagsBuild(nb::module_ &m);
 
 static void OCPFlagsBuild(nb::module_ &m) {
@@ -122,6 +129,15 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     GenericODESBuildPart4(reg, oc);
     GenericODESBuildPart5(reg, oc);
     GenericODESBuildPart6(reg, oc);
+
+    // Integrator bindings — must be registered after the core ODE parts above
+    // so that the submodules already exist.
+    GenericODESIntegratorPart1(reg, oc);
+    GenericODESIntegratorPart2(reg, oc);
+    GenericODESIntegratorPart3(reg, oc);
+    GenericODESIntegratorPart4(reg, oc);
+    GenericODESIntegratorPart5(reg, oc);
+    GenericODESIntegratorPart6(reg, oc);
 }
 
 } // namespace tycho
