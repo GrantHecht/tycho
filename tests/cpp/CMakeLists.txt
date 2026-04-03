@@ -27,14 +27,11 @@ include(GoogleTest)
 # Test sources — split into two executables by memory weight.
 #
 # tycho_tests_light: utility and leaf-header tests that do NOT include the
-#   full tycho/tycho.h umbrella.  Compiled WITHOUT a precompiled header so
-#   each TU only parses what it actually needs (~200 MB per TU instead of
-#   the ~6 GB PCH baseline).
+#   full tycho/tycho.h umbrella (~200 MB per TU).
 #
 # tycho_tests: VF, OC, integrator, astro, and solver tests that include
-#   tycho/tycho.h (directly or via test_utils.h).  Also compiled without
-#   a PCH — measurements show that per-TU RSS drops ~30% for most of
-#   these tests when the full-library PCH is not force-loaded.
+#   tycho/tycho.h (directly or via test_utils.h).  Compiled without a PCH;
+#   typical per-TU RSS is 4-7 GB due to heavy template instantiation.
 #-------------------------------------------------------------------------------
 set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_timer.cpp

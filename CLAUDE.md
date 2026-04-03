@@ -18,8 +18,8 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously.
 
 As a rule of thumb:
-- macOS (Apple Silicon): ALWAYS use -j2 for builds
-- Linux / Windows: ALWAYS use -j6 for builds (-j2 when building benchmarks)
+- macOS (Apple Silicon): ALWAYS use -j4 for builds
+- Linux / Windows: ALWAYS use -j8 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -365,7 +365,7 @@ or justify benchmark regressions in the same PR.
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
-cd build && ninja -j8 bench_all                      # heavy_compile pool limits to 2 concurrent
+cd build && ninja -j8 bench_all                      # heavy_compile pool auto-limits concurrent heavy TUs
 ./bench/cpp/bench_all
 
 bench/bench_track.sh baseline   # record baseline

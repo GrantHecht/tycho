@@ -25,8 +25,8 @@ target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
 #-------------------------------------------------------------------------------
-# Heavy binding TUs (>2.5 GB RSS) — compiled in the heavy_compile ninja pool
-# so at most 2 run concurrently, preventing OOM on 32 GB systems.
+# Heavy binding TUs (>2.5 GB RSS) — compiled in the heavy_compile ninja pool,
+# limiting concurrency to prevent OOM.
 #-------------------------------------------------------------------------------
 add_library(_tychopy_heavy OBJECT
     tycho_module.cpp
@@ -40,6 +40,7 @@ add_library(_tychopy_heavy OBJECT
     astro/kepler_integrator.cpp
 )
 target_compile_options(_tychopy_heavy PRIVATE ${BINDING_COMPILE_FLAGS})
+target_link_libraries(_tychopy_heavy PRIVATE nanobind-static)
 target_compile_definitions(_tychopy_heavy PRIVATE TYCHO_PYTHON_BINDINGS)
 set_target_properties(_tychopy_heavy PROPERTIES DEFINE_SYMBOL "")
 target_include_directories(_tychopy_heavy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
