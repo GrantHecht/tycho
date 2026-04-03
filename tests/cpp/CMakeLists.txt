@@ -48,7 +48,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
-    # Utils (include test_utils.h -> tycho/tycho.h)
+    # Utils (include tycho/tycho.h)
     utils/test_thread_pool.cpp
     utils/test_memory_management.cpp
 
@@ -104,41 +104,42 @@ set(TYCHO_TEST_HEAVY_SOURCES
 )
 
 #-------------------------------------------------------------------------------
-# Light test executable — no PCH, ~200 MB per TU
+# Common configuration for both test executables.
 #-------------------------------------------------------------------------------
-add_executable(tycho_tests_light ${TYCHO_TEST_LIGHT_SOURCES})
-target_compile_options(tycho_tests_light PRIVATE ${COMPILE_FLAGS})
-target_include_directories(tycho_tests_light PRIVATE
+set(_TYCHO_TEST_COMMON_INCLUDES
     ${INCLUDE_DIRS}
     ${TYCHO_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
 )
-target_link_libraries(tycho_tests_light PRIVATE tycho GTest::gtest_main)
-if(UNIX)
-    target_link_options(tycho_tests_light PRIVATE ${LINKER_FLAGS})
-endif()
-gtest_discover_tests(tycho_tests_light)
+
+function(tycho_add_test_executable target sources)
+    add_executable(${target} ${${sources}})
+    target_compile_options(${target} PRIVATE ${COMPILE_FLAGS})
+    target_include_directories(${target} PRIVATE ${_TYCHO_TEST_COMMON_INCLUDES})
+    target_link_libraries(${target} PRIVATE tycho GTest::gtest_main)
+    if(UNIX)
+        target_link_options(${target} PRIVATE ${LINKER_FLAGS})
+    endif()
+    gtest_discover_tests(${target})
+endfunction()
 
 #-------------------------------------------------------------------------------
-# Heavy test executable — no PCH, ~4-7 GB per TU (still better than the
-# ~6 GB uniform cost when a full-library PCH was force-loaded on every TU)
+# Light test executable — no PCH, ~200 MB per TU
 #-------------------------------------------------------------------------------
-add_executable(tycho_tests ${TYCHO_TEST_HEAVY_SOURCES})
-target_compile_options(tycho_tests PRIVATE ${COMPILE_FLAGS})
+tycho_add_test_executable(tycho_tests_light TYCHO_TEST_LIGHT_SOURCES)
+target_include_directories(tycho_tests_light PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
+)
+
+#-------------------------------------------------------------------------------
+# Heavy test executable — no PCH, ~4-7 GB per TU due to heavy template instantiation
+#-------------------------------------------------------------------------------
+tycho_add_test_executable(tycho_tests TYCHO_TEST_HEAVY_SOURCES)
 target_include_directories(tycho_tests PRIVATE
-    ${INCLUDE_DIRS}
-    ${TYCHO_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}                 # for test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/astro           # for astro_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/integrators     # for integrator_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control # for oc_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/solvers         # for solver_test_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
-target_link_libraries(tycho_tests PRIVATE tycho GTest::gtest_main)
 set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
-if(UNIX)
-    target_link_options(tycho_tests PRIVATE ${LINKER_FLAGS})
-endif()
-gtest_discover_tests(tycho_tests)

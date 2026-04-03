@@ -48,7 +48,8 @@ target_precompile_headers(_tychopy_heavy REUSE_FROM pch_bindings)
 set_property(TARGET _tychopy_heavy PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 #-------------------------------------------------------------------------------
-# _tychopy nanobind module — light/medium binding TUs plus heavy objects.
+# _tychopy nanobind module — light/medium binding TUs only.
+# Heavy TUs are compiled separately in _tychopy_heavy and linked as object files below.
 #-------------------------------------------------------------------------------
 nanobind_add_module(_tychopy
     # Utils bindings

@@ -142,7 +142,7 @@ cannot OOM the system. The pool depth is **auto-detected** from system RAM
 (1 slot per 12 GB, minimum 1) and can be overridden:
 
 ```bash
-cmake --preset <preset> -DTYCHO_HEAVY_COMPILE_JOBS=3   # e.g. for a 48 GB machine
+cmake --preset <preset> -DTYCHO_HEAVY_COMPILE_JOBS=3   # e.g. for a 36 GB machine
 ```
 
 Light TUs (~200 MB - 1 GB) run at the full `-j` level. This means you can
