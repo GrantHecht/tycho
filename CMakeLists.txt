@@ -36,7 +36,12 @@ if(TYCHO_HEAVY_COMPILE_JOBS LESS 1)
         "Max concurrent compilations of memory-heavy TUs" FORCE)
 endif()
 message(STATUS "Heavy compile pool depth: ${TYCHO_HEAVY_COMPILE_JOBS} (override with -DTYCHO_HEAVY_COMPILE_JOBS=N)")
-set_property(GLOBAL PROPERTY JOB_POOLS heavy_compile=${TYCHO_HEAVY_COMPILE_JOBS})
+get_property(_TYCHO_EXISTING_POOLS GLOBAL PROPERTY JOB_POOLS)
+if(_TYCHO_EXISTING_POOLS)
+    set_property(GLOBAL PROPERTY JOB_POOLS ${_TYCHO_EXISTING_POOLS} heavy_compile=${TYCHO_HEAVY_COMPILE_JOBS})
+else()
+    set_property(GLOBAL PROPERTY JOB_POOLS heavy_compile=${TYCHO_HEAVY_COMPILE_JOBS})
+endif()
 ################################################################################
 ################## Includes ####################################################
 ################################################################################
