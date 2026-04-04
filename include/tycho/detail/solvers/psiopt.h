@@ -15,7 +15,6 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
-#include <compare>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -33,6 +32,7 @@
 
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/solvers/psiopt_fwd.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/get_core_count.h"
 
@@ -41,24 +41,6 @@
 #else
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
-
-namespace tycho {
-
-/// Optimizer convergence status — extracted to root namespace so that callers
-/// outside tycho::solvers can reference it without a full PSIOPT qualification.
-enum class ConvergenceFlags {
-    CONVERGED,
-    ACCEPTABLE,
-    NOTCONVERGED,
-    DIVERGING,
-};
-
-// Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
-constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
-    return static_cast<int>(a) <=> static_cast<int>(b);
-}
-
-} // namespace tycho
 
 namespace tycho::solvers {
 
