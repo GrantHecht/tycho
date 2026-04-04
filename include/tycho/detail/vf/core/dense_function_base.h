@@ -82,12 +82,14 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
             this->set_input_domain(inputrows, {dmn});
         }
     }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <class Func, int FuncIRC>
     auto operator()(const DenseFunctionBase<Func, FuncIRC, IR> &f) const {
         return EVALOP<Func>::make_nested(this->derived(), f.derived());
     }
+
     template <class Func, int FuncIRC, int FuncORC>
         requires Composable<Func, Derived>
     auto eval(const DenseFunctionBase<Func, FuncIRC, FuncORC> &f) const {
@@ -113,10 +115,12 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         return SEGMENTOP<SZ, -1>::make_nested(Segment<OR, SZ, -1>(this->output_rows(), SZ, start),
                                               this->derived());
     }
+
     template <int SZ> auto head() const {
         return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->output_rows(), SZ, 0),
                                              this->derived());
     }
+
     template <int SZ> auto head(int sz) const {
         return SEGMENTOP<SZ, 0>::make_nested(Segment<OR, SZ, 0>(this->output_rows(), sz, 0),
                                              this->derived());
@@ -133,6 +137,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                                                   this->output_rows() - SZ),
             this->derived());
     }
+    
     template <int SZ> decltype(auto) tail(int sz) const {
         return SEGMENTOP<SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>::make_nested(
             Segment<OR, SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>(this->output_rows(), sz,
@@ -150,6 +155,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ELE),
                                               this->derived());
     }
+
     template <int ELE> decltype(auto) coeff(int ele) const {
         return SEGMENTOP<1, ELE>::make_nested(Segment<OR, 1, ELE>(this->output_rows(), 1, ele),
                                               this->derived());
@@ -165,10 +171,6 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                               this->derived());
     }
 
-    // Note: XVar<I> tag access is intentionally NOT provided here.
-    // All X/U/P/T tags are ODEArguments-only — see ode_arguments.h.
-    // Use coeff<I>() or segment<SZ, ST>() for plain Arguments.
-
     template <int EL1, int... ELS> decltype(auto) elements() const {
         return FWDOP<Elements<OR, EL1, ELS...>>::make_nested(
             Elements<OR, EL1, ELS...>(this->output_rows()), this->derived());
@@ -178,6 +180,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         return FWDOP<Normalized<OR>>::make_nested(Normalized<OR>(this->output_rows()),
                                                   this->derived());
     }
+
     template <int PW> decltype(auto) normalized_power() const {
         return FWDOP<NormalizedPower<OR, PW>>::make_nested(
             NormalizedPower<OR, PW>(this->output_rows()), this->derived());
@@ -186,26 +189,32 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     decltype(auto) norm() const {
         return FWDOP<Norm<OR>>::make_nested(Norm<OR>(this->output_rows()), this->derived());
     }
+
     decltype(auto) squared_norm() const {
         return FWDOP<SquaredNorm<OR>>::make_nested(SquaredNorm<OR>(this->output_rows()),
                                                    this->derived());
     }
+
     decltype(auto) inverse_norm() const {
         return FWDOP<InverseNorm<OR>>::make_nested(InverseNorm<OR>(this->output_rows()),
                                                    this->derived());
     }
+
     decltype(auto) inverse_squared_norm() const {
         return FWDOP<InverseSquaredNorm<OR>>::make_nested(
             InverseSquaredNorm<OR>(this->output_rows()), this->derived());
     }
+
     template <int PW> decltype(auto) norm_power() const {
         return FWDOP<NormPower<OR, PW>>::make_nested(NormPower<OR, PW>(this->output_rows()),
                                                      this->derived());
     }
+
     template <int PW> decltype(auto) inverse_norm_power() const {
         return FWDOP<InverseNormPower<OR, PW>>::make_nested(
             InverseNormPower<OR, PW>(this->output_rows()), this->derived());
     }
+
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <int MRows, int MCols, int MMajor = Eigen::ColMajor>
@@ -216,6 +225,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     auto colmatrix(int rows, int cols) const {
         return MatrixFunctionView<Derived, -1, -1, Eigen::ColMajor>(this->derived(), rows, cols);
     }
+
     auto rowmatrix(int rows, int cols) const {
         return MatrixFunctionView<Derived, -1, -1, Eigen::RowMajor>(this->derived(), rows, cols);
     }
@@ -223,10 +233,12 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     template <int MRows, int MCols, int MMajor = Eigen::ColMajor> auto matrix() const {
         return MatrixFunctionView<Derived, MRows, MCols, MMajor>(this->derived(), MRows, MCols);
     }
+
     auto colvector() const {
         return MatrixFunctionView<Derived, OR, 1, Eigen::ColMajor>(this->derived(),
                                                                    this->output_rows(), 1);
     }
+
     auto rowvector() const {
         return MatrixFunctionView<Derived, 1, OR, Eigen::ColMajor>(this->derived(), 1,
                                                                    this->output_rows());
