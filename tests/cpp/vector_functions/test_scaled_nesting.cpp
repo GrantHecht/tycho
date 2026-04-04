@@ -20,6 +20,11 @@ template <class T> struct is_double_scaled : std::false_type {};
 template <class T>
 struct is_double_scaled<tycho::vf::Scaled<tycho::vf::Scaled<T>>> : std::true_type {};
 
+// Trait to detect double-wrapping: RowScaled<RowScaled<T>>
+template <class T> struct is_double_row_scaled : std::false_type {};
+template <class T>
+struct is_double_row_scaled<tycho::vf::RowScaled<tycho::vf::RowScaled<T>>> : std::true_type {};
+
 TEST_F(CommonFunctionsTest, DoubleScaleCollapse_ScaledTimesDouble) {
     auto args = Arguments<3>();
     auto x = args.coeff<0>();
@@ -125,6 +130,9 @@ TEST_F(CommonFunctionsTest, RowScaledTimesDouble) {
     auto row_scaled = args * sv; // RowScaled<Arguments<3>>
     auto chained = row_scaled * 5.0; // should collapse to RowScaled with combined scale
 
+    static_assert(!is_double_row_scaled<decltype(chained)>::value,
+                  "RowScaled nesting should be collapsed, not RowScaled<RowScaled<...>>");
+
     Eigen::VectorXd x(3);
     x << 1.0, 1.0, 1.0;
     Eigen::VectorXd fx(3);
@@ -140,6 +148,9 @@ TEST_F(CommonFunctionsTest, DoubleTimesRowScaled) {
     Eigen::Vector3d sv(2.0, 3.0, 4.0);
     auto row_scaled = args * sv;
     auto chained = 5.0 * row_scaled;
+
+    static_assert(!is_double_row_scaled<decltype(chained)>::value,
+                  "RowScaled nesting should be collapsed, not RowScaled<RowScaled<...>>");
 
     Eigen::VectorXd x(3);
     x << 1.0, 1.0, 1.0;
@@ -158,6 +169,9 @@ TEST_F(CommonFunctionsTest, RowScaledTimesVector) {
     auto row_scaled = args * sv1;
     auto chained = row_scaled * sv2; // cwiseProduct of scales
 
+    static_assert(!is_double_row_scaled<decltype(chained)>::value,
+                  "RowScaled nesting should be collapsed, not RowScaled<RowScaled<...>>");
+
     Eigen::VectorXd x(3);
     x << 1.0, 1.0, 1.0;
     Eigen::VectorXd fx(3);
@@ -175,6 +189,9 @@ TEST_F(CommonFunctionsTest, VectorTimesRowScaled) {
     auto row_scaled = args * sv1;
     auto chained = sv2 * row_scaled;
 
+    static_assert(!is_double_row_scaled<decltype(chained)>::value,
+                  "RowScaled nesting should be collapsed, not RowScaled<RowScaled<...>>");
+
     Eigen::VectorXd x(3);
     x << 1.0, 1.0, 1.0;
     Eigen::VectorXd fx(3);
@@ -190,6 +207,9 @@ TEST_F(CommonFunctionsTest, RowScaledDivisionCollapse) {
     Eigen::Vector3d sv(2.0, 3.0, 4.0);
     auto row_scaled = args * sv;
     auto divided = row_scaled / 2.0;
+
+    static_assert(!is_double_row_scaled<decltype(divided)>::value,
+                  "RowScaled / double should collapse, not double-wrap");
 
     Eigen::VectorXd x(3);
     x << 1.0, 1.0, 1.0;

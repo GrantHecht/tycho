@@ -105,7 +105,15 @@ struct ODE_DerivModeWrapper
         } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
             this->set_hess_fd_steps(1.0e-5);
         }
-        // AutodiffFwd and Analytic modes don't use FD step vectors; no reinitialization needed.
+        // Other modes (AutodiffFwd, Analytic) don't use FD step vectors; add new FD-like modes here.
+        static_assert(Jm == DenseDerivativeMode::Analytic || Jm == DenseDerivativeMode::FDiffFwd ||
+                          Jm == DenseDerivativeMode::FDiffCentArray ||
+                          Jm == DenseDerivativeMode::AutodiffFwd,
+                      "Unhandled Jacobian derivative mode — check FD step reinitialization");
+        static_assert(Hm == DenseDerivativeMode::Analytic || Hm == DenseDerivativeMode::FDiffFwd ||
+                          Hm == DenseDerivativeMode::FDiffCentArray ||
+                          Hm == DenseDerivativeMode::AutodiffFwd,
+                      "Unhandled Hessian derivative mode — check FD step reinitialization");
     }
 
     const InnerODE &inner() const { return inner_; }

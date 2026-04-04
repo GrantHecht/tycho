@@ -159,3 +159,40 @@ TEST_F(VFCompositionTest, ZeroParamODE_AdjointConsistency) {
     Eigen::VectorXd lm = deterministic_random_vector(2, 501, -1.0, 1.0);
     verify_adjoint_consistency(ode, x, lm, 1e-11);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Zero-parameter non-ODE expression — exercises __VA_OPT__ in BUILD_FROM_EXPRESSION
+///////////////////////////////////////////////////////////////////////////////
+
+struct UnitCircle_Impl {
+    static auto Definition() {
+        auto args = Arguments<1>(); // [theta]
+        auto theta = args.coeff<0>();
+        return StackedOutputs{cos(theta), sin(theta)};
+    }
+};
+BUILD_FROM_EXPRESSION(UnitCircle, UnitCircle_Impl);
+
+TEST_F(VFCompositionTest, ZeroParamExpression_Constructs) {
+    UnitCircle expr;
+    EXPECT_EQ(expr.input_rows(), 1);
+    EXPECT_EQ(expr.output_rows(), 2);
+}
+
+TEST_F(VFCompositionTest, ZeroParamExpression_Compute) {
+    UnitCircle expr;
+    Eigen::VectorXd x(1);
+    x << 0.0;
+    Eigen::VectorXd fx(2);
+    fx.setZero();
+    expr.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 1.0); // cos(0)
+    EXPECT_DOUBLE_EQ(fx[1], 0.0); // sin(0)
+}
+
+TEST_F(VFCompositionTest, ZeroParamExpression_JacobianFD) {
+    UnitCircle expr;
+    Eigen::VectorXd x(1);
+    x << std::numbers::pi / 3.0;
+    verify_jacobian_fd(expr, x);
+}
