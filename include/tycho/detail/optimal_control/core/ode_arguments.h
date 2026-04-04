@@ -37,9 +37,9 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
         : ODEArguments(_XV, _UV, _PV) {}
 
     // Offset-aware access via semantic variable tags.
-    // XVar<I> → index I          (states start at 0)
-    // UVar<I> → index XV + 1 + I (controls after states + time)
-    // PVar<I> → index XV + 1 + UV + I (params after controls)
+    // ODE vector layout: [x0..x(XV-1), t, u0..u(UV-1), p0..p(PV-1)]
+
+    // ---- Scalar access ----
 
     template <int I> decltype(auto) operator[](vf::XVarTag<I>) const {
         static_assert(_XV >= 0 && I < _XV, "XVar index out of range for this ODE sizing");
@@ -54,6 +54,48 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
     template <int I> decltype(auto) operator[](vf::PVarTag<I>) const {
         static_assert(_PV >= 0 && I < _PV, "PVar index out of range for this ODE sizing");
         return this->template coeff<_XV + 1 + _UV + I>();
+    }
+
+    decltype(auto) operator[](vf::TVarTag) const {
+        static_assert(_XV >= 0, "TVar requires compile-time-known XV");
+        return this->template coeff<_XV>();
+    }
+
+    // ---- Full-vector access ----
+
+    decltype(auto) operator[](vf::XVecTag) const {
+        static_assert(_XV >= 0, "XVec requires compile-time-known XV");
+        return this->template segment<_XV, 0>();
+    }
+
+    decltype(auto) operator[](vf::UVecTag) const {
+        static_assert(_UV >= 0, "UVec requires compile-time-known UV");
+        return this->template segment<_UV, _XV + 1>();
+    }
+
+    decltype(auto) operator[](vf::PVecTag) const {
+        static_assert(_PV >= 0, "PVec requires compile-time-known PV");
+        return this->template segment<_PV, _XV + 1 + _UV>();
+    }
+
+    // ---- Sub-vector access ----
+
+    template <int Start, int Size>
+    decltype(auto) operator[](vf::XSegTag<Start, Size>) const {
+        static_assert(_XV >= 0 && Start + Size <= _XV, "XSeg out of range for this ODE sizing");
+        return this->template segment<Size, Start>();
+    }
+
+    template <int Start, int Size>
+    decltype(auto) operator[](vf::USegTag<Start, Size>) const {
+        static_assert(_UV >= 0 && Start + Size <= _UV, "USeg out of range for this ODE sizing");
+        return this->template segment<Size, _XV + 1 + Start>();
+    }
+
+    template <int Start, int Size>
+    decltype(auto) operator[](vf::PSegTag<Start, Size>) const {
+        static_assert(_PV >= 0 && Start + Size <= _PV, "PSeg out of range for this ODE sizing");
+        return this->template segment<Size, _XV + 1 + _UV + Start>();
     }
 };
 

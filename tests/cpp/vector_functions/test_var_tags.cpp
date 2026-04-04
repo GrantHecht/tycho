@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Compile-time named variable tags — XVar, UVar, PVar
+// Compile-time named variable tags — XVar, UVar, PVar, TVar, XVec, UVec,
+// PVec, XSeg, USeg, PSeg. All tags are ODEArguments-only.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -12,53 +13,20 @@ using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Basic indexing — XVar<I> maps to coeff<I>() on Arguments
+// Scalar tags — XVar, UVar, PVar, TVar on ODEArguments
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST_F(CommonFunctionsTest, VarTag_XVar_IndexAccess) {
-    auto args = Arguments<4>();
-    auto x0_tag = args[XVar<0>];
-    auto x0_coeff = args.coeff<0>();
-
-    Eigen::VectorXd input(4);
-    input << 1.0, 2.0, 3.0, 0.5;
-
-    Eigen::VectorXd out_tag(1), out_coeff(1);
-    out_tag.setZero();
-    out_coeff.setZero();
-    x0_tag.compute(input, out_tag);
-    x0_coeff.compute(input, out_coeff);
-    EXPECT_DOUBLE_EQ(out_tag(0), out_coeff(0));
-    EXPECT_DOUBLE_EQ(out_tag(0), 1.0);
-}
-
-TEST_F(CommonFunctionsTest, VarTag_MultipleVars) {
-    auto args = Arguments<5>();
-    auto x = args[XVar<0>];
-    auto y = args[XVar<1>];
-    auto v = args[XVar<2>];
+TEST_F(CommonFunctionsTest, VarTag_XVar_ODEArguments) {
+    auto args = ODEArguments<3, 1, 0>();
+    auto x2 = args[XVar<2>];
 
     Eigen::VectorXd input(5);
     input << 10.0, 20.0, 30.0, 0.0, 0.5;
-
     Eigen::VectorXd fx(1);
-
     fx.setZero();
-    x.compute(input, fx);
-    EXPECT_DOUBLE_EQ(fx(0), 10.0);
-
-    fx.setZero();
-    y.compute(input, fx);
-    EXPECT_DOUBLE_EQ(fx(0), 20.0);
-
-    fx.setZero();
-    v.compute(input, fx);
+    x2.compute(input, fx);
     EXPECT_DOUBLE_EQ(fx(0), 30.0);
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// UVar and PVar on ODEArguments — offset-aware access
-///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(CommonFunctionsTest, VarTag_UVar_ODEArguments) {
     // ODE layout: [x0, x1, x2, t, u0] — XV=3, UV=1, PV=0
@@ -92,21 +60,164 @@ TEST_F(CommonFunctionsTest, VarTag_PVar_ODEArguments) {
     EXPECT_DOUBLE_EQ(fx(0), 77.0);
 }
 
-TEST_F(CommonFunctionsTest, VarTag_XVar_ODEArguments) {
-    // Verify XVar works on ODEArguments too
+TEST_F(CommonFunctionsTest, VarTag_TVar_ODEArguments) {
+    // ODE layout: [x0, x1, x2, t, u0] — XV=3, UV=1, PV=0
     auto args = ODEArguments<3, 1, 0>();
-    auto x2 = args[XVar<2>];
+    auto t = args[TVar]; // should resolve to coeff<3>() (XV = 3)
+
+    Eigen::VectorXd input(5);
+    input << 1.0, 2.0, 3.0, 7.5, 0.5;
+    Eigen::VectorXd fx(1);
+    fx.setZero();
+    t.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 7.5);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_SameTypeAsCoeff) {
+    auto args = ODEArguments<3, 1, 0>();
+    auto via_xvar = args[XVar<1>];
+    auto via_coeff = args.coeff<1>();
+    static_assert(std::is_same_v<decltype(via_xvar), decltype(via_coeff)>);
+
+    auto via_tvar = args[TVar];
+    auto via_tcoeff = args.coeff<3>(); // XV = 3
+    static_assert(std::is_same_v<decltype(via_tvar), decltype(via_tcoeff)>);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Full-vector tags — XVec, UVec, PVec on ODEArguments
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CommonFunctionsTest, VarTag_XVec_FullStateVector) {
+    auto args = ODEArguments<3, 1, 0>();
+    auto x_all = args[XVec]; // segment<3, 0>()
 
     Eigen::VectorXd input(5);
     input << 10.0, 20.0, 30.0, 0.0, 0.5;
-    Eigen::VectorXd fx(1);
+    Eigen::VectorXd fx(3);
     fx.setZero();
-    x2.compute(input, fx);
-    EXPECT_DOUBLE_EQ(fx(0), 30.0);
+    x_all.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 10.0);
+    EXPECT_DOUBLE_EQ(fx(1), 20.0);
+    EXPECT_DOUBLE_EQ(fx(2), 30.0);
 }
 
+TEST_F(CommonFunctionsTest, VarTag_UVec_FullControlVector) {
+    // ODE layout: [x0, x1, t, u0, u1, u2] — XV=2, UV=3, PV=0
+    auto args = ODEArguments<2, 3, 0>();
+    auto u_all = args[UVec]; // segment<3, 3>() (XV+1 = 3)
+
+    Eigen::VectorXd input(6);
+    input << 1.0, 2.0, 0.0, 40.0, 50.0, 60.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    u_all.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 40.0);
+    EXPECT_DOUBLE_EQ(fx(1), 50.0);
+    EXPECT_DOUBLE_EQ(fx(2), 60.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_PVec_FullParameterVector) {
+    // ODE layout: [x0, x1, t, u0, p0, p1] — XV=2, UV=1, PV=2
+    auto args = ODEArguments<2, 1, 2>();
+    auto p_all = args[PVec]; // segment<2, 4>() (XV+1+UV = 4)
+
+    Eigen::VectorXd input(6);
+    input << 1.0, 2.0, 0.0, 3.0, 99.0, 77.0;
+    Eigen::VectorXd fx(2);
+    fx.setZero();
+    p_all.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 99.0);
+    EXPECT_DOUBLE_EQ(fx(1), 77.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_XVec_SameTypeAsSegment) {
+    auto args = ODEArguments<3, 1, 0>();
+    auto via_tag = args[XVec];
+    auto via_seg = args.segment<3, 0>();
+    static_assert(std::is_same_v<decltype(via_tag), decltype(via_seg)>);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Sub-vector tags — XSeg, USeg, PSeg on ODEArguments
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CommonFunctionsTest, VarTag_XSeg_StateSubVector) {
+    // ODE layout: [x0..x5, t, u0, u1] — XV=6, UV=2, PV=0
+    auto args = ODEArguments<6, 2, 0>();
+    auto pos = args[XSeg<0, 3>]; // first 3 states (position)
+    auto vel = args[XSeg<3, 3>]; // next 3 states (velocity)
+
+    Eigen::VectorXd input(9);
+    input << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 10.0, 20.0;
+
+    Eigen::VectorXd fx_pos(3), fx_vel(3);
+    fx_pos.setZero();
+    fx_vel.setZero();
+    pos.compute(input, fx_pos);
+    vel.compute(input, fx_vel);
+
+    EXPECT_DOUBLE_EQ(fx_pos(0), 1.0);
+    EXPECT_DOUBLE_EQ(fx_pos(1), 2.0);
+    EXPECT_DOUBLE_EQ(fx_pos(2), 3.0);
+    EXPECT_DOUBLE_EQ(fx_vel(0), 4.0);
+    EXPECT_DOUBLE_EQ(fx_vel(1), 5.0);
+    EXPECT_DOUBLE_EQ(fx_vel(2), 6.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_USeg_ControlSubVector) {
+    // ODE layout: [x0, x1, t, u0, u1, u2, u3] — XV=2, UV=4, PV=0
+    auto args = ODEArguments<2, 4, 0>();
+    auto u_first2 = args[USeg<0, 2>]; // first 2 controls
+    auto u_last2 = args[USeg<2, 2>];  // last 2 controls
+
+    Eigen::VectorXd input(7);
+    input << 1.0, 2.0, 0.0, 10.0, 20.0, 30.0, 40.0;
+
+    Eigen::VectorXd fx1(2), fx2(2);
+    fx1.setZero();
+    fx2.setZero();
+    u_first2.compute(input, fx1);
+    u_last2.compute(input, fx2);
+
+    EXPECT_DOUBLE_EQ(fx1(0), 10.0);
+    EXPECT_DOUBLE_EQ(fx1(1), 20.0);
+    EXPECT_DOUBLE_EQ(fx2(0), 30.0);
+    EXPECT_DOUBLE_EQ(fx2(1), 40.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_PSeg_ParameterSubVector) {
+    // ODE layout: [x0, t, u0, p0, p1, p2] — XV=1, UV=1, PV=3
+    auto args = ODEArguments<1, 1, 3>();
+    auto p_first = args[PSeg<0, 1>];
+    auto p_last2 = args[PSeg<1, 2>];
+
+    Eigen::VectorXd input(6);
+    input << 1.0, 0.0, 5.0, 100.0, 200.0, 300.0;
+
+    Eigen::VectorXd fx1(1), fx2(2);
+    fx1.setZero();
+    fx2.setZero();
+    p_first.compute(input, fx1);
+    p_last2.compute(input, fx2);
+
+    EXPECT_DOUBLE_EQ(fx1(0), 100.0);
+    EXPECT_DOUBLE_EQ(fx2(0), 200.0);
+    EXPECT_DOUBLE_EQ(fx2(1), 300.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_XSeg_SameTypeAsSegment) {
+    auto args = ODEArguments<6, 2, 0>();
+    auto via_tag = args[XSeg<3, 3>];
+    auto via_seg = args.segment<3, 3>();
+    static_assert(std::is_same_v<decltype(via_tag), decltype(via_seg)>);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Expression composition — tags work in DSL expressions
+///////////////////////////////////////////////////////////////////////////////
+
 TEST_F(CommonFunctionsTest, VarTag_ODEArguments_InExpression) {
-    // Build an ODE-like expression using offset-aware tags
     auto args = ODEArguments<3, 1, 0>();
     auto v = args[XVar<2>];     // index 2
     auto theta = args[UVar<0>]; // index 4 (XV+1+0)
@@ -121,47 +232,32 @@ TEST_F(CommonFunctionsTest, VarTag_ODEArguments_InExpression) {
     EXPECT_NEAR(fx(0), std::sin(std::numbers::pi / 4.0) * 5.0, 1e-12);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Used in expressions — composable with DSL operators
-///////////////////////////////////////////////////////////////////////////////
-
-TEST_F(CommonFunctionsTest, VarTag_InExpression) {
-    auto args = Arguments<5>();
-    auto v = args[XVar<2>];
-    auto theta = args[XVar<4>];
-
-    auto expr = sin(theta) * v;
+TEST_F(CommonFunctionsTest, VarTag_XVec_InExpression_Jacobian) {
+    // Dot product of state vector with itself: x^T * x = sum of squares
+    auto args = ODEArguments<3, 1, 0>();
+    auto x_all = args[XVec];
+    auto expr = x_all.squared_norm();
 
     Eigen::VectorXd input(5);
-    input << 0, 0, 5.0, 0, std::numbers::pi / 4.0;
+    input << 1.0, 2.0, 3.0, 0.0, 0.5;
     Eigen::VectorXd fx(1);
     fx.setZero();
     expr.compute(input, fx);
-    EXPECT_NEAR(fx(0), std::sin(std::numbers::pi / 4.0) * 5.0, 1e-12);
+    EXPECT_NEAR(fx(0), 14.0, 1e-12); // 1 + 4 + 9
+
+    verify_jacobian_fd(expr, input);
 }
 
-TEST_F(CommonFunctionsTest, VarTag_InExpression_Jacobian) {
-    auto args = Arguments<3>();
-    auto x = args[XVar<0>];
-    auto y = args[XVar<1>];
-    auto expr = 2.0 * x + 3.0 * y;
+TEST_F(CommonFunctionsTest, VarTag_XSeg_InExpression_Jacobian) {
+    // Use sub-vectors in an expression: pos.norm() + vel.norm()
+    auto args = ODEArguments<6, 1, 0>();
+    auto pos = args[XSeg<0, 3>];
+    auto vel = args[XSeg<3, 3>];
 
-    Eigen::VectorXd input(3);
-    input << 1.0, 2.0, 3.0;
+    auto expr = pos.norm() + vel.norm();
 
-    // Jacobian should be [2, 3, 0]
-    Eigen::MatrixXd expected(1, 3);
-    expected << 2.0, 3.0, 0.0;
-    verify_jacobian_analytical(expr, input, expected);
-}
+    Eigen::VectorXd input(8);
+    input << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.5;
 
-///////////////////////////////////////////////////////////////////////////////
-// Type identity — VarTag access produces same type as coeff<>
-///////////////////////////////////////////////////////////////////////////////
-
-TEST_F(CommonFunctionsTest, VarTag_SameTypeAsCoeff) {
-    auto args = Arguments<3>();
-    auto via_tag = args[XVar<1>];
-    auto via_coeff = args.coeff<1>();
-    static_assert(std::is_same_v<decltype(via_tag), decltype(via_coeff)>);
+    verify_jacobian_fd(expr, input);
 }

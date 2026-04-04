@@ -15,6 +15,11 @@ using namespace TychoTest;
 // Type-level checks: Scaled<Scaled<X>> must not occur
 ///////////////////////////////////////////////////////////////////////////////
 
+// Trait to detect double-wrapping: Scaled<Scaled<T>>
+template <class T> struct is_double_scaled : std::false_type {};
+template <class T>
+struct is_double_scaled<tycho::vf::Scaled<tycho::vf::Scaled<T>>> : std::true_type {};
+
 TEST_F(CommonFunctionsTest, DoubleScaleCollapse_ScaledTimesDouble) {
     auto args = Arguments<3>();
     auto x = args.coeff<0>();
@@ -25,6 +30,8 @@ TEST_F(CommonFunctionsTest, DoubleScaleCollapse_ScaledTimesDouble) {
     auto twice = once * 2.0;
 
     // Type check: twice should be Scaled<Segment<...>>, NOT Scaled<Scaled<Segment<...>>>
+    static_assert(!is_double_scaled<decltype(twice)>::value,
+                  "Scaled nesting should be collapsed, not Scaled<Scaled<...>>");
     static_assert(std::is_same_v<decltype(twice), decltype(2.0 * once)>,
                   "double * Scaled and Scaled * double should produce the same type");
 
@@ -42,6 +49,9 @@ TEST_F(CommonFunctionsTest, DoubleScaleCollapse_DoubleTimesScaled) {
 
     auto once = 3.0 * x;
     auto twice = 2.0 * once;
+
+    static_assert(!is_double_scaled<decltype(twice)>::value,
+                  "Scaled nesting should be collapsed, not Scaled<Scaled<...>>");
 
     Eigen::VectorXd input(3);
     input << 5.0, 0.0, 0.0;
@@ -175,10 +185,42 @@ TEST_F(CommonFunctionsTest, VectorTimesRowScaled) {
     EXPECT_DOUBLE_EQ(fx[2], 120.0);
 }
 
-TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD) {
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_DoubleTimesRowScaled) {
     auto args = Arguments<3>();
     Eigen::Vector3d sv(2.0, 3.0, 4.0);
     auto chained = 5.0 * (args * sv);
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 3.0;
+    verify_jacobian_fd(chained, x);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_RowScaledTimesDouble) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto chained = (args * sv) * 5.0;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 3.0;
+    verify_jacobian_fd(chained, x);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_RowScaledTimesVector) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv1(2.0, 3.0, 4.0);
+    Eigen::Vector3d sv2(10.0, 20.0, 30.0);
+    auto chained = (args * sv1) * sv2;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 3.0;
+    verify_jacobian_fd(chained, x);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_VectorTimesRowScaled) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv1(2.0, 3.0, 4.0);
+    Eigen::Vector3d sv2(10.0, 20.0, 30.0);
+    auto chained = sv2 * (args * sv1);
 
     Eigen::VectorXd x(3);
     x << 1.0, 2.0, 3.0;

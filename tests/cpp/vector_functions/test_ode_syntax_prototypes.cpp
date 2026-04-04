@@ -4,8 +4,8 @@
 // This file prototypes two alternative ODE definition syntaxes and
 // evaluates them against the brachistochrone problem.
 //
-// Option A: Single-struct, macro-free (via helper base class)
-// Option B: Refined TYCHO_DEFINE_ODE macro
+// Option A: ODEArguments with offset-aware XVar/UVar tags
+// Option B: FD/FWAD macro variants for reduced compile time
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -72,51 +72,22 @@ BUILD_ODE_FROM_EXPRESSION(DragBrach, DragBrach_Impl, double, double);
 } // namespace OptionA
 
 ///////////////////////////////////////////////////////////////////////////////
-// OPTION B — Refined TYCHO_DEFINE_ODE macro
+// OPTION B — FD/FWAD macro variants
 //
-// Single macro that generates both the Impl struct and the final ODE type.
-// User writes the ODE body inline. The macro provides 'args' automatically
-// and uses XVar/UVar tags for named access.
-//
-// Lines of code: ~10 for the ODE definition
-// Ceremony: Minimal — one macro call wraps everything
-// Multi-parameter: Via macro parameter list
+// Same Impl+macro definition pattern as Option A, but using
+// BUILD_ODE_FROM_EXPRESSION_FD / BUILD_ODE_FROM_EXPRESSION_FWAD to avoid
+// expensive Jacobian template instantiation. Uses ODEArguments with
+// offset-aware XVar/UVar tags, same as Option A.
 ///////////////////////////////////////////////////////////////////////////////
-
-// The TYCHO_DEFINE_ODE macro generates an Impl struct with the given body
-// and wraps it with BUILD_ODE_FROM_EXPRESSION.
-//
-// Usage:
-//   TYCHO_DEFINE_ODE(Name, XV, UV, PV, (Params), Body)
-//
-// Note: The body receives 'args' as Arguments<XV+1+UV+PV>.
-
-// Helper macro to compute XtUP size — unfortunately C++ macros can't do arithmetic,
-// so we use a constexpr helper.
-namespace detail {
-template <int XV, int UV, int PV> inline constexpr int XtUPSize = XV + 1 + UV + PV;
-}
-
-#define TYCHO_DEFINE_ODE_1(NAME, XV, UV, PV, P1, T1)                                              \
-    struct NAME##_Impl : ODESize<XV, UV, PV> {                                                     \
-        static auto Definition(T1 P1) {                                                            \
-            auto args = Arguments<detail::XtUPSize<XV, UV, PV>>();                                 \
-            return [&]() TYCHO_DEFINE_ODE_BODY                                                     \
-        }                                                                                          \
-    };                                                                                             \
-    BUILD_ODE_FROM_EXPRESSION(NAME, NAME##_Impl, T1)
-
-// For this prototype, we'll use a simpler approach — define the ODE body
-// as a regular function and use the existing macro infrastructure.
 
 namespace OptionB {
 
-// Option B brachistochrone — uses a helper that provides 'args' automatically
+// Option B brachistochrone — analytic baseline (same definition as Option A)
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args = Arguments<5>();
+        auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
-        auto theta = args[XVar<4>];
+        auto theta = args[UVar<0>];
 
         auto xdot = sin(theta) * v;
         auto ydot = cos(theta) * v * (-1.0);
@@ -130,9 +101,9 @@ BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 // Option B — FD variant showing the new macro
 struct BrachistochroneFD_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args = Arguments<5>();
+        auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
-        auto theta = args[XVar<4>];
+        auto theta = args[UVar<0>];
         return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta)};
     }
 };
@@ -141,9 +112,9 @@ BUILD_ODE_FROM_EXPRESSION_FD(BrachistochroneFD, BrachistochroneFD_Impl, double);
 // Option B — Forward-AD variant
 struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args = Arguments<5>();
+        auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
-        auto theta = args[XVar<4>];
+        auto theta = args[UVar<0>];
         return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta)};
     }
 };
@@ -294,29 +265,29 @@ TEST_F(VFCompositionTest, OptionB_FWAD_JacobianMatchesAnalytic) {
     // Forward-AD should be more accurate than FD
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 5; ++j)
-            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-10)
+            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
                 << "FWAD Jacobian mismatch at (" << i << "," << j << ")";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Comparison notes (for evaluation):
 //
-// Option A (existing pattern + XVar tags):
-//   - No new infrastructure needed beyond XVar tags
-//   - Familiar pattern: separate Impl struct + BUILD_ODE_FROM_EXPRESSION
+// Option A (ODEArguments + XVar/UVar tags):
+//   - Offset-aware access via ODEArguments: UVar<0> resolves to the correct index
+//   - Familiar pattern: Impl struct + BUILD_ODE_FROM_EXPRESSION macro
 //   - Multi-parameter support: natural via macro __VA_ARGS__
 //   - Integration: Fully compatible with ODEPhase, Integrator
-//   - Lines for brachistochrone: 12 (Impl) + 1 (macro) = 13
+//   - Lines for brachistochrone: ~8 (Impl) + 1 (macro) = ~9
 //
-// Option B (FD variant):
+// Option B (FD/FWAD variants):
+//   - Same Impl+macro pattern as Option A with FD or forward-AD Jacobians
 //   - Reduces compile time by avoiding Jacobian template instantiation
-//   - Same definition pattern as Option A but with FD Jacobian mode
-//   - Trade-off: ~1e-6 Jacobian accuracy vs analytic (acceptable for most problems)
+//   - Trade-off: ~1e-6 Jacobian accuracy (FD) or near-exact (FWAD) vs analytic
 //   - Integration: Fully compatible with ODEPhase, Integrator
-//   - Lines for brachistochrone: 12 (Impl) + 1 (macro) = 13
+//   - Lines for brachistochrone: ~8 (Impl) + 1 (macro) = ~9
 //
 // Recommendation: Keep the existing BUILD_ODE_FROM_EXPRESSION pattern with
 // XVar/UVar tags (Option A style). Add BUILD_ODE_FROM_EXPRESSION_FD/FWAD
-// as compile-time optimization options (Option B). No need for a fundamentally
+// as compile-time optimization options. No need for a fundamentally
 // different syntax — the improvements are additive.
 ///////////////////////////////////////////////////////////////////////////////

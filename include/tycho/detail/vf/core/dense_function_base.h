@@ -165,9 +165,9 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                               this->derived());
     }
 
-    template <int I> decltype(auto) operator[](XVarTag<I>) const {
-        return this->template coeff<I>();
-    }
+    // Note: XVar<I> tag access is intentionally NOT provided here.
+    // All X/U/P/T tags are ODEArguments-only — see ode_arguments.h.
+    // Use coeff<I>() or segment<SZ, ST>() for plain Arguments.
 
     template <int EL1, int... ELS> decltype(auto) elements() const {
         return FWDOP<Elements<OR, EL1, ELS...>>::make_nested(
