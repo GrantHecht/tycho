@@ -8,9 +8,6 @@
 // State  : [x, y, v]   (position x, position y, speed v)
 // Control: [theta]     (wire angle, measured from vertical)
 //
-// Augmented phase vector layout: [x, y, v, t, theta]
-//                                  0  1  2  3     4
-//
 // ODE dynamics:
 //   xdot = sin(theta) * v
 //   ydot = -cos(theta) * v
@@ -38,9 +35,9 @@ using namespace tycho::utils;
 
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
-        auto args = Arguments<5>(); // [x, y, v, t, theta]
-        auto v = args.coeff<2>();
-        auto theta = args.coeff<4>();
+        auto args = ODEArguments<3, 1, 0>();
+        auto v = args[XVar<2>];
+        auto theta = args[UVar<0>];
 
         auto xdot = sin(theta) * v;
         auto ydot = cos(theta) * v * (-1.0);

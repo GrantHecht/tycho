@@ -137,7 +137,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                                                                   this->output_rows() - SZ),
             this->derived());
     }
-    
+
     template <int SZ> decltype(auto) tail(int sz) const {
         return SEGMENTOP<SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>::make_nested(
             Segment<OR, SZ, tycho::utils::SZ_DIFF<OR, SZ>::value>(this->output_rows(), sz,

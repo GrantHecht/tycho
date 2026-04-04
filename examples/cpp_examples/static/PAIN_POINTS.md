@@ -1,13 +1,13 @@
 # C++ Static DSL Pain Points
 
-Documented during Phase 4 C++ example implementation. These findings inform the
-design priorities for phases 5-7 (ODEArguments, GenericODE, improved static DSL).
+Documented during Phase 4 C++ example implementation, updated in Phase 8 with
+post-improvement status.
 
-## Compile Metrics
+## Compile Metrics (Phase 4 Baseline)
 
 | Example         | Wall Time | Peak Memory | Notes                          |
 |-----------------|-----------|-------------|--------------------------------|
-| brachistochrone | 1m41s     | 6.9 GB      | Arguments<4>, 2 states 1 ctrl  |
+| brachistochrone | 1m41s     | 6.9 GB      | Arguments<5>, 3 states 1 ctrl  |
 | zermelo         | 2m13s     | 7.3 GB      | Arguments<4>, 4 ODE types      |
 | hypersens       | 1m32s     | 6.3 GB      | Arguments<3>, simplest ODE     |
 | delta3_launch   | 2m11s     | 8.6 GB      | Arguments<11>, 7 states 3 ctrl |
@@ -16,80 +16,67 @@ All measurements: single-threaded (-j1), ccache cold, Clang 21, -O3, Linux x86_6
 
 ## Pain Point 1: No composable ODE functions
 
-**Severity: High** — each wind model / engine configuration requires its own ODE
-struct. In Python, the ODE constructor takes callables (wind functions, engine params)
-at runtime. In the static DSL, the expression template type changes with every
-structural variation, requiring a separate `BUILD_ODE_FROM_EXPRESSION` per model.
+**Severity: High** | **Status: Open**
 
-**Zermelo impact:** 4 separate ODE structs for what Python does with one class and
-a composable wind function.
+Each wind model / engine configuration requires its own ODE struct. In Python, the
+ODE constructor takes callables (wind functions, engine params) at runtime. In the
+static DSL, the expression template type changes with every structural variation,
+requiring a separate `BUILD_ODE_FROM_EXPRESSION` per model.
 
-**Delta3Launch impact:** One ODE struct works (same structure, different params), but
-only because `BUILD_ODE_FROM_EXPRESSION(RocketODE, RocketODE_Impl, double, double)`
-accepts multiple constructor args of the same type. Heterogeneous parameter packs
-would require a struct wrapper.
+This is a fundamental limitation of the expression-template approach and remains
+open for future work (runtime-polymorphic GenericODE is the alternative).
 
 ## Pain Point 2: No unary negation on VF expressions
 
-**Severity: Medium** — `-expr` does not compile. Must rewrite as `expr * (-1.0)` or
-restructure (e.g., `Re - R.norm()` instead of `-(R.norm() - Re)`).
+**Severity: Medium** | **Status: Open**
+
+`-expr` does not compile. Must rewrite as `expr * (-1.0)` or restructure.
 
 ## Pain Point 3: double * Scaled<...> operator bug
 
-**Severity: Medium** — `OperatorOverloads.h` lines 62-66 access `func.Scaled_func`
-but the member in `Scaled_Impl` is `func`. This means you cannot scale an
-already-scaled expression: `a * (b * expr)` compiles but `(a * b_scaled_expr)` where
-`b_scaled_expr = b * expr` does not. Workaround: pre-combine all scalar constants
-into a single double and apply one scaling pass. The `/` operator (line 95-96)
-correctly uses `func.func`.
+**Severity: Medium** | **Status: Open**
+
+Nested scaling (`a * (b * expr)`) produces `Scaled<Scaled<...>>` types that fail
+to compile. Workaround: pre-combine scalar constants into a single factor.
 
 ## Pain Point 4: Manual index tracking
 
-**Severity: High** — every `addBoundaryValue`, `addEqualCon`, `addLUNormBound` call
-requires constructing `Eigen::VectorXi` and `Eigen::VectorXd` arrays manually.
-Python uses plain lists. The C++ API also requires an explicit `ScaleType` argument
-that Python infers.
+**Severity: High** | **Status: Open**
 
-```cpp
-// C++: 6 lines for what Python does in 1
-Eigen::VectorXi front_idx(2); front_idx << 0, 1;
-Eigen::VectorXd front_val(2); front_val << xt0, 0.0;
-phase->addBoundaryValue(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
-
-# Python
-phase.addBoundaryValue("First", [0, 1], [xt0, 0])
-```
+Boundary conditions, constraints, etc. still require `Eigen::VectorXi`/`VectorXd`
+construction. Future work could add initializer_list overloads.
 
 ## Pain Point 5: No ODEArguments in static DSL
 
-**Severity: Medium** — `Arguments<N>` requires the user to compute the total phase
-vector size (states + 1 time + controls) and track all indices manually. Python's
-`ODEArguments(nX, nU)` auto-computes the layout and provides `XVar()`, `UVar()`,
-`XVec()`, `UVec()` accessors.
+**Severity: Medium** | **Status: RESOLVED (Phase 7/8)**
+
+`ODEArguments<XV, UV, PV>` now auto-computes the phase vector layout and provides
+semantic variable tags: `XVar<I>`, `UVar<I>`, `TVar`, `PVar<I>`, `XVec`, `UVec`,
+`PVec`, `XSeg<Start, Size>`, `USeg<Start, Size>`, `PSeg<Start, Size>`.
+
+All four static examples updated to use `ODEArguments` + tags in Phase 8.
 
 ## Pain Point 6: Constant vectors in expressions
 
-**Severity: Medium** — expressions like `R.cross([0, 0, We])` or
-`vf.cross([0, 0, 1], hvec)` require explicit `Constant<IR, OR>` construction with
-matching input size. Python accepts numpy arrays directly.
+**Severity: Medium** | **Status: Open**
 
-```cpp
-// C++: must match IR=11 of surrounding expressions
-Eigen::Vector3d omega_val(0.0, 0.0, We);
-auto omega = Constant<11, 3>(11, omega_val);
-auto Vr = V + R.cross(omega);
-
-# Python
-Vr = V + R.cross(np.array([0, 0, We]))
-```
+Still requires `Constant<IR, OR>` construction. Future work could add implicit
+conversion from Eigen vectors within expression contexts.
 
 ## Pain Point 7: BUILD_ODE_FROM_EXPRESSION requires at least one type arg
 
-**Severity: Low** — the macro uses `__VA_ARGS__` which leaves a trailing comma when
-empty. ODEs with zero constructor parameters need a dummy `double` arg.
+**Severity: Low** | **Status: RESOLVED (Phase 7)**
+
+The macros now use `__VA_OPT__` (C++20) to handle zero variadic arguments cleanly.
+HyperSens example uses zero-arg `Definition()` and `BUILD_ODE_FROM_EXPRESSION`
+with no type arguments.
 
 ## Pain Point 8: Template compilation cost
 
-**Severity: Medium** — even the simplest ODE (HyperSens: 1 state, 1 control) takes
-1.5 minutes and 6.3 GB. The most complex (Delta3Launch: Arguments<11>) takes 2.2
-minutes and 8.6 GB. This is a barrier to iteration speed during development.
+**Severity: Medium** | **Status: PARTIALLY RESOLVED (Phase 7/8)**
+
+`BUILD_ODE_FROM_EXPRESSION_FD` and `BUILD_ODE_FROM_EXPRESSION_FWAD` avoid
+instantiating the expression tree's Jacobian and Hessian templates, using finite
+differences or forward-mode autodiff instead. Delta3Launch uses `_FD` variant.
+The simpler ODEs (Brachistochrone, Zermelo, HyperSens) keep analytic derivatives
+since their expression trees are small enough that compile cost is acceptable.
