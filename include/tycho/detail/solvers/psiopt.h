@@ -10,6 +10,7 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
+//   - Configuration fields grouped into Settings struct
 // =============================================================================
 
 #pragma once
@@ -140,6 +141,104 @@ struct PSIOPT {
         }
     }
 
+    // =========================================================================
+    // Settings — all user-configurable parameters grouped in one place
+    // =========================================================================
+    struct Settings {
+        // --- Iteration limits ---
+        int max_iters_ = 500;
+        int max_ls_iters_ = 2;
+        int max_acc_iters_ = 50;
+        int max_refac_ = 15;
+        int max_soc_ = 1;
+        int max_feas_rest_ = 2;
+
+        // --- Convergence tolerances ---
+        double kkt_tol_ = 1.0e-6;
+        double econ_tol_ = 1.0e-6;
+        double icon_tol_ = 1.0e-6;
+        double bar_tol_ = 1.0e-6;
+
+        // --- Acceptable tolerances ---
+        double acc_kkt_tol_ = 1.0e-2;
+        double acc_econ_tol_ = 1.0e-3;
+        double acc_icon_tol_ = 1.0e-3;
+        double acc_bar_tol_ = 1.0e-3;
+
+        // --- Unacceptable tolerances ---
+        double unacc_kkt_tol_ = 10;
+        double unacc_econ_tol_ = 2;
+        double unacc_icon_tol_ = 2;
+        double unacc_bar_tol_ = 2;
+
+        // --- Divergence tolerances ---
+        double div_kkt_tol_ = 1.0e15;
+        double div_econ_tol_ = 1.0e15;
+        double div_icon_tol_ = 1.0e15;
+        double div_bar_tol_ = 1.0e15;
+
+        // --- Algorithm modes ---
+        AlgorithmModes soe_mode_ = AlgorithmModes::SOE;
+        BarrierModes opt_bar_mode_ = BarrierModes::LOQO;
+        BarrierModes soe_bar_mode_ = BarrierModes::LOQO;
+        LineSearchModes opt_ls_mode_ = LineSearchModes::AUGLANG;
+        LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
+        PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
+
+        // --- Barrier parameters ---
+        double init_mu_ = 0.001;
+        double max_mu_ = 100.0;
+        double min_mu_ = 1.0e-12;
+
+        // --- Step parameters ---
+        double bound_fraction_ = 0.99;
+        double bound_push_ = 1.0e-3;
+        double neg_slack_reset_ = 1.0e-12;
+        double soe_bound_relax_ = 1.0e-8;
+        double alpha_red_ = 2.0;
+
+        // --- Hessian perturbation ---
+        double delta_h_ = 1.0e-5;
+        double incr_h_ = 8.0;
+        double decr_h_ = 0.333333;
+
+        // --- QP solver ---
+        int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;
+        QPAlgModes qp_alg_ = QPAlgModes::Classic;
+        QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
+        QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
+        int qp_matching_ = 1;
+        int qp_scaling_ = 0;
+        int qp_pivot_perturb_ = 8;
+        int qp_ref_steps_ = 0;
+        int qp_par_solve_ = 0;
+        bool qp_print_ = false;
+#ifdef USE_ACCELERATE_SPARSE
+        double accel_pivot_tolerance_ = 0.01;
+        double accel_zero_tolerance_ = 1e-4 * std::numeric_limits<double>::epsilon();
+#endif
+
+        // --- Objective ---
+        double obj_scale_ = 1.0;
+
+        // --- Output/behavior ---
+        int print_level_ = 0;
+        bool wide_console_ = false;
+        bool cnr_mode_ = false;
+        bool fast_factor_alg_ = true;
+        bool force_qp_analysis_ = false;
+        bool return_best_ = false;
+        BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
+    };
+
+    Settings settings_;
+    Settings &settings() { return settings_; }
+    const Settings &settings() const { return settings_; }
+
+    // =========================================================================
+    // Non-config members — problem dimensions, solver state, results
+    // =========================================================================
+
     using VectorXd = Eigen::VectorXd;
     std::shared_ptr<NonLinearProgram> nlp_;
 
@@ -155,93 +254,66 @@ struct PSIOPT {
     Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
 #endif
 
-    int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;
-    QPAlgModes qp_alg_ = QPAlgModes::Classic;
-    QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
-    QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
-
-    void set_qp_ordering_mode(QPOrderingModes mode) { this->qp_ord_ = mode; }
-    void set_qp_ordering_mode(const std::string &str) { this->qp_ord_ = strto_OrderingMode(str); }
-
-    int qp_matching_ = 1;
-    int qp_scaling_ = 0;
-    int qp_pivot_perturb_ = 8;
-    int qp_ref_steps_ = 0;
-#ifdef USE_ACCELERATE_SPARSE
-    double accel_pivot_tolerance_ = 0.01;
-    double accel_zero_tolerance_ = 1e-4 * std::numeric_limits<double>::epsilon();
-
-    void set_accel_pivot_tolerance(double tol) { this->accel_pivot_tolerance_ = tol; }
-    void set_accel_zero_tolerance(double tol) { this->accel_zero_tolerance_ = tol; }
-#endif
-    bool qp_print_ = false;
     bool qp_analyzed_ = false;
-    bool force_qp_analysis_ = false;
-    int qp_par_solve_ = 0;
 
     /////////////////////////////////////////////////////////////////////
-    int max_iters_ = 500;
-    int max_ls_iters_ = 2;
-    int max_acc_iters_ = 50;
+
+    void set_qp_ordering_mode(QPOrderingModes mode) { settings_.qp_ord_ = mode; }
+    void set_qp_ordering_mode(const std::string &str) {
+        settings_.qp_ord_ = strto_OrderingMode(str);
+    }
+
+#ifdef USE_ACCELERATE_SPARSE
+    void set_accel_pivot_tolerance(double tol) { settings_.accel_pivot_tolerance_ = tol; }
+    void set_accel_zero_tolerance(double tol) { settings_.accel_zero_tolerance_ = tol; }
+#endif
 
     void set_max_iters(int max_iters) {
         if (max_iters < 1) {
             throw std::invalid_argument("max_iters must be greater than 0.");
         }
-        this->max_iters_ = max_iters;
+        settings_.max_iters_ = max_iters;
     }
     void set_max_acc_iters(int max_acc_iters) {
         if (max_acc_iters < 1) {
             throw std::invalid_argument("max_acc_iters must be greater than 0.");
         }
-        this->max_acc_iters_ = max_acc_iters;
+        settings_.max_acc_iters_ = max_acc_iters;
     }
     void set_max_ls_iters(int max_ls_iters) {
         if (max_ls_iters < 0) {
             throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
         }
-        this->max_ls_iters_ = max_ls_iters;
+        settings_.max_ls_iters_ = max_ls_iters;
     }
     void set_all_max_iters(int m1, int m2) {
         set_max_iters(m1);
         set_max_acc_iters(m2);
     }
 
-    int max_refac_ = 15;
+    void set_opt_bar_mode(BarrierModes mode) { settings_.opt_bar_mode_ = mode; }
+    void set_opt_bar_mode(const std::string &str) {
+        settings_.opt_bar_mode_ = strto_BarrierMode(str);
+    }
+    void set_soe_bar_mode(BarrierModes mode) { settings_.soe_bar_mode_ = mode; }
+    void set_soe_bar_mode(const std::string &str) {
+        settings_.soe_bar_mode_ = strto_BarrierMode(str);
+    }
 
-    int max_soc_ = 1;
-    int max_feas_rest_ = 2;
-
-    AlgorithmModes soe_mode_ = AlgorithmModes::SOE;
-
-    BarrierModes opt_bar_mode_ = BarrierModes::LOQO;
-    BarrierModes soe_bar_mode_ = BarrierModes::LOQO;
-
-    void set_opt_bar_mode(BarrierModes mode) { this->opt_bar_mode_ = mode; }
-    void set_opt_bar_mode(const std::string &str) { this->opt_bar_mode_ = strto_BarrierMode(str); }
-    void set_soe_bar_mode(BarrierModes mode) { this->soe_bar_mode_ = mode; }
-    void set_soe_bar_mode(const std::string &str) { this->soe_bar_mode_ = strto_BarrierMode(str); }
-
-    LineSearchModes opt_ls_mode_ = LineSearchModes::AUGLANG;
-    LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
-
-    void set_opt_ls_mode(LineSearchModes mode) { this->opt_ls_mode_ = mode; }
-    void set_opt_ls_mode(const std::string &str) { this->opt_ls_mode_ = strto_LineSearchMode(str); }
-    void set_soe_ls_mode(LineSearchModes mode) { this->soe_ls_mode_ = mode; }
-    void set_soe_ls_mode(const std::string &str) { this->soe_ls_mode_ = strto_LineSearchMode(str); }
-
-    double obj_scale_ = 1.0;
+    void set_opt_ls_mode(LineSearchModes mode) { settings_.opt_ls_mode_ = mode; }
+    void set_opt_ls_mode(const std::string &str) {
+        settings_.opt_ls_mode_ = strto_LineSearchMode(str);
+    }
+    void set_soe_ls_mode(LineSearchModes mode) { settings_.soe_ls_mode_ = mode; }
+    void set_soe_ls_mode(const std::string &str) {
+        settings_.soe_ls_mode_ = strto_LineSearchMode(str);
+    }
 
     /////////////////////////////////////////////////////////////////////////
-    double kkt_tol_ = 1.0e-6;
-    double econ_tol_ = 1.0e-6;
-    double icon_tol_ = 1.0e-6;
-    double bar_tol_ = 1.0e-6;
-
-    void set_kkt_tol(double kkt_tol) { this->kkt_tol_ = std::abs(kkt_tol); }
-    void set_bar_tol(double bar_tol) { this->bar_tol_ = std::abs(bar_tol); }
-    void set_econ_tol(double econ_tol) { this->econ_tol_ = std::abs(econ_tol); }
-    void set_icon_tol(double icon_tol) { this->icon_tol_ = std::abs(icon_tol); }
+    void set_kkt_tol(double kkt_tol) { settings_.kkt_tol_ = std::abs(kkt_tol); }
+    void set_bar_tol(double bar_tol) { settings_.bar_tol_ = std::abs(bar_tol); }
+    void set_econ_tol(double econ_tol) { settings_.econ_tol_ = std::abs(econ_tol); }
+    void set_icon_tol(double icon_tol) { settings_.icon_tol_ = std::abs(icon_tol); }
     void set_tols(double kkt_tol, double econ_tol, double icon_tol, double bar_tol) {
         this->set_kkt_tol(kkt_tol);
         this->set_econ_tol(econ_tol);
@@ -249,15 +321,14 @@ struct PSIOPT {
         this->set_bar_tol(bar_tol);
     }
 
-    double acc_kkt_tol_ = 1.0e-2;
-    double acc_econ_tol_ = 1.0e-3;
-    double acc_icon_tol_ = 1.0e-3;
-    double acc_bar_tol_ = 1.0e-3;
-
-    void set_acc_kkt_tol(double acc_kkt_tol) { this->acc_kkt_tol_ = std::abs(acc_kkt_tol); }
-    void set_acc_bar_tol(double acc_bar_tol) { this->acc_bar_tol_ = std::abs(acc_bar_tol); }
-    void set_acc_econ_tol(double acc_econ_tol) { this->acc_econ_tol_ = std::abs(acc_econ_tol); }
-    void set_acc_icon_tol(double acc_icon_tol) { this->acc_icon_tol_ = std::abs(acc_icon_tol); }
+    void set_acc_kkt_tol(double acc_kkt_tol) { settings_.acc_kkt_tol_ = std::abs(acc_kkt_tol); }
+    void set_acc_bar_tol(double acc_bar_tol) { settings_.acc_bar_tol_ = std::abs(acc_bar_tol); }
+    void set_acc_econ_tol(double acc_econ_tol) {
+        settings_.acc_econ_tol_ = std::abs(acc_econ_tol);
+    }
+    void set_acc_icon_tol(double acc_icon_tol) {
+        settings_.acc_icon_tol_ = std::abs(acc_icon_tol);
+    }
     void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
                       double acc_bar_tol) {
         this->set_acc_kkt_tol(acc_kkt_tol);
@@ -266,27 +337,21 @@ struct PSIOPT {
         this->set_acc_bar_tol(acc_bar_tol);
     }
 
-    double unacc_kkt_tol_ = 10;
-    double unacc_econ_tol_ = 2;
-    double unacc_icon_tol_ = 2;
-    double unacc_bar_tol_ = 2;
-
     void set_unacc_tols(double kktol, double etol, double itol, double bartol) {
-        this->unacc_kkt_tol_ = kktol;
-        this->unacc_bar_tol_ = bartol;
-        this->unacc_econ_tol_ = etol;
-        this->unacc_icon_tol_ = itol;
+        settings_.unacc_kkt_tol_ = kktol;
+        settings_.unacc_bar_tol_ = bartol;
+        settings_.unacc_econ_tol_ = etol;
+        settings_.unacc_icon_tol_ = itol;
     }
 
-    double div_kkt_tol_ = 1.0e15;
-    double div_econ_tol_ = 1.0e15;
-    double div_icon_tol_ = 1.0e15;
-    double div_bar_tol_ = 1.0e15;
-
-    void set_div_kkt_tol(double div_kkt_tol) { this->div_kkt_tol_ = std::abs(div_kkt_tol); }
-    void set_div_bar_tol(double div_bar_tol) { this->div_bar_tol_ = std::abs(div_bar_tol); }
-    void set_div_econ_tol(double div_econ_tol) { this->div_econ_tol_ = std::abs(div_econ_tol); }
-    void set_div_icon_tol(double div_icon_tol) { this->div_icon_tol_ = std::abs(div_icon_tol); }
+    void set_div_kkt_tol(double div_kkt_tol) { settings_.div_kkt_tol_ = std::abs(div_kkt_tol); }
+    void set_div_bar_tol(double div_bar_tol) { settings_.div_bar_tol_ = std::abs(div_bar_tol); }
+    void set_div_econ_tol(double div_econ_tol) {
+        settings_.div_econ_tol_ = std::abs(div_econ_tol);
+    }
+    void set_div_icon_tol(double div_icon_tol) {
+        settings_.div_icon_tol_ = std::abs(div_icon_tol);
+    }
     void set_div_tols(double div_kkt_tol, double div_econ_tol, double div_icon_tol,
                       double div_bar_tol) {
         this->set_div_kkt_tol(div_kkt_tol);
@@ -297,57 +362,45 @@ struct PSIOPT {
 
     /////////////////////////////////////////////////////////////////////////
 
-    double bound_fraction_ = 0.99;
-
     void set_bound_fraction(double bound_fraction) {
         if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
             throw std::invalid_argument("bound_fraction must be between 0 and 1.");
         }
-        this->bound_fraction_ = bound_fraction;
+        settings_.bound_fraction_ = bound_fraction;
     }
 
-    double bound_push_ = 1.0e-3;
     void set_bound_push(double bound_push) {
         if (bound_push <= 0.0) {
             throw std::invalid_argument("bound_push must be greater than 0.");
         }
-        this->bound_push_ = bound_push;
+        settings_.bound_push_ = bound_push;
     }
-
-    double neg_slack_reset_ = 1.0e-12;
-
-    double soe_bound_relax_ = 1.0e-8;
-    double alpha_red_ = 2.0;
 
     void set_alpha_red(double ared) {
         if (ared <= 1.0) {
             throw std::invalid_argument("alpha_red must be greater than 1.0");
         }
-        this->alpha_red_ = ared;
+        settings_.alpha_red_ = ared;
     }
 
     /////////////////////////////////////////////////////////////////////////
-    double delta_h_ = 1.0e-5;
-    double incr_h_ = 8.00;
-    double decr_h_ = 0.333333;
-
     void set_delta_h(double delta_h) {
         if (delta_h <= 0.0) {
             throw std::invalid_argument("delta_h must be greater than 0.");
         }
-        this->delta_h_ = delta_h;
+        settings_.delta_h_ = delta_h;
     }
     void set_incr_h(double incr_h) {
         if (incr_h <= 1.0) {
             throw std::invalid_argument("incr_h must be greater than 1.0.");
         }
-        this->incr_h_ = incr_h;
+        settings_.incr_h_ = incr_h;
     }
     void set_decr_h(double decr_h) {
         if (decr_h >= 1.0 || decr_h <= 0) {
             throw std::invalid_argument("decr_h must be between 0 and 1.");
         }
-        this->decr_h_ = decr_h;
+        settings_.decr_h_ = decr_h;
     }
     void set_hpert_params(double delta_h, double incr_h, double decr_h) {
         this->set_delta_h(delta_h);
@@ -358,17 +411,9 @@ struct PSIOPT {
     ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
     ConvergenceFlags get_convergence_flag() const { return this->converge_flag_; }
 
-    double init_mu_ = 0.001;
-    double max_mu_ = 100.0;
-    double min_mu_ = 1.0e-12;
+    void set_print_level(int plevel) { settings_.print_level_ = plevel; }
 
-    bool cnr_mode_ = false;
-    int print_level_ = 0;
-    void set_print_level(int plevel) { this->print_level_ = plevel; }
-
-    PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
     double last_obj_val_ = 0.0;
-    bool fast_factor_alg_ = true;
 
     double last_total_time_ = 0;
     double last_pre_time_ = 0;
@@ -390,7 +435,6 @@ struct PSIOPT {
         this->last_iter_num_ = 0;
     }
 
-    bool wide_console_ = false;
     int factor_mem_ = 0;
     int factor_flops_ = 0;
     Eigen::VectorXd last_eq_lmults_;
@@ -399,12 +443,9 @@ struct PSIOPT {
     Eigen::VectorXd last_eq_cons_;
     Eigen::VectorXd last_iq_cons_;
 
-    bool return_best_ = false;
-    BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
-
-    void set_best_criteria(BestCriteriaModes mode) { this->best_criteria_ = mode; }
+    void set_best_criteria(BestCriteriaModes mode) { settings_.best_criteria_ = mode; }
     void set_best_criteria(const std::string &str) {
-        this->best_criteria_ = strto_BestCriteriaMode(str);
+        settings_.best_criteria_ = strto_BestCriteriaMode(str);
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -426,10 +467,12 @@ struct PSIOPT {
     ////////////////////////////////////////////////////////////////////
 
     PSIOPT() {
-        this->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+        settings_.qp_threads_ =
+            std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
     }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        this->qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+        settings_.qp_threads_ =
+            std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
         this->set_nlp(np);
     }
 
@@ -446,7 +489,7 @@ struct PSIOPT {
     void set_qp_params() {
 #ifdef USE_ACCELERATE_SPARSE
         // Accelerate interface uses different configuration methods
-        switch (qp_ord_) {
+        switch (settings_.qp_ord_) {
         case QPOrderingModes::MINDEG:
             this->kkt_sol_.set_order(SparseOrderAMD);
             break;
@@ -465,24 +508,24 @@ struct PSIOPT {
 #endif
             break;
         }
-        this->kkt_sol_.set_num_threads(qp_threads_);
-        this->kkt_sol_.set_iterative_refinement(qp_ref_steps_ > 0);
-        this->kkt_sol_.set_iterative_refinement_iterations(qp_ref_steps_);
-        this->kkt_sol_.set_pivot_tolerance(accel_pivot_tolerance_);
-        this->kkt_sol_.set_zero_tolerance(accel_zero_tolerance_);
+        this->kkt_sol_.set_num_threads(settings_.qp_threads_);
+        this->kkt_sol_.set_iterative_refinement(settings_.qp_ref_steps_ > 0);
+        this->kkt_sol_.set_iterative_refinement_iterations(settings_.qp_ref_steps_);
+        this->kkt_sol_.set_pivot_tolerance(settings_.accel_pivot_tolerance_);
+        this->kkt_sol_.set_zero_tolerance(settings_.accel_zero_tolerance_);
 #else
-        this->kkt_sol_.ord_ = static_cast<int>(qp_ord_);
-        this->kkt_sol_.pivotstrat_ = static_cast<int>(qp_pivot_strategy_);
-        this->kkt_sol_.pivotpert_ = qp_pivot_perturb_;
-        this->kkt_sol_.matching_ = qp_matching_;
-        this->kkt_sol_.scaling_ = qp_scaling_;
-        this->kkt_sol_.iterref_ = qp_ref_steps_;
-        this->kkt_sol_.alg_ = static_cast<int>(qp_alg_);
-        this->kkt_sol_.msglvl_ = qp_print_;
+        this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
+        this->kkt_sol_.pivotstrat_ = static_cast<int>(settings_.qp_pivot_strategy_);
+        this->kkt_sol_.pivotpert_ = settings_.qp_pivot_perturb_;
+        this->kkt_sol_.matching_ = settings_.qp_matching_;
+        this->kkt_sol_.scaling_ = settings_.qp_scaling_;
+        this->kkt_sol_.iterref_ = settings_.qp_ref_steps_;
+        this->kkt_sol_.alg_ = static_cast<int>(settings_.qp_alg_);
+        this->kkt_sol_.msglvl_ = settings_.qp_print_;
 
-        if (this->cnr_mode_)
-            this->kkt_sol_.threads_ = this->qp_threads_;
-        this->kkt_sol_.parsolve_ = this->qp_par_solve_;
+        if (settings_.cnr_mode_)
+            this->kkt_sol_.threads_ = settings_.qp_threads_;
+        this->kkt_sol_.parsolve_ = settings_.qp_par_solve_;
         this->kkt_sol_.set_params();
 #endif
     }
@@ -542,13 +585,13 @@ struct PSIOPT {
         for (int i = 0; i < this->slack_vars_; i++) {
             double fxi = FXI[i];
             double si = S[i];
-            if (si < neg_slack_reset_) {
-                si = neg_slack_reset_;
+            if (si < settings_.neg_slack_reset_) {
+                si = settings_.neg_slack_reset_;
             }
 
             if (fxi < 0.0) {
                 FXI[i] = 0.0;
-                S[i] = std::max(std::abs(fxi), neg_slack_reset_);
+                S[i] = std::max(std::abs(fxi), settings_.neg_slack_reset_);
             } else {
                 FXI[i] += si;
             }
@@ -698,7 +741,7 @@ struct PSIOPT {
 
     bool analyze_kkt_matrix() {
         bool docompute = true;
-        if (this->qp_analyzed_ && !(this->force_qp_analysis_)) {
+        if (this->qp_analyzed_ && !(settings_.force_qp_analysis_)) {
             docompute = false;
         } else {
             this->qp_analyzed_ = true;

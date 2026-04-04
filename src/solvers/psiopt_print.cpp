@@ -54,14 +54,14 @@ void tycho::solvers::PSIOPT::print_settings() {
 
     fmt::print("{0:_^{1}}\n", "", 39);
     fmt::print("|------|   tol   | Acctol  | Divtol  |\n");
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "KKT", this->kkt_tol_,
-               this->acc_kkt_tol_, this->div_kkt_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "Bar", this->bar_tol_,
-               this->acc_bar_tol_, this->div_bar_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ECons", this->econ_tol_,
-               this->acc_econ_tol_, this->div_econ_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ICons", this->icon_tol_,
-               this->acc_icon_tol_, this->div_icon_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "KKT", settings_.kkt_tol_,
+               settings_.acc_kkt_tol_, settings_.div_kkt_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "Bar", settings_.bar_tol_,
+               settings_.acc_bar_tol_, settings_.div_bar_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ECons", settings_.econ_tol_,
+               settings_.acc_econ_tol_, settings_.div_econ_tol_);
+    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ICons", settings_.icon_tol_,
+               settings_.acc_icon_tol_, settings_.div_icon_tol_);
 }
 
 void tycho::solvers::PSIOPT::print_stats() {
@@ -94,7 +94,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     auto last = iters.back();
 
     if (last.iter % 10 == 0) {
-        if (wide_console_) {
+        if (settings_.wide_console_) {
             fmt::print("{0:=^{1}}\n", "", 159);
             fmt::print(
                 "|Iter| mu Val | Prim Obj |  Bar Obj |  KKT Inf |  Bar Inf | ECons Inf| ICons "
@@ -115,10 +115,10 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::text_style BHashcol = fmt::text_style();
     fmt::text_style BOHashcol = fmt::text_style();
 
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, this->kkt_tol_, this->acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, this->bar_tol_, this->acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, this->econ_tol_, this->acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, this->icon_tol_, this->acc_icon_tol_);
+    fmt::text_style Kcol = calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
+    fmt::text_style Bcol = calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
+    fmt::text_style Ecol = calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
+    fmt::text_style Icol = calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
 
     if (iters.size() > 1) {
 
@@ -154,7 +154,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::print(Icol, "{:>10.4e}", last.icon_inf_);
     chash(IHashcol);
 
-    if (wide_console_) {
+    if (settings_.wide_console_) {
         fmt::print(
             "{:>9.3e}|{:>9.3e}|{:>8.2e}|{:>8.2e}|{:>8.2e}|{:>10.3e}|{:>3}|{:>3}|{:>3}|{:>6.1e}|\n",
             last.max_e_mult_, last.max_i_mult_, last.alpha_p_, last.alpha_d_, last.alpha_t_,
@@ -184,10 +184,10 @@ void tycho::solvers::PSIOPT::print_finished(std::string msg) const {
 void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last,
                                               int iternum, double tottime, double nlptime,
                                               double qptime, double printtime) {
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, this->kkt_tol_, this->acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, this->bar_tol_, this->acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, this->econ_tol_, this->acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, this->icon_tol_, this->acc_icon_tol_);
+    fmt::text_style Kcol = calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
+    fmt::text_style Bcol = calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
+    fmt::text_style Ecol = calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
+    fmt::text_style Icol = calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
 
     auto TColor = fmt::fg(fmt::color::cyan);
     auto Printtime = [&](const char *msg, double t1) {
@@ -195,7 +195,7 @@ void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const I
         fmt::print(TColor, "{0:>10.3f} ms {1:>10.3f} ms/iter\n", t1, double(t1 / iternum));
     };
 
-    if (this->print_level_ < 3) {
+    if (settings_.print_level_ < 3) {
         if (ExitCode == ConvergenceFlags::CONVERGED) {
             fmt::print(fmt::fg(fmt::color::lime_green), "\nOptimal Solution Found\n");
         } else if (ExitCode == ConvergenceFlags::ACCEPTABLE) {
@@ -207,7 +207,7 @@ void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const I
         }
     }
 
-    if (this->print_level_ < 2) {
+    if (settings_.print_level_ < 2) {
 
         fmt::print(" Iterations : ");
         fmt::print("{:<5}\n", iternum);

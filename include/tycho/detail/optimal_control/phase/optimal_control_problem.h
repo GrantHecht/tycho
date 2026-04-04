@@ -1567,14 +1567,14 @@ struct OptimalControlProblem : OptimizationProblemBase {
 
     void jet_initialize() {
         this->set_num_partitions(1, 1);
-        this->optimizer_->print_level_ = 10;
+        this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
         this->transcribe();
     }
     void jet_release() {
         this->optimizer_->release();
         this->init_partitions();
-        this->optimizer_->print_level_ = 0;
+        this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         for (auto &phase : this->phases)

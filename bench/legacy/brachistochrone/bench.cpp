@@ -92,7 +92,7 @@ int main() {
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Suppress optimizer output
-    phase->optimizer_->print_level_ = 3;
+    phase->optimizer_->set_print_level(3);
 
     // ---- Solve (timed) -----------------------------------------------------
     auto start = std::chrono::high_resolution_clock::now();

@@ -146,7 +146,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
-        phase->optimizer_->print_level_ = print_level;
+        phase->optimizer_->set_print_level(print_level);
     }
 
     return phase;
@@ -208,7 +208,7 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs, int
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
-        phase->optimizer_->print_level_ = print_level;
+        phase->optimizer_->set_print_level(print_level);
     }
 
     return phase;
@@ -374,7 +374,7 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
     phase->set_num_partitions(8, 8);
 
     if (print_level >= 0) {
-        phase->optimizer_->print_level_ = print_level;
+        phase->optimizer_->set_print_level(print_level);
     }
 
     return phase;
