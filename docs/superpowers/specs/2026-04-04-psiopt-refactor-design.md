@@ -102,7 +102,6 @@ struct PSIOPT::Settings {
     double bound_push = 1.0e-3;
     double neg_slack_reset = 1.0e-12;
     double soe_bound_relax = 1.0e-8;
-    double min_ls_step = 0.01;
     double alpha_red = 2.0;
 
     // --- Hessian perturbation ---
@@ -128,13 +127,13 @@ struct PSIOPT::Settings {
 
     // --- Objective ---
     double obj_scale = 1.0;
-    double max_cpu_time = 1200;
 
     // --- Output/behavior ---
     int print_level = 0;
     bool wide_console = false;
     bool cnr_mode = false;
     bool fast_factor_alg = true;
+    bool force_qp_analysis = false;
     bool return_best = false;
     BestCriteriaModes best_criteria = BestCriteriaModes::ECONS;
 };
@@ -270,8 +269,10 @@ The 5 entry points become thin wrappers:
 `run_phase_sequence` scaffolding:
 1. `result_.zero_timing()`, print stats, `ensure_solver_initialized()`, start timer
 2. `analyze_kkt_matrix()`, `init_impl()`
-3. For each step: skip if `conditional` and already converged. Otherwise call `alg_impl()` with the step's modes. Re-init between phases (extract primals, re-run `init_impl`).
+3. For each step: skip if `conditional` and already converged. Otherwise print `print_beginning(label)`, call `alg_impl()` with the step's modes, print `print_finished(label)`. Re-init between phases (extract primals, re-run `init_impl`).
 4. Stop timer, compute misc time, print summary, populate `result_`, return primals.
+
+**Printing behavior:** The current entry points have inconsistent per-step printing (e.g., `solve_optimize` calls `print_finished` after the solve phase but not after the optimization phase). `run_phase_sequence` uniformly prints `print_beginning`/`print_finished` around every phase step. This is an intentional improvement to output consistency, not an algorithm change.
 
 ---
 
@@ -310,6 +311,9 @@ Each variant reads cleanly on its own (~20-30 lines), with variant-specific logi
 | `store_sp_mat_` / `spmat` / `get_sp_mat()` / `get_sp_mat2()` | Remove |
 | `ex_obj_val_` (set to `-1.0e20`, never read) | Remove |
 | `FIACCO` and `BARDISABLED` barrier modes (declared but unimplemented) | Remove from enum |
+| `LineSearchModes::L2` (declared, never handled in `ls_impl`, not bound in Python) | Remove from enum |
+| `max_cpu_time_` (declared, never referenced in any .cpp file, not bound in Python) | Remove |
+| `min_ls_step_` (declared, never referenced in any .cpp file, not bound in Python) | Remove |
 | `wide` variable in `print_last_iterate` (unused) | Remove |
 
 ---
@@ -333,10 +337,17 @@ All remaining config fields route through `settings_` via getter/setter lambdas.
 
 ### Preserved as-is
 
-- All validated setter methods (`set_kkt_tol`, `set_tols`, etc.)
-- All enum bindings
+- All validated setter methods that are currently bound (`set_kkt_tol`, `set_tols`, etc.). C++-only setters (`set_all_max_iters`, `set_bound_push`, `set_unacc_tols`) remain C++-only — no new bindings added.
+- All enum bindings. Note: `QPPivotModes::E4`, `E6`, `E8`, `E13` are retained in the C++ enum (they are valid Pardiso parameters) but remain unbound in Python (only `OneByOne` and `TwoByTwo` are exposed, matching current behavior).
 - `optimize`, `solve`, `solve_optimize` method signatures and return types
 - `get_convergence_flag()` method
+
+### Internal (no Python binding)
+
+These fields exist in `SolveResult` for C++ callers but are not exposed in Python (matching current behavior):
+- `eq_lmults`, `iq_lmults`, `eq_cons`, `iq_cons` — multipliers and constraints
+- `factor_mem`, `factor_flops` — factorization statistics
+- `primals` — entry points return this directly as the `Eigen::VectorXd` return value
 
 ---
 
@@ -376,7 +387,7 @@ public:
 
     // NLP setup
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
-    void release();
+    void release();  // clears nlp_, kkt_sol_, qp_analyzed_; resets result_.eq_lmults and result_.iq_lmults (matching current behavior)
 
     // Public entry points (unchanged signatures)
     Eigen::VectorXd optimize(const Eigen::VectorXd& x);
@@ -478,11 +489,11 @@ private:
     void print_stats();
     void print_settings();
     void print_last_iterate(...);
-    void print_beginning(...) const;
-    void print_finished(...) const;
+    void print_beginning(std::string_view msg) const;
+    void print_finished(std::string_view msg) const;
     void print_exit_stats(...);
     void print_timing_summary();
-    static fmt::text_style calculate_color(...);
+    static fmt::text_style calculate_color(...);  // changed from non-static: does not access member state
 };
 ```
 
