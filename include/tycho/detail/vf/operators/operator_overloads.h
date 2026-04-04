@@ -59,26 +59,26 @@ decltype(auto) operator*(const Eigen::MatrixBase<OutType> &s,
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 template <class Derived> decltype(auto) operator*(const Scaled<Derived> &func, double s) {
-    return Scaled<Derived>(func.func, func.scale_value_ * s);
+    return Scaled<Derived>(func.func_, func.scale_value_ * s);
 }
 template <class Derived> decltype(auto) operator*(double s, const Scaled<Derived> &func) {
-    return Scaled<Derived>(func.func, func.scale_value_ * s);
+    return Scaled<Derived>(func.func_, func.scale_value_ * s);
 }
 template <class Derived> decltype(auto) operator*(const RowScaled<Derived> &func, double s) {
-    return RowScaled<Derived>(func.func, func.row_scale_values_ * s);
+    return RowScaled<Derived>(func.func_, func.row_scale_values_ * s);
 }
 template <class Derived> decltype(auto) operator*(double s, const RowScaled<Derived> &func) {
-    return RowScaled<Derived>(func.func, func.row_scale_values_ * s);
+    return RowScaled<Derived>(func.func_, func.row_scale_values_ * s);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class Derived, class OutType>
 decltype(auto) operator*(const RowScaled<Derived> &func, const Eigen::MatrixBase<OutType> &s) {
-    return RowScaled<Derived>(func.func, func.row_scale_values_.cwiseProduct(s));
+    return RowScaled<Derived>(func.func_, func.row_scale_values_.cwiseProduct(s));
 }
 template <class Derived, class OutType>
 decltype(auto) operator*(const Eigen::MatrixBase<OutType> &s, const RowScaled<Derived> &func) {
-    return RowScaled<Derived>(func.func, func.row_scale_values_.cwiseProduct(s));
+    return RowScaled<Derived>(func.func_, func.row_scale_values_.cwiseProduct(s));
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -93,6 +93,9 @@ decltype(auto) operator/(const DenseFunctionBase<Derived, IR, OR> &func,
 }
 template <class Derived> decltype(auto) operator/(const Scaled<Derived> &func, double s) {
     return Scaled<Derived>(func.func_, func.scale_value_ / s);
+}
+template <class Derived> decltype(auto) operator/(const RowScaled<Derived> &func, double s) {
+    return RowScaled<Derived>(func.func_, func.row_scale_values_ / s);
 }
 
 template <class Derived, int IR>

@@ -57,8 +57,8 @@ struct VectorExpression<Derived, ExprImpl>
 };
 
 #define BUILD_FROM_EXPRESSION(NAME, IMPL, ...)                                                     \
-    struct NAME : VectorExpression<NAME, IMPL, __VA_ARGS__> {                                      \
-        using Base = VectorExpression<NAME, IMPL, __VA_ARGS__>;                                    \
+    struct NAME : VectorExpression<NAME, IMPL __VA_OPT__(, ) __VA_ARGS__> {                        \
+        using Base = VectorExpression<NAME, IMPL __VA_OPT__(, ) __VA_ARGS__>;                      \
         using Base::Base;                                                                          \
     };
 
