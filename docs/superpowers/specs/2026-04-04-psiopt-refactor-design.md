@@ -35,7 +35,7 @@
 | File | Purpose |
 |---|---|
 | `include/tycho/detail/solvers/psiopt_fwd.h` | Forward declarations + `ConvergenceFlags` enum (lightweight include for code that doesn't need the full PSIOPT definition) |
-| `include/tycho/detail/solvers/psiopt.h` | PSIOPT class declaration with nested `Settings`, `SolveResult`, `KktVector`, enums. Declarations only — non-trivial method bodies live in .cpp files. |
+| `include/tycho/detail/solvers/psiopt.h` | PSIOPT class declaration with nested `Settings`, `SolveResult`, `KKTVector`, enums. Declarations only — non-trivial method bodies live in .cpp files. |
 | `src/solvers/psiopt.cpp` | Algorithm core: `run_phase_sequence`, `alg_impl`, `init_impl`, `ls_impl` (dispatcher + 3 variants + helpers), `factor_impl`, entry points, setters, barrier math, NLP eval wrappers |
 | `src/solvers/psiopt_print.cpp` | All printing/formatting methods (still methods on PSIOPT, just compiled in a separate TU) |
 | `src/bindings/solvers/psiopt_bind.cpp` | Updated bindings: `def_rw` -> `def_prop_rw` for config, `def_prop_ro` for results, dead bindings removed |
@@ -53,93 +53,93 @@ Groups the ~40 configuration fields into a plain aggregate struct with logical s
 ```cpp
 struct PSIOPT::Settings {
     // --- Iteration limits ---
-    int max_iters = 500;
-    int max_ls_iters = 2;
-    int max_acc_iters = 50;
-    int max_refac = 15;
-    int max_soc = 1;
-    int max_feas_rest = 2;
+    int max_iters_ = 500;
+    int max_ls_iters_ = 2;
+    int max_acc_iters_ = 50;
+    int max_refac_ = 15;
+    int max_soc_ = 1;
+    int max_feas_rest_ = 2;
 
     // --- Convergence tolerances ---
-    double kkt_tol = 1.0e-6;
-    double econ_tol = 1.0e-6;
-    double icon_tol = 1.0e-6;
-    double bar_tol = 1.0e-6;
+    double kkt_tol_ = 1.0e-6;
+    double econ_tol_ = 1.0e-6;
+    double icon_tol_ = 1.0e-6;
+    double bar_tol_ = 1.0e-6;
 
     // --- Acceptable tolerances ---
-    double acc_kkt_tol = 1.0e-2;
-    double acc_econ_tol = 1.0e-3;
-    double acc_icon_tol = 1.0e-3;
-    double acc_bar_tol = 1.0e-3;
+    double acc_kkt_tol_ = 1.0e-2;
+    double acc_econ_tol_ = 1.0e-3;
+    double acc_icon_tol_ = 1.0e-3;
+    double acc_bar_tol_ = 1.0e-3;
 
     // --- Unacceptable tolerances ---
-    double unacc_kkt_tol = 10;
-    double unacc_econ_tol = 2;
-    double unacc_icon_tol = 2;
-    double unacc_bar_tol = 2;
+    double unacc_kkt_tol_ = 10;
+    double unacc_econ_tol_ = 2;
+    double unacc_icon_tol_ = 2;
+    double unacc_bar_tol_ = 2;
 
     // --- Divergence tolerances ---
-    double div_kkt_tol = 1.0e15;
-    double div_econ_tol = 1.0e15;
-    double div_icon_tol = 1.0e15;
-    double div_bar_tol = 1.0e15;
+    double div_kkt_tol_ = 1.0e15;
+    double div_econ_tol_ = 1.0e15;
+    double div_icon_tol_ = 1.0e15;
+    double div_bar_tol_ = 1.0e15;
 
     // --- Algorithm modes ---
-    AlgorithmModes soe_mode = AlgorithmModes::SOE;
-    BarrierModes opt_bar_mode = BarrierModes::LOQO;
-    BarrierModes soe_bar_mode = BarrierModes::LOQO;
-    LineSearchModes opt_ls_mode = LineSearchModes::AUGLANG;
-    LineSearchModes soe_ls_mode = LineSearchModes::NOLS;
-    PDStepStrategies pd_step_strategy = PDStepStrategies::PrimSlackEq_Iq;
+    AlgorithmModes soe_mode_ = AlgorithmModes::SOE;
+    BarrierModes opt_bar_mode_ = BarrierModes::LOQO;
+    BarrierModes soe_bar_mode_ = BarrierModes::LOQO;
+    LineSearchModes opt_ls_mode_ = LineSearchModes::AUGLANG;
+    LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
+    PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
 
     // --- Barrier parameters ---
-    double init_mu = 0.001;
-    double max_mu = 100.0;
-    double min_mu = 1.0e-12;
+    double init_mu_ = 0.001;
+    double max_mu_ = 100.0;
+    double min_mu_ = 1.0e-12;
 
     // --- Step parameters ---
-    double bound_fraction = 0.99;
-    double bound_push = 1.0e-3;
-    double neg_slack_reset = 1.0e-12;
-    double soe_bound_relax = 1.0e-8;
-    double alpha_red = 2.0;
+    double bound_fraction_ = 0.99;
+    double bound_push_ = 1.0e-3;
+    double neg_slack_reset_ = 1.0e-12;
+    double soe_bound_relax_ = 1.0e-8;
+    double alpha_red_ = 2.0;
 
     // --- Hessian perturbation ---
-    double delta_h = 1.0e-5;
-    double incr_h = 8.0;
-    double decr_h = 0.333333;
+    double delta_h_ = 1.0e-5;
+    double incr_h_ = 8.0;
+    double decr_h_ = 0.333333;
 
     // --- QP solver ---
-    int qp_threads = TYCHO_DEFAULT_QP_THREADS;  // clamped in PSIOPT ctor
-    QPAlgModes qp_alg = QPAlgModes::Classic;
-    QPOrderingModes qp_ord = QPOrderingModes::METIS;
-    QPPivotModes qp_pivot_strategy = QPPivotModes::TwoByTwo;
-    int qp_matching = 1;
-    int qp_scaling = 0;
-    int qp_pivot_perturb = 8;
-    int qp_ref_steps = 0;
-    int qp_par_solve = 0;
-    bool qp_print = false;
+    int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;  // clamped in PSIOPT ctor
+    QPAlgModes qp_alg_ = QPAlgModes::Classic;
+    QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
+    QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
+    int qp_matching_ = 1;
+    int qp_scaling_ = 0;
+    int qp_pivot_perturb_ = 8;
+    int qp_ref_steps_ = 0;
+    int qp_par_solve_ = 0;
+    bool qp_print_ = false;
 #ifdef USE_ACCELERATE_SPARSE
-    double accel_pivot_tolerance = 0.01;
-    double accel_zero_tolerance = 1e-4 * std::numeric_limits<double>::epsilon();
+    double accel_pivot_tolerance_ = 0.01;
+    double accel_zero_tolerance_ = 1e-4 * std::numeric_limits<double>::epsilon();
 #endif
 
     // --- Objective ---
-    double obj_scale = 1.0;
+    double obj_scale_ = 1.0;
 
     // --- Output/behavior ---
-    int print_level = 0;
-    bool wide_console = false;
-    bool cnr_mode = false;
-    bool fast_factor_alg = true;
-    bool force_qp_analysis = false;
-    bool return_best = false;
-    BestCriteriaModes best_criteria = BestCriteriaModes::ECONS;
+    int print_level_ = 0;
+    bool wide_console_ = false;
+    bool cnr_mode_ = false;
+    bool fast_factor_alg_ = true;
+    bool force_qp_analysis_ = false;
+    bool return_best_ = false;
+    BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
 };
 ```
 
-All validation stays on PSIOPT's setter methods (e.g., `PSIOPT::set_kkt_tol()` validates then writes to `settings_.kkt_tol`). Internal code reads config as `settings_.kkt_tol`.
+All validation stays on PSIOPT's setter methods (e.g., `PSIOPT::set_kkt_tol()` validates then writes to `settings_.kkt_tol_`). Internal code reads config as `settings_.kkt_tol_`.
 
 ### `PSIOPT::SolveResult`
 
@@ -148,52 +148,52 @@ Groups all solve output fields. Written by the algorithm, read by callers.
 ```cpp
 struct PSIOPT::SolveResult {
     // --- Solution ---
-    Eigen::VectorXd primals;
+    Eigen::VectorXd primals_;
 
     // --- Solve outcome ---
-    int iter_num = 0;
-    double obj_val = 0;
-    ConvergenceFlags converge_flag = ConvergenceFlags::NOTCONVERGED;
+    int iter_num_ = 0;
+    double obj_val_ = 0;
+    ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
 
     // --- Multipliers and constraints ---
-    Eigen::VectorXd eq_lmults;
-    Eigen::VectorXd iq_lmults;
-    Eigen::VectorXd eq_cons;
-    Eigen::VectorXd iq_cons;
+    Eigen::VectorXd eq_lmults_;
+    Eigen::VectorXd iq_lmults_;
+    Eigen::VectorXd eq_cons_;
+    Eigen::VectorXd iq_cons_;
 
     // --- Timing (seconds) ---
-    double total_time = 0;
-    double pre_time = 0;
-    double func_time = 0;
-    double kkt_time = 0;
-    double print_time = 0;
-    double misc_time = 0;
-    double solver_init_time = 0;
+    double total_time_ = 0;
+    double pre_time_ = 0;
+    double func_time_ = 0;
+    double kkt_time_ = 0;
+    double print_time_ = 0;
+    double misc_time_ = 0;
+    double solver_init_time_ = 0;
 
     // --- Factorization stats ---
-    int factor_mem = 0;
-    int factor_flops = 0;
+    int factor_mem_ = 0;
+    int factor_flops_ = 0;
 
     void zero_timing() {
-        total_time = 0;  pre_time = 0;  func_time = 0;
-        kkt_time = 0;  print_time = 0;  misc_time = 0;
-        solver_init_time = 0;  iter_num = 0;
+        total_time_ = 0;  pre_time_ = 0;  func_time_ = 0;
+        kkt_time_ = 0;  print_time_ = 0;  misc_time_ = 0;
+        solver_init_time_ = 0;  iter_num_ = 0;
     }
 };
 ```
 
 Python bindings expose result fields as **read-only** properties (`def_prop_ro`). Python property names keep the `last_` prefix for backward compatibility (e.g., `def_prop_ro("last_total_time", ...)`).
 
-Entry points populate `result_` fully (including primals) then return `result_.primals` to preserve the existing `Eigen::VectorXd` return type.
+Entry points populate `result_` fully (including primals) then return `result_.primals_` to preserve the existing `Eigen::VectorXd` return type.
 
-### `PSIOPT::KktVector`
+### `PSIOPT::KKTVector`
 
 Lightweight non-owning view over the compound `[primals | slacks | eq_lmults | iq_lmults]` vector layout. Replaces the 14 `get_*` helper methods.
 
 ```cpp
-class PSIOPT::KktVector {
+class PSIOPT::KKTVector {
 public:
-    KktVector(Eigen::VectorXd& data, int primal_vars, int slack_vars,
+    KKTVector(Eigen::VectorXd& data, int primal_vars, int slack_vars,
               int equal_cons, int inequal_cons);
 
     // --- Primal/slack segments ---
@@ -366,7 +366,7 @@ These fields exist in `SolveResult` for C++ callers but are not exposed in Pytho
 ### Kept in header (inline)
 
 - `settings()` / `result()` — trivial accessors
-- `KktVector` accessors — return Eigen expressions, must be inline for zero overhead
+- `KKTVector` accessors — return Eigen expressions, must be inline for zero overhead
 - Callback setters — true one-liners
 - `SolveResult::zero_timing()` — small utility
 - `print_header()` — static one-liner
@@ -379,7 +379,7 @@ These fields exist in `SolveResult` for C++ callers but are not exposed in Pytho
 class PSIOPT {
 public:
     // Nested enums (unchanged)
-    // Settings, SolveResult, KktVector (see above)
+    // Settings, SolveResult, KKTVector (see above)
 
     // Construction
     PSIOPT();
@@ -387,7 +387,7 @@ public:
 
     // NLP setup
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
-    void release();  // clears nlp_, kkt_sol_, qp_analyzed_; resets result_.eq_lmults and result_.iq_lmults (matching current behavior)
+    void release();  // clears nlp_, kkt_sol_, qp_analyzed_; resets result_.eq_lmults_ and result_.iq_lmults_ (matching current behavior)
 
     // Public entry points (unchanged signatures)
     Eigen::VectorXd optimize(const Eigen::VectorXd& x);
