@@ -86,22 +86,19 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
 
     // ---- Sub-vector access ----
 
-    template <int Start, int Size>
-    decltype(auto) operator[](vf::XSegTag<Start, Size>) const {
+    template <int Start, int Size> decltype(auto) operator[](vf::XSegTag<Start, Size>) const {
         static_assert(_XV >= 0, "XSeg requires compile-time-known state dimension (XV >= 0)");
         static_assert(Start + Size <= _XV, "XSeg out of range for this ODE sizing");
         return this->template segment<Size, Start>();
     }
 
-    template <int Start, int Size>
-    decltype(auto) operator[](vf::USegTag<Start, Size>) const {
+    template <int Start, int Size> decltype(auto) operator[](vf::USegTag<Start, Size>) const {
         static_assert(_UV >= 0, "USeg requires compile-time-known control dimension (UV >= 0)");
         static_assert(Start + Size <= _UV, "USeg out of range for this ODE sizing");
         return this->template segment<Size, _XV + 1 + Start>();
     }
 
-    template <int Start, int Size>
-    decltype(auto) operator[](vf::PSegTag<Start, Size>) const {
+    template <int Start, int Size> decltype(auto) operator[](vf::PSegTag<Start, Size>) const {
         static_assert(_PV >= 0, "PSeg requires compile-time-known parameter dimension (PV >= 0)");
         static_assert(Start + Size <= _PV, "PSeg out of range for this ODE sizing");
         return this->template segment<Size, _XV + 1 + _UV + Start>();

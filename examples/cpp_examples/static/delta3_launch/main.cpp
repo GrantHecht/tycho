@@ -9,25 +9,13 @@
 // State  : [Rx, Ry, Rz, Vx, Vy, Vz, m]   (7)
 // Control: [ux, uy, uz]                     (3)
 //
-// Phase vector layout: [R(3), V(3), m, t, u(3)]
-//                       0-2   3-5   6  7  8-10
-//
 // Corresponds to the Python example in examples/Delta3Launch.py.
 //
-// === PAIN POINTS (for Phase 7 static DSL improvements) ===
-// 1. No composable ODE: each thrust/mdot combination requires a separate
-//    ODE type in the static DSL.  Python just passes (T, mdot) at runtime.
-//    Workaround: BUILD_ODE_FROM_EXPRESSION with (double, double) works here
-//    because both parameters are the same type.  Heterogeneous parameter packs
-//    would need a struct wrapper.
-// 2. Constant vectors in expressions: R.cross([0,0,We]) requires explicit
-//    Constant<IR,3> construction.  Python accepts numpy arrays directly.
-// 3. TargetOrbit constraint function requires manual construction of
-//    orbital elements from VF primitives (acos, cross, ifelse, normalized).
-//    Verbose but functional.
-// 4. Manual index arrays for every add_boundary_value / add_equal_con call.
-// 5. Arguments<11> is expensive to compile (~heavy template instantiation).
-// 6. No ODEArguments equivalent — must track [x,t,u] layout manually.
+// Phase 8 refinements applied:
+//   - ODEArguments<7,3,0> replaces Arguments<11> — auto-computed layout
+//   - XSeg/XVar/UVec tags replace manual head/segment/coeff/tail indices
+//   - BUILD_ODE_FROM_EXPRESSION_FD avoids Jacobian/Hessian template
+//     instantiation, reducing compile time and memory for this large ODE
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -132,11 +120,11 @@ static const double mf_phase4 = m0_phase4 - PM2;
 
 struct RocketODE_Impl : ODESize<7, 3, 0> {
     static auto Definition(double T, double mdot) {
-        auto args = Arguments<11>(); // [R(3), V(3), m, t, u(3)]
-        auto R = args.head<3>();
-        auto V = args.segment<3, 3>();
-        auto m = args.coeff<6>();
-        auto u = args.tail<3>().normalized();
+        auto args = ODEArguments<7, 3, 0>();
+        auto R = args[XSeg<0, 3>];
+        auto V = args[XSeg<3, 3>];
+        auto m = args[XVar<6>];
+        auto u = args[UVec].normalized();
 
         auto h = R.norm() - Re;
 
@@ -167,7 +155,7 @@ struct RocketODE_Impl : ODESize<7, 3, 0> {
         return StackedOutputs{Rdot, Vdot, neg_mdot_vf};
     }
 };
-BUILD_ODE_FROM_EXPRESSION(RocketODE, RocketODE_Impl, double, double);
+BUILD_ODE_FROM_EXPRESSION_FD(RocketODE, RocketODE_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // TargetOrbit — equality constraint on classical orbital elements

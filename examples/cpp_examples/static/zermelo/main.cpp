@@ -8,27 +8,15 @@
 // State  : [x, y]    (2D position)
 // Control: [theta]   (heading angle, measured from +x)
 //
-// Augmented phase vector layout: [x, y, t, theta]
-//                                  0  1  2     3
-//
 // ODE:
 //   xdot = vMax * cos(theta) + wx(x,y,t)
 //   ydot = vMax * sin(theta) + wy(x,y,t)
 //
 // Corresponds to the Python example in examples/Zermelo.py.
 //
-// === PAIN POINTS (for Phase 7 static DSL improvements) ===
-// 1. No composable wind functions: each wind model requires its own ODE type.
-//    In Python, the wind function is a callable passed to the ODE constructor.
-//    In C++, you must define a separate _Impl struct + BUILD_ODE_FROM_EXPRESSION
-//    per wind model, duplicating the boat dynamics in each.
-// 2. The navigate() solver function must be a template parameterised on the
-//    ODE type, even though the problem structure is identical for all wind
-//    models.  A runtime-polymorphic ODE (GenericODE) would avoid this but adds
-//    type-erasure overhead and a different construction pattern.
-// 3. Manual index tracking: coeff<0>(), coeff<3>() instead of named variables.
-// 4. Time-dependent models require Arguments<N> (total size) — there is no
-//    ODEArguments equivalent in the static DSL that auto-calculates the layout.
+// Phase 8 refinements applied:
+//   - ODEArguments<2,1,0> replaces Arguments<4> — auto-computed layout
+//   - XVar/UVar/XVec tags replace manual coeff<> indices
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -52,8 +40,8 @@ using namespace tycho::utils;
 // No wind
 struct ZermeloNoWind_Impl : ODESize<2, 1, 0> {
     static auto Definition(double vMax) {
-        auto args = Arguments<4>(); // [x, y, t, theta]
-        auto theta = args.coeff<3>();
+        auto args = ODEArguments<2, 1, 0>();
+        auto theta = args[UVar<0>];
         return StackedOutputs{vMax * cos(theta), vMax * sin(theta)};
     }
 };
@@ -62,8 +50,8 @@ BUILD_ODE_FROM_EXPRESSION(ZermeloNoWind, ZermeloNoWind_Impl, double);
 // Uniform wind (constant velocity and direction)
 struct ZermeloUniformWind_Impl : ODESize<2, 1, 0> {
     static auto Definition(double vMax, double wVel, double wAng) {
-        auto args = Arguments<4>();
-        auto theta = args.coeff<3>();
+        auto args = ODEArguments<2, 1, 0>();
+        auto theta = args[UVar<0>];
         return StackedOutputs{
             vMax * cos(theta) + wVel * std::cos(wAng),
             vMax * sin(theta) + wVel * std::sin(wAng)};
@@ -74,9 +62,9 @@ BUILD_ODE_FROM_EXPRESSION(ZermeloUniformWind, ZermeloUniformWind_Impl, double, d
 // Constant-direction wind with position-dependent speed
 struct ZermeloConstDirWind_Impl : ODESize<2, 1, 0> {
     static auto Definition(double vMax, double wAng) {
-        auto args = Arguments<4>();
-        auto pos = args.head<2>();
-        auto theta = args.coeff<3>();
+        auto args = ODEArguments<2, 1, 0>();
+        auto pos = args[XVec];
+        auto theta = args[UVar<0>];
         auto vel = cos(pos.norm());
         return StackedOutputs{
             vMax * cos(theta) + vel * std::cos(wAng),
@@ -88,11 +76,11 @@ BUILD_ODE_FROM_EXPRESSION(ZermeloConstDirWind, ZermeloConstDirWind_Impl, double,
 // Variable-direction wind: speed and angle depend on position
 struct ZermeloVarWind_Impl : ODESize<2, 1, 0> {
     static auto Definition(double vMax) {
-        auto args = Arguments<4>();
-        auto pos = args.head<2>();
-        auto x = args.coeff<0>();
-        auto y = args.coeff<1>();
-        auto theta = args.coeff<3>();
+        auto args = ODEArguments<2, 1, 0>();
+        auto pos = args[XVec];
+        auto x = args[XVar<0>];
+        auto y = args[XVar<1>];
+        auto theta = args[UVar<0>];
         auto vel = sin(pos.norm());
         auto ang = 2.0 * (x + y);
         return StackedOutputs{

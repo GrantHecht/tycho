@@ -7,9 +7,6 @@
 // State  : [x]   (1 scalar state)
 // Control: [u]   (1 scalar control)
 //
-// Phase vector layout: [x, t, u]
-//                       0  1  2
-//
 // ODE:
 //   xdot = -x + u
 //
@@ -21,15 +18,10 @@
 //
 // Corresponds to the Python example in examples/MeshRefinement/HyperSensLong.py.
 //
-// === PAIN POINTS (for Phase 7 static DSL improvements) ===
-// 1. Integral objectives require constructing a GenericFunction wrapper and
-//    manually specifying which phase variables map to the function's inputs.
-//    Python: phase.add_integral_objective(Args(2).squared_norm()/2, [0, 2])
-//    C++:    GenericFunction<-1,1> + VectorXi index array
-// 2. Boundary conditions require manual VectorXi/VectorXd construction for
-//    index and value arrays — verbose compared to Python's list syntax.
-// 3. Solver/mesh settings are string-based in Python but require enum imports
-//    in C++.  Minor, but adds friction.
+// Phase 8 refinements applied:
+//   - ODEArguments<1,1,0> replaces Arguments<3> — auto-computed layout
+//   - XVar/UVar tags replace manual coeff<> indices
+//   - Zero-arg Definition() — no dummy parameter needed
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -52,14 +44,14 @@ using namespace tycho::utils;
 // Linear version: xdot = -x + u
 // The cubed version (xdot = -x^3 + u) would require a separate ODE type.
 struct HyperSens_Impl : ODESize<1, 1, 0> {
-    static auto Definition(double /*unused*/) {
-        auto args = Arguments<3>(); // [x, t, u]
-        auto x = args.coeff<0>();
-        auto u = args.coeff<2>();
+    static auto Definition() {
+        auto args = ODEArguments<1, 1, 0>();
+        auto x = args[XVar<0>];
+        auto u = args[UVar<0>];
         return u - x;
     }
 };
-BUILD_ODE_FROM_EXPRESSION(HyperSens, HyperSens_Impl, double);
+BUILD_ODE_FROM_EXPRESSION(HyperSens, HyperSens_Impl);
 
 ///////////////////////////////////////////////////////////////////////////////
 // main
@@ -82,7 +74,7 @@ int main() {
         trajIG.push_back(pt);
     }
 
-    HyperSens ode(0.0); // dummy parameter (macro requires >=1 type arg)
+    HyperSens ode;
 
     auto phase = std::make_shared<ODEPhase<HyperSens>>(ode, TranscriptionModes::LGL7);
     phase->set_traj(trajIG, nSeg);
