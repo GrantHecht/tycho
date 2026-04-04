@@ -25,16 +25,25 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
 
     using Base = Arguments<ODESize<_XV, _UV, _PV>::XtUPV>;
 
-    ODEArguments(int Xv, int Uv, int Pv) : Base(Xv + Uv + Pv + 1) {
+    // Runtime-argument constructors: only available when at least one dimension is dynamic.
+    ODEArguments(int Xv, int Uv, int Pv)
+        requires(_XV < 0 || _UV < 0 || _PV < 0)
+        : Base(Xv + Uv + Pv + 1) {
         this->set_xt_up_vars(Xv, Uv, Pv);
     }
-    ODEArguments(int Xv, int Uv) : ODEArguments(Xv, Uv, 0) {}
-    ODEArguments(int Xv) : ODEArguments(Xv, 0) {}
+    ODEArguments(int Xv, int Uv)
+        requires(_XV < 0 || _UV < 0 || _PV < 0)
+        : ODEArguments(Xv, Uv, 0) {}
+    ODEArguments(int Xv)
+        requires(_XV < 0 || _UV < 0 || _PV < 0)
+        : ODEArguments(Xv, 0) {}
 
     // Default constructor for compile-time-sized ODEArguments (XV, UV, PV all >= 0).
     ODEArguments()
         requires(_XV >= 0 && _UV >= 0 && _PV >= 0)
-        : ODEArguments(_XV, _UV, _PV) {}
+        : Base(_XV + _UV + _PV + 1) {
+        this->set_xt_up_vars(_XV, _UV, _PV);
+    }
 
     // Offset-aware access via semantic variable tags.
     // ODE vector layout: [x0..x(XV-1), t, u0..u(UV-1), p0..p(PV-1)]

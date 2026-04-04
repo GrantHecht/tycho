@@ -129,12 +129,12 @@ struct RocketODE_Impl : ODESize<7, 3, 0> {
         auto h = R.norm() - Re;
 
         // Atmospheric density: rho = RhoAir * exp(-h / h_scale)
-        // NOTE: Combine RhoAir with drag coefficient to avoid double-scaling
-        //       the expression (double * Scaled<...> has a bug in OperatorOverloads.h
-        //       where it accesses func.Scaled_func instead of func.func).
+        // NOTE: Combine RhoAir with drag coefficient to avoid nested
+        //       Scaled<Scaled<...>> wrapping (fails to compile — see PAIN_POINTS.md #3).
         auto exp_neg_h = exp(h * (-1.0 / h_scale));
 
         // Relative velocity: Vr = V + R × [0, 0, We]
+        // Constant<IR,OR> still requires manual IR = XV+1+UV+PV (see PAIN_POINTS.md #6)
         Eigen::Vector3d omega_val(0.0, 0.0, We);
         auto omega = Constant<11, 3>(11, omega_val);
         auto Vr = V + R.cross(omega);

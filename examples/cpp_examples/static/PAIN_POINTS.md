@@ -7,7 +7,7 @@ post-improvement status.
 
 | Example         | Wall Time | Peak Memory | Notes                          |
 |-----------------|-----------|-------------|--------------------------------|
-| brachistochrone | 1m41s     | 6.9 GB      | Arguments<4>, 2 states 1 ctrl  |
+| brachistochrone | 1m41s     | 6.9 GB      | Arguments<5>, 3 states 1 ctrl  |
 | zermelo         | 2m13s     | 7.3 GB      | Arguments<4>, 4 ODE types      |
 | hypersens       | 1m32s     | 6.3 GB      | Arguments<3>, simplest ODE     |
 | delta3_launch   | 2m11s     | 8.6 GB      | Arguments<11>, 7 states 3 ctrl |
@@ -36,8 +36,8 @@ open for future work (runtime-polymorphic GenericODE is the alternative).
 
 **Severity: Medium** | **Status: Open**
 
-`OperatorOverloads.h` lines 62-66 access `func.Scaled_func` but the member in
-`Scaled_Impl` is `func`. Workaround: pre-combine scalar constants.
+Nested scaling (`a * (b * expr)`) produces `Scaled<Scaled<...>>` types that fail
+to compile. Workaround: pre-combine scalar constants into a single factor.
 
 ## Pain Point 4: Manual index tracking
 

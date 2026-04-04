@@ -91,7 +91,8 @@ struct ZermeloVarWind_Impl : ODESize<2, 1, 0> {
 BUILD_ODE_FROM_EXPRESSION(ZermeloVarWind, ZermeloVarWind_Impl, double);
 
 ///////////////////////////////////////////////////////////////////////////////
-// Solver — templated on ODE type (pain point: cannot take a runtime wind fn)
+// Solver — templated on ODE type because each wind model produces a distinct
+// expression-template type (see PAIN_POINTS.md #1)
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename ODE>
