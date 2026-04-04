@@ -261,3 +261,56 @@ TEST_F(CommonFunctionsTest, VarTag_XSeg_InExpression_Jacobian) {
 
     verify_jacobian_fd(expr, input);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Boundary segment tests — Start + Size == UV/PV (exact end of range)
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CommonFunctionsTest, VarTag_USeg_BoundaryFullRange) {
+    // USeg covering the full control range should match UVec
+    auto args = ODEArguments<3, 2, 1>();
+    auto u_seg = args[USeg<0, 2>]; // Start=0, Size=UV=2 → exact boundary
+    auto u_vec = args[UVec];
+    static_assert(std::is_same_v<decltype(u_seg), decltype(u_vec)>);
+
+    Eigen::VectorXd input(7);
+    input << 1.0, 2.0, 3.0, 0.0, 40.0, 50.0, 99.0;
+    Eigen::VectorXd fx(2);
+    fx.setZero();
+    u_seg.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 40.0);
+    EXPECT_DOUBLE_EQ(fx(1), 50.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_PSeg_BoundaryFullRange) {
+    // PSeg covering the full parameter range should match PVec
+    auto args = ODEArguments<3, 2, 1>();
+    auto p_seg = args[PSeg<0, 1>]; // Start=0, Size=PV=1 �� exact boundary
+    auto p_vec = args[PVec];
+    static_assert(std::is_same_v<decltype(p_seg), decltype(p_vec)>);
+
+    Eigen::VectorXd input(7);
+    input << 1.0, 2.0, 3.0, 0.0, 40.0, 50.0, 99.0;
+    Eigen::VectorXd fx(1);
+    fx.setZero();
+    p_seg.compute(input, fx);
+    EXPECT_DOUBLE_EQ(fx(0), 99.0);
+}
+
+TEST_F(CommonFunctionsTest, VarTag_XSeg_BoundaryLastElement) {
+    // XSeg accessing the very last state element
+    auto args = ODEArguments<6, 2, 0>();
+    auto x_last = args[XSeg<5, 1>]; // Start=5, Size=1 → Start+Size == XV
+    auto x_coeff = args[XVar<5>];
+
+    Eigen::VectorXd input(9);
+    input << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 10.0, 20.0;
+
+    Eigen::VectorXd fx1(1), fx2(1);
+    fx1.setZero();
+    fx2.setZero();
+    x_last.compute(input, fx1);
+    x_coeff.compute(input, fx2);
+    EXPECT_DOUBLE_EQ(fx1(0), 6.0);
+    EXPECT_DOUBLE_EQ(fx1(0), fx2(0));
+}

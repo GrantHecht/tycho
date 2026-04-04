@@ -70,8 +70,9 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
 
 // Wraps an expression-based ODE with a different derivative mode.
 // The inner ODE is built from the expression tree (Analytic mode),
-// but compute_jacobian uses the specified mode (FD/forward-AD),
-// avoiding instantiation of the expression tree's Jacobian templates.
+// but compute_jacobian and compute_adjointhessian use the specified modes
+// (FD/forward-AD), avoiding instantiation of the expression tree's
+// Jacobian and Hessian templates.
 template <class Derived, class InnerODE,
           DenseDerivativeMode Jm = DenseDerivativeMode::FDiffFwd,
           DenseDerivativeMode Hm = DenseDerivativeMode::FDiffFwd>
@@ -82,32 +83,40 @@ struct ODE_DerivModeWrapper
                          InnerODE::XV, InnerODE::UV, InnerODE::PV>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    InnerODE inner_;
-
-    template <class... Args, std::enable_if_t<std::is_constructible_v<InnerODE, Args...>, int> = 0>
+    template <class... Args>
+        requires std::is_constructible_v<InnerODE, Args...>
     ODE_DerivModeWrapper(Args &&...args) : inner_(std::forward<Args>(args)...) {
         this->set_xvars(inner_.x_vars());
         this->set_uvars(inner_.u_vars());
         this->set_pvars(inner_.p_vars());
+        this->set_idxs(inner_.get_idxs());
         this->set_io_rows(inner_.input_rows(), inner_.output_rows());
         // Re-initialize FD step-size vectors now that IO rows are known.
         // The FD base constructor ran before set_io_rows, so for dynamic-size
         // inner ODEs (IRC == -1) the step vectors were initialized to length 0.
-        if constexpr (Jm == DenseDerivativeMode::FDiffFwd ||
-                      Jm == DenseDerivativeMode::FDiffCentArray) {
+        // For compile-time-sized ODEs this is a no-op that reassigns same-length vectors.
+        if constexpr (Jm == DenseDerivativeMode::FDiffFwd) {
             this->set_jac_fd_steps(1.0e-7);
+        } else if constexpr (Jm == DenseDerivativeMode::FDiffCentArray) {
+            this->set_jac_fd_steps(1.0e-5);
         }
-        if constexpr (Hm == DenseDerivativeMode::FDiffFwd ||
-                      Hm == DenseDerivativeMode::FDiffCentArray) {
+        if constexpr (Hm == DenseDerivativeMode::FDiffFwd) {
             this->set_hess_fd_steps(1.0e-7);
+        } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
+            this->set_hess_fd_steps(1.0e-5);
         }
     }
+
+    const InnerODE &inner() const { return inner_; }
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x,
                              ConstVectorBaseRef<OutType> fx_) const {
         inner_.compute(x, fx_);
     }
+
+  private:
+    InnerODE inner_;
 };
 
 #define BUILD_ODE_FROM_EXPRESSION_FD(NAME, IMPL, ...)                                              \

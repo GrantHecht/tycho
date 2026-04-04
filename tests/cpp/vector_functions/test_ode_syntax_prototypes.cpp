@@ -1,11 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
-// ODE definition syntax prototypes (A and B)
+// ODE definition syntax prototypes
 //
-// This file prototypes two alternative ODE definition syntaxes and
-// evaluates them against the brachistochrone problem.
+// Tests the Impl+macro ODE definition pattern with:
+//   - ODEArguments with offset-aware XVar/UVar tags
+//   - FD/FWAD macro variants for reduced compile time
+//   - Hessian consistency through FD/FWAD wrappers
+//   - Dynamic-size ODE wrapping via ODE_DerivModeWrapper
 //
-// Option A: ODEArguments with offset-aware XVar/UVar tags
-// Option B: FD/FWAD macro variants for reduced compile time
+// Both features are complementary: tags provide semantic access to ODE
+// variables, while FD/FWAD macros avoid expensive Jacobian/Hessian
+// template instantiation.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -18,35 +22,10 @@ using namespace tycho;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
-// OPTION A — Single-struct, macro-free
-//
-// User defines a struct inheriting StaticODE<XV, UV, PV> and implements
-// an ode() method returning the expression tree. Constructor parameters
-// are plain members.
-//
-// Lines of code: ~12 for the ODE definition
-// Ceremony: Low — no separate _Impl struct, no macro
-// Multi-parameter: Natural — constructor params are plain members
+// ODEArguments + XVar/UVar tags — Impl+macro pattern
 ///////////////////////////////////////////////////////////////////////////////
 
-// Helper base: builds the expression ODE from a derived class's ode() method.
-// The derived class must provide:
-//   - StaticODE<XV, UV, PV> template parameters
-//   - auto ode() const { ... return StackedOutputs{...}; }
-namespace detail {
-
-template <class Derived, int XV, int UV, int PV> struct StaticODE_Impl : ODESize<XV, UV, PV> {
-    static auto Definition() {
-        // Call the derived class's ode() to get the expression tree
-        return Derived{}.ode();
-    }
-};
-
-} // namespace detail
-
-// Option A brachistochrone — single-parameter
-namespace OptionA {
-
+// Brachistochrone — single-parameter (analytic Jacobian)
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g_) {
         auto args = ODEArguments<3, 1, 0>();
@@ -57,7 +36,7 @@ struct Brachistochrone_Impl : ODESize<3, 1, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 
-// Option A — multi-parameter variant (drag brachistochrone)
+// Multi-parameter variant (drag brachistochrone)
 struct DragBrach_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g, double drag) {
         auto args = ODEArguments<3, 1, 0>();
@@ -69,36 +48,12 @@ struct DragBrach_Impl : ODESize<3, 1, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION(DragBrach, DragBrach_Impl, double, double);
 
-} // namespace OptionA
-
 ///////////////////////////////////////////////////////////////////////////////
-// OPTION B — FD/FWAD macro variants
-//
-// Same Impl+macro definition pattern as Option A, but using
-// BUILD_ODE_FROM_EXPRESSION_FD / BUILD_ODE_FROM_EXPRESSION_FWAD to avoid
-// expensive Jacobian template instantiation. Uses ODEArguments with
-// offset-aware XVar/UVar tags, same as Option A.
+// FD/FWAD macro variants — same Impl+macro pattern but avoids expensive
+// Jacobian/Hessian template instantiation
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace OptionB {
-
-// Option B brachistochrone — analytic baseline (same definition as Option A)
-struct Brachistochrone_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = ODEArguments<3, 1, 0>();
-        auto v = args[XVar<2>];
-        auto theta = args[UVar<0>];
-
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
-
-// Option B — FD variant showing the new macro
+// FD variant
 struct BrachistochroneFD_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
         auto args = ODEArguments<3, 1, 0>();
@@ -109,7 +64,7 @@ struct BrachistochroneFD_Impl : ODESize<3, 1, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION_FD(BrachistochroneFD, BrachistochroneFD_Impl, double);
 
-// Option B — Forward-AD variant
+// Forward-AD variant
 struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g) {
         auto args = ODEArguments<3, 1, 0>();
@@ -120,14 +75,39 @@ struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, double);
 
-} // namespace OptionB
-
 ///////////////////////////////////////////////////////////////////////////////
-// Tests — verify both options produce correct results
+// Dynamic-size ODE for testing ODE_DerivModeWrapper with IRC == -1
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST_F(VFCompositionTest, OptionA_Brachistochrone_Basic) {
-    OptionA::Brachistochrone ode(9.81);
+struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
+    DynamicBrach() { set_ode_size(3, 1, 0); }
+
+    template <class InType, class OutType>
+    inline void compute_impl(ConstVectorBaseRef<InType> x,
+                             ConstVectorBaseRef<OutType> fx_) const {
+        auto &fx = const_cast<Eigen::MatrixBase<OutType> &>(fx_);
+        double v = x[2];
+        double theta = x[4];
+        fx[0] = std::sin(theta) * v;
+        fx[1] = std::cos(theta) * v * (-1.0);
+        fx[2] = 9.81 * std::cos(theta);
+    }
+};
+
+struct DynamicBrachFD
+    : ODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
+                           DenseDerivativeMode::FDiffFwd> {
+    using Base = ODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
+                                      DenseDerivativeMode::FDiffFwd>;
+    using Base::Base;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Tests — analytic Jacobian
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(VFCompositionTest, Brachistochrone_Basic) {
+    Brachistochrone ode(9.81);
     EXPECT_EQ(ode.input_rows(), 5);
     EXPECT_EQ(ode.output_rows(), 3);
 
@@ -143,8 +123,8 @@ TEST_F(VFCompositionTest, OptionA_Brachistochrone_Basic) {
     EXPECT_NEAR(fx[2], 9.81 * std::cos(theta), 1e-12);
 }
 
-TEST_F(VFCompositionTest, OptionA_MultiParam) {
-    OptionA::DragBrach ode(9.81, 0.1);
+TEST_F(VFCompositionTest, MultiParam_AdjointConsistency) {
+    DragBrach ode(9.81, 0.1);
     EXPECT_EQ(ode.input_rows(), 5);
     EXPECT_EQ(ode.output_rows(), 3);
 
@@ -153,33 +133,20 @@ TEST_F(VFCompositionTest, OptionA_MultiParam) {
     verify_adjoint_consistency(ode, x, lm, 1e-11);
 }
 
-TEST_F(VFCompositionTest, OptionA_Integrator) {
-    OptionA::Brachistochrone ode(9.81);
+TEST_F(VFCompositionTest, Brachistochrone_Integrator) {
+    Brachistochrone ode(9.81);
     auto integ = ode.integrator(0.01);
     EXPECT_EQ(integ.input_rows(), 6);
     EXPECT_EQ(integ.output_rows(), 5);
 }
 
-TEST_F(VFCompositionTest, OptionB_Brachistochrone_Basic) {
-    OptionB::Brachistochrone ode(9.81);
-    EXPECT_EQ(ode.input_rows(), 5);
-    EXPECT_EQ(ode.output_rows(), 3);
+///////////////////////////////////////////////////////////////////////////////
+// Tests — FD/FWAD Jacobian
+///////////////////////////////////////////////////////////////////////////////
 
-    Eigen::VectorXd x(5);
-    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
-    Eigen::VectorXd fx(3);
-    fx.setZero();
-    ode.compute(x, fx);
-
-    double v = 5.0, theta = std::numbers::pi / 4.0;
-    EXPECT_NEAR(fx[0], std::sin(theta) * v, 1e-12);
-    EXPECT_NEAR(fx[1], -std::cos(theta) * v, 1e-12);
-    EXPECT_NEAR(fx[2], 9.81 * std::cos(theta), 1e-12);
-}
-
-TEST_F(VFCompositionTest, OptionB_FD_ComputeMatchesAnalytic) {
-    OptionB::Brachistochrone analytic(9.81);
-    OptionB::BrachistochroneFD fd(9.81);
+TEST_F(VFCompositionTest, FD_ComputeMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    BrachistochroneFD fd(9.81);
 
     EXPECT_EQ(fd.input_rows(), 5);
     EXPECT_EQ(fd.output_rows(), 3);
@@ -196,9 +163,9 @@ TEST_F(VFCompositionTest, OptionB_FD_ComputeMatchesAnalytic) {
         EXPECT_NEAR(fx_a[i], fx_fd[i], 1e-14);
 }
 
-TEST_F(VFCompositionTest, OptionB_FD_JacobianMatchesAnalytic) {
-    OptionB::Brachistochrone analytic(9.81);
-    OptionB::BrachistochroneFD fd(9.81);
+TEST_F(VFCompositionTest, FD_JacobianMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    BrachistochroneFD fd(9.81);
 
     Eigen::VectorXd x(5);
     x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
@@ -224,9 +191,9 @@ TEST_F(VFCompositionTest, OptionB_FD_JacobianMatchesAnalytic) {
                 << "Jacobian mismatch at (" << i << "," << j << ")";
 }
 
-TEST_F(VFCompositionTest, OptionB_FWAD_ComputeMatchesAnalytic) {
-    OptionB::Brachistochrone analytic(9.81);
-    OptionB::BrachistochroneFWAD fwad(9.81);
+TEST_F(VFCompositionTest, FWAD_ComputeMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    BrachistochroneFWAD fwad(9.81);
 
     EXPECT_EQ(fwad.input_rows(), 5);
     EXPECT_EQ(fwad.output_rows(), 3);
@@ -243,9 +210,9 @@ TEST_F(VFCompositionTest, OptionB_FWAD_ComputeMatchesAnalytic) {
         EXPECT_NEAR(fx_a[i], fx_fwad[i], 1e-14);
 }
 
-TEST_F(VFCompositionTest, OptionB_FWAD_JacobianMatchesAnalytic) {
-    OptionB::Brachistochrone analytic(9.81);
-    OptionB::BrachistochroneFWAD fwad(9.81);
+TEST_F(VFCompositionTest, FWAD_JacobianMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    BrachistochroneFWAD fwad(9.81);
 
     Eigen::VectorXd x(5);
     x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
@@ -270,24 +237,80 @@ TEST_F(VFCompositionTest, OptionB_FWAD_JacobianMatchesAnalytic) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Comparison notes (for evaluation):
-//
-// Option A (ODEArguments + XVar/UVar tags):
-//   - Offset-aware access via ODEArguments: UVar<0> resolves to the correct index
-//   - Familiar pattern: Impl struct + BUILD_ODE_FROM_EXPRESSION macro
-//   - Multi-parameter support: natural via macro __VA_ARGS__
-//   - Integration: Fully compatible with ODEPhase, Integrator
-//   - Lines for brachistochrone: ~8 (Impl) + 1 (macro) = ~9
-//
-// Option B (FD/FWAD variants):
-//   - Same Impl+macro pattern as Option A with FD or forward-AD Jacobians
-//   - Reduces compile time by avoiding Jacobian template instantiation
-//   - Trade-off: ~1e-6 Jacobian accuracy (FD) or near-exact (FWAD) vs analytic
-//   - Integration: Fully compatible with ODEPhase, Integrator
-//   - Lines for brachistochrone: ~8 (Impl) + 1 (macro) = ~9
-//
-// Recommendation: Keep the existing BUILD_ODE_FROM_EXPRESSION pattern with
-// XVar/UVar tags (Option A style). Add BUILD_ODE_FROM_EXPRESSION_FD/FWAD
-// as compile-time optimization options. No need for a fundamentally
-// different syntax — the improvements are additive.
+// Tests — Hessian consistency through FD/FWAD wrappers
 ///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(VFCompositionTest, FD_HessianConsistency) {
+    BrachistochroneFD fd(9.81);
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+    Eigen::VectorXd lm = deterministic_random_vector(3, 500, -1.0, 1.0);
+
+    // FD Hessian: check symmetry and adjoint gradient consistency
+    verify_hessian_consistency(fd, x, lm, 1e-5);
+}
+
+TEST_F(VFCompositionTest, FWAD_HessianConsistency) {
+    BrachistochroneFWAD fwad(9.81);
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+    Eigen::VectorXd lm = deterministic_random_vector(3, 501, -1.0, 1.0);
+
+    // Forward-AD Hessian: tighter tolerance than FD
+    verify_hessian_consistency(fwad, x, lm, 1e-10);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Tests — Dynamic-size ODE wrapping (IRC == -1)
+//
+// Regression test for the FD step re-initialization fix (fedfb22).
+// The macros always produce compile-time-sized inner ODEs, so this test
+// manually constructs an ODE_DerivModeWrapper around a dynamic-size ODE
+// to exercise the path where FD step vectors were previously length 0.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(VFCompositionTest, DynamicODE_FD_ComputeCorrect) {
+    DynamicBrachFD fd;
+    EXPECT_EQ(fd.input_rows(), 5);
+    EXPECT_EQ(fd.output_rows(), 3);
+
+    Eigen::VectorXd x(5);
+    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    fd.compute(x, fx);
+
+    double v = 5.0, theta = std::numbers::pi / 4.0;
+    EXPECT_NEAR(fx[0], std::sin(theta) * v, 1e-12);
+    EXPECT_NEAR(fx[1], -std::cos(theta) * v, 1e-12);
+    EXPECT_NEAR(fx[2], 9.81 * std::cos(theta), 1e-12);
+}
+
+TEST_F(VFCompositionTest, DynamicODE_FD_JacobianMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    DynamicBrachFD fd;
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+
+    // Analytic Jacobian from expression-based ODE
+    Eigen::VectorXd fx_a(3);
+    Eigen::MatrixXd jx_a(3, 5);
+    fx_a.setZero();
+    jx_a.setZero();
+    analytic.compute_jacobian(x, fx_a, jx_a);
+
+    // FD Jacobian from dynamic-size wrapper
+    Eigen::VectorXd fx_fd(3);
+    Eigen::MatrixXd jx_fd(3, 5);
+    fx_fd.setZero();
+    jx_fd.setZero();
+    fd.compute_jacobian(x, fx_fd, jx_fd);
+
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 5; ++j)
+            EXPECT_NEAR(jx_a(i, j), jx_fd(i, j), 1e-6)
+                << "Dynamic FD Jacobian mismatch at (" << i << "," << j << ")";
+}
