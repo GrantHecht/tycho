@@ -105,7 +105,9 @@ struct ODE_DerivModeWrapper
         } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
             this->set_hess_fd_steps(1.0e-5);
         }
-        // Other modes (AutodiffFwd, Analytic) don't use FD step vectors; add new FD-like modes here.
+        // Other modes (AutodiffFwd, Analytic) don't use FD step vectors;
+        // add new FD-like modes here with an if constexpr branch calling
+        // set_jac_fd_steps / set_hess_fd_steps.
         static_assert(Jm == DenseDerivativeMode::Analytic || Jm == DenseDerivativeMode::FDiffFwd ||
                           Jm == DenseDerivativeMode::FDiffCentArray ||
                           Jm == DenseDerivativeMode::AutodiffFwd,
@@ -128,6 +130,9 @@ struct ODE_DerivModeWrapper
     InnerODE inner_;
 };
 
+// Defines an ODE that uses the expression tree for compute_impl only, with
+// Jacobian/Hessian computed via forward finite differences. Generates an
+// intermediate analytic-mode ODE (NAME##_AnalyticBase_) and wraps it.
 #define BUILD_ODE_FROM_EXPRESSION_FD(NAME, IMPL, ...)                                              \
     struct NAME##_AnalyticBase_                                                                     \
         : ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__> {                  \
@@ -143,6 +148,8 @@ struct ODE_DerivModeWrapper
         using Base::Base;                                                                          \
     };
 
+// Same as BUILD_ODE_FROM_EXPRESSION_FD but uses forward-mode automatic
+// differentiation (autodiff) instead of finite differences.
 #define BUILD_ODE_FROM_EXPRESSION_FWAD(NAME, IMPL, ...)                                            \
     struct NAME##_AnalyticBase_                                                                     \
         : ODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__> {                  \

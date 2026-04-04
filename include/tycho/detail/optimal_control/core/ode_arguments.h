@@ -68,16 +68,19 @@ struct ODEArguments : Arguments<ODESize<_XV, _UV, _PV>::XtUPV>, ODESize<_XV, _UV
 
     decltype(auto) operator[](vf::XVecTag) const {
         static_assert(_XV >= 0, "XVec requires compile-time-known XV");
+        static_assert(_XV > 0, "XVec requires at least one state variable (XV > 0)");
         return this->template segment<_XV, 0>();
     }
 
     decltype(auto) operator[](vf::UVecTag) const {
         static_assert(_UV >= 0, "UVec requires compile-time-known UV");
+        static_assert(_UV > 0, "UVec requires at least one control variable (UV > 0)");
         return this->template segment<_UV, _XV + 1>();
     }
 
     decltype(auto) operator[](vf::PVecTag) const {
         static_assert(_PV >= 0, "PVec requires compile-time-known PV");
+        static_assert(_PV > 0, "PVec requires at least one parameter variable (PV > 0)");
         return this->template segment<_PV, _XV + 1 + _UV>();
     }
 

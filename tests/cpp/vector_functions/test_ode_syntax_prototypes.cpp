@@ -75,6 +75,7 @@ struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
     }
 };
 BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, double);
+BUILD_ODE_FROM_EXPRESSION_FWAD(DragBrachFWAD, DragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Dynamic-size ODE for testing ODE_DerivModeWrapper with IRC == -1
@@ -87,11 +88,13 @@ struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
     inline void compute_impl(ConstVectorBaseRef<InType> x,
                              ConstVectorBaseRef<OutType> fx_) const {
         auto &fx = const_cast<Eigen::MatrixBase<OutType> &>(fx_);
-        double v = x[2];
-        double theta = x[4];
-        fx[0] = std::sin(theta) * v;
-        fx[1] = std::cos(theta) * v * (-1.0);
-        fx[2] = 9.81 * std::cos(theta);
+        auto v = x[2];
+        auto theta = x[4];
+        using std::cos;
+        using std::sin;
+        fx[0] = sin(theta) * v;
+        fx[1] = cos(theta) * v * (-1.0);
+        fx[2] = 9.81 * cos(theta);
     }
 };
 
@@ -100,6 +103,15 @@ struct DynamicBrachFD
                            DenseDerivativeMode::FDiffFwd> {
     using Base = ODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
                                       DenseDerivativeMode::FDiffFwd>;
+    using Base::Base;
+};
+
+struct DynamicBrachFWAD
+    : ODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
+                           DenseDerivativeMode::AutodiffFwd> {
+    using Base =
+        ODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
+                             DenseDerivativeMode::AutodiffFwd>;
     using Base::Base;
 };
 
@@ -264,6 +276,33 @@ TEST_F(VFCompositionTest, FWAD_JacobianMatchesAnalytic) {
                 << "FWAD Jacobian mismatch at (" << i << "," << j << ")";
 }
 
+TEST_F(VFCompositionTest, FWAD_MultiParam_JacobianMatchesAnalytic) {
+    DragBrach analytic(9.81, 0.1);
+    DragBrachFWAD fwad(9.81, 0.1);
+    EXPECT_EQ(fwad.input_rows(), 5);
+    EXPECT_EQ(fwad.output_rows(), 3);
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+
+    Eigen::VectorXd fx_a(3);
+    Eigen::MatrixXd jx_a(3, 5);
+    fx_a.setZero();
+    jx_a.setZero();
+    analytic.compute_jacobian(x, fx_a, jx_a);
+
+    Eigen::VectorXd fx_fwad(3);
+    Eigen::MatrixXd jx_fwad(3, 5);
+    fx_fwad.setZero();
+    jx_fwad.setZero();
+    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
+
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 5; ++j)
+            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
+                << "Multi-param FWAD Jacobian mismatch at (" << i << "," << j << ")";
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Tests — Hessian consistency through FD/FWAD wrappers
 ///////////////////////////////////////////////////////////////////////////////
@@ -293,10 +332,11 @@ TEST_F(VFCompositionTest, FWAD_HessianConsistency) {
 ///////////////////////////////////////////////////////////////////////////////
 // Tests — Dynamic-size ODE wrapping (IRC == -1)
 //
-// Regression test for the FD step re-initialization fix (fedfb22).
-// The macros always produce compile-time-sized inner ODEs, so this test
-// manually constructs an ODE_DerivModeWrapper around a dynamic-size ODE
-// to exercise the path where FD step vectors were previously length 0.
+// Regression test for the FD step re-initialization fix. When
+// ODE_DerivModeWrapper wraps a dynamic-size ODE (IRC == -1), the FD step
+// vectors must be reinitialized after set_io_rows. The macros always produce
+// compile-time-sized inner ODEs, so this test manually constructs a wrapper
+// around a dynamic-size ODE to exercise that path.
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFCompositionTest, DynamicODE_FD_ComputeCorrect) {
@@ -349,4 +389,62 @@ TEST_F(VFCompositionTest, DynamicODE_FD_HessianConsistency) {
     x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
     Eigen::VectorXd lm = deterministic_random_vector(3, 502, -1.0, 1.0);
     verify_hessian_consistency(fd, x, lm, 1e-5);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Tests — Dynamic-size ODE wrapping with AutodiffFwd (IRC == -1)
+//
+// Exercises the AutodiffFwd path through ODE_DerivModeWrapper with a
+// dynamic-size inner ODE. The FD path is tested above; this verifies
+// that set_io_rows works correctly for the autodiff derivative mode too.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(VFCompositionTest, DynamicODE_FWAD_ComputeCorrect) {
+    DynamicBrachFWAD fwad;
+    EXPECT_EQ(fwad.input_rows(), 5);
+    EXPECT_EQ(fwad.output_rows(), 3);
+
+    Eigen::VectorXd x(5);
+    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    fwad.compute(x, fx);
+
+    double v = 5.0, theta = std::numbers::pi / 4.0;
+    EXPECT_NEAR(fx[0], std::sin(theta) * v, 1e-12);
+    EXPECT_NEAR(fx[1], -std::cos(theta) * v, 1e-12);
+    EXPECT_NEAR(fx[2], 9.81 * std::cos(theta), 1e-12);
+}
+
+TEST_F(VFCompositionTest, DynamicODE_FWAD_JacobianMatchesAnalytic) {
+    Brachistochrone analytic(9.81);
+    DynamicBrachFWAD fwad;
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+
+    Eigen::VectorXd fx_a(3);
+    Eigen::MatrixXd jx_a(3, 5);
+    fx_a.setZero();
+    jx_a.setZero();
+    analytic.compute_jacobian(x, fx_a, jx_a);
+
+    Eigen::VectorXd fx_fwad(3);
+    Eigen::MatrixXd jx_fwad(3, 5);
+    fx_fwad.setZero();
+    jx_fwad.setZero();
+    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
+
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 5; ++j)
+            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
+                << "Dynamic FWAD Jacobian mismatch at (" << i << "," << j << ")";
+}
+
+TEST_F(VFCompositionTest, DynamicODE_FWAD_HessianConsistency) {
+    DynamicBrachFWAD fwad;
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+    Eigen::VectorXd lm = deterministic_random_vector(3, 503, -1.0, 1.0);
+    verify_hessian_consistency(fwad, x, lm, 1e-10);
 }
