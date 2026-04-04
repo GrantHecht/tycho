@@ -191,8 +191,6 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     //////////////////////////////////////////////////////////////////////////////////////////////////
     obj.def_rw("qp_print", &PSIOPT::qp_print_);
 
-    obj.def_rw("diagnostic", &PSIOPT::diagnostic_);
-
     obj.def_rw("return_best", &PSIOPT::return_best_);
     obj.def_prop_rw(
         "best_criteria", [](const PSIOPT &self) { return self.best_criteria_; },
@@ -207,10 +205,6 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_best_criteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_best_criteria));
     obj.def("set_best_criteria",
             nb::overload_cast<const std::string &>(&PSIOPT::set_best_criteria));
-
-    obj.def_rw("store_sp_mat", &PSIOPT::store_sp_mat_, "");
-    obj.def("get_sp_mat", &PSIOPT::get_sp_mat, "");
-    obj.def("get_sp_mat2", &PSIOPT::get_sp_mat2, "");
 
     obj.def_rw("cnr_mode", &PSIOPT::cnr_mode_, "");
 

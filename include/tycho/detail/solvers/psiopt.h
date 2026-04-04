@@ -72,8 +72,8 @@ struct IterateInfo;
 
 struct PSIOPT {
 
-    enum class BarrierModes { PROBE, LOQO, FIACCO, BARDISABLED };
-    enum class LineSearchModes { AUGLANG, LANG, L1, L2, NOLS };
+    enum class BarrierModes { PROBE, LOQO };
+    enum class LineSearchModes { AUGLANG, LANG, L1, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
 
     /// Alias so existing callers using PSIOPT::ConvergenceFlags continue to work.
@@ -195,7 +195,6 @@ struct PSIOPT {
     bool qp_print_ = false;
     bool qp_analyzed_ = false;
     bool force_qp_analysis_ = false;
-    bool diagnostic_ = false;
     int qp_par_solve_ = 0;
 
     /////////////////////////////////////////////////////////////////////
@@ -249,7 +248,6 @@ struct PSIOPT {
     void set_soe_ls_mode(LineSearchModes mode) { this->soe_ls_mode_ = mode; }
     void set_soe_ls_mode(const std::string &str) { this->soe_ls_mode_ = strto_LineSearchMode(str); }
 
-    double max_cpu_time_ = 1200;
     double obj_scale_ = 1.0;
 
     /////////////////////////////////////////////////////////////////////////
@@ -317,8 +315,6 @@ struct PSIOPT {
 
     /////////////////////////////////////////////////////////////////////////
 
-    double ex_obj_val_ = -1.0e20;
-
     double bound_fraction_ = 0.99;
 
     void set_bound_fraction(double bound_fraction) {
@@ -339,7 +335,6 @@ struct PSIOPT {
     double neg_slack_reset_ = 1.0e-12;
 
     double soe_bound_relax_ = 1.0e-8;
-    double min_ls_step_ = .01;
     double alpha_red_ = 2.0;
 
     void set_alpha_red(double ared) {
@@ -390,8 +385,6 @@ struct PSIOPT {
     void set_print_level(int plevel) { this->print_level_ = plevel; }
 
     PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
-    bool store_sp_mat_ = false;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> spmat;
     double last_obj_val_ = 0.0;
     bool fast_factor_alg_ = true;
 
@@ -467,8 +460,6 @@ struct PSIOPT {
     }
 
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
-    Eigen::MatrixXd get_sp_mat() { return this->spmat.toDense(); }
-    Eigen::MatrixXd get_sp_mat2() { return this->kkt_sol_.get_matrix_twisted(this->spmat); }
 
     void set_qp_params() {
 #ifdef USE_ACCELERATE_SPARSE
@@ -709,7 +700,6 @@ struct PSIOPT {
     static void print_psiopt();
 
     void print_settings();
-    void print_matrixinfo();
     void print_stats();
     void print_last_iterate(const std::vector<IterateInfo> &iters);
 

@@ -69,8 +69,6 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // we changed the sparsity pattern via the reference returned from get_matrix.
     this->kkt_sol_.reinitialize_internal_matrix_representation();
 #endif
-    if (store_sp_mat_)
-        spmat = this->kkt_sol_.get_matrix();
     this->qp_analyzed_ = false;
 }
 
@@ -252,8 +250,6 @@ void tycho::solvers::PSIOPT::print_settings() {
                this->acc_icon_tol_, this->div_icon_tol_);
 }
 
-void tycho::solvers::PSIOPT::print_matrixinfo() {}
-
 void tycho::solvers::PSIOPT::print_stats() {
     print_psiopt();
 
@@ -282,7 +278,6 @@ void tycho::solvers::PSIOPT::print_stats() {
 
 void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     auto last = iters.back();
-    bool wide = false;
 
     if (last.iter % 10 == 0) {
         if (wide_console_) {
@@ -297,8 +292,6 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
                        "ICons Inf| AlphaP | "
                        "AlphaD |LS| PPS |HF| HPert |\n");
         }
-        auto tst =
-            "|Iter|mu Val | Prim Obj |KKT Inf |ECon Inf|ICon Inf|AlphaM |LS|PPS|HF| HPert |\n";
     }
 
     fmt::text_style PHashcol = fmt::text_style();
@@ -615,8 +608,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 mu = this->loqo_mu(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp,
                                    mincomp);
                 break;
-            case BarrierModes::FIACCO:
-                break;
             default:
                 break;
             }
@@ -633,8 +624,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (this->inequal_cons_ > 0)
             this->max_primal_dual_step(XSL, DXSL, this->bound_fraction_, alphap, alphad);
         /////////////////////////////////////////////////////////////////////
-        if (diagnostic_) {
-        }
         QPtimer.stop();
 
         Funtimer.start();
