@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Scaled<Scaled<...>> nesting — verify collapse to single Scaled
+// Scaled and RowScaled nesting — verify collapse to avoid double-wrapping
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -183,6 +183,32 @@ TEST_F(CommonFunctionsTest, VectorTimesRowScaled) {
     EXPECT_DOUBLE_EQ(fx[0], 20.0);
     EXPECT_DOUBLE_EQ(fx[1], 60.0);
     EXPECT_DOUBLE_EQ(fx[2], 120.0);
+}
+
+TEST_F(CommonFunctionsTest, RowScaledDivisionCollapse) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto row_scaled = args * sv;
+    auto divided = row_scaled / 2.0;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 1.0, 1.0;
+    Eigen::VectorXd fx(3);
+    fx.setZero();
+    divided.compute(x, fx);
+    EXPECT_DOUBLE_EQ(fx[0], 1.0);  // 2 / 2
+    EXPECT_DOUBLE_EQ(fx[1], 1.5);  // 3 / 2
+    EXPECT_DOUBLE_EQ(fx[2], 2.0);  // 4 / 2
+}
+
+TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_RowScaledDivDouble) {
+    auto args = Arguments<3>();
+    Eigen::Vector3d sv(2.0, 3.0, 4.0);
+    auto chained = (args * sv) / 2.0;
+
+    Eigen::VectorXd x(3);
+    x << 1.0, 2.0, 3.0;
+    verify_jacobian_fd(chained, x);
 }
 
 TEST_F(CommonFunctionsTest, RowScaledNesting_JacobianFD_DoubleTimesRowScaled) {

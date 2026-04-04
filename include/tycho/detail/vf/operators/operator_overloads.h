@@ -94,6 +94,9 @@ decltype(auto) operator/(const DenseFunctionBase<Derived, IR, OR> &func,
 template <class Derived> decltype(auto) operator/(const Scaled<Derived> &func, double s) {
     return Scaled<Derived>(func.func_, func.scale_value_ / s);
 }
+template <class Derived> decltype(auto) operator/(const RowScaled<Derived> &func, double s) {
+    return RowScaled<Derived>(func.func_, func.row_scale_values_ / s);
+}
 
 template <class Derived, int IR>
 decltype(auto) operator/(double s, const DenseFunctionBase<Derived, IR, 1> &func) {

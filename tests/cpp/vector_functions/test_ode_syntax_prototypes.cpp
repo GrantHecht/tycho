@@ -47,6 +47,7 @@ struct DragBrach_Impl : ODESize<3, 1, 0> {
     }
 };
 BUILD_ODE_FROM_EXPRESSION(DragBrach, DragBrach_Impl, double, double);
+BUILD_ODE_FROM_EXPRESSION_FD(DragBrachFD, DragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // FD/FWAD macro variants — same Impl+macro pattern but avoids expensive
@@ -191,6 +192,33 @@ TEST_F(VFCompositionTest, FD_JacobianMatchesAnalytic) {
                 << "Jacobian mismatch at (" << i << "," << j << ")";
 }
 
+TEST_F(VFCompositionTest, FD_MultiParam_JacobianMatchesAnalytic) {
+    DragBrach analytic(9.81, 0.1);
+    DragBrachFD fd(9.81, 0.1);
+    EXPECT_EQ(fd.input_rows(), 5);
+    EXPECT_EQ(fd.output_rows(), 3);
+
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+
+    Eigen::VectorXd fx_a(3);
+    Eigen::MatrixXd jx_a(3, 5);
+    fx_a.setZero();
+    jx_a.setZero();
+    analytic.compute_jacobian(x, fx_a, jx_a);
+
+    Eigen::VectorXd fx_fd(3);
+    Eigen::MatrixXd jx_fd(3, 5);
+    fx_fd.setZero();
+    jx_fd.setZero();
+    fd.compute_jacobian(x, fx_fd, jx_fd);
+
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 5; ++j)
+            EXPECT_NEAR(jx_a(i, j), jx_fd(i, j), 1e-6)
+                << "Multi-param FD Jacobian mismatch at (" << i << "," << j << ")";
+}
+
 TEST_F(VFCompositionTest, FWAD_ComputeMatchesAnalytic) {
     Brachistochrone analytic(9.81);
     BrachistochroneFWAD fwad(9.81);
@@ -313,4 +341,12 @@ TEST_F(VFCompositionTest, DynamicODE_FD_JacobianMatchesAnalytic) {
         for (int j = 0; j < 5; ++j)
             EXPECT_NEAR(jx_a(i, j), jx_fd(i, j), 1e-6)
                 << "Dynamic FD Jacobian mismatch at (" << i << "," << j << ")";
+}
+
+TEST_F(VFCompositionTest, DynamicODE_FD_HessianConsistency) {
+    DynamicBrachFD fd;
+    Eigen::VectorXd x(5);
+    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
+    Eigen::VectorXd lm = deterministic_random_vector(3, 502, -1.0, 1.0);
+    verify_hessian_consistency(fd, x, lm, 1e-5);
 }

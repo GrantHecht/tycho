@@ -19,7 +19,7 @@ simultaneously.
 
 As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j4 for builds
-- Linux / Windows: ALWAYS use -j8 for builds
+- Linux / Windows: ALWAYS use -j4 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 
 ## Repository Structure
@@ -129,8 +129,8 @@ preset for your platform** — do not configure manually.
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
 | macOS (Apple Si) | `macos-llvm-release`    | `-j4`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
-| Windows x64      | `x64-Clang-Release`     | `-j8`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j4`             |
+| Windows x64      | `x64-Clang-Release`     | `-j4`             |
 
 **Note:** The `-j` values above are upper bounds — use lower values on
 RAM-constrained systems. On 32 GB, `-j4` is safe; on 16 GB, use `-j2`.
@@ -150,7 +150,7 @@ safely use higher `-j` values — ninja automatically throttles the heavy TUs
 while keeping light TUs parallel.
 
 ```bash
-cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
+cd build && ninja -j4 all      # safe — pool limits heavy TUs automatically
                                # use -j4 on 32 GB systems
 ```
 

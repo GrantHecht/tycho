@@ -68,11 +68,11 @@ struct ODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>, Deri
         using Base::Base;                                                                          \
     };
 
-// Wraps an expression-based ODE with a different derivative mode.
-// The inner ODE is built from the expression tree (Analytic mode),
-// but compute_jacobian and compute_adjointhessian use the specified modes
-// (FD/forward-AD), avoiding instantiation of the expression tree's
-// Jacobian and Hessian templates.
+// Wraps any ODE with a different derivative mode.
+// The wrapper delegates compute to the inner ODE but uses the specified
+// modes (e.g., FD or forward-AD) for Jacobian and Hessian computation.
+// When used with expression-based ODEs (via the macros below), this avoids
+// instantiation of the expression tree's Jacobian and Hessian templates.
 template <class Derived, class InnerODE,
           DenseDerivativeMode Jm = DenseDerivativeMode::FDiffFwd,
           DenseDerivativeMode Hm = DenseDerivativeMode::FDiffFwd>
@@ -105,6 +105,7 @@ struct ODE_DerivModeWrapper
         } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
             this->set_hess_fd_steps(1.0e-5);
         }
+        // AutodiffFwd and Analytic modes don't use FD step vectors; no reinitialization needed.
     }
 
     const InnerODE &inner() const { return inner_; }
