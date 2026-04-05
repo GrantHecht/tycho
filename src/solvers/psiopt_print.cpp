@@ -14,6 +14,8 @@
 
 #include "tycho/detail/solvers/psiopt.h"
 
+#include <iostream>
+
 void tycho::solvers::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");

@@ -16,13 +16,9 @@
 
 #pragma once
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <initializer_list>
-#include <iostream>
-#include <limits>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,7 +28,6 @@
 
 #include <fmt/color.h>
 #include <fmt/core.h>
-#include <fmt/format.h>
 
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/non_linear_program.h"
@@ -41,6 +36,7 @@
 #include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
+#include <limits>
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
 #else
 #include "tycho/detail/solvers/linear/pardiso_interface.h"

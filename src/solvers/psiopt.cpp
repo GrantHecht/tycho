@@ -14,6 +14,10 @@
 
 #include "tycho/detail/solvers/psiopt.h"
 
+#include <cmath>
+#include <iostream>
+#include <stdexcept>
+
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
