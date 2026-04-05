@@ -236,7 +236,53 @@ struct PSIOPT {
     const Settings &settings() const { return settings_; }
 
     // =========================================================================
-    // Non-config members — problem dimensions, solver state, results
+    // SolveResult — all output fields produced by a solve/optimize call
+    // =========================================================================
+    struct SolveResult {
+        // --- Solve outcome ---
+        int iter_num_ = 0;
+        double obj_val_ = 0;
+        ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
+
+        // --- Solution ---
+        Eigen::VectorXd primals_;
+
+        // --- Multipliers and constraints ---
+        Eigen::VectorXd eq_lmults_;
+        Eigen::VectorXd iq_lmults_;
+        Eigen::VectorXd eq_cons_;
+        Eigen::VectorXd iq_cons_;
+
+        // --- Timing (seconds) ---
+        double total_time_ = 0;
+        double pre_time_ = 0;
+        double func_time_ = 0;
+        double kkt_time_ = 0;
+        double print_time_ = 0;
+        double misc_time_ = 0;
+        double solver_init_time_ = 0;
+
+        // --- Factorization stats ---
+        int factor_mem_ = 0;
+        int factor_flops_ = 0;
+
+        void zero_timing() {
+            total_time_ = 0;
+            pre_time_ = 0;
+            func_time_ = 0;
+            kkt_time_ = 0;
+            print_time_ = 0;
+            misc_time_ = 0;
+            solver_init_time_ = 0;
+            iter_num_ = 0;
+        }
+    };
+
+    SolveResult result_;
+    const SolveResult &result() const { return result_; }
+
+    // =========================================================================
+    // Non-config members — problem dimensions, solver state
     // =========================================================================
 
     using VectorXd = Eigen::VectorXd;
@@ -408,40 +454,9 @@ struct PSIOPT {
         this->set_decr_h(decr_h);
     }
     /////////////////////////////////////////////////////////////////////////
-    ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
-    ConvergenceFlags get_convergence_flag() const { return this->converge_flag_; }
+    ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
 
     void set_print_level(int plevel) { settings_.print_level_ = plevel; }
-
-    double last_obj_val_ = 0.0;
-
-    double last_total_time_ = 0;
-    double last_pre_time_ = 0;
-    double last_misc_time_ = 0;
-    double last_func_time_ = 0;
-    double last_kkt_time_ = 0;
-    double last_print_time_ = 0;
-    double last_solver_init_time_ = 0;
-    int last_iter_num_ = 0;
-
-    void zero_timing_stats() {
-        this->last_total_time_ = 0;
-        this->last_pre_time_ = 0;
-        this->last_misc_time_ = 0;
-        this->last_func_time_ = 0;
-        this->last_kkt_time_ = 0;
-        this->last_print_time_ = 0;
-        this->last_solver_init_time_ = 0;
-        this->last_iter_num_ = 0;
-    }
-
-    int factor_mem_ = 0;
-    int factor_flops_ = 0;
-    Eigen::VectorXd last_eq_lmults_;
-    Eigen::VectorXd last_iq_lmults_;
-
-    Eigen::VectorXd last_eq_cons_;
-    Eigen::VectorXd last_iq_cons_;
 
     void set_best_criteria(BestCriteriaModes mode) { settings_.best_criteria_ = mode; }
     void set_best_criteria(const std::string &str) {
@@ -480,8 +495,8 @@ struct PSIOPT {
         this->kkt_sol_.release();
         this->qp_analyzed_ = false;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
-        this->last_eq_lmults_.resize(0);
-        this->last_iq_lmults_.resize(0);
+        result_.eq_lmults_.resize(0);
+        result_.iq_lmults_.resize(0);
     }
 
     void set_nlp(std::shared_ptr<NonLinearProgram> np);

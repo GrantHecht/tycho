@@ -32,6 +32,12 @@ using namespace tycho::utils;
         [](PSIOPT &self, decltype(self.settings_.field) v) { self.settings_.field = v; }           \
         __VA_OPT__(, ) __VA_ARGS__)
 
+// Helper macro for binding result fields as read-only properties on PSIOPT.
+// These produce lambda-based def_prop_ro that forward to result_.field.
+#define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
+    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result_.field; }                  \
+                        __VA_OPT__(, ) __VA_ARGS__)
+
 void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     using BarrierModes = PSIOPT::BarrierModes;
     using LineSearchModes = PSIOPT::LineSearchModes;
@@ -65,21 +71,21 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "fast_factor_alg", fast_factor_alg_, "");
 
-    obj.def_rw("last_total_time", &PSIOPT::last_total_time_, "");
-    obj.def_rw("last_pre_time", &PSIOPT::last_pre_time_, "");
-    obj.def_rw("last_func_time", &PSIOPT::last_func_time_, "");
-    obj.def_rw("last_kkt_time", &PSIOPT::last_kkt_time_, "");
-    obj.def_rw("last_misc_time", &PSIOPT::last_misc_time_, "");
-    obj.def_rw("last_print_time", &PSIOPT::last_print_time_, "");
-    obj.def_rw("last_solver_init_time", &PSIOPT::last_solver_init_time_, "");
-    obj.def_rw("last_iter_num", &PSIOPT::last_iter_num_, "");
-    obj.def_rw("last_obj_val", &PSIOPT::last_obj_val_);
+    BIND_RESULT_RO(obj, "last_total_time", total_time_, "");
+    BIND_RESULT_RO(obj, "last_pre_time", pre_time_, "");
+    BIND_RESULT_RO(obj, "last_func_time", func_time_, "");
+    BIND_RESULT_RO(obj, "last_kkt_time", kkt_time_, "");
+    BIND_RESULT_RO(obj, "last_misc_time", misc_time_, "");
+    BIND_RESULT_RO(obj, "last_print_time", print_time_, "");
+    BIND_RESULT_RO(obj, "last_solver_init_time", solver_init_time_, "");
+    BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
+    BIND_RESULT_RO(obj, "last_obj_val", obj_val_);
 
     BIND_SETTINGS_RW(obj, "obj_scale", obj_scale_, "");
     BIND_SETTINGS_RW(obj, "print_level", print_level_, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
 
-    obj.def_rw("converge_flag", &PSIOPT::converge_flag_);
+    BIND_RESULT_RO(obj, "converge_flag", converge_flag_);
 
     obj.def("get_convergence_flag", &PSIOPT::get_convergence_flag);
 

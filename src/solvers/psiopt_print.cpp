@@ -17,15 +17,15 @@
 void tycho::solvers::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_pre_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.pre_time_ * 1000.0);
     fmt::print(" NLP Function Evaluation Time : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_func_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.func_time_ * 1000.0);
     fmt::print(" KKT Factor/Solve Time        : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_kkt_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.kkt_time_ * 1000.0);
     fmt::print(" Console Print Time           : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_print_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.print_time_ * 1000.0);
     fmt::print(" Misc Time                    : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_misc_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.misc_time_ * 1000.0);
 }
 
 void tycho::solvers::PSIOPT::print_psiopt() {

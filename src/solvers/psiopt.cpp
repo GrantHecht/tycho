@@ -24,7 +24,7 @@
 void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
-        this->last_solver_init_time_ = initMs / 1000.0;
+        this->result_.solver_init_time_ = initMs / 1000.0;
         // Suppress the init line when init was trivially fast (< 0.5 ms),
         // which also covers subsequent calls (return 0.0).
         constexpr double kSolverInitPrintThresholdMs = 0.5;
@@ -272,7 +272,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     tycho::utils::Timer LStimer;
     tycho::utils::Timer QPtimer;
     tycho::utils::Timer
-        CBtimer; // Callback time is included in last_misc_time_ (not separately reported)
+        CBtimer; // Callback time is included in result_.misc_time_ (not separately reported)
     tycho::utils::Timer Printtimer;
 
     double Hpert0 = settings_.delta_h_;
@@ -457,7 +457,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 RHS = BestRHS;
             }
 
-            this->converge_flag_ = ExitCode;
+            this->result_.converge_flag_ = ExitCode;
             break;
         }
 
@@ -467,33 +467,33 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     }
 
     if (algmode == AlgorithmModes::OPT) {
-        this->last_obj_val_ = iters.back().prim_obj_;
+        this->result_.obj_val_ = iters.back().prim_obj_;
     } else {
         Funtimer.start();
-        this->last_obj_val_ = 0;
-        this->nlp_->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->last_obj_val_);
+        this->result_.obj_val_ = 0;
+        this->nlp_->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->result_.obj_val_);
         Funtimer.stop();
     }
 
     if (this->equal_cons_ > 0) {
-        this->last_eq_cons_ = this->get_eq_cons(RHS);
-        this->last_eq_lmults_ = this->get_eq_lmults(XSL);
+        this->result_.eq_cons_ = this->get_eq_cons(RHS);
+        this->result_.eq_lmults_ = this->get_eq_lmults(XSL);
     }
     if (this->inequal_cons_ > 0) {
-        this->last_iq_cons_ = this->get_iq_cons(RHS) - this->get_slacks(XSL);
-        this->last_iq_lmults_ = this->get_iq_lmults(XSL);
+        this->result_.iq_cons_ = this->get_iq_cons(RHS) - this->get_slacks(XSL);
+        this->result_.iq_lmults_ = this->get_iq_lmults(XSL);
     }
 
     Runtimer.stop();
-    this->last_iter_num_ += iters.size();
+    this->result_.iter_num_ += iters.size();
     double qptime = double(QPtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double nlptime = double(Funtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double tottime = double(Runtimer.count<std::chrono::microseconds>()) / 1000000.0;
 
-    this->last_func_time_ += nlptime;
-    this->last_kkt_time_ += qptime;
+    this->result_.func_time_ += nlptime;
+    this->result_.kkt_time_ += qptime;
     double printtime = double(Printtimer.count<std::chrono::microseconds>()) / 1000000.0;
-    this->last_print_time_ += printtime;
+    this->result_.print_time_ += printtime;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -553,19 +553,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     kktt.stop();
 
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
-    this->last_pre_time_ += pretime;
+    this->result_.pre_time_ += pretime;
 
-    this->factor_flops_ = this->kkt_sol_.flops_;
-    this->factor_mem_ = this->kkt_sol_.mem_;
+    this->result_.factor_flops_ = this->kkt_sol_.flops_;
+    this->result_.factor_mem_ = this->kkt_sol_.mem_;
 
     if (settings_.print_level_ < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);
         if (docompute) {
             fmt::print(" LDLT Factor Size      : ");
-            fmt::print(cyan, "{0:<10}\n", this->factor_mem_);
-            if (this->factor_flops_ > 0) {
+            fmt::print(cyan, "{0:<10}\n", this->result_.factor_mem_);
+            if (this->result_.factor_flops_ > 0) {
                 fmt::print(" LDLT Factor FLOPs     : ");
-                fmt::print(cyan, "{0} MFLOPs\n", this->factor_flops_);
+                fmt::print(cyan, "{0} MFLOPs\n", this->result_.factor_flops_);
             }
         }
         fmt::print(" Analysis/Reorder Time : ");
@@ -743,7 +743,7 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
-    this->zero_timing_stats();
+    this->result_.zero_timing();
 
     if (settings_.print_level_ == 0)
         print_stats();
@@ -772,9 +772,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_timing_summary();
@@ -788,7 +789,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
 
-    this->zero_timing_stats();
+    this->result_.zero_timing();
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {
@@ -825,9 +826,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x)
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_finished("Optimization Algorithm ");
@@ -842,7 +844,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x)
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
-    this->zero_timing_stats();
+    this->result_.zero_timing();
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {
@@ -879,7 +881,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
     if (settings_.print_level_ < 2) {
         print_finished("Optimization Algorithm ");
     }
-    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
+    if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
         Xt = this->get_primals(XSLans);
@@ -897,9 +899,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
     }
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_timing_summary();
@@ -913,7 +916,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
-    this->zero_timing_stats();
+    this->result_.zero_timing();
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {
@@ -940,7 +943,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
         print_finished("Optimization Algorithm ");
     }
 
-    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
+    if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
         Eigen::VectorXd Xt = this->get_primals(XSLans);
@@ -958,9 +961,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
     }
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_timing_summary();
@@ -975,7 +979,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
 
-    this->zero_timing_stats();
+    this->result_.zero_timing();
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {
@@ -998,9 +1002,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
 
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_finished("Solve Algorithm ");
