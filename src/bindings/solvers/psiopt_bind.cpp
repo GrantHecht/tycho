@@ -88,8 +88,9 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_solver_init_time", solver_init_time_, "");
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
     BIND_RESULT_RO(obj, "last_obj_val", obj_val_);
+    BIND_RESULT_RO(obj, "last_primals", primals_, "");
 
-    BIND_SETTINGS_RW(obj, "obj_scale", obj_scale_, "");
+    BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_RW(obj, "print_level", print_level_, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
 
@@ -135,7 +136,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_div_eq_con_tol", &PSIOPT::set_div_econ_tol);
     obj.def("set_div_ineq_con_tol", &PSIOPT::set_div_icon_tol);
 
-    BIND_SETTINGS_RW(obj, "neg_slack_reset", neg_slack_reset_, "");
+    BIND_SETTINGS_VALIDATED(obj, "neg_slack_reset", neg_slack_reset_, set_neg_slack_reset, "");
 
     BIND_SETTINGS_VALIDATED(obj, "bound_fraction", bound_fraction_, set_bound_fraction, "");
     obj.def("set_bound_fraction", &PSIOPT::set_bound_fraction);
@@ -156,11 +157,9 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::arg("decr_h"));
 
     /////////////////////////////////////////////////////////////
-    BIND_SETTINGS_RW(obj, "init_mu", init_mu_, "");
-    BIND_SETTINGS_RW(obj, "min_mu", min_mu_, "");
-    BIND_SETTINGS_RW(obj, "max_mu", max_mu_, "");
-
-    BIND_SETTINGS_RW(obj, "max_soc", max_soc_, "");
+    BIND_SETTINGS_VALIDATED(obj, "init_mu", init_mu_, set_init_mu, "");
+    BIND_SETTINGS_VALIDATED(obj, "min_mu", min_mu_, set_min_mu, "");
+    BIND_SETTINGS_VALIDATED(obj, "max_mu", max_mu_, set_max_mu, "");
 
     BIND_SETTINGS_RW(obj, "pd_step_strategy", pd_step_strategy_, "");
     BIND_SETTINGS_RW(obj, "soe_bound_relax", soe_bound_relax_, "");
@@ -193,7 +192,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     BIND_SETTINGS_RW(obj, "qp_ref_steps", qp_ref_steps_, "");
 
     BIND_SETTINGS_RW(obj, "qp_pivot_perturb", qp_pivot_perturb_, "");
-    BIND_SETTINGS_RW(obj, "qp_threads", qp_threads_, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_threads", qp_threads_, set_qp_threads, "");
     BIND_SETTINGS_RW(obj, "qp_pivot_strategy", qp_pivot_strategy_, "");
 
     //////////////////////////////////////////////////////////////////////////////////////////////////

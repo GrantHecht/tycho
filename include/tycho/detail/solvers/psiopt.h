@@ -186,6 +186,9 @@ class PSIOPT {
         double obj_val_ = 0;
         ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
 
+        // --- Solution ---
+        Eigen::VectorXd primals_;
+
         // --- Multipliers and constraints ---
         Eigen::VectorXd eq_lmults_;
         Eigen::VectorXd iq_lmults_;
@@ -206,7 +209,8 @@ class PSIOPT {
         int factor_flops_ = 0;
 
         // Reset timing accumulators and iteration count for a new phase sequence.
-        // Does NOT reset converge_flag_ or obj_val_ — those are set by alg_impl.
+        // Does NOT reset converge_flag_, obj_val_, or primals_ — set by alg_impl per phase.
+        // Does NOT reset factor_mem_ or factor_flops_ — overwritten (not accumulated) by init_impl.
         void reset_accumulators() {
             total_time_ = 0;
             pre_time_ = 0;
@@ -291,6 +295,13 @@ class PSIOPT {
     void set_hpert_params(double delta_h, double incr_h, double decr_h);
 
     void set_print_level(int plevel);
+
+    void set_init_mu(double mu);
+    void set_min_mu(double mu);
+    void set_max_mu(double mu);
+    void set_neg_slack_reset(double val);
+    void set_qp_threads(int n);
+    void set_obj_scale(double scale);
 
     void set_qp_ordering_mode(QPOrderingModes mode);
     void set_qp_ordering_mode(const std::string &str);

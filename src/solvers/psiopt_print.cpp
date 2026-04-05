@@ -14,8 +14,6 @@
 
 #include "tycho/detail/solvers/psiopt.h"
 
-#include <iostream>
-
 void tycho::solvers::PSIOPT::print_timing_summary() {
     auto cyan = fmt::fg(fmt::color::cyan);
     fmt::print(" KKT Analysis/Init Time       : ");
@@ -46,9 +44,6 @@ void tycho::solvers::PSIOPT::print_psiopt() {
 }
 
 void tycho::solvers::PSIOPT::print_settings() {
-    using std::cout;
-    using std::endl;
-
     auto cyan = fmt::fg(fmt::color::cyan);
     auto magenta = fmt::fg(fmt::color::magenta);
 
@@ -93,7 +88,7 @@ void tycho::solvers::PSIOPT::print_stats() {
 }
 
 void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
-    auto last = iters.back();
+    const auto &last = iters.back();
 
     if (last.iter % 10 == 0) {
         if (settings_.wide_console_) {
