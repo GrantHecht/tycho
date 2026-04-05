@@ -96,8 +96,8 @@ class PSIOPT {
         int max_ls_iters_ = 2;
         int max_acc_iters_ = 50;
         int max_refac_ = 15;
-        int max_soc_ = 1;       // reserved — not currently used by algorithm
-        int max_feas_rest_ = 2; // reserved — not currently used by algorithm
+        int max_soc_ = 1;       // reserved — second-order correction, not currently implemented
+        int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
 
         // --- Convergence tolerances ---
         double kkt_tol_ = 1.0e-6;
@@ -111,7 +111,7 @@ class PSIOPT {
         double acc_icon_tol_ = 1.0e-3;
         double acc_bar_tol_ = 1.0e-3;
 
-        // --- Unacceptable tolerances (reserved — not currently read by converge_check) ---
+        // --- Unacceptable tolerances (reserved — not currently read by any algorithm code) ---
         double unacc_kkt_tol_ = 10;
         double unacc_econ_tol_ = 2;
         double unacc_icon_tol_ = 2;
@@ -168,7 +168,8 @@ class PSIOPT {
         double obj_scale_ = 1.0;
 
         // --- Output/behavior ---
-        int print_level_ = 0;
+        int print_level_ =
+            0; // 0 = full iteration table, 1 = summary, 2 = exit status only, 3+ = silent
         bool wide_console_ = false;
         bool cnr_mode_ = false;
         bool fast_factor_alg_ = true;
@@ -201,23 +202,28 @@ class PSIOPT {
         double func_time_ = 0;
         double kkt_time_ = 0;
         double print_time_ = 0;
-        double misc_time_ = 0;
         double solver_init_time_ = 0;
+
+        // Derived timing — computed from the other timing fields, not stored.
+        double misc_time() const {
+            return total_time_ - pre_time_ - kkt_time_ - func_time_ - print_time_;
+        }
 
         // --- Factorization stats ---
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
-        // Reset timing accumulators and iteration count for a new phase sequence.
-        // Does NOT reset converge_flag_, obj_val_, or primals_ — set by alg_impl per phase.
+        // Reset all accumulated/per-solve fields for a new phase sequence.
+        // converge_flag_ is reset as defense-in-depth; alg_impl always writes it
+        // before any conditional phase check reads it.
         // Does NOT reset factor_mem_ or factor_flops_ — overwritten (not accumulated) by init_impl.
         void reset_accumulators() {
+            converge_flag_ = ConvergenceFlags::NOTCONVERGED;
             total_time_ = 0;
             pre_time_ = 0;
             func_time_ = 0;
             kkt_time_ = 0;
             print_time_ = 0;
-            misc_time_ = 0;
             solver_init_time_ = 0;
             iter_num_ = 0;
         }
@@ -301,6 +307,9 @@ class PSIOPT {
     void set_max_mu(double mu);
     void set_neg_slack_reset(double val);
     void set_qp_threads(int n);
+    void set_qp_pivot_perturb(int v);
+    void set_qp_ref_steps(int v);
+    void set_qp_par_solve(int v);
     void set_obj_scale(double scale);
 
     void set_qp_ordering_mode(QPOrderingModes mode);

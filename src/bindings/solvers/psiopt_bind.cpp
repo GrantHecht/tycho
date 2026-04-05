@@ -83,7 +83,8 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_pre_time", pre_time_, "");
     BIND_RESULT_RO(obj, "last_func_time", func_time_, "");
     BIND_RESULT_RO(obj, "last_kkt_time", kkt_time_, "");
-    BIND_RESULT_RO(obj, "last_misc_time", misc_time_, "");
+    obj.def_prop_ro(
+        "last_misc_time", [](const PSIOPT &self) { return self.result().misc_time(); }, "");
     BIND_RESULT_RO(obj, "last_print_time", print_time_, "");
     BIND_RESULT_RO(obj, "last_solver_init_time", solver_init_time_, "");
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
@@ -91,7 +92,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_primals", primals_, "");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
-    BIND_SETTINGS_RW(obj, "print_level", print_level_, "");
+    BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
 
     BIND_RESULT_RO(obj, "converge_flag", converge_flag_);
@@ -143,8 +144,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     BIND_SETTINGS_VALIDATED(obj, "bound_push", bound_push_, set_bound_push, "");
 
-    /////////////////////////////////////////////////////////////
-
+    // --- Hessian perturbation ---
     BIND_SETTINGS_VALIDATED(obj, "delta_h", delta_h_, set_delta_h, "");
     BIND_SETTINGS_VALIDATED(obj, "incr_h", incr_h_, set_incr_h, "");
     BIND_SETTINGS_VALIDATED(obj, "decr_h", decr_h_, set_decr_h, "");
@@ -156,18 +156,17 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_hpert_params", &PSIOPT::set_hpert_params, nb::arg("delta_h"), nb::arg("incr_h"),
             nb::arg("decr_h"));
 
-    /////////////////////////////////////////////////////////////
+    // --- Barrier parameters ---
     BIND_SETTINGS_VALIDATED(obj, "init_mu", init_mu_, set_init_mu, "");
     BIND_SETTINGS_VALIDATED(obj, "min_mu", min_mu_, set_min_mu, "");
     BIND_SETTINGS_VALIDATED(obj, "max_mu", max_mu_, set_max_mu, "");
 
+    // --- Algorithm modes ---
     BIND_SETTINGS_RW(obj, "pd_step_strategy", pd_step_strategy_, "");
     BIND_SETTINGS_RW(obj, "soe_bound_relax", soe_bound_relax_, "");
-    BIND_SETTINGS_RW(obj, "qp_par_solve", qp_par_solve_, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_par_solve", qp_par_solve_, set_qp_par_solve, "");
 
     BIND_SETTINGS_RW(obj, "soe_mode", soe_mode_, "");
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
 
     BIND_SETTINGS_RW(obj, "opt_bar_mode", opt_bar_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_bar_mode", soe_bar_mode_, "");
@@ -177,7 +176,7 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_soe_bar_mode", nb::overload_cast<BarrierModes>(&PSIOPT::set_soe_bar_mode));
     obj.def("set_soe_bar_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_bar_mode));
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // --- Line search modes ---
     BIND_SETTINGS_RW(obj, "opt_ls_mode", opt_ls_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_ls_mode", soe_ls_mode_, "");
 
@@ -186,16 +185,14 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_soe_ls_mode));
     obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_ls_mode));
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-
+    // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
-    BIND_SETTINGS_RW(obj, "qp_ref_steps", qp_ref_steps_, "");
-
-    BIND_SETTINGS_RW(obj, "qp_pivot_perturb", qp_pivot_perturb_, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_ref_steps", qp_ref_steps_, set_qp_ref_steps, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_pivot_perturb", qp_pivot_perturb_, set_qp_pivot_perturb, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_threads", qp_threads_, set_qp_threads, "");
     BIND_SETTINGS_RW(obj, "qp_pivot_strategy", qp_pivot_strategy_, "");
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // --- QP ordering ---
     BIND_SETTINGS_RW(obj, "qp_ordering_mode", qp_ord_, "");
 
     obj.def("set_qp_ordering_mode",
@@ -204,13 +201,15 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::overload_cast<const std::string &>(&PSIOPT::set_qp_ordering_mode));
 
 #ifdef USE_ACCELERATE_SPARSE
-    BIND_SETTINGS_RW(obj, "accel_pivot_tolerance", accel_pivot_tolerance_);
-    BIND_SETTINGS_RW(obj, "accel_zero_tolerance", accel_zero_tolerance_);
+    BIND_SETTINGS_VALIDATED(obj, "accel_pivot_tolerance", accel_pivot_tolerance_,
+                            set_accel_pivot_tolerance);
+    BIND_SETTINGS_VALIDATED(obj, "accel_zero_tolerance", accel_zero_tolerance_,
+                            set_accel_zero_tolerance);
     obj.def("set_accel_pivot_tolerance", &PSIOPT::set_accel_pivot_tolerance);
     obj.def("set_accel_zero_tolerance", &PSIOPT::set_accel_zero_tolerance);
 #endif
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // --- Output/result ---
     BIND_SETTINGS_RW(obj, "qp_print", qp_print_);
 
     BIND_SETTINGS_RW(obj, "return_best", return_best_);

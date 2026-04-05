@@ -25,7 +25,7 @@ void tycho::solvers::PSIOPT::print_timing_summary() {
     fmt::print(" Console Print Time           : ");
     fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.print_time_ * 1000.0);
     fmt::print(" Misc Time                    : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.misc_time_ * 1000.0);
+    fmt::print(cyan, "{0:>10.3f} ms\n", this->result_.misc_time() * 1000.0);
 }
 
 void tycho::solvers::PSIOPT::print_psiopt() {

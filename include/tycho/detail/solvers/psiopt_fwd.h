@@ -18,8 +18,9 @@
 
 namespace tycho {
 
-/// Optimizer convergence status — extracted to root namespace so that callers
-/// outside tycho::solvers can reference it without a full PSIOPT qualification.
+/// Optimizer convergence status. Lives in tycho:: (not tycho::solvers) so callers
+/// outside the solvers module can reference it directly. Placed in a forward-
+/// declaration header to break include cycles with dependent modules.
 enum class ConvergenceFlags {
     CONVERGED = 0,
     ACCEPTABLE = 1,

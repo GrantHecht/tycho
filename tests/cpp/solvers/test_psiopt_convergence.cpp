@@ -114,6 +114,47 @@ TEST_F(SolverTest, HpertParamsValidation) {
     EXPECT_NO_THROW(opt.set_hpert_params(1e-5, 8.0, 0.333));
 }
 
+TEST_F(SolverTest, IntegerSetterValidation) {
+    PSIOPT opt;
+    EXPECT_THROW(opt.set_max_iters(0), std::invalid_argument);
+    EXPECT_THROW(opt.set_max_iters(-1), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_max_iters(100));
+    EXPECT_THROW(opt.set_max_acc_iters(0), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_max_acc_iters(10));
+    EXPECT_THROW(opt.set_max_ls_iters(-1), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_max_ls_iters(0)); // 0 is valid (no line search)
+    EXPECT_THROW(opt.set_print_level(-1), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_print_level(0));
+}
+
+TEST_F(SolverTest, ObjScaleRejectsNonFinite) {
+    PSIOPT opt;
+    EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::quiet_NaN()),
+                 std::invalid_argument);
+    EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::infinity()),
+                 std::invalid_argument);
+}
+
+TEST_F(SolverTest, QpParamSetterValidation) {
+    PSIOPT opt;
+    EXPECT_THROW(opt.set_qp_pivot_perturb(-1), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_pivot_perturb(0));
+    EXPECT_NO_THROW(opt.set_qp_pivot_perturb(13));
+    EXPECT_THROW(opt.set_qp_ref_steps(-1), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_ref_steps(0));
+    EXPECT_THROW(opt.set_qp_par_solve(-1), std::invalid_argument);
+    EXPECT_THROW(opt.set_qp_par_solve(2), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_par_solve(0));
+    EXPECT_NO_THROW(opt.set_qp_par_solve(1));
+}
+
+TEST_F(SolverTest, StringToEnumConverters) {
+    EXPECT_EQ(PSIOPT::strto_LineSearchMode("AUGLANG"), PSIOPT::LineSearchModes::AUGLANG);
+    EXPECT_THROW(PSIOPT::strto_LineSearchMode("INVALID"), std::invalid_argument);
+    EXPECT_EQ(PSIOPT::strto_BarrierMode("LOQO"), PSIOPT::BarrierModes::LOQO);
+    EXPECT_THROW(PSIOPT::strto_BarrierMode("NOPE"), std::invalid_argument);
+}
+
 // =============================================================================
 // run_phase_sequence guard tests
 // =============================================================================
@@ -135,6 +176,20 @@ TEST_F(SolverTest, OptimizeThrowsOnSizeMismatch) {
 // Result accessor tests
 // =============================================================================
 
+TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
+    auto phase = make_brach_solver_phase(32);
+    phase->optimizer_->set_print_level(3);
+    auto status = phase->optimize_solve();
+    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+}
+
+TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {
+    auto phase = make_brach_solver_phase(32);
+    phase->optimizer_->set_print_level(3);
+    auto status = phase->solve_optimize_solve();
+    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+}
+
 TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     auto phase = make_brach_solver_phase(32);
     auto status = phase->solve_optimize();
@@ -144,5 +199,23 @@ TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     EXPECT_GT(r.iter_num_, 0);
     EXPECT_GT(r.obj_val_, 0.0);
     EXPECT_GT(r.total_time_, 0.0);
-    EXPECT_GT(r.primals_.size(), 0);
+    EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
+
+    // Cross-check: primals should produce the expected brachistochrone trajectory
+    auto result = phase->return_traj();
+    double tf = result.back()[3];
+    EXPECT_NEAR(tf, 1.8013, 0.01);
+}
+
+TEST_F(SolverTest, ResultResetBetweenCalls) {
+    auto phase = make_brach_solver_phase(32);
+    phase->optimizer_->set_print_level(3);
+    phase->solve_optimize();
+    int first_iters = phase->optimizer_->result().iter_num_;
+
+    phase->optimize();
+    int second_iters = phase->optimizer_->result().iter_num_;
+
+    // iter_num_ should reflect only the second call, not accumulated
+    EXPECT_LT(second_iters, first_iters);
 }

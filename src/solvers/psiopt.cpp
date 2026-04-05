@@ -10,6 +10,11 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
+//   - Configuration fields grouped into Settings struct
+//   - Phase dispatch refactored into run_phase_sequence
+//   - Line search methods extracted (ls_lang, ls_l1, ls_auglang)
+//   - Validated setter methods added
+//   - Printing extracted to psiopt_print.cpp
 // =============================================================================
 
 #include "tycho/detail/solvers/psiopt.h"
@@ -38,7 +43,7 @@ auto tycho::solvers::PSIOPT::strto_OrderingMode(const std::string &str) -> QPOrd
     else {
         throw std::invalid_argument(
             fmt::format("Unrecognized QPOrderingMode: {0}\n"
-                        "Valid Options Are: MINDEG, METIS, PARMETIS, MTMETIS",
+                        "Valid Options Are: MINDEG, METIS, PARMETIS (alias: MTMETIS)",
                         str));
     }
 }
@@ -287,7 +292,12 @@ void tycho::solvers::PSIOPT::set_hpert_params(double delta_h, double incr_h, dou
     this->set_decr_h(decr_h);
 }
 
-void tycho::solvers::PSIOPT::set_print_level(int plevel) { settings_.print_level_ = plevel; }
+void tycho::solvers::PSIOPT::set_print_level(int plevel) {
+    if (plevel < 0)
+        throw std::invalid_argument(
+            fmt::format("print_level must be non-negative, got {}", plevel));
+    settings_.print_level_ = plevel;
+}
 
 void tycho::solvers::PSIOPT::set_qp_ordering_mode(QPOrderingModes mode) {
     settings_.qp_ord_ = mode;
@@ -335,10 +345,16 @@ void tycho::solvers::PSIOPT::set_best_criteria(const std::string &str) {
 
 #ifdef USE_ACCELERATE_SPARSE
 void tycho::solvers::PSIOPT::set_accel_pivot_tolerance(double tol) {
+    if (!std::isfinite(tol) || tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("accel_pivot_tolerance must be finite and positive, got {}", tol));
     settings_.accel_pivot_tolerance_ = tol;
 }
 
 void tycho::solvers::PSIOPT::set_accel_zero_tolerance(double tol) {
+    if (!std::isfinite(tol) || tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("accel_zero_tolerance must be finite and positive, got {}", tol));
     settings_.accel_zero_tolerance_ = tol;
 }
 #endif
@@ -372,6 +388,25 @@ void tycho::solvers::PSIOPT::set_qp_threads(int n) {
     if (n < 1)
         throw std::invalid_argument(fmt::format("qp_threads must be >= 1, got {}", n));
     settings_.qp_threads_ = n;
+}
+
+void tycho::solvers::PSIOPT::set_qp_pivot_perturb(int v) {
+    if (v < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_pivot_perturb must be non-negative, got {}", v));
+    settings_.qp_pivot_perturb_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_qp_ref_steps(int v) {
+    if (v < 0)
+        throw std::invalid_argument(fmt::format("qp_ref_steps must be non-negative, got {}", v));
+    settings_.qp_ref_steps_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_qp_par_solve(int v) {
+    if (v != 0 && v != 1)
+        throw std::invalid_argument(fmt::format("qp_par_solve must be 0 or 1, got {}", v));
+    settings_.qp_par_solve_ = v;
 }
 
 void tycho::solvers::PSIOPT::set_obj_scale(double scale) {
@@ -613,8 +648,7 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
         this->result_.solver_init_time_ = initMs / 1000.0;
-        // Suppress the init line when init was trivially fast (< 0.5 ms),
-        // which also covers subsequent calls (return 0.0).
+        // Suppress the init line when init was trivially fast (< 0.5 ms).
         constexpr double kSolverInitPrintThresholdMs = 0.5;
         if (initMs > kSolverInitPrintThresholdMs && settings_.print_level_ < 2) {
             fmt::print(" Solver Initialization : ");
@@ -784,6 +818,10 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     return Flag;
 }
 
+// Inertia-correcting factorization: if the LDLT factorization has incorrect
+// inertia (excess positive eigenvalues in the Hessian block), perturb the
+// primal diagonal by increasing amounts until correct inertia is achieved
+// or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert) {
     auto Inertia = [&]() {
@@ -831,6 +869,11 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
             p *= incpurt;
         p -= finalpert;
     }
+    if (settings_.print_level_ < 3)
+        fmt::print(fmt::fg(fmt::color::yellow),
+                   "Warning: Inertia correction exhausted ({} perturbation attempts, "
+                   "{} excess eigenvalue(s))\n",
+                   settings_.max_refac_, IncEigs);
     return settings_.max_refac_;
 }
 
@@ -890,8 +933,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         double prim_obj = 0;
         double barr_obj = 0;
 
+        // Evaluate NLP and build barrier terms
         Funtimer.start();
-        /////////////////////////////////////////////////////////////
 
         this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
 
@@ -902,7 +945,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
         }
 
-        ///////////////////////////////////////////////////////////////
         Funtimer.stop();
         if (this->early_callback_enabled_) {
             CBtimer.start();
@@ -910,11 +952,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                                   this->kkt_sol_.get_matrix());
             CBtimer.stop();
         }
+
+        // Assemble KKT gradient and factorize with inertia correction
         QPtimer.start();
-        ////////////////////////////////////////////////////////////////
         v_rhs.prim_grad() += PGX;
 
-        ////////////////////////////////////////////////////////////////
         double nhpert = 0;
         double Incr = settings_.incr_h_;
         double Incr2 = settings_.incr_h_;
@@ -940,8 +982,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             FirstPert = false;
         }
         Citer.h_pert_ = nhpert;
-        ///////////////////////////////////////////////////////////////////
 
+        // Update barrier parameter and compute search direction
         if (this->inequal_cons_ > 0) {
             switch (barmode) {
             case BarrierModes::PROBE:
@@ -970,12 +1012,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
             this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
-        /////////////////////////////////////////////////////////////////////
         QPtimer.stop();
 
+        // Line search
         Funtimer.start();
-        //////////////////////////////////////////////////////////////////////
-
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
@@ -986,7 +1026,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Citer.h_facs_ = -1;
         }
 
-        //////////////////////////////////////////////////////////////////////
         Funtimer.stop();
 
         Citer.alpha_p_ = alphap;
@@ -1085,12 +1124,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     double printtime = double(Printtimer.count<std::chrono::microseconds>()) / 1000000.0;
     this->result_.print_time_ += printtime;
 
-    ///////////////////////////////////////////////////////////////////////////
-
+    // Print exit statistics
     int retiter = (settings_.return_best_ ? BestIter : iters.size() - 1);
     print_exit_stats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
                      qptime * 1000, printtime * 1000);
-    ////////////////////////////////////////////////////////////////////////////
 
     return XSL;
 }
@@ -1427,9 +1464,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     t.stop();
     double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
     this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
 
     if (settings_.print_level_ < 2) {
         print_timing_summary();
