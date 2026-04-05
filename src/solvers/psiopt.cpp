@@ -58,12 +58,10 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->qp_analyzed_ = false;
 }
 
-void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
-                                                  Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
+void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac,
                                                   double &alphap, double &alphad) {
-    double Smax = this->max_step_to_boundary(this->get_slacks(XSL), this->get_slacks(DXSL), bfrac);
-    double Lmax =
-        this->max_step_to_boundary(this->get_iq_lmults(XSL), this->get_iq_lmults(DXSL), bfrac);
+    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac);
+    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac);
 
     double primstep = Smax;
     double slackstep = Smax;
@@ -83,51 +81,49 @@ void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XS
         double step = std::max(Smax, Lmax);
         eqmultstep = step;
     }
-    this->get_primals(DXSL) *= primstep;
+    dxsl.primals() *= primstep;
     if (inequal_cons_ > 0)
-        this->get_slacks(DXSL) *= slackstep;
+        dxsl.slacks() *= slackstep;
     if (equal_cons_ > 0)
-        this->get_eq_lmults(DXSL) *= eqmultstep;
+        dxsl.eq_lmults() *= eqmultstep;
     if (inequal_cons_ > 0)
-        this->get_iq_lmults(DXSL) *= iqmultstep;
+        dxsl.iq_lmults() *= iqmultstep;
 
     alphap = Smax;
     alphad = Lmax;
 }
 
-void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL,
-                                            Eigen::Ref<Eigen::VectorXd> RHS, double pobj,
+void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
                                             double bobj, double mu, IterateInfo &iter) const {
 
     iter.prim_obj_ = pobj;
     iter.barr_obj_ = bobj;
     iter.mu_ = mu;
     iter.p_pivots_ = this->kkt_sol_.ppivs();
-    iter.kkt_inf_ = this->get_prim_grad(RHS).lpNorm<Eigen::Infinity>();
+    iter.kkt_inf_ = rhs.prim_grad().lpNorm<Eigen::Infinity>();
 
     double avgcomp = 0;
     double mincomp = 0;
     double maxcomp = 0;
     if (inequal_cons_ > 0) {
-        iter.icon_inf_ = this->get_iq_cons(RHS).lpNorm<Eigen::Infinity>();
-        iter.icon_norm_err_ = this->get_iq_cons(RHS).norm();
-        iter.max_i_mult_ = this->get_iq_lmults(XSL).lpNorm<Eigen::Infinity>();
-        this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
-                              maxcomp);
+        iter.icon_inf_ = rhs.iq_cons().lpNorm<Eigen::Infinity>();
+        iter.icon_norm_err_ = rhs.iq_cons().norm();
+        iter.max_i_mult_ = xsl.iq_lmults().lpNorm<Eigen::Infinity>();
+        this->complementarity(xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
 
         iter.barr_inf_ = maxcomp;
         iter.barr_norm_err_ = avgcomp;
     }
     if (equal_cons_ > 0) {
-        iter.econ_inf_ = this->get_eq_cons(RHS).lpNorm<Eigen::Infinity>();
-        iter.econ_norm_err_ = this->get_eq_cons(RHS).norm();
-        iter.max_e_mult_ = this->get_eq_lmults(XSL).lpNorm<Eigen::Infinity>();
+        iter.econ_inf_ = rhs.eq_cons().lpNorm<Eigen::Infinity>();
+        iter.econ_norm_err_ = rhs.eq_cons().norm();
+        iter.max_e_mult_ = xsl.eq_lmults().lpNorm<Eigen::Infinity>();
     }
 
-    iter.kkt_norm_err_ = this->get_prim_grad(RHS).norm();
+    iter.kkt_norm_err_ = rhs.prim_grad().norm();
 
     if (equal_cons_ > 0 || inequal_cons_ > 0)
-        iter.all_con_norm_err_ = this->get_all_cons(RHS).norm();
+        iter.all_con_norm_err_ = rhs.all_cons().norm();
 }
 
 void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
@@ -151,8 +147,8 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         this->nlp_->set_primal_diags(1.0);
         eval_soe(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp_->set_primal_diags(0.0);
-        this->get_prim_grad(GX).setZero();
-        this->get_prim_grad(AGXS_FX).setZero();
+        GX.head(primal_vars_).setZero();
+        AGXS_FX.head(primal_vars_).setZero();
         break;
     default:
         throw std::invalid_argument("Unknown AlgorithmMode");
@@ -267,6 +263,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     double mu = MuI;
 
+    // Create KKTVector views over the working vectors
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_rhs = kkt_view(RHS);
+    KKTVector v_dxsl = kkt_view(DXSL);
+    KKTVector v_temp = kkt_view(Temp);
+
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
     tycho::utils::Timer LStimer;
@@ -304,11 +306,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
 
         if (this->inequal_cons_ > 0) {
-            this->apply_reset_slacks(this->get_slacks(XSL), this->get_iq_cons(RHS));
-            this->barrier_hessian(this->kkt_sol_.get_matrix(), this->get_slacks(XSL),
-                                  this->get_iq_lmults(XSL), mu);
-            this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
-                                  maxcomp);
+            this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
+            this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
+                                  mu);
+            this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
         }
 
         ///////////////////////////////////////////////////////////////
@@ -321,7 +322,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         }
         QPtimer.start();
         ////////////////////////////////////////////////////////////////
-        RHS.head(this->primal_vars_) += PGX;
+        v_rhs.prim_grad() += PGX;
 
         ////////////////////////////////////////////////////////////////
         double nhpert = 0;
@@ -354,17 +355,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (this->inequal_cons_ > 0) {
             switch (barmode) {
             case BarrierModes::PROBE:
-                this->barrier_gradient(this->get_iq_lmults(XSL), this->get_dual_grad(RHS));
+                this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
                 DXSL = -this->kkt_sol_.solve(RHS);
-                this->max_primal_dual_step(XSL, DXSL, settings_.bound_fraction_, alphap, alphad);
+                this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
+                                           alphad);
                 Temp = XSL + DXSL;
-                mu = this->mpc_mu(this->get_slacks(Temp), this->get_iq_lmults(Temp), avgcomp,
-                                  mincomp);
+                mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp);
 
                 break;
             case BarrierModes::LOQO:
-                mu = this->loqo_mu(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp,
-                                   mincomp);
+                mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
                 break;
             default:
                 break;
@@ -372,15 +372,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
             mu = std::max(mu, settings_.min_mu_);
             mu = std::min(mu, settings_.max_mu_);
-            barr_obj = this->barrier_objective(this->get_slacks(XSL), mu);
-            this->barrier_gradient(this->get_slacks(XSL), this->get_iq_lmults(XSL), mu,
-                                   this->get_dual_grad(RHS));
+            barr_obj = this->barrier_objective(v_xsl.slacks(), mu);
+            this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
         }
 
         DXSL = -this->kkt_sol_.solve(RHS);
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
-            this->max_primal_dual_step(XSL, DXSL, settings_.bound_fraction_, alphap, alphad);
+            this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
         /////////////////////////////////////////////////////////////////////
         QPtimer.stop();
 
@@ -404,7 +403,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.alpha_d_ = alphad;
         Citer.alpha_t_ = alpha;
 
-        this->fill_iter_info(XSL, RHS, prim_obj, barr_obj, mu, Citer);
+        this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
 
         if (settings_.return_best_) {
@@ -471,17 +470,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     } else {
         Funtimer.start();
         this->result_.obj_val_ = 0;
-        this->nlp_->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->result_.obj_val_);
+        this->nlp_->eval_obj(obj_scale, v_xsl.primals(), this->result_.obj_val_);
         Funtimer.stop();
     }
 
     if (this->equal_cons_ > 0) {
-        this->result_.eq_cons_ = this->get_eq_cons(RHS);
-        this->result_.eq_lmults_ = this->get_eq_lmults(XSL);
+        this->result_.eq_cons_ = v_rhs.eq_cons();
+        this->result_.eq_lmults_ = v_xsl.eq_lmults();
     }
     if (this->inequal_cons_ > 0) {
-        this->result_.iq_cons_ = this->get_iq_cons(RHS) - this->get_slacks(XSL);
-        this->result_.iq_lmults_ = this->get_iq_lmults(XSL);
+        this->result_.iq_cons_ = v_rhs.iq_cons() - v_xsl.slacks();
+        this->result_.iq_lmults_ = v_xsl.iq_lmults();
     }
 
     Runtimer.stop();
@@ -525,17 +524,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     this->eval_nlp(AlgorithmModes::INIT, settings_.obj_scale_, XSL, val, RHS.head(this->primal_vars_),
                    RHS, this->kkt_sol_.get_matrix());
 
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_rhs = kkt_view(RHS);
+
     Eigen::VectorXd hp(this->slack_vars_);
 
     for (int i = 0; i < this->slack_vars_; i++) {
-        double fxi = this->get_iq_cons(RHS)[i];
+        double fxi = v_rhs.iq_cons()[i];
         if (fxi < -settings_.bound_push_) {
-            this->get_slacks(XSL)[i] = abs(fxi);
+            v_xsl.slacks()[i] = abs(fxi);
         } else {
-            this->get_slacks(XSL)[i] = settings_.bound_push_;
+            v_xsl.slacks()[i] = settings_.bound_push_;
         }
         hp[i] = 1.0;
-        this->get_iq_lmults(XSL)[i] = mu / this->get_slacks(XSL)[i];
+        v_xsl.iq_lmults()[i] = mu / v_xsl.slacks()[i];
     }
 
     RHS.tail(this->equal_cons_ + this->inequal_cons_).setZero();
@@ -574,9 +576,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     }
 
     Eigen::VectorXd dx = -this->kkt_sol_.solve(RHS);
+    KKTVector v_dx = kkt_view(dx);
 
     if (equal_cons_ > 0)
-        this->get_eq_lmults(XSL) = this->get_eq_lmults(dx);
+        v_xsl.eq_lmults() = v_dx.eq_lmults();
     if (this->inequal_cons_ > 0)
         this->nlp_->set_slack_diags(0.0);
     this->nlp_->set_primal_diags(0.0);
@@ -585,18 +588,25 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
 }
 
 double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
-                                       double prim_obj, double barr_obj, EigenRef<VectorXd> XSL,
-                                       EigenRef<VectorXd> DXSL, EigenRef<VectorXd> XSL2,
-                                       EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
+                                       double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                                       Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                       Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                                        IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
 
     // Do not modify RHS,XSL,DXSL. EigenRef<VectorXd> doesnt like to be explicitly const in this
     // instance, I will fix this later in refactor
 
+    // Create local KKTVector views (these bind to the EigenRef-backed vectors)
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_dxsl = kkt_view(DXSL);
+    KKTVector v_xsl2 = kkt_view(XSL2);
+    KKTVector v_rhs = kkt_view(RHS);
+    KKTVector v_rhs2 = kkt_view(RHS2);
+
     double alpha = 1.0;
 
     if (lsmode == LineSearchModes::LANG) {
-        double LangInit = prim_obj + barr_obj + this->get_lmults(XSL).dot(this->get_all_cons(RHS));
+        double LangInit = prim_obj + barr_obj + v_xsl.lmults().dot(v_rhs.all_cons());
 
         for (int j = 0; j < settings_.max_ls_iters_; j++) {
             double ptest = 0;
@@ -604,11 +614,10 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
             this->eval_rhs(obj_scale, XSL2, ptest, RHS2, RHS2);
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
-            this->barrier_gradient(this->get_slacks(XSL2), this->get_iq_lmults(XSL2), mu,
-                                   this->get_dual_grad(RHS2));
-            double LangTest = ptest + btest + this->get_lmults(XSL2).dot(this->get_all_cons(RHS2));
+            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
+            btest = this->barrier_objective(v_xsl2.slacks(), mu);
+            this->barrier_gradient(v_xsl2.slacks(), v_xsl2.iq_lmults(), mu, v_rhs2.dual_grad());
+            double LangTest = ptest + btest + v_xsl2.lmults().dot(v_rhs2.all_cons());
             Citer.ls_iters_ = j;
             if (LangTest < LangInit) {
                 break;
@@ -617,14 +626,13 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             }
         }
     } else if (lsmode == LineSearchModes::L1) {
-        double vv = RHS.head(this->primal_vars_ + this->slack_vars_)
-                        .dot(DXSL.head(this->primal_vars_ + this->slack_vars_));
-        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
+        double vv = v_rhs.prim_dual_grad().dot(v_dxsl.primals_slacks());
+        double cv = v_dxsl.lmults().dot(v_rhs.all_cons());
 
         double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
-        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
-        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
+        double InitL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs.all_cons().cwiseAbs());
+        double InitL2Pen = v_rhs.all_cons().squaredNorm();
+        double InitLinfPenalty = v_rhs.all_cons().lpNorm<Eigen::Infinity>();
 
         double sc = .1 + std::abs(vv - cv) / InitL2Pen;
         if (InitL2Pen == 0.0)
@@ -637,19 +645,16 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->nlp_->eval_occ(
-                obj_scale, XSL2.head(this->primal_vars_), ptest,
-                RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
-                RHS2.tail(this->inequal_cons_));
+            this->nlp_->eval_occ(obj_scale, v_xsl2.primals(), ptest, v_rhs2.eq_cons(),
+                                 v_rhs2.iq_cons());
 
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
+            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
+            btest = this->barrier_objective(v_xsl2.slacks(), mu);
 
             double LangTest = ptest + btest;
-            double TestL1Pen =
-                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
-            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
+            double TestL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs2.all_cons().cwiseAbs());
+            double TestL2Pen = v_rhs2.all_cons().squaredNorm();
+            double TestLinfPenalty = v_rhs2.all_cons().lpNorm<Eigen::Infinity>();
 
             LangTest += TestL1Pen + TestL2Pen * sc;
 
@@ -665,13 +670,13 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
         }
     } else if (lsmode == LineSearchModes::AUGLANG) {
 
-        double vv = this->get_prim_dual_grad(RHS).dot(this->get_primals_slacks(DXSL));
-        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
+        double vv = v_rhs.prim_dual_grad().dot(v_dxsl.primals_slacks());
+        double cv = v_dxsl.lmults().dot(v_rhs.all_cons());
 
         double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
-        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
-        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
+        double InitL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs.all_cons().cwiseAbs());
+        double InitL2Pen = v_rhs.all_cons().squaredNorm();
+        double InitLinfPenalty = v_rhs.all_cons().lpNorm<Eigen::Infinity>();
 
         double sc = .01 + std::abs(vv - cv) / InitL2Pen;
         if (InitL2Pen == 0.0)
@@ -684,39 +689,36 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
             double btest = 0;
             XSL2 = XSL + alpha * DXSL;
             RHS2.setZero();
-            this->nlp_->eval_occ(
-                obj_scale, XSL2.head(this->primal_vars_), ptest,
-                RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
-                RHS2.tail(this->inequal_cons_));
+            this->nlp_->eval_occ(obj_scale, v_xsl2.primals(), ptest, v_rhs2.eq_cons(),
+                                 v_rhs2.iq_cons());
 
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
+            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
+            btest = this->barrier_objective(v_xsl2.slacks(), mu);
 
             double LangTest = ptest + btest;
 
-            double TestL1Pen =
-                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
+            double TestL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs2.all_cons().cwiseAbs());
 
             TestL1Pen = 0;
 
             for (int i = 0; i < this->equal_cons_; i++) {
-                double eqerr = abs(this->get_eq_cons(RHS2)[i]);
-                double eqmul = abs(this->get_eq_lmults(XSL)[i]);
+                double eqerr = abs(v_rhs2.eq_cons()[i]);
+                double eqmul = abs(v_xsl.eq_lmults()[i]);
                 if (eqerr > settings_.econ_tol_ * 10) {
                     TestL1Pen += eqerr * eqmul;
                 }
             }
 
             for (int i = 0; i < this->inequal_cons_; i++) {
-                double iqerr = abs(this->get_iq_cons(RHS2)[i]);
-                double iqmul = abs(this->get_iq_lmults(XSL)[i]);
+                double iqerr = abs(v_rhs2.iq_cons()[i]);
+                double iqmul = abs(v_xsl.iq_lmults()[i]);
                 if (iqerr > settings_.icon_tol_ * 10) {
                     TestL1Pen += iqerr * iqmul;
                 }
             }
 
-            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
+            double TestL2Pen = v_rhs2.all_cons().squaredNorm();
+            double TestLinfPenalty = v_rhs2.all_cons().lpNorm<Eigen::Infinity>();
 
             if (TestL2Pen < settings_.econ_tol_ * settings_.econ_tol_ * equal_cons_ +
                                 settings_.icon_tol_ * settings_.icon_tol_ * inequal_cons_) {
@@ -784,7 +786,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
         print_finished("PSIOPT ");
         print_header();
     }
-    return this->get_primals(XSLans);
+    return XSLans.head(primal_vars_);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
@@ -815,7 +817,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x)
     if (settings_.print_level_ < 2) {
         print_finished("Solve Algorithm ");
     }
-    Eigen::VectorXd Xt = this->get_primals(XSLans);
+    Eigen::VectorXd Xt = XSLans.head(primal_vars_);
     XSL = this->init_impl(Xt, settings_.init_mu_, false);
 
     if (settings_.print_level_ < 2) {
@@ -840,7 +842,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x)
         print_header();
     }
 
-    return this->get_primals(XSLans);
+    return XSLans.head(primal_vars_);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
@@ -870,7 +872,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
     if (settings_.print_level_ < 2) {
         print_finished("Solve Algorithm ");
     }
-    Eigen::VectorXd Xt = this->get_primals(XSLans);
+    Eigen::VectorXd Xt = XSLans.head(primal_vars_);
     XSL = this->init_impl(Xt, settings_.init_mu_, false);
 
     if (settings_.print_level_ < 2) {
@@ -884,7 +886,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
     if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
-        Xt = this->get_primals(XSLans);
+        Xt = XSLans.head(primal_vars_);
         XSL = this->init_impl(Xt, settings_.init_mu_, false);
 
         if (settings_.print_level_ < 2) {
@@ -912,7 +914,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::Vector
         print_header();
     }
 
-    return this->get_primals(XSLans);
+    return XSLans.head(primal_vars_);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
@@ -946,7 +948,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
     if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
 
     } else {
-        Eigen::VectorXd Xt = this->get_primals(XSLans);
+        Eigen::VectorXd Xt = XSLans.head(primal_vars_);
         XSL = this->init_impl(Xt, settings_.init_mu_, false);
 
         if (settings_.print_level_ < 2) {
@@ -974,7 +976,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
         print_header();
     }
 
-    return this->get_primals(XSLans);
+    return XSLans.head(primal_vars_);
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
@@ -1016,5 +1018,5 @@ Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
         print_header();
     }
 
-    return this->get_primals(XSLans);
+    return XSLans.head(primal_vars_);
 }
