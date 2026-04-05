@@ -166,14 +166,14 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     }
 }
 
-void tycho::solvers::PSIOPT::print_beginning(std::string msg) const {
+void tycho::solvers::PSIOPT::print_beginning(std::string_view msg) const {
     fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
     fmt::print(": ");
     fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
     fmt::print("\n");
 }
 
-void tycho::solvers::PSIOPT::print_finished(std::string msg) const {
+void tycho::solvers::PSIOPT::print_finished(std::string_view msg) const {
 
     fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
     fmt::print(": ");

@@ -25,17 +25,17 @@ using namespace tycho::astro;
 using namespace tycho::utils;
 
 // Helper macros for binding settings fields as read-write properties on PSIOPT.
-// These produce lambda-based def_prop_rw that forward to settings_.field.
+// These produce lambda-based def_prop_rw that forward through the settings() accessor.
 #define BIND_SETTINGS_RW(obj, pyname, field, ...)                                                  \
     obj.def_prop_rw(                                                                               \
-        pyname, [](const PSIOPT &self) { return self.settings_.field; },                           \
-        [](PSIOPT &self, decltype(self.settings_.field) v) { self.settings_.field = v; }           \
+        pyname, [](const PSIOPT &self) { return self.settings().field; },                          \
+        [](PSIOPT &self, decltype(self.settings().field) v) { self.settings().field = v; }         \
         __VA_OPT__(, ) __VA_ARGS__)
 
 // Helper macro for binding result fields as read-only properties on PSIOPT.
-// These produce lambda-based def_prop_ro that forward to result_.field.
+// These produce lambda-based def_prop_ro that forward through the result() accessor.
 #define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
-    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result_.field; }                  \
+    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result().field; }                 \
                         __VA_OPT__(, ) __VA_ARGS__)
 
 void TychoBind<PSIOPT>::Build(nb::module_ &m) {
@@ -208,12 +208,12 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "return_best", return_best_);
     obj.def_prop_rw(
-        "best_criteria", [](const PSIOPT &self) { return self.settings_.best_criteria_; },
+        "best_criteria", [](const PSIOPT &self) { return self.settings().best_criteria_; },
         [](PSIOPT &self, nb::object val) {
             if (nb::isinstance<BestCriteriaModes>(val))
-                self.settings_.best_criteria_ = nb::cast<BestCriteriaModes>(val);
+                self.settings().best_criteria_ = nb::cast<BestCriteriaModes>(val);
             else if (nb::isinstance<nb::str>(val))
-                self.settings_.best_criteria_ =
+                self.settings().best_criteria_ =
                     PSIOPT::strto_BestCriteriaMode(nb::cast<std::string>(val));
             else
                 throw nb::type_error("expected BestCriteriaModes enum or str");

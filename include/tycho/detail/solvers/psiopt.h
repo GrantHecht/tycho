@@ -11,6 +11,7 @@
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
 //   - Configuration fields grouped into Settings struct
+//   - Converted from struct to class with public/private access sections
 // =============================================================================
 
 #pragma once
@@ -23,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Eigen/Core>
@@ -54,8 +56,8 @@ using tycho::EigenRef;
 
 struct IterateInfo;
 
-struct PSIOPT {
-
+class PSIOPT {
+  public:
     enum class BarrierModes { PROBE, LOQO };
     enum class LineSearchModes { AUGLANG, LANG, L1, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
@@ -81,66 +83,11 @@ struct PSIOPT {
     };
     enum class PDStepStrategies { PrimSlackEq_Iq, AllMinimum, PrimSlack_EqIq, MaxEq };
 
-    static QPOrderingModes strto_OrderingMode(const std::string &str) {
-
-        if (str.compare("MINDEG") == 0)
-            return QPOrderingModes::MINDEG;
-        else if (str.compare("METIS") == 0)
-            return QPOrderingModes::METIS;
-        else if (str.compare("PARMETIS") == 0 || str.compare("MTMETIS") == 0)
-            return QPOrderingModes::PARMETIS;
-        else {
-            auto msg =
-                fmt::format("Unrecognized QPOrderingMode: {0}\n"
-                            "Valid Options Are: MINDEG, METIS, PARMETIS (or MTMETIS on Accelerate)",
-                            str);
-            throw std::invalid_argument(msg);
-        }
-    }
-    static LineSearchModes strto_LineSearchMode(const std::string &str) {
-
-        if (str.compare("L1") == 0)
-            return LineSearchModes::L1;
-        else if (str.compare("NOLS") == 0)
-            return LineSearchModes::NOLS;
-        else if (str.compare("LANG") == 0)
-            return LineSearchModes::LANG;
-        else if (str.compare("AUGLANG") == 0)
-            return LineSearchModes::AUGLANG;
-        else {
-            auto msg = fmt::format("Unrecognized LineSearchMode: {0}\n"
-                                   "Valid Options Are: AUGLANG, LANG, L1, NOLS ",
-                                   str);
-            throw std::invalid_argument(msg);
-        }
-    }
-    static BarrierModes strto_BarrierMode(const std::string &str) {
-
-        if (str.compare("PROBE") == 0)
-            return BarrierModes::PROBE;
-        else if (str.compare("LOQO") == 0)
-            return BarrierModes::LOQO;
-        else {
-            auto msg = fmt::format("Unrecognized BarrierMode: {0}\n"
-                                   "Valid Options Are: LOQO, PROBE ",
-                                   str);
-            throw std::invalid_argument(msg);
-        }
-    }
-    static BestCriteriaModes strto_BestCriteriaMode(const std::string &str) {
-
-        if (str == "ECons" || str == "ECon")
-            return BestCriteriaModes::ECONS;
-        else if (str == "ICons" || str == "ICon")
-            return BestCriteriaModes::ICONS;
-        else if (str == "KKT")
-            return BestCriteriaModes::KKT;
-        else if (str == "Obj" || str == "Prim Obj")
-            return BestCriteriaModes::OBJ;
-        else {
-            throw std::invalid_argument(fmt::format("Unrecognized BestCriteriaMode: {0}", str));
-        }
-    }
+    // --- Static string-to-enum converters (defined in psiopt.cpp) ---
+    static QPOrderingModes strto_OrderingMode(const std::string &str);
+    static LineSearchModes strto_LineSearchMode(const std::string &str);
+    static BarrierModes strto_BarrierMode(const std::string &str);
+    static BestCriteriaModes strto_BestCriteriaMode(const std::string &str);
 
     // =========================================================================
     // Settings — all user-configurable parameters grouped in one place
@@ -232,10 +179,6 @@ struct PSIOPT {
         BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
     };
 
-    Settings settings_;
-    Settings &settings() { return settings_; }
-    const Settings &settings() const { return settings_; }
-
     // =========================================================================
     // SolveResult — all output fields produced by a solve/optimize call
     // =========================================================================
@@ -279,9 +222,6 @@ struct PSIOPT {
         }
     };
 
-    SolveResult result_;
-    const SolveResult &result() const { return result_; }
-
     // =========================================================================
     // KKTVector — lightweight non-owning view over compound KKT layout
     //   [primals | slacks | eq_lmults | iq_lmults]
@@ -318,194 +258,7 @@ struct PSIOPT {
         int pv_, sv_, ec_, ic_;
     };
 
-    /// Create a KKTVector view over a VectorXd using this solver's dimensions.
-    KKTVector kkt_view(Eigen::VectorXd &v) {
-        return KKTVector(v, primal_vars_, slack_vars_, equal_cons_, inequal_cons_);
-    }
-
-    // =========================================================================
-    // Non-config members — problem dimensions, solver state
-    // =========================================================================
-
     using VectorXd = Eigen::VectorXd;
-    std::shared_ptr<NonLinearProgram> nlp_;
-
-    int primal_vars_ = 0;
-    int slack_vars_ = 0;
-    int equal_cons_ = 0;
-    int inequal_cons_ = 0;
-    int kkt_dim_ = 0;
-
-#ifdef USE_ACCELERATE_SPARSE
-    Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
-#else
-    Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
-#endif
-
-    bool qp_analyzed_ = false;
-
-    /////////////////////////////////////////////////////////////////////
-
-    void set_qp_ordering_mode(QPOrderingModes mode) { settings_.qp_ord_ = mode; }
-    void set_qp_ordering_mode(const std::string &str) {
-        settings_.qp_ord_ = strto_OrderingMode(str);
-    }
-
-#ifdef USE_ACCELERATE_SPARSE
-    void set_accel_pivot_tolerance(double tol) { settings_.accel_pivot_tolerance_ = tol; }
-    void set_accel_zero_tolerance(double tol) { settings_.accel_zero_tolerance_ = tol; }
-#endif
-
-    void set_max_iters(int max_iters) {
-        if (max_iters < 1) {
-            throw std::invalid_argument("max_iters must be greater than 0.");
-        }
-        settings_.max_iters_ = max_iters;
-    }
-    void set_max_acc_iters(int max_acc_iters) {
-        if (max_acc_iters < 1) {
-            throw std::invalid_argument("max_acc_iters must be greater than 0.");
-        }
-        settings_.max_acc_iters_ = max_acc_iters;
-    }
-    void set_max_ls_iters(int max_ls_iters) {
-        if (max_ls_iters < 0) {
-            throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
-        }
-        settings_.max_ls_iters_ = max_ls_iters;
-    }
-    void set_all_max_iters(int m1, int m2) {
-        set_max_iters(m1);
-        set_max_acc_iters(m2);
-    }
-
-    void set_opt_bar_mode(BarrierModes mode) { settings_.opt_bar_mode_ = mode; }
-    void set_opt_bar_mode(const std::string &str) {
-        settings_.opt_bar_mode_ = strto_BarrierMode(str);
-    }
-    void set_soe_bar_mode(BarrierModes mode) { settings_.soe_bar_mode_ = mode; }
-    void set_soe_bar_mode(const std::string &str) {
-        settings_.soe_bar_mode_ = strto_BarrierMode(str);
-    }
-
-    void set_opt_ls_mode(LineSearchModes mode) { settings_.opt_ls_mode_ = mode; }
-    void set_opt_ls_mode(const std::string &str) {
-        settings_.opt_ls_mode_ = strto_LineSearchMode(str);
-    }
-    void set_soe_ls_mode(LineSearchModes mode) { settings_.soe_ls_mode_ = mode; }
-    void set_soe_ls_mode(const std::string &str) {
-        settings_.soe_ls_mode_ = strto_LineSearchMode(str);
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    void set_kkt_tol(double kkt_tol) { settings_.kkt_tol_ = std::abs(kkt_tol); }
-    void set_bar_tol(double bar_tol) { settings_.bar_tol_ = std::abs(bar_tol); }
-    void set_econ_tol(double econ_tol) { settings_.econ_tol_ = std::abs(econ_tol); }
-    void set_icon_tol(double icon_tol) { settings_.icon_tol_ = std::abs(icon_tol); }
-    void set_tols(double kkt_tol, double econ_tol, double icon_tol, double bar_tol) {
-        this->set_kkt_tol(kkt_tol);
-        this->set_econ_tol(econ_tol);
-        this->set_icon_tol(icon_tol);
-        this->set_bar_tol(bar_tol);
-    }
-
-    void set_acc_kkt_tol(double acc_kkt_tol) { settings_.acc_kkt_tol_ = std::abs(acc_kkt_tol); }
-    void set_acc_bar_tol(double acc_bar_tol) { settings_.acc_bar_tol_ = std::abs(acc_bar_tol); }
-    void set_acc_econ_tol(double acc_econ_tol) {
-        settings_.acc_econ_tol_ = std::abs(acc_econ_tol);
-    }
-    void set_acc_icon_tol(double acc_icon_tol) {
-        settings_.acc_icon_tol_ = std::abs(acc_icon_tol);
-    }
-    void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
-                      double acc_bar_tol) {
-        this->set_acc_kkt_tol(acc_kkt_tol);
-        this->set_acc_econ_tol(acc_econ_tol);
-        this->set_acc_icon_tol(acc_icon_tol);
-        this->set_acc_bar_tol(acc_bar_tol);
-    }
-
-    void set_unacc_tols(double kktol, double etol, double itol, double bartol) {
-        settings_.unacc_kkt_tol_ = kktol;
-        settings_.unacc_bar_tol_ = bartol;
-        settings_.unacc_econ_tol_ = etol;
-        settings_.unacc_icon_tol_ = itol;
-    }
-
-    void set_div_kkt_tol(double div_kkt_tol) { settings_.div_kkt_tol_ = std::abs(div_kkt_tol); }
-    void set_div_bar_tol(double div_bar_tol) { settings_.div_bar_tol_ = std::abs(div_bar_tol); }
-    void set_div_econ_tol(double div_econ_tol) {
-        settings_.div_econ_tol_ = std::abs(div_econ_tol);
-    }
-    void set_div_icon_tol(double div_icon_tol) {
-        settings_.div_icon_tol_ = std::abs(div_icon_tol);
-    }
-    void set_div_tols(double div_kkt_tol, double div_econ_tol, double div_icon_tol,
-                      double div_bar_tol) {
-        this->set_div_kkt_tol(div_kkt_tol);
-        this->set_div_econ_tol(div_econ_tol);
-        this->set_div_icon_tol(div_icon_tol);
-        this->set_div_bar_tol(div_bar_tol);
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-
-    void set_bound_fraction(double bound_fraction) {
-        if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
-            throw std::invalid_argument("bound_fraction must be between 0 and 1.");
-        }
-        settings_.bound_fraction_ = bound_fraction;
-    }
-
-    void set_bound_push(double bound_push) {
-        if (bound_push <= 0.0) {
-            throw std::invalid_argument("bound_push must be greater than 0.");
-        }
-        settings_.bound_push_ = bound_push;
-    }
-
-    void set_alpha_red(double ared) {
-        if (ared <= 1.0) {
-            throw std::invalid_argument("alpha_red must be greater than 1.0");
-        }
-        settings_.alpha_red_ = ared;
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    void set_delta_h(double delta_h) {
-        if (delta_h <= 0.0) {
-            throw std::invalid_argument("delta_h must be greater than 0.");
-        }
-        settings_.delta_h_ = delta_h;
-    }
-    void set_incr_h(double incr_h) {
-        if (incr_h <= 1.0) {
-            throw std::invalid_argument("incr_h must be greater than 1.0.");
-        }
-        settings_.incr_h_ = incr_h;
-    }
-    void set_decr_h(double decr_h) {
-        if (decr_h >= 1.0 || decr_h <= 0) {
-            throw std::invalid_argument("decr_h must be between 0 and 1.");
-        }
-        settings_.decr_h_ = decr_h;
-    }
-    void set_hpert_params(double delta_h, double incr_h, double decr_h) {
-        this->set_delta_h(delta_h);
-        this->set_incr_h(incr_h);
-        this->set_decr_h(decr_h);
-    }
-    /////////////////////////////////////////////////////////////////////////
-    ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
-
-    void set_print_level(int plevel) { settings_.print_level_ = plevel; }
-
-    void set_best_criteria(BestCriteriaModes mode) { settings_.best_criteria_ = mode; }
-    void set_best_criteria(const std::string &str) {
-        settings_.best_criteria_ = strto_BestCriteriaMode(str);
-    }
-
-    /////////////////////////////////////////////////////////////////////
 
     using EarlyCallBackType =
         std::function<int(int, double, EigenRef<VectorXd>, double, EigenRef<VectorXd>,
@@ -514,15 +267,7 @@ struct PSIOPT {
     using LateCallBackType =
         std::function<int(const IterateInfo &, ConstEigenRef<VectorXd>, ConstEigenRef<VectorXd>)>;
 
-    EarlyCallBackType early_callback_; // = [](int i, EigenRef<VectorXd> XSL, EigenRef<VectorXd>
-                                       // GX, EigenRef<VectorXd> AGXFX) {return 0; };
-    bool early_callback_enabled_ = false;
-    LateCallBackType late_callback_; // = [](const IterateInfo& i, EigenRef<VectorXd> XSL,
-                                     // EigenRef<VectorXd> AGXFX) {return 0; };
-    bool late_callback_enabled_ = false;
-
-    ////////////////////////////////////////////////////////////////////
-
+    // --- Constructors ---
     PSIOPT() {
         settings_.qp_threads_ =
             std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
@@ -533,60 +278,83 @@ struct PSIOPT {
         this->set_nlp(np);
     }
 
-    void release() {
-        this->kkt_sol_.release();
-        this->qp_analyzed_ = false;
-        this->nlp_ = std::shared_ptr<NonLinearProgram>();
-        result_.eq_lmults_.resize(0);
-        result_.iq_lmults_.resize(0);
-    }
+    // --- Accessors ---
+    Settings &settings() { return settings_; }
+    const Settings &settings() const { return settings_; }
+    const SolveResult &result() const { return result_; }
 
+    // --- NLP management ---
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
+    void release();
 
-    void set_qp_params() {
+    // --- Entry points ---
+    Eigen::VectorXd optimize(const Eigen::VectorXd &x);
+    Eigen::VectorXd solve(const Eigen::VectorXd &x);
+    Eigen::VectorXd solve_optimize(const Eigen::VectorXd &x);
+    Eigen::VectorXd optimize_solve(const Eigen::VectorXd &x);
+    Eigen::VectorXd solve_optimize_solve(const Eigen::VectorXd &x);
+
+    // --- Validated setter methods (defined in psiopt.cpp) ---
+    void set_max_iters(int max_iters);
+    void set_max_acc_iters(int max_acc_iters);
+    void set_max_ls_iters(int max_ls_iters);
+    void set_all_max_iters(int m1, int m2);
+
+    void set_kkt_tol(double kkt_tol);
+    void set_bar_tol(double bar_tol);
+    void set_econ_tol(double econ_tol);
+    void set_icon_tol(double icon_tol);
+    void set_tols(double kkt_tol, double econ_tol, double icon_tol, double bar_tol);
+
+    void set_acc_kkt_tol(double acc_kkt_tol);
+    void set_acc_bar_tol(double acc_bar_tol);
+    void set_acc_econ_tol(double acc_econ_tol);
+    void set_acc_icon_tol(double acc_icon_tol);
+    void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
+                      double acc_bar_tol);
+
+    void set_unacc_tols(double kktol, double etol, double itol, double bartol);
+
+    void set_div_kkt_tol(double div_kkt_tol);
+    void set_div_bar_tol(double div_bar_tol);
+    void set_div_econ_tol(double div_econ_tol);
+    void set_div_icon_tol(double div_icon_tol);
+    void set_div_tols(double div_kkt_tol, double div_econ_tol, double div_icon_tol,
+                      double div_bar_tol);
+
+    void set_bound_fraction(double bound_fraction);
+    void set_bound_push(double bound_push);
+    void set_alpha_red(double ared);
+
+    void set_delta_h(double delta_h);
+    void set_incr_h(double incr_h);
+    void set_decr_h(double decr_h);
+    void set_hpert_params(double delta_h, double incr_h, double decr_h);
+
+    void set_print_level(int plevel);
+
+    void set_qp_ordering_mode(QPOrderingModes mode);
+    void set_qp_ordering_mode(const std::string &str);
+
+    void set_opt_bar_mode(BarrierModes mode);
+    void set_opt_bar_mode(const std::string &str);
+    void set_soe_bar_mode(BarrierModes mode);
+    void set_soe_bar_mode(const std::string &str);
+
+    void set_opt_ls_mode(LineSearchModes mode);
+    void set_opt_ls_mode(const std::string &str);
+    void set_soe_ls_mode(LineSearchModes mode);
+    void set_soe_ls_mode(const std::string &str);
+
+    void set_best_criteria(BestCriteriaModes mode);
+    void set_best_criteria(const std::string &str);
+
 #ifdef USE_ACCELERATE_SPARSE
-        // Accelerate interface uses different configuration methods
-        switch (settings_.qp_ord_) {
-        case QPOrderingModes::MINDEG:
-            this->kkt_sol_.set_order(SparseOrderAMD);
-            break;
-        case QPOrderingModes::METIS:
-            // Serial METIS: faster than MT-METIS at all tested scales (up to
-            // ~5400 primal variables) due to per-call thread coordination overhead.
-            this->kkt_sol_.set_order(SparseOrderMetis);
-            break;
-        case QPOrderingModes::PARMETIS:
-            // MT-METIS (macOS 26+): currently slower than serial METIS at tested
-            // scales. Retained for tracking Apple's improvements across releases.
-#ifdef TYCHO_HAS_MTMETIS
-            this->kkt_sol_.set_order(SparseOrderMTMetis);
-#else
-            this->kkt_sol_.set_order(SparseOrderMetis);
+    void set_accel_pivot_tolerance(double tol);
+    void set_accel_zero_tolerance(double tol);
 #endif
-            break;
-        }
-        this->kkt_sol_.set_num_threads(settings_.qp_threads_);
-        this->kkt_sol_.set_iterative_refinement(settings_.qp_ref_steps_ > 0);
-        this->kkt_sol_.set_iterative_refinement_iterations(settings_.qp_ref_steps_);
-        this->kkt_sol_.set_pivot_tolerance(settings_.accel_pivot_tolerance_);
-        this->kkt_sol_.set_zero_tolerance(settings_.accel_zero_tolerance_);
-#else
-        this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
-        this->kkt_sol_.pivotstrat_ = static_cast<int>(settings_.qp_pivot_strategy_);
-        this->kkt_sol_.pivotpert_ = settings_.qp_pivot_perturb_;
-        this->kkt_sol_.matching_ = settings_.qp_matching_;
-        this->kkt_sol_.scaling_ = settings_.qp_scaling_;
-        this->kkt_sol_.iterref_ = settings_.qp_ref_steps_;
-        this->kkt_sol_.alg_ = static_cast<int>(settings_.qp_alg_);
-        this->kkt_sol_.msglvl_ = settings_.qp_print_;
 
-        if (settings_.cnr_mode_)
-            this->kkt_sol_.threads_ = settings_.qp_threads_;
-        this->kkt_sol_.parsolve_ = settings_.qp_par_solve_;
-        this->kkt_sol_.set_params();
-#endif
-    }
-
+    // --- Callback methods ---
     void set_early_callback(const EarlyCallBackType &f) {
         this->early_callback_enabled_ = true;
         this->early_callback_ = f;
@@ -597,191 +365,71 @@ struct PSIOPT {
         this->late_callback_ = f;
     }
     void disable_late_callback() { this->late_callback_enabled_ = false; }
-    /////////////////////////////////////////////////////////////////////////////////////////////
-    void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const {
-        for (int i = 0; i < this->slack_vars_; i++) {
-            double fxi = FXI[i];
-            double si = S[i];
-            if (si < settings_.neg_slack_reset_) {
-                si = settings_.neg_slack_reset_;
-            }
 
-            if (fxi < 0.0) {
-                FXI[i] = 0.0;
-                S[i] = std::max(std::abs(fxi), settings_.neg_slack_reset_);
-            } else {
-                FXI[i] += si;
-            }
-        }
-    }
-    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
-                                double bfrac) const {
-        double alpha = 1.0;
-        for (int i = 0; i < this->inequal_cons_; i++) {
-            if (dSLI[i] < -bfrac * SLI[i]) {
-                double an = -bfrac * SLI[i] / dSLI[i];
-                if (an < alpha)
-                    alpha = an;
-            }
-        }
-        return alpha;
-    }
-    void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
-                         double &avgcomp, double &mincomp, double &maxcomp) const {
-        Eigen::VectorXd StLI = S.cwiseProduct(LI);
-        mincomp = StLI.minCoeff();
-        maxcomp = StLI.maxCoeff();
-        avgcomp = StLI.sum() / double(StLI.size());
-    }
+    // --- Query methods ---
+    ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
 
-    double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
-        double psi = 0;
-        for (int i = 0; i < this->inequal_cons_; i++) {
-            psi += -mu * std::log(S[i]);
-        }
-        return psi;
-    }
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
-                          Eigen::Ref<Eigen::VectorXd> AGS) const {
-        AGS = LI - mu * (S.cwiseInverse());
-    }
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const {
-        AGS = LI;
-    }
+    // --- QP parameter setup (defined in psiopt.cpp) ---
+    void set_qp_params();
 
-    void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
-                         Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu) {
-        Eigen::VectorXd hp = LI.cwiseQuotient(S);
-        for (int i = 0; i < this->inequal_cons_; i++) {
-            if (hp[i] < 0.0) {
-                hp[i] = mu / (S[i] * S[i]);
-            }
-        }
-        this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
-    }
-
-    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                   double mincomp) const {
-        double eta = mincomp / avgcomp;
-        double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
-        double sigma = std::min(0.8, abs(sigmat));
-        return sigma * avgcomp;
-    }
-    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                  double mincomp) const {
-        double navgcomp = 0;
-        double nmincomp = 0;
-        double nmaxcomp = 0;
-        this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp);
-        return std::pow(navgcomp / avgcomp, 3) * avgcomp;
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp_->eval_kkt(
-            obj_scale, XSL.head(primal_vars_),
-            XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-            GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-            AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-            AGXS_FX.tail(inequal_cons_), KKTmat);
-    }
-
-    void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
-                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp_->eval_kkt_no(
-            obj_scale, XSL.head(primal_vars_),
-            XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-            GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-            AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-            AGXS_FX.tail(inequal_cons_), KKTmat);
-    }
-
-    void eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp_->eval_aug(
-            obj_scale, XSL.head(primal_vars_),
-            XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-            GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-            AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-            AGXS_FX.tail(inequal_cons_), KKTmat);
-    }
-
-    void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-        this->nlp_->eval_soe(
-            obj_scale, XSL.head(primal_vars_),
-            XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-            GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-            AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-            AGXS_FX.tail(inequal_cons_), KKTmat);
-    }
-
-    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
-        this->nlp_->eval_rhs(
-            obj_scale, XSL.head(primal_vars_),
-            XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-            GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-            AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-            AGXS_FX.tail(inequal_cons_));
-    }
-
-    void max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac, double &alphap,
-                              double &alphad);
-
-    void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
-                        IterateInfo &iter) const;
-
-    void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
-                  double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
-
-    ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
-
-    static void print_psiopt();
-
-    void print_settings();
-    void print_stats();
-    void print_last_iterate(const std::vector<IterateInfo> &iters);
-
+    // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
-    void print_beginning(std::string msg) const;
-    void print_finished(std::string msg) const;
-    void print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
-                          double tottime, double nlptime, double qptime, double printtime);
 
-    fmt::text_style calculate_color(double val, double targ, double acc);
+  private:
+    Settings settings_;
+    SolveResult result_;
+    std::shared_ptr<NonLinearProgram> nlp_;
 
-    int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert);
+    // --- Problem dimensions ---
+    int primal_vars_ = 0;
+    int slack_vars_ = 0;
+    int equal_cons_ = 0;
+    int inequal_cons_ = 0;
+    int kkt_dim_ = 0;
 
-    bool analyze_kkt_matrix() {
-        bool docompute = true;
-        if (this->qp_analyzed_ && !(settings_.force_qp_analysis_)) {
-            docompute = false;
-        } else {
-            this->qp_analyzed_ = true;
-            docompute = true;
-        }
-        return docompute;
+    // --- KKT solver ---
+#ifdef USE_ACCELERATE_SPARSE
+    Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
+#else
+    Eigen::PardisoLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
+#endif
+    bool qp_analyzed_ = false;
+
+    // --- Callbacks ---
+    EarlyCallBackType early_callback_;
+    bool early_callback_enabled_ = false;
+    LateCallBackType late_callback_;
+    bool late_callback_enabled_ = false;
+
+    /// Create a KKTVector view over a VectorXd using this solver's dimensions.
+    KKTVector kkt_view(Eigen::VectorXd &v) {
+        return KKTVector(v, primal_vars_, slack_vars_, equal_cons_, inequal_cons_);
     }
 
+    // --- Phase sequence ---
+    struct PhaseStep {
+        AlgorithmModes alg_mode_;
+        BarrierModes bar_mode_;
+        LineSearchModes ls_mode_;
+        const char *label_;
+        bool conditional_ = false; // only run if previous phase didn't converge
+    };
+
+    Eigen::VectorXd run_phase_sequence(const Eigen::VectorXd &x,
+                                       std::initializer_list<PhaseStep> steps);
+
+    // --- Core algorithm (defined in psiopt.cpp) ---
     Eigen::VectorXd alg_impl(AlgorithmModes algmode, BarrierModes barmode, LineSearchModes lsmode,
                              double obj_scale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
+    // --- Line search (defined in psiopt.cpp) ---
     double ls_impl(LineSearchModes lsmode, double obj_scale, double Mu, double prim_obj,
                    double barr_obj, Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
                    Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
-    // Line search variant implementations
     double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj,
                    KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
                    KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
@@ -794,7 +442,7 @@ struct PSIOPT {
                       KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
                       KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
 
-    // Line search shared helpers
+    // --- Line search shared helpers ---
     struct PenaltyTerms {
         double l1_, l2_, linf_;
     };
@@ -808,29 +456,69 @@ struct PSIOPT {
     bool secondary_accept(double ptest, double prim_obj,
                           const PenaltyTerms &test, const PenaltyTerms &init) const;
 
+    // --- KKT factorization (defined in psiopt.cpp) ---
+    int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
+                    double &finalpert);
+
+    bool analyze_kkt_matrix();
+
     void ensure_solver_initialized();
+
+    // --- Barrier math helpers (defined in psiopt.cpp) ---
+    void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
+    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac) const;
+    void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
+                         double &avgcomp, double &mincomp, double &maxcomp) const;
+    double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
+    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                          Eigen::Ref<Eigen::VectorXd> AGS) const;
+    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
+    void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
+                         Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
+    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                   double mincomp) const;
+    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                  double mincomp) const;
+
+    // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
+    void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+    void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                     EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+    void eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+    void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
+                  EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX);
+
+    void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
+                  double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+
+    // --- Convergence and stepping ---
+    void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
+                        IterateInfo &iter) const;
+    ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
+    void max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac, double &alphap,
+                              double &alphad);
+
+    // --- Printing methods ---
+    static void print_psiopt();
+    void print_settings();
+    void print_stats();
+    void print_last_iterate(const std::vector<IterateInfo> &iters);
+    void print_beginning(std::string_view msg) const;
+    void print_finished(std::string_view msg) const;
+    void print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last, int iternum,
+                          double tottime, double nlptime, double qptime, double printtime);
     void print_timing_summary();
-
-    struct PhaseStep {
-        AlgorithmModes alg_mode_;
-        BarrierModes bar_mode_;
-        LineSearchModes ls_mode_;
-        const char *label_;
-        bool conditional_ = false; // only run if previous phase didn't converge
-    };
-
-    Eigen::VectorXd run_phase_sequence(const Eigen::VectorXd &x,
-                                       std::initializer_list<PhaseStep> steps);
-
-    Eigen::VectorXd optimize(const Eigen::VectorXd &x);
-
-    Eigen::VectorXd solve_optimize(const Eigen::VectorXd &x);
-
-    Eigen::VectorXd solve_optimize_solve(const Eigen::VectorXd &x);
-
-    Eigen::VectorXd optimize_solve(const Eigen::VectorXd &x);
-
-    Eigen::VectorXd solve(const Eigen::VectorXd &x);
+    static fmt::text_style calculate_color(double val, double targ, double acc);
 };
 
 } // namespace tycho::solvers

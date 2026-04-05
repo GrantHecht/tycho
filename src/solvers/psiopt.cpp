@@ -21,6 +21,524 @@
 #include <mkl.h>
 #endif
 
+// =============================================================================
+// Static string-to-enum converters
+// =============================================================================
+
+auto tycho::solvers::PSIOPT::strto_OrderingMode(const std::string &str) -> QPOrderingModes {
+    if (str.compare("MINDEG") == 0)
+        return QPOrderingModes::MINDEG;
+    else if (str.compare("METIS") == 0)
+        return QPOrderingModes::METIS;
+    else if (str.compare("PARMETIS") == 0 || str.compare("MTMETIS") == 0)
+        return QPOrderingModes::PARMETIS;
+    else {
+        auto msg =
+            fmt::format("Unrecognized QPOrderingMode: {0}\n"
+                        "Valid Options Are: MINDEG, METIS, PARMETIS (or MTMETIS on Accelerate)",
+                        str);
+        throw std::invalid_argument(msg);
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_LineSearchMode(const std::string &str) -> LineSearchModes {
+    if (str.compare("L1") == 0)
+        return LineSearchModes::L1;
+    else if (str.compare("NOLS") == 0)
+        return LineSearchModes::NOLS;
+    else if (str.compare("LANG") == 0)
+        return LineSearchModes::LANG;
+    else if (str.compare("AUGLANG") == 0)
+        return LineSearchModes::AUGLANG;
+    else {
+        auto msg = fmt::format("Unrecognized LineSearchMode: {0}\n"
+                               "Valid Options Are: AUGLANG, LANG, L1, NOLS ",
+                               str);
+        throw std::invalid_argument(msg);
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_BarrierMode(const std::string &str) -> BarrierModes {
+    if (str.compare("PROBE") == 0)
+        return BarrierModes::PROBE;
+    else if (str.compare("LOQO") == 0)
+        return BarrierModes::LOQO;
+    else {
+        auto msg = fmt::format("Unrecognized BarrierMode: {0}\n"
+                               "Valid Options Are: LOQO, PROBE ",
+                               str);
+        throw std::invalid_argument(msg);
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_BestCriteriaMode(const std::string &str) -> BestCriteriaModes {
+    if (str == "ECons" || str == "ECon")
+        return BestCriteriaModes::ECONS;
+    else if (str == "ICons" || str == "ICon")
+        return BestCriteriaModes::ICONS;
+    else if (str == "KKT")
+        return BestCriteriaModes::KKT;
+    else if (str == "Obj" || str == "Prim Obj")
+        return BestCriteriaModes::OBJ;
+    else {
+        throw std::invalid_argument(fmt::format("Unrecognized BestCriteriaMode: {0}", str));
+    }
+}
+
+// =============================================================================
+// Validated setter methods
+// =============================================================================
+
+void tycho::solvers::PSIOPT::set_max_iters(int max_iters) {
+    if (max_iters < 1) {
+        throw std::invalid_argument("max_iters must be greater than 0.");
+    }
+    settings_.max_iters_ = max_iters;
+}
+
+void tycho::solvers::PSIOPT::set_max_acc_iters(int max_acc_iters) {
+    if (max_acc_iters < 1) {
+        throw std::invalid_argument("max_acc_iters must be greater than 0.");
+    }
+    settings_.max_acc_iters_ = max_acc_iters;
+}
+
+void tycho::solvers::PSIOPT::set_max_ls_iters(int max_ls_iters) {
+    if (max_ls_iters < 0) {
+        throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
+    }
+    settings_.max_ls_iters_ = max_ls_iters;
+}
+
+void tycho::solvers::PSIOPT::set_all_max_iters(int m1, int m2) {
+    set_max_iters(m1);
+    set_max_acc_iters(m2);
+}
+
+void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
+    settings_.kkt_tol_ = std::abs(kkt_tol);
+}
+
+void tycho::solvers::PSIOPT::set_bar_tol(double bar_tol) {
+    settings_.bar_tol_ = std::abs(bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_econ_tol(double econ_tol) {
+    settings_.econ_tol_ = std::abs(econ_tol);
+}
+
+void tycho::solvers::PSIOPT::set_icon_tol(double icon_tol) {
+    settings_.icon_tol_ = std::abs(icon_tol);
+}
+
+void tycho::solvers::PSIOPT::set_tols(double kkt_tol, double econ_tol, double icon_tol,
+                                      double bar_tol) {
+    this->set_kkt_tol(kkt_tol);
+    this->set_econ_tol(econ_tol);
+    this->set_icon_tol(icon_tol);
+    this->set_bar_tol(bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_kkt_tol(double acc_kkt_tol) {
+    settings_.acc_kkt_tol_ = std::abs(acc_kkt_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_bar_tol(double acc_bar_tol) {
+    settings_.acc_bar_tol_ = std::abs(acc_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_econ_tol(double acc_econ_tol) {
+    settings_.acc_econ_tol_ = std::abs(acc_econ_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_icon_tol(double acc_icon_tol) {
+    settings_.acc_icon_tol_ = std::abs(acc_icon_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_tols(double acc_kkt_tol, double acc_econ_tol,
+                                          double acc_icon_tol, double acc_bar_tol) {
+    this->set_acc_kkt_tol(acc_kkt_tol);
+    this->set_acc_econ_tol(acc_econ_tol);
+    this->set_acc_icon_tol(acc_icon_tol);
+    this->set_acc_bar_tol(acc_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol,
+                                             double bartol) {
+    settings_.unacc_kkt_tol_ = kktol;
+    settings_.unacc_bar_tol_ = bartol;
+    settings_.unacc_econ_tol_ = etol;
+    settings_.unacc_icon_tol_ = itol;
+}
+
+void tycho::solvers::PSIOPT::set_div_kkt_tol(double div_kkt_tol) {
+    settings_.div_kkt_tol_ = std::abs(div_kkt_tol);
+}
+
+void tycho::solvers::PSIOPT::set_div_bar_tol(double div_bar_tol) {
+    settings_.div_bar_tol_ = std::abs(div_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_div_econ_tol(double div_econ_tol) {
+    settings_.div_econ_tol_ = std::abs(div_econ_tol);
+}
+
+void tycho::solvers::PSIOPT::set_div_icon_tol(double div_icon_tol) {
+    settings_.div_icon_tol_ = std::abs(div_icon_tol);
+}
+
+void tycho::solvers::PSIOPT::set_div_tols(double div_kkt_tol, double div_econ_tol,
+                                          double div_icon_tol, double div_bar_tol) {
+    this->set_div_kkt_tol(div_kkt_tol);
+    this->set_div_econ_tol(div_econ_tol);
+    this->set_div_icon_tol(div_icon_tol);
+    this->set_div_bar_tol(div_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_bound_fraction(double bound_fraction) {
+    if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
+        throw std::invalid_argument("bound_fraction must be between 0 and 1.");
+    }
+    settings_.bound_fraction_ = bound_fraction;
+}
+
+void tycho::solvers::PSIOPT::set_bound_push(double bound_push) {
+    if (bound_push <= 0.0) {
+        throw std::invalid_argument("bound_push must be greater than 0.");
+    }
+    settings_.bound_push_ = bound_push;
+}
+
+void tycho::solvers::PSIOPT::set_alpha_red(double ared) {
+    if (ared <= 1.0) {
+        throw std::invalid_argument("alpha_red must be greater than 1.0");
+    }
+    settings_.alpha_red_ = ared;
+}
+
+void tycho::solvers::PSIOPT::set_delta_h(double delta_h) {
+    if (delta_h <= 0.0) {
+        throw std::invalid_argument("delta_h must be greater than 0.");
+    }
+    settings_.delta_h_ = delta_h;
+}
+
+void tycho::solvers::PSIOPT::set_incr_h(double incr_h) {
+    if (incr_h <= 1.0) {
+        throw std::invalid_argument("incr_h must be greater than 1.0.");
+    }
+    settings_.incr_h_ = incr_h;
+}
+
+void tycho::solvers::PSIOPT::set_decr_h(double decr_h) {
+    if (decr_h >= 1.0 || decr_h <= 0) {
+        throw std::invalid_argument("decr_h must be between 0 and 1.");
+    }
+    settings_.decr_h_ = decr_h;
+}
+
+void tycho::solvers::PSIOPT::set_hpert_params(double delta_h, double incr_h, double decr_h) {
+    this->set_delta_h(delta_h);
+    this->set_incr_h(incr_h);
+    this->set_decr_h(decr_h);
+}
+
+void tycho::solvers::PSIOPT::set_print_level(int plevel) { settings_.print_level_ = plevel; }
+
+void tycho::solvers::PSIOPT::set_qp_ordering_mode(QPOrderingModes mode) {
+    settings_.qp_ord_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_qp_ordering_mode(const std::string &str) {
+    settings_.qp_ord_ = strto_OrderingMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_opt_bar_mode(BarrierModes mode) {
+    settings_.opt_bar_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_opt_bar_mode(const std::string &str) {
+    settings_.opt_bar_mode_ = strto_BarrierMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_soe_bar_mode(BarrierModes mode) {
+    settings_.soe_bar_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_soe_bar_mode(const std::string &str) {
+    settings_.soe_bar_mode_ = strto_BarrierMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_opt_ls_mode(LineSearchModes mode) {
+    settings_.opt_ls_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_opt_ls_mode(const std::string &str) {
+    settings_.opt_ls_mode_ = strto_LineSearchMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_soe_ls_mode(LineSearchModes mode) {
+    settings_.soe_ls_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_soe_ls_mode(const std::string &str) {
+    settings_.soe_ls_mode_ = strto_LineSearchMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_best_criteria(BestCriteriaModes mode) {
+    settings_.best_criteria_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_best_criteria(const std::string &str) {
+    settings_.best_criteria_ = strto_BestCriteriaMode(str);
+}
+
+#ifdef USE_ACCELERATE_SPARSE
+void tycho::solvers::PSIOPT::set_accel_pivot_tolerance(double tol) {
+    settings_.accel_pivot_tolerance_ = tol;
+}
+
+void tycho::solvers::PSIOPT::set_accel_zero_tolerance(double tol) {
+    settings_.accel_zero_tolerance_ = tol;
+}
+#endif
+
+// =============================================================================
+// QP parameter setup
+// =============================================================================
+
+void tycho::solvers::PSIOPT::set_qp_params() {
+#ifdef USE_ACCELERATE_SPARSE
+    // Accelerate interface uses different configuration methods
+    switch (settings_.qp_ord_) {
+    case QPOrderingModes::MINDEG:
+        this->kkt_sol_.set_order(SparseOrderAMD);
+        break;
+    case QPOrderingModes::METIS:
+        // Serial METIS: faster than MT-METIS at all tested scales (up to
+        // ~5400 primal variables) due to per-call thread coordination overhead.
+        this->kkt_sol_.set_order(SparseOrderMetis);
+        break;
+    case QPOrderingModes::PARMETIS:
+        // MT-METIS (macOS 26+): currently slower than serial METIS at tested
+        // scales. Retained for tracking Apple's improvements across releases.
+#ifdef TYCHO_HAS_MTMETIS
+        this->kkt_sol_.set_order(SparseOrderMTMetis);
+#else
+        this->kkt_sol_.set_order(SparseOrderMetis);
+#endif
+        break;
+    }
+    this->kkt_sol_.set_num_threads(settings_.qp_threads_);
+    this->kkt_sol_.set_iterative_refinement(settings_.qp_ref_steps_ > 0);
+    this->kkt_sol_.set_iterative_refinement_iterations(settings_.qp_ref_steps_);
+    this->kkt_sol_.set_pivot_tolerance(settings_.accel_pivot_tolerance_);
+    this->kkt_sol_.set_zero_tolerance(settings_.accel_zero_tolerance_);
+#else
+    this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
+    this->kkt_sol_.pivotstrat_ = static_cast<int>(settings_.qp_pivot_strategy_);
+    this->kkt_sol_.pivotpert_ = settings_.qp_pivot_perturb_;
+    this->kkt_sol_.matching_ = settings_.qp_matching_;
+    this->kkt_sol_.scaling_ = settings_.qp_scaling_;
+    this->kkt_sol_.iterref_ = settings_.qp_ref_steps_;
+    this->kkt_sol_.alg_ = static_cast<int>(settings_.qp_alg_);
+    this->kkt_sol_.msglvl_ = settings_.qp_print_;
+
+    if (settings_.cnr_mode_)
+        this->kkt_sol_.threads_ = settings_.qp_threads_;
+    this->kkt_sol_.parsolve_ = settings_.qp_par_solve_;
+    this->kkt_sol_.set_params();
+#endif
+}
+
+// =============================================================================
+// KKT matrix analysis
+// =============================================================================
+
+bool tycho::solvers::PSIOPT::analyze_kkt_matrix() {
+    bool docompute = true;
+    if (this->qp_analyzed_ && !(settings_.force_qp_analysis_)) {
+        docompute = false;
+    } else {
+        this->qp_analyzed_ = true;
+        docompute = true;
+    }
+    return docompute;
+}
+
+// =============================================================================
+// Release
+// =============================================================================
+
+void tycho::solvers::PSIOPT::release() {
+    this->kkt_sol_.release();
+    this->qp_analyzed_ = false;
+    this->nlp_ = std::shared_ptr<NonLinearProgram>();
+    result_.eq_lmults_.resize(0);
+    result_.iq_lmults_.resize(0);
+}
+
+// =============================================================================
+// Barrier math helpers
+// =============================================================================
+
+void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
+                                                 Eigen::Ref<Eigen::VectorXd> FXI) const {
+    for (int i = 0; i < this->slack_vars_; i++) {
+        double fxi = FXI[i];
+        double si = S[i];
+        if (si < settings_.neg_slack_reset_) {
+            si = settings_.neg_slack_reset_;
+        }
+
+        if (fxi < 0.0) {
+            FXI[i] = 0.0;
+            S[i] = std::max(std::abs(fxi), settings_.neg_slack_reset_);
+        } else {
+            FXI[i] += si;
+        }
+    }
+}
+
+double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                                     Eigen::Ref<Eigen::VectorXd> dSLI,
+                                                     double bfrac) const {
+    double alpha = 1.0;
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        if (dSLI[i] < -bfrac * SLI[i]) {
+            double an = -bfrac * SLI[i] / dSLI[i];
+            if (an < alpha)
+                alpha = an;
+        }
+    }
+    return alpha;
+}
+
+void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
+                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
+                                              double &mincomp, double &maxcomp) const {
+    Eigen::VectorXd StLI = S.cwiseProduct(LI);
+    mincomp = StLI.minCoeff();
+    maxcomp = StLI.maxCoeff();
+    avgcomp = StLI.sum() / double(StLI.size());
+}
+
+double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S,
+                                                  double mu) const {
+    double psi = 0;
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        psi += -mu * std::log(S[i]);
+    }
+    return psi;
+}
+
+void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
+                                               Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI - mu * (S.cwiseInverse());
+}
+
+void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
+                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI;
+}
+
+void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
+                                              Eigen::Ref<Eigen::VectorXd> S,
+                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
+    Eigen::VectorXd hp = LI.cwiseQuotient(S);
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        if (hp[i] < 0.0) {
+            hp[i] = mu / (S[i] * S[i]);
+        }
+    }
+    this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
+}
+
+double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
+                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                        double mincomp) const {
+    double eta = mincomp / avgcomp;
+    double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
+    double sigma = std::min(0.8, abs(sigmat));
+    return sigma * avgcomp;
+}
+
+double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
+                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                       double mincomp) const {
+    double navgcomp = 0;
+    double nmincomp = 0;
+    double nmaxcomp = 0;
+    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp);
+    return std::pow(navgcomp / avgcomp, 3) * avgcomp;
+}
+
+// =============================================================================
+// NLP eval dispatch methods
+// =============================================================================
+
+void tycho::solvers::PSIOPT::eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_kkt(
+        obj_scale, XSL.head(primal_vars_),
+        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
+        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
+        AGXS_FX.tail(inequal_cons_), KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL,
+                                          double &val, EigenRef<VectorXd> GX,
+                                          EigenRef<VectorXd> AGXS_FX,
+                                          Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_kkt_no(
+        obj_scale, XSL.head(primal_vars_),
+        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
+        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
+        AGXS_FX.tail(inequal_cons_), KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_aug(
+        obj_scale, XSL.head(primal_vars_),
+        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
+        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
+        AGXS_FX.tail(inequal_cons_), KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_soe(
+        obj_scale, XSL.head(primal_vars_),
+        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
+        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
+        AGXS_FX.tail(inequal_cons_), KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_rhs(double obj_scale,
+                                       const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                                       Eigen::Ref<Eigen::VectorXd> GX,
+                                       Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
+    this->nlp_->eval_rhs(
+        obj_scale, XSL.head(primal_vars_),
+        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
+        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
+        AGXS_FX.tail(inequal_cons_));
+}
+
+// =============================================================================
+// Existing implementations
+// =============================================================================
+
 void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
