@@ -164,10 +164,10 @@ void tycho::solvers::PSIOPT::set_acc_tols(double acc_kkt_tol, double acc_econ_to
 }
 
 void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol, double bartol) {
-    settings_.unacc_kkt_tol_ = kktol;
-    settings_.unacc_bar_tol_ = bartol;
-    settings_.unacc_econ_tol_ = etol;
-    settings_.unacc_icon_tol_ = itol;
+    settings_.unacc_kkt_tol_ = std::abs(kktol);
+    settings_.unacc_bar_tol_ = std::abs(bartol);
+    settings_.unacc_econ_tol_ = std::abs(etol);
+    settings_.unacc_icon_tol_ = std::abs(itol);
 }
 
 void tycho::solvers::PSIOPT::set_div_kkt_tol(double div_kkt_tol) {
@@ -1285,8 +1285,17 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
 
 Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
                                                            std::initializer_list<PhaseStep> steps) {
+    if (!this->nlp_) {
+        throw std::runtime_error("PSIOPT::run_phase_sequence: no NLP has been set. "
+                                 "Call set_nlp() before optimize/solve.");
+    }
+    if (x.size() != primal_vars_) {
+        throw std::invalid_argument(
+            fmt::format("PSIOPT: initial guess has {} elements, expected {} primal variables",
+                        x.size(), primal_vars_));
+    }
 
-    this->result_.zero_timing();
+    this->result_.reset_accumulators();
 
     if (settings_.print_level_ == 0)
         print_stats();

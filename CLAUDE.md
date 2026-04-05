@@ -21,6 +21,10 @@ As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j4 for builds
 - Linux / Windows: ALWAYS use -j4 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
+- **NEVER launch a second build if one is already running** — not even in the background.
+  If you started a build with `run_in_background`, WAIT for the completion notification
+  before running any other `ninja` or `cmake --build` command. Two concurrent builds WILL
+  OOM the system. This applies within a single conversation, not just across agents.
 
 ## Repository Structure
 

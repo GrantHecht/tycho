@@ -33,6 +33,14 @@ using namespace tycho::utils;
             self.settings().field = v;                                                             \
         } __VA_OPT__(, ) __VA_ARGS__)
 
+// Like BIND_SETTINGS_RW, but routes the setter through a validated method.
+// Use for fields that have a corresponding set_* method with validation logic.
+#define BIND_SETTINGS_VALIDATED(obj, pyname, field, setter, ...)                                   \
+    obj.def_prop_rw(                                                                               \
+        pyname, [](const PSIOPT &self) { return self.settings().field; },                          \
+        [](PSIOPT &self, decltype(self.settings().field) v) { self.setter(v); } __VA_OPT__(, )     \
+            __VA_ARGS__)
+
 // Helper macro for binding result fields as read-only properties on PSIOPT.
 // These produce lambda-based def_prop_ro that forward through the result() accessor.
 #define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
@@ -56,15 +64,15 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("solve_optimize", &PSIOPT::solve_optimize, "");
     obj.def("solve", &PSIOPT::solve, "");
 
-    BIND_SETTINGS_RW(obj, "max_iters", max_iters_, "");
-    BIND_SETTINGS_RW(obj, "max_acc_iters", max_acc_iters_, "");
-    BIND_SETTINGS_RW(obj, "max_ls_iters", max_ls_iters_, "");
+    BIND_SETTINGS_VALIDATED(obj, "max_iters", max_iters_, set_max_iters, "");
+    BIND_SETTINGS_VALIDATED(obj, "max_acc_iters", max_acc_iters_, set_max_acc_iters, "");
+    BIND_SETTINGS_VALIDATED(obj, "max_ls_iters", max_ls_iters_, set_max_ls_iters, "");
 
     obj.def("set_max_iters", &PSIOPT::set_max_iters);
     obj.def("set_max_acc_iters", &PSIOPT::set_max_acc_iters);
     obj.def("set_max_ls_iters", &PSIOPT::set_max_ls_iters);
 
-    BIND_SETTINGS_RW(obj, "alpha_red", alpha_red_, "");
+    BIND_SETTINGS_VALIDATED(obj, "alpha_red", alpha_red_, set_alpha_red, "");
     obj.def("set_alpha_red", &PSIOPT::set_alpha_red);
 
     BIND_SETTINGS_RW(obj, "wide_console", wide_console_);
@@ -89,10 +97,10 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     obj.def("get_convergence_flag", &PSIOPT::get_convergence_flag);
 
-    BIND_SETTINGS_RW(obj, "kkt_tol", kkt_tol_, "");
-    BIND_SETTINGS_RW(obj, "bar_tol", bar_tol_, "");
-    BIND_SETTINGS_RW(obj, "eq_con_tol", econ_tol_, "");
-    BIND_SETTINGS_RW(obj, "ineq_con_tol", icon_tol_, "");
+    BIND_SETTINGS_VALIDATED(obj, "kkt_tol", kkt_tol_, set_kkt_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "bar_tol", bar_tol_, set_bar_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "eq_con_tol", econ_tol_, set_econ_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "ineq_con_tol", icon_tol_, set_icon_tol, "");
 
     obj.def("set_kkt_tol", &PSIOPT::set_kkt_tol);
     obj.def("set_bar_tol", &PSIOPT::set_bar_tol);
@@ -103,10 +111,10 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::arg("eq_con_tol") = 1.0e-6, nb::arg("ineq_con_tol") = 1.0e-6,
             nb::arg("bar_tol") = 1.0e-6);
 
-    BIND_SETTINGS_RW(obj, "acc_kkt_tol", acc_kkt_tol_, "");
-    BIND_SETTINGS_RW(obj, "acc_bar_tol", acc_bar_tol_, "");
-    BIND_SETTINGS_RW(obj, "acc_eq_con_tol", acc_econ_tol_, "");
-    BIND_SETTINGS_RW(obj, "acc_ineq_con_tol", acc_icon_tol_, "");
+    BIND_SETTINGS_VALIDATED(obj, "acc_kkt_tol", acc_kkt_tol_, set_acc_kkt_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "acc_bar_tol", acc_bar_tol_, set_acc_bar_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "acc_eq_con_tol", acc_econ_tol_, set_acc_econ_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "acc_ineq_con_tol", acc_icon_tol_, set_acc_icon_tol, "");
 
     obj.def("set_acc_kkt_tol", &PSIOPT::set_acc_kkt_tol);
     obj.def("set_acc_bar_tol", &PSIOPT::set_acc_bar_tol);
@@ -117,10 +125,10 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
             nb::arg("acc_eq_con_tol") = 1.0e-3, nb::arg("acc_ineq_con_tol") = 1.0e-3,
             nb::arg("acc_bar_tol") = 1.0e-3);
 
-    BIND_SETTINGS_RW(obj, "div_kkt_tol", div_kkt_tol_, "");
-    BIND_SETTINGS_RW(obj, "div_bar_tol", div_bar_tol_, "");
-    BIND_SETTINGS_RW(obj, "div_eq_con_tol", div_econ_tol_, "");
-    BIND_SETTINGS_RW(obj, "div_ineq_con_tol", div_icon_tol_, "");
+    BIND_SETTINGS_VALIDATED(obj, "div_kkt_tol", div_kkt_tol_, set_div_kkt_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "div_bar_tol", div_bar_tol_, set_div_bar_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "div_eq_con_tol", div_econ_tol_, set_div_econ_tol, "");
+    BIND_SETTINGS_VALIDATED(obj, "div_ineq_con_tol", div_icon_tol_, set_div_icon_tol, "");
 
     obj.def("set_div_kkt_tol", &PSIOPT::set_div_kkt_tol);
     obj.def("set_div_bar_tol", &PSIOPT::set_div_bar_tol);
@@ -129,16 +137,16 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "neg_slack_reset", neg_slack_reset_, "");
 
-    BIND_SETTINGS_RW(obj, "bound_fraction", bound_fraction_, "");
+    BIND_SETTINGS_VALIDATED(obj, "bound_fraction", bound_fraction_, set_bound_fraction, "");
     obj.def("set_bound_fraction", &PSIOPT::set_bound_fraction);
 
-    BIND_SETTINGS_RW(obj, "bound_push", bound_push_, "");
+    BIND_SETTINGS_VALIDATED(obj, "bound_push", bound_push_, set_bound_push, "");
 
     /////////////////////////////////////////////////////////////
 
-    BIND_SETTINGS_RW(obj, "delta_h", delta_h_, "");
-    BIND_SETTINGS_RW(obj, "incr_h", incr_h_, "");
-    BIND_SETTINGS_RW(obj, "decr_h", decr_h_, "");
+    BIND_SETTINGS_VALIDATED(obj, "delta_h", delta_h_, set_delta_h, "");
+    BIND_SETTINGS_VALIDATED(obj, "incr_h", incr_h_, set_incr_h, "");
+    BIND_SETTINGS_VALIDATED(obj, "decr_h", decr_h_, set_decr_h, "");
 
     obj.def("set_delta_h", &PSIOPT::set_delta_h);
     obj.def("set_incr_h", &PSIOPT::set_incr_h);

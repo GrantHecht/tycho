@@ -16,11 +16,13 @@
 
 #pragma once
 #include <algorithm>
+#include <cassert>
 #include <functional>
 #include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -36,8 +38,8 @@
 #include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
-#include <limits>
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
+#include <limits>
 #else
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
@@ -94,8 +96,8 @@ class PSIOPT {
         int max_ls_iters_ = 2;
         int max_acc_iters_ = 50;
         int max_refac_ = 15;
-        int max_soc_ = 1;
-        int max_feas_rest_ = 2;
+        int max_soc_ = 1;       // reserved — not currently used by algorithm
+        int max_feas_rest_ = 2; // reserved — not currently used by algorithm
 
         // --- Convergence tolerances ---
         double kkt_tol_ = 1.0e-6;
@@ -109,7 +111,7 @@ class PSIOPT {
         double acc_icon_tol_ = 1.0e-3;
         double acc_bar_tol_ = 1.0e-3;
 
-        // --- Unacceptable tolerances ---
+        // --- Unacceptable tolerances (reserved — not currently read by converge_check) ---
         double unacc_kkt_tol_ = 10;
         double unacc_econ_tol_ = 2;
         double unacc_icon_tol_ = 2;
@@ -176,16 +178,13 @@ class PSIOPT {
     };
 
     // =========================================================================
-    // SolveResult — all output fields produced by a solve/optimize call
+    // SolveResult — accumulated outputs from the most recent solve/optimize call
     // =========================================================================
     struct SolveResult {
         // --- Solve outcome ---
         int iter_num_ = 0;
         double obj_val_ = 0;
         ConvergenceFlags converge_flag_ = ConvergenceFlags::NOTCONVERGED;
-
-        // --- Solution ---
-        Eigen::VectorXd primals_;
 
         // --- Multipliers and constraints ---
         Eigen::VectorXd eq_lmults_;
@@ -206,7 +205,9 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
-        void zero_timing() {
+        // Reset timing accumulators and iteration count for a new phase sequence.
+        // Does NOT reset converge_flag_ or obj_val_ — those are set by alg_impl.
+        void reset_accumulators() {
             total_time_ = 0;
             pre_time_ = 0;
             func_time_ = 0;
@@ -216,42 +217,6 @@ class PSIOPT {
             solver_init_time_ = 0;
             iter_num_ = 0;
         }
-    };
-
-    // =========================================================================
-    // KKTVector — lightweight non-owning view over compound KKT layout
-    //   [primals | slacks | eq_lmults | iq_lmults]
-    // =========================================================================
-    class KKTVector {
-      public:
-        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
-            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {}
-
-        // --- Primal/slack segments ---
-        auto primals() { return data_.head(pv_); }
-        auto slacks() { return data_.segment(pv_, sv_); }
-        auto primals_slacks() { return data_.head(pv_ + sv_); }
-
-        // --- Multiplier segments ---
-        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
-        auto iq_lmults() { return data_.tail(ic_); }
-        auto lmults() { return data_.tail(ec_ + ic_); }
-
-        // --- Gradient/constraint segments (same layout, different semantics) ---
-        auto prim_grad() { return data_.head(pv_); }
-        auto dual_grad() { return data_.segment(pv_, sv_); }
-        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
-        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
-        auto iq_cons() { return data_.tail(ic_); }
-        auto all_cons() { return data_.tail(ec_ + ic_); }
-
-        // --- Full vector access ---
-        Eigen::VectorXd &data() { return data_; }
-        const Eigen::VectorXd &data() const { return data_; }
-
-      private:
-        Eigen::VectorXd &data_;
-        int pv_, sv_, ec_, ic_;
     };
 
     using VectorXd = Eigen::VectorXd;
@@ -394,6 +359,65 @@ class PSIOPT {
     bool early_callback_enabled_ = false;
     LateCallBackType late_callback_;
     bool late_callback_enabled_ = false;
+
+    // =========================================================================
+    // KKTVector — lightweight non-owning view over compound KKT layout
+    //   [primals | slacks | eq_lmults | iq_lmults]
+    // Used for both the iterate vector (x, s, lambda_e, lambda_i) and the
+    // RHS/gradient vector (grad_x, grad_s, c_eq, c_iq). The two accessor
+    // groups provide semantic names for each interpretation.
+    // Lifetime: must not outlive the referenced VectorXd.
+    // =========================================================================
+    class KKTVector {
+      public:
+        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
+            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {
+            assert(pv >= 0 && sv >= 0 && ec >= 0 && ic >= 0);
+            assert(data.size() >= pv + sv + ec + ic);
+        }
+
+        // --- Primal/slack segments ---
+        auto primals() { return data_.head(pv_); }
+        auto primals() const { return std::as_const(data_).head(pv_); }
+        auto slacks() { return data_.segment(pv_, sv_); }
+        auto slacks() const { return std::as_const(data_).segment(pv_, sv_); }
+        auto primals_slacks() { return data_.head(pv_ + sv_); }
+        auto primals_slacks() const { return std::as_const(data_).head(pv_ + sv_); }
+
+        // --- Multiplier segments ---
+        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
+        auto eq_lmults() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
+        auto iq_lmults() { return data_.tail(ic_); }
+        auto iq_lmults() const { return std::as_const(data_).tail(ic_); }
+        auto lmults() { return data_.tail(ec_ + ic_); }
+        auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
+
+        // --- Gradient/constraint segments ---
+        // Same memory layout as above, but with names matching the RHS/gradient
+        // interpretation: the primal block holds the objective gradient, the slack
+        // block holds the dual gradient, and the multiplier blocks hold constraint
+        // values rather than multiplier values.
+        auto prim_grad() { return data_.head(pv_); }
+        auto prim_grad() const { return std::as_const(data_).head(pv_); }
+        auto dual_grad() { return data_.segment(pv_, sv_); }
+        auto dual_grad() const { return std::as_const(data_).segment(pv_, sv_); }
+        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
+        auto prim_dual_grad() const { return std::as_const(data_).head(pv_ + sv_); }
+        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
+        auto eq_cons() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
+        auto iq_cons() { return data_.tail(ic_); }
+        auto iq_cons() const { return std::as_const(data_).tail(ic_); }
+        auto all_cons() { return data_.tail(ec_ + ic_); }
+        auto all_cons() const { return std::as_const(data_).tail(ec_ + ic_); }
+
+        // --- Full vector access ---
+        Eigen::VectorXd &data() { return data_; }
+        const Eigen::VectorXd &data() const { return data_; }
+
+      private:
+        Eigen::VectorXd &data_;
+        int pv_, sv_, ec_, ic_;
+    };
 
     /// Create a KKTVector view over a VectorXd using this solver's dimensions.
     KKTVector kkt_view(Eigen::VectorXd &v) {

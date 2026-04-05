@@ -8,7 +8,8 @@
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
-//   - Extracted ConvergenceFlags enum and forward declaration from psiopt.h
+//   - Extracted ConvergenceFlags enum, severity ordering operator, and forward declaration from
+//   psiopt.h
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 // =============================================================================
 
@@ -20,10 +21,10 @@ namespace tycho {
 /// Optimizer convergence status — extracted to root namespace so that callers
 /// outside tycho::solvers can reference it without a full PSIOPT qualification.
 enum class ConvergenceFlags {
-    CONVERGED,
-    ACCEPTABLE,
-    NOTCONVERGED,
-    DIVERGING,
+    CONVERGED = 0,
+    ACCEPTABLE = 1,
+    NOTCONVERGED = 2,
+    DIVERGING = 3,
 };
 
 // Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
@@ -34,5 +35,5 @@ constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
 } // namespace tycho
 
 namespace tycho::solvers {
-struct PSIOPT;
+class PSIOPT;
 } // namespace tycho::solvers
