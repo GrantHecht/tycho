@@ -29,14 +29,15 @@ using namespace tycho::utils;
 #define BIND_SETTINGS_RW(obj, pyname, field, ...)                                                  \
     obj.def_prop_rw(                                                                               \
         pyname, [](const PSIOPT &self) { return self.settings().field; },                          \
-        [](PSIOPT &self, decltype(self.settings().field) v) { self.settings().field = v; }         \
-        __VA_OPT__(, ) __VA_ARGS__)
+        [](PSIOPT &self, decltype(self.settings().field) v) {                                      \
+            self.settings().field = v;                                                             \
+        } __VA_OPT__(, ) __VA_ARGS__)
 
 // Helper macro for binding result fields as read-only properties on PSIOPT.
 // These produce lambda-based def_prop_ro that forward through the result() accessor.
 #define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
-    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result().field; }                 \
-                        __VA_OPT__(, ) __VA_ARGS__)
+    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result().field; } __VA_OPT__(, )  \
+                                __VA_ARGS__)
 
 void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     using BarrierModes = PSIOPT::BarrierModes;

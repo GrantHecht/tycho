@@ -459,10 +459,9 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 
     this->collect_solver_output(Output);
 
-    this->collect_post_opt_info(this->optimizer_->result().eq_cons_,
-                                this->optimizer_->result().eq_lmults_,
-                                this->optimizer_->result().iq_cons_,
-                                this->optimizer_->result().iq_lmults_);
+    this->collect_post_opt_info(
+        this->optimizer_->result().eq_cons_, this->optimizer_->result().eq_lmults_,
+        this->optimizer_->result().iq_cons_, this->optimizer_->result().iq_lmults_);
 
     return this->optimizer_->result().converge_flag_;
 }

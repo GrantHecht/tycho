@@ -115,10 +115,14 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::text_style BHashcol = fmt::text_style();
     fmt::text_style BOHashcol = fmt::text_style();
 
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
+    fmt::text_style Kcol =
+        calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
+    fmt::text_style Bcol =
+        calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
+    fmt::text_style Ecol =
+        calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
+    fmt::text_style Icol =
+        calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
 
     if (iters.size() > 1) {
 
@@ -184,10 +188,14 @@ void tycho::solvers::PSIOPT::print_finished(std::string_view msg) const {
 void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last,
                                               int iternum, double tottime, double nlptime,
                                               double qptime, double printtime) {
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
+    fmt::text_style Kcol =
+        calculate_color(last.kkt_inf_, settings_.kkt_tol_, settings_.acc_kkt_tol_);
+    fmt::text_style Bcol =
+        calculate_color(last.barr_inf_, settings_.bar_tol_, settings_.acc_bar_tol_);
+    fmt::text_style Ecol =
+        calculate_color(last.econ_inf_, settings_.econ_tol_, settings_.acc_econ_tol_);
+    fmt::text_style Icol =
+        calculate_color(last.icon_inf_, settings_.icon_tol_, settings_.acc_icon_tol_);
 
     auto TColor = fmt::fg(fmt::color::cyan);
     auto Printtime = [&](const char *msg, double t1) {

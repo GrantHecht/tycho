@@ -115,13 +115,9 @@ void tycho::solvers::PSIOPT::set_all_max_iters(int m1, int m2) {
     set_max_acc_iters(m2);
 }
 
-void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
-    settings_.kkt_tol_ = std::abs(kkt_tol);
-}
+void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) { settings_.kkt_tol_ = std::abs(kkt_tol); }
 
-void tycho::solvers::PSIOPT::set_bar_tol(double bar_tol) {
-    settings_.bar_tol_ = std::abs(bar_tol);
-}
+void tycho::solvers::PSIOPT::set_bar_tol(double bar_tol) { settings_.bar_tol_ = std::abs(bar_tol); }
 
 void tycho::solvers::PSIOPT::set_econ_tol(double econ_tol) {
     settings_.econ_tol_ = std::abs(econ_tol);
@@ -163,8 +159,7 @@ void tycho::solvers::PSIOPT::set_acc_tols(double acc_kkt_tol, double acc_econ_to
     this->set_acc_bar_tol(acc_bar_tol);
 }
 
-void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol,
-                                             double bartol) {
+void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol, double bartol) {
     settings_.unacc_kkt_tol_ = kktol;
     settings_.unacc_bar_tol_ = bartol;
     settings_.unacc_econ_tol_ = etol;
@@ -253,17 +248,13 @@ void tycho::solvers::PSIOPT::set_qp_ordering_mode(const std::string &str) {
     settings_.qp_ord_ = strto_OrderingMode(str);
 }
 
-void tycho::solvers::PSIOPT::set_opt_bar_mode(BarrierModes mode) {
-    settings_.opt_bar_mode_ = mode;
-}
+void tycho::solvers::PSIOPT::set_opt_bar_mode(BarrierModes mode) { settings_.opt_bar_mode_ = mode; }
 
 void tycho::solvers::PSIOPT::set_opt_bar_mode(const std::string &str) {
     settings_.opt_bar_mode_ = strto_BarrierMode(str);
 }
 
-void tycho::solvers::PSIOPT::set_soe_bar_mode(BarrierModes mode) {
-    settings_.soe_bar_mode_ = mode;
-}
+void tycho::solvers::PSIOPT::set_soe_bar_mode(BarrierModes mode) { settings_.soe_bar_mode_ = mode; }
 
 void tycho::solvers::PSIOPT::set_soe_bar_mode(const std::string &str) {
     settings_.soe_bar_mode_ = strto_BarrierMode(str);
@@ -383,7 +374,7 @@ void tycho::solvers::PSIOPT::release() {
 // =============================================================================
 
 void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
-                                                 Eigen::Ref<Eigen::VectorXd> FXI) const {
+                                                Eigen::Ref<Eigen::VectorXd> FXI) const {
     for (int i = 0; i < this->slack_vars_; i++) {
         double fxi = FXI[i];
         double si = S[i];
@@ -401,8 +392,8 @@ void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
 }
 
 double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
-                                                     Eigen::Ref<Eigen::VectorXd> dSLI,
-                                                     double bfrac) const {
+                                                    Eigen::Ref<Eigen::VectorXd> dSLI,
+                                                    double bfrac) const {
     double alpha = 1.0;
     for (int i = 0; i < this->inequal_cons_; i++) {
         if (dSLI[i] < -bfrac * SLI[i]) {
@@ -415,16 +406,15 @@ double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> 
 }
 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
-                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
-                                              double &mincomp, double &maxcomp) const {
+                                             Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
+                                             double &mincomp, double &maxcomp) const {
     Eigen::VectorXd StLI = S.cwiseProduct(LI);
     mincomp = StLI.minCoeff();
     maxcomp = StLI.maxCoeff();
     avgcomp = StLI.sum() / double(StLI.size());
 }
 
-double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S,
-                                                  double mu) const {
+double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
     double psi = 0;
     for (int i = 0; i < this->inequal_cons_; i++) {
         psi += -mu * std::log(S[i]);
@@ -433,19 +423,19 @@ double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S,
 }
 
 void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
-                                               Eigen::Ref<Eigen::VectorXd> LI, double mu,
-                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+                                              Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
     AGS = LI - mu * (S.cwiseInverse());
 }
 
 void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
-                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
     AGS = LI;
 }
 
 void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
-                                              Eigen::Ref<Eigen::VectorXd> S,
-                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
+                                             Eigen::Ref<Eigen::VectorXd> S,
+                                             Eigen::Ref<Eigen::VectorXd> LI, double mu) {
     Eigen::VectorXd hp = LI.cwiseQuotient(S);
     for (int i = 0; i < this->inequal_cons_; i++) {
         if (hp[i] < 0.0) {
@@ -456,17 +446,16 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
 }
 
 double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
-                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                                        double mincomp) const {
+                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                       double mincomp) const {
     double eta = mincomp / avgcomp;
     double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
     double sigma = std::min(0.8, abs(sigmat));
     return sigma * avgcomp;
 }
 
-double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
-                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                                       double mincomp) const {
+double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
+                                      double avgcomp, double mincomp) const {
     double navgcomp = 0;
     double nmincomp = 0;
     double nmaxcomp = 0;
@@ -479,60 +468,53 @@ double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
 // =============================================================================
 
 void tycho::solvers::PSIOPT::eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
-                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     this->nlp_->eval_kkt(
-        obj_scale, XSL.head(primal_vars_),
-        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-        AGXS_FX.tail(inequal_cons_), KKTmat);
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
 }
 
-void tycho::solvers::PSIOPT::eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL,
-                                          double &val, EigenRef<VectorXd> GX,
-                                          EigenRef<VectorXd> AGXS_FX,
-                                          Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+void tycho::solvers::PSIOPT::eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                         EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     this->nlp_->eval_kkt_no(
-        obj_scale, XSL.head(primal_vars_),
-        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-        AGXS_FX.tail(inequal_cons_), KKTmat);
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
-                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     this->nlp_->eval_aug(
-        obj_scale, XSL.head(primal_vars_),
-        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-        AGXS_FX.tail(inequal_cons_), KKTmat);
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
-                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     this->nlp_->eval_soe(
-        obj_scale, XSL.head(primal_vars_),
-        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-        AGXS_FX.tail(inequal_cons_), KKTmat);
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_rhs(double obj_scale,
-                                       const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                                       Eigen::Ref<Eigen::VectorXd> GX,
-                                       Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
+                                      const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                                      Eigen::Ref<Eigen::VectorXd> GX,
+                                      Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
     this->nlp_->eval_rhs(
-        obj_scale, XSL.head(primal_vars_),
-        XSL.segment(primal_vars_ + slack_vars_, equal_cons_), XSL.tail(inequal_cons_), val,
-        GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_),
-        AGXS_FX.tail(inequal_cons_));
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_));
 }
 
 // =============================================================================
@@ -1039,8 +1021,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     if (this->inequal_cons_ > 0) {
         this->nlp_->set_slacks_ones();
     }
-    this->eval_nlp(AlgorithmModes::INIT, settings_.obj_scale_, XSL, val, RHS.head(this->primal_vars_),
-                   RHS, this->kkt_sol_.get_matrix());
+    this->eval_nlp(AlgorithmModes::INIT, settings_.obj_scale_, XSL, val,
+                   RHS.head(this->primal_vars_), RHS, this->kkt_sol_.get_matrix());
 
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_rhs = kkt_view(RHS);
@@ -1110,9 +1092,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
 // ============================================================================
 
 void tycho::solvers::PSIOPT::eval_trial_point_occ(double obj_scale, double mu, double alpha,
-                                                   KKTVector &xsl, KKTVector &dxsl,
-                                                   KKTVector &xsl2, KKTVector &rhs2,
-                                                   double &ptest, double &btest) {
+                                                  KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                                                  KKTVector &rhs2, double &ptest, double &btest) {
     xsl2.data() = xsl.data() + alpha * dxsl.data();
     rhs2.data().setZero();
     this->nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
@@ -1122,14 +1103,13 @@ void tycho::solvers::PSIOPT::eval_trial_point_occ(double obj_scale, double mu, d
 
 auto tycho::solvers::PSIOPT::compute_penalties(KKTVector &xsl, KKTVector &rhs) const
     -> PenaltyTerms {
-    return {xsl.lmults().cwiseAbs().dot(rhs.all_cons().cwiseAbs()),
-            rhs.all_cons().squaredNorm(),
+    return {xsl.lmults().cwiseAbs().dot(rhs.all_cons().cwiseAbs()), rhs.all_cons().squaredNorm(),
             rhs.all_cons().template lpNorm<Eigen::Infinity>()};
 }
 
 bool tycho::solvers::PSIOPT::secondary_accept(double ptest, double prim_obj,
-                                               const PenaltyTerms &test,
-                                               const PenaltyTerms &init) const {
+                                              const PenaltyTerms &test,
+                                              const PenaltyTerms &init) const {
     return (ptest < prim_obj && test.l2_ < init.l2_) ||
            (ptest < prim_obj && test.linf_ < init.linf_);
 }
@@ -1165,10 +1145,9 @@ double tycho::solvers::PSIOPT::ls_lang(double obj_scale, double mu, double prim_
     return alpha;
 }
 
-double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_obj,
-                                     double barr_obj, KKTVector &xsl, KKTVector &dxsl,
-                                     KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                                     IterateInfo &citer) {
+double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj,
+                                     KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                                     KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer) {
     double alpha = 1.0;
     double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
     double cv = dxsl.lmults().dot(rhs.all_cons());
@@ -1203,9 +1182,9 @@ double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_ob
 }
 
 double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double prim_obj,
-                                           double barr_obj, KKTVector &xsl, KKTVector &dxsl,
-                                           KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                                           IterateInfo &citer) {
+                                          double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                          KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                          IterateInfo &citer) {
     double alpha = 1.0;
     double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
     double cv = dxsl.lmults().dot(rhs.all_cons());
@@ -1300,8 +1279,8 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
     }
 }
 
-Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(
-    const Eigen::VectorXd &x, std::initializer_list<PhaseStep> steps) {
+Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
+                                                           std::initializer_list<PhaseStep> steps) {
 
     this->result_.zero_timing();
 
@@ -1335,8 +1314,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(
         if (settings_.print_level_ < 2)
             print_beginning(step.label_);
 
-        XSLans = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_,
-                                settings_.obj_scale_, settings_.init_mu_, XSL);
+        XSLans = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
+                                settings_.init_mu_, XSL);
 
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
@@ -1367,23 +1346,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
-    return run_phase_sequence(
-        x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-             "Optimization Algorithm "}});
+    return run_phase_sequence(x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_,
+                                   settings_.opt_ls_mode_, "Optimization Algorithm "}});
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
-    return run_phase_sequence(
-        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-             "Solve Algorithm "}});
+    return run_phase_sequence(x, {{settings_.soe_mode_, settings_.soe_bar_mode_,
+                                   settings_.soe_ls_mode_, "Solve Algorithm "}});
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
-    return run_phase_sequence(
-        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-             "Solve Algorithm "},
-            {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-             "Optimization Algorithm "}});
+    return run_phase_sequence(x, {{settings_.soe_mode_, settings_.soe_bar_mode_,
+                                   settings_.soe_ls_mode_, "Solve Algorithm "},
+                                  {AlgorithmModes::OPT, settings_.opt_bar_mode_,
+                                   settings_.opt_ls_mode_, "Optimization Algorithm "}});
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
@@ -1396,10 +1372,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x)
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
     return run_phase_sequence(
-        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-             "Solve Algorithm "},
-            {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-             "Optimization Algorithm "},
-            {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-             "Solve Algorithm ", /*conditional_=*/true}});
+        x,
+        {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_, "Solve Algorithm "},
+         {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+          "Optimization Algorithm "},
+         {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_, "Solve Algorithm ",
+          /*conditional_=*/true}});
 }

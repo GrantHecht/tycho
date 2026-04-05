@@ -74,7 +74,8 @@ struct OptimizationProblemBase {
 
     virtual void init_partitions() {
         this->num_partitions_ = default_num_partitions();
-        this->optimizer_->settings().qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
+        this->optimizer_->settings().qp_threads_ =
+            std::min(TYCHO_DEFAULT_QP_THREADS, utils::get_core_count());
     }
 
     virtual void set_num_partitions(int num_partitions, int qp_threads) {

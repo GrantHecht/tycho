@@ -269,12 +269,10 @@ class PSIOPT {
 
     // --- Constructors ---
     PSIOPT() {
-        settings_.qp_threads_ =
-            std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
     }
     PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        settings_.qp_threads_ =
-            std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
         this->set_nlp(np);
     }
 
@@ -430,31 +428,31 @@ class PSIOPT {
                    Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
-    double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj,
-                   KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
-                   KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+    double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
+                   KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                   IterateInfo &citer);
 
-    double ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj,
-                 KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
-                 KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+    double ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
+                 KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                 IterateInfo &citer);
 
-    double ls_auglang(double obj_scale, double mu, double prim_obj, double barr_obj,
-                      KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
-                      KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+    double ls_auglang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
+                      KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                      IterateInfo &citer);
 
     // --- Line search shared helpers ---
     struct PenaltyTerms {
         double l1_, l2_, linf_;
     };
 
-    void eval_trial_point_occ(double obj_scale, double mu, double alpha,
-                              KKTVector &xsl, KKTVector &dxsl,
-                              KKTVector &xsl2, KKTVector &rhs2, double &ptest, double &btest);
+    void eval_trial_point_occ(double obj_scale, double mu, double alpha, KKTVector &xsl,
+                              KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs2, double &ptest,
+                              double &btest);
 
     PenaltyTerms compute_penalties(KKTVector &xsl, KKTVector &rhs) const;
 
-    bool secondary_accept(double ptest, double prim_obj,
-                          const PenaltyTerms &test, const PenaltyTerms &init) const;
+    bool secondary_accept(double ptest, double prim_obj, const PenaltyTerms &test,
+                          const PenaltyTerms &init) const;
 
     // --- KKT factorization (defined in psiopt.cpp) ---
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
@@ -466,8 +464,8 @@ class PSIOPT {
 
     // --- Barrier math helpers (defined in psiopt.cpp) ---
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
-    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
-                                Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac) const;
+    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
+                                double bfrac) const;
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
@@ -483,17 +481,14 @@ class PSIOPT {
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+                  EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+                  EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
-                  EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+                  EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
                   Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX);
 
