@@ -54,7 +54,6 @@ void TychoBind<PSIOPT>::Build(nb::module_ &m) {
     obj.def("optimize", &PSIOPT::optimize, "");
     obj.def("solve_optimize", &PSIOPT::solve_optimize, "");
     obj.def("solve", &PSIOPT::solve, "");
-    obj.def("set_qp_params", &PSIOPT::set_qp_params);
 
     BIND_SETTINGS_RW(obj, "max_iters", max_iters_, "");
     BIND_SETTINGS_RW(obj, "max_acc_iters", max_acc_iters_, "");
