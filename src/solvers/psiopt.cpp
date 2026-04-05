@@ -587,160 +587,199 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
+// ============================================================================
+// Line search — shared helpers
+// ============================================================================
+
+void tycho::solvers::PSIOPT::eval_trial_point_occ(double obj_scale, double mu, double alpha,
+                                                   KKTVector &xsl, KKTVector &dxsl,
+                                                   KKTVector &xsl2, KKTVector &rhs2,
+                                                   double &ptest, double &btest) {
+    xsl2.data() = xsl.data() + alpha * dxsl.data();
+    rhs2.data().setZero();
+    this->nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
+    this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
+    btest = this->barrier_objective(xsl2.slacks(), mu);
+}
+
+auto tycho::solvers::PSIOPT::compute_penalties(KKTVector &xsl, KKTVector &rhs) const
+    -> PenaltyTerms {
+    return {xsl.lmults().cwiseAbs().dot(rhs.all_cons().cwiseAbs()),
+            rhs.all_cons().squaredNorm(),
+            rhs.all_cons().template lpNorm<Eigen::Infinity>()};
+}
+
+bool tycho::solvers::PSIOPT::secondary_accept(double ptest, double prim_obj,
+                                               const PenaltyTerms &test,
+                                               const PenaltyTerms &init) const {
+    return (ptest < prim_obj && test.l2_ < init.l2_) ||
+           (ptest < prim_obj && test.linf_ < init.linf_);
+}
+
+// ============================================================================
+// Line search — variant implementations
+// ============================================================================
+
+double tycho::solvers::PSIOPT::ls_lang(double obj_scale, double mu, double prim_obj,
+                                       double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                       KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                       IterateInfo &citer) {
+    double alpha = 1.0;
+    double LangInit = prim_obj + barr_obj + xsl.lmults().dot(rhs.all_cons());
+
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        xsl2.data() = xsl.data() + alpha * dxsl.data();
+        rhs2.data().setZero();
+        this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
+        btest = this->barrier_objective(xsl2.slacks(), mu);
+        this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
+        double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
+        citer.ls_iters_ = j;
+        if (LangTest < LangInit) {
+            break;
+        } else {
+            alpha = alpha / settings_.alpha_red_;
+        }
+    }
+    return alpha;
+}
+
+double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_obj,
+                                     double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                     KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                     IterateInfo &citer) {
+    double alpha = 1.0;
+    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
+    double cv = dxsl.lmults().dot(rhs.all_cons());
+
+    PenaltyTerms init = compute_penalties(xsl, rhs);
+
+    double sc = .1 + std::abs(vv - cv) / init.l2_;
+    if (init.l2_ == 0.0)
+        sc = 1.0;
+
+    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
+
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+
+        double LangTest = ptest + btest;
+        PenaltyTerms test = compute_penalties(xsl, rhs2);
+        LangTest += test.l1_ + test.l2_ * sc;
+
+        citer.merit_val_ = LangTest;
+        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
+            citer.ls_iters_ = j;
+            break;
+        } else {
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / settings_.alpha_red_;
+        }
+    }
+    return alpha;
+}
+
+double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double prim_obj,
+                                           double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                           KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                           IterateInfo &citer) {
+    double alpha = 1.0;
+    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
+    double cv = dxsl.lmults().dot(rhs.all_cons());
+
+    PenaltyTerms init = compute_penalties(xsl, rhs);
+
+    double sc = .01 + std::abs(vv - cv) / init.l2_;
+    if (init.l2_ == 0.0)
+        sc = 1.0;
+
+    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
+
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+
+        double LangTest = ptest + btest;
+
+        // Tolerance-filtered L1 penalty
+        double TestL1Pen = 0;
+        for (int i = 0; i < this->equal_cons_; i++) {
+            double eqerr = abs(rhs2.eq_cons()[i]);
+            double eqmul = abs(xsl.eq_lmults()[i]);
+            if (eqerr > settings_.econ_tol_ * 10) {
+                TestL1Pen += eqerr * eqmul;
+            }
+        }
+        for (int i = 0; i < this->inequal_cons_; i++) {
+            double iqerr = abs(rhs2.iq_cons()[i]);
+            double iqmul = abs(xsl.iq_lmults()[i]);
+            if (iqerr > settings_.icon_tol_ * 10) {
+                TestL1Pen += iqerr * iqmul;
+            }
+        }
+
+        double TestL2Pen = rhs2.all_cons().squaredNorm();
+        double TestLinfPenalty = rhs2.all_cons().template lpNorm<Eigen::Infinity>();
+
+        // Zero L2 when within tolerance threshold
+        if (TestL2Pen < settings_.econ_tol_ * settings_.econ_tol_ * equal_cons_ +
+                            settings_.icon_tol_ * settings_.icon_tol_ * inequal_cons_) {
+            TestL2Pen = 0;
+        }
+
+        LangTest += TestL1Pen + TestL2Pen * sc;
+
+        PenaltyTerms test{TestL1Pen, TestL2Pen, TestLinfPenalty};
+        citer.merit_val_ = LangTest;
+        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
+            citer.ls_iters_ = j;
+            break;
+        } else {
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / settings_.alpha_red_;
+        }
+    }
+    return alpha;
+}
+
+// ============================================================================
+// Line search — dispatcher
+// ============================================================================
+
 double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
                                        double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
                                        Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
                                        Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                                        IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
 
-    // Do not modify RHS,XSL,DXSL. EigenRef<VectorXd> doesnt like to be explicitly const in this
-    // instance, I will fix this later in refactor
-
-    // Create local KKTVector views (these bind to the EigenRef-backed vectors)
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_dxsl = kkt_view(DXSL);
     KKTVector v_xsl2 = kkt_view(XSL2);
     KKTVector v_rhs = kkt_view(RHS);
     KKTVector v_rhs2 = kkt_view(RHS2);
 
-    double alpha = 1.0;
-
-    if (lsmode == LineSearchModes::LANG) {
-        double LangInit = prim_obj + barr_obj + v_xsl.lmults().dot(v_rhs.all_cons());
-
-        for (int j = 0; j < settings_.max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->eval_rhs(obj_scale, XSL2, ptest, RHS2, RHS2);
-            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
-            btest = this->barrier_objective(v_xsl2.slacks(), mu);
-            this->barrier_gradient(v_xsl2.slacks(), v_xsl2.iq_lmults(), mu, v_rhs2.dual_grad());
-            double LangTest = ptest + btest + v_xsl2.lmults().dot(v_rhs2.all_cons());
-            Citer.ls_iters_ = j;
-            if (LangTest < LangInit) {
-                break;
-            } else {
-                alpha = alpha / settings_.alpha_red_;
-            }
-        }
-    } else if (lsmode == LineSearchModes::L1) {
-        double vv = v_rhs.prim_dual_grad().dot(v_dxsl.primals_slacks());
-        double cv = v_dxsl.lmults().dot(v_rhs.all_cons());
-
-        double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs.all_cons().cwiseAbs());
-        double InitL2Pen = v_rhs.all_cons().squaredNorm();
-        double InitLinfPenalty = v_rhs.all_cons().lpNorm<Eigen::Infinity>();
-
-        double sc = .1 + std::abs(vv - cv) / InitL2Pen;
-        if (InitL2Pen == 0.0)
-            sc = 1.0;
-
-        LangInit += InitL1Pen + InitL2Pen * sc;
-
-        for (int j = 0; j < settings_.max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->nlp_->eval_occ(obj_scale, v_xsl2.primals(), ptest, v_rhs2.eq_cons(),
-                                 v_rhs2.iq_cons());
-
-            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
-            btest = this->barrier_objective(v_xsl2.slacks(), mu);
-
-            double LangTest = ptest + btest;
-            double TestL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs2.all_cons().cwiseAbs());
-            double TestL2Pen = v_rhs2.all_cons().squaredNorm();
-            double TestLinfPenalty = v_rhs2.all_cons().lpNorm<Eigen::Infinity>();
-
-            LangTest += TestL1Pen + TestL2Pen * sc;
-
-            Citer.merit_val_ = LangTest;
-            if (LangTest < LangInit || (ptest < prim_obj) && (TestL2Pen < InitL2Pen) ||
-                (ptest < prim_obj) && (TestLinfPenalty < InitLinfPenalty)) {
-                Citer.ls_iters_ = j;
-                break;
-            } else {
-                Citer.ls_iters_ = j + 1;
-                alpha = alpha / settings_.alpha_red_;
-            }
-        }
-    } else if (lsmode == LineSearchModes::AUGLANG) {
-
-        double vv = v_rhs.prim_dual_grad().dot(v_dxsl.primals_slacks());
-        double cv = v_dxsl.lmults().dot(v_rhs.all_cons());
-
-        double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs.all_cons().cwiseAbs());
-        double InitL2Pen = v_rhs.all_cons().squaredNorm();
-        double InitLinfPenalty = v_rhs.all_cons().lpNorm<Eigen::Infinity>();
-
-        double sc = .01 + std::abs(vv - cv) / InitL2Pen;
-        if (InitL2Pen == 0.0)
-            sc = 1.0;
-
-        LangInit += InitL1Pen + InitL2Pen * sc;
-
-        for (int j = 0; j < settings_.max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->nlp_->eval_occ(obj_scale, v_xsl2.primals(), ptest, v_rhs2.eq_cons(),
-                                 v_rhs2.iq_cons());
-
-            this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
-            btest = this->barrier_objective(v_xsl2.slacks(), mu);
-
-            double LangTest = ptest + btest;
-
-            double TestL1Pen = v_xsl.lmults().cwiseAbs().dot(v_rhs2.all_cons().cwiseAbs());
-
-            TestL1Pen = 0;
-
-            for (int i = 0; i < this->equal_cons_; i++) {
-                double eqerr = abs(v_rhs2.eq_cons()[i]);
-                double eqmul = abs(v_xsl.eq_lmults()[i]);
-                if (eqerr > settings_.econ_tol_ * 10) {
-                    TestL1Pen += eqerr * eqmul;
-                }
-            }
-
-            for (int i = 0; i < this->inequal_cons_; i++) {
-                double iqerr = abs(v_rhs2.iq_cons()[i]);
-                double iqmul = abs(v_xsl.iq_lmults()[i]);
-                if (iqerr > settings_.icon_tol_ * 10) {
-                    TestL1Pen += iqerr * iqmul;
-                }
-            }
-
-            double TestL2Pen = v_rhs2.all_cons().squaredNorm();
-            double TestLinfPenalty = v_rhs2.all_cons().lpNorm<Eigen::Infinity>();
-
-            if (TestL2Pen < settings_.econ_tol_ * settings_.econ_tol_ * equal_cons_ +
-                                settings_.icon_tol_ * settings_.icon_tol_ * inequal_cons_) {
-                TestL2Pen = 0;
-            }
-
-            LangTest += TestL1Pen + TestL2Pen * sc;
-
-            Citer.merit_val_ = LangTest;
-            if (LangTest < LangInit || (ptest < prim_obj) && (TestL2Pen < InitL2Pen) ||
-                (ptest < prim_obj) && (TestLinfPenalty < InitLinfPenalty)) {
-                Citer.ls_iters_ = j;
-                break;
-            } else {
-                Citer.ls_iters_ = j + 1;
-                alpha = alpha / settings_.alpha_red_;
-            }
-        }
-    } else
+    switch (lsmode) {
+    case LineSearchModes::LANG:
+        return ls_lang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                       Citer);
+    case LineSearchModes::L1:
+        return ls_l1(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                     Citer);
+    case LineSearchModes::AUGLANG:
+        return ls_auglang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                          Citer);
+    case LineSearchModes::NOLS:
         Citer.ls_iters_ = 0;
-
-    return alpha;
+        return 1.0;
+    default:
+        throw std::invalid_argument("Unknown LineSearchMode");
+    }
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(

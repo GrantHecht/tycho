@@ -781,6 +781,33 @@ struct PSIOPT {
                    Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                    IterateInfo &Citer, const std::vector<IterateInfo> &iters);
 
+    // Line search variant implementations
+    double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj,
+                   KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                   KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+
+    double ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj,
+                 KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                 KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+
+    double ls_auglang(double obj_scale, double mu, double prim_obj, double barr_obj,
+                      KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                      KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer);
+
+    // Line search shared helpers
+    struct PenaltyTerms {
+        double l1_, l2_, linf_;
+    };
+
+    void eval_trial_point_occ(double obj_scale, double mu, double alpha,
+                              KKTVector &xsl, KKTVector &dxsl,
+                              KKTVector &xsl2, KKTVector &rhs2, double &ptest, double &btest);
+
+    PenaltyTerms compute_penalties(KKTVector &xsl, KKTVector &rhs) const;
+
+    bool secondary_accept(double ptest, double prim_obj,
+                          const PenaltyTerms &test, const PenaltyTerms &init) const;
+
     void ensure_solver_initialized();
     void print_timing_summary();
 
