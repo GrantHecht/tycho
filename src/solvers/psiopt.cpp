@@ -743,280 +743,106 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
     return alpha;
 }
 
+Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(
+    const Eigen::VectorXd &x, std::initializer_list<PhaseStep> steps) {
+
+    this->result_.zero_timing();
+
+    if (settings_.print_level_ == 0)
+        print_stats();
+    if (settings_.print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
+    }
+    this->ensure_solver_initialized();
+
+    tycho::utils::Timer t;
+    t.start();
+
+    bool docompute = analyze_kkt_matrix();
+    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
+    Eigen::VectorXd XSLans(this->kkt_dim_);
+    XSLans.setZero();
+
+    auto it = steps.begin();
+    auto end = steps.end();
+    while (it != end) {
+        const auto &step = *it;
+        ++it;
+        bool is_last = (it == end);
+
+        // Conditional steps only run if the previous phase didn't converge
+        if (step.conditional_ && this->result_.converge_flag_ == ConvergenceFlags::CONVERGED)
+            continue;
+
+        if (settings_.print_level_ < 2)
+            print_beginning(step.label_);
+
+        XSLans = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_,
+                                settings_.obj_scale_, settings_.init_mu_, XSL);
+
+        if (settings_.print_level_ < 2)
+            print_finished(step.label_);
+
+        // Re-init for the next phase (extract primals, re-run init_impl)
+        if (!is_last) {
+            Eigen::VectorXd Xt = XSLans.head(primal_vars_);
+            XSL = this->init_impl(Xt, settings_.init_mu_, false);
+        }
+    }
+
+    t.stop();
+    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
+    this->result_.total_time_ = tottime / 1000.0;
+    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
+                               this->result_.kkt_time_ - this->result_.func_time_ -
+                               this->result_.print_time_;
+
+    if (settings_.print_level_ < 2) {
+        print_timing_summary();
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
+        print_finished("PSIOPT ");
+        print_header();
+    }
+
+    return XSLans.head(primal_vars_);
+}
+
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
-
-    this->result_.zero_timing();
-
-    if (settings_.print_level_ == 0)
-        print_stats();
-    if (settings_.print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
-
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-    if (settings_.print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-    if (settings_.print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
-
-    if (settings_.print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-    return XSLans.head(primal_vars_);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
-
-    this->result_.zero_timing();
-    if (settings_.print_level_ == 0)
-        print_stats();
-    if (settings_.print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-
-    if (settings_.print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-
-    XSLans = this->alg_impl(settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-    if (settings_.print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-    }
-    Eigen::VectorXd Xt = XSLans.head(primal_vars_);
-    XSL = this->init_impl(Xt, settings_.init_mu_, false);
-
-    if (settings_.print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
-
-    if (settings_.print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return XSLans.head(primal_vars_);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
-    this->result_.zero_timing();
-    if (settings_.print_level_ == 0)
-        print_stats();
-    if (settings_.print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-
-    if (settings_.print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-
-    XSLans = this->alg_impl(settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-    if (settings_.print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-    }
-    Eigen::VectorXd Xt = XSLans.head(primal_vars_);
-    XSL = this->init_impl(Xt, settings_.init_mu_, false);
-
-    if (settings_.print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-    if (settings_.print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-    if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
-
-    } else {
-        Xt = XSLans.head(primal_vars_);
-        XSL = this->init_impl(Xt, settings_.init_mu_, false);
-
-        if (settings_.print_level_ < 2) {
-            print_beginning("Solve Algorithm ");
-        }
-        XSLans = this->alg_impl(settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-                                settings_.obj_scale_, settings_.init_mu_, XSL);
-
-        if (settings_.print_level_ < 2) {
-            print_finished("Solve Algorithm ");
-        }
-    }
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
-
-    if (settings_.print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return XSLans.head(primal_vars_);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
-    this->result_.zero_timing();
-    if (settings_.print_level_ == 0)
-        print_stats();
-    if (settings_.print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-
-    if (settings_.print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-
-    XSLans = this->alg_impl(AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
-
-    if (settings_.print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-
-    if (this->result_.converge_flag_ == ConvergenceFlags::CONVERGED) {
-
-    } else {
-        Eigen::VectorXd Xt = XSLans.head(primal_vars_);
-        XSL = this->init_impl(Xt, settings_.init_mu_, false);
-
-        if (settings_.print_level_ < 2) {
-            print_beginning("Solve Algorithm ");
-        }
-        XSLans = this->alg_impl(settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-                                settings_.obj_scale_, settings_.init_mu_, XSL);
-
-        if (settings_.print_level_ < 2) {
-            print_finished("Solve Algorithm ");
-        }
-    }
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
-
-    if (settings_.print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return XSLans.head(primal_vars_);
+    return run_phase_sequence(
+        x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+             "Optimization Algorithm "}});
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm "}});
+}
 
-    this->result_.zero_timing();
-    if (settings_.print_level_ == 0)
-        print_stats();
-    if (settings_.print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-    bool docompute = analyze_kkt_matrix();
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm "},
+            {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+             "Optimization Algorithm "}});
+}
 
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-    if (settings_.print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-    XSLans = this->alg_impl(settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
-                            settings_.obj_scale_, settings_.init_mu_, XSL);
+Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+             "Optimization Algorithm "},
+            {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm ", /*conditional_=*/true}});
+}
 
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->result_.total_time_ = tottime / 1000.0;
-    this->result_.misc_time_ = this->result_.total_time_ - this->result_.pre_time_ -
-                               this->result_.kkt_time_ - this->result_.func_time_ -
-                               this->result_.print_time_;
-
-    if (settings_.print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return XSLans.head(primal_vars_);
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x, {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm "},
+            {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+             "Optimization Algorithm "},
+            {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm ", /*conditional_=*/true}});
 }

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -782,6 +783,17 @@ struct PSIOPT {
 
     void ensure_solver_initialized();
     void print_timing_summary();
+
+    struct PhaseStep {
+        AlgorithmModes alg_mode_;
+        BarrierModes bar_mode_;
+        LineSearchModes ls_mode_;
+        const char *label_;
+        bool conditional_ = false; // only run if previous phase didn't converge
+    };
+
+    Eigen::VectorXd run_phase_sequence(const Eigen::VectorXd &x,
+                                       std::initializer_list<PhaseStep> steps);
 
     Eigen::VectorXd optimize(const Eigen::VectorXd &x);
 
