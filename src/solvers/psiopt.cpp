@@ -58,9 +58,11 @@ auto tycho::solvers::PSIOPT::strto_LineSearchMode(const std::string &str) -> Lin
     else if (str == "AUGLANG")
         return LineSearchModes::AUGLANG;
     else {
-        throw std::invalid_argument(fmt::format("Unrecognized LineSearchMode: {0}\n"
-                                                "Valid Options Are: AUGLANG, LANG, L1, NOLS",
-                                                str));
+        throw std::invalid_argument(
+            fmt::format("Unrecognized LineSearchMode: {0}\n"
+                        "Valid Options Are: AUGLANG, LANG, L1, NOLS\n"
+                        "Note: L2 was removed. Use L1, LANG, AUGLANG, or NOLS.",
+                        str));
     }
 }
 
@@ -70,9 +72,11 @@ auto tycho::solvers::PSIOPT::strto_BarrierMode(const std::string &str) -> Barrie
     else if (str == "LOQO")
         return BarrierModes::LOQO;
     else {
-        throw std::invalid_argument(fmt::format("Unrecognized BarrierMode: {0}\n"
-                                                "Valid Options Are: LOQO, PROBE",
-                                                str));
+        throw std::invalid_argument(
+            fmt::format("Unrecognized BarrierMode: {0}\n"
+                        "Valid Options Are: LOQO, PROBE\n"
+                        "Note: FIACCO and BARDISABLED were removed. Use LOQO or PROBE.",
+                        str));
     }
 }
 
@@ -664,6 +668,7 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->inequal_cons_ = this->nlp_->inequal_cons_;
     this->slack_vars_ = this->nlp_->slack_vars_;
     this->kkt_dim_ = this->nlp_->kkt_dim_;
+    assert(kkt_dim_ == primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_);
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
@@ -819,9 +824,9 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 }
 
 // Inertia-correcting factorization: if the LDLT factorization has incorrect
-// inertia (excess positive eigenvalues in the Hessian block), perturb the
-// primal diagonal by increasing amounts until correct inertia is achieved
-// or max_refac_ attempts are exhausted.
+// inertia (more negative eigenvalues than expected from the constraint block),
+// perturb the primal diagonal by increasing amounts until correct inertia is
+// achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert) {
     auto Inertia = [&]() {
@@ -887,7 +892,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     Eigen::VectorXd PGX(this->primal_vars_);
 
     Eigen::VectorXd Temp(this->kkt_dim_);
-    Eigen::VectorXd Err;
 
     Eigen::VectorXd BestXSL;
     Eigen::VectorXd BestRHS;
@@ -904,7 +908,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
-    tycho::utils::Timer LStimer;
     tycho::utils::Timer QPtimer;
     tycho::utils::Timer CBtimer; // Callback time falls into misc_time_ implicitly (misc = total -
                                  // pre - kkt - func - print)
@@ -913,7 +916,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     double Hpert0 = settings_.delta_h_;
     std::vector<IterateInfo> iters;
     iters.reserve(settings_.max_iters_);
-    ConvergenceFlags ExitCode;
+    ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
     bool FirstPert = true;
 
     Runtimer.start();
@@ -976,6 +979,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         }
 
         Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert);
+        // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
+        // we proceed rather than aborting. The line search evaluates actual function values
+        // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
+        // would be an algorithmic change that could break existing convergence behavior.
 
         if (Citer.h_facs_ > 0) {
             Hpert0 = std::max(settings_.delta_h_, nhpert * settings_.decr_h_);
@@ -1382,6 +1389,10 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
                                        Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
                                        Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                                        IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
+    // Line search exhaustion (all max_ls_iters_ attempts fail the merit test) is
+    // signaled implicitly: Citer.ls_iters_ == max_ls_iters_ in the iteration table.
+    // The best alpha found is still returned; alg_impl's convergence check determines
+    // whether the overall iteration should continue or terminate.
 
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_dxsl = kkt_view(DXSL);
@@ -1454,6 +1465,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
+
+        // If a phase diverged, skip subsequent phases — result_.primals_ may contain
+        // garbage and feeding it into init_impl for the next phase would be pointless.
+        if (result_.converge_flag_ == ConvergenceFlags::DIVERGING) {
+            if (settings_.print_level_ < 3)
+                fmt::print(fmt::fg(fmt::color::yellow),
+                           "Phase diverged; skipping remaining phases.\n");
+            break;
+        }
 
         // Re-init for the next phase using stored primals
         if (!is_last) {

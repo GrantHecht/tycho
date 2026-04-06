@@ -140,7 +140,7 @@ class PSIOPT {
         double bound_fraction_ = 0.99;
         double bound_push_ = 1.0e-3;
         double neg_slack_reset_ = 1.0e-12;
-        double soe_bound_relax_ = 1.0e-8;
+        double soe_bound_relax_ = 1.0e-8; // reserved — not currently read by algorithm code
         double alpha_red_ = 2.0;
 
         // --- Hessian perturbation ---
@@ -213,10 +213,10 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
-        // Reset all accumulated/per-solve fields for a new phase sequence.
-        // converge_flag_ is reset as defense-in-depth; alg_impl always writes it
-        // before any conditional phase check reads it.
-        // Does NOT reset factor_mem_ or factor_flops_ — overwritten (not accumulated) by init_impl.
+        // Only resets accumulated timing/iteration counters and the convergence flag.
+        // All other fields (primals_, obj_val_, eq_lmults_, iq_lmults_, eq_cons_,
+        // iq_cons_, factor_mem_, factor_flops_) are overwritten unconditionally by
+        // alg_impl/init_impl each phase — not accumulated.
         void reset_accumulators() {
             converge_flag_ = ConvergenceFlags::NOTCONVERGED;
             total_time_ = 0;
@@ -348,9 +348,6 @@ class PSIOPT {
     // --- Query methods ---
     ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
 
-    // --- QP parameter setup (defined in psiopt.cpp) ---
-    void set_qp_params();
-
     // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
@@ -358,6 +355,9 @@ class PSIOPT {
     Settings settings_;
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;
+
+    // QP parameter setup — called automatically by set_nlp()
+    void set_qp_params();
 
     // --- Problem dimensions ---
     int primal_vars_ = 0;
@@ -412,11 +412,13 @@ class PSIOPT {
         auto lmults() { return data_.tail(ec_ + ic_); }
         auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
 
-        // --- Gradient/constraint segments ---
-        // Same memory layout as above, but with names matching the RHS/gradient
-        // interpretation: the primal block holds the objective gradient, the slack
-        // block holds the dual gradient, and the multiplier blocks hold constraint
-        // values rather than multiplier values.
+        // --- Gradient/constraint segments (intentional aliases) ---
+        // Same memory layout as the primal/multiplier accessors above, but with
+        // names matching the RHS/gradient interpretation: the primal block holds
+        // the objective gradient, the slack block holds the dual gradient, and
+        // the multiplier blocks hold constraint values.
+        // These are intentional aliases: prim_grad() == primals(),
+        // dual_grad() == slacks(), eq_cons() == eq_lmults(), iq_cons() == iq_lmults().
         auto prim_grad() { return data_.head(pv_); }
         auto prim_grad() const { return std::as_const(data_).head(pv_); }
         auto dual_grad() { return data_.segment(pv_, sv_); }
@@ -445,6 +447,9 @@ class PSIOPT {
     }
 
     // --- Phase sequence ---
+    // Describes one phase in a multi-phase solve strategy. run_phase_sequence
+    // executes steps in order, skipping conditional steps when an earlier phase
+    // already converged, and re-initializing the KKT system between phases.
     struct PhaseStep {
         AlgorithmModes alg_mode_;
         BarrierModes bar_mode_;

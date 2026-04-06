@@ -44,7 +44,6 @@ void tycho::solvers::PSIOPT::print_psiopt() {
 }
 
 void tycho::solvers::PSIOPT::print_settings() {
-    auto cyan = fmt::fg(fmt::color::cyan);
     auto magenta = fmt::fg(fmt::color::magenta);
 
     fmt::print(magenta, "Convergence Criteria\n\n");
@@ -239,13 +238,14 @@ void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const I
 }
 
 fmt::text_style tycho::solvers::PSIOPT::calculate_color(double val, double targ, double acc) {
-    auto level1 = std::log(targ);
-    auto level3 = std::log(acc);
-    auto level5 = std::log(acc * 1000.0);
+    constexpr double kFloor = 1e-300;
+    auto level1 = std::log(std::max(targ, kFloor));
+    auto level3 = std::log(std::max(acc, kFloor));
+    auto level5 = std::log(std::max(acc * 1000.0, kFloor));
     auto level2 = (level1 + level3) / 2.0;
     auto level4 = (level3 + level5) / 2.0;
 
-    auto logval = std::log(val);
+    auto logval = std::log(std::max(val, kFloor));
     fmt::color c;
 
     if (logval < level1)
