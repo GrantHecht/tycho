@@ -11,7 +11,8 @@
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
 //   - Migrated to tycho:: sub-namespaces (PR #35)
-//   - Settings struct: def_rw -> def_prop_rw for fields moved into PSIOPT::Settings
+//   - PSIOPT refactor (PR #39): Settings/SolveResult structs with def_prop_rw/def_prop_ro,
+//     validated setters, result read-only bindings, dead binding removal
 // =============================================================================
 
 #include "psiopt_bind.h"

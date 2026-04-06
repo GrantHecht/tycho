@@ -52,8 +52,6 @@ namespace tycho::solvers {
 using tycho::ConstEigenRef;
 using tycho::EigenRef;
 
-struct IterateInfo;
-
 class PSIOPT {
   public:
     enum class BarrierModes { PROBE, LOQO };
@@ -168,14 +166,24 @@ class PSIOPT {
         double obj_scale_ = 1.0;
 
         // --- Output/behavior ---
-        int print_level_ =
-            0; // 0 = full iteration table, 1 = summary, 2 = exit status only, 3+ = silent
+        // Output verbosity:
+        //   0 — full output (stats + iteration table + exit + timing)
+        //   1 — no iteration table (phase banners + timing summary)
+        //   2 — exit status and warnings only
+        //   3+ — fully silent
+        int print_level_ = 0;
         bool wide_console_ = false;
         bool cnr_mode_ = false;
         bool fast_factor_alg_ = true;
         bool force_qp_analysis_ = false;
         bool return_best_ = false;
         BestCriteriaModes best_criteria_ = BestCriteriaModes::ECONS;
+
+        /// Validate all settings, throwing std::invalid_argument on the first
+        /// violation. Checks per-field conditions (matching the individual
+        /// set_*() methods) plus cross-field invariants (min_mu <= max_mu,
+        /// convergence tols <= acceptable tols).
+        void validate() const;
     };
 
     // =========================================================================
@@ -204,7 +212,9 @@ class PSIOPT {
         double print_time_ = 0;
         double solver_init_time_ = 0;
 
-        // Derived timing — computed from the other timing fields, not stored.
+        // Derived timing — total wall-clock minus all categorized components.
+        // Excludes solver_init_time_ (measured before the main timer starts).
+        // Captures: callback time, step application, convergence checks, etc.
         double misc_time() const {
             return total_time_ - pre_time_ - kkt_time_ - func_time_ - print_time_;
         }
@@ -215,8 +225,9 @@ class PSIOPT {
 
         // Only resets accumulated timing/iteration counters and the convergence flag.
         // All other fields (primals_, obj_val_, eq_lmults_, iq_lmults_, eq_cons_,
-        // iq_cons_, factor_mem_, factor_flops_) are overwritten unconditionally by
-        // alg_impl/init_impl each phase — not accumulated.
+        // iq_cons_) are overwritten unconditionally by alg_impl each phase.
+        // factor_mem_ and factor_flops_ reflect the last factorization's stats
+        // (set by init_impl) and are not accumulated across phases.
         void reset_accumulators() {
             converge_flag_ = ConvergenceFlags::NOTCONVERGED;
             total_time_ = 0;
@@ -248,6 +259,9 @@ class PSIOPT {
     }
 
     // --- Accessors ---
+    /// Returns a mutable reference to the settings struct. Direct writes bypass
+    /// per-field validation in the set_*() methods. All settings are re-validated
+    /// at run_phase_sequence() entry via Settings::validate().
     Settings &settings() { return settings_; }
     const Settings &settings() const { return settings_; }
     const SolveResult &result() const { return result_; }
@@ -386,6 +400,11 @@ class PSIOPT {
     // Used for both the iterate vector (x, s, lambda_e, lambda_i) and the
     // RHS/gradient vector (grad_x, grad_s, c_eq, c_iq). The two accessor
     // groups provide semantic names for each interpretation.
+    //
+    // const-correctness: const overloads use std::as_const(data_) to force
+    // Eigen's .head()/.segment()/.tail() to return immutable segment
+    // expressions. Without this, calling .head() on the non-const VectorXd&
+    // member would return a mutable expression even from a const method.
     // Lifetime: must not outlive the referenced VectorXd.
     // =========================================================================
     class KKTVector {
@@ -455,7 +474,8 @@ class PSIOPT {
         BarrierModes bar_mode_;
         LineSearchModes ls_mode_;
         const char *label_;
-        bool conditional_ = false; // only run if previous phase didn't converge
+        bool conditional_ = false; // skip if converge_flag_ == CONVERGED
+                                   // (still runs on ACCEPTABLE / NOTCONVERGED / DIVERGING)
     };
 
     Eigen::VectorXd run_phase_sequence(const Eigen::VectorXd &x,

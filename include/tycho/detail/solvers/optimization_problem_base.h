@@ -82,8 +82,8 @@ struct OptimizationProblemBase {
         if (num_partitions < 1) {
             throw std::invalid_argument("Number of partitions must be positive");
         }
+        this->optimizer_->set_qp_threads(qp_threads); // may throw — do before mutating
         this->num_partitions_ = num_partitions;
-        this->optimizer_->set_qp_threads(qp_threads);
     }
     virtual void set_num_partitions(int num_partitions) {
         if (num_partitions < 1) {

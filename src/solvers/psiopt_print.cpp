@@ -75,7 +75,7 @@ void tycho::solvers::PSIOPT::print_stats() {
     fmt::print(" Inequality Constraints   : ");
     fmt::print(cyan, "{:<10}\n", this->inequal_cons_);
     fmt::print("\n");
-    fmt::print(" KKT-Matrix DIM (P+E+2*I) : ");
+    fmt::print(" KKT-Matrix DIM (P+S+E+I) : ");
     fmt::print(cyan, "{:<10}\n", this->kkt_dim_);
     fmt::print(" KKT-Matrix NNZs          : ");
     fmt::print(cyan, "{:<10}\n", this->kkt_sol_.get_matrix().nonZeros());

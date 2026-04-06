@@ -19,6 +19,7 @@
 
 #include "tycho/detail/solvers/psiopt.h"
 
+#include <cassert>
 #include <cmath>
 #include <stdexcept>
 
@@ -421,6 +422,113 @@ void tycho::solvers::PSIOPT::set_obj_scale(double scale) {
 }
 
 // =============================================================================
+// Settings validation
+// =============================================================================
+
+void tycho::solvers::PSIOPT::Settings::validate() const {
+    auto pos_finite = [](double v, const char *name) {
+        if (!std::isfinite(v) || v <= 0.0)
+            throw std::invalid_argument(
+                fmt::format("{} must be finite and positive, got {}", name, v));
+    };
+    auto pos_int = [](int v, const char *name) {
+        if (v < 1)
+            throw std::invalid_argument(fmt::format("{} must be >= 1, got {}", name, v));
+    };
+
+    // --- Iteration limits ---
+    pos_int(max_iters_, "max_iters");
+    pos_int(max_acc_iters_, "max_acc_iters");
+    if (max_ls_iters_ < 0)
+        throw std::invalid_argument(
+            fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));
+
+    // --- Convergence tolerances ---
+    pos_finite(kkt_tol_, "kkt_tol");
+    pos_finite(econ_tol_, "econ_tol");
+    pos_finite(icon_tol_, "icon_tol");
+    pos_finite(bar_tol_, "bar_tol");
+
+    // --- Acceptable tolerances ---
+    pos_finite(acc_kkt_tol_, "acc_kkt_tol");
+    pos_finite(acc_econ_tol_, "acc_econ_tol");
+    pos_finite(acc_icon_tol_, "acc_icon_tol");
+    pos_finite(acc_bar_tol_, "acc_bar_tol");
+
+    // --- Unacceptable tolerances ---
+    pos_finite(unacc_kkt_tol_, "unacc_kkt_tol");
+    pos_finite(unacc_econ_tol_, "unacc_econ_tol");
+    pos_finite(unacc_icon_tol_, "unacc_icon_tol");
+    pos_finite(unacc_bar_tol_, "unacc_bar_tol");
+
+    // --- Divergence tolerances ---
+    pos_finite(div_kkt_tol_, "div_kkt_tol");
+    pos_finite(div_econ_tol_, "div_econ_tol");
+    pos_finite(div_icon_tol_, "div_icon_tol");
+    pos_finite(div_bar_tol_, "div_bar_tol");
+
+    // --- Cross-field: convergence tols <= acceptable tols ---
+    if (kkt_tol_ > acc_kkt_tol_)
+        throw std::invalid_argument(
+            fmt::format("kkt_tol ({}) must be <= acc_kkt_tol ({})", kkt_tol_, acc_kkt_tol_));
+    if (econ_tol_ > acc_econ_tol_)
+        throw std::invalid_argument(
+            fmt::format("econ_tol ({}) must be <= acc_econ_tol ({})", econ_tol_, acc_econ_tol_));
+    if (icon_tol_ > acc_icon_tol_)
+        throw std::invalid_argument(
+            fmt::format("icon_tol ({}) must be <= acc_icon_tol ({})", icon_tol_, acc_icon_tol_));
+    if (bar_tol_ > acc_bar_tol_)
+        throw std::invalid_argument(
+            fmt::format("bar_tol ({}) must be <= acc_bar_tol ({})", bar_tol_, acc_bar_tol_));
+
+    // --- Barrier parameters ---
+    pos_finite(init_mu_, "init_mu");
+    pos_finite(min_mu_, "min_mu");
+    pos_finite(max_mu_, "max_mu");
+    if (min_mu_ > max_mu_)
+        throw std::invalid_argument(
+            fmt::format("min_mu ({}) must be <= max_mu ({})", min_mu_, max_mu_));
+
+    // --- Step parameters ---
+    if (bound_fraction_ <= 0.0 || bound_fraction_ >= 1.0)
+        throw std::invalid_argument("bound_fraction must be in (0, 1)");
+    if (bound_push_ <= 0.0)
+        throw std::invalid_argument("bound_push must be > 0");
+    pos_finite(neg_slack_reset_, "neg_slack_reset");
+    if (alpha_red_ <= 1.0)
+        throw std::invalid_argument("alpha_red must be > 1.0");
+
+    // --- Hessian perturbation ---
+    if (delta_h_ <= 0.0)
+        throw std::invalid_argument("delta_h must be > 0");
+    if (incr_h_ <= 1.0)
+        throw std::invalid_argument("incr_h must be > 1.0");
+    if (decr_h_ <= 0.0 || decr_h_ >= 1.0)
+        throw std::invalid_argument("decr_h must be in (0, 1)");
+
+    // --- QP solver ---
+    pos_int(qp_threads_, "qp_threads");
+    if (qp_pivot_perturb_ < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_pivot_perturb must be non-negative, got {}", qp_pivot_perturb_));
+    if (qp_ref_steps_ < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_ref_steps must be non-negative, got {}", qp_ref_steps_));
+    if (qp_par_solve_ != 0 && qp_par_solve_ != 1)
+        throw std::invalid_argument(
+            fmt::format("qp_par_solve must be 0 or 1, got {}", qp_par_solve_));
+
+    // --- Objective ---
+    if (!std::isfinite(obj_scale_) || obj_scale_ == 0.0)
+        throw std::invalid_argument("obj_scale must be finite and non-zero");
+
+    // --- Output ---
+    if (print_level_ < 0)
+        throw std::invalid_argument(
+            fmt::format("print_level must be non-negative, got {}", print_level_));
+}
+
+// =============================================================================
 // QP parameter setup
 // =============================================================================
 
@@ -445,6 +553,8 @@ void tycho::solvers::PSIOPT::set_qp_params() {
         this->kkt_sol_.set_order(SparseOrderMetis);
 #endif
         break;
+    default:
+        throw std::invalid_argument("Unknown QPOrderingMode");
     }
     this->kkt_sol_.set_num_threads(settings_.qp_threads_);
     this->kkt_sol_.set_iterative_refinement(settings_.qp_ref_steps_ > 0);
@@ -494,6 +604,8 @@ void tycho::solvers::PSIOPT::release() {
     result_.primals_.resize(0);
     result_.eq_lmults_.resize(0);
     result_.iq_lmults_.resize(0);
+    result_.eq_cons_.resize(0);
+    result_.iq_cons_.resize(0);
 }
 
 // =============================================================================
@@ -783,6 +895,7 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
 }
 
 tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
+    assert(!iters.empty() && "converge_check called with empty iteration history");
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
     IterateInfo last = iters.back();
     bool KKTFeas = (last.kkt_inf_ < settings_.kkt_tol_);
@@ -965,6 +1078,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         double Incr2 = settings_.incr_h_;
         if (FirstPert)
             Incr2 *= settings_.incr_h_;
+        // Cycling heuristic: if the last 4 consecutive iterations all required
+        // Hessian perturbation (h_facs_ > 0), skip the zero-perturbation attempt
+        // to avoid wasted factorizations when the problem is persistently
+        // near-singular. The (i*3)%4 != 0 condition samples 3/4 of iterations,
+        // periodically re-probing for recovered inertia.
         bool Zfac = true;
         if (settings_.fast_factor_alg_ && i > 6 && ((i * 3) % 4) != 0) {
             bool cycling = true;
@@ -1006,7 +1124,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
                 break;
             default:
-                break;
+                throw std::invalid_argument("Unknown BarrierMode");
             }
 
             mu = std::max(mu, settings_.min_mu_);
@@ -1132,7 +1250,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     this->result_.print_time_ += printtime;
 
     // Print exit statistics
-    int retiter = (settings_.return_best_ ? BestIter : iters.size() - 1);
+    assert(!iters.empty());
+    assert(!settings_.return_best_ || BestIter < static_cast<int>(iters.size()));
+    int retiter = (settings_.return_best_ ? BestIter : static_cast<int>(iters.size()) - 1);
     print_exit_stats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
                      qptime * 1000, printtime * 1000);
 
@@ -1270,10 +1390,11 @@ double tycho::solvers::PSIOPT::ls_lang(double obj_scale, double mu, double prim_
         btest = this->barrier_objective(xsl2.slacks(), mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
         double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
-        citer.ls_iters_ = j;
         if (LangTest < LangInit) {
+            citer.ls_iters_ = j;
             break;
         } else {
+            citer.ls_iters_ = j + 1;
             alpha = alpha / settings_.alpha_red_;
         }
     }
@@ -1390,7 +1511,11 @@ double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale,
                                        Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
                                        IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
     // Line search exhaustion (all max_ls_iters_ attempts fail the merit test) is
-    // signaled implicitly: Citer.ls_iters_ == max_ls_iters_ in the iteration table.
+    // signaled by Citer.ls_iters_ == max_ls_iters_ in the iteration table.
+    // On success, ls_iters_ records the 0-based index of the accepted step (j).
+    // On failure, ls_iters_ is set to j+1 (attempts exhausted so far), reaching
+    // max_ls_iters_ when all attempts are exhausted. This convention is shared by
+    // ls_lang, ls_l1, and ls_auglang.
     // The best alpha found is still returned; alg_impl's convergence check determines
     // whether the overall iteration should continue or terminate.
 
@@ -1431,6 +1556,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     }
 
     this->result_.reset_accumulators();
+    settings_.validate();
 
     if (settings_.print_level_ == 0)
         print_stats();

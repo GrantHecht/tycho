@@ -294,3 +294,159 @@ TEST_F(SolverTest, ResultResetBetweenCalls) {
     EXPECT_GT(r.total_time_, 0.0);
     EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
 }
+
+// =============================================================================
+// return_best and divergence tests
+// =============================================================================
+
+TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
+    auto phase = make_brach_solver_phase(16);
+    phase->optimizer_->set_print_level(3);
+    phase->optimizer_->set_max_iters(3); // force NOTCONVERGED
+    phase->optimizer_->settings().return_best_ = true;
+    phase->optimizer_->settings().best_criteria_ = PSIOPT::BestCriteriaModes::ECONS;
+
+    auto status = phase->optimize();
+    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::NOTCONVERGED);
+
+    const auto &r = phase->optimizer_->result();
+    EXPECT_GT(r.primals_.size(), 0u);
+    EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
+    EXPECT_GT(r.obj_val_, 0.0);
+
+    // Verify without return_best for comparison — both should produce valid primals
+    auto phase2 = make_brach_solver_phase(16);
+    phase2->optimizer_->set_print_level(3);
+    phase2->optimizer_->set_max_iters(3);
+    phase2->optimizer_->settings().return_best_ = false;
+
+    phase2->optimize();
+    EXPECT_EQ(phase2->optimizer_->result().primals_.size(), r.primals_.size());
+}
+
+TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
+    auto phase = make_brach_solver_phase(16);
+    phase->optimizer_->set_print_level(3);
+    // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly
+    phase->optimizer_->set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
+    auto status = phase->solve_optimize();
+    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::DIVERGING);
+}
+
+// =============================================================================
+// String-based mode setter tests
+// =============================================================================
+
+TEST_F(SolverTest, StringModeSetters) {
+    PSIOPT opt;
+
+    opt.set_opt_ls_mode("LANG");
+    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::LANG);
+    opt.set_opt_ls_mode("AUGLANG");
+    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::AUGLANG);
+    opt.set_opt_ls_mode("L1");
+    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::L1);
+    opt.set_opt_ls_mode("NOLS");
+    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::NOLS);
+
+    opt.set_soe_ls_mode("L1");
+    EXPECT_EQ(opt.settings().soe_ls_mode_, PSIOPT::LineSearchModes::L1);
+
+    opt.set_opt_bar_mode("PROBE");
+    EXPECT_EQ(opt.settings().opt_bar_mode_, PSIOPT::BarrierModes::PROBE);
+    opt.set_opt_bar_mode("LOQO");
+    EXPECT_EQ(opt.settings().opt_bar_mode_, PSIOPT::BarrierModes::LOQO);
+
+    opt.set_soe_bar_mode("PROBE");
+    EXPECT_EQ(opt.settings().soe_bar_mode_, PSIOPT::BarrierModes::PROBE);
+
+    opt.set_qp_ordering_mode("MINDEG");
+    EXPECT_EQ(opt.settings().qp_ord_, PSIOPT::QPOrderingModes::MINDEG);
+    opt.set_qp_ordering_mode("METIS");
+    EXPECT_EQ(opt.settings().qp_ord_, PSIOPT::QPOrderingModes::METIS);
+
+    opt.set_best_criteria("ECons");
+    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::ECONS);
+    opt.set_best_criteria("ICons");
+    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::ICONS);
+    opt.set_best_criteria("KKT");
+    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::KKT);
+    opt.set_best_criteria("Obj");
+    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::OBJ);
+}
+
+// =============================================================================
+// Composite setter delegation tests
+// =============================================================================
+
+TEST_F(SolverTest, UnaccTolsCompositeDelegation) {
+    PSIOPT opt;
+    opt.set_unacc_tols(1.0, 2.0, 3.0, 4.0);
+    EXPECT_DOUBLE_EQ(opt.settings().unacc_kkt_tol_, 1.0);
+    EXPECT_DOUBLE_EQ(opt.settings().unacc_econ_tol_, 2.0);
+    EXPECT_DOUBLE_EQ(opt.settings().unacc_icon_tol_, 3.0);
+    EXPECT_DOUBLE_EQ(opt.settings().unacc_bar_tol_, 4.0);
+}
+
+TEST_F(SolverTest, DivTolsCompositeDelegation) {
+    PSIOPT opt;
+    opt.set_div_tols(1e10, 2e10, 3e10, 4e10);
+    EXPECT_DOUBLE_EQ(opt.settings().div_kkt_tol_, 1e10);
+    EXPECT_DOUBLE_EQ(opt.settings().div_econ_tol_, 2e10);
+    EXPECT_DOUBLE_EQ(opt.settings().div_icon_tol_, 3e10);
+    EXPECT_DOUBLE_EQ(opt.settings().div_bar_tol_, 4e10);
+}
+
+// =============================================================================
+// Result population — multipliers and constraints
+// =============================================================================
+
+TEST_F(SolverTest, MultiplierAndConstraintResultPopulation) {
+    auto phase = make_brach_solver_phase(32);
+    phase->optimizer_->set_print_level(3);
+    auto status = phase->solve_optimize();
+    ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+
+    const auto &r = phase->optimizer_->result();
+
+    // Equality multipliers and constraints should be populated and correctly sized
+    EXPECT_EQ(r.eq_lmults_.size(), phase->nlp_->equal_cons_);
+    EXPECT_EQ(r.eq_cons_.size(), phase->nlp_->equal_cons_);
+
+    // Inequality constraints (from lu bounds on the control variable)
+    if (phase->nlp_->inequal_cons_ > 0) {
+        EXPECT_EQ(r.iq_lmults_.size(), phase->nlp_->inequal_cons_);
+        EXPECT_EQ(r.iq_cons_.size(), phase->nlp_->inequal_cons_);
+    }
+}
+
+// =============================================================================
+// Settings::validate() tests
+// =============================================================================
+
+TEST_F(SolverTest, SettingsValidateAcceptsDefaults) {
+    PSIOPT::Settings s;
+    EXPECT_NO_THROW(s.validate());
+}
+
+TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
+    PSIOPT::Settings s;
+
+    // min_mu > max_mu
+    s.min_mu_ = 200.0;
+    s.max_mu_ = 100.0;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.min_mu_ = 1e-12;
+    s.max_mu_ = 100.0;
+
+    // convergence tol > acceptable tol
+    s.kkt_tol_ = 1.0;
+    s.acc_kkt_tol_ = 0.01;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.kkt_tol_ = 1e-6;
+    s.acc_kkt_tol_ = 1e-2;
+
+    // Invalid per-field value
+    s.bound_fraction_ = 5.0;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+}
