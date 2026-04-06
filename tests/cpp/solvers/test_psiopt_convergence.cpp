@@ -36,7 +36,7 @@ TEST_F(SolverTest, ConvergenceFlagOrdering) {
     EXPECT_LT(PSIOPT::ConvergenceFlags::NOTCONVERGED, PSIOPT::ConvergenceFlags::DIVERGING);
 }
 
-TEST_F(SolverTest, PrintLevelZeroSilent) {
+TEST_F(SolverTest, PrintLevelZeroConverges) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(0);
     auto status = phase->solve_optimize();
@@ -171,6 +171,18 @@ TEST_F(SolverTest, CompositeSetterDelegation) {
     EXPECT_DOUBLE_EQ(opt.settings().acc_econ_tol_, 2e-4);
     EXPECT_DOUBLE_EQ(opt.settings().acc_icon_tol_, 3e-4);
     EXPECT_DOUBLE_EQ(opt.settings().acc_bar_tol_, 4e-4);
+
+    opt.set_all_max_iters(100, 20);
+    EXPECT_EQ(opt.settings().max_iters_, 100);
+    EXPECT_EQ(opt.settings().max_acc_iters_, 20);
+}
+
+TEST_F(SolverTest, CompositeSetterValidationPropagates) {
+    PSIOPT opt;
+    EXPECT_THROW(opt.set_tols(-1, 1e-7, 1e-7, 1e-7), std::invalid_argument);
+    EXPECT_THROW(opt.set_acc_tols(1e-4, -1, 1e-4, 1e-4), std::invalid_argument);
+    EXPECT_THROW(opt.set_all_max_iters(0, 20), std::invalid_argument);
+    EXPECT_THROW(opt.set_all_max_iters(100, 0), std::invalid_argument);
 }
 
 TEST_F(SolverTest, StringToEnumConverters) {
@@ -293,6 +305,11 @@ TEST_F(SolverTest, ResultResetBetweenCalls) {
     EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GT(r.total_time_, 0.0);
     EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
+
+    // Timing fields should reflect only the second call, not accumulated
+    EXPECT_GT(r.func_time_, 0.0);
+    EXPECT_GT(r.kkt_time_, 0.0);
+    EXPECT_GE(r.misc_time(), 0.0);
 }
 
 // =============================================================================
@@ -327,7 +344,11 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
 TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(3);
-    // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly
+    // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly.
+    // Must also lower convergence and acceptable tols to satisfy
+    // the conv <= acc <= div cross-field invariant.
+    phase->optimizer_->set_tols(1e-22, 1e-22, 1e-22, 1e-22);
+    phase->optimizer_->set_acc_tols(1e-21, 1e-21, 1e-21, 1e-21);
     phase->optimizer_->set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::DIVERGING);
@@ -439,12 +460,72 @@ TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
     s.min_mu_ = 1e-12;
     s.max_mu_ = 100.0;
 
-    // convergence tol > acceptable tol
+    // init_mu outside [min_mu, max_mu]
+    s.init_mu_ = 200.0;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.init_mu_ = 1e-14; // below min_mu
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.init_mu_ = 0.001;
+
+    // convergence tol > acceptable tol (all four families)
     s.kkt_tol_ = 1.0;
     s.acc_kkt_tol_ = 0.01;
     EXPECT_THROW(s.validate(), std::invalid_argument);
     s.kkt_tol_ = 1e-6;
     s.acc_kkt_tol_ = 1e-2;
+
+    s.econ_tol_ = 1.0;
+    s.acc_econ_tol_ = 0.01;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.econ_tol_ = 1e-6;
+    s.acc_econ_tol_ = 1e-3;
+
+    s.icon_tol_ = 1.0;
+    s.acc_icon_tol_ = 0.01;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.icon_tol_ = 1e-6;
+    s.acc_icon_tol_ = 1e-3;
+
+    s.bar_tol_ = 1.0;
+    s.acc_bar_tol_ = 0.01;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.bar_tol_ = 1e-6;
+    s.acc_bar_tol_ = 1e-3;
+
+    // acceptable tol > divergence tol
+    s.acc_kkt_tol_ = 1e20;
+    s.div_kkt_tol_ = 1e15;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.acc_kkt_tol_ = 1e-2;
+    s.div_kkt_tol_ = 1e15;
+
+    s.acc_econ_tol_ = 1e20;
+    s.div_econ_tol_ = 1e15;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.acc_econ_tol_ = 1e-3;
+    s.div_econ_tol_ = 1e15;
+
+    s.acc_icon_tol_ = 1e20;
+    s.div_icon_tol_ = 1e15;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.acc_icon_tol_ = 1e-3;
+    s.div_icon_tol_ = 1e15;
+
+    s.acc_bar_tol_ = 1e20;
+    s.div_bar_tol_ = 1e15;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.acc_bar_tol_ = 1e-3;
+    s.div_bar_tol_ = 1e15;
+
+    // max_refac must be >= 1
+    s.max_refac_ = 0;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.max_refac_ = 15;
+
+    // soe_bound_relax must be positive and finite
+    s.soe_bound_relax_ = -1.0;
+    EXPECT_THROW(s.validate(), std::invalid_argument);
+    s.soe_bound_relax_ = 1e-8;
 
     // Invalid per-field value
     s.bound_fraction_ = 5.0;

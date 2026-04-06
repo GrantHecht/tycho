@@ -181,8 +181,9 @@ class PSIOPT {
 
         /// Validate all settings, throwing std::invalid_argument on the first
         /// violation. Checks per-field conditions (matching the individual
-        /// set_*() methods) plus cross-field invariants (min_mu <= max_mu,
-        /// convergence tols <= acceptable tols).
+        /// set_*() methods) plus cross-field invariants (min_mu <= init_mu <=
+        /// max_mu, convergence tols <= their respective acceptable tols <=
+        /// their respective divergence tols).
         void validate() const;
     };
 
@@ -224,8 +225,9 @@ class PSIOPT {
         int factor_flops_ = 0;
 
         // Only resets accumulated timing/iteration counters and the convergence flag.
-        // All other fields (primals_, obj_val_, eq_lmults_, iq_lmults_, eq_cons_,
-        // iq_cons_) are overwritten unconditionally by alg_impl each phase.
+        // primals_ and obj_val_ are overwritten unconditionally by alg_impl each
+        // phase. eq_lmults_ and eq_cons_ are overwritten when equal_cons_ > 0;
+        // iq_lmults_ and iq_cons_ are overwritten when inequal_cons_ > 0.
         // factor_mem_ and factor_flops_ reflect the last factorization's stats
         // (set by init_impl) and are not accumulated across phases.
         void reset_accumulators() {
@@ -475,7 +477,8 @@ class PSIOPT {
         LineSearchModes ls_mode_;
         const char *label_;
         bool conditional_ = false; // skip if converge_flag_ == CONVERGED
-                                   // (still runs on ACCEPTABLE / NOTCONVERGED / DIVERGING)
+                                   // (still runs on ACCEPTABLE / NOTCONVERGED;
+                                   // DIVERGING breaks the loop before reaching this)
     };
 
     Eigen::VectorXd run_phase_sequence(const Eigen::VectorXd &x,

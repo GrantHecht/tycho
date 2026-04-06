@@ -439,6 +439,7 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     // --- Iteration limits ---
     pos_int(max_iters_, "max_iters");
     pos_int(max_acc_iters_, "max_acc_iters");
+    pos_int(max_refac_, "max_refac");
     if (max_ls_iters_ < 0)
         throw std::invalid_argument(
             fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));
@@ -467,7 +468,7 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     pos_finite(div_icon_tol_, "div_icon_tol");
     pos_finite(div_bar_tol_, "div_bar_tol");
 
-    // --- Cross-field: convergence tols <= acceptable tols ---
+    // --- Cross-field: convergence tols <= acceptable tols <= divergence tols ---
     if (kkt_tol_ > acc_kkt_tol_)
         throw std::invalid_argument(
             fmt::format("kkt_tol ({}) must be <= acc_kkt_tol ({})", kkt_tol_, acc_kkt_tol_));
@@ -480,6 +481,18 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (bar_tol_ > acc_bar_tol_)
         throw std::invalid_argument(
             fmt::format("bar_tol ({}) must be <= acc_bar_tol ({})", bar_tol_, acc_bar_tol_));
+    if (acc_kkt_tol_ > div_kkt_tol_)
+        throw std::invalid_argument(fmt::format("acc_kkt_tol ({}) must be <= div_kkt_tol ({})",
+                                                acc_kkt_tol_, div_kkt_tol_));
+    if (acc_econ_tol_ > div_econ_tol_)
+        throw std::invalid_argument(fmt::format("acc_econ_tol ({}) must be <= div_econ_tol ({})",
+                                                acc_econ_tol_, div_econ_tol_));
+    if (acc_icon_tol_ > div_icon_tol_)
+        throw std::invalid_argument(fmt::format("acc_icon_tol ({}) must be <= div_icon_tol ({})",
+                                                acc_icon_tol_, div_icon_tol_));
+    if (acc_bar_tol_ > div_bar_tol_)
+        throw std::invalid_argument(fmt::format("acc_bar_tol ({}) must be <= div_bar_tol ({})",
+                                                acc_bar_tol_, div_bar_tol_));
 
     // --- Barrier parameters ---
     pos_finite(init_mu_, "init_mu");
@@ -488,6 +501,9 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (min_mu_ > max_mu_)
         throw std::invalid_argument(
             fmt::format("min_mu ({}) must be <= max_mu ({})", min_mu_, max_mu_));
+    if (init_mu_ < min_mu_ || init_mu_ > max_mu_)
+        throw std::invalid_argument(fmt::format(
+            "init_mu ({}) must be within [min_mu ({}), max_mu ({})]", init_mu_, min_mu_, max_mu_));
 
     // --- Step parameters ---
     if (bound_fraction_ <= 0.0 || bound_fraction_ >= 1.0)
@@ -495,6 +511,7 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (bound_push_ <= 0.0)
         throw std::invalid_argument("bound_push must be > 0");
     pos_finite(neg_slack_reset_, "neg_slack_reset");
+    pos_finite(soe_bound_relax_, "soe_bound_relax");
     if (alpha_red_ <= 1.0)
         throw std::invalid_argument("alpha_red must be > 1.0");
 
@@ -526,6 +543,12 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (print_level_ < 0)
         throw std::invalid_argument(
             fmt::format("print_level must be non-negative, got {}", print_level_));
+
+#ifdef USE_ACCELERATE_SPARSE
+    // --- Accelerate sparse solver ---
+    pos_finite(accel_pivot_tolerance_, "accel_pivot_tolerance");
+    pos_finite(accel_zero_tolerance_, "accel_zero_tolerance");
+#endif
 }
 
 // =============================================================================
@@ -774,13 +797,19 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
 }
 
 void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
+    if (!np)
+        throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
     this->nlp_ = np;
     this->primal_vars_ = this->nlp_->primal_vars_;
     this->equal_cons_ = this->nlp_->equal_cons_;
     this->inequal_cons_ = this->nlp_->inequal_cons_;
     this->slack_vars_ = this->nlp_->slack_vars_;
     this->kkt_dim_ = this->nlp_->kkt_dim_;
-    assert(kkt_dim_ == primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_);
+    if (kkt_dim_ != primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_)
+        throw std::logic_error(
+            fmt::format("PSIOPT::set_nlp: NLP kkt_dim ({}) != primal_vars ({}) + slack_vars ({}) "
+                        "+ equal_cons ({}) + inequal_cons ({})",
+                        kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
