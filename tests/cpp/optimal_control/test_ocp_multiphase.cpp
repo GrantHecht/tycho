@@ -21,7 +21,7 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
 
 TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer_->print_level_ = 0;
+    phase->optimizer_->set_print_level(0);
 
     auto status = phase->solve_optimize();
     EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED)
@@ -35,7 +35,7 @@ TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
 
 TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer_->print_level_ = 0;
+    phase->optimizer_->set_print_level(0);
 
     auto status = phase->solve_optimize();
     ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);

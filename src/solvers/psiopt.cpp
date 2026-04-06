@@ -10,9 +10,18 @@
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
+//   - Configuration fields grouped into Settings struct
+//   - Phase dispatch refactored into run_phase_sequence
+//   - Line search methods extracted (ls_lang, ls_l1, ls_auglang)
+//   - Validated setter methods added
+//   - Printing extracted to psiopt_print.cpp
 // =============================================================================
 
 #include "tycho/detail/solvers/psiopt.h"
+
+#include <cassert>
+#include <cmath>
+#include <stdexcept>
 
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
@@ -21,46 +30,791 @@
 #include <mkl.h>
 #endif
 
+// =============================================================================
+// Static string-to-enum converters
+// =============================================================================
+
+auto tycho::solvers::PSIOPT::strto_OrderingMode(const std::string &str) -> QPOrderingModes {
+    if (str == "MINDEG")
+        return QPOrderingModes::MINDEG;
+    else if (str == "METIS")
+        return QPOrderingModes::METIS;
+    else if (str == "PARMETIS" || str == "MTMETIS")
+        return QPOrderingModes::PARMETIS;
+    else {
+        throw std::invalid_argument(
+            fmt::format("Unrecognized QPOrderingMode: {0}\n"
+                        "Valid Options Are: MINDEG, METIS, PARMETIS (alias: MTMETIS)",
+                        str));
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_LineSearchMode(const std::string &str) -> LineSearchModes {
+    if (str == "L1")
+        return LineSearchModes::L1;
+    else if (str == "NOLS")
+        return LineSearchModes::NOLS;
+    else if (str == "LANG")
+        return LineSearchModes::LANG;
+    else if (str == "AUGLANG")
+        return LineSearchModes::AUGLANG;
+    else {
+        throw std::invalid_argument(
+            fmt::format("Unrecognized LineSearchMode: {0}\n"
+                        "Valid Options Are: AUGLANG, LANG, L1, NOLS\n"
+                        "Note: L2 was removed. Use L1, LANG, AUGLANG, or NOLS.",
+                        str));
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_BarrierMode(const std::string &str) -> BarrierModes {
+    if (str == "PROBE")
+        return BarrierModes::PROBE;
+    else if (str == "LOQO")
+        return BarrierModes::LOQO;
+    else {
+        throw std::invalid_argument(
+            fmt::format("Unrecognized BarrierMode: {0}\n"
+                        "Valid Options Are: LOQO, PROBE\n"
+                        "Note: FIACCO and BARDISABLED were removed. Use LOQO or PROBE.",
+                        str));
+    }
+}
+
+auto tycho::solvers::PSIOPT::strto_BestCriteriaMode(const std::string &str) -> BestCriteriaModes {
+    if (str == "ECons" || str == "ECon")
+        return BestCriteriaModes::ECONS;
+    else if (str == "ICons" || str == "ICon")
+        return BestCriteriaModes::ICONS;
+    else if (str == "KKT")
+        return BestCriteriaModes::KKT;
+    else if (str == "Obj" || str == "Prim Obj")
+        return BestCriteriaModes::OBJ;
+    else {
+        throw std::invalid_argument(fmt::format("Unrecognized BestCriteriaMode: {0}", str));
+    }
+}
+
+// =============================================================================
+// Validated setter methods
+// =============================================================================
+
+void tycho::solvers::PSIOPT::set_max_iters(int max_iters) {
+    if (max_iters < 1) {
+        throw std::invalid_argument("max_iters must be greater than 0.");
+    }
+    settings_.max_iters_ = max_iters;
+}
+
+void tycho::solvers::PSIOPT::set_max_acc_iters(int max_acc_iters) {
+    if (max_acc_iters < 1) {
+        throw std::invalid_argument("max_acc_iters must be greater than 0.");
+    }
+    settings_.max_acc_iters_ = max_acc_iters;
+}
+
+void tycho::solvers::PSIOPT::set_max_ls_iters(int max_ls_iters) {
+    if (max_ls_iters < 0) {
+        throw std::invalid_argument("max_ls_iters must be non-negative (>= 0).");
+    }
+    settings_.max_ls_iters_ = max_ls_iters;
+}
+
+void tycho::solvers::PSIOPT::set_all_max_iters(int m1, int m2) {
+    set_max_iters(m1);
+    set_max_acc_iters(m2);
+}
+
+void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
+    if (!std::isfinite(kkt_tol) || kkt_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("kkt_tol must be finite and positive, got {}", kkt_tol));
+    settings_.kkt_tol_ = kkt_tol;
+}
+
+void tycho::solvers::PSIOPT::set_bar_tol(double bar_tol) {
+    if (!std::isfinite(bar_tol) || bar_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("bar_tol must be finite and positive, got {}", bar_tol));
+    settings_.bar_tol_ = bar_tol;
+}
+
+void tycho::solvers::PSIOPT::set_econ_tol(double econ_tol) {
+    if (!std::isfinite(econ_tol) || econ_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("econ_tol must be finite and positive, got {}", econ_tol));
+    settings_.econ_tol_ = econ_tol;
+}
+
+void tycho::solvers::PSIOPT::set_icon_tol(double icon_tol) {
+    if (!std::isfinite(icon_tol) || icon_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("icon_tol must be finite and positive, got {}", icon_tol));
+    settings_.icon_tol_ = icon_tol;
+}
+
+void tycho::solvers::PSIOPT::set_tols(double kkt_tol, double econ_tol, double icon_tol,
+                                      double bar_tol) {
+    this->set_kkt_tol(kkt_tol);
+    this->set_econ_tol(econ_tol);
+    this->set_icon_tol(icon_tol);
+    this->set_bar_tol(bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_acc_kkt_tol(double acc_kkt_tol) {
+    if (!std::isfinite(acc_kkt_tol) || acc_kkt_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("acc_kkt_tol must be finite and positive, got {}", acc_kkt_tol));
+    settings_.acc_kkt_tol_ = acc_kkt_tol;
+}
+
+void tycho::solvers::PSIOPT::set_acc_bar_tol(double acc_bar_tol) {
+    if (!std::isfinite(acc_bar_tol) || acc_bar_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("acc_bar_tol must be finite and positive, got {}", acc_bar_tol));
+    settings_.acc_bar_tol_ = acc_bar_tol;
+}
+
+void tycho::solvers::PSIOPT::set_acc_econ_tol(double acc_econ_tol) {
+    if (!std::isfinite(acc_econ_tol) || acc_econ_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("acc_econ_tol must be finite and positive, got {}", acc_econ_tol));
+    settings_.acc_econ_tol_ = acc_econ_tol;
+}
+
+void tycho::solvers::PSIOPT::set_acc_icon_tol(double acc_icon_tol) {
+    if (!std::isfinite(acc_icon_tol) || acc_icon_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("acc_icon_tol must be finite and positive, got {}", acc_icon_tol));
+    settings_.acc_icon_tol_ = acc_icon_tol;
+}
+
+void tycho::solvers::PSIOPT::set_acc_tols(double acc_kkt_tol, double acc_econ_tol,
+                                          double acc_icon_tol, double acc_bar_tol) {
+    this->set_acc_kkt_tol(acc_kkt_tol);
+    this->set_acc_econ_tol(acc_econ_tol);
+    this->set_acc_icon_tol(acc_icon_tol);
+    this->set_acc_bar_tol(acc_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol, double bartol) {
+    auto validate = [](double v, const char *name) {
+        if (!std::isfinite(v) || v <= 0.0)
+            throw std::invalid_argument(
+                fmt::format("{} must be finite and positive, got {}", name, v));
+    };
+    validate(kktol, "unacc_kkt_tol");
+    validate(etol, "unacc_econ_tol");
+    validate(itol, "unacc_icon_tol");
+    validate(bartol, "unacc_bar_tol");
+    settings_.unacc_kkt_tol_ = kktol;
+    settings_.unacc_bar_tol_ = bartol;
+    settings_.unacc_econ_tol_ = etol;
+    settings_.unacc_icon_tol_ = itol;
+}
+
+void tycho::solvers::PSIOPT::set_div_kkt_tol(double div_kkt_tol) {
+    if (!std::isfinite(div_kkt_tol) || div_kkt_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("div_kkt_tol must be finite and positive, got {}", div_kkt_tol));
+    settings_.div_kkt_tol_ = div_kkt_tol;
+}
+
+void tycho::solvers::PSIOPT::set_div_bar_tol(double div_bar_tol) {
+    if (!std::isfinite(div_bar_tol) || div_bar_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("div_bar_tol must be finite and positive, got {}", div_bar_tol));
+    settings_.div_bar_tol_ = div_bar_tol;
+}
+
+void tycho::solvers::PSIOPT::set_div_econ_tol(double div_econ_tol) {
+    if (!std::isfinite(div_econ_tol) || div_econ_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("div_econ_tol must be finite and positive, got {}", div_econ_tol));
+    settings_.div_econ_tol_ = div_econ_tol;
+}
+
+void tycho::solvers::PSIOPT::set_div_icon_tol(double div_icon_tol) {
+    if (!std::isfinite(div_icon_tol) || div_icon_tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("div_icon_tol must be finite and positive, got {}", div_icon_tol));
+    settings_.div_icon_tol_ = div_icon_tol;
+}
+
+void tycho::solvers::PSIOPT::set_div_tols(double div_kkt_tol, double div_econ_tol,
+                                          double div_icon_tol, double div_bar_tol) {
+    this->set_div_kkt_tol(div_kkt_tol);
+    this->set_div_econ_tol(div_econ_tol);
+    this->set_div_icon_tol(div_icon_tol);
+    this->set_div_bar_tol(div_bar_tol);
+}
+
+void tycho::solvers::PSIOPT::set_bound_fraction(double bound_fraction) {
+    if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
+        throw std::invalid_argument("bound_fraction must be between 0 and 1.");
+    }
+    settings_.bound_fraction_ = bound_fraction;
+}
+
+void tycho::solvers::PSIOPT::set_bound_push(double bound_push) {
+    if (bound_push <= 0.0) {
+        throw std::invalid_argument("bound_push must be greater than 0.");
+    }
+    settings_.bound_push_ = bound_push;
+}
+
+void tycho::solvers::PSIOPT::set_alpha_red(double ared) {
+    if (ared <= 1.0) {
+        throw std::invalid_argument("alpha_red must be greater than 1.0");
+    }
+    settings_.alpha_red_ = ared;
+}
+
+void tycho::solvers::PSIOPT::set_delta_h(double delta_h) {
+    if (delta_h <= 0.0) {
+        throw std::invalid_argument("delta_h must be greater than 0.");
+    }
+    settings_.delta_h_ = delta_h;
+}
+
+void tycho::solvers::PSIOPT::set_incr_h(double incr_h) {
+    if (incr_h <= 1.0) {
+        throw std::invalid_argument("incr_h must be greater than 1.0.");
+    }
+    settings_.incr_h_ = incr_h;
+}
+
+void tycho::solvers::PSIOPT::set_decr_h(double decr_h) {
+    if (decr_h >= 1.0 || decr_h <= 0) {
+        throw std::invalid_argument("decr_h must be between 0 and 1.");
+    }
+    settings_.decr_h_ = decr_h;
+}
+
+void tycho::solvers::PSIOPT::set_hpert_params(double delta_h, double incr_h, double decr_h) {
+    this->set_delta_h(delta_h);
+    this->set_incr_h(incr_h);
+    this->set_decr_h(decr_h);
+}
+
+void tycho::solvers::PSIOPT::set_print_level(int plevel) {
+    if (plevel < 0)
+        throw std::invalid_argument(
+            fmt::format("print_level must be non-negative, got {}", plevel));
+    settings_.print_level_ = plevel;
+}
+
+void tycho::solvers::PSIOPT::set_qp_ordering_mode(QPOrderingModes mode) {
+    settings_.qp_ord_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_qp_ordering_mode(const std::string &str) {
+    settings_.qp_ord_ = strto_OrderingMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_opt_bar_mode(BarrierModes mode) { settings_.opt_bar_mode_ = mode; }
+
+void tycho::solvers::PSIOPT::set_opt_bar_mode(const std::string &str) {
+    settings_.opt_bar_mode_ = strto_BarrierMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_soe_bar_mode(BarrierModes mode) { settings_.soe_bar_mode_ = mode; }
+
+void tycho::solvers::PSIOPT::set_soe_bar_mode(const std::string &str) {
+    settings_.soe_bar_mode_ = strto_BarrierMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_opt_ls_mode(LineSearchModes mode) {
+    settings_.opt_ls_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_opt_ls_mode(const std::string &str) {
+    settings_.opt_ls_mode_ = strto_LineSearchMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_soe_ls_mode(LineSearchModes mode) {
+    settings_.soe_ls_mode_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_soe_ls_mode(const std::string &str) {
+    settings_.soe_ls_mode_ = strto_LineSearchMode(str);
+}
+
+void tycho::solvers::PSIOPT::set_best_criteria(BestCriteriaModes mode) {
+    settings_.best_criteria_ = mode;
+}
+
+void tycho::solvers::PSIOPT::set_best_criteria(const std::string &str) {
+    settings_.best_criteria_ = strto_BestCriteriaMode(str);
+}
+
+#ifdef USE_ACCELERATE_SPARSE
+void tycho::solvers::PSIOPT::set_accel_pivot_tolerance(double tol) {
+    if (!std::isfinite(tol) || tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("accel_pivot_tolerance must be finite and positive, got {}", tol));
+    settings_.accel_pivot_tolerance_ = tol;
+}
+
+void tycho::solvers::PSIOPT::set_accel_zero_tolerance(double tol) {
+    if (!std::isfinite(tol) || tol <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("accel_zero_tolerance must be finite and positive, got {}", tol));
+    settings_.accel_zero_tolerance_ = tol;
+}
+#endif
+
+void tycho::solvers::PSIOPT::set_init_mu(double mu) {
+    if (!std::isfinite(mu) || mu <= 0.0)
+        throw std::invalid_argument(fmt::format("init_mu must be finite and positive, got {}", mu));
+    settings_.init_mu_ = mu;
+}
+
+void tycho::solvers::PSIOPT::set_min_mu(double mu) {
+    if (!std::isfinite(mu) || mu <= 0.0)
+        throw std::invalid_argument(fmt::format("min_mu must be finite and positive, got {}", mu));
+    settings_.min_mu_ = mu;
+}
+
+void tycho::solvers::PSIOPT::set_max_mu(double mu) {
+    if (!std::isfinite(mu) || mu <= 0.0)
+        throw std::invalid_argument(fmt::format("max_mu must be finite and positive, got {}", mu));
+    settings_.max_mu_ = mu;
+}
+
+void tycho::solvers::PSIOPT::set_neg_slack_reset(double val) {
+    if (!std::isfinite(val) || val <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("neg_slack_reset must be finite and positive, got {}", val));
+    settings_.neg_slack_reset_ = val;
+}
+
+void tycho::solvers::PSIOPT::set_qp_threads(int n) {
+    if (n < 1)
+        throw std::invalid_argument(fmt::format("qp_threads must be >= 1, got {}", n));
+    settings_.qp_threads_ = n;
+}
+
+void tycho::solvers::PSIOPT::set_qp_pivot_perturb(int v) {
+    if (v < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_pivot_perturb must be non-negative, got {}", v));
+    settings_.qp_pivot_perturb_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_qp_ref_steps(int v) {
+    if (v < 0)
+        throw std::invalid_argument(fmt::format("qp_ref_steps must be non-negative, got {}", v));
+    settings_.qp_ref_steps_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_qp_par_solve(int v) {
+    if (v != 0 && v != 1)
+        throw std::invalid_argument(fmt::format("qp_par_solve must be 0 or 1, got {}", v));
+    settings_.qp_par_solve_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_obj_scale(double scale) {
+    if (!std::isfinite(scale) || scale == 0.0)
+        throw std::invalid_argument(
+            fmt::format("obj_scale must be finite and non-zero, got {}", scale));
+    settings_.obj_scale_ = scale;
+}
+
+// =============================================================================
+// Settings validation
+// =============================================================================
+
+void tycho::solvers::PSIOPT::Settings::validate() const {
+    auto pos_finite = [](double v, const char *name) {
+        if (!std::isfinite(v) || v <= 0.0)
+            throw std::invalid_argument(
+                fmt::format("{} must be finite and positive, got {}", name, v));
+    };
+    auto pos_int = [](int v, const char *name) {
+        if (v < 1)
+            throw std::invalid_argument(fmt::format("{} must be >= 1, got {}", name, v));
+    };
+
+    // --- Iteration limits ---
+    pos_int(max_iters_, "max_iters");
+    pos_int(max_acc_iters_, "max_acc_iters");
+    pos_int(max_refac_, "max_refac");
+    if (max_ls_iters_ < 0)
+        throw std::invalid_argument(
+            fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));
+
+    // --- Convergence tolerances ---
+    pos_finite(kkt_tol_, "kkt_tol");
+    pos_finite(econ_tol_, "econ_tol");
+    pos_finite(icon_tol_, "icon_tol");
+    pos_finite(bar_tol_, "bar_tol");
+
+    // --- Acceptable tolerances ---
+    pos_finite(acc_kkt_tol_, "acc_kkt_tol");
+    pos_finite(acc_econ_tol_, "acc_econ_tol");
+    pos_finite(acc_icon_tol_, "acc_icon_tol");
+    pos_finite(acc_bar_tol_, "acc_bar_tol");
+
+    // --- Unacceptable tolerances ---
+    pos_finite(unacc_kkt_tol_, "unacc_kkt_tol");
+    pos_finite(unacc_econ_tol_, "unacc_econ_tol");
+    pos_finite(unacc_icon_tol_, "unacc_icon_tol");
+    pos_finite(unacc_bar_tol_, "unacc_bar_tol");
+
+    // --- Divergence tolerances ---
+    pos_finite(div_kkt_tol_, "div_kkt_tol");
+    pos_finite(div_econ_tol_, "div_econ_tol");
+    pos_finite(div_icon_tol_, "div_icon_tol");
+    pos_finite(div_bar_tol_, "div_bar_tol");
+
+    // --- Cross-field: convergence tols <= acceptable tols <= divergence tols ---
+    if (kkt_tol_ > acc_kkt_tol_)
+        throw std::invalid_argument(
+            fmt::format("kkt_tol ({}) must be <= acc_kkt_tol ({})", kkt_tol_, acc_kkt_tol_));
+    if (econ_tol_ > acc_econ_tol_)
+        throw std::invalid_argument(
+            fmt::format("econ_tol ({}) must be <= acc_econ_tol ({})", econ_tol_, acc_econ_tol_));
+    if (icon_tol_ > acc_icon_tol_)
+        throw std::invalid_argument(
+            fmt::format("icon_tol ({}) must be <= acc_icon_tol ({})", icon_tol_, acc_icon_tol_));
+    if (bar_tol_ > acc_bar_tol_)
+        throw std::invalid_argument(
+            fmt::format("bar_tol ({}) must be <= acc_bar_tol ({})", bar_tol_, acc_bar_tol_));
+    if (acc_kkt_tol_ > div_kkt_tol_)
+        throw std::invalid_argument(fmt::format("acc_kkt_tol ({}) must be <= div_kkt_tol ({})",
+                                                acc_kkt_tol_, div_kkt_tol_));
+    if (acc_econ_tol_ > div_econ_tol_)
+        throw std::invalid_argument(fmt::format("acc_econ_tol ({}) must be <= div_econ_tol ({})",
+                                                acc_econ_tol_, div_econ_tol_));
+    if (acc_icon_tol_ > div_icon_tol_)
+        throw std::invalid_argument(fmt::format("acc_icon_tol ({}) must be <= div_icon_tol ({})",
+                                                acc_icon_tol_, div_icon_tol_));
+    if (acc_bar_tol_ > div_bar_tol_)
+        throw std::invalid_argument(fmt::format("acc_bar_tol ({}) must be <= div_bar_tol ({})",
+                                                acc_bar_tol_, div_bar_tol_));
+
+    // --- Barrier parameters ---
+    pos_finite(init_mu_, "init_mu");
+    pos_finite(min_mu_, "min_mu");
+    pos_finite(max_mu_, "max_mu");
+    if (min_mu_ > max_mu_)
+        throw std::invalid_argument(
+            fmt::format("min_mu ({}) must be <= max_mu ({})", min_mu_, max_mu_));
+    if (init_mu_ < min_mu_ || init_mu_ > max_mu_)
+        throw std::invalid_argument(fmt::format(
+            "init_mu ({}) must be within [min_mu ({}), max_mu ({})]", init_mu_, min_mu_, max_mu_));
+
+    // --- Step parameters ---
+    if (bound_fraction_ <= 0.0 || bound_fraction_ >= 1.0)
+        throw std::invalid_argument("bound_fraction must be in (0, 1)");
+    if (bound_push_ <= 0.0)
+        throw std::invalid_argument("bound_push must be > 0");
+    pos_finite(neg_slack_reset_, "neg_slack_reset");
+    pos_finite(soe_bound_relax_, "soe_bound_relax");
+    if (alpha_red_ <= 1.0)
+        throw std::invalid_argument("alpha_red must be > 1.0");
+
+    // --- Hessian perturbation ---
+    if (delta_h_ <= 0.0)
+        throw std::invalid_argument("delta_h must be > 0");
+    if (incr_h_ <= 1.0)
+        throw std::invalid_argument("incr_h must be > 1.0");
+    if (decr_h_ <= 0.0 || decr_h_ >= 1.0)
+        throw std::invalid_argument("decr_h must be in (0, 1)");
+
+    // --- QP solver ---
+    pos_int(qp_threads_, "qp_threads");
+    if (qp_pivot_perturb_ < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_pivot_perturb must be non-negative, got {}", qp_pivot_perturb_));
+    if (qp_ref_steps_ < 0)
+        throw std::invalid_argument(
+            fmt::format("qp_ref_steps must be non-negative, got {}", qp_ref_steps_));
+    if (qp_par_solve_ != 0 && qp_par_solve_ != 1)
+        throw std::invalid_argument(
+            fmt::format("qp_par_solve must be 0 or 1, got {}", qp_par_solve_));
+
+    // --- Objective ---
+    if (!std::isfinite(obj_scale_) || obj_scale_ == 0.0)
+        throw std::invalid_argument("obj_scale must be finite and non-zero");
+
+    // --- Output ---
+    if (print_level_ < 0)
+        throw std::invalid_argument(
+            fmt::format("print_level must be non-negative, got {}", print_level_));
+
+#ifdef USE_ACCELERATE_SPARSE
+    // --- Accelerate sparse solver ---
+    pos_finite(accel_pivot_tolerance_, "accel_pivot_tolerance");
+    pos_finite(accel_zero_tolerance_, "accel_zero_tolerance");
+#endif
+}
+
+// =============================================================================
+// QP parameter setup
+// =============================================================================
+
+void tycho::solvers::PSIOPT::set_qp_params() {
+#ifdef USE_ACCELERATE_SPARSE
+    // Accelerate interface uses different configuration methods
+    switch (settings_.qp_ord_) {
+    case QPOrderingModes::MINDEG:
+        this->kkt_sol_.set_order(SparseOrderAMD);
+        break;
+    case QPOrderingModes::METIS:
+        // Serial METIS: faster than MT-METIS at all tested scales (up to
+        // ~5400 primal variables) due to per-call thread coordination overhead.
+        this->kkt_sol_.set_order(SparseOrderMetis);
+        break;
+    case QPOrderingModes::PARMETIS:
+        // MT-METIS (macOS 26+): currently slower than serial METIS at tested
+        // scales. Retained for tracking Apple's improvements across releases.
+#ifdef TYCHO_HAS_MTMETIS
+        this->kkt_sol_.set_order(SparseOrderMTMetis);
+#else
+        this->kkt_sol_.set_order(SparseOrderMetis);
+#endif
+        break;
+    default:
+        throw std::invalid_argument("Unknown QPOrderingMode");
+    }
+    this->kkt_sol_.set_num_threads(settings_.qp_threads_);
+    this->kkt_sol_.set_iterative_refinement(settings_.qp_ref_steps_ > 0);
+    this->kkt_sol_.set_iterative_refinement_iterations(settings_.qp_ref_steps_);
+    this->kkt_sol_.set_pivot_tolerance(settings_.accel_pivot_tolerance_);
+    this->kkt_sol_.set_zero_tolerance(settings_.accel_zero_tolerance_);
+#else
+    this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
+    this->kkt_sol_.pivotstrat_ = static_cast<int>(settings_.qp_pivot_strategy_);
+    this->kkt_sol_.pivotpert_ = settings_.qp_pivot_perturb_;
+    this->kkt_sol_.matching_ = settings_.qp_matching_;
+    this->kkt_sol_.scaling_ = settings_.qp_scaling_;
+    this->kkt_sol_.iterref_ = settings_.qp_ref_steps_;
+    this->kkt_sol_.alg_ = static_cast<int>(settings_.qp_alg_);
+    this->kkt_sol_.msglvl_ = settings_.qp_print_;
+
+    if (settings_.cnr_mode_)
+        this->kkt_sol_.threads_ = settings_.qp_threads_;
+    this->kkt_sol_.parsolve_ = settings_.qp_par_solve_;
+    this->kkt_sol_.set_params();
+#endif
+}
+
+// =============================================================================
+// KKT matrix analysis
+// =============================================================================
+
+bool tycho::solvers::PSIOPT::analyze_kkt_matrix() {
+    bool docompute = true;
+    if (this->qp_analyzed_ && !(settings_.force_qp_analysis_)) {
+        docompute = false;
+    } else {
+        this->qp_analyzed_ = true;
+        docompute = true;
+    }
+    return docompute;
+}
+
+// =============================================================================
+// Release
+// =============================================================================
+
+void tycho::solvers::PSIOPT::release() {
+    this->kkt_sol_.release();
+    this->qp_analyzed_ = false;
+    this->nlp_.reset();
+    result_.primals_.resize(0);
+    result_.eq_lmults_.resize(0);
+    result_.iq_lmults_.resize(0);
+    result_.eq_cons_.resize(0);
+    result_.iq_cons_.resize(0);
+}
+
+// =============================================================================
+// Barrier math helpers
+// =============================================================================
+
+void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
+                                                Eigen::Ref<Eigen::VectorXd> FXI) const {
+    for (int i = 0; i < this->slack_vars_; i++) {
+        double fxi = FXI[i];
+        double si = S[i];
+        if (si < settings_.neg_slack_reset_) {
+            si = settings_.neg_slack_reset_;
+        }
+
+        if (fxi < 0.0) {
+            FXI[i] = 0.0;
+            S[i] = std::max(std::abs(fxi), settings_.neg_slack_reset_);
+        } else {
+            FXI[i] += si;
+        }
+    }
+}
+
+double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                                    Eigen::Ref<Eigen::VectorXd> dSLI,
+                                                    double bfrac) const {
+    double alpha = 1.0;
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        if (dSLI[i] < -bfrac * SLI[i]) {
+            double an = -bfrac * SLI[i] / dSLI[i];
+            if (an < alpha)
+                alpha = an;
+        }
+    }
+    return alpha;
+}
+
+void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
+                                             Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
+                                             double &mincomp, double &maxcomp) const {
+    Eigen::VectorXd StLI = S.cwiseProduct(LI);
+    mincomp = StLI.minCoeff();
+    maxcomp = StLI.maxCoeff();
+    avgcomp = StLI.sum() / double(StLI.size());
+}
+
+double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
+    double psi = 0;
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        psi += -mu * std::log(S[i]);
+    }
+    return psi;
+}
+
+void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
+                                              Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI - mu * (S.cwiseInverse());
+}
+
+void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
+                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI;
+}
+
+void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
+                                             Eigen::Ref<Eigen::VectorXd> S,
+                                             Eigen::Ref<Eigen::VectorXd> LI, double mu) {
+    Eigen::VectorXd hp = LI.cwiseQuotient(S);
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        if (hp[i] < 0.0) {
+            hp[i] = mu / (S[i] * S[i]);
+        }
+    }
+    this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
+}
+
+double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
+                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                       double mincomp) const {
+    double eta = mincomp / avgcomp;
+    double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
+    double sigma = std::min(0.8, abs(sigmat));
+    return sigma * avgcomp;
+}
+
+double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
+                                      double avgcomp, double mincomp) const {
+    double navgcomp = 0;
+    double nmincomp = 0;
+    double nmaxcomp = 0;
+    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp);
+    return std::pow(navgcomp / avgcomp, 3) * avgcomp;
+}
+
+// =============================================================================
+// NLP eval dispatch methods
+// =============================================================================
+
+void tycho::solvers::PSIOPT::eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_kkt(
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                         EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_kkt_no(
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_aug(
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->nlp_->eval_soe(
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
+        KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_rhs(double obj_scale,
+                                      const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
+                                      Eigen::Ref<Eigen::VectorXd> GX,
+                                      Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
+    this->nlp_->eval_rhs(
+        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
+        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
+        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_));
+}
+
+// =============================================================================
+// Solver initialization and NLP setup
+// =============================================================================
+
 void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     double initMs = ::tycho::solvers::ensure_solver_initialized();
     if (initMs > 0.0) {
-        this->last_solver_init_time_ = initMs / 1000.0;
-        // Suppress the init line when init was trivially fast (< 0.5 ms),
-        // which also covers subsequent calls (return 0.0).
+        this->result_.solver_init_time_ = initMs / 1000.0;
+        // Suppress the init line when init was trivially fast (< 0.5 ms).
         constexpr double kSolverInitPrintThresholdMs = 0.5;
-        if (initMs > kSolverInitPrintThresholdMs && this->print_level_ < 2) {
+        if (initMs > kSolverInitPrintThresholdMs && settings_.print_level_ < 2) {
             fmt::print(" Solver Initialization : ");
             fmt::print(fmt::fg(fmt::color::cyan), "{0:.3f} ms\n", initMs);
         }
     }
 }
 
-void tycho::solvers::PSIOPT::print_timing_summary() {
-    auto cyan = fmt::fg(fmt::color::cyan);
-    fmt::print(" KKT Analysis/Init Time       : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_pre_time_ * 1000.0);
-    fmt::print(" NLP Function Evaluation Time : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_func_time_ * 1000.0);
-    fmt::print(" KKT Factor/Solve Time        : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_kkt_time_ * 1000.0);
-    fmt::print(" Console Print Time           : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_print_time_ * 1000.0);
-    fmt::print(" Misc Time                    : ");
-    fmt::print(cyan, "{0:>10.3f} ms\n", this->last_misc_time_ * 1000.0);
-}
-
 void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
+    if (!np)
+        throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
     this->nlp_ = np;
     this->primal_vars_ = this->nlp_->primal_vars_;
     this->equal_cons_ = this->nlp_->equal_cons_;
     this->inequal_cons_ = this->nlp_->inequal_cons_;
     this->slack_vars_ = this->nlp_->slack_vars_;
     this->kkt_dim_ = this->nlp_->kkt_dim_;
+    if (kkt_dim_ != primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_)
+        throw std::logic_error(
+            fmt::format("PSIOPT::set_nlp: NLP kkt_dim ({}) != primal_vars ({}) + slack_vars ({}) "
+                        "+ equal_cons ({}) + inequal_cons ({})",
+                        kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
-    accelerate_set_num_threads(qp_threads_);
+    accelerate_set_num_threads(settings_.qp_threads_);
 #else
-    mkl_set_num_threads(qp_threads_);
+    mkl_set_num_threads(settings_.qp_threads_);
 #endif
 
     this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
@@ -69,81 +823,75 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // we changed the sparsity pattern via the reference returned from get_matrix.
     this->kkt_sol_.reinitialize_internal_matrix_representation();
 #endif
-    if (store_sp_mat_)
-        spmat = this->kkt_sol_.get_matrix();
     this->qp_analyzed_ = false;
 }
 
-void tycho::solvers::PSIOPT::max_primal_dual_step(Eigen::Ref<Eigen::VectorXd> XSL,
-                                                  Eigen::Ref<Eigen::VectorXd> DXSL, double bfrac,
+void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac,
                                                   double &alphap, double &alphad) {
-    double Smax = this->max_step_to_boundary(this->get_slacks(XSL), this->get_slacks(DXSL), bfrac);
-    double Lmax =
-        this->max_step_to_boundary(this->get_iq_lmults(XSL), this->get_iq_lmults(DXSL), bfrac);
+    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac);
+    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac);
 
     double primstep = Smax;
     double slackstep = Smax;
     double eqmultstep = Smax;
     double iqmultstep = Lmax;
 
-    if (this->pd_step_strategy_ == PDStepStrategies::PrimSlackEq_Iq) {
-    } else if (this->pd_step_strategy_ == PDStepStrategies::AllMinimum) {
+    if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlackEq_Iq) {
+    } else if (settings_.pd_step_strategy_ == PDStepStrategies::AllMinimum) {
         double step = std::min(Smax, Lmax);
         primstep = step;
         slackstep = step;
         eqmultstep = step;
         iqmultstep = step;
-    } else if (this->pd_step_strategy_ == PDStepStrategies::PrimSlack_EqIq) {
+    } else if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlack_EqIq) {
         eqmultstep = Lmax;
-    } else if (this->pd_step_strategy_ == PDStepStrategies::MaxEq) {
+    } else if (settings_.pd_step_strategy_ == PDStepStrategies::MaxEq) {
         double step = std::max(Smax, Lmax);
         eqmultstep = step;
     }
-    this->get_primals(DXSL) *= primstep;
+    dxsl.primals() *= primstep;
     if (inequal_cons_ > 0)
-        this->get_slacks(DXSL) *= slackstep;
+        dxsl.slacks() *= slackstep;
     if (equal_cons_ > 0)
-        this->get_eq_lmults(DXSL) *= eqmultstep;
+        dxsl.eq_lmults() *= eqmultstep;
     if (inequal_cons_ > 0)
-        this->get_iq_lmults(DXSL) *= iqmultstep;
+        dxsl.iq_lmults() *= iqmultstep;
 
     alphap = Smax;
     alphad = Lmax;
 }
 
-void tycho::solvers::PSIOPT::fill_iter_info(Eigen::Ref<Eigen::VectorXd> XSL,
-                                            Eigen::Ref<Eigen::VectorXd> RHS, double pobj,
+void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
                                             double bobj, double mu, IterateInfo &iter) const {
 
     iter.prim_obj_ = pobj;
     iter.barr_obj_ = bobj;
     iter.mu_ = mu;
     iter.p_pivots_ = this->kkt_sol_.ppivs();
-    iter.kkt_inf_ = this->get_prim_grad(RHS).lpNorm<Eigen::Infinity>();
+    iter.kkt_inf_ = rhs.prim_grad().lpNorm<Eigen::Infinity>();
 
     double avgcomp = 0;
     double mincomp = 0;
     double maxcomp = 0;
     if (inequal_cons_ > 0) {
-        iter.icon_inf_ = this->get_iq_cons(RHS).lpNorm<Eigen::Infinity>();
-        iter.icon_norm_err_ = this->get_iq_cons(RHS).norm();
-        iter.max_i_mult_ = this->get_iq_lmults(XSL).lpNorm<Eigen::Infinity>();
-        this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
-                              maxcomp);
+        iter.icon_inf_ = rhs.iq_cons().lpNorm<Eigen::Infinity>();
+        iter.icon_norm_err_ = rhs.iq_cons().norm();
+        iter.max_i_mult_ = xsl.iq_lmults().lpNorm<Eigen::Infinity>();
+        this->complementarity(xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
 
         iter.barr_inf_ = maxcomp;
         iter.barr_norm_err_ = avgcomp;
     }
     if (equal_cons_ > 0) {
-        iter.econ_inf_ = this->get_eq_cons(RHS).lpNorm<Eigen::Infinity>();
-        iter.econ_norm_err_ = this->get_eq_cons(RHS).norm();
-        iter.max_e_mult_ = this->get_eq_lmults(XSL).lpNorm<Eigen::Infinity>();
+        iter.econ_inf_ = rhs.eq_cons().lpNorm<Eigen::Infinity>();
+        iter.econ_norm_err_ = rhs.eq_cons().norm();
+        iter.max_e_mult_ = xsl.eq_lmults().lpNorm<Eigen::Infinity>();
     }
 
-    iter.kkt_norm_err_ = this->get_prim_grad(RHS).norm();
+    iter.kkt_norm_err_ = rhs.prim_grad().norm();
 
     if (equal_cons_ > 0 || inequal_cons_ > 0)
-        iter.all_con_norm_err_ = this->get_all_cons(RHS).norm();
+        iter.all_con_norm_err_ = rhs.all_cons().norm();
 }
 
 void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
@@ -167,8 +915,8 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         this->nlp_->set_primal_diags(1.0);
         eval_soe(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp_->set_primal_diags(0.0);
-        this->get_prim_grad(GX).setZero();
-        this->get_prim_grad(AGXS_FX).setZero();
+        GX.head(primal_vars_).setZero();
+        AGXS_FX.head(primal_vars_).setZero();
         break;
     default:
         throw std::invalid_argument("Unknown AlgorithmMode");
@@ -176,17 +924,18 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
 }
 
 tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
+    assert(!iters.empty() && "converge_check called with empty iteration history");
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
     IterateInfo last = iters.back();
-    bool KKTFeas = (last.kkt_inf_ < this->kkt_tol_);
-    bool EConFeas = (last.econ_inf_ < this->econ_tol_);
-    bool IConFeas = (last.icon_inf_ < this->icon_tol_);
-    bool BarFeas = (last.barr_inf_ < this->bar_tol_);
+    bool KKTFeas = (last.kkt_inf_ < settings_.kkt_tol_);
+    bool EConFeas = (last.econ_inf_ < settings_.econ_tol_);
+    bool IConFeas = (last.icon_inf_ < settings_.icon_tol_);
+    bool BarFeas = (last.barr_inf_ < settings_.bar_tol_);
 
-    bool KKTDiv = (last.kkt_inf_ > this->div_kkt_tol_) || !std::isfinite(last.kkt_inf_);
-    bool EConDiv = (last.econ_inf_ > this->div_econ_tol_) || !std::isfinite(last.econ_inf_);
-    bool IConDiv = (last.icon_inf_ > this->div_icon_tol_) || !std::isfinite(last.icon_inf_);
-    bool BarDiv = (last.barr_inf_ > this->div_bar_tol_) || !std::isfinite(last.barr_inf_);
+    bool KKTDiv = (last.kkt_inf_ > settings_.div_kkt_tol_) || !std::isfinite(last.kkt_inf_);
+    bool EConDiv = (last.econ_inf_ > settings_.div_econ_tol_) || !std::isfinite(last.econ_inf_);
+    bool IConDiv = (last.icon_inf_ > settings_.div_icon_tol_) || !std::isfinite(last.icon_inf_);
+    bool BarDiv = (last.barr_inf_ > settings_.div_bar_tol_) || !std::isfinite(last.barr_inf_);
 
     if (KKTDiv || EConDiv || IConDiv || BarDiv) {
         Flag = ConvergenceFlags::DIVERGING;
@@ -194,20 +943,20 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     } else if (KKTFeas && EConFeas && IConFeas && BarFeas) {
         Flag = ConvergenceFlags::CONVERGED;
         return Flag;
-    } else if (int(iters.size()) > this->max_acc_iters_) {
+    } else if (int(iters.size()) > settings_.max_acc_iters_) {
         int nfeas = 0;
-        for (int i = 0; i < this->max_acc_iters_; i++) {
+        for (int i = 0; i < settings_.max_acc_iters_; i++) {
             last = iters[int(iters.size()) - i - 1];
-            KKTFeas = (last.kkt_inf_ < this->acc_kkt_tol_);
-            EConFeas = (last.econ_inf_ < this->acc_econ_tol_);
-            IConFeas = (last.icon_inf_ < this->acc_icon_tol_);
-            BarFeas = (last.barr_inf_ < this->acc_bar_tol_);
+            KKTFeas = (last.kkt_inf_ < settings_.acc_kkt_tol_);
+            EConFeas = (last.econ_inf_ < settings_.acc_econ_tol_);
+            IConFeas = (last.icon_inf_ < settings_.acc_icon_tol_);
+            BarFeas = (last.barr_inf_ < settings_.acc_bar_tol_);
             if (KKTFeas && EConFeas && IConFeas && BarFeas)
                 nfeas++;
             else
                 break;
         }
-        if (nfeas == this->max_acc_iters_) {
+        if (nfeas == settings_.max_acc_iters_) {
             Flag = ConvergenceFlags::ACCEPTABLE;
             return Flag;
         }
@@ -216,239 +965,10 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     return Flag;
 }
 
-void tycho::solvers::PSIOPT::print_psiopt() {
-
-    constexpr const char *PsioptStr =
-        "       ____    _____    ____          ____     ____   ______\n"
-        "      / __ \\  / ___/   /  _/         / __ \\   / __ \\ /_  __/\n"
-        "     / /_/ /  \\__ \\    / /   ______ / / / /  / /_/ /  / /   \n"
-        "    / ____/  ___/ /  _/ /   /_____// /_/ /  / ____/  / /    \n"
-        "   /_/      /____/  /___/          \\____/  /_/      /_/    \n";
-    print_header();
-    fmt::print(fmt::fg(fmt::color::crimson), PsioptStr);
-    fmt::print(fmt::fg(fmt::color::crimson),
-               " \n       Parallel Sparse Interior-point Optimizer\n");
-    print_header();
-}
-
-void tycho::solvers::PSIOPT::print_settings() {
-    using std::cout;
-    using std::endl;
-
-    auto cyan = fmt::fg(fmt::color::cyan);
-    auto magenta = fmt::fg(fmt::color::magenta);
-
-    fmt::print(magenta, "Convergence Criteria\n\n");
-
-    fmt::print("{0:_^{1}}\n", "", 39);
-    fmt::print("|------|   tol   | Acctol  | Divtol  |\n");
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "KKT", this->kkt_tol_,
-               this->acc_kkt_tol_, this->div_kkt_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "Bar", this->bar_tol_,
-               this->acc_bar_tol_, this->div_bar_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ECons", this->econ_tol_,
-               this->acc_econ_tol_, this->div_econ_tol_);
-    fmt::print("|{0:<6}|{1:>8.3e}|{2:>8.3e}|{3:>8.3e}|\n", "ICons", this->icon_tol_,
-               this->acc_icon_tol_, this->div_icon_tol_);
-}
-
-void tycho::solvers::PSIOPT::print_matrixinfo() {}
-
-void tycho::solvers::PSIOPT::print_stats() {
-    print_psiopt();
-
-    auto cyan = fmt::fg(fmt::color::cyan);
-    auto magenta = fmt::fg(fmt::color::magenta);
-
-    fmt::print(magenta, "Problem Statistics\n\n");
-
-    fmt::print(" Primal Variables         : ");
-    fmt::print(cyan, "{:<10}\n", this->primal_vars_);
-    fmt::print(" Equality Constraints     : ");
-    fmt::print(cyan, "{:<10}\n", this->equal_cons_);
-    fmt::print(" Inequality Constraints   : ");
-    fmt::print(cyan, "{:<10}\n", this->inequal_cons_);
-    fmt::print("\n");
-    fmt::print(" KKT-Matrix DIM (P+E+2*I) : ");
-    fmt::print(cyan, "{:<10}\n", this->kkt_dim_);
-    fmt::print(" KKT-Matrix NNZs          : ");
-    fmt::print(cyan, "{:<10}\n", this->kkt_sol_.get_matrix().nonZeros());
-    fmt::print(" KKT-Matrix NNZ%          : ");
-    fmt::print(cyan, "{:.6f}%\n",
-               100.0 * double(this->kkt_sol_.get_matrix().nonZeros()) /
-                   (double(this->kkt_dim_) * double(this->kkt_dim_)));
-    fmt::print("\n");
-}
-
-void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
-    auto last = iters.back();
-    bool wide = false;
-
-    if (last.iter % 10 == 0) {
-        if (wide_console_) {
-            fmt::print("{0:=^{1}}\n", "", 159);
-            fmt::print(
-                "|Iter| mu Val | Prim Obj |  Bar Obj |  KKT Inf |  Bar Inf | ECons Inf| ICons "
-                "Inf|Max "
-                "EMult|Max IMult| AlphaP | AlphaD | AlphaT | Merit Val|LSI|PPS|HFI| HPert |\n");
-        } else {
-            fmt::print("{0:=^{1}}\n", "", 119);
-            fmt::print("|Iter| mu Val | Prim Obj |  Bar Obj |  KKT Inf |  Bar Inf | ECons Inf| "
-                       "ICons Inf| AlphaP | "
-                       "AlphaD |LS| PPS |HF| HPert |\n");
-        }
-        auto tst =
-            "|Iter|mu Val | Prim Obj |KKT Inf |ECon Inf|ICon Inf|AlphaM |LS|PPS|HF| HPert |\n";
-    }
-
-    fmt::text_style PHashcol = fmt::text_style();
-    fmt::text_style EHashcol = fmt::text_style();
-    fmt::text_style IHashcol = fmt::text_style();
-    fmt::text_style KHashcol = fmt::text_style();
-    fmt::text_style BHashcol = fmt::text_style();
-    fmt::text_style BOHashcol = fmt::text_style();
-
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, this->kkt_tol_, this->acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, this->bar_tol_, this->acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, this->econ_tol_, this->acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, this->icon_tol_, this->acc_icon_tol_);
-
-    if (iters.size() > 1) {
-
-        auto GCol = fmt::fg(fmt::color::lime_green);
-        auto BCol = fmt::fg(fmt::color::red);
-
-        PHashcol = (iters.back().prim_obj_ <= iters[iters.size() - 2].prim_obj_) ? GCol : BCol;
-        BOHashcol = (iters.back().barr_obj_ <= iters[iters.size() - 2].barr_obj_) ? GCol : BCol;
-        BHashcol = (iters.back().barr_inf_ <= iters[iters.size() - 2].barr_inf_) ? GCol : BCol;
-        EHashcol = (iters.back().econ_inf_ <= iters[iters.size() - 2].econ_inf_) ? GCol : BCol;
-        IHashcol = (iters.back().icon_inf_ <= iters[iters.size() - 2].icon_inf_) ? GCol : BCol;
-        KHashcol = (iters.back().kkt_inf_ <= iters[iters.size() - 2].kkt_inf_) ? GCol : BCol;
-    }
-
-    auto hash = []() { fmt::print("|"); };
-    auto chash = [](fmt::text_style c) { fmt::print(c, "|"); };
-
-    hash();
-    fmt::print("{:<4}", last.iter);
-    hash();
-    fmt::print("{:.2e}", last.mu_);
-    hash();
-    fmt::print("{:>10.3e}", last.prim_obj_);
-    chash(PHashcol);
-    fmt::print("{:>10.3e}", last.barr_obj_);
-    chash(BOHashcol);
-    fmt::print(Kcol, "{:>10.4e}", last.kkt_inf_);
-    chash(KHashcol);
-    fmt::print(Bcol, "{:>10.4e}", last.barr_inf_);
-    chash(BHashcol);
-    fmt::print(Ecol, "{:>10.4e}", last.econ_inf_);
-    chash(EHashcol);
-    fmt::print(Icol, "{:>10.4e}", last.icon_inf_);
-    chash(IHashcol);
-
-    if (wide_console_) {
-        fmt::print(
-            "{:>9.3e}|{:>9.3e}|{:>8.2e}|{:>8.2e}|{:>8.2e}|{:>10.3e}|{:>3}|{:>3}|{:>3}|{:>6.1e}|\n",
-            last.max_e_mult_, last.max_i_mult_, last.alpha_p_, last.alpha_d_, last.alpha_t_,
-            last.merit_val_, last.ls_iters_, last.p_pivots_, last.h_facs_, last.h_pert_);
-    } else {
-        fmt::print("{:>8.2e}|{:>8.2e}|{:>2}|{:>5}|{:>2}|{:>6.1e}|\n", last.alpha_t_ * last.alpha_p_,
-                   last.alpha_t_ * last.alpha_d_, last.ls_iters_, last.p_pivots_, last.h_facs_,
-                   last.h_pert_);
-    }
-}
-
-void tycho::solvers::PSIOPT::print_beginning(std::string msg) const {
-    fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
-    fmt::print(": ");
-    fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
-    fmt::print("\n");
-}
-
-void tycho::solvers::PSIOPT::print_finished(std::string msg) const {
-
-    fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
-    fmt::print(": ");
-    fmt::print(fmt::fg(fmt::color::royal_blue), "{}", msg);
-    fmt::print("\n");
-}
-
-void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const IterateInfo &last,
-                                              int iternum, double tottime, double nlptime,
-                                              double qptime, double printtime) {
-    fmt::text_style Kcol = calculate_color(last.kkt_inf_, this->kkt_tol_, this->acc_kkt_tol_);
-    fmt::text_style Bcol = calculate_color(last.barr_inf_, this->bar_tol_, this->acc_bar_tol_);
-    fmt::text_style Ecol = calculate_color(last.econ_inf_, this->econ_tol_, this->acc_econ_tol_);
-    fmt::text_style Icol = calculate_color(last.icon_inf_, this->icon_tol_, this->acc_icon_tol_);
-
-    auto TColor = fmt::fg(fmt::color::cyan);
-    auto Printtime = [&](const char *msg, double t1) {
-        fmt::print("{}", msg);
-        fmt::print(TColor, "{0:>10.3f} ms {1:>10.3f} ms/iter\n", t1, double(t1 / iternum));
-    };
-
-    if (this->print_level_ < 3) {
-        if (ExitCode == ConvergenceFlags::CONVERGED) {
-            fmt::print(fmt::fg(fmt::color::lime_green), "\nOptimal Solution Found\n");
-        } else if (ExitCode == ConvergenceFlags::ACCEPTABLE) {
-            fmt::print(fmt::fg(fmt::color::yellow), "\nAcceptable Solution Found\n");
-        } else if (ExitCode == ConvergenceFlags::DIVERGING) {
-            fmt::print(fmt::fg(fmt::color::dark_red), "\nSolution Diverging\n");
-        } else if (ExitCode == ConvergenceFlags::NOTCONVERGED) {
-            fmt::print(fmt::fg(fmt::color::red), "\nNo Solution Found\n");
-        }
-    }
-
-    if (this->print_level_ < 2) {
-
-        fmt::print(" Iterations : ");
-        fmt::print("{:<5}\n", iternum);
-        fmt::print(" Prim Obj   : ");
-        fmt::print("{:<15.8e}\n", last.prim_obj_);
-        fmt::print(" KKT Inf    : ");
-        fmt::print(Kcol, "{:<15.8e}\n", last.kkt_inf_);
-        fmt::print(" Bar Inf    : ");
-        fmt::print(Bcol, "{:<15.8e}\n", last.barr_inf_);
-        fmt::print(" ECons Inf  : ");
-        fmt::print(Ecol, "{:<15.8e}\n", last.econ_inf_);
-        fmt::print(" ICons Inf  : ");
-        fmt::print(Icol, "{:<15.8e}\n", last.icon_inf_);
-
-        fmt::print("\n");
-
-        Printtime(" NLP Function Evaluation Time : ", nlptime);
-        Printtime(" KKT Matrix Factor/Solve Time : ", qptime);
-        Printtime(" Console Print Time           : ", printtime);
-        Printtime(" Total Time                   : ", tottime);
-
-        fmt::print("\n");
-    }
-}
-
-fmt::text_style tycho::solvers::PSIOPT::calculate_color(double val, double targ, double acc) {
-    auto level1 = std::log(targ);
-    auto level3 = std::log(acc);
-    auto level5 = std::log(acc * 1000.0);
-    auto level2 = (level1 + level3) / 2.0;
-    auto level4 = (level3 + level5) / 2.0;
-
-    auto logval = std::log(val);
-    fmt::color c;
-
-    if (logval < level1)
-        c = fmt::color::lime_green;
-    else if (logval < level2)
-        c = fmt::color::yellow;
-    else if (logval < level3)
-        c = fmt::color::orange;
-    else if (logval < level4)
-        c = fmt::color::red;
-    else
-        c = fmt::color::dark_red;
-    return fmt::fg(c);
-}
-
+// Inertia-correcting factorization: if the LDLT factorization has incorrect
+// inertia (more negative eigenvalues than expected from the constraint block),
+// perturb the primal diagonal by increasing amounts until correct inertia is
+// achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert) {
     auto Inertia = [&]() {
@@ -456,7 +976,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     };
     auto RankDef = [&]() {
         if ((this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0) {
-            std::cout << "Potential Rank Deficiency Detected!!!" << std::endl;
+            if (settings_.print_level_ < 3)
+                fmt::print(fmt::fg(fmt::color::yellow),
+                           "Warning: Potential Rank Deficiency Detected\n");
         }
     };
     auto Perturb = [&](double p) {
@@ -479,7 +1001,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     }
     double p = ipurt;
 
-    for (int i = 0; i < this->max_refac_; i++) {
+    for (int i = 0; i < settings_.max_refac_; i++) {
         Perturb(p);
         Refactor();
         RankDef();
@@ -494,7 +1016,12 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
             p *= incpurt;
         p -= finalpert;
     }
-    return this->max_refac_;
+    if (settings_.print_level_ < 3)
+        fmt::print(fmt::fg(fmt::color::yellow),
+                   "Warning: Inertia correction exhausted ({} perturbation attempts, "
+                   "{} excess eigenvalue(s))\n",
+                   settings_.max_refac_, IncEigs);
+    return settings_.max_refac_;
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
@@ -507,7 +1034,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     Eigen::VectorXd PGX(this->primal_vars_);
 
     Eigen::VectorXd Temp(this->kkt_dim_);
-    Eigen::VectorXd Err;
 
     Eigen::VectorXd BestXSL;
     Eigen::VectorXd BestRHS;
@@ -516,22 +1042,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     double mu = MuI;
 
+    // Create KKTVector views over the working vectors
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_rhs = kkt_view(RHS);
+    KKTVector v_dxsl = kkt_view(DXSL);
+    KKTVector v_temp = kkt_view(Temp);
+
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
-    tycho::utils::Timer LStimer;
     tycho::utils::Timer QPtimer;
-    tycho::utils::Timer
-        CBtimer; // Callback time is included in last_misc_time_ (not separately reported)
+    tycho::utils::Timer CBtimer; // Callback time falls into misc_time_ implicitly (misc = total -
+                                 // pre - kkt - func - print)
     tycho::utils::Timer Printtimer;
 
-    double Hpert0 = this->delta_h_;
+    double Hpert0 = settings_.delta_h_;
     std::vector<IterateInfo> iters;
-    iters.reserve(this->max_iters_);
-    ConvergenceFlags ExitCode;
+    iters.reserve(settings_.max_iters_);
+    ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
     bool FirstPert = true;
 
     Runtimer.start();
-    for (int i = 0; i < this->max_iters_; i++) {
+    for (int i = 0; i < settings_.max_iters_; i++) {
         IterateInfo Citer;
         Citer.iter = i;
 
@@ -547,20 +1078,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         double prim_obj = 0;
         double barr_obj = 0;
 
+        // Evaluate NLP and build barrier terms
         Funtimer.start();
-        /////////////////////////////////////////////////////////////
 
         this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
 
         if (this->inequal_cons_ > 0) {
-            this->apply_reset_slacks(this->get_slacks(XSL), this->get_iq_cons(RHS));
-            this->barrier_hessian(this->kkt_sol_.get_matrix(), this->get_slacks(XSL),
-                                  this->get_iq_lmults(XSL), mu);
-            this->complementarity(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp, mincomp,
-                                  maxcomp);
+            this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
+            this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
+                                  mu);
+            this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
         }
 
-        ///////////////////////////////////////////////////////////////
         Funtimer.stop();
         if (this->early_callback_enabled_) {
             CBtimer.start();
@@ -568,18 +1097,23 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                                   this->kkt_sol_.get_matrix());
             CBtimer.stop();
         }
-        QPtimer.start();
-        ////////////////////////////////////////////////////////////////
-        RHS.head(this->primal_vars_) += PGX;
 
-        ////////////////////////////////////////////////////////////////
+        // Assemble KKT gradient and factorize with inertia correction
+        QPtimer.start();
+        v_rhs.prim_grad() += PGX;
+
         double nhpert = 0;
-        double Incr = this->incr_h_;
-        double Incr2 = this->incr_h_;
+        double Incr = settings_.incr_h_;
+        double Incr2 = settings_.incr_h_;
         if (FirstPert)
-            Incr2 *= this->incr_h_;
+            Incr2 *= settings_.incr_h_;
+        // Cycling heuristic: if the last 4 consecutive iterations all required
+        // Hessian perturbation (h_facs_ > 0), skip the zero-perturbation attempt
+        // to avoid wasted factorizations when the problem is persistently
+        // near-singular. The (i*3)%4 != 0 condition samples 3/4 of iterations,
+        // periodically re-probing for recovered inertia.
         bool Zfac = true;
-        if (this->fast_factor_alg_ && i > 6 && ((i * 3) % 4) != 0) {
+        if (settings_.fast_factor_alg_ && i > 6 && ((i * 3) % 4) != 0) {
             bool cycling = true;
             for (int j = 0; j < 4; j++) {
                 int ns = iters[iters.size() - 1 - j].h_facs_;
@@ -592,54 +1126,50 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         }
 
         Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert);
+        // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
+        // we proceed rather than aborting. The line search evaluates actual function values
+        // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
+        // would be an algorithmic change that could break existing convergence behavior.
 
         if (Citer.h_facs_ > 0) {
-            Hpert0 = std::max(this->delta_h_, nhpert * decr_h_);
+            Hpert0 = std::max(settings_.delta_h_, nhpert * settings_.decr_h_);
             FirstPert = false;
         }
         Citer.h_pert_ = nhpert;
-        ///////////////////////////////////////////////////////////////////
 
+        // Update barrier parameter and compute search direction
         if (this->inequal_cons_ > 0) {
             switch (barmode) {
             case BarrierModes::PROBE:
-                this->barrier_gradient(this->get_iq_lmults(XSL), this->get_dual_grad(RHS));
+                this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
                 DXSL = -this->kkt_sol_.solve(RHS);
-                this->max_primal_dual_step(XSL, DXSL, this->bound_fraction_, alphap, alphad);
+                this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
+                                           alphad);
                 Temp = XSL + DXSL;
-                mu = this->mpc_mu(this->get_slacks(Temp), this->get_iq_lmults(Temp), avgcomp,
-                                  mincomp);
+                mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp);
 
                 break;
             case BarrierModes::LOQO:
-                mu = this->loqo_mu(this->get_slacks(XSL), this->get_iq_lmults(XSL), avgcomp,
-                                   mincomp);
-                break;
-            case BarrierModes::FIACCO:
+                mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
                 break;
             default:
-                break;
+                throw std::invalid_argument("Unknown BarrierMode");
             }
 
-            mu = std::max(mu, this->min_mu_);
-            mu = std::min(mu, this->max_mu_);
-            barr_obj = this->barrier_objective(this->get_slacks(XSL), mu);
-            this->barrier_gradient(this->get_slacks(XSL), this->get_iq_lmults(XSL), mu,
-                                   this->get_dual_grad(RHS));
+            mu = std::max(mu, settings_.min_mu_);
+            mu = std::min(mu, settings_.max_mu_);
+            barr_obj = this->barrier_objective(v_xsl.slacks(), mu);
+            this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
         }
 
         DXSL = -this->kkt_sol_.solve(RHS);
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
-            this->max_primal_dual_step(XSL, DXSL, this->bound_fraction_, alphap, alphad);
-        /////////////////////////////////////////////////////////////////////
-        if (diagnostic_) {
-        }
+            this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
         QPtimer.stop();
 
+        // Line search
         Funtimer.start();
-        //////////////////////////////////////////////////////////////////////
-
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
@@ -650,19 +1180,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Citer.h_facs_ = -1;
         }
 
-        //////////////////////////////////////////////////////////////////////
         Funtimer.stop();
 
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
         Citer.alpha_t_ = alpha;
 
-        this->fill_iter_info(XSL, RHS, prim_obj, barr_obj, mu, Citer);
+        this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
 
-        if (this->return_best_) {
+        if (settings_.return_best_) {
             double critval;
-            switch (this->best_criteria_) {
+            switch (settings_.best_criteria_) {
             case BestCriteriaModes::ECONS:
                 critval = iters.back().econ_inf_;
                 break;
@@ -696,64 +1225,65 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (!GoodStep)
             ExitCode = ConvergenceFlags::DIVERGING;
 
-        if (this->print_level_ == 0) {
+        if (settings_.print_level_ == 0) {
             Printtimer.start();
             this->print_last_iterate(iters);
             Printtimer.stop();
         }
 
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || i == (this->max_iters_ - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || i == (settings_.max_iters_ - 1)) {
 
-            if (ExitCode != ConvergenceFlags::CONVERGED && this->return_best_) {
+            if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
                 XSL = BestXSL;
                 RHS = BestRHS;
             }
 
-            this->converge_flag_ = ExitCode;
+            this->result_.converge_flag_ = ExitCode;
             break;
         }
 
-        /////////Very Important/////////
+        // Apply step
         XSL += alpha * DXSL;
-        ///////////////////////////////
     }
 
     if (algmode == AlgorithmModes::OPT) {
-        this->last_obj_val_ = iters.back().prim_obj_;
+        this->result_.obj_val_ = iters.back().prim_obj_;
     } else {
         Funtimer.start();
-        this->last_obj_val_ = 0;
-        this->nlp_->eval_obj(obj_scale, XSL.head(this->primal_vars_), this->last_obj_val_);
+        this->result_.obj_val_ = 0;
+        this->nlp_->eval_obj(obj_scale, v_xsl.primals(), this->result_.obj_val_);
         Funtimer.stop();
     }
 
+    this->result_.primals_ = v_xsl.primals();
+
     if (this->equal_cons_ > 0) {
-        this->last_eq_cons_ = this->get_eq_cons(RHS);
-        this->last_eq_lmults_ = this->get_eq_lmults(XSL);
+        this->result_.eq_cons_ = v_rhs.eq_cons();
+        this->result_.eq_lmults_ = v_xsl.eq_lmults();
     }
     if (this->inequal_cons_ > 0) {
-        this->last_iq_cons_ = this->get_iq_cons(RHS) - this->get_slacks(XSL);
-        this->last_iq_lmults_ = this->get_iq_lmults(XSL);
+        this->result_.iq_cons_ = v_rhs.iq_cons() - v_xsl.slacks();
+        this->result_.iq_lmults_ = v_xsl.iq_lmults();
     }
 
     Runtimer.stop();
-    this->last_iter_num_ += iters.size();
+    this->result_.iter_num_ += iters.size();
     double qptime = double(QPtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double nlptime = double(Funtimer.count<std::chrono::microseconds>()) / 1000000.0;
     double tottime = double(Runtimer.count<std::chrono::microseconds>()) / 1000000.0;
 
-    this->last_func_time_ += nlptime;
-    this->last_kkt_time_ += qptime;
+    this->result_.func_time_ += nlptime;
+    this->result_.kkt_time_ += qptime;
     double printtime = double(Printtimer.count<std::chrono::microseconds>()) / 1000000.0;
-    this->last_print_time_ += printtime;
+    this->result_.print_time_ += printtime;
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    int retiter = (this->return_best_ ? BestIter : iters.size() - 1);
+    // Print exit statistics
+    assert(!iters.empty());
+    assert(!settings_.return_best_ || BestIter < static_cast<int>(iters.size()));
+    int retiter = (settings_.return_best_ ? BestIter : static_cast<int>(iters.size()) - 1);
     print_exit_stats(ExitCode, iters[retiter], iters.size(), tottime * 1000, nlptime * 1000,
                      qptime * 1000, printtime * 1000);
-    ////////////////////////////////////////////////////////////////////////////
 
     return XSL;
 }
@@ -775,27 +1305,30 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     if (this->inequal_cons_ > 0) {
         this->nlp_->set_slacks_ones();
     }
-    this->eval_nlp(AlgorithmModes::INIT, this->obj_scale_, XSL, val, RHS.head(this->primal_vars_),
-                   RHS, this->kkt_sol_.get_matrix());
+    this->eval_nlp(AlgorithmModes::INIT, settings_.obj_scale_, XSL, val,
+                   RHS.head(this->primal_vars_), RHS, this->kkt_sol_.get_matrix());
+
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_rhs = kkt_view(RHS);
 
     Eigen::VectorXd hp(this->slack_vars_);
 
     for (int i = 0; i < this->slack_vars_; i++) {
-        double fxi = this->get_iq_cons(RHS)[i];
-        if (fxi < -this->bound_push_) {
-            this->get_slacks(XSL)[i] = abs(fxi);
+        double fxi = v_rhs.iq_cons()[i];
+        if (fxi < -settings_.bound_push_) {
+            v_xsl.slacks()[i] = abs(fxi);
         } else {
-            this->get_slacks(XSL)[i] = this->bound_push_;
+            v_xsl.slacks()[i] = settings_.bound_push_;
         }
         hp[i] = 1.0;
-        this->get_iq_lmults(XSL)[i] = mu / this->get_slacks(XSL)[i];
+        v_xsl.iq_lmults()[i] = mu / v_xsl.slacks()[i];
     }
 
     RHS.tail(this->equal_cons_ + this->inequal_cons_).setZero();
 
     if (this->inequal_cons_ > 0)
         this->nlp_->assign_kkt_slack_hessian(hp, this->kkt_sol_.get_matrix());
-    if (this->print_level_ < 2) {
+    if (settings_.print_level_ < 2) {
         print_beginning("KKT-Matrix Analysis ");
     }
 
@@ -806,19 +1339,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     kktt.stop();
 
     double pretime = double(kktt.count<std::chrono::microseconds>()) / 1000000.0;
-    this->last_pre_time_ += pretime;
+    this->result_.pre_time_ += pretime;
 
-    this->factor_flops_ = this->kkt_sol_.flops_;
-    this->factor_mem_ = this->kkt_sol_.mem_;
+    this->result_.factor_flops_ = this->kkt_sol_.flops_;
+    this->result_.factor_mem_ = this->kkt_sol_.mem_;
 
-    if (this->print_level_ < 2) {
+    if (settings_.print_level_ < 2) {
         auto cyan = fmt::fg(fmt::color::cyan);
         if (docompute) {
             fmt::print(" LDLT Factor Size      : ");
-            fmt::print(cyan, "{0:<10}\n", this->factor_mem_);
-            if (this->factor_flops_ > 0) {
+            fmt::print(cyan, "{0:<10}\n", this->result_.factor_mem_);
+            if (this->result_.factor_flops_ > 0) {
                 fmt::print(" LDLT Factor FLOPs     : ");
-                fmt::print(cyan, "{0} MFLOPs\n", this->factor_flops_);
+                fmt::print(cyan, "{0} MFLOPs\n", this->result_.factor_flops_);
             }
         }
         fmt::print(" Analysis/Reorder Time : ");
@@ -827,9 +1360,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     }
 
     Eigen::VectorXd dx = -this->kkt_sol_.solve(RHS);
+    KKTVector v_dx = kkt_view(dx);
 
     if (equal_cons_ > 0)
-        this->get_eq_lmults(XSL) = this->get_eq_lmults(dx);
+        v_xsl.eq_lmults() = v_dx.eq_lmults();
     if (this->inequal_cons_ > 0)
         this->nlp_->set_slack_diags(0.0);
     this->nlp_->set_primal_diags(0.0);
@@ -837,432 +1371,317 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
-double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
-                                       double prim_obj, double barr_obj, EigenRef<VectorXd> XSL,
-                                       EigenRef<VectorXd> DXSL, EigenRef<VectorXd> XSL2,
-                                       EigenRef<VectorXd> RHS, EigenRef<VectorXd> RHS2,
-                                       IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
+// ============================================================================
+// Line search — shared helpers
+// ============================================================================
 
-    // Do not modify RHS,XSL,DXSL. EigenRef<VectorXd> doesnt like to be explicitly const in this
-    // instance, I will fix this later in refactor
+void tycho::solvers::PSIOPT::eval_trial_point_occ(double obj_scale, double mu, double alpha,
+                                                  KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                                                  KKTVector &rhs2, double &ptest, double &btest) {
+    xsl2.data() = xsl.data() + alpha * dxsl.data();
+    rhs2.data().setZero();
+    this->nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
+    this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
+    btest = this->barrier_objective(xsl2.slacks(), mu);
+}
 
+auto tycho::solvers::PSIOPT::compute_penalties(KKTVector &xsl, KKTVector &rhs) const
+    -> PenaltyTerms {
+    return {xsl.lmults().cwiseAbs().dot(rhs.all_cons().cwiseAbs()), rhs.all_cons().squaredNorm(),
+            rhs.all_cons().template lpNorm<Eigen::Infinity>()};
+}
+
+bool tycho::solvers::PSIOPT::secondary_accept(double ptest, double prim_obj,
+                                              const PenaltyTerms &test,
+                                              const PenaltyTerms &init) const {
+    return (ptest < prim_obj && test.l2_ < init.l2_) ||
+           (ptest < prim_obj && test.linf_ < init.linf_);
+}
+
+// ============================================================================
+// Line search — variant implementations
+// ============================================================================
+
+double tycho::solvers::PSIOPT::ls_lang(double obj_scale, double mu, double prim_obj,
+                                       double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                       KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                       IterateInfo &citer) {
     double alpha = 1.0;
+    double LangInit = prim_obj + barr_obj + xsl.lmults().dot(rhs.all_cons());
 
-    if (lsmode == LineSearchModes::LANG) {
-        double LangInit = prim_obj + barr_obj + this->get_lmults(XSL).dot(this->get_all_cons(RHS));
-
-        for (int j = 0; j < this->max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->eval_rhs(obj_scale, XSL2, ptest, RHS2, RHS2);
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
-            this->barrier_gradient(this->get_slacks(XSL2), this->get_iq_lmults(XSL2), mu,
-                                   this->get_dual_grad(RHS2));
-            double LangTest = ptest + btest + this->get_lmults(XSL2).dot(this->get_all_cons(RHS2));
-            Citer.ls_iters_ = j;
-            if (LangTest < LangInit) {
-                break;
-            } else {
-                alpha = alpha / this->alpha_red_;
-            }
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        xsl2.data() = xsl.data() + alpha * dxsl.data();
+        rhs2.data().setZero();
+        this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
+        btest = this->barrier_objective(xsl2.slacks(), mu);
+        this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
+        double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
+        if (LangTest < LangInit) {
+            citer.ls_iters_ = j;
+            break;
+        } else {
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / settings_.alpha_red_;
         }
-    } else if (lsmode == LineSearchModes::L1) {
-        double vv = RHS.head(this->primal_vars_ + this->slack_vars_)
-                        .dot(DXSL.head(this->primal_vars_ + this->slack_vars_));
-        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
-
-        double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
-        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
-        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
-
-        double sc = .1 + std::abs(vv - cv) / InitL2Pen;
-        if (InitL2Pen == 0.0)
-            sc = 1.0;
-
-        LangInit += InitL1Pen + InitL2Pen * sc;
-
-        for (int j = 0; j < this->max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->nlp_->eval_occ(
-                obj_scale, XSL2.head(this->primal_vars_), ptest,
-                RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
-                RHS2.tail(this->inequal_cons_));
-
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
-
-            double LangTest = ptest + btest;
-            double TestL1Pen =
-                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
-            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
-
-            LangTest += TestL1Pen + TestL2Pen * sc;
-
-            Citer.merit_val_ = LangTest;
-            if (LangTest < LangInit || (ptest < prim_obj) && (TestL2Pen < InitL2Pen) ||
-                (ptest < prim_obj) && (TestLinfPenalty < InitLinfPenalty)) {
-                Citer.ls_iters_ = j;
-                break;
-            } else {
-                Citer.ls_iters_ = j + 1;
-                alpha = alpha / this->alpha_red_;
-            }
-        }
-    } else if (lsmode == LineSearchModes::AUGLANG) {
-
-        double vv = this->get_prim_dual_grad(RHS).dot(this->get_primals_slacks(DXSL));
-        double cv = this->get_lmults(DXSL).dot(this->get_all_cons(RHS));
-
-        double LangInit = prim_obj + barr_obj;
-        double InitL1Pen = this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS).cwiseAbs());
-        double InitL2Pen = this->get_all_cons(RHS).squaredNorm();
-        double InitLinfPenalty = this->get_all_cons(RHS).lpNorm<Eigen::Infinity>();
-
-        double sc = .01 + std::abs(vv - cv) / InitL2Pen;
-        if (InitL2Pen == 0.0)
-            sc = 1.0;
-
-        LangInit += InitL1Pen + InitL2Pen * sc;
-
-        for (int j = 0; j < this->max_ls_iters_; j++) {
-            double ptest = 0;
-            double btest = 0;
-            XSL2 = XSL + alpha * DXSL;
-            RHS2.setZero();
-            this->nlp_->eval_occ(
-                obj_scale, XSL2.head(this->primal_vars_), ptest,
-                RHS2.segment(this->primal_vars_ + this->slack_vars_, this->equal_cons_),
-                RHS2.tail(this->inequal_cons_));
-
-            this->apply_reset_slacks(this->get_slacks(XSL2), this->get_iq_cons(RHS2));
-            btest = this->barrier_objective(this->get_slacks(XSL2), mu);
-
-            double LangTest = ptest + btest;
-
-            double TestL1Pen =
-                this->get_lmults(XSL).cwiseAbs().dot(this->get_all_cons(RHS2).cwiseAbs());
-
-            TestL1Pen = 0;
-
-            for (int i = 0; i < this->equal_cons_; i++) {
-                double eqerr = abs(this->get_eq_cons(RHS2)[i]);
-                double eqmul = abs(this->get_eq_lmults(XSL)[i]);
-                if (eqerr > this->econ_tol_ * 10) {
-                    TestL1Pen += eqerr * eqmul;
-                }
-            }
-
-            for (int i = 0; i < this->inequal_cons_; i++) {
-                double iqerr = abs(this->get_iq_cons(RHS2)[i]);
-                double iqmul = abs(this->get_iq_lmults(XSL)[i]);
-                if (iqerr > this->icon_tol_ * 10) {
-                    TestL1Pen += iqerr * iqmul;
-                }
-            }
-
-            double TestL2Pen = this->get_all_cons(RHS2).squaredNorm();
-            double TestLinfPenalty = this->get_all_cons(RHS2).lpNorm<Eigen::Infinity>();
-
-            if (TestL2Pen <
-                econ_tol_ * econ_tol_ * equal_cons_ + icon_tol_ * icon_tol_ * inequal_cons_) {
-                TestL2Pen = 0;
-            }
-
-            LangTest += TestL1Pen + TestL2Pen * sc;
-
-            Citer.merit_val_ = LangTest;
-            if (LangTest < LangInit || (ptest < prim_obj) && (TestL2Pen < InitL2Pen) ||
-                (ptest < prim_obj) && (TestLinfPenalty < InitLinfPenalty)) {
-                Citer.ls_iters_ = j;
-                break;
-            } else {
-                Citer.ls_iters_ = j + 1;
-                alpha = alpha / this->alpha_red_;
-            }
-        }
-    } else
-        Citer.ls_iters_ = 0;
-
+    }
     return alpha;
 }
 
+double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj,
+                                     KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
+                                     KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer) {
+    double alpha = 1.0;
+    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
+    double cv = dxsl.lmults().dot(rhs.all_cons());
+
+    PenaltyTerms init = compute_penalties(xsl, rhs);
+
+    double sc = .1 + std::abs(vv - cv) / init.l2_;
+    if (init.l2_ == 0.0)
+        sc = 1.0;
+
+    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
+
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+
+        double LangTest = ptest + btest;
+        PenaltyTerms test = compute_penalties(xsl, rhs2);
+        LangTest += test.l1_ + test.l2_ * sc;
+
+        citer.merit_val_ = LangTest;
+        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
+            citer.ls_iters_ = j;
+            break;
+        } else {
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / settings_.alpha_red_;
+        }
+    }
+    return alpha;
+}
+
+double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double prim_obj,
+                                          double barr_obj, KKTVector &xsl, KKTVector &dxsl,
+                                          KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
+                                          IterateInfo &citer) {
+    double alpha = 1.0;
+    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
+    double cv = dxsl.lmults().dot(rhs.all_cons());
+
+    PenaltyTerms init = compute_penalties(xsl, rhs);
+
+    double sc = .01 + std::abs(vv - cv) / init.l2_;
+    if (init.l2_ == 0.0)
+        sc = 1.0;
+
+    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
+
+    for (int j = 0; j < settings_.max_ls_iters_; j++) {
+        double ptest = 0;
+        double btest = 0;
+        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+
+        double LangTest = ptest + btest;
+
+        // Tolerance-filtered L1 penalty
+        double TestL1Pen = 0;
+        for (int i = 0; i < this->equal_cons_; i++) {
+            double eqerr = abs(rhs2.eq_cons()[i]);
+            double eqmul = abs(xsl.eq_lmults()[i]);
+            if (eqerr > settings_.econ_tol_ * 10) {
+                TestL1Pen += eqerr * eqmul;
+            }
+        }
+        for (int i = 0; i < this->inequal_cons_; i++) {
+            double iqerr = abs(rhs2.iq_cons()[i]);
+            double iqmul = abs(xsl.iq_lmults()[i]);
+            if (iqerr > settings_.icon_tol_ * 10) {
+                TestL1Pen += iqerr * iqmul;
+            }
+        }
+
+        double TestL2Pen = rhs2.all_cons().squaredNorm();
+        double TestLinfPenalty = rhs2.all_cons().template lpNorm<Eigen::Infinity>();
+
+        // Zero L2 when within tolerance threshold
+        if (TestL2Pen < settings_.econ_tol_ * settings_.econ_tol_ * equal_cons_ +
+                            settings_.icon_tol_ * settings_.icon_tol_ * inequal_cons_) {
+            TestL2Pen = 0;
+        }
+
+        LangTest += TestL1Pen + TestL2Pen * sc;
+
+        PenaltyTerms test{TestL1Pen, TestL2Pen, TestLinfPenalty};
+        citer.merit_val_ = LangTest;
+        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
+            citer.ls_iters_ = j;
+            break;
+        } else {
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / settings_.alpha_red_;
+        }
+    }
+    return alpha;
+}
+
+// ============================================================================
+// Line search — dispatcher
+// ============================================================================
+
+double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
+                                       double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                                       Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                       Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
+                                       IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
+    // Line search exhaustion (all max_ls_iters_ attempts fail the merit test) is
+    // signaled by Citer.ls_iters_ == max_ls_iters_ in the iteration table.
+    // On success, ls_iters_ records the 0-based index of the accepted step (j).
+    // On failure, ls_iters_ is set to j+1 (attempts exhausted so far), reaching
+    // max_ls_iters_ when all attempts are exhausted. This convention is shared by
+    // ls_lang, ls_l1, and ls_auglang.
+    // The best alpha found is still returned; alg_impl's convergence check determines
+    // whether the overall iteration should continue or terminate.
+
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_dxsl = kkt_view(DXSL);
+    KKTVector v_xsl2 = kkt_view(XSL2);
+    KKTVector v_rhs = kkt_view(RHS);
+    KKTVector v_rhs2 = kkt_view(RHS2);
+
+    switch (lsmode) {
+    case LineSearchModes::LANG:
+        return ls_lang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                       Citer);
+    case LineSearchModes::L1:
+        return ls_l1(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                     Citer);
+    case LineSearchModes::AUGLANG:
+        return ls_auglang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
+                          Citer);
+    case LineSearchModes::NOLS:
+        Citer.ls_iters_ = 0;
+        return 1.0;
+    default:
+        throw std::invalid_argument("Unknown LineSearchMode");
+    }
+}
+
+Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
+                                                           std::initializer_list<PhaseStep> steps) {
+    if (!this->nlp_) {
+        throw std::runtime_error("PSIOPT::run_phase_sequence: no NLP has been set. "
+                                 "Call set_nlp() before optimize/solve.");
+    }
+    if (x.size() != primal_vars_) {
+        throw std::invalid_argument(
+            fmt::format("PSIOPT: initial guess has {} elements, expected {} primal variables",
+                        x.size(), primal_vars_));
+    }
+
+    this->result_.reset_accumulators();
+    settings_.validate();
+
+    if (settings_.print_level_ == 0)
+        print_stats();
+    if (settings_.print_level_ < 2) {
+        print_header();
+        print_beginning("PSIOPT ");
+    }
+    this->ensure_solver_initialized();
+
+    tycho::utils::Timer t;
+    t.start();
+
+    bool docompute = analyze_kkt_matrix();
+    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
+
+    auto it = steps.begin();
+    auto end = steps.end();
+    while (it != end) {
+        const auto &step = *it;
+        ++it;
+        bool is_last = (it == end);
+
+        // Conditional steps only run if the previous phase didn't converge
+        if (step.conditional_ && this->result_.converge_flag_ == ConvergenceFlags::CONVERGED)
+            continue;
+
+        if (settings_.print_level_ < 2)
+            print_beginning(step.label_);
+
+        XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
+                             settings_.init_mu_, XSL);
+
+        if (settings_.print_level_ < 2)
+            print_finished(step.label_);
+
+        // If a phase diverged, skip subsequent phases — result_.primals_ may contain
+        // garbage and feeding it into init_impl for the next phase would be pointless.
+        if (result_.converge_flag_ == ConvergenceFlags::DIVERGING) {
+            if (settings_.print_level_ < 3)
+                fmt::print(fmt::fg(fmt::color::yellow),
+                           "Phase diverged; skipping remaining phases.\n");
+            break;
+        }
+
+        // Re-init for the next phase using stored primals
+        if (!is_last) {
+            XSL = this->init_impl(result_.primals_, settings_.init_mu_, false);
+        }
+    }
+
+    t.stop();
+    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
+    this->result_.total_time_ = tottime / 1000.0;
+
+    if (settings_.print_level_ < 2) {
+        print_timing_summary();
+        fmt::print(" PSIOPT Total Time            : ");
+        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
+        print_finished("PSIOPT ");
+        print_header();
+    }
+
+    return result_.primals_;
+}
+
 Eigen::VectorXd tycho::solvers::PSIOPT::optimize(const Eigen::VectorXd &x) {
-
-    this->zero_timing_stats();
-
-    if (this->print_level_ == 0)
-        print_stats();
-    if (this->print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
-
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-    if (this->print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-    if (this->print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
-
-    if (this->print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-    return this->get_primals(XSLans);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
-
-    this->zero_timing_stats();
-    if (this->print_level_ == 0)
-        print_stats();
-    if (this->print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-
-    if (this->print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-
-    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-    if (this->print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-    }
-    Eigen::VectorXd Xt = this->get_primals(XSLans);
-    XSL = this->init_impl(Xt, this->init_mu_, false);
-
-    if (this->print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
-
-    if (this->print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return this->get_primals(XSLans);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
-    this->zero_timing_stats();
-    if (this->print_level_ == 0)
-        print_stats();
-    if (this->print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-
-    if (this->print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-
-    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-    if (this->print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-    }
-    Eigen::VectorXd Xt = this->get_primals(XSLans);
-    XSL = this->init_impl(Xt, this->init_mu_, false);
-
-    if (this->print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-    if (this->print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
-
-    } else {
-        Xt = this->get_primals(XSLans);
-        XSL = this->init_impl(Xt, this->init_mu_, false);
-
-        if (this->print_level_ < 2) {
-            print_beginning("Solve Algorithm ");
-        }
-        XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
-                                this->obj_scale_, this->init_mu_, XSL);
-
-        if (this->print_level_ < 2) {
-            print_finished("Solve Algorithm ");
-        }
-    }
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
-
-    if (this->print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return this->get_primals(XSLans);
-}
-
-Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
-    this->zero_timing_stats();
-    if (this->print_level_ == 0)
-        print_stats();
-    if (this->print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-
-    bool docompute = analyze_kkt_matrix();
-
-    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-
-    if (this->print_level_ < 2) {
-        print_beginning("Optimization Algorithm ");
-    }
-
-    XSLans = this->alg_impl(AlgorithmModes::OPT, this->opt_bar_mode_, this->opt_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
-
-    if (this->print_level_ < 2) {
-        print_finished("Optimization Algorithm ");
-    }
-
-    if (this->converge_flag_ == ConvergenceFlags::CONVERGED) {
-
-    } else {
-        Eigen::VectorXd Xt = this->get_primals(XSLans);
-        XSL = this->init_impl(Xt, this->init_mu_, false);
-
-        if (this->print_level_ < 2) {
-            print_beginning("Solve Algorithm ");
-        }
-        XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
-                                this->obj_scale_, this->init_mu_, XSL);
-
-        if (this->print_level_ < 2) {
-            print_finished("Solve Algorithm ");
-        }
-    }
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
-
-    if (this->print_level_ < 2) {
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return this->get_primals(XSLans);
+    return run_phase_sequence(x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_,
+                                   settings_.opt_ls_mode_, "Optimization Algorithm "}});
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(x, {{settings_.soe_mode_, settings_.soe_bar_mode_,
+                                   settings_.soe_ls_mode_, "Solve Algorithm "}});
+}
 
-    this->zero_timing_stats();
-    if (this->print_level_ == 0)
-        print_stats();
-    if (this->print_level_ < 2) {
-        print_header();
-        print_beginning("PSIOPT ");
-    }
-    this->ensure_solver_initialized();
-    tycho::utils::Timer t;
-    t.start();
-    bool docompute = analyze_kkt_matrix();
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize(const Eigen::VectorXd &x) {
+    return run_phase_sequence(x, {{settings_.soe_mode_, settings_.soe_bar_mode_,
+                                   settings_.soe_ls_mode_, "Solve Algorithm "},
+                                  {AlgorithmModes::OPT, settings_.opt_bar_mode_,
+                                   settings_.opt_ls_mode_, "Optimization Algorithm "}});
+}
 
-    Eigen::VectorXd XSL = this->init_impl(x, this->init_mu_, docompute);
-    Eigen::VectorXd XSLans(this->kkt_dim_);
-    XSLans.setZero();
-    if (this->print_level_ < 2) {
-        print_beginning("Solve Algorithm ");
-    }
-    XSLans = this->alg_impl(this->soe_mode_, this->soe_bar_mode_, this->soe_ls_mode_,
-                            this->obj_scale_, this->init_mu_, XSL);
+Eigen::VectorXd tycho::solvers::PSIOPT::optimize_solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x, {{AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+             "Optimization Algorithm "},
+            {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_,
+             "Solve Algorithm ", /*conditional_=*/true}});
+}
 
-    t.stop();
-    double tottime = double(t.count<std::chrono::microseconds>()) / 1000.0;
-    this->last_total_time_ = tottime / 1000.0;
-    this->last_misc_time_ = this->last_total_time_ - this->last_pre_time_ - this->last_kkt_time_ -
-                            this->last_func_time_ - this->last_print_time_;
-
-    if (this->print_level_ < 2) {
-        print_finished("Solve Algorithm ");
-        print_timing_summary();
-        fmt::print(" PSIOPT Total Time            : ");
-        fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
-        print_finished("PSIOPT ");
-        print_header();
-    }
-
-    return this->get_primals(XSLans);
+Eigen::VectorXd tycho::solvers::PSIOPT::solve_optimize_solve(const Eigen::VectorXd &x) {
+    return run_phase_sequence(
+        x,
+        {{settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_, "Solve Algorithm "},
+         {AlgorithmModes::OPT, settings_.opt_bar_mode_, settings_.opt_ls_mode_,
+          "Optimization Algorithm "},
+         {settings_.soe_mode_, settings_.soe_bar_mode_, settings_.soe_ls_mode_, "Solve Algorithm ",
+          /*conditional_=*/true}});
 }

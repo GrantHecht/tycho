@@ -459,10 +459,11 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
 
     this->collect_solver_output(Output);
 
-    this->collect_post_opt_info(this->optimizer_->last_eq_cons_, this->optimizer_->last_eq_lmults_,
-                                this->optimizer_->last_iq_cons_, this->optimizer_->last_iq_lmults_);
+    this->collect_post_opt_info(
+        this->optimizer_->result().eq_cons_, this->optimizer_->result().eq_lmults_,
+        this->optimizer_->result().iq_cons_, this->optimizer_->result().iq_lmults_);
 
-    return this->optimizer_->converge_flag_;
+    return this->optimizer_->result().converge_flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {

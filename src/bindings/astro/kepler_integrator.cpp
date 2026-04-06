@@ -12,6 +12,7 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
+void BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
 void tycho::BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m) {

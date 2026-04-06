@@ -54,6 +54,7 @@ set_property(TARGET optimalcontrol PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 add_library(psiopt STATIC
     solvers/psiopt.cpp
+    solvers/psiopt_print.cpp
     solvers/non_linear_program.cpp
     solvers/optimization_problem.cpp
     solvers/solver_init.cpp

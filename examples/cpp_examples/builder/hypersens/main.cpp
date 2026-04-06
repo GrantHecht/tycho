@@ -75,7 +75,7 @@ int main() {
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_soe_ls_mode("L1");
     phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().print_level_ = 2;
+    phase.optimizer().set_print_level(2);
     phase.set_num_partitions(1);
 
     // MINDEG ordering — needed for reliable convergence at tf=10000
