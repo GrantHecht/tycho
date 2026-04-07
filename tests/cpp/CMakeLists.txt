@@ -148,6 +148,14 @@ target_include_directories(tycho_tests PRIVATE
 )
 set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 
+# Unity build — merge test TUs to eliminate cross-TU template duplication.
+# Batch size 8 merges 46 heavy sources into 6 unity TUs.
+# This significantly reduces serial compile time at the cost of higher per-TU RSS.
+set_target_properties(tycho_tests PROPERTIES
+    UNITY_BUILD ON
+    UNITY_BUILD_BATCH_SIZE 8
+)
+
 # Reduce optimization level for tests to improve compile time.
 # With Clang/GCC, the last -O flag takes precedence over -O3 from COMPILE_FLAGS.
 # Tests don't need -O3 — correctness is unaffected by optimization level.
