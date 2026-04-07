@@ -147,3 +147,11 @@ target_include_directories(tycho_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
 set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
+
+# Reduce optimization level for tests to improve compile time.
+# With Clang/GCC, the last -O flag takes precedence over -O3 from COMPILE_FLAGS.
+# Tests don't need -O3 — correctness is unaffected by optimization level.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_tests PRIVATE $<$<CONFIG:Release>:-O1>)
+    target_compile_options(tycho_tests_light PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
