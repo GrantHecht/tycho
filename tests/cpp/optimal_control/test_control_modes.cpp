@@ -32,7 +32,7 @@ RuntimeODE make_brach_ode() {
         .build();
 }
 
-std::vector<Eigen::VectorXd> make_brach_guess() {
+std::vector<Eigen::VectorXd> make_control_modes_brach_guess() {
     constexpr double g = 9.81;
     constexpr int n_pts = 100;
     std::vector<Eigen::VectorXd> traj;
@@ -51,7 +51,7 @@ std::vector<Eigen::VectorXd> make_brach_guess() {
 }
 
 Phase make_brach_phase_with_mode(RuntimeODE &ode, ControlModes mode) {
-    auto traj = make_brach_guess();
+    auto traj = make_control_modes_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     phase.set_control_mode(mode);
