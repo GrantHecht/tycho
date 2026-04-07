@@ -33,7 +33,7 @@
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_utils.h"
 #else
-#include "mkl.h"
+#include "mkl_service.h"
 #endif
 
 namespace tycho::solvers {
