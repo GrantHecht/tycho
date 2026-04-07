@@ -33,4 +33,49 @@ extern template struct DenseFunctionBase<GenericFunction<-1, 1>, -1, 1>;
 extern template struct DenseScalarFunctionBase<GenericFunction<-1, 1>, -1>;
 extern template struct GenericFunction<-1, 1>;
 
+// ---------------------------------------------------------------------------
+// Common leaf types — CRTP chain (DenseFunctionBase + ComputableBase)
+//
+// These leaf types appear in many TUs as building blocks of larger
+// expressions. Pre-instantiating their DenseFunctionBase methods avoids
+// redundant instantiation across TUs.
+// ---------------------------------------------------------------------------
+extern template struct ComputableBase<Arguments<-1>, -1, -1>;
+extern template struct DenseFunctionBase<Arguments<-1>, -1, -1>;
+
+extern template struct ComputableBase<Segment<-1, -1, -1>, -1, -1>;
+extern template struct DenseFunctionBase<Segment<-1, -1, -1>, -1, -1>;
+
+extern template struct ComputableBase<Constant<-1, -1>, -1, -1>;
+extern template struct DenseFunctionBase<Constant<-1, -1>, -1, -1>;
+
+extern template struct ComputableBase<Constant<-1, 1>, -1, 1>;
+extern template struct DenseFunctionBase<Constant<-1, 1>, -1, 1>;
+extern template struct DenseScalarFunctionBase<Constant<-1, 1>, -1>;
+
+// ---------------------------------------------------------------------------
+// GFModelCommon / GFModel for common leaf types
+//
+// These are the most frequently duplicated type-erasure instantiations across
+// binding and test TUs (30,568 duplicate weak symbols for GFModelCommon<-1,-1>
+// alone). Each unique T stored in GenericFunction requires a full
+// GFModelCommon + GFModel instantiation with ~25 virtual method overrides.
+// ---------------------------------------------------------------------------
+
+// Arguments<-1> — used in virtually every VF expression
+extern template struct GFModelCommon<-1, -1, Arguments<-1>>;
+extern template struct GFModel<-1, -1, Arguments<-1>>;
+
+// Segment<-1, -1, -1> — the most common indexing operation
+extern template struct GFModelCommon<-1, -1, Segment<-1, -1, -1>>;
+extern template struct GFModel<-1, -1, Segment<-1, -1, -1>>;
+
+// Constant<-1, -1> — constant vector function
+extern template struct GFModelCommon<-1, -1, Constant<-1, -1>>;
+extern template struct GFModel<-1, -1, Constant<-1, -1>>;
+
+// Constant<-1, 1> — constant scalar function (stored in GenericFunction<-1,1>)
+extern template struct GFModelCommon<-1, 1, Constant<-1, 1>>;
+extern template struct GFModel<-1, 1, Constant<-1, 1>>;
+
 } // namespace tycho::vf
