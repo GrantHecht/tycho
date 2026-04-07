@@ -30,6 +30,14 @@ target_include_directories(vectorfunctions INTERFACE
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+# Explicit template instantiations for common VF types — reduces cross-TU
+# template duplication. See include/tycho/detail/vf/extern_templates.h.
+add_library(vf_instantiations STATIC vf/extern_template_instantiations.cpp)
+target_include_directories(vf_instantiations PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_compile_options(vf_instantiations PRIVATE ${COMPILE_FLAGS})
+target_precompile_headers(vf_instantiations REUSE_FROM pch)
+set_property(TARGET vf_instantiations PROPERTY JOB_POOL_COMPILE heavy_compile)
+
 
 
 
@@ -98,7 +106,7 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # tycho: public INTERFACE target bundling all core static libs.
 # Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
-target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions astro)
+target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions vf_instantiations astro)
 # CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
 # host-specific absolute paths in the export set. ALL libraries in LINK_LIBS
 # (set in root CMakeLists.txt) must be re-found and re-attached in
@@ -185,7 +193,7 @@ target_compile_options(tycho INTERFACE
 #-------------------------------------------------------------------------------
 # Install rules
 
-install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions
+install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions vf_instantiations
     EXPORT tychoTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
