@@ -93,6 +93,7 @@ nanobind_add_module(_tychopy
 )
 
 target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})
+set_property(TARGET _tychopy PROPERTY JOB_POOL_COMPILE heavy_compile)
 target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
 # Prevent CMake from auto-defining _tychopy_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.

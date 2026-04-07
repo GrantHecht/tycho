@@ -18,8 +18,8 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously.
 
 As a rule of thumb:
-- macOS (Apple Silicon): ALWAYS use -j4 for builds
-- Linux / Windows: ALWAYS use -j4 for builds
+- macOS (Apple Silicon): ALWAYS use -j6 for builds
+- Linux / Windows (32 GB+): ALWAYS use -j8 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 - **NEVER launch a second build if one is already running** — not even in the background.
   If you started a build with `run_in_background`, WAIT for the completion notification
@@ -132,12 +132,15 @@ preset for your platform** — do not configure manually.
 
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
-| macOS (Apple Si) | `macos-llvm-release`    | `-j4`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j4`             |
-| Windows x64      | `x64-Clang-Release`     | `-j4`             |
+| macOS (Apple Si) | `macos-llvm-release`    | `-j6`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
+| Windows x64      | `x64-Clang-Release`     | `-j8`             |
 
 **Note:** The `-j` values above are upper bounds — use lower values on
-RAM-constrained systems. On 32 GB, `-j4` is safe; on 16 GB, use `-j2`.
+RAM-constrained systems. The `heavy_compile` ninja job pool auto-throttles
+heavy TUs (1 slot per 10 GB RAM), so higher `-j` values are safe: light TUs
+fill extra slots while heavy TUs are limited. On 32 GB, `-j8` is safe
+(pool depth 3); on 16 GB, use `-j4` (pool depth 1).
 
 **Build memory and ninja job pools:** Many binding, test, benchmark, and example
 TUs consume 3-8 GB RAM each due to heavy template instantiation. A ninja job
@@ -154,8 +157,8 @@ safely use higher `-j` values — ninja automatically throttles the heavy TUs
 while keeping light TUs parallel.
 
 ```bash
-cd build && ninja -j4 all      # safe — pool limits heavy TUs automatically
-                               # use -j4 on 32 GB systems
+cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
+                               # use -j8 on 32 GB systems, -j4 on 16 GB
 ```
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
@@ -178,7 +181,7 @@ pip install numpy scipy matplotlib spiceypy
 ```bash
 mkdir build && conda activate tycho
 cmake --preset macos-llvm-release
-cd build && ninja -j4 all
+cd build && ninja -j6 all
 ```
 
 ### Linux / WSL2 (Ubuntu)
