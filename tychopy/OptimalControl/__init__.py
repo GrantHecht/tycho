@@ -44,7 +44,6 @@ RKOptions = _tychopy.OptimalControl.RKOptions
 StateConstraint = _tychopy.OptimalControl.StateConstraint
 StateObjective = _tychopy.OptimalControl.StateObjective
 
-ode_2_1 = _tychopy.OptimalControl.ode_2_1
 ode_6 = _tychopy.OptimalControl.ode_6
 ode_6_3 = _tychopy.OptimalControl.ode_6_3
 ode_7_3 = _tychopy.OptimalControl.ode_7_3

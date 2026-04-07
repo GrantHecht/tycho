@@ -26,14 +26,12 @@ void GenericODESBuildPart1(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart2(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart3(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart4(FunctionRegistry &reg, nb::module_ &m);
-void GenericODESBuildPart5(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESBuildPart6(FunctionRegistry &reg, nb::module_ &m);
 
 void GenericODESIntegratorPart1(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESIntegratorPart2(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESIntegratorPart3(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESIntegratorPart4(FunctionRegistry &reg, nb::module_ &m);
-void GenericODESIntegratorPart5(FunctionRegistry &reg, nb::module_ &m);
 void GenericODESIntegratorPart6(FunctionRegistry &reg, nb::module_ &m);
 
 void RKFlagsBuild(nb::module_ &m);
@@ -127,7 +125,6 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     GenericODESBuildPart2(reg, oc);
     GenericODESBuildPart3(reg, oc);
     GenericODESBuildPart4(reg, oc);
-    GenericODESBuildPart5(reg, oc);
     GenericODESBuildPart6(reg, oc);
 
     // Integrator bindings — must be registered after the core ODE parts above
@@ -136,7 +133,6 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     GenericODESIntegratorPart2(reg, oc);
     GenericODESIntegratorPart3(reg, oc);
     GenericODESIntegratorPart4(reg, oc);
-    GenericODESIntegratorPart5(reg, oc);
     GenericODESIntegratorPart6(reg, oc);
 }
 

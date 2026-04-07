@@ -32,7 +32,6 @@ add_library(_tychopy_heavy OBJECT
     tycho_module.cpp
     optimal_control/generic_odes_build_part3.cpp
     optimal_control/generic_odes_build_part4.cpp
-    optimal_control/generic_odes_build_part5.cpp
     optimal_control/generic_odes_build_part6.cpp
     astro/tycho_astro.cpp
     astro/kepler_utils.cpp
@@ -76,7 +75,6 @@ nanobind_add_module(_tychopy
     optimal_control/generic_odes_integrator_part2.cpp
     optimal_control/generic_odes_integrator_part3.cpp
     optimal_control/generic_odes_integrator_part4.cpp
-    optimal_control/generic_odes_integrator_part5.cpp
     optimal_control/generic_odes_integrator_part6.cpp
     optimal_control/ode_phase_base_bind.cpp
     optimal_control/optimal_control_problem_bind.cpp

@@ -14,8 +14,6 @@ using namespace tycho::integrators;
 void GenericODESIntegratorPart6(FunctionRegistry &reg, nb::module_ &m) {
 
     bind::BuildGenODEIntegrator<GenericFunction<-1, -1>, 6, 0, 0>("ode_6", m, reg);
-
-    bind::BuildGenODEIntegrator<GenericFunction<-1, -1>, 4, 0, 0>("ode_4", m, reg);
 }
 
 } // namespace tycho
