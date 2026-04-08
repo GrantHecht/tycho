@@ -214,7 +214,7 @@ def analyze_traces(trace_dir):
 
     family_time = defaultdict(float)
     family_count = defaultdict(int)
-    for base, data in {**instantiate_class, **instantiate_func}.items():
+    for base, data in list(instantiate_class.items()) + list(instantiate_func.items()):
         cls = extract_tycho_class(base)
         if cls:
             family_time[cls] += data["total_us"]

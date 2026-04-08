@@ -111,9 +111,12 @@ def measure_tu(target, trace_dir=None, collect_stats=False):
         extra_flags.extend(["-Xclang", "-print-stats"])
 
     if extra_flags:
-        # Insert flags after the compiler path (first token)
-        parts = cmd.split(" ", 1)
-        cmd = parts[0] + " " + " ".join(extra_flags) + " " + parts[1]
+        # Insert flags after the compiler path, skipping any launcher (ccache, sccache)
+        parts = cmd.split(" ")
+        insert_idx = 1
+        if parts[0].endswith(("ccache", "sccache")):
+            insert_idx = 2
+        cmd = " ".join(parts[:insert_idx] + extra_flags + parts[insert_idx:])
 
     # Wrap with /usr/bin/time -v
     full_cmd = f"/usr/bin/time -v {cmd}"
