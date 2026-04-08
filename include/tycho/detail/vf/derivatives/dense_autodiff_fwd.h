@@ -24,8 +24,8 @@ namespace tycho::vf {
 
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::AutodiffFwd>
-    : DenseFunction<Derived, IR, OR> {
-    using Base = DenseFunction<Derived, IR, OR>;
+    : DenseFunctionBase<Derived, IR, OR> {
+    using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base);
 
     template <class Scalar> using dual = autodiff::detail::HigherOrderDual<1U, Scalar>;

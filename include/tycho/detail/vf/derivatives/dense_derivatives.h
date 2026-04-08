@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "tycho/detail/vf/core/dense_function.h"
+#include "tycho/detail/vf/core/dense_function_base.h"
 
 namespace tycho::vf {
 
@@ -26,19 +26,13 @@ enum class DenseDerivativeMode {
 };
 
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
-struct DenseFirstDerivatives : DenseFunction<Derived, IR, OR> {
-    using Base = DenseFunction<Derived, IR, OR>;
+struct DenseFirstDerivatives : DenseFunctionBase<Derived, IR, OR> {
+    using Base = DenseFunctionBase<Derived, IR, OR>;
 };
 
 template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
 struct DenseSecondDerivatives : DenseFirstDerivatives<Derived, IR, OR, Jmode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, Jmode>;
-};
-
-template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
-struct DenseDerivatives : DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode> {
-    using Base = DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode>;
-    VF_TYPE_ALIASES(Base)
 };
 
 } // namespace tycho::vf

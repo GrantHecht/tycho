@@ -13,7 +13,6 @@
 // for Analytic derivative mode and have negligible instantiation cost.
 
 #include "tycho/detail/vf/type_erasure/generic_function.h"
-#include "tycho/detail/vf/core/dense_scalar_function_base.h"
 
 namespace tycho::vf {
 
@@ -26,11 +25,9 @@ extern template struct GenericFunction<-1, -1>;
 
 // ---------------------------------------------------------------------------
 // GenericFunction<-1, 1>  (dynamic-size scalar function)
-// Uses DenseScalarFunctionBase<D, IR> instead of DenseFunctionBase<D, IR, OR>
 // ---------------------------------------------------------------------------
 extern template struct ComputableBase<GenericFunction<-1, 1>, -1, 1>;
 extern template struct DenseFunctionBase<GenericFunction<-1, 1>, -1, 1>;
-extern template struct DenseScalarFunctionBase<GenericFunction<-1, 1>, -1>;
 extern template struct GenericFunction<-1, 1>;
 
 // ---------------------------------------------------------------------------
@@ -51,7 +48,6 @@ extern template struct DenseFunctionBase<Constant<-1, -1>, -1, -1>;
 
 extern template struct ComputableBase<Constant<-1, 1>, -1, 1>;
 extern template struct DenseFunctionBase<Constant<-1, 1>, -1, 1>;
-extern template struct DenseScalarFunctionBase<Constant<-1, 1>, -1>;
 
 // ---------------------------------------------------------------------------
 // GFModelCommon / GFModel for common leaf types

@@ -21,7 +21,6 @@ template struct GenericFunction<-1, -1>;
 // ---------------------------------------------------------------------------
 template struct ComputableBase<GenericFunction<-1, 1>, -1, 1>;
 template struct DenseFunctionBase<GenericFunction<-1, 1>, -1, 1>;
-template struct DenseScalarFunctionBase<GenericFunction<-1, 1>, -1>;
 template struct GenericFunction<-1, 1>;
 
 // ---------------------------------------------------------------------------
@@ -38,7 +37,6 @@ template struct DenseFunctionBase<Constant<-1, -1>, -1, -1>;
 
 template struct ComputableBase<Constant<-1, 1>, -1, 1>;
 template struct DenseFunctionBase<Constant<-1, 1>, -1, 1>;
-template struct DenseScalarFunctionBase<Constant<-1, 1>, -1>;
 
 // ---------------------------------------------------------------------------
 // GFModelCommon / GFModel for common leaf types

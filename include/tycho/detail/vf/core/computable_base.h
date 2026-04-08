@@ -57,7 +57,6 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -80,7 +79,11 @@ namespace tycho::vf {
  * @tparam OR Output Rows
  */
 template <class Derived, int IR, int OR>
-struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR> {
+struct ComputableBase : InputOutputSize<IR, OR> {
+    Derived &derived() { return static_cast<Derived &>(*this); }
+    const Derived &derived() const { return static_cast<const Derived &>(*this); }
+    std::string name() const { return type_name<Derived>(); }
+
     ///////////////////////TypeDefs////////////////////////////////////////////
     template <class Scalar> using Output = Eigen::Matrix<Scalar, OR, 1>;
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IR, 1>;

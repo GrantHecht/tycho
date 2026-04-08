@@ -25,8 +25,8 @@ namespace tycho::vf {
 */
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
-    : DenseFunction<Derived, IR, OR> {
-    using Base = DenseFunction<Derived, IR, OR>;
+    : DenseFunctionBase<Derived, IR, OR> {
+    using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base)
 
     DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-7); }
