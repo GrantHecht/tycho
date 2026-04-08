@@ -12,6 +12,10 @@ using vf::GenericFunction;
 using vf::IfElseFunction;
 using vf::ScalarRootFinder;
 using vf::SignFunction;
+using vf::CMatRef;
+using vf::CVecRef;
+using vf::MatRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -268,7 +272,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     using Base = VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     GenericFunction<-1, -1> propfunc_;
     double mu_ = 1.0;
@@ -317,9 +321,9 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
 
         this->propfunc_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,

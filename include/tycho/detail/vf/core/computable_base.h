@@ -36,6 +36,7 @@
 #include <concepts>
 
 #include "tycho/detail/solvers/indexing_data.h"
+#include "tycho/detail/vf/core/eigen_ref_aliases.h"
 #include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/vf/core/input_output_size.h"
 #include "tycho/detail/vf/derivatives/detect_super_scalar.h"
@@ -84,9 +85,6 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     template <class Scalar> using Output = Eigen::Matrix<Scalar, OR, 1>;
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IR, 1>;
     template <class Scalar> using Gradient = Eigen::Matrix<Scalar, IR, 1>;
-
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
 
     /// Input Rows at Compile Time (-1 if Dynamic)
     static constexpr int IRC = IR;
@@ -155,11 +153,11 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
      * @param fx_ Output vector
      */
     template <class InType, class OutType>
-    inline void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         if constexpr (!Vectorizable<Derived>) {
             if constexpr (IsSuperScalar<Scalar>) {
-                VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+                VecRef<OutType> fx = fx_.const_cast_derived();
 
                 typedef typename Scalar::Scalar RealScalar;
 
@@ -199,7 +197,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
      * @return Output<typename InType::Scalar> Output type
      */
     template <class InType>
-    inline Output<typename InType::Scalar> compute(ConstVectorBaseRef<InType> x) const {
+    inline Output<typename InType::Scalar> compute(CVecRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
         Output<Scalar> fx(this->output_rows());
         fx.setZero();
@@ -208,17 +206,17 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     }
 
     template <class InType, class OutType, class AdjGradType, class AdjVarType>
-    inline void compute_adjointgradient(ConstVectorBaseRef<InType> x,
-                                        ConstVectorBaseRef<OutType> fx_,
-                                        ConstVectorBaseRef<AdjGradType> adjgrad_,
-                                        ConstVectorBaseRef<AdjVarType> adjvars) const {
+    inline void compute_adjointgradient(CVecRef<InType> x,
+                                        CVecRef<OutType> fx_,
+                                        CVecRef<AdjGradType> adjgrad_,
+                                        CVecRef<AdjVarType> adjvars) const {
         this->derived().compute_adjointgradient(x, fx_, adjgrad_, adjvars);
     }
 
     template <class InType, class AdjGradType, class AdjVarType>
-    inline void adjointgradient(ConstVectorBaseRef<InType> x,
-                                ConstVectorBaseRef<AdjGradType> adjgrad_,
-                                ConstVectorBaseRef<AdjVarType> adjvars) const {
+    inline void adjointgradient(CVecRef<InType> x,
+                                CVecRef<AdjGradType> adjgrad_,
+                                CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Output<Scalar> fx(this->output_rows());
         fx.setZero();
@@ -227,7 +225,7 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
 
     template <class InType, class AdjVarType>
     inline Gradient<typename InType::Scalar>
-    adjointgradient(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<AdjVarType> adjvars) const {
+    adjointgradient(CVecRef<InType> x, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Gradient<Scalar> adjgrad(this->input_rows());
         adjgrad.setZero();

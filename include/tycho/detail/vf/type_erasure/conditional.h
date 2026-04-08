@@ -35,7 +35,7 @@ template <class LHS, class RHS> struct ConditionalStatement {
     static constexpr bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
 
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IRC, 1>;
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
 
     ConditionalStatement() {}
     ConditionalStatement(LHS lhss, ConditionalFlags flagss, RHS rhss)
@@ -60,7 +60,7 @@ template <class LHS, class RHS> struct ConditionalStatement {
         }
     }
 
-    template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
+    template <class InType> inline bool compute(CVecRef<InType> x) const {
         typedef typename InType::Scalar Scalar;
         if constexpr (meta_conditional) {
             bool left = this->lhs_.compute(x);
@@ -119,12 +119,12 @@ template <class LHS, class RHS> struct ConditionalStatement {
 
 struct ConstantConditional {
     template <class Scalar> using Input = Eigen::Matrix<Scalar, -1, 1>;
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
 
     ConstantConditional() {}
     ConstantConditional(int irows, bool val) : input_rows_val_(irows), value_(val) {}
     ConstantConditional(bool val) : value_(val) {}
-    template <class InType> inline bool compute(ConstVectorBaseRef<InType> x) const {
+    template <class InType> inline bool compute(CVecRef<InType> x) const {
         return this->value_;
     }
 
@@ -145,7 +145,7 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename TrueFunc::INPUT_DOMAIN,
                                          typename FalseFunc::INPUT_DOMAIN>;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     static constexpr bool is_vectorizable = false;
 
     TestFunc test_func_;
@@ -176,9 +176,9 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
 
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         if (this->test_func_.compute(x)) {
             this->true_func_.compute(x, fx);
@@ -187,8 +187,8 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         if (this->test_func_.compute(x)) {
             this->true_func_.compute_jacobian(x, fx_, jx_);
         } else {
@@ -198,9 +198,9 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         if (this->test_func_.compute(x)) {
             this->true_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                              adjhess_, adjvars);

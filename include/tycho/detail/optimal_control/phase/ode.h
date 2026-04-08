@@ -26,6 +26,8 @@ using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::FunctionHolder;
 using vf::GenericFunction;
+using vf::CVecRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -79,7 +81,7 @@ struct ODE_DerivModeWrapper : ODEBase<VectorFunction<Derived, InnerODE::IRC, Inn
                                       Derived, InnerODE::XV, InnerODE::UV, InnerODE::PV> {
     using Base = ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived,
                          InnerODE::XV, InnerODE::UV, InnerODE::PV>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class... Args>
         requires std::is_constructible_v<InnerODE, Args...>
@@ -119,7 +121,7 @@ struct ODE_DerivModeWrapper : ODEBase<VectorFunction<Derived, InnerODE::IRC, Inn
     const InnerODE &inner() const { return inner_; }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         inner_.compute(x, fx_);
     }
 

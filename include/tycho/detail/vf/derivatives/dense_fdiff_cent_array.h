@@ -27,7 +27,7 @@ template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArray>
     : DenseFunction<Derived, IR, OR> {
     using Base = DenseFunction<Derived, IR, OR>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-5); }
 
@@ -40,11 +40,11 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         this->derived().compute(x, fx_);
         using ScalArray = Eigen::Array<Scalar, 2, 1>;

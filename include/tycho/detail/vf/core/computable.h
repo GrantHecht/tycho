@@ -24,8 +24,8 @@ template <class Derived, int IR, int OR> struct Computable : ComputableBase<Deri
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
     template <class Scalar> using Gradient = typename Base::template Gradient<Scalar>;
 
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using VecRef = Eigen::MatrixBase<Scalar> &;
 };
 
 ///// Scalar Specialization
@@ -37,8 +37,8 @@ struct Computable<Derived, IR, 1> : ComputableBase<Derived, IR, 1> {
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
     template <class Scalar> using Gradient = typename Base::template Gradient<Scalar>;
 
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
+    template <class Scalar> using VecRef = Eigen::MatrixBase<Scalar> &;
 };
 
 } // namespace tycho::vf

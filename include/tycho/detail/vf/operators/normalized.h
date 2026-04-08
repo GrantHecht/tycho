@@ -24,21 +24,21 @@ template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
 template <int IR> struct Normalized : NormalizedPower_Impl<Normalized<IR>, IR, 1> {
     using Base = NormalizedPower_Impl<Normalized<IR>, IR, 1>;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <int IR, int PW>
 struct NormalizedPower : NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW> {
     using Base = NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <class Derived, int IR, int PW>
 struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     using Base = VectorFunction<Derived, IR, IR>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     static constexpr int power = PW;
     static constexpr int pp2 = power + 2;
@@ -68,9 +68,9 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         using std::sqrt;
         Scalar n;
@@ -85,11 +85,11 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         fx = x * np;
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         using std::sqrt;
         Scalar n;
@@ -122,13 +122,13 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, Eigen::MatrixBase<AdjGradType> const &adjgrad_,
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, Eigen::MatrixBase<AdjGradType> const &adjgrad_,
         Eigen::MatrixBase<AdjHessType> const &adjhess_,
         const Eigen::MatrixBase<AdjVarType> &adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 

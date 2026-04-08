@@ -38,7 +38,7 @@ struct DenseSecondDerivatives : DenseFirstDerivatives<Derived, IR, OR, Jmode> {
 template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
 struct DenseDerivatives : DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode> {
     using Base = DenseSecondDerivatives<Derived, IR, OR, Jmode, Hmode>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 };
 
 } // namespace tycho::vf

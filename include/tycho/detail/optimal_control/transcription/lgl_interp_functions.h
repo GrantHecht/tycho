@@ -27,6 +27,10 @@ using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
 using vf::ThreadingFlags;
+using vf::CMatRef;
+using vf::CVecRef;
+using vf::MatRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -35,7 +39,7 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
                                        DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     static constexpr int TempSize = SZ_SUM<OR, 1>::value;
     std::shared_ptr<LGLInterpTable> table;
@@ -66,9 +70,9 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto maxsize) {
             Scalar t = x[0];
@@ -87,11 +91,11 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto maxsize) {
             Scalar t = x[0];
@@ -119,10 +123,10 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
         const Eigen::MatrixBase<AdjVarType> &adjvars) const {
         typedef typename InType::Scalar Scalar;
 
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        MatrixBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> hx = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        MatRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto maxsize) {
             if (this->table->method_ == TranscriptionModes::LGL3) {

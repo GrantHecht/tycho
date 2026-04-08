@@ -25,6 +25,10 @@ using utils::SZ_SUM;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
 using vf::ThreadingFlags;
+using vf::CMatRef;
+using vf::CVecRef;
+using vf::MatRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -816,7 +820,7 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivative
                                          DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<InterpFunction3D, 3, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     std::shared_ptr<InterpTable3D> tab;
 
@@ -824,17 +828,17 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivative
     InterpFunction3D(std::shared_ptr<InterpTable3D> tab) : tab(tab) { this->set_io_rows(3, 1); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
         fx[0] = this->tab->interp(x[0], x[1], x[2]);
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto [z, dzdx] = this->tab->interp_deriv1(x[0], x[1], x[2]);
         fx[0] = z;
@@ -843,14 +847,14 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivative
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto [z, dzdx, d2zdx] = this->tab->interp_deriv2(x[0], x[1], x[2]);
         fx[0] = z;

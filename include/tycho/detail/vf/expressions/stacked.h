@@ -98,9 +98,7 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
                                 SZ_SUM<Func1::ORC, Func2::ORC>::value>;
     using Base::compute;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func1);
-    SUB_FUNCTION_IO_TYPES(Func2);
+    VF_TYPE_ALIASES(Base);
 
     static constexpr bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
     static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
@@ -132,20 +130,20 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         this->func1.compute(x, fx.template segment<Func1::ORC>(0, this->func1.output_rows()));
         this->func2.compute(x, fx.template segment<Func2::ORC>(this->func1.output_rows(),
                                                                this->func2.output_rows()));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         this->func1.compute_jacobian(x,
                                      fx.template segment<Func1::ORC>(0, this->func1.output_rows()),
@@ -159,14 +157,14 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &func2_adjgrad, auto &func2_adjhess) {
             if constexpr (Func1::is_generic_function && Func2::is_generic_function) {
@@ -231,22 +229,22 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
         const int irows = this->func2.input_rows();
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<Func2_gradient<Scalar>>(irows, 1),
-            tycho::utils::TempSpec<Func2_hessian<Scalar>>(irows, irows));
+            Impl, tycho::utils::TempSpec<typename Func2::template Gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<typename Func2::template Hessian<Scalar>>(irows, irows));
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
+    inline void right_jacobian_product(CMatRef<Target> target_,
+                                       CEigRef<Left> left, CEigRef<Right> right,
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
             Base::right_jacobian_product(target_, left, right, assign, aliased);
 
         } else {
-            MatrixBaseRef<Right> right_ref = right.const_cast_derived();
-            MatrixBaseRef<Left> left_ref = left.const_cast_derived();
+            MatRef<Right> right_ref = right.const_cast_derived();
+            MatRef<Left> left_ref = left.const_cast_derived();
 
             this->func1.right_jacobian_product(
                 target_, left_ref.template leftCols<Func1::ORC>(this->func1.output_rows()),
@@ -266,8 +264,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     }
 
     template <class Target, class Scalar>
-    inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        MatrixBaseRef<Target> target = target_.const_cast_derived();
+    inline void scale_jacobian(CMatRef<Target> target_, Scalar s) const {
+        MatRef<Target> target = target_.const_cast_derived();
         this->func1.scale_jacobian(target.template topRows<Func1::ORC>(this->func1.output_rows()),
                                    s);
         this->func2.scale_jacobian(
@@ -275,10 +273,10 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        MatrixBaseRef<Target> target = target_.const_cast_derived();
-        MatrixBaseRef<JacType> right_ref = right.const_cast_derived();
+    inline void accumulate_jacobian(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
+        MatRef<Target> target = target_.const_cast_derived();
+        MatRef<JacType> right_ref = right.const_cast_derived();
 
         // typedef typename Target::Scalar Scalar;
 
@@ -291,8 +289,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                                   ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_,
+                                   CMatRef<JacType> right, Assignment assign) const {
         if constexpr (Func1::is_linear_function) {
             this->func2.accumulate_hessian(target_, right, assign);
         } else if constexpr (Func2::is_linear_function) {
@@ -310,8 +308,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     using Base = VectorFunction<DynamicStackedOutputs<Func>, Func::IRC, -1>;
     using Base::compute;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func);
+    VF_TYPE_ALIASES(Base);
 
     static constexpr bool is_linear_function = Func::is_linear_function;
     static constexpr bool is_vectorizable = Func::is_vectorizable;
@@ -354,9 +351,9 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     bool _linear = false;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
         int start = 0;
         for (auto &func : this->funcs) {
             int orows = func.output_rows();
@@ -365,11 +362,11 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         int start = 0;
         for (auto &func : this->funcs) {
@@ -382,14 +379,14 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &func_adjgrad, auto &func_adjhess) {
             int start = 0;
@@ -419,8 +416,8 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
 
         const int irows = this->input_rows();
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<Func_gradient<Scalar>>(irows, 1),
-            tycho::utils::TempSpec<Func_hessian<Scalar>>(irows, irows));
+            Impl, tycho::utils::TempSpec<typename Func::template Gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<typename Func::template Hessian<Scalar>>(irows, irows));
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -31,26 +31,26 @@ template <class Derived, class Func, int MRows> struct MatrixScaled_Impl;
 template <class Func, class Value>
 struct StaticScaled : StaticScaled_Impl<StaticScaled<Func, Value>, Func, Value> {
     using Base = StaticScaled_Impl<StaticScaled<Func, Value>, Func, Value>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <class Func> struct Scaled : Scaled_Impl<Scaled<Func>, Func> {
     using Base = Scaled_Impl<Scaled<Func>, Func>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <class Func> struct RowScaled : RowScaled_Impl<RowScaled<Func>, Func> {
     using Base = RowScaled_Impl<RowScaled<Func>, Func>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <class Func, int MRows>
 struct MatrixScaled : MatrixScaled_Impl<MatrixScaled<Func, MRows>, Func, MRows> {
     using Base = MatrixScaled_Impl<MatrixScaled<Func, MRows>, Func, MRows>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
@@ -62,7 +62,7 @@ struct StaticScaled_Impl
     : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
@@ -73,18 +73,18 @@ struct StaticScaled_Impl
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
     }
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
         this->func_.compute(x, fx_);
         fx *= Value::value;
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
         this->func_.compute_jacobian(x, fx_, jx_);
 
         fx *= Value::value;
@@ -93,14 +93,14 @@ struct StaticScaled_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        // VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        // MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        // VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        // MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         Output<Scalar> adjv_scaled = adjvars * Value::value;
 
@@ -112,44 +112,44 @@ struct StaticScaled_Impl
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
+    inline void right_jacobian_product(CMatRef<Target> target_,
+                                       CEigRef<Left> left, CEigRef<Right> right,
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         this->func_.right_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void symetric_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                          ConstEigenBaseRef<Left> left,
-                                          ConstEigenBaseRef<Right> right, Assignment assign,
+    inline void symetric_jacobian_product(CMatRef<Target> target_,
+                                          CEigRef<Left> left,
+                                          CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_gradient(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                                   ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_,
+                                   CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
-    inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_jacobian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_gradient(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_hessian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,7 +159,7 @@ template <class Derived, class Func>
 struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     Func func_;
     double scale_value_ = 1.0;
 
@@ -177,18 +177,18 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     bool is_linear() const { return func_.is_linear(); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
         this->func_.compute(x, fx_);
         fx *= Scalar(this->scale_value_);
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
         this->func_.compute_jacobian(x, fx_, jx_);
         fx *= Scalar(this->scale_value_);
         this->func_.scale_jacobian(jx, Scalar(this->scale_value_));
@@ -196,11 +196,11 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &adjv_scaled) {
             adjv_scaled = adjvars * Scalar(this->scale_value_);
@@ -217,52 +217,52 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
+    inline void right_jacobian_product(CMatRef<Target> target_,
+                                       CEigRef<Left> left, CEigRef<Right> right,
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
-            ConstMatrixBaseRef<Right> right_ref(right.derived());
-            ConstDiagonalBaseRef<Left> left_ref(left.derived());
+            CMatRef<Right> right_ref(right.derived());
+            CDiagRef<Left> left_ref(left.derived());
             this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         } else {
-            ConstMatrixBaseRef<Right> right_ref(right.derived());
-            ConstMatrixBaseRef<Left> left_ref(left.derived());
+            CMatRef<Right> right_ref(right.derived());
+            CMatRef<Left> left_ref(left.derived());
             this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         }
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void symetric_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                          ConstEigenBaseRef<Left> left,
-                                          ConstEigenBaseRef<Right> right, Assignment assign,
+    inline void symetric_jacobian_product(CMatRef<Target> target_,
+                                          CEigRef<Left> left,
+                                          CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_gradient(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                                   ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_,
+                                   CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
-    inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_jacobian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_gradient(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_hessian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -273,7 +273,7 @@ struct RowScaled_Impl
     : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     Func func_;
     Output<double> row_scale_values_;
     static constexpr bool is_linear_function = Func::is_linear_function;
@@ -283,7 +283,7 @@ struct RowScaled_Impl
     RowScaled_Impl() { this->row_scale_values_.setOnes(); }
 
     template <class OutType>
-    RowScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func_(std::move(f)) {
+    RowScaled_Impl(Func f, CVecRef<OutType> s) : func_(std::move(f)) {
         this->row_scale_values_ = s;
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {func_.input_domain()});
@@ -291,9 +291,9 @@ struct RowScaled_Impl
     bool is_linear() const { return func_.is_linear(); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &scales) {
             scales = this->row_scale_values_.template cast<Scalar>();
@@ -306,11 +306,11 @@ struct RowScaled_Impl
                                                   tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &scales) {
             scales = this->row_scale_values_.template cast<Scalar>();
@@ -328,14 +328,14 @@ struct RowScaled_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &scales, auto &adjv_scaled) {
             scales = this->row_scale_values_.template cast<Scalar>();
@@ -357,53 +357,53 @@ struct RowScaled_Impl
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
+    inline void right_jacobian_product(CMatRef<Target> target_,
+                                       CEigRef<Left> left, CEigRef<Right> right,
                                        Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
 
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
-            ConstMatrixBaseRef<Right> right_ref(right.derived());
-            ConstDiagonalBaseRef<Left> left_ref(left.derived());
+            CMatRef<Right> right_ref(right.derived());
+            CDiagRef<Left> left_ref(left.derived());
             this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         } else {
-            ConstMatrixBaseRef<Right> right_ref(right.derived());
-            ConstMatrixBaseRef<Left> left_ref(left.derived());
+            CMatRef<Right> right_ref(right.derived());
+            CMatRef<Left> left_ref(left.derived());
             this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         }
     }
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void symetric_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                          ConstEigenBaseRef<Left> left,
-                                          ConstEigenBaseRef<Right> right, Assignment assign,
+    inline void symetric_jacobian_product(CMatRef<Target> target_,
+                                          CEigRef<Left> left,
+                                          CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_jacobian(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_gradient(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_gradient(CMatRef<Target> target_,
+                                    CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_gradient(target_, right, assign);
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                                   ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_,
+                                   CMatRef<JacType> right, Assignment assign) const {
         this->func_.accumulate_hessian(target_, right, assign);
     }
     template <class Target, class Scalar>
-    inline void scale_jacobian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_jacobian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_jacobian(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_gradient(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_gradient(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_gradient(target_, s);
     }
     template <class Target, class Scalar>
-    inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
+    inline void scale_hessian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_hessian(target_, s);
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -414,8 +414,7 @@ struct MatrixScaled_Impl
     : VectorFunction<Derived, Func::IRC, MRows, DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<Derived, Func::IRC, MRows, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func);
+    VF_TYPE_ALIASES(Base);
 
     Func func_;
 
@@ -431,7 +430,7 @@ struct MatrixScaled_Impl
     MatrixScaled_Impl() {}
 
     template <class OutType>
-    MatrixScaled_Impl(Func f, ConstVectorBaseRef<OutType> s) : func_(std::move(f)) {
+    MatrixScaled_Impl(Func f, CVecRef<OutType> s) : func_(std::move(f)) {
         this->mat = s;
         this->set_io_rows(this->func_.input_rows(), this->mat.rows());
         this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
@@ -448,9 +447,9 @@ struct MatrixScaled_Impl
     bool is_linear() const { return this->func_.is_linear(); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         if (NoTemp) {
             auto Impl = [&](auto &mattmp) {
@@ -473,15 +472,15 @@ struct MatrixScaled_Impl
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
                                                         this->func_.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1));
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         if (NoTemp) {
             auto Impl = [&](auto &mattmp) {
@@ -508,22 +507,22 @@ struct MatrixScaled_Impl
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
                                                         this->func_.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(this->func_.output_rows(),
                                                               this->func_.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if (NoTemp) {
             auto Impl = [&](auto &mattmp, auto &adjv_scaled) {
@@ -540,7 +539,7 @@ struct MatrixScaled_Impl
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
                                                         this->func_.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1)
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1)
 
             );
         } else {
@@ -559,10 +558,10 @@ struct MatrixScaled_Impl
                 Impl,
                 tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
                                                         this->func_.output_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(this->func_.output_rows(),
                                                               this->func_.input_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1));
         }
     }
 };

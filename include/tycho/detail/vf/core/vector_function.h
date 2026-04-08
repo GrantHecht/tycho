@@ -26,7 +26,7 @@ template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativ
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct VectorFunction : DenseDerivatives<Derived, IR, OR, Jm, Hm> {
     using Base = DenseDerivatives<Derived, IR, OR, Jm, Hm>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 };
 
 template <class Derived, class ExprImpl, class... Ts>

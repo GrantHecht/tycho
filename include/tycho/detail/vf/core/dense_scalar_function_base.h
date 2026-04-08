@@ -21,7 +21,7 @@ namespace tycho::vf {
 template <class Derived, int IR>
 struct DenseScalarFunctionBase : DenseFunctionBase<Derived, IR, 1> {
     using Base = DenseFunctionBase<Derived, IR, 1>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val,
                    const tycho::solvers::SolverIndexingData &data) const {

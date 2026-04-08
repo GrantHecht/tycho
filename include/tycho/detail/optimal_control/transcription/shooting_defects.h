@@ -56,6 +56,10 @@ using vf::GenericFunction;
 using vf::Is_SuperScalar;
 using vf::StackedOutputs;
 using vf::ThreadingFlags;
+using vf::CMatRef;
+using vf::CVecRef;
+using vf::MatRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -118,7 +122,7 @@ struct CentralShootingDefect
     using Base = VectorFunction<CentralShootingDefect<DODE, Integrator>,
                                 SZ_SUM<SZ_PROD<DODE::XtUV, 2>::value, DODE::PV>::value, DODE::XV>;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
@@ -137,7 +141,7 @@ struct CentralShootingDefect
     CentralShootingDefect() {}
 
     template <class InType>
-    void extract_scalar_inputs(ConstVectorBaseRef<InType> X1X2,
+    void extract_scalar_inputs(CVecRef<InType> X1X2,
                                std::vector<Input<double>> &X1X2s) const {
 
         typedef typename InType::Scalar Scalar;
@@ -152,7 +156,7 @@ struct CentralShootingDefect
     }
 
     template <class InType>
-    void extract_scalar_lmults(ConstVectorBaseRef<InType> Lf,
+    void extract_scalar_lmults(CVecRef<InType> Lf,
                                std::vector<Output<double>> &Lfs) const {
 
         typedef typename InType::Scalar Scalar;
@@ -350,9 +354,9 @@ struct CentralShootingDefect
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         std::vector<Input<double>> X1X2s;
 
@@ -375,11 +379,11 @@ struct CentralShootingDefect
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         std::vector<Input<double>> X1X2s;
 
@@ -412,14 +416,14 @@ struct CentralShootingDefect
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_,
+        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
+        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         std::vector<Input<double>> X1X2s;
         std::vector<Output<double>> Lfs;

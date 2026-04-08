@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 using namespace tycho;
+using namespace tycho::vf;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -86,8 +87,8 @@ struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
     DynamicBrach() { set_ode_size(3, 1, 0); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x,
+                             CVecRef<OutType> fx_) const {
         auto &fx = const_cast<Eigen::MatrixBase<OutType> &>(fx_);
         auto v = x[2];
         auto theta = x[4];
