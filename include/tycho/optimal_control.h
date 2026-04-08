@@ -22,3 +22,7 @@
 #include "tycho/detail/optimal_control/builder/ode_builder.h"
 #include "tycho/detail/optimal_control/builder/phase_wrapper.h"
 #include "tycho/detail/optimal_control/builder/ocp_wrapper.h"
+
+// Extern template declarations — suppress implicit instantiation of common
+// OC/integrator types in consuming TUs (explicit instantiations in oc_instantiations lib)
+#include "tycho/detail/optimal_control/extern_templates.h"
