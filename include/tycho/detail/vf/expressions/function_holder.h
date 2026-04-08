@@ -25,8 +25,8 @@ struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Ana
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
 
     FunctionHolder() {}
     FunctionHolder(Func f) : func_(std::move(f)) {

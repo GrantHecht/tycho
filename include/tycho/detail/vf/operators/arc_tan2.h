@@ -23,7 +23,7 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
     using Base = VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     template <class Scalar> static Scalar calc_arc_tan2(Scalar yy, Scalar xx) {
         Scalar fx;

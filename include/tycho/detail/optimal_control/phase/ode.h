@@ -165,7 +165,7 @@ template <class BaseType, class Derived, int _XV, int _UV, int _PV>
 struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
     using Base = BaseType;
     using Base::Base;
-    static const bool IsGenericODE = false;
+    static constexpr bool IsGenericODE = false;
 
     Integrator<Derived> integrator(double dstep) const {
         return Integrator<Derived>(this->derived(), dstep);
@@ -180,7 +180,7 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
                                 SZ_SUM<_XV, _UV, _PV, 1>::value, _XV>;
     using Base::Base;
 
-    static const bool IsGenericODE = true;
+    static constexpr bool IsGenericODE = true;
 
     GenericODE(BaseType f, int xv, int uv, int pv) : Base(f) {
         this->set_xvars(xv);

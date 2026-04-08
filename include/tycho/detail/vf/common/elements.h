@@ -25,12 +25,12 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     using Base::compute;
     static const std::tuple<std::integral_constant<int, EL1>, std::integral_constant<int, ELS>...>
         elements;
-    static const int num_elements = 1 + sizeof...(ELS);
+    static constexpr int num_elements = 1 + sizeof...(ELS);
 
     Elements() {}
     Elements(int irows) { this->set_io_rows(irows, num_elements); }
 
-    static const bool is_linear_function = true;
+    static constexpr bool is_linear_function = true;
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
         VectorBaseRef<OutType> fx = fx_.const_cast_derived();

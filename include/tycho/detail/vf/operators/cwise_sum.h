@@ -34,8 +34,8 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     template <class... OtherFunc> using DerivedTemplate = CwiseSum<OtherFunc...>;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool IsSegmentOp = Is_Segment<Func>::value || Is_Arguments<Func>::value;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool IsSegmentOp = Is_Segment<Func>::value || Is_Arguments<Func>::value;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);

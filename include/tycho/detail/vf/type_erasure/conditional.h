@@ -30,9 +30,9 @@ enum class ConditionalFlags {
 
 template <class LHS, class RHS> struct ConditionalStatement {
 
-    static const int IRC = SZ_MAX<LHS::IRC, RHS::IRC>::value;
-    static const bool is_conditional = true;
-    static const bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
+    static constexpr int IRC = SZ_MAX<LHS::IRC, RHS::IRC>::value;
+    static constexpr bool is_conditional = true;
+    static constexpr bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
 
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IRC, 1>;
     template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
@@ -146,7 +146,7 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
                                          typename FalseFunc::INPUT_DOMAIN>;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
 
     TestFunc test_func_;
     TrueFunc true_func_;

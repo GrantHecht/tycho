@@ -27,7 +27,7 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
                                 SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
     template <class Scalar> using Mat = Eigen::Matrix<Scalar, Size, Size>;
 
     int size;

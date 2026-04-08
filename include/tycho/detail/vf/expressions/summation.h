@@ -124,18 +124,18 @@ struct TwoFunctionSum_Impl
     Func1 func1;
     Func2 func2;
 
-    static const bool func1_is_segment = Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
-    static const bool func2_is_segment = Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
-    static const bool is_sum_of_segments = func1_is_segment && func2_is_segment;
+    static constexpr bool func1_is_segment = Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
+    static constexpr bool func2_is_segment = Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
+    static constexpr bool is_sum_of_segments = func1_is_segment && func2_is_segment;
 
-    static const bool func1_is_sumordiff = Is_SumorDiff<Func1>::value;
-    static const bool func2_is_sumordiff = Is_SumorDiff<Func2>::value;
+    static constexpr bool func1_is_sumordiff = Is_SumorDiff<Func1>::value;
+    static constexpr bool func2_is_sumordiff = Is_SumorDiff<Func2>::value;
 
-    static const bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
-    static const bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
+    static constexpr bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
+    static constexpr bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
 
-    static const bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
@@ -334,15 +334,15 @@ struct MultiFunctionSum_Impl
     Func2 func2;
     std::tuple<Funcs...> funcs;
 
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         SZ_PROD<int(Func1::is_linear_function), int(Func2::is_linear_function),
                 int(Funcs::is_linear_function)...>::value == 1;
 
-    static const bool is_vectorizable =
+    static constexpr bool is_vectorizable =
         SZ_PROD<int(Func1::is_vectorizable), int(Func2::is_vectorizable),
                 int(Funcs::is_vectorizable)...>::value == 1;
 
-    static const bool IsSumofSegments =
+    static constexpr bool IsSumofSegments =
         SZ_PROD<int(Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value),
                 int(Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value),
                 int(Is_Segment<Funcs>::value || Is_ScaledSegment<Funcs>::value)...>::value == 1;

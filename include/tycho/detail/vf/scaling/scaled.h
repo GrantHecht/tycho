@@ -66,7 +66,7 @@ struct StaticScaled_Impl
     Func func_;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
-    static const bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_linear_function = Func::is_linear_function;
 
     StaticScaled_Impl() {}
     StaticScaled_Impl(Func f) : func_(std::move(f)) {
@@ -165,8 +165,8 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
 
     Scaled_Impl() {}
     Scaled_Impl(Func f, double s) : func_(std::move(f)), scale_value_(s) {
@@ -276,8 +276,8 @@ struct RowScaled_Impl
     DENSE_FUNCTION_BASE_TYPES(Base);
     Func func_;
     Output<double> row_scale_values_;
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
     RowScaled_Impl() { this->row_scale_values_.setOnes(); }
@@ -424,8 +424,8 @@ struct MatrixScaled_Impl
     MatType<double> mat;
     bool NoTemp = false;
 
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
 
     MatrixScaled_Impl() {}

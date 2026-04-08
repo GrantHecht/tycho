@@ -22,8 +22,8 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     using Base = VectorFunction<Constant<IR, OR>, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base)
 
-    static const bool is_linear_function = true;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_linear_function = true;
+    static constexpr bool is_vectorizable = true;
 
     Output<double> value_;
 

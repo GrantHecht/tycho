@@ -45,7 +45,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     static constexpr int pp4 = power + 4;
 
     using Base::compute;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     NormalizedPower_Impl() {}
     NormalizedPower_Impl(int irows) { this->set_io_rows(irows, irows); }

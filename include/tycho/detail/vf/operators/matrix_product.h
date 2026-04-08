@@ -37,12 +37,12 @@ struct MatrixFunctionProduct_Impl
                                 SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
                                 DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
 
-    static const int M1Rows = MatFunc1::MROWS;
-    static const int M1Cols_M2Rows = MatFunc2::MROWS;
-    static const int M2Cols = MatFunc2::MCOLS;
+    static constexpr int M1Rows = MatFunc1::MROWS;
+    static constexpr int M1Cols_M2Rows = MatFunc2::MROWS;
+    static constexpr int M2Cols = MatFunc2::MCOLS;
 
-    static const int M1Major = MatFunc1::Major;
-    static const int M2Major = MatFunc2::Major;
+    static constexpr int M1Major = MatFunc1::Major;
+    static constexpr int M2Major = MatFunc2::Major;
 
     int m1rows = 0;
     int m1cols_m2rows = 0;
@@ -61,8 +61,8 @@ struct MatrixFunctionProduct_Impl
     using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename MatFunc1::INPUT_DOMAIN,
                                          typename MatFunc2::INPUT_DOMAIN>;
 
-    static const bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
-    // static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
+    // static constexpr bool is_vectorizable = false;
 
     DENSE_FUNCTION_BASE_TYPES(Base);
 

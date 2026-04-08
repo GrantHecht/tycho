@@ -305,7 +305,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     inline void compute_jacobian(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
                                  ConstMatrixBaseRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        if constexpr (!Derived::is_vectorizable) {
+        if constexpr (!Vectorizable<Derived>) {
             if constexpr (Is_SuperScalar<Scalar>::value) {
                 VectorBaseRef<OutType> fx = fx_.const_cast_derived();
                 VectorBaseRef<JacType> jx = jx_.const_cast_derived();
@@ -417,7 +417,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
         ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
 
         typedef typename InType::Scalar Scalar;
-        if constexpr (!Derived::is_vectorizable) {
+        if constexpr (!Vectorizable<Derived>) {
 
             if constexpr (Is_SuperScalar<Scalar>::value) {
                 VectorBaseRef<OutType> fx = fx_.const_cast_derived();
@@ -678,7 +678,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        if constexpr (Derived::is_linear_function) {
+        if constexpr (LinearVF<Derived>) {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
@@ -850,7 +850,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
     template <class Target, class Scalar>
     inline void scale_hessian(ConstMatrixBaseRef<Target> target_, Scalar s) const {
-        if constexpr (Derived::is_linear_function) {
+        if constexpr (LinearVF<Derived>) {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
@@ -1059,7 +1059,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 ScalarImpl(Packs * vsize, data.num_appl());
             };
 
-            if constexpr (Derived::is_vectorizable) {
+            if constexpr (Vectorizable<Derived>) {
                 if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
@@ -1230,7 +1230,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
                 ScalarImpl(Packs * vsize, data.num_appl());
             };
 
-            if constexpr (Derived::is_vectorizable) {
+            if constexpr (Vectorizable<Derived>) {
                 if (this->derived().enable_vectorization_) {
                     VectorImpl();
                 } else {
@@ -1257,7 +1257,7 @@ struct DenseFunctionBase : Computable<Derived, IR, OR>, DomainHolder<IR> {
     }
     inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                  int &freeloc) const {
-        if constexpr (!Derived::is_linear_function) {
+        if constexpr (!LinearVF<Derived>) {
             mpt[lpt[freeloc]] += v;
             freeloc++;
         }

@@ -54,8 +54,8 @@ namespace tycho::vf {
 template <int IR> struct GenericComparative {
     using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    static const bool is_conditional = true;
-    static const int IRC = IR;
+    static constexpr bool is_conditional = true;
+    static constexpr int IRC = IR;
 
     tycho::utils::TypeStorage<ConditionalBase<IR>> storage;
 

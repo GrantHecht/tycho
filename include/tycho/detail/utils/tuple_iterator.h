@@ -80,7 +80,7 @@ void constexpr const_tuple_for_each(TupleType &&t, FunctionType f) {
 ////////////////////////////////////////////////////////////////////////////////////////
 
 template <int I> struct tuple_loop_index {
-    static const int value = I;
+    static constexpr int value = I;
 };
 
 template <typename TupleType, typename FunctionType>

@@ -121,9 +121,9 @@ struct FunctionCrossProduct_Impl
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
 #if defined(_WIN32)
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 #else
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
 #endif
 
     FunctionCrossProduct_Impl() {}

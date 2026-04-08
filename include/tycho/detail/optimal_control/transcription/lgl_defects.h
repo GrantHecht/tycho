@@ -36,8 +36,8 @@ template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefORC> {
-    static const int Cardinals = CS;
-    static const int Interiors = CS - 1;
+    static constexpr int Cardinals = CS;
+    static constexpr int Interiors = CS - 1;
 
     using Base = VectorFunction<LGLDefects<DODE, CS>,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
@@ -59,7 +59,7 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
     using Coeffs = LGLCoeffs<CS>;
     /////////////////////////////////////////////////////////////////////////////
     DODE ode_;
-    static const bool is_vectorizable = DODE::is_vectorizable;
+    static constexpr bool is_vectorizable = DODE::is_vectorizable;
 
     LGLDefects(const DODE &od) { this->set_ode(od); }
     void set_ode(const DODE &od) {

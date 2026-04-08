@@ -34,7 +34,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
 
     double mu_ = 1.0;
     double sqm_ = 1.0;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     MEEDynamics() { this->set_io_rows(9, 6); }
     MEEDynamics(double mu_) : mu_(mu_), sqm_(std::sqrt(mu_)) { this->set_io_rows(9, 6); }

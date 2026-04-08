@@ -130,7 +130,7 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
     using Base = CwiseFunctionOperator<CwiseArcSin<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -169,7 +169,7 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
     using Base = CwiseFunctionOperator<CwiseArcCos<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -209,7 +209,7 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
     using Base = CwiseFunctionOperator<CwiseArcTan<Func>, Func>;
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -677,7 +677,7 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     template <class InType, class OutType>
     static void cwise_compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
@@ -747,7 +747,7 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
     using Base::Base;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
     double power = 1;
 
     CwisePow(Func f, double power) : Base(f), power(power) {}
@@ -855,7 +855,7 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
     Func func_;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
     CwiseFunctionOperator() {}
     CwiseFunctionOperator(Func f) : func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());

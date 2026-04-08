@@ -19,7 +19,7 @@
 namespace tycho::vf {
 
 template <int St> struct UpperPadHolder {
-    static const int u_pad_ = St;
+    static constexpr int u_pad_ = St;
     UpperPadHolder(int st) {};
     UpperPadHolder() {};
 };
@@ -39,10 +39,10 @@ struct PaddedOutput
     DENSE_FUNCTION_BASE_TYPES(Base)
 
     Func func_;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_linear_function = Func::is_linear_function;
 
     PaddedOutput(Func f, int upad, int lpad) : UpperPadHolder<UP>(upad), func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows() + upad + lpad);

@@ -140,4 +140,30 @@ struct AllPairsStackableHelper<Head, Tail...>
 template <class... Fs>
 concept MutuallyStackable = detail::AllPairsStackableHelper<Fs...>::value;
 
+template <typename T>
+concept ConditionalVF =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_conditional); };
+
+template <typename T>
+concept CwiseVF =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_cwise_operator); };
+
+template <typename T>
+concept HasDiagonalHess =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::has_diagonal_hessian); };
+
+template <typename T>
+concept DenseVectorFunction = requires(const T& t) {
+    { T::IRC } -> std::convertible_to<int>;
+    { T::ORC } -> std::convertible_to<int>;
+    { t.input_rows() } -> std::same_as<int>;
+    { t.output_rows() } -> std::same_as<int>;
+    { T::is_vectorizable } -> std::convertible_to<bool>;
+    { T::is_linear_function } -> std::convertible_to<bool>;
+    typename T::template Output<double>;
+    typename T::template Input<double>;
+    typename T::template Jacobian<double>;
+    typename T::INPUT_DOMAIN;
+};
+
 } // namespace tycho::vf

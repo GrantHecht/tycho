@@ -17,8 +17,8 @@
 namespace tycho::vf {
 
 template <int IR, int OR> struct InputOutputSize {
-    static const int input_rows_val = IR;
-    static const int output_rows_val = OR;
+    static constexpr int input_rows_val = IR;
+    static constexpr int output_rows_val = OR;
 };
 
 template <> struct InputOutputSize<-1, -1> {
@@ -28,11 +28,11 @@ template <> struct InputOutputSize<-1, -1> {
 
 template <int OR> struct InputOutputSize<-1, OR> {
     int input_rows_val = 0;
-    static const int output_rows_val = OR;
+    static constexpr int output_rows_val = OR;
 };
 
 template <int IR> struct InputOutputSize<IR, -1> {
-    static const int input_rows_val = IR;
+    static constexpr int input_rows_val = IR;
     int output_rows_val = 0;
 };
 

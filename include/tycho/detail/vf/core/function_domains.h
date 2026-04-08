@@ -48,15 +48,15 @@ using utils::const_tuple_for_each;
 using utils::make_array;
 
 template <int IR, int Start, int Size> struct SingleDomain {
-    static const int DomainSize = IR;
+    static constexpr int DomainSize = IR;
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {
         std::array<int, 2>{Start, Size}};
-    static const int start = Start;
-    static const int size = Size;
+    static constexpr int start = Start;
+    static constexpr int size = Size;
 };
 
 template <int IR, class T, class... Ts> struct CompositeDomain {
-    static const int DomainSize = IR;
+    static constexpr int DomainSize = IR;
 
     static constexpr bool contains_elem(int n) {
         std::tuple<T, Ts...> ts;
@@ -97,7 +97,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return sr;
     }
-    static const int NumSubDomains = count_sub_domains(dmn);
+    static constexpr int NumSubDomains = count_sub_domains(dmn);
     static constexpr std::array<int, 2> calc_sub_domains(int sd) {
         std::array<int, 2> v = {0, 0};
         int sr = 0;
@@ -126,10 +126,10 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
 
 template <class T, class... Ts> struct CompositeDomain<-1, T, Ts...> {
 
-    static const int DomainSize = -1;
+    static constexpr int DomainSize = -1;
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {std::array<int, 2>{-1, -1}};
-    static const int start = -1;
-    static const int size = -1;
+    static constexpr int start = -1;
+    static constexpr int size = -1;
 
     // CompositeDomain(int ir, T b, Ts... a) {}
     // CompositeDomain() = default;

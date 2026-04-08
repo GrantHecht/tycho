@@ -32,8 +32,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     using Base = VectorFunction<GenericFunction<IR, OR>, IR, OR>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
-    static const bool is_generic_function = true;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_generic_function = true;
+    static constexpr bool is_vectorizable = true;
 
     using Dspec = DenseFunctionSpec<IR, OR>;
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
@@ -45,9 +45,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
     GenericFunction() {}
 
-    template <class T, std::enable_if_t<
-                           !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
-                           bool> = true>
+    template <DenseVectorFunction T>
+        requires (!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>>)
     GenericFunction(const T &t) {
         func_.emplace(t);
         this->cachedata();

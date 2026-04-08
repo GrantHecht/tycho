@@ -42,9 +42,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     InnerFunc inner_func_;
 
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
@@ -272,9 +272,9 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     OuterFunc outer_func_;
 
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, Segment<IR, OR, ST> ifunc) {

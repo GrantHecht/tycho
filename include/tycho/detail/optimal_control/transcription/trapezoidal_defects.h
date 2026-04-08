@@ -36,7 +36,7 @@ struct TrapezoidalDefects
     : VectorFunction<TrapezoidalDefects<DODE>,
                      DefectConstSizes<2, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                      DefectConstSizes<2, DODE::XV, DODE::UV, DODE::PV>::DefORC> {
-    static const int CS = 2;
+    static constexpr int CS = 2;
     using Base = VectorFunction<TrapezoidalDefects<DODE>,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefORC>;
@@ -55,7 +55,7 @@ struct TrapezoidalDefects
     DODE ode_;
     bool enable_hessian_sparsity_ = false;
     Eigen::MatrixXi nz_locs_;
-    static const bool is_vectorizable = DODE::is_vectorizable;
+    static constexpr bool is_vectorizable = DODE::is_vectorizable;
 
     void exact_hessian_sparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
 

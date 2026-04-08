@@ -89,22 +89,22 @@ struct ComputableBase : tycho::utils::CRTPBase<Derived>, InputOutputSize<IR, OR>
     template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
 
     /// Input Rows at Compile Time (-1 if Dynamic)
-    static const int IRC = IR;
+    static constexpr int IRC = IR;
     /// Output Rows at Compile Time (-1 if Dynamic)
-    static const int ORC = OR;
+    static constexpr int ORC = OR;
 
-    static const bool InputIsDynamic = (IR < 0);
-    static const bool OutputIsDynamic = (OR < 0);
-    static const bool JacobianIsDynamic = (IR < 0 || OR < 0);
-    static const bool FullyDynamic = (IR < 0 && OR < 0);
+    static constexpr bool InputIsDynamic = (IR < 0);
+    static constexpr bool OutputIsDynamic = (OR < 0);
+    static constexpr bool JacobianIsDynamic = (IR < 0 || OR < 0);
+    static constexpr bool FullyDynamic = (IR < 0 && OR < 0);
 
-    static const bool is_vectorizable = false;
-    static const bool is_linear_function = false;
-    static const bool has_diagonal_jacobian = false;
-    static const bool has_diagonal_hessian = false;
-    static const bool is_cwise_operator = false;
-    static const bool is_generic_function = false;
-    static const bool is_conditional = false;
+    static constexpr bool is_vectorizable = false;
+    static constexpr bool is_linear_function = false;
+    static constexpr bool has_diagonal_jacobian = false;
+    static constexpr bool has_diagonal_hessian = false;
+    static constexpr bool is_cwise_operator = false;
+    static constexpr bool is_generic_function = false;
+    static constexpr bool is_conditional = false;
 
     mutable bool enable_vectorization_ = false;
 

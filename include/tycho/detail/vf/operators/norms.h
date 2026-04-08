@@ -63,7 +63,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     static constexpr int pp4 = power - 4;
     static constexpr int ppm2 = power * (power - 2);
     // double IntegralNorm_Scale = 1.0;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     IntegralNorm_Impl() {}
     IntegralNorm_Impl(int ir) { this->set_io_rows(ir, 1); }

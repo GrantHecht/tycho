@@ -278,7 +278,7 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     const double pi_ = 3.14159265358979;
     double t0_ = 0.0;
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     KeplerPropagator(double m) {
         this->mu_ = m;

@@ -124,7 +124,7 @@ struct CentralShootingDefect
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
     template <class Scalar> using IntegJac = typename Integrator::template Jacobian<Scalar>;
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
     bool enable_hessian_sparsity_ = false;
 
     DODE ode_;

@@ -46,7 +46,7 @@ template <int IR, int OR, int ST, class VALUE>
 struct Is_ScaledSegment<StaticScaled<Segment<IR, OR, ST>, VALUE>> : std::true_type {};
 
 template <int ST> struct SegStartHolder {
-    static const int seg_start_ = ST;
+    static constexpr int seg_start_ = ST;
     void set_seg_start(int st) {};
 };
 template <> struct SegStartHolder<-1> {
@@ -76,8 +76,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         }
     }
 
-    static const bool is_linear_function = true;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_linear_function = true;
+    static constexpr bool is_vectorizable = true;
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {

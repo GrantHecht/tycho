@@ -45,7 +45,7 @@ struct VectorScalarFunctionProduct_Impl
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename VecFunc::INPUT_DOMAIN, typename ScalFunc::INPUT_DOMAIN>;
-    static const bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
+    static constexpr bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
 
     VectorScalarFunctionProduct_Impl() {}
     VectorScalarFunctionProduct_Impl(VecFunc f1, ScalFunc f2)
@@ -64,11 +64,11 @@ struct VectorScalarFunctionProduct_Impl
         }
     }
 
-    static const bool vectorfunc_is_segment =
+    static constexpr bool vectorfunc_is_segment =
         Is_Segment<VecFunc>::value || Is_ScaledSegment<VecFunc>::value;
-    static const bool scalarfunc_is_segment =
+    static constexpr bool scalarfunc_is_segment =
         Is_Segment<ScalFunc>::value || Is_ScaledSegment<ScalFunc>::value;
-    static const bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
+    static constexpr bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
 
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {

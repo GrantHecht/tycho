@@ -37,9 +37,9 @@ struct NestedCallAndAppendChain2
 
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
-    static const bool is_vectorizable = InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
+    static constexpr bool is_vectorizable = InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
 
-    static const int SizeInnerFuncs = sizeof...(InnerFuncs);
+    static constexpr int SizeInnerFuncs = sizeof...(InnerFuncs);
 
     NestedCallAndAppendChain2() {}
 
@@ -376,8 +376,8 @@ struct NestedCallAndAppendChain
 
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
-    static const bool ReverseAlg = false;
-    static const int SizeInnerFuncs = sizeof...(InnerFuncs);
+    static constexpr bool ReverseAlg = false;
+    static constexpr int SizeInnerFuncs = sizeof...(InnerFuncs);
 
     NestedCallAndAppendChain() {}
     NestedCallAndAppendChain(OuterFunc outer_func_, InnerFunc1 inner_func1_,

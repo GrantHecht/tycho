@@ -38,7 +38,7 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
 
     double cardinal_spacing_;
     double scale_ = 1.0;
-    static const bool IsLinearFunction = true;
+    static constexpr bool IsLinearFunction = true;
 
     SingleMeshSpacing() {}
     SingleMeshSpacing(double cs) { cardinal_spacing_ = cs; }

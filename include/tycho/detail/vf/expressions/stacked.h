@@ -102,8 +102,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     SUB_FUNCTION_IO_TYPES(Func1);
     SUB_FUNCTION_IO_TYPES(Func2);
 
-    static const bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     Func1 func1;
     Func2 func2;
@@ -313,8 +313,8 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     DENSE_FUNCTION_BASE_TYPES(Base);
     SUB_FUNCTION_IO_TYPES(Func);
 
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool is_vectorizable = Func::is_vectorizable;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool is_vectorizable = Func::is_vectorizable;
 
     std::vector<Func> funcs;
 
