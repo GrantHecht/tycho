@@ -120,8 +120,7 @@ endif()
 
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)"
     ${TYCHO_MASTER_PROJECT})
-option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables"
-    ${TYCHO_MASTER_PROJECT})
+option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" OFF)
 option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
 option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)

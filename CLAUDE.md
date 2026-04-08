@@ -224,7 +224,7 @@ cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
 | `PYTHON_LOCAL_INSTALL_DIR`    | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
 | `TYCHO_FP_MODE`               | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
 | `BUILD_SPHINX_DOCS`           | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
-| `BUILD_CPP_EXAMPLES`          | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
+| `BUILD_CPP_EXAMPLES`          | `ON` to build C++ example programs under `examples/cpp_examples/` (default OFF)              |
 | `BUILD_CPP_TESTS`             | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
@@ -344,10 +344,15 @@ conda install -n tycho -c conda-forge basemap
 
 ### C++ brachistochrone example
 
+C++ examples are not built by default (`BUILD_CPP_EXAMPLES=OFF`). To build and run:
+
 ```bash
-./build/examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
+cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON
+cd build && ninja -j<N> brachistochrone_cpp
+./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
 # Builder-API variant (equivalent convergence check):
-# ./build/examples/cpp_examples/builder/brachistochrone/brachistochrone_cpp
+# ninja -j<N> brachistochrone_builder
+# ./examples/cpp_examples/builder/brachistochrone/brachistochrone_builder
 ```
 
 Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
@@ -358,7 +363,7 @@ Run all four steps in order before opening or merging any PR into `main`:
 
 1. **C++ unit tests** — `ctest --output-on-failure` — all must pass
 2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 38 must exit 0
-3. **C++ brachistochrone** — see path above — must print "Optimal Solution Found", obj ≈ 1.8013 s
+3. **C++ brachistochrone** — `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON && cd build && ninja -j<N> brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp` — must print "Optimal Solution Found", obj ≈ 1.8013 s
 4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy
