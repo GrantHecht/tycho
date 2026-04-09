@@ -28,22 +28,22 @@ ported). Organized into tiers by complexity and expected API gaps.
 
 | # | Example | States | Ctrls | Dynamics | Objective | Key Features |
 |---|---------|--------|-------|----------|-----------|--------------|
-| 1 | CartPole | 4 | 1 | Swingup, matrix inverse | min control effort | Matrix VF operations |
-| 2 | VanDerPol | 2 | 1 | Oscillator | min integral(x0^2+x1^2+u^2) | BlockConstant control |
-| 3 | BrysonDenham | 2 | 1 | Point mass | min integral(u^2/2) | State upper bound (x<=1/9) |
-| 4 | MountainCar | 2 | 1 | Terrain oscillator | min time | State bounds, scaling |
-| 5 | ParallelParking | 6 | 2+1p | Bicycle kinematics | min time | Path constraints (slot), BlockConstant, manual mesh (two k values) |
-| 6 | AnalyticExample | 1 | 1 | Linear | min custom integral | Custom objective function |
+| 1 | VanDerPol | 2 | 1 | Oscillator | min integral(x0^2+x1^2+u^2) | BlockConstant control |
+| 2 | BrysonDenham | 2 | 1 | Point mass | min integral(u^2/2) | State upper bound (x<=1/9) |
+| 3 | MountainCar | 2 | 1 | Terrain oscillator | min time | State bounds, scaling |
+| 4 | AnalyticExample | 1 | 1 | Linear | min custom integral | Custom objective function |
+| 5 | BikeObstacle | 4 | 2 | Bicycle kinematics | min time | Obstacle avoidance inequality |
+| 6 | FreeFlyingRobot | 6 | 4 | Planar 6-DOF | min integral(u_sum) | Large control vector |
 
-### Tier 2: Single-Phase with Special Features
+### Tier 2: Single-Phase with Advanced Features
 
-| # | Example | States | Ctrls | Dynamics | Objective | Key Features |
-|---|---------|--------|-------|----------|-----------|--------------|
-| 7 | BikeObstacle | 4 | 2 | Bicycle kinematics | min time | Obstacle avoidance inequality |
-| 8 | FreeFlyingRobot | 6 | 4 | Planar 6-DOF | min integral(u_sum) | Large control vector |
-| 9 | HangingChain | 1 | 1+1p | Chain statics | min potential energy | Integral parameter constraint, Jet parallel solve |
-| 10 | Reentry | 5 | 2 | Shuttle reentry | max cross-range | Heating constraint, adaptive mesh, two-step solve |
-| 11 | MinimumTimeToClimb | 4 | 1 | Aircraft climb | min time | Inline atmospheric model, adaptive mesh |
+| # | Example | States | Ctrls | Dynamics | Objective | Key Features | Notes |
+|---|---------|--------|-------|----------|-----------|--------------|-------|
+| 7 | CartPole | 4 | 1 | Swingup, matrix inverse | min control effort | `RowMatrix`, `.inverse()` | **Validate matrix VF ops work in builder lambda** |
+| 8 | ParallelParking | 6 | 2+1p | Bicycle kinematics | min time | Path constraints, static params, `refine_traj_manual`, BlockConstant | May need `phase.base()` for manual mesh refinement |
+| 9 | HangingChain | 1 | 1+1p | Chain statics | min potential energy | Integral parameter constraint | **Jet parallel solve gap** — Phase wrapper has no Jet integration |
+| 10 | Reentry | 5 | 2 | Shuttle reentry | max cross-range | Heating constraint, adaptive mesh, two-step solve | |
+| 11 | MinimumTimeToClimb | 4 | 1 | Aircraft climb | min time | Inline atmospheric model, adaptive mesh | |
 
 ### Tier 3: Multi-Phase
 
@@ -87,14 +87,14 @@ examples/cpp_examples/builder/
   zermelo/                  # (existing)
   hypersens/                # (existing)
   delta3_launch/            # (existing)
-  cart_pole/                # new
   van_der_pol/              # new
   bryson_denham/            # new
   mountain_car/             # new
-  parallel_parking/         # new
   analytic_example/         # new
   bike_obstacle/            # new
   free_flying_robot/        # new
+  cart_pole/                # new
+  parallel_parking/         # new
   hanging_chain/            # new
   reentry/                  # new
   minimum_time_to_climb/    # new
@@ -116,11 +116,15 @@ Each directory contains `CMakeLists.txt` + `main.cpp`.
 
 ## Example Structure (template)
 
+Based on the existing builder examples (which use `iostream`, `PSIOPT::ConvergenceFlags`,
+and `phase.return_traj()`):
+
 ```cpp
 #include "tycho/tycho.h"
 #include <cmath>
 #include <cstdlib>
-#include <fmt/core.h>
+#include <iomanip>
+#include <iostream>
 
 using namespace tycho;
 
@@ -141,21 +145,26 @@ int main() {
     phase.optimizer().set_...();
     auto flag = phase.solve_optimize();
 
-    // 4. Extract and verify results
-    auto traj = phase.return_traj();
-    double obj = phase.return_objective();
-    fmt::print("Objective: {:.6f}\n", obj);
+    // 4. Convergence check
+    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "FAILED: solver did not converge (status "
+                  << static_cast<int>(flag) << ")\n";
+        return EXIT_FAILURE;
+    }
 
-    // 5. Convergence assertion
-    if (flag != oc::ConvergenceFlags::CONVERGED) {
-        fmt::print(stderr, "FAILED: solver did not converge\n");
+    // 5. Extract and verify results
+    auto traj = phase.return_traj();
+    // Extract objective from trajectory (e.g., final time for min-time problems)
+    double tf = traj.back()[time_index];
+    std::cout << std::fixed << std::setprecision(6)
+              << "Objective: " << tf << "\n";
+
+    if (std::abs(tf - EXPECTED_TF) > TOLERANCE) {
+        std::cerr << "FAILED: objective " << tf
+                  << " != expected " << EXPECTED_TF << "\n";
         return EXIT_FAILURE;
     }
-    if (std::abs(obj - EXPECTED_OBJ) > TOLERANCE) {
-        fmt::print(stderr, "FAILED: objective {:.6f} != expected {:.6f}\n", obj, EXPECTED_OBJ);
-        return EXIT_FAILURE;
-    }
-    fmt::print("PASSED\n");
+    std::cout << "PASSED\n";
     return EXIT_SUCCESS;
 }
 ```
@@ -165,8 +174,13 @@ int main() {
 - Each example gets a `CMakeLists.txt` that adds an executable and links `tycho`
 - `examples/cpp_examples/CMakeLists.txt` conditionally adds all subdirectories
   when `BUILD_CPP_EXAMPLES=ON`
-- All example executables placed in `heavy_compile` job pool
-- A top-level CMake target `cpp_examples_all` builds all examples
+- All example executables placed in `heavy_compile` job pool (via a foreach loop
+  over all builder example targets in the parent CMakeLists.txt)
+- Add a custom target `cpp_examples_all` that depends on all example executables
+  (must be created in `examples/cpp_examples/CMakeLists.txt`)
+- Each example registered as a CTest test via `add_test(NAME cpp_example_<name>
+  COMMAND <target>)` in `examples/cpp_examples/CMakeLists.txt`, enabling
+  `ctest -R cpp_example` to run all C++ examples
 
 ## Gap Tracking
 
@@ -188,14 +202,16 @@ at the blocked sections, with the gap tracked in the above document.
 
 1. `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON`
 2. `ninja -j8 cpp_examples_all` — all examples compile
-3. Each example runs and prints `PASSED` (or `TODO: <gap>` for blocked features)
-4. `ctest -R cpp_example` — integrated into test suite
-5. No regressions in existing tests or Python examples
+3. Each example exits 0 and prints `PASSED` (or documents gap with TODO)
+4. `ctest -R cpp_example` — all registered examples pass
+5. No regressions in existing C++ tests or Python examples
+6. Integration: C++ examples become step 5 of the pre-merge verification
+   sequence in CLAUDE.md (after benchmarks)
 
 ## Implementation Order
 
 1. Tier 1 (6 examples) — validates core builder API
-2. Tier 2 (5 examples) — mesh refinement, special constraints, Jet parallel
+2. Tier 2 (5 examples) — mesh refinement, special constraints, matrix ops, Jet
 3. Tier 3 (3 examples) — multi-phase, OCP linking
 4. Tier 4 (5 examples) — low-thrust, astro features (gap discovery)
 5. Tier 5 (3 examples) — advanced astro (most gaps expected)
