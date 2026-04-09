@@ -74,6 +74,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_cwise_segment_sum_jacobian.cpp
     vector_functions/test_cwise_jacobian_stress.cpp
     vector_functions/test_mixed_size_ops.cpp
+    vector_functions/test_vf_concepts.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -149,7 +150,7 @@ target_include_directories(tycho_tests PRIVATE
 set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 # Unity build — merge test TUs to eliminate cross-TU template duplication.
-# Batch size 8 merges 46 heavy sources into 6 unity TUs.
+# Batch size 8 merges heavy test sources into fewer unity TUs.
 # This significantly reduces serial compile time at the cost of higher per-TU RSS.
 set_target_properties(tycho_tests PROPERTIES
     UNITY_BUILD ON

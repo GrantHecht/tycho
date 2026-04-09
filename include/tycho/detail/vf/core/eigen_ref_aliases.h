@@ -8,10 +8,12 @@
 
 #pragma once
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 
 namespace tycho::vf {
 
+// CVecRef and CMatRef (likewise VecRef/MatRef) are intentionally identical —
+// Eigen::MatrixBase covers both vectors and matrices. The separate aliases
+// document usage-site semantics (vector vs matrix context).
 template <class T> using CVecRef = const Eigen::MatrixBase<T> &;
 template <class T> using VecRef = Eigen::MatrixBase<T> &;
 template <class T> using CMatRef = const Eigen::MatrixBase<T> &;
