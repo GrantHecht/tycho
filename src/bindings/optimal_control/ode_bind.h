@@ -16,8 +16,8 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// Free-function binding helpers for ODE_Expression, ODEBase, and GenericODE.
-// Replaces the out-of-class ODE_Expression::Build(), ODEBase::BuildODEModule(), and
+// Free-function binding helpers for StaticODE_Expression, ODEBase, and GenericODE.
+// Replaces the out-of-class StaticODE_Expression::Build(), ODEBase::BuildODEModule(), and
 // GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
 #include "dense_function_base_bind.h"
@@ -30,7 +30,7 @@ using namespace tycho::oc;
 using namespace tycho::integrators;
 
 template <class Derived, class ExprImpl, class... Ts>
-void ODE_ExpressionBuild(nb::module_ &m, const char *name) {
+void StaticODE_ExpressionBuild(nb::module_ &m, const char *name) {
     auto obj = nb::class_<Derived>(m, name).def(nb::init<Ts...>());
     DenseBaseBuild<Derived>(obj);
     obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {

@@ -5,7 +5,7 @@
 //   - ODEArguments with offset-aware XVar/UVar tags
 //   - FD/FWAD macro variants for reduced compile time
 //   - Hessian consistency through FD/FWAD wrappers
-//   - Dynamic-size ODE wrapping via ODE_DerivModeWrapper
+//   - Dynamic-size ODE wrapping via StaticODE_DerivModeWrapper
 //
 // Both features are complementary: tags provide semantic access to ODE
 // variables, while FD/FWAD macros avoid expensive Jacobian/Hessian
@@ -80,10 +80,10 @@ BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, do
 BUILD_ODE_FROM_EXPRESSION_FWAD(SyntaxDragBrachFWAD, SyntaxDragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
-// Dynamic-size ODE for testing ODE_DerivModeWrapper with IRC == -1
+// Dynamic-size ODE for testing StaticODE_DerivModeWrapper with IRC == -1
 ///////////////////////////////////////////////////////////////////////////////
 
-struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
+struct DynamicBrach : StaticODE<DynamicBrach, -1, -1, -1> {
     DynamicBrach() { set_ode_size(3, 1, 0); }
 
     template <class InType, class OutType>
@@ -101,19 +101,21 @@ struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
 };
 
 struct DynamicBrachFD
-    : ODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
-                           DenseDerivativeMode::FDiffFwd> {
-    using Base = ODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
-                                      DenseDerivativeMode::FDiffFwd>;
+    : StaticODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
+                                 DenseDerivativeMode::FDiffFwd> {
+    using Base =
+        StaticODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
+                                   DenseDerivativeMode::FDiffFwd>;
     using Base::Base;
 };
 
 struct DynamicBrachFWAD
-    : ODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
-                           DenseDerivativeMode::AutodiffFwd> {
+    : StaticODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
+                                 DenseDerivativeMode::AutodiffFwd> {
     using Base =
-        ODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
-                             DenseDerivativeMode::AutodiffFwd>;
+        StaticODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach,
+                                   DenseDerivativeMode::AutodiffFwd,
+                                   DenseDerivativeMode::AutodiffFwd>;
     using Base::Base;
 };
 
@@ -337,7 +339,7 @@ TEST_F(VFCompositionTest, FWAD_HessianConsistency) {
 // Tests — Dynamic-size ODE wrapping (IRC == -1)
 //
 // Regression test for the FD step re-initialization fix. When
-// ODE_DerivModeWrapper wraps a dynamic-size ODE (IRC == -1), the FD step
+// StaticODE_DerivModeWrapper wraps a dynamic-size ODE (IRC == -1), the FD step
 // vectors must be reinitialized after set_io_rows. The macros always produce
 // compile-time-sized inner ODEs, so this test manually constructs a wrapper
 // around a dynamic-size ODE to exercise that path.
@@ -398,7 +400,7 @@ TEST_F(VFCompositionTest, DynamicODE_FD_HessianConsistency) {
 ///////////////////////////////////////////////////////////////////////////////
 // Tests — Dynamic-size ODE wrapping with AutodiffFwd (IRC == -1)
 //
-// Exercises the AutodiffFwd path through ODE_DerivModeWrapper with a
+// Exercises the AutodiffFwd path through StaticODE_DerivModeWrapper with a
 // dynamic-size inner ODE. The FD path is tested above; this verifies
 // that set_io_rows works correctly for the autodiff derivative mode too.
 ///////////////////////////////////////////////////////////////////////////////

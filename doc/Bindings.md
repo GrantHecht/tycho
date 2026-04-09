@@ -329,7 +329,7 @@ For `GenericFunction<IR,OR>` types (the type-erased wrappers). Registers init-fr
 | `ODESizeBuild<XV,UV,PV,Derived>(obj)` | Registers ODE dimension accessors: `x_vars()`, `u_vars()`, `p_vars()`, `t_var()`, index helpers |
 | `BuildGenODEModule<BaseType,XV,UV,PV>(name, mod, reg)` | Creates a complete ODE submodule with `ode`, `integrator`, `phase` classes |
 | `BuildODEModule<BaseType,Derived,XV,UV,PV>(name, mod, reg)` | Same but for concrete (non-generic) ODE types |
-| `ODE_ExpressionBuild<Derived,ExprImpl,Ts...>(m, name)` | Registers an ODE expression type with DenseBaseBuild + phase factory + integrator constructors |
+| `StaticODE_ExpressionBuild<Derived,ExprImpl,Ts...>(m, name)` | Registers a static ODE expression type with DenseBaseBuild + phase factory + integrator constructors |
 
 ### Conditional and Comparative Builders
 
@@ -559,7 +559,7 @@ src/bindings/
     matrix_function_build.cpp     ColMatrix, RowMatrix types
   optimal_control/
     ode_phase_bind.h              TychoBind<> for ODEPhase, StateFunction, LinkFunction, etc.
-    ode_bind.h                    ODE_ExpressionBuild, BuildODEModule, BuildGenODEModule
+    ode_bind.h                    StaticODE_ExpressionBuild, BuildODEModule, BuildGenODEModule
     ode_sizes_bind.h              ODESizeBuild<XV,UV,PV,Derived> helper
     ode_arguments_bind.h          ODEArguments binding
     mesh_iterate_info_bind.h/.cpp MeshIterateInfo binding
@@ -937,7 +937,7 @@ Every file in `src/bindings/` with a one-line description:
 | `matrix_function_build.cpp` | ColMatrix, RowMatrix type bindings |
 | **optimal_control/** | |
 | `ode_phase_bind.h` | `TychoBind` for ODEPhase, StateFunction, LinkFunction, FDDerivArbitrary; `ODEPhaseBuildImpl` helper; forward declarations for ODEPhaseBase, LGLInterpTable, OptimalControlProblem |
-| `ode_bind.h` | `ODE_ExpressionBuild`, `BuildODEModule`, `BuildGenODEModule`, `TychoBind<InterpFunction>` |
+| `ode_bind.h` | `StaticODE_ExpressionBuild`, `BuildODEModule`, `BuildGenODEModule`, `TychoBind<InterpFunction>` |
 | `ode_sizes_bind.h` | `ODESizeBuild<XV,UV,PV,Derived>` helper |
 | `ode_arguments_bind.h` | ODEArguments binding |
 | `mesh_iterate_info_bind.h` | MeshIterateInfo binding declaration |
