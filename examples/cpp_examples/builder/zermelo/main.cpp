@@ -4,7 +4,7 @@
 // Same problem as the Python examples (examples/Zermelo*.py), but
 // demonstrating the key Builder API advantage: composable wind functions
 // at runtime.  The static DSL approach requires 4 separate ODE types;
-// here we use a single navigate() function and pass different RuntimeODE
+// here we use a single navigate() function and pass different ODE
 // instances.
 //
 // State  : [x, y]    (2D position)
@@ -30,10 +30,10 @@ using namespace tycho::astro;
 using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
-// navigate() — not templated!  Works with any RuntimeODE.
+// navigate() — not templated!  Works with any ODE.
 ///////////////////////////////////////////////////////////////////////////////
 
-std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
+std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
                                       const Eigen::VectorXd &B, double vMax) {
     constexpr int nSeg = 250;
     constexpr double tol = 1e-12;
@@ -82,10 +82,10 @@ std::vector<Eigen::VectorXd> navigate(RuntimeODE &ode, const Eigen::VectorXd &A,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Wind model factories — each returns a RuntimeODE
+// Wind model factories — each returns a ODE
 ///////////////////////////////////////////////////////////////////////////////
 
-RuntimeODE make_no_wind(double vMax) {
+ODE make_no_wind(double vMax) {
     return ODEBuilder(2, 1)
         .define([vMax](auto &args) {
             auto theta = args.u_var(0);
@@ -95,7 +95,7 @@ RuntimeODE make_no_wind(double vMax) {
         .build();
 }
 
-RuntimeODE make_uniform_wind(double vMax, double wVel, double wAng) {
+ODE make_uniform_wind(double vMax, double wVel, double wAng) {
     double wx = wVel * std::cos(wAng);
     double wy = wVel * std::sin(wAng);
     return ODEBuilder(2, 1)
@@ -107,7 +107,7 @@ RuntimeODE make_uniform_wind(double vMax, double wVel, double wAng) {
         .build();
 }
 
-RuntimeODE make_const_dir_wind(double vMax, double wAng) {
+ODE make_const_dir_wind(double vMax, double wAng) {
     // Wind speed depends on position: vel = cos(||pos||)
     // Direction is constant.
     double cwAng = std::cos(wAng);
@@ -128,7 +128,7 @@ RuntimeODE make_const_dir_wind(double vMax, double wAng) {
         .build();
 }
 
-RuntimeODE make_var_wind(double vMax) {
+ODE make_var_wind(double vMax) {
     // Wind speed and direction both depend on position.
     // vel = sin(||pos||), ang = 2*(x+y)
     auto XtU = ODEArguments(2, 1, 0);

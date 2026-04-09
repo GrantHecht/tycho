@@ -114,7 +114,7 @@ static const double mf_phase4 = m0_phase4 - PM2;
 // RocketODE factory — parameterised by (T, mdot)
 ///////////////////////////////////////////////////////////////////////////////
 
-RuntimeODE make_rocket_ode(double T, double mdot) {
+ODE make_rocket_ode(double T, double mdot) {
     // Dynamic args with template segment accessors: dynamic shell, static core.
     // head<3>() / segment<3>() produce ORC=3, enabling cross/normalized_power.
     auto args = ODEArguments(7, 3, 0);

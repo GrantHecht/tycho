@@ -22,7 +22,7 @@ class ControlModeTest : public OptimalControlTest {};
 
 namespace {
 
-RuntimeODE make_brach_ode() {
+ODE make_brach_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
             auto v = args.x_var(2);
@@ -50,7 +50,7 @@ std::vector<Eigen::VectorXd> make_control_modes_brach_guess() {
     return traj;
 }
 
-Phase make_brach_phase_with_mode(RuntimeODE &ode, ControlModes mode) {
+Phase make_brach_phase_with_mode(ODE &ode, ControlModes mode) {
     auto traj = make_control_modes_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho — Builder API: RuntimeODE
+// Tycho — Builder API: ODE
 //
 // Runtime-defined ODE that stores a type-erased GenericFunction plus size
 // metadata.  Produces ODEPhase objects via a fully-dynamic GenericODE.
@@ -30,20 +30,20 @@ class Phase; // forward
 /// expression (auto-erased), or from a pre-built GenericFunction.  Call
 /// phase() to produce a Phase object for setting up constraints, objectives,
 /// and solving.
-class RuntimeODE {
+class ODE {
   public:
     using DynODE = GenericODE<GenericFunction<-1, -1>, -1, -1, -1>;
 
     /// Construct from any VectorFunction expression and explicit sizes.
     template <typename Func>
-    RuntimeODE(const Func &ode_func, int xvars, int uvars, int pvars = 0)
+    ODE(const Func &ode_func, int xvars, int uvars, int pvars = 0)
         : func_(ode_func), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         validate_sizes();
         validate();
     }
 
     /// Construct from an already type-erased GenericFunction and sizes.
-    RuntimeODE(GenericFunction<-1, -1> func, int xvars, int uvars, int pvars = 0)
+    ODE(GenericFunction<-1, -1> func, int xvars, int uvars, int pvars = 0)
         : func_(std::move(func)), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         validate_sizes();
         validate();
@@ -51,20 +51,20 @@ class RuntimeODE {
 
     // ── Named variable registration (fluent) ────────────────────────────
 
-    RuntimeODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
+    ODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         ensure_registry();
         for (const auto &[name, idx] : names)
             registry_->add_name(name, idx);
         return *this;
     }
 
-    RuntimeODE &var_group(const std::string &name, int start, int count) {
+    ODE &var_group(const std::string &name, int start, int count) {
         ensure_registry();
         registry_->add_group(name, start, count);
         return *this;
     }
 
-    RuntimeODE &var_group(const std::string &name, std::initializer_list<std::string> members) {
+    ODE &var_group(const std::string &name, std::initializer_list<std::string> members) {
         ensure_registry();
         registry_->add_group(name, members);
         return *this;
@@ -117,26 +117,26 @@ class RuntimeODE {
     void validate_sizes() const {
         if (xvars_ <= 0)
             throw std::invalid_argument(
-                fmt::format("RuntimeODE: xvars must be positive (got {})", xvars_));
+                fmt::format("ODE: xvars must be positive (got {})", xvars_));
         if (uvars_ < 0)
             throw std::invalid_argument(
-                fmt::format("RuntimeODE: uvars must be non-negative (got {})", uvars_));
+                fmt::format("ODE: uvars must be non-negative (got {})", uvars_));
         if (pvars_ < 0)
             throw std::invalid_argument(
-                fmt::format("RuntimeODE: pvars must be non-negative (got {})", pvars_));
+                fmt::format("ODE: pvars must be non-negative (got {})", pvars_));
     }
 
     void validate() const {
         int expected_ir = xvars_ + 1 + uvars_ + pvars_;
         if (func_.input_rows() != expected_ir) {
             throw std::invalid_argument(
-                fmt::format("RuntimeODE: function input size {} does not match XtUP size {} "
+                fmt::format("ODE: function input size {} does not match XtUP size {} "
                             "(xv={}, uv={}, pv={})",
                             func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
         }
         if (func_.output_rows() != xvars_) {
             throw std::invalid_argument(
-                fmt::format("RuntimeODE: function output size {} does not match XV={}",
+                fmt::format("ODE: function output size {} does not match XV={}",
                             func_.output_rows(), xvars_));
         }
     }
@@ -149,9 +149,12 @@ class RuntimeODE {
     void check_registry() const {
         if (!registry_) {
             throw std::invalid_argument(
-                "RuntimeODE: no variable names registered (call var_names() first)");
+                "ODE: no variable names registered (call var_names() first)");
         }
     }
 };
+
+/// Deprecated alias — use ODE instead.
+[[deprecated("Use ODE instead")]] typedef ODE RuntimeODE;
 
 } // namespace tycho

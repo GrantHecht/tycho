@@ -1,8 +1,8 @@
 // =============================================================================
-// Tycho — RuntimeODE::phase() implementation
+// Tycho — ODE::phase() implementation
 //
 // Defined out-of-line to avoid pulling ODEPhase.h (heavy template) into the
-// RuntimeODE header.
+// ODE header.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
 // =============================================================================
@@ -15,18 +15,18 @@
 
 namespace tycho {
 
-Phase RuntimeODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
+Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                         int num_segments) const {
     if (traj.empty())
-        throw std::invalid_argument("RuntimeODE::phase: trajectory must not be empty");
+        throw std::invalid_argument("ODE::phase: trajectory must not be empty");
     if (num_segments <= 0)
         throw std::invalid_argument(
-            fmt::format("RuntimeODE::phase: num_segments must be positive (got {})", num_segments));
+            fmt::format("ODE::phase: num_segments must be positive (got {})", num_segments));
     int expected = xtup_size();
     for (size_t i = 0; i < traj.size(); ++i) {
         if (traj[i].size() != expected) {
             throw std::invalid_argument(
-                fmt::format("RuntimeODE::phase: trajectory point {} has size {}, expected {} "
+                fmt::format("ODE::phase: trajectory point {} has size {}, expected {} "
                             "(XtUP = {}+1+{}+{})",
                             i, traj[i].size(), expected, xvars_, uvars_, pvars_));
         }

@@ -43,7 +43,7 @@ class Phase {
         : phase_(std::move(phase)), registry_(std::move(registry)) {
         if (!phase_)
             throw std::invalid_argument(
-                "Phase: null phase pointer (construct via RuntimeODE::phase())");
+                "Phase: null phase pointer (construct via ODE::phase())");
         if (registry_.xvars() != phase_->x_vars() || registry_.uvars() != phase_->u_vars() ||
             registry_.pvars() != phase_->p_vars()) {
             throw std::invalid_argument(fmt::format(

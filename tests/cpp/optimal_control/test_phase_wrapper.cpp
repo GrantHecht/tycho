@@ -16,7 +16,7 @@ class PhaseWrapperTest : public OptimalControlTest {};
 
 namespace {
 
-RuntimeODE make_brach_runtime_ode() {
+ODE make_brach_runtime_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
             auto v = args.x_var(2);
