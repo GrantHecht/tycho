@@ -45,25 +45,25 @@ sizes), sub-segments work with all operations including `cross()` and
 `normalized_power()`. Template overloads `XVec<SZ>()`, `UVec<SZ>()`,
 `PVec<SZ>()` are also available for compile-time-sized segments.
 
-## Pain Point 3: OCP link constraints require index-based API — RESOLVED
+## Pain Point 3: OptimalControlProblem link constraints require index-based API — RESOLVED
 
-**Status: Fixed** — Added `OCP` wrapper class that accepts Phase wrappers
+**Status: Fixed** — Added `OptimalControlProblem` wrapper class that accepts Phase wrappers
 directly and resolves named variables for link constraints:
 
 ```cpp
-OCP ocp;
-ocp.addPhase(phase1);                                          // no base_ptr()
-ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});  // named vars
-ocp.optimizer().set_PrintLevel(1);
+OptimalControlProblem ocp;
+ocp.add_phase(phase1);                                          // no base_ptr()
+ocp.add_forward_link_equal_con(phase1, phase4, {"R", "V", "t", "u"});  // named vars
+ocp.optimizer().set_print_level(1);
 ocp.solve_optimize();
 ```
 
-Use `ocp.base()` to access the underlying `OptimalControlProblem` for methods
+Use `ocp.base()` to access the underlying `OptimalControlProblemBase` for methods
 not yet wrapped.
 
-## Pain Point 4: `base_ptr()` required for OCP integration — RESOLVED
+## Pain Point 4: `base_ptr()` required for OptimalControlProblem integration — RESOLVED
 
-**Status: Fixed** — The `OCP` wrapper's `addPhase(Phase&)` accepts Phase
+**Status: Fixed** — The `OptimalControlProblem` wrapper's `addPhase(Phase&)` accepts Phase
 wrappers directly, eliminating all `base_ptr()` calls for the common workflow.
 
 ## Positive Findings
@@ -73,8 +73,8 @@ wrappers directly, eliminating all `base_ptr()` calls for the common workflow.
 The Builder API's primary advantage shines in the Zermelo example. The static
 version requires 4 separate ODE types (one per wind model) and a templated
 `navigate<ODE>()` function. The builder version has:
-- 4 factory functions returning `RuntimeODE`
-- A single, non-templated `navigate(RuntimeODE&, ...)` function
+- 4 factory functions returning `ODE`
+- A single, non-templated `navigate(ODE&, ...)` function
 - Each wind model composed at runtime with captured parameters
 
 This is a clear ergonomic win: **4 ODE types + template → 4 factory functions + 1 plain function**.

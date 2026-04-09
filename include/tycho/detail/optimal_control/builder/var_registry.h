@@ -171,7 +171,7 @@ class VarRegistry {
     bool contains(const std::string &name) const { return map_.count(name) > 0; }
 
     /// Read-only access to registered name-index pairs (used by
-    /// RuntimeODE::phase() to populate the GenericODE's internal index map).
+    /// ODE::phase() to populate the GenericODE's internal index map).
     const std::unordered_map<std::string, Eigen::VectorXi> &entries() const { return map_; }
 
   private:

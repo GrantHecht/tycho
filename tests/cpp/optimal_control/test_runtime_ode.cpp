@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// RuntimeODE unit tests
+// ODE unit tests
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "oc_test_utils.h"
@@ -12,9 +12,9 @@
 using namespace tycho;
 using namespace TychoTest;
 
-class RuntimeODETest : public OptimalControlTest {};
+class ODETest : public OptimalControlTest {};
 
-TEST_F(RuntimeODETest, ConstructFromExpression) {
+TEST_F(ODETest, ConstructFromExpression) {
     // Build Brachistochrone dynamics using the VF DSL
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);     // x_var(2)
@@ -26,21 +26,21 @@ TEST_F(RuntimeODETest, ConstructFromExpression) {
 
     auto ode_expr = stack(xdot, ydot, vdot);
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     EXPECT_EQ(ode.xvars(), 3);
     EXPECT_EQ(ode.uvars(), 1);
     EXPECT_EQ(ode.pvars(), 0);
     EXPECT_EQ(ode.xtup_size(), 5);
 }
 
-TEST_F(RuntimeODETest, VarNameRegistration) {
+TEST_F(ODETest, VarNameRegistration) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     ode.var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}});
 
     EXPECT_TRUE(ode.has_registry());
@@ -51,14 +51,14 @@ TEST_F(RuntimeODETest, VarNameRegistration) {
     EXPECT_DOUBLE_EQ(input[4], 1.0);
 }
 
-TEST_F(RuntimeODETest, GenericODEConstruction) {
+TEST_F(ODETest, GenericODEConstruction) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     auto gen_ode = ode.generic_ode();
 
     EXPECT_EQ(gen_ode.x_vars(), 3);
@@ -66,7 +66,7 @@ TEST_F(RuntimeODETest, GenericODEConstruction) {
     EXPECT_EQ(gen_ode.p_vars(), 0);
 }
 
-TEST_F(RuntimeODETest, SizeMismatchThrows) {
+TEST_F(ODETest, SizeMismatchThrows) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
@@ -74,31 +74,31 @@ TEST_F(RuntimeODETest, SizeMismatchThrows) {
     // Expression has 3 outputs but we claim xvars=2
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    EXPECT_THROW(RuntimeODE(ode_expr, 2, 1, 0), std::invalid_argument);
+    EXPECT_THROW(ODE(ode_expr, 2, 1, 0), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, InvalidSizesThrow) {
+TEST_F(ODETest, InvalidSizesThrow) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    EXPECT_THROW(RuntimeODE(ode_expr, 0, 1, 0), std::invalid_argument);
-    EXPECT_THROW(RuntimeODE(ode_expr, -1, 1, 0), std::invalid_argument);
-    EXPECT_THROW(RuntimeODE(ode_expr, 3, -1, 0), std::invalid_argument);
+    EXPECT_THROW(ODE(ode_expr, 0, 1, 0), std::invalid_argument);
+    EXPECT_THROW(ODE(ode_expr, -1, 1, 0), std::invalid_argument);
+    EXPECT_THROW(ODE(ode_expr, 3, -1, 0), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, InputSizeMismatchThrows) {
+TEST_F(ODETest, InputSizeMismatchThrows) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
     // Expression built for (3,1,0) but we claim (3,2,0) — input size mismatch
-    EXPECT_THROW(RuntimeODE(ode_expr, 3, 2, 0), std::invalid_argument);
+    EXPECT_THROW(ODE(ode_expr, 3, 2, 0), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
+TEST_F(ODETest, FlatMapPopulatedOnPhase) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(2);
@@ -128,28 +128,28 @@ TEST_F(RuntimeODETest, FlatMapPopulatedOnPhase) {
     EXPECT_EQ(theta_idx[0], 4);
 }
 
-TEST_F(RuntimeODETest, MakeInputWithoutRegistryThrows) {
+TEST_F(ODETest, MakeInputWithoutRegistryThrows) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     EXPECT_FALSE(ode.has_registry());
     EXPECT_THROW(ode.make_input({{"x", 1.0}}), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, MakeUnitsWithoutRegistryThrows) {
+TEST_F(ODETest, MakeUnitsWithoutRegistryThrows) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     EXPECT_THROW(ode.make_units({{"x", 10.0}}), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, EmptyTrajectoryThrows) {
+TEST_F(ODETest, EmptyTrajectoryThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(2);
@@ -162,7 +162,7 @@ TEST_F(RuntimeODETest, EmptyTrajectoryThrows) {
     EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, empty_traj, 16), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
+TEST_F(ODETest, WrongTrajectoryDimensionThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(2);
@@ -176,7 +176,7 @@ TEST_F(RuntimeODETest, WrongTrajectoryDimensionThrows) {
     EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, bad_traj, 16), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, ZeroSegmentsThrows) {
+TEST_F(ODETest, ZeroSegmentsThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(2);
@@ -189,7 +189,7 @@ TEST_F(RuntimeODETest, ZeroSegmentsThrows) {
     EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, traj, 0), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, NegativeSegmentsThrows) {
+TEST_F(ODETest, NegativeSegmentsThrows) {
     auto ode = ODEBuilder(3, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(2);
@@ -202,14 +202,14 @@ TEST_F(RuntimeODETest, NegativeSegmentsThrows) {
     EXPECT_THROW(ode.phase(TranscriptionModes::LGL3, traj, -1), std::invalid_argument);
 }
 
-TEST_F(RuntimeODETest, FluentVarGroupRegistration) {
+TEST_F(ODETest, FluentVarGroupRegistration) {
     auto args = ODEArguments(3, 1, 0);
     auto v = args.segment(0, 3).coeff(2);
     auto theta = args.segment(4, 1).coeff(0);
 
     auto ode_expr = stack(sin(theta) * v, cos(theta) * v * (-1.0), 9.81 * cos(theta));
 
-    RuntimeODE ode(ode_expr, 3, 1, 0);
+    ODE ode(ode_expr, 3, 1, 0);
     ode.var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"theta", 4}}).var_group("pos", 0, 2);
 
     auto idx = ode.registry().resolve("pos");

@@ -391,7 +391,7 @@ int main() {
     ///////////////////////////////////////////////////////////////////////////
     // Optimal Control Problem — link phases
     ///////////////////////////////////////////////////////////////////////////
-    OptimalControlProblem ocp;
+    OptimalControlProblemBase ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
     ocp.add_phase(phase3);

@@ -20,7 +20,7 @@ using tycho::solvers::ConstraintFunction;
 using tycho::solvers::ObjectiveFunction;
 using tycho::vf::IOScaled;
 
-Eigen::VectorXd tycho::oc::OptimalControlProblem::get_input_scale(
+Eigen::VectorXd tycho::oc::OptimalControlProblemBase::get_input_scale(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,
     std::vector<VectorXi> XtUVars, std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
     std::vector<VectorXi> LVars) {
@@ -67,7 +67,7 @@ Eigen::VectorXd tycho::oc::OptimalControlProblem::get_input_scale(
     return input_scales;
 }
 
-std::vector<Eigen::VectorXd> tycho::oc::OptimalControlProblem::get_test_inputs(
+std::vector<Eigen::VectorXd> tycho::oc::OptimalControlProblemBase::get_test_inputs(
     LinkFlags lflag, Eigen::Vector<PhaseRegionFlags, -1> regs, std::vector<VectorXi> phases_to_link,
     std::vector<VectorXi> XtUVars, std::vector<VectorXi> OPVars, std::vector<VectorXi> SPVars,
     std::vector<VectorXi> LVars) {
@@ -117,7 +117,7 @@ std::vector<Eigen::VectorXd> tycho::oc::OptimalControlProblem::get_test_inputs(
     return test_inputs;
 }
 
-void tycho::oc::OptimalControlProblem::transcribe_phases() {
+void tycho::oc::OptimalControlProblemBase::transcribe_phases() {
 
     if (this->phases.size() > 0) {
 
@@ -157,7 +157,7 @@ void tycho::oc::OptimalControlProblem::transcribe_phases() {
     }
 }
 
-void tycho::oc::OptimalControlProblem::check_functions() {
+void tycho::oc::OptimalControlProblemBase::check_functions() {
     /*
     Loops through all user defined functions and checks that they do not
     reference non-existent variables. Should be run prior to any transcribing any
@@ -173,54 +173,48 @@ void tycho::oc::OptimalControlProblem::check_functions() {
             for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
                 int pnum = func.phases_to_link_[i][j];
                 if (pnum >= this->phases.size() || pnum < 0) {
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Transcription Error!!!\n"
-                               "{0:} references non-existant phase:{1:}\n"
-                               " Function Storage Index:{2:}\n"
-                               " Function Name:{3:}\n",
-                               type, pnum, func.storage_index_, func.func_.name());
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("Transcription Error!!!\n"
+                                    "{0:} references non-existant phase:{1:}\n"
+                                    " Function Storage Index:{2:}\n"
+                                    " Function Name:{3:}\n",
+                                    type, pnum, func.storage_index_, func.func_.name()));
                 }
 
                 if (func.xtu_vars_[j].size() > 0) {
                     if (func.xtu_vars_[j].maxCoeff() >= this->phase(pnum)->xtu_p_vars() ||
                         func.xtu_vars_[j].minCoeff() < 0) {
 
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(fmt::format(
                             "Transcription Error!!!\n"
                             "{0:} function state variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
                 if (func.op_vars_[j].size() > 0) {
                     if (func.op_vars_[j].maxCoeff() >= this->phase(pnum)->p_vars() ||
                         func.op_vars_[j].minCoeff() < 0) {
 
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(fmt::format(
                             "Transcription Error!!!\n"
                             "{0:} function ODE Param variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
                 if (func.sp_vars_[j].size() > 0) {
                     if (func.sp_vars_[j].maxCoeff() >= this->phase(pnum)->num_stat_params_ ||
                         func.sp_vars_[j].minCoeff() < 0) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "{0:} function Static Param variable indices out of bounds in "
-                                   "phase:{1:}\n"
-                                   " Function Storage Index:{2:}\n"
-                                   " Function Name:{3:}\n",
-                                   type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(fmt::format(
+                            "Transcription Error!!!\n"
+                            "{0:} function Static Param variable indices out of bounds in "
+                            "phase:{1:}\n"
+                            " Function Storage Index:{2:}\n"
+                            " Function Name:{3:}\n",
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
             }
@@ -232,13 +226,12 @@ void tycho::oc::OptimalControlProblem::check_functions() {
                 if (func.link_params_[i].maxCoeff() >= this->num_link_params_ ||
                     func.link_params_[i].minCoeff() < 0) {
 
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Transcription Error!!!\n"
-                               "{0:} function link parameter variable indices out of bounds\n"
-                               " Function Storage Index:{1:}\n"
-                               " Function Name:{2:}\n",
-                               type, func.storage_index_, func.func_.name());
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("Transcription Error!!!\n"
+                                    "{0:} function link parameter variable indices out of bounds\n"
+                                    " Function Storage Index:{1:}\n"
+                                    " Function Name:{2:}\n",
+                                    type, func.storage_index_, func.func_.name()));
                 }
             }
         }
@@ -256,7 +249,7 @@ void tycho::oc::OptimalControlProblem::check_functions() {
         CheckFunc(obj, f);
 }
 
-void tycho::oc::OptimalControlProblem::transcribe_links() {
+void tycho::oc::OptimalControlProblemBase::transcribe_links() {
 
     int NextEq = this->num_phase_eq_cons_.sum();
     int NextIq = this->num_phase_iq_cons_.sum();
@@ -340,7 +333,7 @@ void tycho::oc::OptimalControlProblem::transcribe_links() {
     this->num_link_iq_cons_ = NextIq - this->num_phase_iq_cons_.sum();
 }
 
-void tycho::oc::OptimalControlProblem::calc_auto_scales() {
+void tycho::oc::OptimalControlProblemBase::calc_auto_scales() {
     for (int i = 0; i < this->phases.size(); i++) {
         this->phases[i]->calc_auto_scales();
     }
@@ -367,7 +360,7 @@ void tycho::oc::OptimalControlProblem::calc_auto_scales() {
     calc_impl(this->link_objectives_);
 }
 
-std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
+std::vector<double> tycho::oc::OptimalControlProblemBase::get_objective_scales() {
     std::vector<double> scales;
     for (auto &[key, obj] : this->link_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
@@ -384,7 +377,7 @@ std::vector<double> tycho::oc::OptimalControlProblem::get_objective_scales() {
     return scales;
 }
 
-void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
+void tycho::oc::OptimalControlProblemBase::update_objective_scales(double scale) {
     for (auto &[key, obj] : this->link_objectives_) {
         if (obj.scale_mode_ == ScaleModes::AUTO) {
             obj.output_scales_[0] = scale;
@@ -395,7 +388,7 @@ void tycho::oc::OptimalControlProblem::update_objective_scales(double scale) {
     }
 }
 
-void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns) {
+void tycho::oc::OptimalControlProblemBase::transcribe(bool showstats, bool showfuns) {
 
     this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
@@ -429,7 +422,7 @@ void tycho::oc::OptimalControlProblem::transcribe(bool showstats, bool showfuns)
     this->do_transcription_ = false;
 }
 
-tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::psipot_call_impl(JetJobModes mode) {
 
     this->check_transcriptions();
     if (this->do_transcription_)
@@ -466,7 +459,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::psipot_call_impl(JetJo
     return this->optimizer_->result().converge_flag_;
 }
 
-tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJobModes mode) {
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
         fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
@@ -555,7 +548,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblem::ocp_call_impl(JetJobMo
     return flag;
 }
 
-void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
+void tycho::oc::OptimalControlProblemBase::print_stats(bool showfuns) {
     using std::cout;
     using std::endl;
     cout << "Problem Statistics" << endl << endl;
@@ -602,7 +595,7 @@ void tycho::oc::OptimalControlProblem::print_stats(bool showfuns) {
     }
 }
 
-std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblem::make_link_Vindex_Cindex(
+std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblemBase::make_link_Vindex_Cindex(
     LinkFlags Reg, const Eigen::Matrix<PhaseRegionFlags, -1, 1> &PhaseRegs,
     const std::vector<Eigen::VectorXi> &PTL, const std::vector<Eigen::VectorXi> &xtv,
     const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,

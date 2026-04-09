@@ -1,7 +1,7 @@
 // =============================================================================
 // Tycho — Builder API: ODEBuilder
 //
-// Fluent builder for constructing RuntimeODE objects.  Accepts dynamics via
+// Fluent builder for constructing ODE objects.  Accepts dynamics via
 // a lambda (receiving a proxy with x_var/u_var/t_var/p_var/x_vec/u_vec/p_vec accessors) or
 // a pre-built VectorFunction expression.
 //
@@ -166,7 +166,7 @@ class ODEArgsProxy {
     ODEArguments<> args_;
 };
 
-/// Fluent builder for RuntimeODE.
+/// Fluent builder for ODE.
 ///
 /// Usage:
 ///   auto ode = ODEBuilder(3, 1)
@@ -261,8 +261,8 @@ class ODEBuilder {
         return *this;
     }
 
-    /// Build the RuntimeODE.
-    RuntimeODE build() {
+    /// Build the ODE.
+    ODE build() {
         if (state_ == State::Built)
             throw std::invalid_argument(
                 "ODEBuilder: build() already called; create a new ODEBuilder");
@@ -271,7 +271,7 @@ class ODEBuilder {
                 "ODEBuilder: no dynamics defined (call define() or from())");
         }
 
-        RuntimeODE ode(func_, xvars_, uvars_, pvars_);
+        ODE ode(func_, xvars_, uvars_, pvars_);
 
         if (!pending_names_.empty() || !pending_groups_.empty()) {
             for (const auto &[name, idx] : pending_names_)

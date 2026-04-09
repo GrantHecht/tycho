@@ -16,7 +16,7 @@ class PhaseWrapperTest : public OptimalControlTest {};
 
 namespace {
 
-RuntimeODE make_brach_runtime_ode() {
+ODE make_brach_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
             auto v = args.x_var(2);
@@ -48,7 +48,7 @@ std::vector<Eigen::VectorXd> make_brach_guess() {
 } // namespace
 
 TEST_F(PhaseWrapperTest, NamedBoundaryValue) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -64,7 +64,7 @@ TEST_F(PhaseWrapperTest, NamedBoundaryValue) {
 }
 
 TEST_F(PhaseWrapperTest, IndexBasedPassthrough) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -81,7 +81,7 @@ TEST_F(PhaseWrapperTest, IndexBasedPassthrough) {
 }
 
 TEST_F(PhaseWrapperTest, NamedLUVarBound) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -96,7 +96,7 @@ TEST_F(PhaseWrapperTest, NamedLUVarBound) {
 }
 
 TEST_F(PhaseWrapperTest, DeltaTimeObjective) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -106,7 +106,7 @@ TEST_F(PhaseWrapperTest, DeltaTimeObjective) {
 }
 
 TEST_F(PhaseWrapperTest, SetUnitsNamed) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -116,7 +116,7 @@ TEST_F(PhaseWrapperTest, SetUnitsNamed) {
 }
 
 TEST_F(PhaseWrapperTest, BasePhaseResolvesNames) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
@@ -146,7 +146,7 @@ TEST_F(PhaseWrapperTest, LUVarBoundMultiIndexThrows) {
 }
 
 TEST_F(PhaseWrapperTest, AccessBase) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
@@ -255,7 +255,7 @@ TEST_F(PhaseWrapperTest, ValueObjectiveGroupThrows) {
 }
 
 TEST_F(PhaseWrapperTest, NamedLowerVarBound) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
@@ -264,7 +264,7 @@ TEST_F(PhaseWrapperTest, NamedLowerVarBound) {
 }
 
 TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
@@ -273,7 +273,7 @@ TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
 }
 
 TEST_F(PhaseWrapperTest, NamedValueObjective) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
@@ -282,7 +282,7 @@ TEST_F(PhaseWrapperTest, NamedValueObjective) {
 }
 
 TEST_F(PhaseWrapperTest, BoundaryValueSizeMismatchThrows) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
@@ -293,7 +293,7 @@ TEST_F(PhaseWrapperTest, BoundaryValueSizeMismatchThrows) {
 }
 
 TEST_F(PhaseWrapperTest, NamedDeltaVarEqualCon) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
     phase.add_delta_var_equal_con("v", 5.0);
@@ -301,7 +301,7 @@ TEST_F(PhaseWrapperTest, NamedDeltaVarEqualCon) {
 }
 
 TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
     phase.add_lower_delta_var_bound("v", 0.0);
@@ -309,7 +309,7 @@ TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
 }
 
 TEST_F(PhaseWrapperTest, NamedEqualCon) {
-    auto ode = make_brach_runtime_ode();
+    auto ode = make_brach_ode();
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 

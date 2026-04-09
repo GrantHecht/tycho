@@ -12,7 +12,7 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
     auto phase1 = make_brach_phase(50, 16);
     auto phase2 = make_brach_phase(50, 16);
 
-    OptimalControlProblem ocp;
+    OptimalControlProblemBase ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
     // Should construct without error

@@ -21,9 +21,9 @@
 namespace tycho::astro {
 
 // Import cross-namespace types from vf and oc.
-using oc::ODE_Expression;
 using oc::ODEPhase;
 using oc::ODESize;
+using oc::StaticODE_Expression;
 using vf::Arguments;
 using vf::StackedOutputs;
 
@@ -40,8 +40,8 @@ struct Kepler_Impl : ODESize<6, 0, 0> {
 };
 struct KeplerPhase;
 
-struct Kepler : ODE_Expression<Kepler, Kepler_Impl, double> {
-    using Base = ODE_Expression<Kepler, Kepler_Impl, double>;
+struct Kepler : StaticODE_Expression<Kepler, Kepler_Impl, double> {
+    using Base = StaticODE_Expression<Kepler, Kepler_Impl, double>;
     using Base::Base;
     double mu_ = 1.0;
     Kepler(double mu) : Base(mu) { this->mu_ = mu; }

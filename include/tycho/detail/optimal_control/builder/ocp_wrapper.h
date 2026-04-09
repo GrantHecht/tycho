@@ -1,10 +1,10 @@
 // =============================================================================
-// Tycho — Builder API: OCP wrapper
+// Tycho — Builder API: OptimalControlProblem wrapper
 //
-// Thin wrapper around OptimalControlProblem that accepts Phase wrappers
+// Thin wrapper around OptimalControlProblemBase that accepts Phase wrappers
 // directly, eliminating base_ptr() calls and enabling named-variable link
 // constraints.  For methods not wrapped here, use base() to access the
-// underlying OptimalControlProblem.
+// underlying OptimalControlProblemBase.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
 // =============================================================================
@@ -16,18 +16,18 @@
 
 namespace tycho {
 
-using oc::OptimalControlProblem;
+using oc::OptimalControlProblemBase;
 // Solvers types
 using tycho::solvers::PSIOPT;
 
-/// Thin wrapper around OptimalControlProblem with Phase-aware overloads.
+/// Thin wrapper around OptimalControlProblemBase with Phase-aware overloads.
 ///
 /// Accepts Phase wrapper objects directly (no base_ptr() needed) and
 /// supports named-variable link constraints.  Use base() for any
-/// OptimalControlProblem method not wrapped here.
-class OCP {
+/// OptimalControlProblemBase method not wrapped here.
+class OptimalControlProblem {
   public:
-    OCP() = default;
+    OptimalControlProblem() = default;
 
     // ── Phase management ────────────────────────────────────────────────
 
@@ -50,11 +50,11 @@ class OCP {
             std::string which = p1_empty && p2_empty ? "both phases"
                                 : p1_empty           ? "phase p1"
                                                      : "phase p2";
-            throw std::invalid_argument(
-                fmt::format("OCP::add_forward_link_equal_con: {} {} no variable names "
-                            "registered -- register names via ODEBuilder::var_names() "
-                            "or use the index-based overload",
-                            which, (p1_empty && p2_empty) ? "have" : "has"));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::add_forward_link_equal_con: {} {} no variable names "
+                "registered -- register names via ODEBuilder::var_names() "
+                "or use the index-based overload",
+                which, (p1_empty && p2_empty) ? "have" : "has"));
         }
         auto idx1 = p1.registry().resolve(var_names);
         auto idx2 = p2.registry().resolve(var_names);
@@ -68,11 +68,11 @@ class OCP {
                 }
                 return s + "]";
             };
-            throw std::invalid_argument(
-                fmt::format("OCP::add_forward_link_equal_con: variable names resolve to "
-                            "different indices in p1 {} vs p2 {} -- use the "
-                            "index-based overload for heterogeneous phase layouts",
-                            fmt_idx(idx1), fmt_idx(idx2)));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::add_forward_link_equal_con: variable names resolve to "
+                "different indices in p1 {} vs p2 {} -- use the "
+                "index-based overload for heterogeneous phase layouts",
+                fmt_idx(idx1), fmt_idx(idx2)));
         }
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), idx1);
     }
@@ -117,17 +117,18 @@ class OCP {
 
     PSIOPT &optimizer() { return *ocp_.optimizer_; }
 
-    OptimalControlProblem &base() { return ocp_; }
-    const OptimalControlProblem &base() const { return ocp_; }
+    OptimalControlProblemBase &base() { return ocp_; }
+    const OptimalControlProblemBase &base() const { return ocp_; }
 
   private:
     void check_has_phases(const char *method) const {
         if (ocp_.phases.empty())
-            throw std::invalid_argument(
-                fmt::format("OCP::{}: no phases added — call add_phase() before solving", method));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::{}: no phases added — call add_phase() before solving",
+                method));
     }
 
-    OptimalControlProblem ocp_;
+    OptimalControlProblemBase ocp_;
 };
 
 } // namespace tycho

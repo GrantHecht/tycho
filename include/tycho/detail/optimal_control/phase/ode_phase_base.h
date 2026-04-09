@@ -70,7 +70,7 @@ using tycho::solvers::NonLinearProgram;
 using tycho::solvers::OptimizationProblemBase;
 using tycho::solvers::PSIOPT;
 
-struct OptimalControlProblem;
+struct OptimalControlProblemBase;
 
 struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     using VectorXi = Eigen::VectorXi;
@@ -87,7 +87,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     template <int V> using int_const = std::integral_constant<int, V>;
 
-    friend OptimalControlProblem;
+    friend OptimalControlProblemBase;
 
   protected:
     PhaseIndexer indexer_;
