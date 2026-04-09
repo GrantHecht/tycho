@@ -154,7 +154,4 @@ class ODE {
     }
 };
 
-/// Deprecated alias — use ODE instead.
-[[deprecated("Use ODE instead")]] typedef ODE RuntimeODE;
-
 } // namespace tycho

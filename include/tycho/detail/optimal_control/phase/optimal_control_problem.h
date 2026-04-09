@@ -300,11 +300,10 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     int get_phase_num(const std::string &name) {
         auto nameit = std::find(phase_names.begin(), phase_names.end(), name);
         if (nameit == phase_names.end()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "No phase with name '{0}' exists in OptimalControlProblemBase.\n",
-                       name);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Transcription Error!!!\n"
+                "No phase with name '{}' exists in OptimalControlProblem.\n",
+                name));
         }
         return int(nameit - phase_names.begin());
     }
@@ -313,10 +312,9 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         auto ptrit = std::find_if(phases.begin(), phases.end(),
                                   [&](PhasePtr pt) { return pt.get() == p.get(); });
         if (ptrit == phases.end()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "The requested phase does not exist in OptimalControlProblemBase\n");
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                "Transcription Error!!!\n"
+                "The requested phase does not exist in OptimalControlProblem\n");
         }
         return int(ptrit - phases.begin());
     }
@@ -1413,20 +1411,16 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                 if (j != i) {
 
                     if (this->phase_names[i] == this->phase_names[j]) {
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(
                             "Transcription Error!!!\n"
-                            "OptimalControlProblemBase contains Two phases with identical names\n");
-                        throw std::invalid_argument("");
+                            "OptimalControlProblem contains two phases with identical names\n");
                     }
 
                     if (this->phases[i].get() == this->phases[j].get()) {
 
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(
                             "Transcription Error!!!\n"
-                            "Same phase detected more than once in optimal control problem. \n");
-                        throw std::invalid_argument("");
+                            "Same phase detected more than once in optimal control problem.\n");
                     }
                 }
             }
@@ -1449,24 +1443,21 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
 
             if (func.link_params_.size() != func.phases_to_link_.size() &&
                 func.phases_to_link_.size() > 0) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "LinkParam Vector Must be same size as PTL Vector "
-                           "even if each element of LinkParam Vector is empty (See Docs).");
-                throw std::invalid_argument("");
+                throw std::invalid_argument(
+                    "Transcription Error!!!\n"
+                    "LinkParam Vector Must be same size as PTL Vector "
+                    "even if each element of LinkParam Vector is empty (See Docs).");
             }
 
             if (func.link_params_.size() > 0 && func.phases_to_link_.size() == 0) {
                 for (int i = 0; i < func.link_params_.size(); i++) {
                     int isize = func.link_params_[i].size();
                     if (irows != isize) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Input size of {0:} (IRows = {1:}) does not match that implied "
-                                   "by indexing "
-                                   "parameters (IRows = {2:}).\n",
-                                   ftype, irows, isize);
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(fmt::format(
+                            "Transcription Error!!!\n"
+                            "Input size of {} (IRows = {}) does not match that implied "
+                            "by indexing parameters (IRows = {}).\n",
+                            ftype, irows, isize));
                     }
                 }
             } else {
@@ -1474,32 +1465,28 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                     int isize = func.link_params_[i].size();
 
                     if (func.phases_to_link_[i].size() != func.xtu_vars_.size()) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Size of PTL vector element must equal size of Phase State "
-                                   "Variables Vector");
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(
+                            "Transcription Error!!!\n"
+                            "Size of PTL vector element must equal size of Phase State "
+                            "Variables Vector");
                     }
                     if (func.phases_to_link_[i].size() != func.op_vars_.size()) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Size of PTL vector element must equal size of Phase ODEParam "
-                                   "Variables Vector");
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(
+                            "Transcription Error!!!\n"
+                            "Size of PTL vector element must equal size of Phase ODEParam "
+                            "Variables Vector");
                     }
                     if (func.phases_to_link_[i].size() != func.sp_vars_.size()) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Size of PTL vector element must equal size of Phase "
-                                   "StaticParam Variables Vector");
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(
+                            "Transcription Error!!!\n"
+                            "Size of PTL vector element must equal size of Phase "
+                            "StaticParam Variables Vector");
                     }
                     if (func.phases_to_link_[i].size() != func.phase_reg_flags_.size()) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Size of PTL vector element must equal size of Phase Region "
-                                   "Flag Vector");
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(
+                            "Transcription Error!!!\n"
+                            "Size of PTL vector element must equal size of Phase Region "
+                            "Flag Vector");
                     }
                     for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
                         auto flag = func.phase_reg_flags_[j];
@@ -1518,29 +1505,23 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                             xmult = 2;
                             break;
                         default: {
-
-                            fmt::print(fmt::fg(fmt::color::red),
-                                       "Transcription Error!!!\n"
-                                       "Invalid Phase Region requested in link function\n"
-                                       "Only the following regions are supported\n"
-                                       "    Front, Back, Path,ODEParams,StaticParams, Params, "
-                                       "FrontandBack, BackAndFront\n");
-
-                            throw std::invalid_argument("");
-                            break;
+                            throw std::invalid_argument(
+                                "Transcription Error!!!\n"
+                                "Invalid Phase Region requested in link function\n"
+                                "Only the following regions are supported\n"
+                                "    Front, Back, Path, ODEParams, StaticParams, Params, "
+                                "FrontandBack, BackAndFront\n");
                         }
                         }
                         isize += func.xtu_vars_[j].size() * xmult + func.op_vars_[j].size() +
                                  func.sp_vars_[j].size();
                     }
                     if (irows != isize) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "Input size of {0:} (IRows = {1:}) does not match that implied "
-                                   "by indexing "
-                                   "parameters (IRows = {2:}).\n",
-                                   ftype, irows, isize);
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(fmt::format(
+                            "Transcription Error!!!\n"
+                            "Input size of {} (IRows = {}) does not match that implied "
+                            "by indexing parameters (IRows = {}).\n",
+                            ftype, irows, isize));
                     }
                 }
             }

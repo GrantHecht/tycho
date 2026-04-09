@@ -130,6 +130,4 @@ class OptimalControlProblem {
     OptimalControlProblemBase ocp_;
 };
 
-[[deprecated("Use OptimalControlProblem instead")]] typedef OptimalControlProblem OCP;
-
 } // namespace tycho
