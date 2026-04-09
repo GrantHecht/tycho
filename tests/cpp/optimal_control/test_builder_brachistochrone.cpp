@@ -73,7 +73,7 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
 }
 
 TEST_F(BuilderAPITest, OCPWrapperAddPhaseAndLink) {
-    // Two identical Brachistochrone phases linked via OCP wrapper with named vars
+    // Two identical Brachistochrone phases linked via OptimalControlProblem wrapper with named vars
     constexpr double g = 9.81;
 
     auto make_ode = [g]() {
@@ -101,8 +101,8 @@ TEST_F(BuilderAPITest, OCPWrapperAddPhaseAndLink) {
     auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
-    // Use OCP wrapper — no base_ptr() needed
-    OCP ocp;
+    // Use OptimalControlProblem wrapper — no base_ptr() needed
+    OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
@@ -199,7 +199,7 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
     auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
-    OCP ocp;
+    OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
@@ -242,7 +242,7 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
     auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
-    OCP ocp;
+    OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
@@ -281,7 +281,7 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
     auto phase1 = ode1.phase(TranscriptionModes::LGL3, traj, 16);
     auto phase2 = ode2.phase(TranscriptionModes::LGL3, traj, 16);
 
-    OCP ocp;
+    OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
@@ -294,7 +294,7 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
 }
 
 TEST_F(BuilderAPITest, OCPSolveThrowsWithNoPhases) {
-    OCP ocp;
+    OptimalControlProblem ocp;
     EXPECT_THROW(ocp.solve(), std::invalid_argument);
     EXPECT_THROW(ocp.optimize(), std::invalid_argument);
     EXPECT_THROW(ocp.solve_optimize(), std::invalid_argument);

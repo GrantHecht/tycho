@@ -4,7 +4,7 @@
 // Same problem as the static DSL version.  Demonstrates:
 //   - var_group() for named groups (R, V, u)
 //   - from() with ODEArguments for vector ODE expressions
-//   - OCP wrapper for named-variable link constraints (no base_ptr())
+//   - OptimalControlProblem for named-variable link constraints
 //   - Named variables for all constraint/objective calls
 //
 // State  : [Rx, Ry, Rz, Vx, Vy, Vz, m]   (7)
@@ -329,9 +329,9 @@ int main() {
     phase4.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
     ///////////////////////////////////////////////////////////////////////////
-    // Optimal Control Problem — link phases via OCP wrapper
+    // Optimal Control Problem — link phases
     ///////////////////////////////////////////////////////////////////////////
-    OCP ocp;
+    OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
     ocp.add_phase(phase3);

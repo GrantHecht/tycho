@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho — Builder API: OCP wrapper
+// Tycho — Builder API: OptimalControlProblem wrapper
 //
 // Thin wrapper around OptimalControlProblemBase that accepts Phase wrappers
 // directly, eliminating base_ptr() calls and enabling named-variable link
@@ -25,9 +25,9 @@ using tycho::solvers::PSIOPT;
 /// Accepts Phase wrapper objects directly (no base_ptr() needed) and
 /// supports named-variable link constraints.  Use base() for any
 /// OptimalControlProblemBase method not wrapped here.
-class OCP {
+class OptimalControlProblem {
   public:
-    OCP() = default;
+    OptimalControlProblem() = default;
 
     // ── Phase management ────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ class OCP {
                                 : p1_empty           ? "phase p1"
                                                      : "phase p2";
             throw std::invalid_argument(
-                fmt::format("OCP::add_forward_link_equal_con: {} {} no variable names "
+                fmt::format("OptimalControlProblem::add_forward_link_equal_con: {} {} no variable names "
                             "registered -- register names via ODEBuilder::var_names() "
                             "or use the index-based overload",
                             which, (p1_empty && p2_empty) ? "have" : "has"));
@@ -69,7 +69,7 @@ class OCP {
                 return s + "]";
             };
             throw std::invalid_argument(
-                fmt::format("OCP::add_forward_link_equal_con: variable names resolve to "
+                fmt::format("OptimalControlProblem::add_forward_link_equal_con: variable names resolve to "
                             "different indices in p1 {} vs p2 {} -- use the "
                             "index-based overload for heterogeneous phase layouts",
                             fmt_idx(idx1), fmt_idx(idx2)));
@@ -124,10 +124,12 @@ class OCP {
     void check_has_phases(const char *method) const {
         if (ocp_.phases.empty())
             throw std::invalid_argument(
-                fmt::format("OCP::{}: no phases added — call add_phase() before solving", method));
+                fmt::format("OptimalControlProblem::{}: no phases added — call add_phase() before solving", method));
     }
 
     OptimalControlProblemBase ocp_;
 };
+
+[[deprecated("Use OptimalControlProblem instead")]] typedef OptimalControlProblem OCP;
 
 } // namespace tycho
