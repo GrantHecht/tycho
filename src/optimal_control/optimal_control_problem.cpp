@@ -173,54 +173,48 @@ void tycho::oc::OptimalControlProblemBase::check_functions() {
             for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
                 int pnum = func.phases_to_link_[i][j];
                 if (pnum >= this->phases.size() || pnum < 0) {
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Transcription Error!!!\n"
-                               "{0:} references non-existant phase:{1:}\n"
-                               " Function Storage Index:{2:}\n"
-                               " Function Name:{3:}\n",
-                               type, pnum, func.storage_index_, func.func_.name());
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(fmt::format(
+                        "Transcription Error!!!\n"
+                        "{0:} references non-existant phase:{1:}\n"
+                        " Function Storage Index:{2:}\n"
+                        " Function Name:{3:}\n",
+                        type, pnum, func.storage_index_, func.func_.name()));
                 }
 
                 if (func.xtu_vars_[j].size() > 0) {
                     if (func.xtu_vars_[j].maxCoeff() >= this->phase(pnum)->xtu_p_vars() ||
                         func.xtu_vars_[j].minCoeff() < 0) {
 
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(fmt::format(
                             "Transcription Error!!!\n"
                             "{0:} function state variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
                 if (func.op_vars_[j].size() > 0) {
                     if (func.op_vars_[j].maxCoeff() >= this->phase(pnum)->p_vars() ||
                         func.op_vars_[j].minCoeff() < 0) {
 
-                        fmt::print(
-                            fmt::fg(fmt::color::red),
+                        throw std::invalid_argument(fmt::format(
                             "Transcription Error!!!\n"
                             "{0:} function ODE Param variable indices out of bounds in phase:{1:}\n"
                             " Function Storage Index:{2:}\n"
                             " Function Name:{3:}\n",
-                            type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
                 if (func.sp_vars_[j].size() > 0) {
                     if (func.sp_vars_[j].maxCoeff() >= this->phase(pnum)->num_stat_params_ ||
                         func.sp_vars_[j].minCoeff() < 0) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Transcription Error!!!\n"
-                                   "{0:} function Static Param variable indices out of bounds in "
-                                   "phase:{1:}\n"
-                                   " Function Storage Index:{2:}\n"
-                                   " Function Name:{3:}\n",
-                                   type, pnum, func.storage_index_, func.func_.name());
-                        throw std::invalid_argument("");
+                        throw std::invalid_argument(fmt::format(
+                            "Transcription Error!!!\n"
+                            "{0:} function Static Param variable indices out of bounds in "
+                            "phase:{1:}\n"
+                            " Function Storage Index:{2:}\n"
+                            " Function Name:{3:}\n",
+                            type, pnum, func.storage_index_, func.func_.name()));
                     }
                 }
             }
@@ -232,13 +226,12 @@ void tycho::oc::OptimalControlProblemBase::check_functions() {
                 if (func.link_params_[i].maxCoeff() >= this->num_link_params_ ||
                     func.link_params_[i].minCoeff() < 0) {
 
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Transcription Error!!!\n"
-                               "{0:} function link parameter variable indices out of bounds\n"
-                               " Function Storage Index:{1:}\n"
-                               " Function Name:{2:}\n",
-                               type, func.storage_index_, func.func_.name());
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(fmt::format(
+                        "Transcription Error!!!\n"
+                        "{0:} function link parameter variable indices out of bounds\n"
+                        " Function Storage Index:{1:}\n"
+                        " Function Name:{2:}\n",
+                        type, func.storage_index_, func.func_.name()));
                 }
             }
         }

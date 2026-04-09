@@ -52,13 +52,13 @@ directly and resolves named variables for link constraints:
 
 ```cpp
 OptimalControlProblem ocp;
-ocp.addPhase(phase1);                                          // no base_ptr()
-ocp.addForwardLinkEqualCon(phase1, phase4, {"R", "V", "t", "u"});  // named vars
-ocp.optimizer().set_PrintLevel(1);
+ocp.add_phase(phase1);                                          // no base_ptr()
+ocp.add_forward_link_equal_con(phase1, phase4, {"R", "V", "t", "u"});  // named vars
+ocp.optimizer().set_print_level(1);
 ocp.solve_optimize();
 ```
 
-Use `ocp.base()` to access the underlying `OptimalControlProblem` for methods
+Use `ocp.base()` to access the underlying `OptimalControlProblemBase` for methods
 not yet wrapped.
 
 ## Pain Point 4: `base_ptr()` required for OptimalControlProblem integration — RESOLVED
