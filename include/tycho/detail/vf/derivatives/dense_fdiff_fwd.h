@@ -111,8 +111,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
       gradient vector.
     */
     template <class InType, class AdjHessType, class AdjVarType>
-    inline void adjointhessian(CVecRef<InType> x,
-                               CMatRef<AdjHessType> adjhess_,
+    inline void adjointhessian(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
                                CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
@@ -146,9 +145,9 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         this->derived().compute_jacobian_adjointgradient(x, fx_, jx_, adjgrad_, adjvars);
         adjointhessian(x, adjhess_, adjvars);
     }

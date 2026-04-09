@@ -360,8 +360,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class JacType, class AdjGradType, class AdjVarType>
-    inline void jacobian_x_adjoint(CMatRef<JacType> jx_,
-                                   CVecRef<AdjGradType> adjgrad_,
+    inline void jacobian_x_adjoint(CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
                                    CVecRef<AdjVarType> adjvars) const {
         typedef typename JacType::Scalar JScalar;
         typedef typename AdjVarType::Scalar AScalar;
@@ -380,8 +379,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <class InType, class OutType, class AdjGradType, class AdjVarType>
-    inline void compute_adjointgradient(CVecRef<InType> x,
-                                        CVecRef<OutType> fx_,
+    inline void compute_adjointgradient(CVecRef<InType> x, CVecRef<OutType> fx_,
                                         CVecRef<AdjGradType> adjgrad_,
                                         CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
@@ -392,8 +390,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
-    inline void compute_jacobian_adjointgradient(CVecRef<InType> x,
-                                                 CVecRef<OutType> fx_,
+    inline void compute_jacobian_adjointgradient(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                  CMatRef<JacType> jx_,
                                                  CVecRef<AdjGradType> adjgrad_,
                                                  CVecRef<AdjVarType> adjvars) const {
@@ -404,10 +401,12 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
-    inline void compute_jacobian_adjointgradient_adjointhessian(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+    inline void compute_jacobian_adjointgradient_adjointhessian(CVecRef<InType> x,
+                                                                CVecRef<OutType> fx_,
+                                                                CMatRef<JacType> jx_,
+                                                                CVecRef<AdjGradType> adjgrad_,
+                                                                CMatRef<AdjHessType> adjhess_,
+                                                                CVecRef<AdjVarType> adjvars) const {
 
         typedef typename InType::Scalar Scalar;
         if constexpr (!Vectorizable<Derived>) {
@@ -483,8 +482,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class InType, class AdjHessType, class AdjVarType>
-    inline void adjointhessian(CVecRef<InType> x,
-                               CMatRef<AdjHessType> adjhess_,
+    inline void adjointhessian(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
                                CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Output<Scalar> fx(this->output_rows());
@@ -499,8 +497,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class InType, class AdjVarType>
-    inline Hessian<typename InType::Scalar>
-    adjointhessian(CVecRef<InType> x, CVecRef<AdjVarType> adjvars) const {
+    inline Hessian<typename InType::Scalar> adjointhessian(CVecRef<InType> x,
+                                                           CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Hessian<Scalar> adjhess(this->input_rows(), this->input_rows());
         adjhess.setZero();
@@ -539,9 +537,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
       the jacobian.
     */
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
 
         // Run Time Input Domain
@@ -579,16 +576,14 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
 
     */
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_domain_product(CMatRef<Target> target_,
-                                              CEigRef<Left> left,
+    inline void right_jacobian_domain_product(CMatRef<Target> target_, CEigRef<Left> left,
                                               CEigRef<Right> right, Assignment assign,
                                               std::bool_constant<Aliased> aliased) const {
         this->right_jacobian_product(target_, left, right, assign, aliased);
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void symetric_jacobian_product(CMatRef<Target> target_,
-                                          CEigRef<Left> left,
+    inline void symetric_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                           CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         if constexpr (Base::InputIsDynamic ||
@@ -611,8 +606,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
      * Derived into the target_ matrix according to the speccified Assignment type.
      */
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(CMatRef<Target> target_,
-                                    CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
@@ -640,8 +635,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
      * Derived into the target_ matrix according to the speccified Assignment type.
      */
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_gradient(CMatRef<Target> target_,
-                                    CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_gradient(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
             if constexpr (Base::InputIsDynamic) {
@@ -669,8 +664,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
      * absolutely nothing if Derived is known to be linear at compile time.
      */
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(CMatRef<Target> target_,
-                                   CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                   Assignment assign) const {
         if constexpr (LinearVF<Derived>) {
         } else if constexpr (Base::InputIsDynamic ||
                              std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
@@ -735,8 +730,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
      * Derived into the target_ matrix according to the speccified Assignment type.
      */
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_matrix_domain(CMatRef<Target> target_,
-                                         CMatRef<JacType> right,
+    inline void accumulate_matrix_domain(CMatRef<Target> target_, CMatRef<JacType> right,
                                          Assignment assign) const {
         if constexpr (Base::InputIsDynamic ||
                       std::is_same<typename Derived::INPUT_DOMAIN, INPUT_DOMAIN>::value) {
@@ -762,8 +756,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     template <class Target, class JacType>
-    inline void accumulate_product_hessian(CMatRef<Target> target_,
-                                           CMatRef<JacType> right) const {
+    inline void accumulate_product_hessian(CMatRef<Target> target_, CMatRef<JacType> right) const {
         MatRef<Target> target_ref(target_.const_cast_derived());
 
         if constexpr (Derived::InputIsDynamic) {
@@ -867,8 +860,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /*
      * Zeros target_ matrix with the same input domain as derived.
      */
-    template <class Target>
-    inline void zero_matrix_domain(CMatRef<Target> target_) const {
+    template <class Target> inline void zero_matrix_domain(CMatRef<Target> target_) const {
 
         MatRef<Target> target_ref(target_.const_cast_derived());
 

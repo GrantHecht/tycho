@@ -108,17 +108,19 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(this->func_.output_rows(),
-                                                              this->func_.input_rows()));
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -166,10 +168,13 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(this->func_.output_rows(),
-                                                              this->func_.input_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(this->func_.output_rows(), 1));
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()),
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1));
         }
     }
 };

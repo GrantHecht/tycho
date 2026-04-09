@@ -65,9 +65,9 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();

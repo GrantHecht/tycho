@@ -34,8 +34,7 @@ template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Fu
         fx = x.array().sin();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -43,10 +42,8 @@ template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Fu
         jx = x.array().cos();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CVecRef<JacType> jx_,
-                                               CVecRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
         VecRef<HessType> hx = hx_.const_cast_derived();
@@ -68,8 +65,7 @@ template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Fu
         fx = x.array().cos();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -77,10 +73,8 @@ template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Fu
         jx.derived() = -x.array().sin();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
         EigRef<HessType> hx = hx_.const_cast_derived();
@@ -102,8 +96,7 @@ template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Fu
         fx = x.array().tan();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -111,10 +104,8 @@ template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Fu
         jx.derived() = x.array().cos().square().inverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -138,8 +129,7 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
         fx = x.array().asin();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -149,10 +139,8 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
         jx.derived() = (jx.derived().cwiseSqrt()).cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
         EigRef<HessType> hx = hx_.const_cast_derived();
@@ -177,8 +165,7 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
         fx = x.array().acos();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -188,10 +175,8 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
         jx.derived() = -(jx.derived().cwiseSqrt()).cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
         EigRef<HessType> hx = hx_.const_cast_derived();
@@ -217,8 +202,7 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
         fx = x.array().atan();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -227,10 +211,8 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
         jx.derived() = (jx.derived() + x.cwiseProduct(x)).cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -255,8 +237,7 @@ template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Fun
         fx = x.array().square();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
@@ -265,10 +246,8 @@ template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Fun
         jx.derived() = Scalar(2.0) * x;
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -290,8 +269,7 @@ template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<F
         fx = x.array().inverse();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -299,10 +277,8 @@ template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<F
         jx.derived() = -fx.cwiseProduct(fx);
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -324,8 +300,7 @@ template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Fu
         fx = x.array().exp();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -333,10 +308,8 @@ template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Fu
         jx.derived() = fx;
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -358,8 +331,7 @@ template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Fu
         fx = x.array().log();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -367,10 +339,8 @@ template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Fu
         jx.derived() = x.cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -393,8 +363,7 @@ template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, 
         fx = x.array().sinh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -402,10 +371,8 @@ template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, 
         jx = x.array().cosh();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CVecRef<JacType> jx_,
-                                               CVecRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
         VecRef<HessType> hx = hx_.const_cast_derived();
@@ -427,8 +394,7 @@ template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, 
         fx = x.array().cosh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -436,10 +402,8 @@ template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, 
         jx.derived() = x.array().sinh();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
         EigRef<HessType> hx = hx_.const_cast_derived();
@@ -461,8 +425,7 @@ template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, 
         fx = x.array().tanh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -471,10 +434,8 @@ template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, 
         jx.derived() = jx.derived().array() - fx.derived().array().square();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -498,8 +459,7 @@ template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<F
         fx = x.array().asinh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -525,10 +485,8 @@ template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<F
         jx = jx.cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CVecRef<JacType> jx_,
-                                               CVecRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
         VecRef<HessType> hx = hx_.const_cast_derived();
@@ -567,8 +525,7 @@ template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<F
         fx = x.array().acosh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -595,10 +552,8 @@ template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<F
         jx = jx.cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CVecRef<JacType> jx_,
-                                               CVecRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
         VecRef<HessType> hx = hx_.const_cast_derived();
@@ -638,8 +593,7 @@ template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<F
         fx = x.array().atanh();
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -652,10 +606,8 @@ template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<F
         jx = jx.cwiseInverse();
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CVecRef<JacType> jx_,
-                                               CVecRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
         VecRef<HessType> hx = hx_.const_cast_derived();
@@ -696,8 +648,7 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
         }
     }
     template <class InType, class OutType, class JacType>
-    static void cwise_compute_jacobian(CVecRef<InType> x,
-                                       CVecRef<OutType> fx_,
+    static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
@@ -716,10 +667,8 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
         jx.derived() = fx.array().inverse() * Scalar(0.5);
     }
     template <class InType, class OutType, class JacType, class HessType>
-    static void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                               CVecRef<OutType> fx_,
-                                               CEigRef<JacType> jx_,
-                                               CEigRef<HessType> hx_) {
+    static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                               CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -768,10 +717,8 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
         jx.derived() = Scalar(this->power) * x.array().pow(Scalar(this->power - 1.0));
     }
     template <class InType, class OutType, class JacType, class HessType>
-    void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                        CVecRef<OutType> fx_,
-                                        CEigRef<JacType> jx_,
-                                        CEigRef<HessType> hx_) const {
+    void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                        CEigRef<JacType> jx_, CEigRef<HessType> hx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         EigRef<JacType> jx = jx_.const_cast_derived();
@@ -813,10 +760,8 @@ template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Fu
         }
     }
     template <class InType, class OutType, class JacType, class HessType>
-    void cwise_compute_jacobian_hessian(CVecRef<InType> x,
-                                        CVecRef<OutType> fx_,
-                                        CEigRef<JacType> jx_,
-                                        CEigRef<HessType> hx_) const {
+    void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                        CEigRef<JacType> jx_, CEigRef<HessType> hx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         VecRef<JacType> jx = jx_.const_cast_derived();
@@ -900,9 +845,9 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         MatRef<JacType> jx = jx_.const_cast_derived();
         // VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
@@ -962,10 +907,12 @@ template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, 
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
-    inline void compute_jacobian_adjointgradient_adjointhessian(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+    inline void compute_jacobian_adjointgradient_adjointhessian(CVecRef<InType> x,
+                                                                CVecRef<OutType> fx_,
+                                                                CMatRef<JacType> jx_,
+                                                                CVecRef<AdjGradType> adjgrad_,
+                                                                CMatRef<AdjHessType> adjhess_,
+                                                                CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         MatRef<JacType> jx = jx_.const_cast_derived();
         VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();

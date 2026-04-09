@@ -152,7 +152,7 @@ concept HasDiagonalHess =
     requires { requires static_cast<bool>(detail::VectorFunctionType<T>::has_diagonal_hessian); };
 
 template <typename T>
-concept DenseVectorFunction = requires(const T& t) {
+concept DenseVectorFunction = requires(const T &t) {
     { T::IRC } -> std::convertible_to<int>;
     { T::ORC } -> std::convertible_to<int>;
     { t.input_rows() } -> std::same_as<int>;

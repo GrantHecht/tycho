@@ -66,18 +66,18 @@ using utils::BumpAllocator;
 using utils::SZ_SUM;
 using utils::TempSpec;
 using vf::Arguments;
-using vf::Constant;
-using vf::GenericConditional;
-using vf::GenericFunction;
-using vf::NestedFunction;
-using vf::ParsedInput;
 using vf::CDiagRef;
 using vf::CEigRef;
 using vf::CMatRef;
+using vf::Constant;
 using vf::CVecRef;
 using vf::DiagRef;
 using vf::EigRef;
+using vf::GenericConditional;
+using vf::GenericFunction;
 using vf::MatRef;
+using vf::NestedFunction;
+using vf::ParsedInput;
 using vf::StackedOutputs;
 using vf::VecRef;
 using vf::VectorFunction;
@@ -2143,9 +2143,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();

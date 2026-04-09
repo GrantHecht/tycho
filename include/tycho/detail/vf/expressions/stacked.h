@@ -100,7 +100,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
     VF_TYPE_ALIASES(Base);
 
-    static constexpr bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static constexpr bool is_linear_function =
+        Func1::is_linear_function && Func2::is_linear_function;
     static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     Func1 func1;
@@ -157,9 +158,9 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -235,9 +236,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
             Base::right_jacobian_product(target_, left, right, assign, aliased);
@@ -273,8 +273,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(CMatRef<Target> target_,
-                                    CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
         MatRef<JacType> right_ref = right.const_cast_derived();
 
@@ -289,8 +289,8 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(CMatRef<Target> target_,
-                                   CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                   Assignment assign) const {
         if constexpr (Func1::is_linear_function) {
             this->func2.accumulate_hessian(target_, right, assign);
         } else if constexpr (Func2::is_linear_function) {
@@ -379,9 +379,9 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();

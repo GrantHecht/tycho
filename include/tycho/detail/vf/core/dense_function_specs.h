@@ -97,29 +97,24 @@ template <int IR, int OR> struct DenseFunctionSpec {
         virtual bool is_linear() const = 0;
         virtual void enable_vectorization(bool b) const = 0;
 
-        virtual void compute(CVecRef<InType> x,
-                             CVecRef<OutType> fx_) const = 0;
+        virtual void compute(CVecRef<InType> x, CVecRef<OutType> fx_) const = 0;
 
-        virtual void compute(CVecRef<SuperInType> x,
-                             CVecRef<SuperOutType> fx_) const = 0;
+        virtual void compute(CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_) const = 0;
 
         virtual void compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const = 0;
 
-        virtual void compute_jacobian(CVecRef<SuperInType> x,
-                                      CVecRef<SuperOutType> fx_,
+        virtual void compute_jacobian(CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_,
                                       CMatRef<SuperJacType> jx_) const = 0;
 
         virtual void compute_jacobian_adjointgradient_adjointhessian(
-            CVecRef<InType> x, CVecRef<OutType> fx_,
-            CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-            CMatRef<AdjHessType> adjhess_,
+            CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+            CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
             CVecRef<AdjVarType> adjvars) const = 0;
 
         virtual void compute_jacobian_adjointgradient_adjointhessian(
-            CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_,
-            CMatRef<SuperJacType> jx_, CVecRef<SuperAdjGradType> adjgrad_,
-            CMatRef<SuperAdjHessType> adjhess_,
+            CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_, CMatRef<SuperJacType> jx_,
+            CVecRef<SuperAdjGradType> adjgrad_, CMatRef<SuperAdjHessType> adjhess_,
             CVecRef<SuperAdjVarType> adjvars) const = 0;
 
         virtual void scale_jacobian(CMatRef<JacType> target_, double s) const = 0;
@@ -128,14 +123,11 @@ template <int IR, int OR> struct DenseFunctionSpec {
         virtual void scale_hessian(CMatRef<AdjHessType> target_,
                                    double s) const = 0;*/
 
-        virtual void accumulate_jacobian(CMatRef<JacType> target_,
-                                         CMatRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          DirectAssignment assign) const = 0;
-        virtual void accumulate_jacobian(CMatRef<JacType> target_,
-                                         CMatRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          PlusEqualsAssignment assign) const = 0;
-        virtual void accumulate_jacobian(CMatRef<JacType> target_,
-                                         CMatRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          MinusEqualsAssignment assign) const = 0;
 
         /* virtual void accumulate_gradient(CMatRef<AdjGradType> target_,
@@ -159,34 +151,28 @@ template <int IR, int OR> struct DenseFunctionSpec {
                                          MinusEqualsAssignment assign) const = 0;*/
 
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             DirectAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             PlusEqualsAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             MinusEqualsAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
 
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             DirectAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             PlusEqualsAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
         virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
-                                            CEigRef<LeftJacMatrix> left,
-                                            CEigRef<JacType> right,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             MinusEqualsAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
 

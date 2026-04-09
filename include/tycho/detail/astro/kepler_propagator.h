@@ -6,15 +6,15 @@ namespace tycho::astro {
 // Import cross-namespace types from vf and utils.
 using utils::SZ_SUM;
 using vf::Arguments;
+using vf::CMatRef;
 using vf::Constant;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
 using vf::IfElseFunction;
+using vf::MatRef;
 using vf::ScalarRootFinder;
 using vf::SignFunction;
-using vf::CMatRef;
-using vf::CVecRef;
-using vf::MatRef;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
@@ -321,9 +321,9 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
 
         this->propfunc_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,

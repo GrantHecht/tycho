@@ -99,9 +99,9 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -117,9 +117,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         MatRef<Target> target = target_.const_cast_derived();
         typedef typename Target::Scalar Scalar;
@@ -192,8 +191,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void symetric_jacobian_product(CMatRef<Target> target_,
-                                          CEigRef<Left> left,
+    inline void symetric_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                           CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         MatRef<Target> target = target_.const_cast_derived();
@@ -247,8 +245,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(CMatRef<Target> target_,
-                                    CEigRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CEigRef<JacType> right,
+                                    Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() =
@@ -269,8 +267,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         }
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_gradient(CMatRef<Target> target_,
-                                    CEigRef<JacType> right, Assignment assign) const {
+    inline void accumulate_gradient(CMatRef<Target> target_, CEigRef<JacType> right,
+                                    Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template segment<OR>(this->seg_start_, this->output_rows()) =

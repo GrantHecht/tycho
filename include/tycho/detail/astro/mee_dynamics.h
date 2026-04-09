@@ -19,10 +19,10 @@ namespace tycho::astro {
 
 // Import cross-namespace types from vf and utils.
 using utils::SZ_SUM;
-using vf::DenseDerivativeMode;
-using vf::GenericFunction;
 using vf::CMatRef;
 using vf::CVecRef;
+using vf::DenseDerivativeMode;
+using vf::GenericFunction;
 using vf::MatRef;
 using vf::VecRef;
 using vf::VectorExpression;
@@ -88,8 +88,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(CVecRef<InType> x_,
-                                      CVecRef<OutType> fx_,
+    inline void compute_jacobian_impl(CVecRef<InType> x_, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
         using std::cos;
         using std::sin;
@@ -253,9 +252,9 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x_, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x_, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         using std::cos;
         using std::sin;
         using std::sqrt;

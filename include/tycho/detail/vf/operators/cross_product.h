@@ -146,8 +146,7 @@ struct FunctionCrossProduct_Impl
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <class Scalar, class T1, class T2>
-    Vector3<Scalar> crossimpl(Scalar sign, CVecRef<T1> x1,
-                              CVecRef<T2> x2) const {
+    Vector3<Scalar> crossimpl(Scalar sign, CVecRef<T1> x1, CVecRef<T2> x2) const {
         Vector3<Scalar> out;
         out[0] = sign * (x1[1] * x2[2] - x1[2] * x2[1]);
         out[1] = sign * (x2[0] * x1[2] - x2[2] * x1[0]);
@@ -204,9 +203,9 @@ struct FunctionCrossProduct_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();

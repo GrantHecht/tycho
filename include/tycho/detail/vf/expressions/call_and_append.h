@@ -35,7 +35,8 @@ struct NestedCallAndAppendChain2
 
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
-    static constexpr bool is_vectorizable = InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
 
     static constexpr int SizeInnerFuncs = sizeof...(InnerFuncs);
 
@@ -74,8 +75,8 @@ struct NestedCallAndAppendChain2
             this->outer_func_.compute(xchain, fx_);
         };
         tycho::utils::BumpAllocator::allocate_run(
-            Impl,
-            tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(this->outer_func_.input_rows(), 1));
+            Impl, tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(
+                      this->outer_func_.input_rows(), 1));
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
@@ -145,12 +146,13 @@ struct NestedCallAndAppendChain2
 
         tycho::utils::BumpAllocator::allocate_run(
             Impl,
-            tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(this->outer_func_.input_rows(), 1),
-            tycho::utils::TempSpec<typename InnerFunc1::template Jacobian<Scalar>>(this->inner_func1_.output_rows(),
-                                                                this->inner_func1_.input_rows()),
+            tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(
+                this->outer_func_.input_rows(), 1),
+            tycho::utils::TempSpec<typename InnerFunc1::template Jacobian<Scalar>>(
+                this->inner_func1_.output_rows(), this->inner_func1_.input_rows()),
             JITemps,
-            tycho::utils::TempSpec<typename OuterFunc::template Jacobian<Scalar>>(this->outer_func_.output_rows(),
-                                                               this->outer_func_.input_rows())
+            tycho::utils::TempSpec<typename OuterFunc::template Jacobian<Scalar>>(
+                this->outer_func_.output_rows(), this->outer_func_.input_rows())
 
         );
     }
@@ -158,9 +160,9 @@ struct NestedCallAndAppendChain2
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         // VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -169,13 +171,15 @@ struct NestedCallAndAppendChain2
 
         // typename OuterFunc::template Input<Scalar> xchain(this->outer_func_.input_rows());
 
-        // typename OuterFunc::template Jacobian<Scalar> jx_o;  // = typename OuterFunc::template Jacobian<Scalar>::Zero();
-        // typename OuterFunc::template Hessian<Scalar> hx_o;   // = OuterFunc_hessian <Scalar>::Zero();
-        // typename OuterFunc::template Gradient<Scalar> gx_o;  // = typename OuterFunc::template Gradient<Scalar>::Zero();
+        // typename OuterFunc::template Jacobian<Scalar> jx_o;  // = typename OuterFunc::template
+        // Jacobian<Scalar>::Zero(); typename OuterFunc::template Hessian<Scalar> hx_o;   // =
+        // OuterFunc_hessian <Scalar>::Zero(); typename OuterFunc::template Gradient<Scalar> gx_o;
+        // // = typename OuterFunc::template Gradient<Scalar>::Zero();
 
-        // typename InnerFunc1::template Jacobian<Scalar> jx1;  // = typename InnerFunc1::template Jacobian<Scalar>::Zero();
-        // typename InnerFunc1::template Gradient<Scalar> gx1;  // = typename InnerFunc1::template Gradient<Scalar>::Zero();
-        // typename InnerFunc1::template Hessian<Scalar> hx1;   // = typename InnerFunc1::template Hessian<Scalar>::Zero();
+        // typename InnerFunc1::template Jacobian<Scalar> jx1;  // = typename InnerFunc1::template
+        // Jacobian<Scalar>::Zero(); typename InnerFunc1::template Gradient<Scalar> gx1;  // =
+        // typename InnerFunc1::template Gradient<Scalar>::Zero(); typename InnerFunc1::template
+        // Hessian<Scalar> hx1;   // = typename InnerFunc1::template Hessian<Scalar>::Zero();
 
         // std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
         // std::tuple<typename InnerFuncs::template Hessian<Scalar>...> hxi;
@@ -338,18 +342,21 @@ struct NestedCallAndAppendChain2
 
         tycho::utils::BumpAllocator::allocate_run(
             Impl,
-            tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(this->outer_func_.input_rows(), 1),
-            tycho::utils::TempSpec<typename InnerFunc1::template Jacobian<Scalar>>(this->inner_func1_.output_rows(),
-                                                                this->inner_func1_.input_rows()),
-            tycho::utils::TempSpec<typename InnerFunc1::template Gradient<Scalar>>(this->inner_func1_.input_rows(), 1),
-            tycho::utils::TempSpec<typename InnerFunc1::template Hessian<Scalar>>(this->inner_func1_.input_rows(),
-                                                               this->inner_func1_.input_rows()),
+            tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(
+                this->outer_func_.input_rows(), 1),
+            tycho::utils::TempSpec<typename InnerFunc1::template Jacobian<Scalar>>(
+                this->inner_func1_.output_rows(), this->inner_func1_.input_rows()),
+            tycho::utils::TempSpec<typename InnerFunc1::template Gradient<Scalar>>(
+                this->inner_func1_.input_rows(), 1),
+            tycho::utils::TempSpec<typename InnerFunc1::template Hessian<Scalar>>(
+                this->inner_func1_.input_rows(), this->inner_func1_.input_rows()),
             JITemps, GITemps, HITemps,
-            tycho::utils::TempSpec<typename OuterFunc::template Jacobian<Scalar>>(this->outer_func_.output_rows(),
-                                                               this->outer_func_.input_rows()),
-            tycho::utils::TempSpec<typename OuterFunc::template Gradient<Scalar>>(this->outer_func_.input_rows(), 1),
-            tycho::utils::TempSpec<typename OuterFunc::template Hessian<Scalar>>(this->outer_func_.input_rows(),
-                                                              this->outer_func_.input_rows()),
+            tycho::utils::TempSpec<typename OuterFunc::template Jacobian<Scalar>>(
+                this->outer_func_.output_rows(), this->outer_func_.input_rows()),
+            tycho::utils::TempSpec<typename OuterFunc::template Gradient<Scalar>>(
+                this->outer_func_.input_rows(), 1),
+            tycho::utils::TempSpec<typename OuterFunc::template Hessian<Scalar>>(
+                this->outer_func_.input_rows(), this->outer_func_.input_rows()),
             tycho::utils::TempSpec<Eigen::Matrix<Scalar, OuterFunc::IRC, Base::IRC>>(
                 this->outer_func_.input_rows(), this->input_rows()));
     }
@@ -487,9 +494,9 @@ struct NestedCallAndAppendChain
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         // VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -512,13 +519,18 @@ struct NestedCallAndAppendChain
                 xchain.template segment<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()));
         });
 
-        typename OuterFunc::template Jacobian<Scalar> jx_o; // = typename OuterFunc::template Jacobian<Scalar>::Zero();
-        typename OuterFunc::template Hessian<Scalar> hx_o;  // = OuterFunc_hessian <Scalar>::Zero();
-        typename OuterFunc::template Gradient<Scalar> gx_o; // = typename OuterFunc::template Gradient<Scalar>::Zero();
+        typename OuterFunc::template Jacobian<Scalar>
+            jx_o; // = typename OuterFunc::template Jacobian<Scalar>::Zero();
+        typename OuterFunc::template Hessian<Scalar> hx_o; // = OuterFunc_hessian <Scalar>::Zero();
+        typename OuterFunc::template Gradient<Scalar>
+            gx_o; // = typename OuterFunc::template Gradient<Scalar>::Zero();
 
-        typename InnerFunc1::template Jacobian<Scalar> jx1; // = typename InnerFunc1::template Jacobian<Scalar>::Zero();
-        typename InnerFunc1::template Gradient<Scalar> gx1; // = typename InnerFunc1::template Gradient<Scalar>::Zero();
-        typename InnerFunc1::template Hessian<Scalar> hx1;  // = typename InnerFunc1::template Hessian<Scalar>::Zero();
+        typename InnerFunc1::template Jacobian<Scalar>
+            jx1; // = typename InnerFunc1::template Jacobian<Scalar>::Zero();
+        typename InnerFunc1::template Gradient<Scalar>
+            gx1; // = typename InnerFunc1::template Gradient<Scalar>::Zero();
+        typename InnerFunc1::template Hessian<Scalar>
+            hx1; // = typename InnerFunc1::template Hessian<Scalar>::Zero();
 
         std::tuple<typename InnerFuncs::template Jacobian<Scalar>...> jxi;
         std::tuple<typename InnerFuncs::template Hessian<Scalar>...> hxi;

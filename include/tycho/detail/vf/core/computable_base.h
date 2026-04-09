@@ -78,8 +78,7 @@ namespace tycho::vf {
  * @tparam IR Input Rows
  * @tparam OR Output Rows
  */
-template <class Derived, int IR, int OR>
-struct ComputableBase : InputOutputSize<IR, OR> {
+template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize<IR, OR> {
     Derived &derived() { return static_cast<Derived &>(*this); }
     const Derived &derived() const { return static_cast<const Derived &>(*this); }
     std::string name() const { return type_name<Derived>(); }
@@ -209,16 +208,14 @@ struct ComputableBase : InputOutputSize<IR, OR> {
     }
 
     template <class InType, class OutType, class AdjGradType, class AdjVarType>
-    inline void compute_adjointgradient(CVecRef<InType> x,
-                                        CVecRef<OutType> fx_,
+    inline void compute_adjointgradient(CVecRef<InType> x, CVecRef<OutType> fx_,
                                         CVecRef<AdjGradType> adjgrad_,
                                         CVecRef<AdjVarType> adjvars) const {
         this->derived().compute_adjointgradient(x, fx_, adjgrad_, adjvars);
     }
 
     template <class InType, class AdjGradType, class AdjVarType>
-    inline void adjointgradient(CVecRef<InType> x,
-                                CVecRef<AdjGradType> adjgrad_,
+    inline void adjointgradient(CVecRef<InType> x, CVecRef<AdjGradType> adjgrad_,
                                 CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Output<Scalar> fx(this->output_rows());
@@ -227,8 +224,8 @@ struct ComputableBase : InputOutputSize<IR, OR> {
     }
 
     template <class InType, class AdjVarType>
-    inline Gradient<typename InType::Scalar>
-    adjointgradient(CVecRef<InType> x, CVecRef<AdjVarType> adjvars) const {
+    inline Gradient<typename InType::Scalar> adjointgradient(CVecRef<InType> x,
+                                                             CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         Gradient<Scalar> adjgrad(this->input_rows());
         adjgrad.setZero();

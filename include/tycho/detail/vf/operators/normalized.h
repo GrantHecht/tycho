@@ -122,8 +122,8 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, Eigen::MatrixBase<AdjGradType> const &adjgrad_,
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        Eigen::MatrixBase<AdjGradType> const &adjgrad_,
         Eigen::MatrixBase<AdjHessType> const &adjhess_,
         const Eigen::MatrixBase<AdjVarType> &adjvars) const {
         typedef typename InType::Scalar Scalar;

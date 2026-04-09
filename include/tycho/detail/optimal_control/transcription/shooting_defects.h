@@ -50,14 +50,14 @@ using utils::SZ_MAX;
 using utils::SZ_PROD;
 using utils::SZ_SUM;
 using vf::Arguments;
+using vf::CMatRef;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
 using vf::Is_SuperScalar;
+using vf::MatRef;
 using vf::StackedOutputs;
 using vf::ThreadingFlags;
-using vf::CMatRef;
-using vf::CVecRef;
-using vf::MatRef;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
@@ -140,8 +140,7 @@ struct CentralShootingDefect
     CentralShootingDefect() {}
 
     template <class InType>
-    void extract_scalar_inputs(CVecRef<InType> X1X2,
-                               std::vector<Input<double>> &X1X2s) const {
+    void extract_scalar_inputs(CVecRef<InType> X1X2, std::vector<Input<double>> &X1X2s) const {
 
         typedef typename InType::Scalar Scalar;
 
@@ -155,8 +154,7 @@ struct CentralShootingDefect
     }
 
     template <class InType>
-    void extract_scalar_lmults(CVecRef<InType> Lf,
-                               std::vector<Output<double>> &Lfs) const {
+    void extract_scalar_lmults(CVecRef<InType> Lf, std::vector<Output<double>> &Lfs) const {
 
         typedef typename InType::Scalar Scalar;
 
@@ -415,9 +413,9 @@ struct CentralShootingDefect
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();

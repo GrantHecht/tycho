@@ -124,9 +124,7 @@ struct ConstantConditional {
     ConstantConditional() {}
     ConstantConditional(int irows, bool val) : input_rows_val_(irows), value_(val) {}
     ConstantConditional(bool val) : value_(val) {}
-    template <class InType> inline bool compute(CVecRef<InType> x) const {
-        return this->value_;
-    }
+    template <class InType> inline bool compute(CVecRef<InType> x) const { return this->value_; }
 
     int input_rows() const { return this->input_rows_val_; }
 
@@ -198,9 +196,9 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         if (this->test_func_.compute(x)) {
             this->true_func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
                                                                              adjhess_, adjvars);

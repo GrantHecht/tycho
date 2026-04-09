@@ -46,7 +46,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     GenericFunction() {}
 
     template <DenseVectorFunction T>
-        requires (!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>>)
+        requires(!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>>)
     GenericFunction(const T &t) {
         func_.emplace(t);
         this->cachedata();
@@ -92,8 +92,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     // concrete Ref type expected by the virtual signature before dispatching.
 
     template <class InTypeTT, class OutTypeTT>
-    inline void compute_impl(CVecRef<InTypeTT> x,
-                             CVecRef<OutTypeTT> fx_) const {
+    inline void compute_impl(CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
             typename Dspec::InType xt(x.derived());
@@ -107,8 +106,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     template <class InTypeTT, class OutTypeTT, class JacTypeTT>
-    inline void compute_jacobian_impl(CVecRef<InTypeTT> x,
-                                      CVecRef<OutTypeTT> fx_,
+    inline void compute_jacobian_impl(CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_,
                                       CMatRef<JacTypeTT> jx_) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
@@ -127,9 +125,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     template <class InTypeTT, class OutTypeTT, class JacTypeTT, class AdjGradTypeTT,
               class AdjHessTypeTT, class AdjVarTypeTT>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_,
-        CMatRef<JacTypeTT> jx_, CVecRef<AdjGradTypeTT> adjgrad_,
-        CMatRef<AdjHessTypeTT> adjhess_,
+        CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_, CMatRef<JacTypeTT> jx_,
+        CVecRef<AdjGradTypeTT> adjgrad_, CMatRef<AdjHessTypeTT> adjhess_,
         CVecRef<AdjVarTypeTT> adjvars) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
@@ -156,9 +153,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     /////////////////////////////////////////////////////////////////////////////////
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         typedef typename Target::Scalar Scalar;
 
@@ -185,15 +181,15 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     template <class Target, class AdjHessTypeTT, class Assignment>
-    void accumulate_hessian(CMatRef<Target> target_,
-                            CMatRef<AdjHessTypeTT> right, Assignment assign) const {
+    void accumulate_hessian(CMatRef<Target> target_, CMatRef<AdjHessTypeTT> right,
+                            Assignment assign) const {
         if (!this->is_linear())
             Base::accumulate_hessian(target_, right, assign);
     }
 
     template <class Target, class JacTypeTT, class Assignment>
-    void accumulate_jacobian(CMatRef<Target> target_,
-                             CMatRef<JacTypeTT> right, Assignment assign) const {
+    void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacTypeTT> right,
+                             Assignment assign) const {
         typedef typename Target::Scalar Scalar;
 
         if constexpr (std::is_same_v<Scalar, double>) {

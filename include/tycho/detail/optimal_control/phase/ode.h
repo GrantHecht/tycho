@@ -23,10 +23,10 @@ namespace tycho::oc {
 // Import cross-namespace types used by ODE definitions.
 using integrators::Integrator;
 using utils::SZ_SUM;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
 using vf::FunctionHolder;
 using vf::GenericFunction;
-using vf::CVecRef;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;

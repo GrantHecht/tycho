@@ -12,13 +12,13 @@
 
 namespace tycho::vf {
 
-template <class T> using CVecRef  = const Eigen::MatrixBase<T> &;
-template <class T> using VecRef   = Eigen::MatrixBase<T> &;
-template <class T> using CMatRef  = const Eigen::MatrixBase<T> &;
-template <class T> using MatRef   = Eigen::MatrixBase<T> &;
-template <class T> using CEigRef  = const Eigen::EigenBase<T> &;
-template <class T> using EigRef   = Eigen::EigenBase<T> &;
+template <class T> using CVecRef = const Eigen::MatrixBase<T> &;
+template <class T> using VecRef = Eigen::MatrixBase<T> &;
+template <class T> using CMatRef = const Eigen::MatrixBase<T> &;
+template <class T> using MatRef = Eigen::MatrixBase<T> &;
+template <class T> using CEigRef = const Eigen::EigenBase<T> &;
+template <class T> using EigRef = Eigen::EigenBase<T> &;
 template <class T> using CDiagRef = const Eigen::DiagonalBase<T> &;
-template <class T> using DiagRef  = Eigen::DiagonalBase<T> &;
+template <class T> using DiagRef = Eigen::DiagonalBase<T> &;
 
 } // namespace tycho::vf

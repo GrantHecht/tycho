@@ -122,8 +122,10 @@ struct TwoFunctionSum_Impl
     Func1 func1;
     Func2 func2;
 
-    static constexpr bool func1_is_segment = Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
-    static constexpr bool func2_is_segment = Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
+    static constexpr bool func1_is_segment =
+        Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
+    static constexpr bool func2_is_segment =
+        Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
     static constexpr bool is_sum_of_segments = func1_is_segment && func2_is_segment;
 
     static constexpr bool func1_is_sumordiff = Is_SumorDiff<Func1>::value;
@@ -132,7 +134,8 @@ struct TwoFunctionSum_Impl
     static constexpr bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
     static constexpr bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
 
-    static constexpr bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
+    static constexpr bool is_linear_function =
+        Func1::is_linear_function && Func2::is_linear_function;
     static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     using INPUT_DOMAIN =
@@ -207,9 +210,9 @@ struct TwoFunctionSum_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -256,9 +259,8 @@ struct TwoFunctionSum_Impl
     ///////////////////////////////////////////////////////////////////////////////////////
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (is_sum_of_segments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
@@ -298,8 +300,8 @@ struct TwoFunctionSum_Impl
         }
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(CMatRef<Target> target_,
-                                    CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         if constexpr (is_sum_of_segments) {
             this->func1.accumulate_jacobian(target_, right, assign);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
@@ -480,9 +482,9 @@ struct MultiFunctionSum_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -541,9 +543,8 @@ struct MultiFunctionSum_Impl
 
     ///////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(CMatRef<Target> target_,
-                                       CEigRef<Left> left, CEigRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (IsSumofSegments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);

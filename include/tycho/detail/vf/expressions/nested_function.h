@@ -42,7 +42,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
     static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static constexpr bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
@@ -138,9 +139,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         // MatRef<JacType> jx = jx_.const_cast_derived();
@@ -271,7 +272,8 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
     static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static constexpr bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, Segment<IR, OR, ST> ifunc) {
@@ -318,9 +320,9 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x, CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_, CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_, CVecRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
 
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
@@ -339,8 +341,8 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(CMatRef<Target> target_,
-                                    CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
         MatRef<JacType> right_ref = right.const_cast_derived();
         // typedef typename Target::Scalar Scalar;
@@ -355,8 +357,8 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(CMatRef<Target> target_,
-                                   CMatRef<JacType> right, Assignment assign) const {
+    inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                   Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
         MatRef<JacType> right_ref = right.const_cast_derived();
         // typedef typename Target::Scalar Scalar;
