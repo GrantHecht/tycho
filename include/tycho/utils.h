@@ -1,6 +1,6 @@
 #pragma once
 
-// Tycho — Thread pool, type storage, sizing helpers, CRTP base
+// Tycho — Thread pool, type storage, sizing helpers, math functions
 
 #include "tycho/detail/utils/type_storage.h"
 #include "tycho/detail/utils/sizing_helpers.h"

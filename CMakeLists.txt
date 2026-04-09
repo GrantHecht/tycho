@@ -18,7 +18,7 @@ set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 # build in parallel at the full -j level.
 #
 # TYCHO_HEAVY_COMPILE_JOBS controls the pool depth (max concurrent heavy TUs).
-# Default: auto-detected from system RAM (1 per 12 GB, minimum 1).
+# Default: auto-detected from system RAM (1 per 10 GB, minimum 1).
 # Override: cmake -DTYCHO_HEAVY_COMPILE_JOBS=<N> ...
 ################################################################################
 if(NOT DEFINED TYCHO_HEAVY_COMPILE_JOBS)

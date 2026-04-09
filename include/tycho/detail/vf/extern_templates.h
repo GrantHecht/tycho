@@ -7,10 +7,9 @@
 // src/vf/extern_template_instantiations.cpp (the vf_instantiations library).
 //
 // Only the classes with significant method bodies are listed here.
-// Empty pass-through classes in the CRTP chain (VectorFunction,
-// DenseDerivatives, DenseFirstDerivatives, DenseSecondDerivatives,
-// DenseFunction, Computable) are omitted — they contain only type aliases
-// for Analytic derivative mode and have negligible instantiation cost.
+// The remaining thin CRTP layers (VectorFunction, DenseFirstDerivatives,
+// DenseSecondDerivatives) are omitted — they contain only type aliases
+// for the Analytic derivative mode and have negligible instantiation cost.
 
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
@@ -55,7 +54,7 @@ extern template struct DenseFunctionBase<Constant<-1, 1>, -1, 1>;
 // These are the most frequently duplicated type-erasure instantiations across
 // binding and test TUs (30,568 duplicate weak symbols for GFModelCommon<-1,-1>
 // alone). Each unique T stored in GenericFunction requires a full
-// GFModelCommon + GFModel instantiation with ~25 virtual method overrides.
+// GFModelCommon + GFModel instantiation with ~42 virtual method overrides.
 // ---------------------------------------------------------------------------
 
 // Arguments<-1> — used in virtually every VF expression

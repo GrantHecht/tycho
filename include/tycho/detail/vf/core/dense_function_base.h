@@ -1348,12 +1348,9 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         }
     }
 
-  public:
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  protected:
     inline constexpr bool jacobian_elem_is_nonzero(int row, int col) const { return true; }
     inline constexpr bool hessian_elem_is_nonzero(int row, int col) const {
-        return !Derived::is_linear_function;
+        return !LinearVF<Derived>;
     }
     inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                  int &freeloc) const {

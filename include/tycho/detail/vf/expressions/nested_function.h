@@ -50,14 +50,11 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         : outer_func_(std::move(ofunc)), inner_func_(std::move(ifunc)) {
         if (this->inner_func_.output_rows() != this->outer_func_.input_rows()) {
 
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in NestedFunction/.eval method !!!\n"
-                       "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
-                       "OuterFunction "
-                       "(IRows = {1:}).\n",
-                       this->inner_func_.output_rows(), this->outer_func_.input_rows());
-
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in NestedFunction/.eval method: "
+                            "Output Size of InnerFunction (ORows = {}) does not match "
+                            "Input Size of OuterFunction (IRows = {}).",
+                            this->inner_func_.output_rows(), this->outer_func_.input_rows()));
         }
 
         this->set_io_rows(this->inner_func_.input_rows(), this->outer_func_.output_rows());

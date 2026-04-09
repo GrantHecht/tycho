@@ -10,7 +10,7 @@
 // Template parameters are the derived class (Derived), and the compile time value of the input (IR)
 // and output (OR) rows of the vectorfunction.
 //
-// Inherits from CRTP to gain derived casting capabilities.
+// Provides derived() cast directly (CRTP pattern).
 // Inherits from InputOutputSize<IR, OR> to gain fields for holding input and output sizes if
 // necessary for dynamic sized functions (IR=OR=-1).
 //

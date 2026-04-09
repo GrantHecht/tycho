@@ -35,7 +35,6 @@ template <class LHS, class RHS> struct ConditionalStatement {
     static constexpr bool meta_conditional = LHS::is_conditional && RHS::is_conditional;
 
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IRC, 1>;
-    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
 
     ConditionalStatement() {}
     ConditionalStatement(LHS lhss, ConditionalFlags flagss, RHS rhss)
@@ -119,7 +118,6 @@ template <class LHS, class RHS> struct ConditionalStatement {
 
 struct ConstantConditional {
     template <class Scalar> using Input = Eigen::Matrix<Scalar, -1, 1>;
-    template <class Scalar> using CVecRef = const Eigen::MatrixBase<Scalar> &;
 
     ConstantConditional() {}
     ConstantConditional(int irows, bool val) : input_rows_val_(irows), value_(val) {}

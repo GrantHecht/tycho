@@ -146,7 +146,7 @@ fill extra slots while heavy TUs are limited. On 32 GB, `-j8` is safe
 TUs consume 3-8 GB RAM each due to heavy template instantiation. A ninja job
 pool named `heavy_compile` limits concurrent compilation of these TUs so they
 cannot OOM the system. The pool depth is **auto-detected** from system RAM
-(1 slot per 12 GB, minimum 1) and can be overridden:
+(1 slot per 10 GB, minimum 1) and can be overridden:
 
 ```bash
 cmake --preset <preset> -DTYCHO_HEAVY_COMPILE_JOBS=3   # e.g. for a 36 GB machine
@@ -228,7 +228,7 @@ cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
 | `BUILD_CPP_TESTS`             | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
-| `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 12 GB RAM). Override for your system.  |
+| `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 10 GB RAM). Override for your system.  |
 
 ## Code Style
 
