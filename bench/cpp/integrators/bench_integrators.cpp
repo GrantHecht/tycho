@@ -2,8 +2,11 @@
 // Integrator benchmarks — RK stepper pipeline throughput
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../bench_common.h"
+#include "../bench_odes.h"
+#include <tycho/integrators.h>
 #include <benchmark/benchmark.h>
+
+using namespace tycho::integrators;
 
 ///////////////////////////////////////////////////////////////////////////////
 // SHO integration benchmarks — one full period (2*pi)

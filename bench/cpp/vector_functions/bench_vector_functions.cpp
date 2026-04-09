@@ -2,8 +2,11 @@
 // VectorFunction DSL evaluation benchmarks
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../bench_common.h"
+#include "../bench_odes.h"
+#include <tycho/detail/astro/cr3bp_model.h>
 #include <benchmark/benchmark.h>
+
+using namespace tycho::astro;
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrachODE benchmarks (5->3)

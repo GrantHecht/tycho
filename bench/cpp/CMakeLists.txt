@@ -25,6 +25,7 @@ target_include_directories(pch_bench PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch_bench PRIVATE ${COMPILE_FLAGS})
 
 add_executable(bench_all
+    bench_init.cpp
     kepler/bench_kepler.cpp
     vector_functions/bench_vector_functions.cpp
     type_erasure/bench_type_erasure.cpp

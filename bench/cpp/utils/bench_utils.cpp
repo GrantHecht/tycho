@@ -2,9 +2,12 @@
 // Utils benchmarks — TypeStorage SBO, BumpAllocator, ThreadPool
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../bench_common.h"
+#include <tycho/typedefs.h>
+#include <tycho/utils.h>
 #include <benchmark/benchmark.h>
 #include <future>
+
+using namespace tycho::utils;
 
 ///////////////////////////////////////////////////////////////////////////////
 // TypeStorage SBO benchmarks
