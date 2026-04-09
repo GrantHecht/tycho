@@ -173,12 +173,12 @@ void tycho::oc::OptimalControlProblemBase::check_functions() {
             for (int j = 0; j < func.phases_to_link_[i].size(); j++) {
                 int pnum = func.phases_to_link_[i][j];
                 if (pnum >= this->phases.size() || pnum < 0) {
-                    throw std::invalid_argument(fmt::format(
-                        "Transcription Error!!!\n"
-                        "{0:} references non-existant phase:{1:}\n"
-                        " Function Storage Index:{2:}\n"
-                        " Function Name:{3:}\n",
-                        type, pnum, func.storage_index_, func.func_.name()));
+                    throw std::invalid_argument(
+                        fmt::format("Transcription Error!!!\n"
+                                    "{0:} references non-existant phase:{1:}\n"
+                                    " Function Storage Index:{2:}\n"
+                                    " Function Name:{3:}\n",
+                                    type, pnum, func.storage_index_, func.func_.name()));
                 }
 
                 if (func.xtu_vars_[j].size() > 0) {
@@ -226,12 +226,12 @@ void tycho::oc::OptimalControlProblemBase::check_functions() {
                 if (func.link_params_[i].maxCoeff() >= this->num_link_params_ ||
                     func.link_params_[i].minCoeff() < 0) {
 
-                    throw std::invalid_argument(fmt::format(
-                        "Transcription Error!!!\n"
-                        "{0:} function link parameter variable indices out of bounds\n"
-                        " Function Storage Index:{1:}\n"
-                        " Function Name:{2:}\n",
-                        type, func.storage_index_, func.func_.name()));
+                    throw std::invalid_argument(
+                        fmt::format("Transcription Error!!!\n"
+                                    "{0:} function link parameter variable indices out of bounds\n"
+                                    " Function Storage Index:{1:}\n"
+                                    " Function Name:{2:}\n",
+                                    type, func.storage_index_, func.func_.name()));
                 }
             }
         }

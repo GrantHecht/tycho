@@ -21,9 +21,9 @@
 namespace tycho::astro {
 
 // Import cross-namespace types from vf and oc.
-using oc::StaticODE_Expression;
 using oc::ODEPhase;
 using oc::ODESize;
+using oc::StaticODE_Expression;
 using vf::Arguments;
 using vf::StackedOutputs;
 

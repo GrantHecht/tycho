@@ -300,10 +300,10 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     int get_phase_num(const std::string &name) {
         auto nameit = std::find(phase_names.begin(), phase_names.end(), name);
         if (nameit == phase_names.end()) {
-            throw std::invalid_argument(fmt::format(
-                "Transcription Error!!!\n"
-                "No phase with name '{}' exists in OptimalControlProblem.\n",
-                name));
+            throw std::invalid_argument(
+                fmt::format("Transcription Error!!!\n"
+                            "No phase with name '{}' exists in OptimalControlProblem.\n",
+                            name));
         }
         return int(nameit - phase_names.begin());
     }
@@ -1453,11 +1453,11 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                 for (int i = 0; i < func.link_params_.size(); i++) {
                     int isize = func.link_params_[i].size();
                     if (irows != isize) {
-                        throw std::invalid_argument(fmt::format(
-                            "Transcription Error!!!\n"
-                            "Input size of {} (IRows = {}) does not match that implied "
-                            "by indexing parameters (IRows = {}).\n",
-                            ftype, irows, isize));
+                        throw std::invalid_argument(
+                            fmt::format("Transcription Error!!!\n"
+                                        "Input size of {} (IRows = {}) does not match that implied "
+                                        "by indexing parameters (IRows = {}).\n",
+                                        ftype, irows, isize));
                     }
                 }
             } else {
@@ -1517,11 +1517,11 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                                  func.sp_vars_[j].size();
                     }
                     if (irows != isize) {
-                        throw std::invalid_argument(fmt::format(
-                            "Transcription Error!!!\n"
-                            "Input size of {} (IRows = {}) does not match that implied "
-                            "by indexing parameters (IRows = {}).\n",
-                            ftype, irows, isize));
+                        throw std::invalid_argument(
+                            fmt::format("Transcription Error!!!\n"
+                                        "Input size of {} (IRows = {}) does not match that implied "
+                                        "by indexing parameters (IRows = {}).\n",
+                                        ftype, irows, isize));
                     }
                 }
             }

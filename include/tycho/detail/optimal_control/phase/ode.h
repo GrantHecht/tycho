@@ -37,7 +37,7 @@ template <class Derived, int _XV, int _UV, int _PV,
           DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct StaticODE : ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _XV, Jm, Hm>,
-                          Derived, _XV, _UV, _PV> {
+                           Derived, _XV, _UV, _PV> {
     using Base = ODEBase<VectorFunction<Derived, SZ_SUM<_XV, 1, _UV, _PV>::value, _XV, Jm, Hm>,
                          Derived, _XV, _UV, _PV>;
 
@@ -78,8 +78,8 @@ struct StaticODE_Expression : ODEBase<VectorExpression<Derived, ExprImpl, Ts...>
 template <class Derived, class InnerODE, DenseDerivativeMode Jm = DenseDerivativeMode::FDiffFwd,
           DenseDerivativeMode Hm = DenseDerivativeMode::FDiffFwd>
 struct StaticODE_DerivModeWrapper
-    : ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived,
-              InnerODE::XV, InnerODE::UV, InnerODE::PV> {
+    : ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived, InnerODE::XV,
+              InnerODE::UV, InnerODE::PV> {
     using Base = ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived,
                          InnerODE::XV, InnerODE::UV, InnerODE::PV>;
     VF_TYPE_ALIASES(Base);
@@ -157,13 +157,11 @@ struct StaticODE_DerivModeWrapper
         using Base::Base;                                                                          \
     };                                                                                             \
     struct NAME                                                                                    \
-        : StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                                   \
-                                     DenseDerivativeMode::AutodiffFwd,                             \
+        : StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_, DenseDerivativeMode::AutodiffFwd, \
                                      DenseDerivativeMode::AutodiffFwd> {                           \
-        using Base =                                                                               \
-            StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                                 \
-                                       DenseDerivativeMode::AutodiffFwd,                           \
-                                       DenseDerivativeMode::AutodiffFwd>;                          \
+        using Base = StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                        \
+                                                DenseDerivativeMode::AutodiffFwd,                  \
+                                                DenseDerivativeMode::AutodiffFwd>;                 \
         using Base::Base;                                                                          \
     };
 

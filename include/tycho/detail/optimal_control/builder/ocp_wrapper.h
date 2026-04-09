@@ -50,11 +50,11 @@ class OptimalControlProblem {
             std::string which = p1_empty && p2_empty ? "both phases"
                                 : p1_empty           ? "phase p1"
                                                      : "phase p2";
-            throw std::invalid_argument(
-                fmt::format("OptimalControlProblem::add_forward_link_equal_con: {} {} no variable names "
-                            "registered -- register names via ODEBuilder::var_names() "
-                            "or use the index-based overload",
-                            which, (p1_empty && p2_empty) ? "have" : "has"));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::add_forward_link_equal_con: {} {} no variable names "
+                "registered -- register names via ODEBuilder::var_names() "
+                "or use the index-based overload",
+                which, (p1_empty && p2_empty) ? "have" : "has"));
         }
         auto idx1 = p1.registry().resolve(var_names);
         auto idx2 = p2.registry().resolve(var_names);
@@ -68,11 +68,11 @@ class OptimalControlProblem {
                 }
                 return s + "]";
             };
-            throw std::invalid_argument(
-                fmt::format("OptimalControlProblem::add_forward_link_equal_con: variable names resolve to "
-                            "different indices in p1 {} vs p2 {} -- use the "
-                            "index-based overload for heterogeneous phase layouts",
-                            fmt_idx(idx1), fmt_idx(idx2)));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::add_forward_link_equal_con: variable names resolve to "
+                "different indices in p1 {} vs p2 {} -- use the "
+                "index-based overload for heterogeneous phase layouts",
+                fmt_idx(idx1), fmt_idx(idx2)));
         }
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), idx1);
     }
@@ -123,8 +123,9 @@ class OptimalControlProblem {
   private:
     void check_has_phases(const char *method) const {
         if (ocp_.phases.empty())
-            throw std::invalid_argument(
-                fmt::format("OptimalControlProblem::{}: no phases added — call add_phase() before solving", method));
+            throw std::invalid_argument(fmt::format(
+                "OptimalControlProblem::{}: no phases added — call add_phase() before solving",
+                method));
     }
 
     OptimalControlProblemBase ocp_;

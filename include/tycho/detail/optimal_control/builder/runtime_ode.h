@@ -135,9 +135,8 @@ class ODE {
                             func_.input_rows(), expected_ir, xvars_, uvars_, pvars_));
         }
         if (func_.output_rows() != xvars_) {
-            throw std::invalid_argument(
-                fmt::format("ODE: function output size {} does not match XV={}",
-                            func_.output_rows(), xvars_));
+            throw std::invalid_argument(fmt::format(
+                "ODE: function output size {} does not match XV={}", func_.output_rows(), xvars_));
         }
     }
 

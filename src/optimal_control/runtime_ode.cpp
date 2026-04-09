@@ -16,7 +16,7 @@
 namespace tycho {
 
 Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
-                        int num_segments) const {
+                 int num_segments) const {
     if (traj.empty())
         throw std::invalid_argument("ODE::phase: trajectory must not be empty");
     if (num_segments <= 0)
