@@ -1,10 +1,10 @@
 // =============================================================================
 // Tycho — Builder API: OCP wrapper
 //
-// Thin wrapper around OptimalControlProblem that accepts Phase wrappers
+// Thin wrapper around OptimalControlProblemBase that accepts Phase wrappers
 // directly, eliminating base_ptr() calls and enabling named-variable link
 // constraints.  For methods not wrapped here, use base() to access the
-// underlying OptimalControlProblem.
+// underlying OptimalControlProblemBase.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
 // =============================================================================
@@ -16,15 +16,15 @@
 
 namespace tycho {
 
-using oc::OptimalControlProblem;
+using oc::OptimalControlProblemBase;
 // Solvers types
 using tycho::solvers::PSIOPT;
 
-/// Thin wrapper around OptimalControlProblem with Phase-aware overloads.
+/// Thin wrapper around OptimalControlProblemBase with Phase-aware overloads.
 ///
 /// Accepts Phase wrapper objects directly (no base_ptr() needed) and
 /// supports named-variable link constraints.  Use base() for any
-/// OptimalControlProblem method not wrapped here.
+/// OptimalControlProblemBase method not wrapped here.
 class OCP {
   public:
     OCP() = default;
@@ -117,8 +117,8 @@ class OCP {
 
     PSIOPT &optimizer() { return *ocp_.optimizer_; }
 
-    OptimalControlProblem &base() { return ocp_; }
-    const OptimalControlProblem &base() const { return ocp_; }
+    OptimalControlProblemBase &base() { return ocp_; }
+    const OptimalControlProblemBase &base() const { return ocp_; }
 
   private:
     void check_has_phases(const char *method) const {
@@ -127,7 +127,7 @@ class OCP {
                 fmt::format("OCP::{}: no phases added — call add_phase() before solving", method));
     }
 
-    OptimalControlProblem ocp_;
+    OptimalControlProblemBase ocp_;
 };
 
 } // namespace tycho

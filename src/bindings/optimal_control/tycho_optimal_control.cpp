@@ -110,7 +110,7 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     TychoBind<MeshIterateInfo>::Build(oc);
 
     TychoBind<ODEPhaseBase>::Build(oc);
-    TychoBind<OptimalControlProblem>::Build(oc);
+    TychoBind<OptimalControlProblemBase>::Build(oc);
     TychoBind<LGLInterpTable>::Build(oc);
 
     reg.Build_Register<InterpFunction<-1>>(oc, "InterpFunction");

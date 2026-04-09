@@ -17,7 +17,7 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 // TychoBind specializations for ODEPhase<DODE>, StateFunction<T>, LinkFunction<T>,
-// FDDerivArbitrary<T>, ODEPhaseBase, LGLInterpTable, and OptimalControlProblem.
+// FDDerivArbitrary<T>, ODEPhaseBase, LGLInterpTable, and OptimalControlProblemBase.
 
 #include "tycho/detail/optimal_control/core/link_function.h"
 #include "tycho/detail/optimal_control/core/state_function.h"
@@ -106,7 +106,7 @@ template <> struct TychoBind<LGLInterpTable> {
     static void Build(nb::module_ &m);
 };
 
-template <> struct TychoBind<OptimalControlProblem> {
+template <> struct TychoBind<OptimalControlProblemBase> {
     static void Build(nb::module_ &m);
 };
 

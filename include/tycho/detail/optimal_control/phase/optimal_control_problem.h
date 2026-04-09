@@ -56,7 +56,7 @@ using vf::Arguments;
 using vf::GenericFunction;
 using vf::StackedOutputs;
 
-struct OptimalControlProblem : OptimizationProblemBase {
+struct OptimalControlProblemBase : OptimizationProblemBase {
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;
 
@@ -268,8 +268,8 @@ struct OptimalControlProblem : OptimizationProblemBase {
     }
 
     ///////////////////////////////
-    OptimalControlProblem() {}
-    OptimalControlProblem(std::vector<PhasePtr> ps) { this->add_phases(ps); }
+    OptimalControlProblemBase() {}
+    OptimalControlProblemBase(std::vector<PhasePtr> ps) { this->add_phases(ps); }
 
     int add_phase(PhasePtr p) {
         this->reset_transcription();
@@ -302,7 +302,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (nameit == phase_names.end()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Transcription Error!!!\n"
-                       "No phase with name '{0}' exists in OptimalControlProblem.\n",
+                       "No phase with name '{0}' exists in OptimalControlProblemBase.\n",
                        name);
             throw std::invalid_argument("");
         }
@@ -315,7 +315,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
         if (ptrit == phases.end()) {
             fmt::print(fmt::fg(fmt::color::red),
                        "Transcription Error!!!\n"
-                       "The requested phase does not exist in OptimalControlProblem\n");
+                       "The requested phase does not exist in OptimalControlProblemBase\n");
             throw std::invalid_argument("");
         }
         return int(ptrit - phases.begin());
@@ -1416,7 +1416,7 @@ struct OptimalControlProblem : OptimizationProblemBase {
                         fmt::print(
                             fmt::fg(fmt::color::red),
                             "Transcription Error!!!\n"
-                            "OptimalControlProblem contains Two phases with identical names\n");
+                            "OptimalControlProblemBase contains Two phases with identical names\n");
                         throw std::invalid_argument("");
                     }
 
