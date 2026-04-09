@@ -19,8 +19,15 @@ namespace tycho::astro {
 
 // Import cross-namespace types from vf and utils.
 using utils::SZ_SUM;
+using vf::Arguments;
+using vf::CMatRef;
+using vf::Constant;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
 using vf::GenericFunction;
+using vf::IfElseFunction;
+using vf::MatRef;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 

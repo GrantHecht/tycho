@@ -17,6 +17,7 @@ using namespace TychoTest;
 ///////////////////////////////////////////////////////////////////////////////
 // Multi-parameter ODE — drag brachistochrone with g and drag coefficient
 ///////////////////////////////////////////////////////////////////////////////
+namespace {
 
 struct DragBrach_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g, double drag) {
@@ -45,6 +46,8 @@ struct ThreeParam_Impl : ODESize<2, 1, 0> {
     }
 };
 BUILD_ODE_FROM_EXPRESSION(ThreeParamODE, ThreeParam_Impl, double, double, double);
+
+} // anonymous namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // Tests

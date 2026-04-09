@@ -74,6 +74,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_cwise_segment_sum_jacobian.cpp
     vector_functions/test_cwise_jacobian_stress.cpp
     vector_functions/test_mixed_size_ops.cpp
+    vector_functions/test_vf_concepts.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -147,3 +148,19 @@ target_include_directories(tycho_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/vector_functions # for vf_test_utils.h
 )
 set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
+
+# Unity build — merge test TUs to eliminate cross-TU template duplication.
+# Batch size 8 merges heavy test sources into fewer unity TUs.
+# This significantly reduces serial compile time at the cost of higher per-TU RSS.
+set_target_properties(tycho_tests PROPERTIES
+    UNITY_BUILD ON
+    UNITY_BUILD_BATCH_SIZE 8
+)
+
+# Reduce optimization level for tests to improve compile time.
+# With Clang/GCC, the last -O flag takes precedence over -O3 from COMPILE_FLAGS.
+# Tests don't need -O3 — correctness is unaffected by optimization level.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_tests PRIVATE $<$<CONFIG:Release>:-O1>)
+    target_compile_options(tycho_tests_light PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()

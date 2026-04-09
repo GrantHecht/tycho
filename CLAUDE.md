@@ -18,8 +18,8 @@ how many parallel jobs are being used in any given build, and how many agents ar
 simultaneously.
 
 As a rule of thumb:
-- macOS (Apple Silicon): ALWAYS use -j4 for builds
-- Linux / Windows: ALWAYS use -j4 for builds
+- macOS (Apple Silicon): ALWAYS use -j6 for builds
+- Linux / Windows (32 GB+): ALWAYS use -j8 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 - **NEVER launch a second build if one is already running** — not even in the background.
   If you started a build with `run_in_background`, WAIT for the completion notification
@@ -132,18 +132,21 @@ preset for your platform** — do not configure manually.
 
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
-| macOS (Apple Si) | `macos-llvm-release`    | `-j4`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j4`             |
-| Windows x64      | `x64-Clang-Release`     | `-j4`             |
+| macOS (Apple Si) | `macos-llvm-release`    | `-j6`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
+| Windows x64      | `x64-Clang-Release`     | `-j8`             |
 
 **Note:** The `-j` values above are upper bounds — use lower values on
-RAM-constrained systems. On 32 GB, `-j4` is safe; on 16 GB, use `-j2`.
+RAM-constrained systems. The `heavy_compile` ninja job pool auto-throttles
+heavy TUs (1 slot per 10 GB RAM), so higher `-j` values are safe: light TUs
+fill extra slots while heavy TUs are limited. On 32 GB, `-j8` is safe
+(pool depth 3); on 16 GB, use `-j4` (pool depth 1).
 
 **Build memory and ninja job pools:** Many binding, test, benchmark, and example
 TUs consume 3-8 GB RAM each due to heavy template instantiation. A ninja job
 pool named `heavy_compile` limits concurrent compilation of these TUs so they
 cannot OOM the system. The pool depth is **auto-detected** from system RAM
-(1 slot per 12 GB, minimum 1) and can be overridden:
+(1 slot per 10 GB, minimum 1) and can be overridden:
 
 ```bash
 cmake --preset <preset> -DTYCHO_HEAVY_COMPILE_JOBS=3   # e.g. for a 36 GB machine
@@ -154,8 +157,8 @@ safely use higher `-j` values — ninja automatically throttles the heavy TUs
 while keeping light TUs parallel.
 
 ```bash
-cd build && ninja -j4 all      # safe — pool limits heavy TUs automatically
-                               # use -j4 on 32 GB systems
+cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
+                               # use -j8 on 32 GB systems, -j4 on 16 GB
 ```
 
 The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
@@ -178,7 +181,7 @@ pip install numpy scipy matplotlib spiceypy
 ```bash
 mkdir build && conda activate tycho
 cmake --preset macos-llvm-release
-cd build && ninja -j4 all
+cd build && ninja -j6 all
 ```
 
 ### Linux / WSL2 (Ubuntu)
@@ -221,11 +224,11 @@ cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
 | `PYTHON_LOCAL_INSTALL_DIR`    | Site-packages directory to install into; defaults to `python -m site --user-site` if not set |
 | `TYCHO_FP_MODE`               | Floating-point mode: `STRICT`, `SAFER_FAST`, or `FAST` (default `SAFER_FAST`)               |
 | `BUILD_SPHINX_DOCS`           | `ON` to also build documentation (requires sphinx, breathe, furo, exhale)                    |
-| `BUILD_CPP_EXAMPLES`          | `ON` to build C++ example programs under `examples/cpp_examples/`                            |
+| `BUILD_CPP_EXAMPLES`          | `ON` to build C++ example programs under `examples/cpp_examples/` (default OFF)              |
 | `BUILD_CPP_TESTS`             | `ON` to build C++ unit tests via Google Test (fetched via FetchContent)                       |
 | `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
-| `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 12 GB RAM). Override for your system.  |
+| `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 10 GB RAM). Override for your system.  |
 
 ## Code Style
 
@@ -341,10 +344,15 @@ conda install -n tycho -c conda-forge basemap
 
 ### C++ brachistochrone example
 
+C++ examples are not built by default (`BUILD_CPP_EXAMPLES=OFF`). To build and run:
+
 ```bash
-./build/examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
+cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON
+cd build && ninja -j<N> brachistochrone_cpp
+./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
 # Builder-API variant (equivalent convergence check):
-# ./build/examples/cpp_examples/builder/brachistochrone/brachistochrone_cpp
+# ninja -j<N> brachistochrone_builder
+# ./examples/cpp_examples/builder/brachistochrone/brachistochrone_builder
 ```
 
 Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
@@ -355,7 +363,7 @@ Run all four steps in order before opening or merging any PR into `main`:
 
 1. **C++ unit tests** — `ctest --output-on-failure` — all must pass
 2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 38 must exit 0
-3. **C++ brachistochrone** — see path above — must print "Optimal Solution Found", obj ≈ 1.8013 s
+3. **C++ brachistochrone** — `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON && cd build && ninja -j<N> brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp` — must print "Optimal Solution Found", obj ≈ 1.8013 s
 4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy

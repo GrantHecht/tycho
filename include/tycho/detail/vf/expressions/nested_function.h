@@ -25,7 +25,7 @@ template <class OuterFunc, class InnerFunc>
 struct NestedFunction
     : NestedFunction_Impl<NestedFunction<OuterFunc, InnerFunc>, OuterFunc, InnerFunc> {
     using Base = NestedFunction_Impl<NestedFunction<OuterFunc, InnerFunc>, OuterFunc, InnerFunc>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
@@ -34,31 +34,27 @@ template <class Derived, class OuterFunc, class InnerFunc>
 struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::ORC> {
     using Base = VectorFunction<Derived, InnerFunc::IRC, OuterFunc::ORC>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(OuterFunc);
-    SUB_FUNCTION_IO_TYPES(InnerFunc);
+    VF_TYPE_ALIASES(Base);
 
     OuterFunc outer_func_;
     InnerFunc inner_func_;
 
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
         : outer_func_(std::move(ofunc)), inner_func_(std::move(ifunc)) {
         if (this->inner_func_.output_rows() != this->outer_func_.input_rows()) {
 
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in NestedFunction/.eval method !!!\n"
-                       "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
-                       "OuterFunction "
-                       "(IRows = {1:}).\n",
-                       this->inner_func_.output_rows(), this->outer_func_.input_rows());
-
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in NestedFunction/.eval method: "
+                            "Output Size of InnerFunction (ORows = {}) does not match "
+                            "Input Size of OuterFunction (IRows = {}).",
+                            this->inner_func_.output_rows(), this->outer_func_.input_rows()));
         }
 
         this->set_io_rows(this->inner_func_.input_rows(), this->outer_func_.output_rows());
@@ -67,9 +63,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &fx_inner) {
             if constexpr (Is_Segment<OuterFunc>::value) {
@@ -83,15 +79,15 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         };
 
         const int orows = this->inner_func_.output_rows();
-        using FType = InnerFunc_Output<Scalar>;
+        using FType = typename InnerFunc::template Output<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        // MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        // MatRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (Is_Segment<OuterFunc>::value) {
 
@@ -109,8 +105,8 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int inner_OR = this->inner_func_.output_rows();
             const int inner_IR = this->inner_func_.input_rows();
 
-            using IFXType = InnerFunc_Output<Scalar>;
-            using IJXType = InnerFunc_jacobian<Scalar>;
+            using IFXType = typename InnerFunc::template Output<Scalar>;
+            using IJXType = typename InnerFunc::template Jacobian<Scalar>;
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
                 tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR));
@@ -128,9 +124,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int outer_OR = this->outer_func_.output_rows();
             const int outer_IR = this->outer_func_.input_rows();
 
-            using IFXType = InnerFunc_Output<Scalar>;
-            using IJXType = InnerFunc_jacobian<Scalar>;
-            using OJXType = OuterFunc_jacobian<Scalar>;
+            using IFXType = typename InnerFunc::template Output<Scalar>;
+            using IJXType = typename InnerFunc::template Jacobian<Scalar>;
+            using OJXType = typename OuterFunc::template Jacobian<Scalar>;
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
                 tycho::utils::TempSpec<IJXType>(inner_OR, inner_IR),
@@ -140,14 +136,14 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        // MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        // VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        // MatRef<JacType> jx = jx_.const_cast_derived();
+        // VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (Is_Segment<OuterFunc>::value) {
             auto Impl = [&](auto &fx_inner, auto &jx_inner, auto &gx_outer) {
@@ -169,9 +165,9 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int inner_IR = this->inner_func_.input_rows();
             const int outer_IR = this->outer_func_.input_rows();
 
-            using IFXType = InnerFunc_Output<Scalar>;
-            using IJXType = InnerFunc_jacobian<Scalar>;
-            using OGXType = OuterFunc_gradient<Scalar>;
+            using IFXType = typename InnerFunc::template Output<Scalar>;
+            using IJXType = typename InnerFunc::template Jacobian<Scalar>;
+            using OGXType = typename OuterFunc::template Gradient<Scalar>;
 
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
@@ -236,11 +232,11 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
             const int outer_OR = this->outer_func_.output_rows();
             const int outer_IR = this->outer_func_.input_rows();
 
-            using IFXType = InnerFunc_Output<Scalar>;
-            using IJXType = InnerFunc_jacobian<Scalar>;
-            using OJXType = OuterFunc_jacobian<Scalar>;
-            using OGXType = OuterFunc_gradient<Scalar>;
-            using OHXType = OuterFunc_hessian<Scalar>;
+            using IFXType = typename InnerFunc::template Output<Scalar>;
+            using IJXType = typename InnerFunc::template Jacobian<Scalar>;
+            using OJXType = typename OuterFunc::template Jacobian<Scalar>;
+            using OGXType = typename OuterFunc::template Gradient<Scalar>;
+            using OHXType = typename OuterFunc::template Hessian<Scalar>;
 
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, tycho::utils::TempSpec<IFXType>(inner_OR, 1),
@@ -264,17 +260,17 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     : VectorFunction<Derived, IR, OuterFunc::ORC>, SegStartHolder<ST> {
     using Base = VectorFunction<Derived, IR, OuterFunc::ORC>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(OuterFunc);
+    VF_TYPE_ALIASES(Base);
 
     using InnerFunc = Segment<IR, OR, ST>;
 
     OuterFunc outer_func_;
 
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         OuterFunc::is_linear_function && InnerFunc::is_linear_function;
-    static const bool is_vectorizable = OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
 
     NestedFunction_Impl() {}
     NestedFunction_Impl(OuterFunc ofunc, Segment<IR, OR, ST> ifunc) {
@@ -297,20 +293,20 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         const int size = this->outer_func_.input_rows();
 
         this->outer_func_.compute(x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx);
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
 
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         const int size = this->outer_func_.input_rows();
 
@@ -321,14 +317,14 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
 
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         const int size = this->outer_func_.input_rows();
 
@@ -342,10 +338,10 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        MatrixBaseRef<Target> target = target_.const_cast_derived();
-        MatrixBaseRef<JacType> right_ref = right.const_cast_derived();
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
+        MatRef<Target> target = target_.const_cast_derived();
+        MatRef<JacType> right_ref = right.const_cast_derived();
         // typedef typename Target::Scalar Scalar;
         if constexpr (OR > 0 && IR > 0 && OuterFunc::IRC == -1) {
             Base::accumulate_jacobian(target_, right, assign);
@@ -358,10 +354,10 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     }
 
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                                   ConstMatrixBaseRef<JacType> right, Assignment assign) const {
-        MatrixBaseRef<Target> target = target_.const_cast_derived();
-        MatrixBaseRef<JacType> right_ref = right.const_cast_derived();
+    inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                   Assignment assign) const {
+        MatRef<Target> target = target_.const_cast_derived();
+        MatRef<JacType> right_ref = right.const_cast_derived();
         // typedef typename Target::Scalar Scalar;
 
         if constexpr (OR > 0 && IR > 0 && OuterFunc::IRC == -1) {

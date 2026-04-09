@@ -19,3 +19,7 @@
 
 // Concepts
 #include "tycho/detail/vf/core/vector_function_concepts.h"
+
+// Extern template declarations — suppress implicit instantiation of common
+// VF types in consuming TUs (explicit instantiations in vf_instantiations lib)
+#include "tycho/detail/vf/extern_templates.h"

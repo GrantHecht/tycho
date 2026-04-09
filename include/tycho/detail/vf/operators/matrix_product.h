@@ -37,12 +37,12 @@ struct MatrixFunctionProduct_Impl
                                 SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
                                 DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
 
-    static const int M1Rows = MatFunc1::MROWS;
-    static const int M1Cols_M2Rows = MatFunc2::MROWS;
-    static const int M2Cols = MatFunc2::MCOLS;
+    static constexpr int M1Rows = MatFunc1::MROWS;
+    static constexpr int M1Cols_M2Rows = MatFunc2::MROWS;
+    static constexpr int M2Cols = MatFunc2::MCOLS;
 
-    static const int M1Major = MatFunc1::Major;
-    static const int M2Major = MatFunc2::Major;
+    static constexpr int M1Major = MatFunc1::Major;
+    static constexpr int M2Major = MatFunc2::Major;
 
     int m1rows = 0;
     int m1cols_m2rows = 0;
@@ -52,19 +52,16 @@ struct MatrixFunctionProduct_Impl
     template <class Scalar> using MatrixTwo = Eigen::Matrix<Scalar, M1Cols_M2Rows, M2Cols, M2Major>;
     template <class Scalar> using MatrixResult = Eigen::Matrix<Scalar, M1Rows, M2Cols>;
 
-    SUB_FUNCTION_IO_TYPES(MatFunc1);
-    SUB_FUNCTION_IO_TYPES(MatFunc2);
-
     MatFunc1 matrix_func1;
     MatFunc2 matrix_func2;
 
     using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename MatFunc1::INPUT_DOMAIN,
                                          typename MatFunc2::INPUT_DOMAIN>;
 
-    static const bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
-    // static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
+    // static constexpr bool is_vectorizable = false;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     MatrixFunctionProduct_Impl() {}
     MatrixFunctionProduct_Impl(MatFunc1 mf1, MatFunc2 mf2) : matrix_func1(mf1), matrix_func2(mf2) {
@@ -85,9 +82,9 @@ struct MatrixFunctionProduct_Impl
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &fxm1, auto &fxm2, auto &fxmd) {
             this->matrix_func1.compute(x, fxm1);
@@ -107,16 +104,16 @@ struct MatrixFunctionProduct_Impl
         const int orows = this->output_rows();
 
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
+            Impl, tycho::utils::TempSpec<typename MatFunc1::template Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<typename MatFunc2::template Output<Scalar>>(o2, 1),
             tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         ///////////////////////////
         auto Impl = [&](auto &fxm1, auto &jxm1, auto &fxm2, auto &jxm2, auto &fxmd, auto &dvec) {
@@ -173,24 +170,24 @@ struct MatrixFunctionProduct_Impl
         const int orows = this->output_rows();
 
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
-            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
+            Impl, tycho::utils::TempSpec<typename MatFunc1::template Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<typename MatFunc1::template Jacobian<Scalar>>(o1, irows),
+            tycho::utils::TempSpec<typename MatFunc2::template Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<typename MatFunc2::template Jacobian<Scalar>>(o2, irows),
             tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
             tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         ///////////////////////////
         auto Impl = [&](auto &fxm1, auto &adjv1, auto &jxm1, auto &fxm2, auto &adjv2, auto &jxm2,
@@ -387,19 +384,19 @@ struct MatrixFunctionProduct_Impl
         const int orows = this->output_rows();
 
         tycho::utils::BumpAllocator::allocate_run(
-            Impl, tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-            tycho::utils::TempSpec<MatFunc1_Output<Scalar>>(o1, 1),
-            tycho::utils::TempSpec<MatFunc1_jacobian<Scalar>>(o1, irows),
+            Impl, tycho::utils::TempSpec<typename MatFunc1::template Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<typename MatFunc1::template Output<Scalar>>(o1, 1),
+            tycho::utils::TempSpec<typename MatFunc1::template Jacobian<Scalar>>(o1, irows),
 
-            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-            tycho::utils::TempSpec<MatFunc2_Output<Scalar>>(o2, 1),
-            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows),
-            tycho::utils::TempSpec<MatFunc2_gradient<Scalar>>(irows, 1),
-            tycho::utils::TempSpec<MatFunc2_hessian<Scalar>>(irows, irows),
+            tycho::utils::TempSpec<typename MatFunc2::template Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<typename MatFunc2::template Output<Scalar>>(o2, 1),
+            tycho::utils::TempSpec<typename MatFunc2::template Jacobian<Scalar>>(o2, irows),
+            tycho::utils::TempSpec<typename MatFunc2::template Gradient<Scalar>>(irows, 1),
+            tycho::utils::TempSpec<typename MatFunc2::template Hessian<Scalar>>(irows, irows),
 
             tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
             tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1),
-            tycho::utils::TempSpec<MatFunc2_jacobian<Scalar>>(o2, irows));
+            tycho::utils::TempSpec<typename MatFunc2::template Jacobian<Scalar>>(o2, irows));
     }
 };
 

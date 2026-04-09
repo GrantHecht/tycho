@@ -24,18 +24,18 @@ namespace tycho::vf {
 
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::AutodiffFwd>
-    : DenseFunction<Derived, IR, OR> {
-    using Base = DenseFunction<Derived, IR, OR>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    : DenseFunctionBase<Derived, IR, OR> {
+    using Base = DenseFunctionBase<Derived, IR, OR>;
+    VF_TYPE_ALIASES(Base);
 
     template <class Scalar> using dual = autodiff::detail::HigherOrderDual<1U, Scalar>;
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         Input<dual<Scalar>> xdual = x.template cast<dual<Scalar>>();
         Output<dual<Scalar>> fdual(this->output_rows());
@@ -67,7 +67,7 @@ template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::AutodiffFwd>
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     // using Base::adjointhessian;
 
     template <class Scalar> using dual = autodiff::detail::HigherOrderDual<2U, Scalar>;
@@ -75,15 +75,15 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Autod
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
 
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> gx = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> hx = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
 
         Input<dual<Scalar>> xdual = x.template cast<dual<Scalar>>();
         Output<dual<Scalar>> fdual(this->output_rows());

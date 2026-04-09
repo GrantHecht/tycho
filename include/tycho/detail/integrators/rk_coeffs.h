@@ -33,9 +33,9 @@ enum class RKOptions {
 template <RKOptions opt> struct RKCoeffs {};
 
 template <> struct RKCoeffs<RKOptions::RK4Classic> {
-    static const int Stages = 4;
-    static const bool is_diag_ = true;
-    static const bool EmbeddedCorrector = false;
+    static constexpr int Stages = 4;
+    static constexpr bool is_diag_ = true;
+    static constexpr bool EmbeddedCorrector = false;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
 
@@ -49,10 +49,10 @@ template <> struct RKCoeffs<RKOptions::RK4Classic> {
 };
 
 template <> struct RKCoeffs<RKOptions::DOPRI54> {
-    static const int Stages = 7;
-    static const bool is_diag_ = false;
-    static const bool EmbeddedCorrector = true;
-    static const bool FSAL = true;
+    static constexpr int Stages = 7;
+    static constexpr bool is_diag_ = false;
+    static constexpr bool EmbeddedCorrector = true;
+    static constexpr bool FSAL = true;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
 
@@ -81,9 +81,9 @@ template <> struct RKCoeffs<RKOptions::DOPRI54> {
 };
 
 template <> struct RKCoeffs<RKOptions::DOPRI5> {
-    static const int Stages = 6;
-    static const bool is_diag_ = false;
-    static const bool EmbeddedCorrector = false;
+    static constexpr int Stages = 6;
+    static constexpr bool is_diag_ = false;
+    static constexpr bool EmbeddedCorrector = false;
 
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
 
@@ -104,10 +104,10 @@ template <> struct RKCoeffs<RKOptions::DOPRI5> {
 };
 
 template <> struct RKCoeffs<RKOptions::DOPRI87> {
-    static const int Stages = 13;
-    static const bool is_diag_ = false;
-    static const bool EmbeddedCorrector = true;
-    static const bool FSAL = false;
+    static constexpr int Stages = 13;
+    static constexpr bool is_diag_ = false;
+    static constexpr bool EmbeddedCorrector = true;
+    static constexpr bool FSAL = false;
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
 
     static constexpr STDarray<STDarray<double, 12>, 12> ACoeffs = {

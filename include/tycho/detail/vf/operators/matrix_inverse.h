@@ -26,8 +26,8 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
     using Base = VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
                                 SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    static const bool is_vectorizable = false;
+    VF_TYPE_ALIASES(Base);
+    static constexpr bool is_vectorizable = false;
     template <class Scalar> using Mat = Eigen::Matrix<Scalar, Size, Size>;
 
     int size;
@@ -36,9 +36,9 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
     MatrixInverse(int size) : size(size) { this->set_io_rows(size * size, size * size); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &M, auto &MInv) {
             for (int i = 0; i < this->size; i++) {
@@ -63,11 +63,11 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &M, auto &MInv) {
             for (int i = 0; i < this->size; i++) {
@@ -109,14 +109,14 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &M, auto &MInv, auto &Madj) {
             for (int i = 0; i < this->size; i++) {

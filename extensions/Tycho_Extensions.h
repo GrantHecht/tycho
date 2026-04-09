@@ -23,24 +23,26 @@
 
 namespace tycho {
 
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
+using vf::VecRef;
 using vf::VectorFunction;
 
 struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
                                 DenseDerivativeMode::AutodiffFwd> {
     using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
                                 DenseDerivativeMode::AutodiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     double mu = 0.0123;
 
     CR3BPAD(double mu) : mu(mu) {}
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
 
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         Vector3<Scalar> X = x.template head<3>();
         Vector3<Scalar> V = x.template segment<3>(3);
@@ -69,7 +71,7 @@ struct ModifiedDynamicsAD
                      DenseDerivativeMode::AutodiffFwd> {
     using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
                                 DenseDerivativeMode::AutodiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     double mu = 1.00;
     double sqm = 1.0;
@@ -77,13 +79,13 @@ struct ModifiedDynamicsAD
     ModifiedDynamicsAD(double mu) : mu(mu), sqm(std::sqrt(mu)) {}
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         using std::cos;
         using std::sin;
         using std::sqrt;
 
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         Scalar x0 = x[0];
         Scalar x1 = x[1];

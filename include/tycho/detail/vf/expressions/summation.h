@@ -26,7 +26,7 @@ template <class Func1, class Func2>
 struct TwoFunctionSum : TwoFunctionSum_Impl<TwoFunctionSum<Func1, Func2>, Func1, Func2, false> {
     using Base = TwoFunctionSum_Impl<TwoFunctionSum<Func1, Func2>, Func1, Func2, false>;
     using Base::Base;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 };
 
 template <class Func1, class Func2>
@@ -34,7 +34,7 @@ struct FunctionDifference
     : TwoFunctionSum_Impl<FunctionDifference<Func1, Func2>, Func1, Func2, true> {
     using Base = TwoFunctionSum_Impl<FunctionDifference<Func1, Func2>, Func1, Func2, true>;
     using Base::Base;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 };
 
 template <class Func1, class Func2, class... Funcs>
@@ -43,7 +43,7 @@ struct MultiFunctionSum
     using Base =
         MultiFunctionSum_Impl<MultiFunctionSum<Func1, Func2, Funcs...>, Func1, Func2, Funcs...>;
     using Base::Base;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 };
 
 template <class F> struct Is_SumorDiff : std::false_type {};
@@ -117,25 +117,26 @@ struct TwoFunctionSum_Impl
         VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
                        SZ_MAX<Func1::ORC, Func2::ORC>::value, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func1);
-    SUB_FUNCTION_IO_TYPES(Func2);
+    VF_TYPE_ALIASES(Base);
 
     Func1 func1;
     Func2 func2;
 
-    static const bool func1_is_segment = Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
-    static const bool func2_is_segment = Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
-    static const bool is_sum_of_segments = func1_is_segment && func2_is_segment;
+    static constexpr bool func1_is_segment =
+        Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value;
+    static constexpr bool func2_is_segment =
+        Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value;
+    static constexpr bool is_sum_of_segments = func1_is_segment && func2_is_segment;
 
-    static const bool func1_is_sumordiff = Is_SumorDiff<Func1>::value;
-    static const bool func2_is_sumordiff = Is_SumorDiff<Func2>::value;
+    static constexpr bool func1_is_sumordiff = Is_SumorDiff<Func1>::value;
+    static constexpr bool func2_is_sumordiff = Is_SumorDiff<Func2>::value;
 
-    static const bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
-    static const bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
+    static constexpr bool is_sum_of_sums = func1_is_sumordiff || func2_is_sumordiff;
+    static constexpr bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
 
-    static const bool is_linear_function = Func1::is_linear_function && Func2::is_linear_function;
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_linear_function =
+        Func1::is_linear_function && Func2::is_linear_function;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
@@ -162,9 +163,9 @@ struct TwoFunctionSum_Impl
     bool is_linear() const { return func1.is_linear() && func2.is_linear(); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &func2_fx) {
             this->func1.compute(x, fx);
@@ -177,15 +178,15 @@ struct TwoFunctionSum_Impl
         };
 
         const int orows = this->func2.output_rows();
-        using FType = Func2_Output<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &func2_fx, auto &func2_jx) {
             this->func1.compute_jacobian(x, fx, jx);
@@ -201,22 +202,22 @@ struct TwoFunctionSum_Impl
 
         const int orows = this->func2.output_rows();
         const int irows = this->func2.input_rows();
-        using FType = Func2_Output<Scalar>;
-        using JType = Func2_jacobian<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
+        using JType = typename Func2::template Jacobian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         //////////////////////////////////////////////
 
@@ -245,10 +246,10 @@ struct TwoFunctionSum_Impl
         const int orows = this->func2.output_rows();
         const int irows = this->func2.input_rows();
 
-        using FType = Func2_Output<Scalar>;
-        using JType = Func2_jacobian<Scalar>;
-        using GType = Func2_gradient<Scalar>;
-        using HType = Func2_hessian<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
+        using JType = typename Func2::template Jacobian<Scalar>;
+        using GType = typename Func2::template Gradient<Scalar>;
+        using HType = typename Func2::template Hessian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(orows, irows),
                                                   tycho::utils::TempSpec<GType>(irows, 1),
@@ -258,9 +259,8 @@ struct TwoFunctionSum_Impl
     ///////////////////////////////////////////////////////////////////////////////////////
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (is_sum_of_segments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
@@ -300,8 +300,8 @@ struct TwoFunctionSum_Impl
         }
     }
     template <class Target, class JacType, class Assignment>
-    inline void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                                    ConstMatrixBaseRef<JacType> right, Assignment assign) const {
+    inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
+                                    Assignment assign) const {
         if constexpr (is_sum_of_segments) {
             this->func1.accumulate_jacobian(target_, right, assign);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
@@ -326,23 +326,21 @@ struct MultiFunctionSum_Impl
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC, Funcs::IRC...>::value,
                                 SZ_MAX<Func1::ORC, Func2::ORC, Funcs::ORC...>::value>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func1);
-    SUB_FUNCTION_IO_TYPES(Func2);
+    VF_TYPE_ALIASES(Base);
 
     Func1 func1;
     Func2 func2;
     std::tuple<Funcs...> funcs;
 
-    static const bool is_linear_function =
+    static constexpr bool is_linear_function =
         SZ_PROD<int(Func1::is_linear_function), int(Func2::is_linear_function),
                 int(Funcs::is_linear_function)...>::value == 1;
 
-    static const bool is_vectorizable =
+    static constexpr bool is_vectorizable =
         SZ_PROD<int(Func1::is_vectorizable), int(Func2::is_vectorizable),
                 int(Funcs::is_vectorizable)...>::value == 1;
 
-    static const bool IsSumofSegments =
+    static constexpr bool IsSumofSegments =
         SZ_PROD<int(Is_Segment<Func1>::value || Is_ScaledSegment<Func1>::value),
                 int(Is_Segment<Func2>::value || Is_ScaledSegment<Func2>::value),
                 int(Is_Segment<Funcs>::value || Is_ScaledSegment<Funcs>::value)...>::value == 1;
@@ -417,9 +415,9 @@ struct MultiFunctionSum_Impl
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &func2_fx) {
             this->func1.compute(x, fx);
@@ -435,15 +433,15 @@ struct MultiFunctionSum_Impl
         };
 
         const int orows = this->func2.output_rows();
-        using FType = Func2_Output<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &func2_fx, auto &func2_jx) {
             this->func1.compute_jacobian(x, fx, jx);
@@ -476,22 +474,22 @@ struct MultiFunctionSum_Impl
 
         const int orows = this->func2.output_rows();
         const int irows = this->func2.input_rows();
-        using FType = Func2_Output<Scalar>;
-        using JType = Func2_jacobian<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
+        using JType = typename Func2::template Jacobian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(orows, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
 
         //
         auto Impl = [&](auto &func2_fx, auto &func2_jx, auto &func2_adjgrad, auto &func2_adjhess) {
@@ -533,10 +531,10 @@ struct MultiFunctionSum_Impl
         const int orows = this->func2.output_rows();
         const int irows = this->func2.input_rows();
 
-        using FType = Func2_Output<Scalar>;
-        using JType = Func2_jacobian<Scalar>;
-        using GType = Func2_gradient<Scalar>;
-        using HType = Func2_hessian<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
+        using JType = typename Func2::template Jacobian<Scalar>;
+        using GType = typename Func2::template Gradient<Scalar>;
+        using HType = typename Func2::template Hessian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(orows, irows),
                                                   tycho::utils::TempSpec<GType>(irows, 1),
@@ -545,9 +543,8 @@ struct MultiFunctionSum_Impl
 
     ///////////////////////////////////////////////////////////////////////////////////////
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         if constexpr (IsSumofSegments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);

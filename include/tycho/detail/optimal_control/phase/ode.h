@@ -23,9 +23,11 @@ namespace tycho::oc {
 // Import cross-namespace types used by ODE definitions.
 using integrators::Integrator;
 using utils::SZ_SUM;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
 using vf::FunctionHolder;
 using vf::GenericFunction;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
@@ -79,7 +81,7 @@ struct ODE_DerivModeWrapper : ODEBase<VectorFunction<Derived, InnerODE::IRC, Inn
                                       Derived, InnerODE::XV, InnerODE::UV, InnerODE::PV> {
     using Base = ODEBase<VectorFunction<Derived, InnerODE::IRC, InnerODE::ORC, Jm, Hm>, Derived,
                          InnerODE::XV, InnerODE::UV, InnerODE::PV>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class... Args>
         requires std::is_constructible_v<InnerODE, Args...>
@@ -119,7 +121,7 @@ struct ODE_DerivModeWrapper : ODEBase<VectorFunction<Derived, InnerODE::IRC, Inn
     const InnerODE &inner() const { return inner_; }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         inner_.compute(x, fx_);
     }
 
@@ -165,7 +167,7 @@ template <class BaseType, class Derived, int _XV, int _UV, int _PV>
 struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {
     using Base = BaseType;
     using Base::Base;
-    static const bool IsGenericODE = false;
+    static constexpr bool IsGenericODE = false;
 
     Integrator<Derived> integrator(double dstep) const {
         return Integrator<Derived>(this->derived(), dstep);
@@ -180,7 +182,7 @@ struct GenericODE : FunctionHolder<GenericODE<BaseType, _XV, _UV, _PV>, BaseType
                                 SZ_SUM<_XV, _UV, _PV, 1>::value, _XV>;
     using Base::Base;
 
-    static const bool IsGenericODE = true;
+    static constexpr bool IsGenericODE = true;
 
     GenericODE(BaseType f, int xv, int uv, int pv) : Base(f) {
         this->set_xvars(xv);

@@ -20,7 +20,7 @@ namespace tycho::vf {
 template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     using Base = VectorFunction<LockArgs<USZ>, USZ, USZ>;
 
-    static const bool is_linear_function = true;
+    static constexpr bool is_linear_function = true;
 
     LockArgs(int usz) { this->set_io_rows(usz, usz); }
     LockArgs() {}

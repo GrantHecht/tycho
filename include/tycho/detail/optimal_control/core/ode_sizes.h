@@ -46,12 +46,12 @@ using utils::FlatMap;
 using utils::SZ_SUM;
 
 template <int _XV, int _UV, int _PV> struct ODEConstSizes {
-    static const int XV = _XV;
-    static const int UV = _UV;
-    static const int PV = _PV;
-    static const int XtV = SZ_SUM<_XV, 1>::value;
-    static const int XtUV = SZ_SUM<_XV, 1, _UV>::value;
-    static const int XtUPV = SZ_SUM<_XV, 1, _UV, _PV>::value;
+    static constexpr int XV = _XV;
+    static constexpr int UV = _UV;
+    static constexpr int PV = _PV;
+    static constexpr int XtV = SZ_SUM<_XV, 1>::value;
+    static constexpr int XtUV = SZ_SUM<_XV, 1, _UV>::value;
+    static constexpr int XtUPV = SZ_SUM<_XV, 1, _UV, _PV>::value;
 };
 
 template <int _XV, int _UV, int _PV> struct ODEXVSizes : ODEConstSizes<_XV, _UV, _PV> {

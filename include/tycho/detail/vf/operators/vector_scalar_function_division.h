@@ -25,7 +25,7 @@ struct VectorScalarFunctionDivision
                                         ScalFunc> {
     using Base = VectorScalarFunctionDivision_Impl<VectorScalarFunctionDivision<VecFunc, ScalFunc>,
                                                    VecFunc, ScalFunc>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
@@ -33,10 +33,8 @@ template <class Derived, class VecFunc, class ScalFunc>
 struct VectorScalarFunctionDivision_Impl
     : VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC> {
     using Base = VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
-    SUB_FUNCTION_IO_TYPES(VecFunc);
-    SUB_FUNCTION_IO_TYPES(ScalFunc);
     using Base::compute;
 
     VecFunc vectorfunc;
@@ -44,7 +42,7 @@ struct VectorScalarFunctionDivision_Impl
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename VecFunc::INPUT_DOMAIN, typename ScalFunc::INPUT_DOMAIN>;
-    static const bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
+    static constexpr bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
 
     VectorScalarFunctionDivision_Impl() {}
     VectorScalarFunctionDivision_Impl(VecFunc f1, ScalFunc f2)
@@ -63,16 +61,16 @@ struct VectorScalarFunctionDivision_Impl
         }
     }
 
-    static const bool vectorfunc_is_segment =
+    static constexpr bool vectorfunc_is_segment =
         Is_Segment<VecFunc>::value || Is_ScaledSegment<VecFunc>::value;
-    static const bool scalarfunc_is_segment =
+    static constexpr bool scalarfunc_is_segment =
         Is_Segment<ScalFunc>::value || Is_ScaledSegment<ScalFunc>::value;
-    static const bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
+    static constexpr bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         Vector1<Scalar> fxs;
         this->vectorfunc.compute(x, fx);
@@ -85,11 +83,11 @@ struct VectorScalarFunctionDivision_Impl
         // f/g
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &fxt, auto &jxs) {
             // f'/g - fg'/g^2
@@ -113,21 +111,21 @@ struct VectorScalarFunctionDivision_Impl
         const int orows = this->output_rows();
 
         using FType = Output<Scalar>;
-        using JType = ScalFunc_jacobian<Scalar>;
+        using JType = typename ScalFunc::template Jacobian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(1, irows));
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         //////////////////////////////////////////
 
@@ -224,9 +222,9 @@ struct VectorScalarFunctionDivision_Impl
         const int orows = this->output_rows();
 
         using FType = Output<Scalar>;
-        using JType = ScalFunc_jacobian<Scalar>;
-        using GType = ScalFunc_gradient<Scalar>;
-        using HType = ScalFunc_hessian<Scalar>;
+        using JType = typename ScalFunc::template Jacobian<Scalar>;
+        using GType = typename ScalFunc::template Gradient<Scalar>;
+        using HType = typename ScalFunc::template Hessian<Scalar>;
 
         tycho::utils::BumpAllocator::allocate_run(
             Impl, tycho::utils::TempSpec<FType>(orows, 1), tycho::utils::TempSpec<JType>(1, irows),

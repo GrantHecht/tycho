@@ -24,9 +24,9 @@ namespace tycho::vf {
 
 template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
-struct VectorFunction : DenseDerivatives<Derived, IR, OR, Jm, Hm> {
-    using Base = DenseDerivatives<Derived, IR, OR, Jm, Hm>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+struct VectorFunction : DenseSecondDerivatives<Derived, IR, OR, Jm, Hm> {
+    using Base = DenseSecondDerivatives<Derived, IR, OR, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
 };
 
 template <class Derived, class ExprImpl, class... Ts>

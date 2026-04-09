@@ -137,18 +137,18 @@ template <class Scalar> struct BumpStack {
 };
 
 template <int R, int C> struct RCBase {
-    static const int rows = R;
-    static const int cols = C;
+    static constexpr int rows = R;
+    static constexpr int cols = C;
     RCBase(int, int) {}
 };
 template <int R> struct RCBase<R, -1> {
-    static const int rows = R;
+    static constexpr int rows = R;
     int cols;
     RCBase(int r, int c) : cols(c) {}
 };
 template <int C> struct RCBase<-1, C> {
     int rows;
-    static const int cols = C;
+    static constexpr int cols = C;
     RCBase(int r, int c) : rows(r) {}
 };
 template <> struct RCBase<-1, -1> {

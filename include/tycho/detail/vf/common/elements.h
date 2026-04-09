@@ -21,28 +21,28 @@ namespace tycho::vf {
 template <int IR, int EL1, int... ELS>
 struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(ELS)> {
     using Base = VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(ELS)>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::compute;
     static const std::tuple<std::integral_constant<int, EL1>, std::integral_constant<int, ELS>...>
         elements;
-    static const int num_elements = 1 + sizeof...(ELS);
+    static constexpr int num_elements = 1 + sizeof...(ELS);
 
     Elements() {}
     Elements(int irows) { this->set_io_rows(irows, num_elements); }
 
-    static const bool is_linear_function = true;
+    static constexpr bool is_linear_function = true;
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        VecRef<OutType> fx = fx_.const_cast_derived();
         tycho::utils::tuple_for_loop(elements,
                                      [&](const auto &ele, auto i) { fx[i] = x[ele.value]; });
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
         tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
@@ -51,14 +51,14 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];

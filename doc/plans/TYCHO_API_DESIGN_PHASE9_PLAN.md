@@ -39,12 +39,6 @@ prioritized into tiers but not scheduled.
 - Update all examples, tests, and documentation to use the new names
 - This is a breaking change for direct C++ users of `OptimalControlProblem`; coordinate with any downstream consumers
 
-### PSIOPT Struct→Class Refactor
-- Convert PSIOPT from public struct with ~60 read-write fields to a proper class
-- Design encapsulated configuration API (builder, named setters, or config struct)
-- Current flat-property access works but exposes too many internals
-- This is the right time to design the public solver configuration interface
-
 ---
 
 ## Tier 2: Medium-Term

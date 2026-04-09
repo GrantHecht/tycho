@@ -28,30 +28,38 @@ using utils::SZ_PROD;
 using utils::SZ_SUM;
 using utils::TempSpec;
 using vf::Arguments;
+using vf::CDiagRef;
+using vf::CEigRef;
+using vf::CMatRef;
+using vf::CVecRef;
 using vf::DenseDerivativeMode;
+using vf::DiagRef;
+using vf::EigRef;
+using vf::MatRef;
 using vf::NestedCallAndAppendChain;
 using vf::NestedCallAndAppendChain2;
 using vf::StackedOutputs;
 using vf::StaticScaleBase;
+using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
 template <class DODE, RKOptions RKOp>
 struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
     using Base = VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
     template <class Scalar> using ODEHessian = typename DODE::template Hessian<Scalar>;
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     using RKData = RKCoeffs<RKOp>;
-    static const int Stages = RKData::Stages;
-    static const int Stgsm1 = RKData::Stages - 1;
-    static const bool is_diag_ = RKData::is_diag_;
+    static constexpr int Stages = RKData::Stages;
+    static constexpr int Stgsm1 = RKData::Stages - 1;
+    static constexpr bool is_diag_ = RKData::is_diag_;
 
     DODE ode_;
 
@@ -196,14 +204,14 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &k_vals, auto &xtup, auto &k_jacs, auto &xi_jac, auto &kx_jacs,
                         auto &xs, auto &k_grads, auto &k_hesses, auto &kx_mults, auto &ht_par) {
@@ -740,7 +748,7 @@ struct RKStepper_NEW
     using Base =
         VectorExpression<RKStepper_NEW<DODE, RKOp>, RKStepper_Impl_NEW<DODE, RKOp>, const DODE &>;
     // using Base::Base;
-    // static const bool is_vectorizable = false;
+    // static constexpr bool is_vectorizable = false;
 
     RKStepper_NEW(const DODE &ode) : Base(ode) {}
 
@@ -778,16 +786,16 @@ struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>:
                                    DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC,
                                 DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
 
     using RKData = RKCoeffs<RKOp>;
-    static const int Stages = RKData::Stages;
-    static const int Stgsm1 = RKData::Stages - 1;
-    static const bool is_diag_ = RKData::is_diag_;
+    static constexpr int Stages = RKData::Stages;
+    static constexpr int Stgsm1 = RKData::Stages - 1;
+    static constexpr bool is_diag_ = RKData::is_diag_;
 
     DODE ode_;
 

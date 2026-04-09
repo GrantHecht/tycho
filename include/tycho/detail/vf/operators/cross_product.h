@@ -23,7 +23,7 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
     using Base::compute;
     using Base::jacobian;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     template <class Source, class Target, class Scalar2>
     static void cprodmat(const Eigen::MatrixBase<Source> &x, Eigen::MatrixBase<Target> const &m_,
@@ -102,7 +102,7 @@ struct FunctionCrossProduct
     : FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2> {
     using Base = FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2>;
     using Base::Base;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 };
 
 template <class Derived, class Func1, class Func2>
@@ -110,9 +110,7 @@ struct FunctionCrossProduct_Impl
     : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3> {
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func1);
-    SUB_FUNCTION_IO_TYPES(Func2);
+    VF_TYPE_ALIASES(Base);
 
     Func1 func1;
     Func2 func2;
@@ -121,9 +119,9 @@ struct FunctionCrossProduct_Impl
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
 #if defined(_WIN32)
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 #else
-    static const bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false;
 #endif
 
     FunctionCrossProduct_Impl() {}
@@ -148,8 +146,7 @@ struct FunctionCrossProduct_Impl
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     template <class Scalar, class T1, class T2>
-    Vector3<Scalar> crossimpl(Scalar sign, ConstVectorBaseRef<T1> x1,
-                              ConstVectorBaseRef<T2> x2) const {
+    Vector3<Scalar> crossimpl(Scalar sign, CVecRef<T1> x1, CVecRef<T2> x2) const {
         Vector3<Scalar> out;
         out[0] = sign * (x1[1] * x2[2] - x1[2] * x2[1]);
         out[1] = sign * (x2[0] * x1[2] - x2[2] * x1[0]);
@@ -158,7 +155,7 @@ struct FunctionCrossProduct_Impl
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
@@ -174,11 +171,11 @@ struct FunctionCrossProduct_Impl
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         Vector3<Scalar> fx1;
         Vector3<Scalar> fx2;
@@ -206,14 +203,14 @@ struct FunctionCrossProduct_Impl
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         Vector3<Scalar> fx1;
         Vector3<Scalar> fx2;
@@ -267,8 +264,8 @@ struct FunctionCrossProduct_Impl
         };
 
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
-        using GType = Func2_gradient<Scalar>;
-        using HType = Func2_hessian<Scalar>;
+        using GType = typename Func2::template Gradient<Scalar>;
+        using HType = typename Func2::template Hessian<Scalar>;
         const int irows = this->input_rows();
 
         tycho::utils::BumpAllocator::allocate_run(

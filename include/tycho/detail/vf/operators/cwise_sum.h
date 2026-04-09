@@ -22,7 +22,7 @@ template <class Derived, class Func> struct CwiseSum_Impl;
 
 template <class Func> struct CwiseSum : CwiseSum_Impl<CwiseSum<Func>, Func> {
     using Base = CwiseSum_Impl<CwiseSum<Func>, Func>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
@@ -34,11 +34,10 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     template <class... OtherFunc> using DerivedTemplate = CwiseSum<OtherFunc...>;
 
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
-    static const bool is_linear_function = Func::is_linear_function;
-    static const bool IsSegmentOp = Is_Segment<Func>::value || Is_Arguments<Func>::value;
+    static constexpr bool is_linear_function = Func::is_linear_function;
+    static constexpr bool IsSegmentOp = Is_Segment<Func>::value || Is_Arguments<Func>::value;
 
-    DENSE_FUNCTION_BASE_TYPES(Base);
-    SUB_FUNCTION_IO_TYPES(Func);
+    VF_TYPE_ALIASES(Base);
 
     Func func_;
     CwiseSum_Impl() {}
@@ -48,14 +47,14 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
         if constexpr (IsSegmentOp) {
             fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                         .sum();
         } else {
-            Func_Output<Scalar> fxv;
+            typename Func::template Output<Scalar> fxv;
             if constexpr (Func::OutputIsDynamic) {
                 fxv.resize(this->func_.output_rows());
             }
@@ -65,11 +64,11 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
             fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
@@ -109,22 +108,24 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
-                                                              this->func_.input_rows()));
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()));
         }
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         if constexpr (IsSegmentOp) {
             fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
@@ -167,10 +168,13 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             };
 
             tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<Func_jacobian<Scalar>>(this->func_.output_rows(),
-                                                              this->func_.input_rows()),
-                tycho::utils::TempSpec<Func_Output<Scalar>>(this->func_.output_rows(), 1));
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()),
+                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                    this->func_.output_rows(), 1));
         }
     }
 };

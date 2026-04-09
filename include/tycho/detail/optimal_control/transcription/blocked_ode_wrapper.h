@@ -30,7 +30,6 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -54,9 +53,9 @@ using vf::VectorExpression;
 using vf::VectorFunction;
 
 template <class DODE> struct Blocked_ODE_Wrapper : DODE {
-    static const int UV = 0;
-    static const int PV = SZ_SUM<DODE::PV, DODE::UV>::value;
-    static const int XtUV = DODE::XtV;
+    static constexpr int UV = 0;
+    static constexpr int PV = SZ_SUM<DODE::PV, DODE::UV>::value;
+    static constexpr int XtUV = DODE::XtV;
     using Base = DODE;
 
     inline int xtu_vars() const { return Base::xt_vars(); }

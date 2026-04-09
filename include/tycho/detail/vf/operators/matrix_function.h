@@ -22,9 +22,9 @@ template <int MRows, int MCols> struct MatrixRowsCols;
 
 template <class Func, int MRows, int MCols, int MMajor>
 struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
-    static const int Major = MMajor;
-    static const int MROWS = MRows;
-    static const int MCOLS = MCols;
+    static constexpr int Major = MMajor;
+    static constexpr int MROWS = MRows;
+    static constexpr int MCOLS = MCols;
 
     MatrixFunctionView(Func f, int rows, int cols)
         : Func(f), MatrixRowsCols<MRows, MCols>(rows, cols) {
@@ -51,8 +51,8 @@ struct RowMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, 1 + 
 };
 
 template <int MRows, int MCols> struct MatrixRowsCols {
-    static const int matrix_rows_ = MRows;
-    static const int matrix_cols_ = MCols;
+    static constexpr int matrix_rows_ = MRows;
+    static constexpr int matrix_cols_ = MCols;
 
     MatrixRowsCols(int rows, int cols) {}
 };
@@ -66,12 +66,12 @@ template <> struct MatrixRowsCols<-1, -1> {
 
 template <int MCols> struct MatrixRowsCols<-1, MCols> {
     int matrix_rows_ = 0;
-    static const int matrix_cols_ = MCols;
+    static constexpr int matrix_cols_ = MCols;
     MatrixRowsCols(int rows, int cols) : matrix_rows_(rows) {}
 };
 
 template <int MRows> struct MatrixRowsCols<MRows, -1> {
-    static const int matrix_rows_ = MRows;
+    static constexpr int matrix_rows_ = MRows;
     int matrix_cols_ = 0;
     MatrixRowsCols(int rows, int cols) : matrix_cols_(cols) {}
 };

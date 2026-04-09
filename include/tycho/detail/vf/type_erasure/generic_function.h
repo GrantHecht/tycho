@@ -30,10 +30,10 @@ namespace tycho::vf {
 
 template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunction<IR, OR>, IR, OR> {
     using Base = VectorFunction<GenericFunction<IR, OR>, IR, OR>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
-    static const bool is_generic_function = true;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_generic_function = true;
+    static constexpr bool is_vectorizable = true;
 
     using Dspec = DenseFunctionSpec<IR, OR>;
     using RightJacTarget = Eigen::Ref<Eigen::Matrix<double, -1, IR>>;
@@ -45,9 +45,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
     GenericFunction() {}
 
-    template <class T, std::enable_if_t<
-                           !std::is_base_of_v<Eigen::EigenBase<std::decay_t<T>>, std::decay_t<T>>,
-                           bool> = true>
+    template <DenseVectorFunction T>
+        requires(!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>>)
     GenericFunction(const T &t) {
         func_.emplace(t);
         this->cachedata();
@@ -93,8 +92,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     // concrete Ref type expected by the virtual signature before dispatching.
 
     template <class InTypeTT, class OutTypeTT>
-    inline void compute_impl(ConstVectorBaseRef<InTypeTT> x,
-                             ConstVectorBaseRef<OutTypeTT> fx_) const {
+    inline void compute_impl(CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
             typename Dspec::InType xt(x.derived());
@@ -108,9 +106,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     template <class InTypeTT, class OutTypeTT, class JacTypeTT>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InTypeTT> x,
-                                      ConstVectorBaseRef<OutTypeTT> fx_,
-                                      ConstMatrixBaseRef<JacTypeTT> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_,
+                                      CMatRef<JacTypeTT> jx_) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
             typename Dspec::InType xt(x.derived());
@@ -128,10 +125,9 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     template <class InTypeTT, class OutTypeTT, class JacTypeTT, class AdjGradTypeTT,
               class AdjHessTypeTT, class AdjVarTypeTT>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InTypeTT> x, ConstVectorBaseRef<OutTypeTT> fx_,
-        ConstMatrixBaseRef<JacTypeTT> jx_, ConstVectorBaseRef<AdjGradTypeTT> adjgrad_,
-        ConstMatrixBaseRef<AdjHessTypeTT> adjhess_,
-        ConstVectorBaseRef<AdjVarTypeTT> adjvars) const {
+        CVecRef<InTypeTT> x, CVecRef<OutTypeTT> fx_, CMatRef<JacTypeTT> jx_,
+        CVecRef<AdjGradTypeTT> adjgrad_, CMatRef<AdjHessTypeTT> adjhess_,
+        CVecRef<AdjVarTypeTT> adjvars) const {
         using Scalar = typename InTypeTT::Scalar;
         if constexpr (std::is_same_v<Scalar, double>) {
             typename Dspec::InType xt(x.derived());
@@ -157,9 +153,8 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     /////////////////////////////////////////////////////////////////////////////////
 
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
-    inline void right_jacobian_product(ConstMatrixBaseRef<Target> target_,
-                                       ConstEigenBaseRef<Left> left, ConstEigenBaseRef<Right> right,
-                                       Assignment assign,
+    inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
+                                       CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
         typedef typename Target::Scalar Scalar;
 
@@ -167,11 +162,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
             constexpr bool TargConv =
                 std::is_convertible_v<decltype(target_.const_cast_derived()), RightJacTarget>;
             if constexpr (TargConv) {
-                ConstMatrixBaseRef<Right> right_ref = right.derived();
+                CMatRef<Right> right_ref = right.derived();
                 if constexpr (Is_EigenDiagonalMatrix<Left>::value) {
                     Base::right_jacobian_product(target_, left, right, assign, aliased);
                 } else {
-                    ConstMatrixBaseRef<Left> left_ref = left.derived();
+                    CMatRef<Left> left_ref = left.derived();
                     typename Dspec::RightJacTarget tgt(target_.const_cast_derived());
                     typename Dspec::LeftJacMatrix lft(left_ref.derived());
                     typename Dspec::JacType rht(right_ref.const_cast_derived());
@@ -186,15 +181,15 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     template <class Target, class AdjHessTypeTT, class Assignment>
-    void accumulate_hessian(ConstMatrixBaseRef<Target> target_,
-                            ConstMatrixBaseRef<AdjHessTypeTT> right, Assignment assign) const {
+    void accumulate_hessian(CMatRef<Target> target_, CMatRef<AdjHessTypeTT> right,
+                            Assignment assign) const {
         if (!this->is_linear())
             Base::accumulate_hessian(target_, right, assign);
     }
 
     template <class Target, class JacTypeTT, class Assignment>
-    void accumulate_jacobian(ConstMatrixBaseRef<Target> target_,
-                             ConstMatrixBaseRef<JacTypeTT> right, Assignment assign) const {
+    void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacTypeTT> right,
+                             Assignment assign) const {
         typedef typename Target::Scalar Scalar;
 
         if constexpr (std::is_same_v<Scalar, double>) {
@@ -212,7 +207,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
 
     ////////////////////////////////////////////////////////////////////////////////
     template <class JacTypeTT, class Scalar>
-    void scale_jacobian(ConstMatrixBaseRef<JacTypeTT> target_, Scalar s) const {
+    void scale_jacobian(CMatRef<JacTypeTT> target_, Scalar s) const {
         if constexpr (std::is_same_v<Scalar, tycho::DefaultSuperScalar>) {
             Base::scale_jacobian(target_, s);
         } else {
@@ -222,7 +217,7 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     template <class AdjHessTypeTT, class Scalar>
-    void scale_hessian(ConstMatrixBaseRef<AdjHessTypeTT> target_, Scalar s) const {
+    void scale_hessian(CMatRef<AdjHessTypeTT> target_, Scalar s) const {
         if (!this->is_linear())
             Base::scale_hessian(target_, s);
     }

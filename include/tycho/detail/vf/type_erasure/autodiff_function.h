@@ -23,14 +23,14 @@ struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
                               DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
                                 DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     Func func_;
     ADFun(Func f) : func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
     }
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         this->func_.compute(x, fx_);
     }
 

@@ -23,6 +23,7 @@
 #pragma once
 
 #include "tycho/detail/vf/core/assignment_types.h"
+#include "tycho/detail/vf/core/eigen_ref_aliases.h"
 #include "tycho/detail/vf/derivatives/detect_super_scalar.h"
 #include <algorithm>
 #include <array>
@@ -41,7 +42,6 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -58,14 +58,6 @@ template <int IR, int OR> struct DenseFunctionSpec {
     template <class Scalar> using Input = Eigen::Matrix<Scalar, IR, 1>;
     template <class Scalar> using Jacobian = Eigen::Matrix<Scalar, OR, IR>;
     template <class Scalar> using Hessian = Eigen::Matrix<Scalar, IR, IR>;
-
-    template <class Scalar> using ConstVectorBaseRef = const Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using VectorBaseRef = Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using ConstMatrixBaseRef = const Eigen::MatrixBase<Scalar> &;
-    template <class Scalar> using ConstEigenBaseRef = const Eigen::EigenBase<Scalar> &;
-    template <class Scalar> using ConstDiagonalBaseRef = const Eigen::DiagonalBase<Scalar> &;
-
-    template <class Scalar> using MatrixBaseRef = Eigen::MatrixBase<Scalar> &;
 
     using InType = Eigen::Ref<const Input<double>>;
     using OutType = Eigen::Ref<Output<double>>;
@@ -105,113 +97,99 @@ template <int IR, int OR> struct DenseFunctionSpec {
         virtual bool is_linear() const = 0;
         virtual void enable_vectorization(bool b) const = 0;
 
-        virtual void compute(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const = 0;
+        virtual void compute(CVecRef<InType> x, CVecRef<OutType> fx_) const = 0;
 
-        virtual void compute(ConstVectorBaseRef<SuperInType> x,
-                             ConstVectorBaseRef<SuperOutType> fx_) const = 0;
+        virtual void compute(CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_) const = 0;
 
-        virtual void compute_jacobian(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const = 0;
+        virtual void compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const = 0;
 
-        virtual void compute_jacobian(ConstVectorBaseRef<SuperInType> x,
-                                      ConstVectorBaseRef<SuperOutType> fx_,
-                                      ConstMatrixBaseRef<SuperJacType> jx_) const = 0;
+        virtual void compute_jacobian(CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_,
+                                      CMatRef<SuperJacType> jx_) const = 0;
 
         virtual void compute_jacobian_adjointgradient_adjointhessian(
-            ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-            ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-            ConstMatrixBaseRef<AdjHessType> adjhess_,
-            ConstVectorBaseRef<AdjVarType> adjvars) const = 0;
+            CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+            CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+            CVecRef<AdjVarType> adjvars) const = 0;
 
         virtual void compute_jacobian_adjointgradient_adjointhessian(
-            ConstVectorBaseRef<SuperInType> x, ConstVectorBaseRef<SuperOutType> fx_,
-            ConstMatrixBaseRef<SuperJacType> jx_, ConstVectorBaseRef<SuperAdjGradType> adjgrad_,
-            ConstMatrixBaseRef<SuperAdjHessType> adjhess_,
-            ConstVectorBaseRef<SuperAdjVarType> adjvars) const = 0;
+            CVecRef<SuperInType> x, CVecRef<SuperOutType> fx_, CMatRef<SuperJacType> jx_,
+            CVecRef<SuperAdjGradType> adjgrad_, CMatRef<SuperAdjHessType> adjhess_,
+            CVecRef<SuperAdjVarType> adjvars) const = 0;
 
-        virtual void scale_jacobian(ConstMatrixBaseRef<JacType> target_, double s) const = 0;
-        /*virtual void scale_gradient(ConstMatrixBaseRef<AdjGradType> target_,
+        virtual void scale_jacobian(CMatRef<JacType> target_, double s) const = 0;
+        /*virtual void scale_gradient(CMatRef<AdjGradType> target_,
                                     double s) const = 0;
-        virtual void scale_hessian(ConstMatrixBaseRef<AdjHessType> target_,
+        virtual void scale_hessian(CMatRef<AdjHessType> target_,
                                    double s) const = 0;*/
 
-        virtual void accumulate_jacobian(ConstMatrixBaseRef<JacType> target_,
-                                         ConstMatrixBaseRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          DirectAssignment assign) const = 0;
-        virtual void accumulate_jacobian(ConstMatrixBaseRef<JacType> target_,
-                                         ConstMatrixBaseRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          PlusEqualsAssignment assign) const = 0;
-        virtual void accumulate_jacobian(ConstMatrixBaseRef<JacType> target_,
-                                         ConstMatrixBaseRef<JacType> right,
+        virtual void accumulate_jacobian(CMatRef<JacType> target_, CMatRef<JacType> right,
                                          MinusEqualsAssignment assign) const = 0;
 
-        /* virtual void accumulate_gradient(ConstMatrixBaseRef<AdjGradType> target_,
-                                          ConstMatrixBaseRef<AdjGradType> right,
+        /* virtual void accumulate_gradient(CMatRef<AdjGradType> target_,
+                                          CMatRef<AdjGradType> right,
                                           DirectAssignment assign) const = 0;
-         virtual void accumulate_gradient(ConstMatrixBaseRef<AdjGradType> target_,
-                                          ConstMatrixBaseRef<AdjGradType> right,
+         virtual void accumulate_gradient(CMatRef<AdjGradType> target_,
+                                          CMatRef<AdjGradType> right,
                                           PlusEqualsAssignment assign) const = 0;
-         virtual void accumulate_gradient(ConstMatrixBaseRef<AdjGradType> target_,
-                                          ConstMatrixBaseRef<AdjGradType> right,
+         virtual void accumulate_gradient(CMatRef<AdjGradType> target_,
+                                          CMatRef<AdjGradType> right,
                                           MinusEqualsAssignment assign) const = 0;
 
-         virtual void accumulate_hessian(ConstMatrixBaseRef<AdjHessType> target_,
-                                         ConstMatrixBaseRef<AdjHessType> right,
+         virtual void accumulate_hessian(CMatRef<AdjHessType> target_,
+                                         CMatRef<AdjHessType> right,
                                          DirectAssignment assign) const = 0;
-         virtual void accumulate_hessian(ConstMatrixBaseRef<AdjHessType> target_,
-                                         ConstMatrixBaseRef<AdjHessType> right,
+         virtual void accumulate_hessian(CMatRef<AdjHessType> target_,
+                                         CMatRef<AdjHessType> right,
                                          PlusEqualsAssignment assign) const = 0;
-         virtual void accumulate_hessian(ConstMatrixBaseRef<AdjHessType> target_,
-                                         ConstMatrixBaseRef<AdjHessType> right,
+         virtual void accumulate_hessian(CMatRef<AdjHessType> target_,
+                                         CMatRef<AdjHessType> right,
                                          MinusEqualsAssignment assign) const = 0;*/
 
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             DirectAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             PlusEqualsAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             MinusEqualsAssignment assign,
                                             std::bool_constant<true> aliased) const = 0;
 
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             DirectAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             PlusEqualsAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
-        virtual void right_jacobian_product(ConstMatrixBaseRef<RightJacTarget> target_,
-                                            ConstEigenBaseRef<LeftJacMatrix> left,
-                                            ConstEigenBaseRef<JacType> right,
+        virtual void right_jacobian_product(CMatRef<RightJacTarget> target_,
+                                            CEigRef<LeftJacMatrix> left, CEigRef<JacType> right,
                                             MinusEqualsAssignment assign,
                                             std::bool_constant<false> aliased) const = 0;
 
         /*virtual void right_jacobian_product(
-            ConstMatrixBaseRef<RightJacTarget> target_,
-            ConstEigenBaseRef<LeftDiagMatrix> left,
-            ConstEigenBaseRef<JacType> right, DirectAssignment assign,
+            CMatRef<RightJacTarget> target_,
+            CEigRef<LeftDiagMatrix> left,
+            CEigRef<JacType> right, DirectAssignment assign,
             std::bool_constant<true> aliased) const = 0;
         virtual void right_jacobian_product(
-            ConstMatrixBaseRef<RightJacTarget> target_,
-            ConstEigenBaseRef<LeftDiagMatrix> left,
-            ConstEigenBaseRef<JacType> right, PlusEqualsAssignment assign,
+            CMatRef<RightJacTarget> target_,
+            CEigRef<LeftDiagMatrix> left,
+            CEigRef<JacType> right, PlusEqualsAssignment assign,
             std::bool_constant<true> aliased) const = 0;
         virtual void right_jacobian_product(
-            ConstMatrixBaseRef<RightJacTarget> target_,
-            ConstEigenBaseRef<LeftDiagMatrix> left,
-            ConstEigenBaseRef<JacType> right, MinusEqualsAssignment assign,
+            CMatRef<RightJacTarget> target_,
+            CEigRef<LeftDiagMatrix> left,
+            CEigRef<JacType> right, MinusEqualsAssignment assign,
             std::bool_constant<true> aliased) const = 0;*/
     };
 };

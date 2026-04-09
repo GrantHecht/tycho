@@ -2,9 +2,16 @@
 // Kepler conversion and astrodynamics throughput benchmarks (Google Benchmark)
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../bench_common.h"
+#include <tycho/detail/astro/kepler_utils.h>
+#include <tycho/detail/astro/kepler_propagator.h>
+#include <tycho/detail/astro/lambert_solvers.h>
 #include <benchmark/benchmark.h>
 #include <numbers>
+
+using namespace tycho;
+using namespace tycho::astro;
+
+static constexpr double MU_EARTH = 398600.4418;
 
 // LEO classical elements
 static Vector6<double> leoClassic() {

@@ -141,9 +141,9 @@ struct GFModelCommon : GFHolder<T>, GFConcept<IR, OR> {
     using RightJacTarget = typename Dspec::RightJacTarget;
     using LeftJacMatrix = typename Dspec::LeftJacMatrix;
 
-    template <class S> using CVR = const Eigen::MatrixBase<S> &; // ConstVectorBaseRef
-    template <class S> using CMR = const Eigen::MatrixBase<S> &; // ConstMatrixBaseRef
-    template <class S> using CER = const Eigen::EigenBase<S> &;  // ConstEigenBaseRef
+    template <class S> using CVR = const Eigen::MatrixBase<S> &; // CVecRef
+    template <class S> using CMR = const Eigen::MatrixBase<S> &; // CMatRef
+    template <class S> using CER = const Eigen::EigenBase<S> &;  // CEigRef
 
     // ---- DenseFunctionSpec overrides (see DenseFunctionSpecs.h) ----
 

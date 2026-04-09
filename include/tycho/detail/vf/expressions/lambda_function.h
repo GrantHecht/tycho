@@ -25,7 +25,7 @@ struct LambdaFunction
       Data {
     using Base = VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR,
                                 DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::compute;
 
     std::shared_ptr<Func> compute_func_;
@@ -39,8 +39,8 @@ struct LambdaFunction
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        VecRef<OutType> fx = fx_.const_cast_derived();
         this->compute_func_->operator()(this, x, fx);
     }
 };
@@ -53,7 +53,7 @@ struct LambdaFunction2
       Data {
     using Base = VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR,
                                 DenseDerivativeMode::Analytic, DenseDerivativeMode::AutodiffFwd>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::compute;
 
     std::shared_ptr<Func> compute_func_;
@@ -71,17 +71,17 @@ struct LambdaFunction2
         this->set_io_rows(io.input_rows_val, io.output_rows_val);
     }
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        VecRef<OutType> fx = fx_.const_cast_derived();
         this->compute_func_->operator()(this, x, fx);
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
         this->compute_jacobian_func_->operator()(this, x, fx, jx);
     }
 };

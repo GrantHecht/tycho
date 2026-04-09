@@ -35,7 +35,7 @@ struct ComparativeFunction<First, Rest...>
     using Base = IfElseFunction<BaseCond, First, Second>;
 
     // Static Parameters
-    static const bool IsComparative = true;
+    static constexpr bool IsComparative = true;
 
     // ---------------------------------------------------------------------------
     // Constructors
@@ -57,7 +57,7 @@ struct ComparativeFunction<First, Second>
     using Base = IfElseFunction<BaseCond, First, Second>;
 
     // Static Parameters
-    static const bool IsComparative = true;
+    static constexpr bool IsComparative = true;
 
     // ---------------------------------------------------------------------------
     // Constructors

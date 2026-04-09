@@ -20,7 +20,7 @@ namespace tycho::vf {
 
 template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     using Base = VectorFunction<Value<OSZ>, OSZ, OSZ>;
-    DENSE_FUNCTION_BASE_TYPES(Base)
+    VF_TYPE_ALIASES(Base)
 
     template <class Func> using REARGUMENT = Value<OSZ>;
 
@@ -29,15 +29,15 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     Value() { this->value_.setOnes(); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        VecRef<OutType> fx = fx_.const_cast_derived();
         fx = this->value_;
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         fx = this->value_;
     }

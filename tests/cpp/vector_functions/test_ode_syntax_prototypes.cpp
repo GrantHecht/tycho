@@ -19,11 +19,13 @@
 #include <gtest/gtest.h>
 
 using namespace tycho;
+using namespace tycho::vf;
 using namespace TychoTest;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ODEArguments + XVar/UVar tags — Impl+macro pattern
 ///////////////////////////////////////////////////////////////////////////////
+namespace {
 
 // Brachistochrone — single-parameter (analytic Jacobian)
 struct Brachistochrone_Impl : ODESize<3, 1, 0> {
@@ -37,7 +39,7 @@ struct Brachistochrone_Impl : ODESize<3, 1, 0> {
 BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
 
 // Multi-parameter variant (drag brachistochrone)
-struct DragBrach_Impl : ODESize<3, 1, 0> {
+struct SyntaxDragBrach_Impl : ODESize<3, 1, 0> {
     static auto Definition(double g, double drag) {
         auto args = ODEArguments<3, 1, 0>();
         auto v = args[XVar<2>];
@@ -46,8 +48,8 @@ struct DragBrach_Impl : ODESize<3, 1, 0> {
                               g * cos(theta) - drag * v};
     }
 };
-BUILD_ODE_FROM_EXPRESSION(DragBrach, DragBrach_Impl, double, double);
-BUILD_ODE_FROM_EXPRESSION_FD(DragBrachFD, DragBrach_Impl, double, double);
+BUILD_ODE_FROM_EXPRESSION(SyntaxDragBrach, SyntaxDragBrach_Impl, double, double);
+BUILD_ODE_FROM_EXPRESSION_FD(SyntaxDragBrachFD, SyntaxDragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // FD/FWAD macro variants — same Impl+macro pattern but avoids expensive
@@ -75,7 +77,7 @@ struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
     }
 };
 BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, double);
-BUILD_ODE_FROM_EXPRESSION_FWAD(DragBrachFWAD, DragBrach_Impl, double, double);
+BUILD_ODE_FROM_EXPRESSION_FWAD(SyntaxDragBrachFWAD, SyntaxDragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Dynamic-size ODE for testing ODE_DerivModeWrapper with IRC == -1
@@ -85,8 +87,8 @@ struct DynamicBrach : ODE<DynamicBrach, -1, -1, -1> {
     DynamicBrach() { set_ode_size(3, 1, 0); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x,
+                             CVecRef<OutType> fx_) const {
         auto &fx = const_cast<Eigen::MatrixBase<OutType> &>(fx_);
         auto v = x[2];
         auto theta = x[4];
@@ -115,6 +117,8 @@ struct DynamicBrachFWAD
     using Base::Base;
 };
 
+} // anonymous namespace
+
 ///////////////////////////////////////////////////////////////////////////////
 // Tests — analytic Jacobian
 ///////////////////////////////////////////////////////////////////////////////
@@ -137,7 +141,7 @@ TEST_F(VFCompositionTest, Brachistochrone_Basic) {
 }
 
 TEST_F(VFCompositionTest, MultiParam_AdjointConsistency) {
-    DragBrach ode(9.81, 0.1);
+    SyntaxDragBrach ode(9.81, 0.1);
     EXPECT_EQ(ode.input_rows(), 5);
     EXPECT_EQ(ode.output_rows(), 3);
 
@@ -205,8 +209,8 @@ TEST_F(VFCompositionTest, FD_JacobianMatchesAnalytic) {
 }
 
 TEST_F(VFCompositionTest, FD_MultiParam_JacobianMatchesAnalytic) {
-    DragBrach analytic(9.81, 0.1);
-    DragBrachFD fd(9.81, 0.1);
+    SyntaxDragBrach analytic(9.81, 0.1);
+    SyntaxDragBrachFD fd(9.81, 0.1);
     EXPECT_EQ(fd.input_rows(), 5);
     EXPECT_EQ(fd.output_rows(), 3);
 
@@ -277,8 +281,8 @@ TEST_F(VFCompositionTest, FWAD_JacobianMatchesAnalytic) {
 }
 
 TEST_F(VFCompositionTest, FWAD_MultiParam_JacobianMatchesAnalytic) {
-    DragBrach analytic(9.81, 0.1);
-    DragBrachFWAD fwad(9.81, 0.1);
+    SyntaxDragBrach analytic(9.81, 0.1);
+    SyntaxDragBrachFWAD fwad(9.81, 0.1);
     EXPECT_EQ(fwad.input_rows(), 5);
     EXPECT_EQ(fwad.output_rows(), 3);
 

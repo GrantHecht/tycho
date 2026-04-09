@@ -24,15 +24,14 @@ struct ParsedInput
     using Base =
         VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
-    SUB_FUNCTION_IO_TYPES(Func);
     Func func_;
-    Func_Input<int> varlocs_;
+    typename Func::template Input<int> varlocs_;
     bool contiguous_ = false;
 
     ParsedInput() {}
-    ParsedInput(Func f, const Func_Input<int> &vlocs, int irr)
+    ParsedInput(Func f, const typename Func::template Input<int> &vlocs, int irr)
         : func_(std::move(f)), varlocs_(vlocs) {
         this->set_io_rows(irr, this->func_.output_rows());
 
@@ -46,14 +45,14 @@ struct ParsedInput
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
 
         if (this->contiguous_) {
             this->func_.compute(x.segment(varlocs_[0], this->func_.input_rows()), fx_);
 
         } else {
-            Func_Input<Scalar> xin(this->func_.input_rows());
+            typename Func::template Input<Scalar> xin(this->func_.input_rows());
             for (int i = 0; i < this->func_.input_rows(); i++) {
                 xin[i] = x[this->varlocs_[i]];
             }
@@ -61,8 +60,8 @@ struct ParsedInput
         }
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
 
         using Scalar = typename InType::Scalar;
@@ -71,8 +70,9 @@ struct ParsedInput
             this->func_.compute_jacobian(x.segment(varlocs_[0], this->func_.input_rows()), fx_,
                                          jx.middleCols(varlocs_[0], this->func_.input_rows()));
         } else {
-            Func_Input<Scalar> xin(this->func_.input_rows());
-            Func_jacobian<Scalar> jxin(this->func_.output_rows(), this->func_.input_rows());
+            typename Func::template Input<Scalar> xin(this->func_.input_rows());
+            typename Func::template Jacobian<Scalar> jxin(this->func_.output_rows(),
+                                                          this->func_.input_rows());
             jxin.setZero();
             for (int i = 0; i < this->func_.input_rows(); i++) {
                 xin[i] = x[this->varlocs_[i]];
@@ -86,9 +86,9 @@ struct ParsedInput
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
         Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
@@ -105,10 +105,12 @@ struct ParsedInput
                 adjvars);
 
         } else {
-            Func_Input<Scalar> xin(this->func_.input_rows());
-            Func_jacobian<Scalar> jxin(this->func_.output_rows(), this->func_.input_rows());
-            Func_gradient<Scalar> gxin(this->func_.input_rows());
-            Func_hessian<Scalar> hxin(this->func_.input_rows(), this->func_.input_rows());
+            typename Func::template Input<Scalar> xin(this->func_.input_rows());
+            typename Func::template Jacobian<Scalar> jxin(this->func_.output_rows(),
+                                                          this->func_.input_rows());
+            typename Func::template Gradient<Scalar> gxin(this->func_.input_rows());
+            typename Func::template Hessian<Scalar> hxin(this->func_.input_rows(),
+                                                         this->func_.input_rows());
             jxin.setZero();
             hxin.setZero();
             gxin.setZero();

@@ -22,40 +22,40 @@ template <class Derived, int USZ, int Power> struct IntegralNorm_Impl;
 
 template <int IR> struct Norm : IntegralNorm_Impl<Norm<IR>, IR, 1> {
     using Base = IntegralNorm_Impl<Norm<IR>, IR, 1>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 template <int IR> struct SquaredNorm : IntegralNorm_Impl<SquaredNorm<IR>, IR, 2> {
     using Base = IntegralNorm_Impl<SquaredNorm<IR>, IR, 2>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 template <int IR> struct InverseNorm : IntegralNorm_Impl<InverseNorm<IR>, IR, -1> {
     using Base = IntegralNorm_Impl<InverseNorm<IR>, IR, -1>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 template <int IR> struct InverseSquaredNorm : IntegralNorm_Impl<InverseSquaredNorm<IR>, IR, -2> {
     using Base = IntegralNorm_Impl<InverseSquaredNorm<IR>, IR, -2>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 template <int IR, int PW> struct NormPower : IntegralNorm_Impl<NormPower<IR, PW>, IR, PW> {
     using Base = IntegralNorm_Impl<NormPower<IR, PW>, IR, PW>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 template <int IR, int PW>
 struct InverseNormPower : IntegralNorm_Impl<InverseNormPower<IR, PW>, IR, -PW> {
     using Base = IntegralNorm_Impl<InverseNormPower<IR, PW>, IR, -PW>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 template <class Derived, int USZ, int Power>
 struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     using Base = VectorFunction<Derived, USZ, 1>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::compute;
 
     static constexpr int power = Power;
@@ -63,7 +63,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     static constexpr int pp4 = power - 4;
     static constexpr int ppm2 = power * (power - 2);
     // double IntegralNorm_Scale = 1.0;
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     IntegralNorm_Impl() {}
     IntegralNorm_Impl(int ir) { this->set_io_rows(ir, 1); }

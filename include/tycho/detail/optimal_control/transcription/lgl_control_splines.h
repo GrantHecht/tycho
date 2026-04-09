@@ -34,8 +34,8 @@ struct LGLControlSplineSize : VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1),
     using Base = VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1), USZ * Order>;
     using Base::Base;
 
-    static const int Usz = USZ;
-    static const int t_usz = USZ + 1;
+    static constexpr int Usz = USZ;
+    static constexpr int t_usz = USZ + 1;
 
     const int t_usize() const { return t_usz; }
     const int Usize() const { return Usz; }
@@ -51,8 +51,8 @@ struct LGLControlSplineSize<Derived, CSC, -1, Order> : VectorFunction<Derived, -
     using Base = VectorFunction<Derived, -1, -1>;
     using Base::Base;
 
-    static const int Usz = -1;
-    static const int t_usz = -1;
+    static constexpr int Usz = -1;
+    static constexpr int t_usz = -1;
 
     int usz_d_ = -1;
     int t_usz_d_ = -1;
@@ -82,8 +82,8 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
     using Coeffs = LGLCoeffs<CSC>;
 
-    static const int t_u_num = (2 * CSC - 1);
-    static const int UeqNum = Order;
+    static constexpr int t_u_num = (2 * CSC - 1);
+    static constexpr int UeqNum = Order;
 
     LGLControlSpline() {}
 

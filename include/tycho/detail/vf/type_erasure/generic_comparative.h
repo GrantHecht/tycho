@@ -35,7 +35,6 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -54,8 +53,8 @@ namespace tycho::vf {
 template <int IR> struct GenericComparative {
     using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    static const bool is_conditional = true;
-    static const int IRC = IR;
+    static constexpr bool is_conditional = true;
+    static constexpr int IRC = IR;
 
     tycho::utils::TypeStorage<ConditionalBase<IR>> storage;
 

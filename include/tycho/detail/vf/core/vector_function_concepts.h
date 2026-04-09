@@ -27,7 +27,6 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/crtp_base.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -139,5 +138,31 @@ struct AllPairsStackableHelper<Head, Tail...>
 // F1::IRC==-1 could mask an incompatible static F2::IRC vs F3::IRC.
 template <class... Fs>
 concept MutuallyStackable = detail::AllPairsStackableHelper<Fs...>::value;
+
+template <typename T>
+concept ConditionalVF =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_conditional); };
+
+template <typename T>
+concept CwiseVF =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::is_cwise_operator); };
+
+template <typename T>
+concept HasDiagonalHess =
+    requires { requires static_cast<bool>(detail::VectorFunctionType<T>::has_diagonal_hessian); };
+
+template <typename T>
+concept DenseVectorFunction = requires(const T &t) {
+    { T::IRC } -> std::convertible_to<int>;
+    { T::ORC } -> std::convertible_to<int>;
+    { t.input_rows() } -> std::same_as<int>;
+    { t.output_rows() } -> std::same_as<int>;
+    { T::is_vectorizable } -> std::convertible_to<bool>;
+    { T::is_linear_function } -> std::convertible_to<bool>;
+    typename T::template Output<double>;
+    typename T::template Input<double>;
+    typename T::template Jacobian<double>;
+    typename T::INPUT_DOMAIN;
+};
 
 } // namespace tycho::vf

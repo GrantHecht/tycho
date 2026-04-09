@@ -24,7 +24,7 @@ template <class Func1, class Func2>
 struct CwiseFunctionProduct
     : CwiseFunctionProduct_Impl<CwiseFunctionProduct<Func1, Func2>, Func1, Func2> {
     using Base = CwiseFunctionProduct_Impl<CwiseFunctionProduct<Func1, Func2>, Func1, Func2>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
@@ -33,10 +33,8 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
                                                   SZ_MAX<Func1::ORC, Func2::ORC>::value> {
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
                                 SZ_MAX<Func1::ORC, Func2::ORC>::value>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
-    SUB_FUNCTION_IO_TYPES(Func1);
-    SUB_FUNCTION_IO_TYPES(Func2);
     using Base::compute;
 
     Func1 func1;
@@ -44,7 +42,7 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
 
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
-    static const bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
     CwiseFunctionProduct_Impl() {}
     CwiseFunctionProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
@@ -72,10 +70,10 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
 
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &fx2) {
             this->func1.compute(x, fx);
@@ -83,16 +81,16 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
             fx = fx.cwiseProduct(fx2);
         };
 
-        using FType = Func2_Output<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
         const int orows = this->output_rows();
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &fx2, auto &jx2) {
             this->func1.compute_jacobian(x, fx, jx);
@@ -104,8 +102,8 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
             fx = fx.cwiseProduct(fx2);
         };
 
-        using FType = Func2_Output<Scalar>;
-        using JType = Func2_jacobian<Scalar>;
+        using FType = typename Func2::template Output<Scalar>;
+        using JType = typename Func2::template Jacobian<Scalar>;
         const int irows = this->input_rows();
         const int orows = this->output_rows();
 
@@ -115,14 +113,14 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_, ConstVectorBaseRef<AdjVarType> adjvars) const {
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &fx2, auto &jx2, auto &gx2, auto &hx2, auto &adjprod, auto &jttemp) {
             this->func2.compute(x, fx2);
@@ -161,13 +159,13 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         const int orows = this->func1.output_rows();
         const int irows = this->func1.input_rows();
 
-        using FType1 = Func1_Output<Scalar>;
-        using JType1 = Func1_jacobian<Scalar>;
+        using FType1 = typename Func1::template Output<Scalar>;
+        using JType1 = typename Func1::template Jacobian<Scalar>;
 
-        using FType2 = Func2_Output<Scalar>;
-        using JType2 = Func2_jacobian<Scalar>;
-        using GType2 = Func2_gradient<Scalar>;
-        using HType2 = Func2_hessian<Scalar>;
+        using FType2 = typename Func2::template Output<Scalar>;
+        using JType2 = typename Func2::template Jacobian<Scalar>;
+        using GType2 = typename Func2::template Gradient<Scalar>;
+        using HType2 = typename Func2::template Hessian<Scalar>;
 
         tycho::utils::BumpAllocator::allocate_run(
             Impl, tycho::utils::TempSpec<FType2>(orows, 1),

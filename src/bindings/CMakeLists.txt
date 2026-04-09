@@ -32,7 +32,6 @@ add_library(_tychopy_heavy OBJECT
     tycho_module.cpp
     optimal_control/generic_odes_build_part3.cpp
     optimal_control/generic_odes_build_part4.cpp
-    optimal_control/generic_odes_build_part5.cpp
     optimal_control/generic_odes_build_part6.cpp
     astro/tycho_astro.cpp
     astro/kepler_utils.cpp
@@ -76,7 +75,6 @@ nanobind_add_module(_tychopy
     optimal_control/generic_odes_integrator_part2.cpp
     optimal_control/generic_odes_integrator_part3.cpp
     optimal_control/generic_odes_integrator_part4.cpp
-    optimal_control/generic_odes_integrator_part5.cpp
     optimal_control/generic_odes_integrator_part6.cpp
     optimal_control/ode_phase_base_bind.cpp
     optimal_control/optimal_control_problem_bind.cpp
@@ -95,6 +93,7 @@ nanobind_add_module(_tychopy
 )
 
 target_compile_options(_tychopy PRIVATE ${BINDING_COMPILE_FLAGS})
+set_property(TARGET _tychopy PROPERTY JOB_POOL_COMPILE heavy_compile)
 target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
 # Prevent CMake from auto-defining _tychopy_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.

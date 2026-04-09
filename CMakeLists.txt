@@ -18,17 +18,17 @@ set( CMAKE_MESSAGE_LOG_LEVEL "STATUS" )
 # build in parallel at the full -j level.
 #
 # TYCHO_HEAVY_COMPILE_JOBS controls the pool depth (max concurrent heavy TUs).
-# Default: auto-detected from system RAM (1 per 12 GB, minimum 1).
+# Default: auto-detected from system RAM (1 per 10 GB, minimum 1).
 # Override: cmake -DTYCHO_HEAVY_COMPILE_JOBS=<N> ...
 ################################################################################
 if(NOT DEFINED TYCHO_HEAVY_COMPILE_JOBS)
     cmake_host_system_information(RESULT _TYCHO_TOTAL_RAM_MB QUERY TOTAL_PHYSICAL_MEMORY)
-    math(EXPR _TYCHO_POOL_DEPTH "${_TYCHO_TOTAL_RAM_MB} / 12288")
+    math(EXPR _TYCHO_POOL_DEPTH "${_TYCHO_TOTAL_RAM_MB} / 10240")
     if(_TYCHO_POOL_DEPTH LESS 1)
         set(_TYCHO_POOL_DEPTH 1)
     endif()
     set(TYCHO_HEAVY_COMPILE_JOBS ${_TYCHO_POOL_DEPTH} CACHE STRING
-        "Max concurrent compilations of memory-heavy TUs (auto: 1 per 12 GB RAM)")
+        "Max concurrent compilations of memory-heavy TUs (auto: 1 per 10 GB RAM)")
 endif()
 if(TYCHO_HEAVY_COMPILE_JOBS LESS 1)
     message(WARNING "TYCHO_HEAVY_COMPILE_JOBS=${TYCHO_HEAVY_COMPILE_JOBS} is invalid (must be >= 1), resetting to 1.")
@@ -120,8 +120,7 @@ endif()
 
 option(ENABLE_PYTHON_BINDINGS "Build Python bindings (_tychopy nanobind module)"
     ${TYCHO_MASTER_PROJECT})
-option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables"
-    ${TYCHO_MASTER_PROJECT})
+option(BUILD_CPP_EXAMPLES "Build standalone C++ example executables" OFF)
 option(BUILD_CPP_BENCHMARKS "Build C++ benchmarks using Google Benchmark (requires FetchContent)" OFF)
 option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executables" OFF)
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
