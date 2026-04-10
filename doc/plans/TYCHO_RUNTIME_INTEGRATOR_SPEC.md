@@ -45,22 +45,31 @@ namespace (alongside other public enums like `TranscriptionModes`,
 namespace tycho {
 
 enum class IVPAlg {
-    RK4Classic,
-    RK438,
-    DOPRI54,
-    DOPRI87,
-    RK54,
-    RK78,
-    Ralston3,
-    Ralston2,
-    DOPRI5
+    DOPRI54,    // Dormand-Prince 5(4) — 6 stages, adaptive
+    DOPRI87,    // Dormand-Prince 8(7) — 13 stages, adaptive (default)
+    RK4Classic, // Classic RK4 — 4 stages, fixed step only
+    DOPRI5,     // Dormand-Prince 5 — 6 stages, fixed step only
 };
 
 } // namespace tycho
 ```
 
+DOPRI54 and DOPRI87 are fully wired with adaptive step control. RK4Classic
+and DOPRI5 have coefficient tables but do not support adaptive stepping —
+using them with `adaptive_ = true` (the default) throws
+`std::invalid_argument`. They are included in the enum because their
+coefficients are implemented and they represent valid IVP algorithms; the
+adaptive code path can be added later.
+
+Dead values from the old `RKOptions` enum that had NO coefficient
+specializations (`RK438`, `RK54`, `RK78`, `Ralston3`, `Ralston2`) are
+removed entirely.
+
 All internal references to `RKOptions` are updated. The old name is removed
-entirely (no backwards-compat alias).
+entirely (no backwards-compat alias). The `rk_method_` member initializer
+is cleaned up to default to `IVPAlg::DOPRI87` (matching the constructor
+default — currently there's an inconsistency where the member defaults to
+DOPRI54 but the constructor overrides to DOPRI87).
 
 ### 2. Replace String-Based Algorithm Selection in Integrator
 
@@ -116,22 +125,33 @@ DynIntegrator integrator(IVPAlg method, double defstep,
 // With constant control vector
 DynIntegrator integrator(double defstep,
                          const Eigen::VectorXd &u_const) const;
+DynIntegrator integrator(IVPAlg method, double defstep,
+                         const Eigen::VectorXd &u_const) const;
 
 // With LGL interpolation table
 DynIntegrator integrator(double defstep,
                          std::shared_ptr<LGLInterpTable> tab,
                          const Eigen::VectorXi &ulocs) const;
+DynIntegrator integrator(IVPAlg method, double defstep,
+                         std::shared_ptr<LGLInterpTable> tab,
+                         const Eigen::VectorXi &ulocs) const;
 DynIntegrator integrator(double defstep,
+                         std::shared_ptr<LGLInterpTable> tab) const;
+DynIntegrator integrator(IVPAlg method, double defstep,
                          std::shared_ptr<LGLInterpTable> tab) const;
 ```
 
-Each factory method calls `generic_ode()` to build the `DynODE`, then
-constructs `Integrator<DynODE>(dyn_ode, ...)`. Named varlocs are resolved
-through the `VarRegistry` before passing to the constructor.
+Each factory method calls `generic_ode()` to build the `DynODE`, populates
+the DynODE's internal FlatMap from the `VarRegistry` (matching the pattern
+in `ODE::phase()`), then constructs `Integrator<DynODE>(dyn_ode, ...)`.
+Named varlocs are resolved through the `VarRegistry` before passing to the
+constructor.
 
 The returned `DynIntegrator` has all existing `integrate_dense` overloads
 (basic, with output count, with stop function, with events), plus tolerance
-setters — no wrapping needed.
+setters — no wrapping needed. Event detection (`EventPack` =
+`tuple<GenericFunction<-1,1>, int, int>`) works directly on the
+`DynIntegrator`.
 
 ### 4. Python Bindings
 
@@ -166,17 +186,18 @@ Update examples that currently use hand-rolled initial guesses to use
 
 **No regressions:**
 - All existing C++ unit tests pass
-- All 31 C++ example CTests pass
-- All 38 Python examples pass (bindings updated)
+- All C++ example CTests pass
+- All Python examples pass (bindings updated)
 
 ## Files Modified
 
-**Core integrator changes:**
+**Core integrator changes (RKOptions → IVPAlg rename):**
 - `include/tycho/detail/integrators/rk_coeffs.h` — rename enum, move to
-  `tycho` namespace
+  `tycho` namespace, remove dead values
+- `include/tycho/detail/integrators/rk_steppers.h` — update template
+  parameters (10 occurrences)
 - `include/tycho/detail/integrators/integrator.h` — replace `std::string`
-  with `IVPAlg` in all constructors
-- Any internal files that reference `RKOptions` by name
+  with `IVPAlg` in all constructors, fix member initializer
 
 **Builder API:**
 - `include/tycho/detail/optimal_control/builder/runtime_ode.h` —
@@ -186,7 +207,9 @@ Update examples that currently use hand-rolled initial guesses to use
 **Python bindings:**
 - `src/bindings/integrators/integrator_bind.h` — string-to-enum conversion,
   expose `IVPAlg`
-- Any other binding files that pass strings to `Integrator` constructors
+- `src/bindings/integrators/rk_coeffs_bind.cpp` — rename enum binding
+- `tychopy/OptimalControl/__init__.py` — update `RKOptions` re-export to
+  `IVPAlg`
 
 **Examples:**
 - `examples/cpp_examples/builder/goddard_rocket/main.cpp`
