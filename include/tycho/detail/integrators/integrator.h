@@ -133,7 +133,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
   public:
     Integrator() { this->enable_vectorization_ = true; }
 
-    Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
+    Integrator(const DODE &dode, IVPAlg meth, double defstep) : Integrator() {
         // Use in_place_type to sidestep MSVC variant overload-resolution
         // ambiguity between the int and Eigen::VectorXi alternatives.
         ControlIndexType empty_ci{std::in_place_type<Eigen::VectorXi>};
@@ -141,8 +141,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
-    Integrator(const DODE &dode, double defstep) : Integrator(dode, "DOPRI87", defstep) {}
-    Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
+    Integrator(const DODE &dode, double defstep) : Integrator(dode, IVPAlg::DOPRI87, defstep) {}
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
         : Integrator() {
 
@@ -152,27 +152,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     // VectorXi overloads: explicitly wrap into ControlIndexType to avoid MSVC
     // variant implicit-conversion ambiguity (int vs VectorXi alternatives).
-    Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const ControllerType &ucon,
                const Eigen::VectorXi &varlocs)
         : Integrator(dode, meth, defstep, ucon,
                      ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
     Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
-        : Integrator(dode, "DOPRI87", defstep, ucon, varlocs_t) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, ucon, varlocs_t) {}
     Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
                const Eigen::VectorXi &varlocs)
-        : Integrator(dode, "DOPRI87", defstep, ucon,
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, ucon,
                      ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
     Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v) : Integrator() {
 
         Eigen::VectorXi tloc(1);
         tloc[0] = dode.t_var();
         GenericFunction<-1, -1> ucon = Constant<-1, -1>(1, v);
-        this->set_method("DOPRI87", dode, defstep, true, ucon, tloc);
+        this->set_method(IVPAlg::DOPRI87, dode, defstep, true, ucon, tloc);
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
-    Integrator(const DODE &dode, std::string meth, double defstep,
+    Integrator(const DODE &dode, IVPAlg meth, double defstep,
                std::shared_ptr<LGLInterpTable> tab, const Eigen::VectorXi &ulocs)
         : Integrator() {
 
@@ -185,9 +185,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab,
                const Eigen::VectorXi &ulocs)
-        : Integrator(dode, "DOPRI87", defstep, tab, ulocs) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, tab, ulocs) {}
 
-    Integrator(const DODE &dode, std::string meth, double defstep,
+    Integrator(const DODE &dode, IVPAlg meth, double defstep,
                std::shared_ptr<LGLInterpTable> tab)
         : Integrator() {
 
@@ -208,25 +208,30 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab)
-        : Integrator(dode, "DOPRI87", defstep, tab) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, tab) {}
 
-    void set_method(std::string str, const DODE &dode, double defstep, bool usecontrol,
+    void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
         this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
 
-        if (str == "DOPRI54" || str == "DP54") {
+        switch (alg) {
+        case IVPAlg::DOPRI54:
             this->rk_method_ = IVPAlg::DOPRI54;
             this->error_order_ = 4;
             // Using DOPRI5 rather than DOPRI54 here is not a mistake
             this->init_stepper_and_controller<IVPAlg::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
-        } else if (str == "DOPRI87" || str == "DP87") {
+            break;
+        case IVPAlg::DOPRI87:
             this->rk_method_ = IVPAlg::DOPRI87;
             this->error_order_ = 7;
-            this->init_stepper_and_controller<IVPAlg::DOPRI87>(dode, usecontrol, ucon,
-                                                                  varlocs_t);
-        } else {
-            throw std::invalid_argument("Invalid integration method '{0:}'.");
+            this->init_stepper_and_controller<IVPAlg::DOPRI87>(dode, usecontrol, ucon, varlocs_t);
+            break;
+        case IVPAlg::RK4Classic:
+        case IVPAlg::DOPRI5:
+            throw std::invalid_argument(
+                "IVPAlg::RK4Classic and IVPAlg::DOPRI5 do not support adaptive step control. "
+                "Set adaptive = false before using these methods.");
         }
     }
 
