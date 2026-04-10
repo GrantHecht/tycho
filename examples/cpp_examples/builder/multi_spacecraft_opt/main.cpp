@@ -136,7 +136,7 @@ int main() {
 
         // Substitute actual initial conditions
         Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
-        phase.base().sub_variables(PhaseRegionFlags::Front, front_idx, istates[i].head<7>());
+        phase.sub_variables(PhaseRegionFlags::Front, front_idx, istates[i].head<7>());
 
         // Control norm bound
         phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.01, 1.0, 1.0);
@@ -206,8 +206,8 @@ int main() {
             double theta_i = theta_max * static_cast<double>(i) / (N - 1);
             auto istate = make_circ_state(1.0, theta_i);
             Eigen::VectorXi front_idx_sub = Eigen::VectorXi::LinSpaced(7, 0, 6);
-            phases[i].base().sub_variables(PhaseRegionFlags::Front, front_idx_sub,
-                                           istate.head<7>());
+            phases[i].sub_variables(PhaseRegionFlags::Front, front_idx_sub,
+                                    istate.head<7>());
         }
 
         auto flag = ocp.optimize();

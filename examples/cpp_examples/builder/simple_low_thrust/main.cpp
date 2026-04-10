@@ -127,7 +127,7 @@ int main() {
               << " (ND)\n";
 
     // Remove time objective
-    phase.base().remove_state_objective(-1);
+    phase.remove_state_objective(-1);
 
     // ── Objective 2: Minimum power (integral ||u||^2) ──────────────────
     std::cout << "\n=== Phase 2: Minimum power transfer ===\n";
@@ -145,7 +145,7 @@ int main() {
     std::cout << "  Power-optimal tf = " << std::fixed << std::setprecision(4) << tf_power
               << " (ND)\n";
 
-    phase.base().remove_integral_objective(-1);
+    phase.remove_integral_objective(-1);
 
     // ── Objective 3: Minimum fuel (integral ||u||) ─────────────────────
     std::cout << "\n=== Phase 3: Minimum fuel transfer ===\n";

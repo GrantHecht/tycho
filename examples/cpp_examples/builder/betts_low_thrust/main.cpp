@@ -207,8 +207,8 @@ int main() {
                               {"p", "f", "g", "h", "k", "L"});
     }
 
-    // Static param bounds — must use base() for ODEParams region
-    phase.base().add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0, 1.0);
+    // ODE param (tau) bounds
+    phase.add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0, 1.0);
 
     // Weight must remain positive
     phase.add_lower_var_bound(PhaseRegionFlags::Back, "w", 0.05);

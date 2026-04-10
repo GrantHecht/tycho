@@ -10,7 +10,7 @@
 // Two-step solve: unconstrained, then add heating rate constraint
 // Objective: maximise final cross-range (theta at tf)
 //
-// API gaps: refine_traj_manual() not on Phase wrapper, uses base().
+// All API gaps previously noted here have been resolved.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -183,9 +183,9 @@ int main() {
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
     phase.solve_optimize();
 
-    // Refine to more segments — refine_traj_manual not on Phase wrapper
+    // Refine to more segments
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
-    phase.base().refine_traj_manual(300);
+    phase.refine_traj_manual(300);
     phase.optimize();
 
     auto traj1 = phase.return_traj();

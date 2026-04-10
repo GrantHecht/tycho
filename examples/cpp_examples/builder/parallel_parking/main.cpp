@@ -11,14 +11,10 @@
 //
 // Objective: minimise time (~18.4 s expected)
 //
-// API gaps found:
-//   - Phase wrapper add_inequal_con does not support mixed var sources
-//     (phase vars + static params). Must use phase.base() with index-based
-//     API for constraints involving static parameters.
-//   - refine_traj_manual() and sub_variable() are not on the Phase wrapper;
-//     must use phase.base() for mesh refinement and parameter substitution.
-//   - Builder ODE::phase() does not support the LerpIG (interpolate sparse
-//     waypoints) flag. Must use phase.base().set_traj(waypoints, ndef, true).
+// All API gaps previously noted here have been resolved:
+//   - Phase wrapper add_inequal_con supports mixed var sources (XtUP + SP)
+//   - refine_traj_manual() and sub_variable() are on the Phase wrapper
+//   - Phase::set_traj(traj, ndef, true) supports LerpIG interpolation
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -218,12 +214,13 @@ int main() {
 
     // ── Phase setup (coarse) ───────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, dummy_ig, n_segs1);
-    // Re-set with sparse waypoints + LERP interpolation (builder API gap)
-    phase.base().set_traj(waypoints, n_segs1, true);
+    // Re-set with sparse waypoints + LERP interpolation
+    phase.set_traj(waypoints, n_segs1, true);
 
     Eigen::VectorXd sp(1);
     sp[0] = k1;
     phase.set_static_params(sp);
+    phase.set_static_param_names({{"k", 0}});
     phase.set_control_mode(ControlModes::BlockConstant);
 
     // Boundary conditions
@@ -234,16 +231,16 @@ int main() {
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"v", "a"}, Eigen::Vector2d(0.0, 0.0));
 
-    // Slot geometry constraints — uses static param k, need base() API
+    // Slot geometry constraints — uses mixed XtUP + static param sources
     {
         Eigen::VectorXi xtup(3);
         xtup << 0, 1, 4;
         Eigen::VectorXi op_empty;
         Eigen::VectorXi sp_idx(1);
         sp_idx << 0;
-        phase.base().add_inequal_con(PhaseRegionFlags::Path,
-                                     GenericFunction<-1, -1>(make_slot_fn()), xtup, op_empty,
-                                     sp_idx, ScaleModes::AUTO);
+        phase.add_inequal_con(PhaseRegionFlags::Path,
+                              GenericFunction<-1, -1>(make_slot_fn()), xtup, op_empty,
+                              sp_idx, ScaleModes::AUTO);
     }
 
     // Final Y constraint
@@ -284,8 +281,8 @@ int main() {
     // ── Refine and re-solve with tighter k ─────────────────────────────
     std::cout << "ParallelParking: refining to " << n_segs2 << " segments, k=" << k2 << "...\n"
               << std::flush;
-    phase.base().refine_traj_manual(n_segs2);
-    phase.base().sub_variable(PhaseRegionFlags::StaticParams, 0, k2);
+    phase.refine_traj_manual(n_segs2);
+    phase.sub_variable(PhaseRegionFlags::StaticParams, "k", k2);
     phase.optimizer().set_kkt_tol(1.0e-8);
     phase.optimize();
 

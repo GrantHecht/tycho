@@ -12,10 +12,10 @@
 // Control : none
 // ODE param: [rad]            (cannonball radius)
 //
-// API gaps exercised:
+// API features exercised:
 //   - ODEBuilder(4, 0, 1) with ODE parameter
-//   - ocp.base().add_direct_link_equal_con() for ODE param linking
-//   - phase.base().add_inequal_con() for mixed state+ODE param constraint
+//   - ocp.add_direct_link_equal_con() for ODE param linking
+//   - phase.add_inequal_con() with mixed XtUP + ODE param variable sources
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -206,13 +206,12 @@ int main() {
 
     // Energy inequality at launch: 0.5 * M(rad) * v^2 - E0 <= 0
     // This references both state var 0 (v) and ODE param var 0 (rad).
-    // Must use base() since wrapper doesn't support mixed x/p vars.
     {
         auto efunc = make_energy_constraint();
         Eigen::VectorXi xvars(1); xvars << 0;   // v
-        Eigen::VectorXi pvars(1); pvars << 0;   // rad
+        Eigen::VectorXi pvars(1); pvars << 0;   // rad (P-relative index)
         Eigen::VectorXi empty;
-        aphase.base().add_inequal_con(
+        aphase.add_inequal_con(
             PhaseRegionFlags::Front, efunc, xvars, pvars, empty, ScaleModes::AUTO);
     }
 
@@ -237,10 +236,9 @@ int main() {
     ocp.add_forward_link_equal_con(aphase, dphase, {"v", "gamma", "h", "r", "t"});
 
     // Link ODE params (radius) between phases
-    // Must use base() — wrapper doesn't have add_direct_link_equal_con
     {
         Eigen::VectorXi pvar(1); pvar << 0;
-        ocp.base().add_direct_link_equal_con(
+        ocp.add_direct_link_equal_con(
             0, PhaseRegionFlags::ODEParams, pvar,
             1, PhaseRegionFlags::ODEParams, pvar);
     }

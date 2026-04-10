@@ -116,7 +116,7 @@ int main() {
     // ── Time-optimal ───────────────────────────────────────────────────
     std::cout << "=== Time-optimal transfer ===\n";
     phase.add_delta_time_objective(1.0 / 100.0);
-    phase.base().solve_optimize_solve();
+    phase.solve_optimize_solve();
 
     auto time_optimal = phase.return_traj();
     double tf_time = time_optimal.back()[4];
@@ -124,7 +124,7 @@ int main() {
 
     // ── Mass-optimal ───────────────────────────────────────────────────
     std::cout << "\n=== Fuel-optimal transfer ===\n";
-    phase.base().remove_state_objective(0);
+    phase.remove_state_objective(0);
 
     // Reset with mass-optimal IG (different spiral)
     std::vector<Eigen::VectorXd> moptIG;
@@ -154,7 +154,7 @@ int main() {
     }
 
     phase.optimize_solve();
-    phase.base().refine_traj_manual(800);
+    phase.refine_traj_manual(800);
     phase.optimize_solve();
 
     auto mass_optimal = phase.return_traj();
