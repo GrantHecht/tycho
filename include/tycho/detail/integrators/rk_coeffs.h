@@ -16,23 +16,24 @@
 
 #include <array>
 
-namespace tycho::integrators {
+namespace tycho {
 
-enum class RKOptions {
-    RK4Classic,
-    RK438,
-    DOPRI54,
-    DOPRI87,
-    RK54,
-    RK78,
-    Ralston3,
-    Ralston2,
-    DOPRI5
+enum class IVPAlg {
+    DOPRI54,    // Dormand-Prince 5(4) — 6 stages, adaptive
+    DOPRI87,    // Dormand-Prince 8(7) — 13 stages, adaptive (default)
+    RK4Classic, // Classic RK4 — 4 stages, fixed step only
+    DOPRI5,     // Dormand-Prince 5 — 6 stages, fixed step only
 };
 
-template <RKOptions opt> struct RKCoeffs {};
+} // namespace tycho
 
-template <> struct RKCoeffs<RKOptions::RK4Classic> {
+namespace tycho::integrators {
+
+using tycho::IVPAlg;
+
+template <IVPAlg opt> struct RKCoeffs {};
+
+template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr int Stages = 4;
     static constexpr bool is_diag_ = true;
     static constexpr bool EmbeddedCorrector = false;
@@ -48,7 +49,7 @@ template <> struct RKCoeffs<RKOptions::RK4Classic> {
     static constexpr STDarray<double, 4> CCoeffs = {0, 0, 0, 0};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI54> {
+template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr int Stages = 7;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = true;
@@ -80,7 +81,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI54> {
         0.1178653667448159, -0.0899577761820872, 0.0478086164722679};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI5> {
+template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr int Stages = 6;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = false;
@@ -103,7 +104,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI5> {
         5179.0 / 57600.0, 0.0, 7571.0 / 16695.0, 393 / 640.0, -92097 / 339200.0, 187 / 2100.0};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI87> {
+template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr int Stages = 13;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = true;

@@ -101,7 +101,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// Psuedo ODE is a compostion of the ode and control function(if any)
     /// </summary>
     /// <typeparam name="PseudoODE"></typeparam>
-    template <class PseudoODE, RKOptions RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
+    template <class PseudoODE, IVPAlg RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
 
     /// <summary>
     /// Wraps stepper types with RKoptions types
@@ -128,7 +128,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     bool use_controller_ = false;
     ControllerType controller_;
     StepperWrapperType stepper_;
-    RKOptions rk_method_ = RKOptions::DOPRI54;
+    IVPAlg rk_method_ = IVPAlg::DOPRI87;
 
   public:
     Integrator() { this->enable_vectorization_ = true; }
@@ -216,21 +216,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
 
         if (str == "DOPRI54" || str == "DP54") {
-            this->rk_method_ = RKOptions::DOPRI54;
+            this->rk_method_ = IVPAlg::DOPRI54;
             this->error_order_ = 4;
             // Using DOPRI5 rather than DOPRI54 here is not a mistake
-            this->init_stepper_and_controller<RKOptions::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<IVPAlg::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
         } else if (str == "DOPRI87" || str == "DP87") {
-            this->rk_method_ = RKOptions::DOPRI87;
+            this->rk_method_ = IVPAlg::DOPRI87;
             this->error_order_ = 7;
-            this->init_stepper_and_controller<RKOptions::DOPRI87>(dode, usecontrol, ucon,
+            this->init_stepper_and_controller<IVPAlg::DOPRI87>(dode, usecontrol, ucon,
                                                                   varlocs_t);
         } else {
             throw std::invalid_argument("Invalid integration method '{0:}'.");
         }
     }
 
-    template <RKOptions RKOp>
+    template <IVPAlg RKOp>
     void init_stepper_and_controller(const DODE &odet, bool usecontrol,
                                      const GenericFunction<-1, -1> &ucon,
                                      const ControlIndexType &varlocs_t) {
@@ -409,7 +409,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     }
 
-    template <RKOptions RKOp, class Scalar>
+    template <IVPAlg RKOp, class Scalar>
     inline void stepper_compute_impl(const ODEState<Scalar> &x, Scalar tf, ODEState<Scalar> &xf,
                                      ODEState<Scalar> &xf_est, bool dofsal,
                                      ODEDeriv<Scalar> &xdot_prev, bool domidpoint,
@@ -540,12 +540,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                 bool domidpoint, ODEState<Scalar> &xf_mid) const {
 
         switch (this->rk_method_) {
-        case RKOptions::DOPRI54: {
-            this->stepper_compute_impl<RKOptions::DOPRI54, Scalar>(x, tf, xf, xf_est, true,
+        case IVPAlg::DOPRI54: {
+            this->stepper_compute_impl<IVPAlg::DOPRI54, Scalar>(x, tf, xf, xf_est, true,
                                                                    xdot_prev, domidpoint, xf_mid);
         } break;
-        case RKOptions::DOPRI87: {
-            this->stepper_compute_impl<RKOptions::DOPRI87, Scalar>(x, tf, xf, xf_est, false,
+        case IVPAlg::DOPRI87: {
+            this->stepper_compute_impl<IVPAlg::DOPRI87, Scalar>(x, tf, xf, xf_est, false,
                                                                    xdot_prev, domidpoint, xf_mid);
         } break;
         default: {
