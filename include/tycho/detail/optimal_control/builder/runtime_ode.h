@@ -73,8 +73,10 @@ class ODE {
     // ── Phase construction ──────────────────────────────────────────────
 
     /// Create a Phase from this ODE with a trajectory guess and segment count.
+    /// When lerp_ig is true, sparse waypoints are interpolated onto the
+    /// collocation mesh via set_traj(traj, num_segments, true).
     Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
-                int num_segments) const;
+                int num_segments, bool lerp_ig = false) const;
 
     // ── Convenience (delegate to VarRegistry) ───────────────────────────
 

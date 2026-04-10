@@ -435,6 +435,9 @@ class Phase {
     void set_traj(const std::vector<Eigen::VectorXd> &traj, int ndef) {
         phase_->set_traj(traj, ndef);
     }
+    void set_traj(const std::vector<Eigen::VectorXd> &traj, int ndef, bool lerp_ig) {
+        phase_->set_traj(traj, ndef, lerp_ig);
+    }
 
     void set_static_params(const Eigen::VectorXd &parm) { phase_->set_static_params(parm); }
     void set_static_params(const Eigen::VectorXd &parm, const Eigen::VectorXd &units) {

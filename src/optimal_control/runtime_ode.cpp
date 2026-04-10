@@ -16,7 +16,7 @@
 namespace tycho {
 
 Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
-                 int num_segments) const {
+                 int num_segments, bool lerp_ig) const {
     if (traj.empty())
         throw std::invalid_argument("ODE::phase: trajectory must not be empty");
     if (num_segments <= 0)
@@ -44,6 +44,10 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
     }
 
     auto phase_ptr = std::make_shared<oc::ODEPhase<DynODE>>(ode, mode, traj, num_segments);
+
+    if (lerp_ig) {
+        phase_ptr->set_traj(traj, num_segments, true);
+    }
 
     if (registry_) {
         return Phase(phase_ptr, *registry_);
