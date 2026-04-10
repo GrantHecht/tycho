@@ -1,0 +1,14 @@
+{
+  "planPath": "doc/plans/2026-04-10-wrapper-completeness.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: to_region_index helper + fix existing methods", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Static param naming infrastructure", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Simple method passthroughs", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Mixed variable source constraints", "status": "pending", "blockedBy": [1]},
+    {"id": 4, "subject": "Task 4: LerpIG flag on ODE::phase()", "status": "pending"},
+    {"id": 5, "subject": "Task 5: OCP add_direct_link_equal_con", "status": "pending", "blockedBy": [0, 1]},
+    {"id": 6, "subject": "Task 6: Update examples to use new API", "status": "pending", "blockedBy": [2, 3, 4, 5]},
+    {"id": 7, "subject": "Task 7: Full CTest verification", "status": "pending", "blockedBy": [6]}
+  ],
+  "lastUpdated": "2026-04-10T00:00:00Z"
+}
