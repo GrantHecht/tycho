@@ -12,3 +12,6 @@
 | HangingChain | `Jet.map()` parallel solve | Medium | Python uses `Jet.map()` for batch solving over parameter sweeps. No C++ builder equivalent. | Expose Jet parallel solve for Phase wrapper |
 | Reentry | `refine_traj_manual` | Medium | Same gap as ParallelParking — not on Phase wrapper | (same fix) |
 | MinTimeToClimb | `InterpTable` in ODE | High | Python uses `InterpTable` for aero/atmospheric data lookup inside ODE. C++ builder API has no equivalent. Simplified with polynomial fits for this example. | Expose `InterpTable` for use in builder `define()` lambdas |
+| MultiPhaseCannon | `add_direct_link_equal_con` on OCP wrapper | Medium | Not on OptimalControlProblem wrapper. Must use `ocp.base().add_direct_link_equal_con(...)` to link ODE parameters between phases. | Forward to OCP wrapper |
+| MultiPhaseCannon | ODEParams region + named vars | Medium | `add_lower_var_bound(ODEParams, "rad", ...)` resolves name to full phase vector index instead of raw ODE param index. Must use index-based overload. | Fix name resolution for ODEParams region |
+| MultiPhaseCannon | Mixed state+ODE param inequality | Medium | Phase wrapper `add_inequal_con` doesn't support separate ODE param vars. Must use `phase.base().add_inequal_con(region, func, xvars, pvars, spvars, scale)`. | Add overload with param vars |
