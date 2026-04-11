@@ -1,0 +1,12 @@
+{
+  "planPath": "doc/plans/2026-04-11-domain-models.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Modernize CodeGen.py", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Generate MEEToCartesian VF", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Phase wrapper set_jet_job_mode()", "status": "pending"},
+    {"id": 3, "subject": "Task 3: Update HangingChain with Jet::map()", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Update BettsLowThrust with J2/J3/J4", "status": "pending", "blockedBy": [1]},
+    {"id": 5, "subject": "Task 5: Full verification", "status": "pending", "blockedBy": [3, 4]}
+  ],
+  "lastUpdated": "2026-04-11T00:00:00Z"
+}
