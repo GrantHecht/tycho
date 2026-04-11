@@ -15,6 +15,7 @@
 #pragma once
 #include <unsupported/Eigen/CXX11/Tensor>
 
+#include "tycho/detail/optimal_control/interp/interp_type.h"
 #include "tycho/detail/vf/core/vector_function.h"
 namespace tycho::oc {
 
@@ -31,10 +32,9 @@ using vf::ThreadingFlags;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
+using tycho::InterpType;
 
 struct InterpTable4D {
-
-    enum class InterpType { cubic_interp, linear_interp };
 
     Eigen::VectorXd xs_;
     Eigen::VectorXd ys_;
@@ -50,7 +50,7 @@ struct InterpTable4D {
 
     Eigen::Tensor<Eigen::Matrix<double, 256, 1>, 4> alphavecs_;
 
-    InterpType interp_kind_ = InterpType::linear_interp;
+    InterpType interp_kind_ = InterpType::Linear;
 
     bool xeven_ = true;
     bool yeven_ = true;
@@ -74,9 +74,8 @@ struct InterpTable4D {
     InterpTable4D() {}
 
     InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
-                  const Eigen::VectorXd &Ws,
-
-                  const Eigen::Tensor<double, 4> &Fs, std::string kind, bool cache) {
+                  const Eigen::VectorXd &Ws, const Eigen::Tensor<double, 4> &Fs, InterpType kind,
+                  bool cache) {
 
         this->xs_ = Xs;
         this->ys_ = Ys;
@@ -85,14 +84,7 @@ struct InterpTable4D {
 
         this->fs_ = Fs;
         this->cache_alpha_ = cache;
-
-        if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind_ = InterpType::cubic_interp;
-        } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind_ = InterpType::linear_interp;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
+        this->interp_kind_ = kind;
 
         xsize_ = xs_.size();
         ysize_ = ys_.size();
@@ -178,12 +170,26 @@ struct InterpTable4D {
             this->weven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
             this->calc_derivs();
             if (this->cache_alpha_) {
                 this->cache_alphavecs();
             }
         }
+    }
+
+    InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
+                  const Eigen::VectorXd &Ws, const Eigen::Tensor<double, 4> &Fs, std::string kind,
+                  bool cache) {
+        InterpType k;
+        if (kind == "cubic" || kind == "Cubic") {
+            k = InterpType::Cubic;
+        } else if (kind == "linear" || kind == "Linear") {
+            k = InterpType::Linear;
+        } else {
+            throw std::invalid_argument("Unrecognized interpolation type");
+        }
+        *this = InterpTable4D(Xs, Ys, Zs, Ws, Fs, k, cache);
     }
 
     static int find_elem(const Eigen::VectorXd &ts, bool teven, double t) {
@@ -2707,7 +2713,7 @@ struct InterpTable4D {
         double zf = (z - zs_[zelem]) / zstep;
         double wf = (w - ws_[welem]) / wstep;
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
             Eigen::Matrix<double, 256, 1> alphavec = this->get_alphavec(xelem, yelem, zelem, welem);
 
             double xf2 = xf * xf;

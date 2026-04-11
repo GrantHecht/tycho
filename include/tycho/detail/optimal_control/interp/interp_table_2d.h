@@ -13,6 +13,7 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/detail/optimal_control/interp/interp_type.h"
 #include "tycho/detail/utils/timer.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
@@ -31,10 +32,9 @@ using vf::ThreadingFlags;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
+using tycho::InterpType;
 
 struct InterpTable2D {
-
-    enum class InterpType { cubic_interp, linear_interp };
 
     Eigen::VectorXd xs_;
     Eigen::VectorXd ys_;
@@ -51,7 +51,7 @@ struct InterpTable2D {
     bool warn_out_of_bounds_ = true;
     bool throw_out_of_bounds_ = false;
 
-    InterpType interp_kind_ = InterpType::cubic_interp;
+    InterpType interp_kind_ = InterpType::Cubic;
     bool xeven_ = true;
     bool yeven_ = true;
     int xsize_;
@@ -62,20 +62,18 @@ struct InterpTable2D {
     InterpTable2D() {}
 
     InterpTable2D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
+                  InterpType kind) {
+        set_data(Xs, Ys, Zs, kind);
+    }
+    InterpTable2D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
                   std::string kind) {
         set_data(Xs, Ys, Zs, kind);
     }
 
     void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
-                  std::string kind) {
+                  InterpType kind) {
 
-        if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind_ = InterpType::cubic_interp;
-        } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind_ = InterpType::linear_interp;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
+        this->interp_kind_ = kind;
 
         this->xs_ = Xs;
         this->ys_ = Ys;
@@ -127,8 +125,21 @@ struct InterpTable2D {
             this->yeven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::cubic_interp)
+        if (this->interp_kind_ == InterpType::Cubic)
             calc_derivs();
+    }
+
+    void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
+                  std::string kind) {
+        InterpType k;
+        if (kind == "cubic" || kind == "Cubic") {
+            k = InterpType::Cubic;
+        } else if (kind == "linear" || kind == "Linear") {
+            k = InterpType::Linear;
+        } else {
+            throw std::invalid_argument("Unrecognized interpolation type");
+        }
+        set_data(Xs, Ys, Zs, k);
     }
 
     void calc_derivs() {
@@ -325,7 +336,7 @@ struct InterpTable2D {
         double xf = (x - xs_[xelem]) / xstep;
         double yf = (y - ys_[yelem]) / ystep;
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
 
             double yf2 = yf * yf;
             double yf3 = yf2 * yf;

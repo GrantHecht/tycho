@@ -13,6 +13,7 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/detail/optimal_control/interp/interp_type.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::oc {
@@ -30,10 +31,9 @@ using vf::ThreadingFlags;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
+using tycho::InterpType;
 
 struct InterpTable1D {
-
-    enum class InterpType { cubic_interp, linear_interp };
 
     using MatType = Eigen::Matrix<double, -1, -1>;
 
@@ -41,7 +41,7 @@ struct InterpTable1D {
     MatType vs_;
     MatType dvs_dts_;
 
-    InterpType interp_kind_ = InterpType::cubic_interp;
+    InterpType interp_kind_ = InterpType::Cubic;
     bool teven_ = true;
     int axis_ = 0;
     int tsize_;
@@ -52,13 +52,58 @@ struct InterpTable1D {
 
     InterpTable1D() {}
 
+    InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
+        set_data(Ts, Vs, axis, kind);
+    }
     InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
         set_data(Ts, Vs, axis, kind);
+    }
+    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis,
+                  InterpType kind) {
+        MatType Vstmp = Vs.transpose();
+        set_data(Ts, Vstmp, 1, kind);
     }
     InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis,
                   std::string kind) {
         MatType Vstmp = Vs.transpose();
         set_data(Ts, Vstmp, 1, kind);
+    }
+    InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, InterpType kind) {
+
+        if (Vts.size() == 0) {
+            throw std::invalid_argument("Input is empty");
+        }
+        if (Vts[0].size() < 2) {
+            throw std::invalid_argument("Invalid sized value-time data.");
+        }
+
+        if (tvar < 0) {
+            tvar = Vts[0].size() + tvar;
+        }
+        if (tvar > Vts[0].size() - 1 || tvar < 0) {
+            throw std::invalid_argument("Invalid time variable index");
+        }
+
+        Eigen::VectorXd Ts(Vts.size());
+
+        Eigen::MatrixXd Vs(Vts[0].size() - 1, Vts.size());
+
+        for (int i = 0; i < Vts.size(); i++) {
+            int isize = Vts[i].size();
+            if (isize != Vts[0].size()) {
+                throw std::invalid_argument("All value-time vectors must have same size");
+            }
+            int shift = 0;
+            for (int j = 0; j < isize; j++) {
+                if (j == tvar) {
+                    Ts[i] = Vts[i][j];
+                    shift = 1;
+                } else {
+                    Vs.col(i)[j - shift] = Vts[i][j];
+                }
+            }
+        }
+        set_data(Ts, Vs, 1, kind);
     }
     InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, std::string kind) {
 
@@ -97,7 +142,8 @@ struct InterpTable1D {
         }
         set_data(Ts, Vs, 1, kind);
     }
-    void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
+
+    void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
 
         this->ts_ = Ts;
 
@@ -111,13 +157,7 @@ struct InterpTable1D {
             throw std::invalid_argument("Interpolation axis must be 0 or 1");
         }
 
-        if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind_ = InterpType::cubic_interp;
-        } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind_ = InterpType::linear_interp;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
+        this->interp_kind_ = kind;
 
         tsize_ = ts_.size();
         vlen_ = vs_.rows();
@@ -145,8 +185,20 @@ struct InterpTable1D {
             this->teven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::cubic_interp)
+        if (this->interp_kind_ == InterpType::Cubic)
             calc_derivs();
+    }
+
+    void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
+        InterpType k;
+        if (kind == "cubic" || kind == "Cubic") {
+            k = InterpType::Cubic;
+        } else if (kind == "linear" || kind == "Linear") {
+            k = InterpType::Linear;
+        } else {
+            throw std::invalid_argument("Unrecognized interpolation type");
+        }
+        set_data(Ts, Vs, axis, k);
     }
 
     void calc_derivs() {
@@ -234,7 +286,7 @@ struct InterpTable1D {
         double tstep = ts_[telem + 1] - ts_[telem];
         double tnd = (t - ts_[telem]) / tstep;
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
 
             double tnd2 = tnd * tnd;
             double tnd3 = tnd2 * tnd;
