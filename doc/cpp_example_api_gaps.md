@@ -9,7 +9,7 @@
 | ParallelParking | `refine_traj_manual` | Medium | Not on Phase wrapper. Must use `phase.base().refine_traj_manual(ndef)`. | Forward to Phase wrapper |
 | ParallelParking | `sub_variable` | Medium | Not on Phase wrapper. Must use `phase.base().sub_variable(flag, idx, val)`. | Forward to Phase wrapper |
 | ParallelParking | `LerpIG` in `ODE::phase()` | Medium | Builder `ODE::phase(mode, traj, nsegs)` has no LerpIG flag for sparse waypoint interpolation. Must construct with dummy IG then `phase.base().set_traj(waypoints, ndef, true)`. | Add 4th `bool lerp_ig` parameter to builder `ODE::phase()` |
-| HangingChain | `Jet.map()` parallel solve | Medium | Python uses `Jet.map()` for batch solving over parameter sweeps. No C++ builder equivalent. | Expose Jet parallel solve for Phase wrapper |
+| ~~HangingChain~~ | ~~`Jet.map()` parallel solve~~ | ~~Medium~~ | ~~RESOLVED (Subsystem 6): `set_jet_job_mode()` on Phase wrapper + `Jet::map()`. 100/100 configurations converge.~~ | ~~Done~~ |
 | Reentry | `refine_traj_manual` | Medium | Same gap as ParallelParking — not on Phase wrapper | (same fix) |
 | ~~MinTimeToClimb~~ | ~~`InterpTable` in ODE~~ | ~~High~~ | ~~RESOLVED (Subsystem 4): `interp()` / `interp_scalar()` free functions + `InterpType` enum. Climb time 319.47 s matches Python ~321 s.~~ | ~~Done~~ |
 | MultiPhaseCannon | `add_direct_link_equal_con` on OCP wrapper | Medium | Not on OptimalControlProblem wrapper. Must use `ocp.base().add_direct_link_equal_con(...)` to link ODE parameters between phases. | Forward to OCP wrapper |
@@ -17,8 +17,8 @@
 | MultiPhaseCannon | Mixed state+ODE param inequality | Medium | Phase wrapper `add_inequal_con` doesn't support separate ODE param vars. Must use `phase.base().add_inequal_con(region, func, xvars, pvars, spvars, scale)`. | Add overload with param vars |
 | DionysusLowThrust | MEE astro models | Medium | Python `MEETwoBody_CSI` and `CSIThruster` not available in C++. MEE dynamics must be implemented inline. | Expose MEE dynamics as C++ builder-compatible ODE factory |
 | DionysusLowThrust | `ODE::integrator()` | **High** | Builder `ODE` has no `integrator()` method. Cannot generate initial guesses via integration. Must use manual lerp or external propagation. Blocks faithful porting of ~8 examples that rely on integrated IG. | Add `ODE::integrator()` returning a builder-compatible integrator |
-| BettsLowThrust | Zonal gravity via `RowMatrix`/`inverse` | High | Full J2/J3/J4 zonal gravity requires Cartesian-to-RTN rotation via `RowMatrix().inverse()` composition. Same gap as CartPole. | (same fix as CartPole) |
-| BettsLowThrust | MEE-to-Cartesian composition | Medium | Full dynamics chain: MEE → Cartesian (via `MEECartFunc`) → zonal gravity → RTN → MEE rates. Multi-level VF composition works in Python but is complex in C++. | Document composition patterns |
+| ~~BettsLowThrust~~ | ~~Zonal gravity via `RowMatrix`/`inverse`~~ | ~~High~~ | ~~RESOLVED (Subsystem 6): Full J2/J3/J4 via MEEToCartesian (generated VF) + RowMatrix RTN rotation. Adaptive mesh converges.~~ | ~~Done~~ |
+| ~~BettsLowThrust~~ | ~~MEE-to-Cartesian composition~~ | ~~Medium~~ | ~~RESOLVED (Subsystem 6): Uses generated `astro::MEEToCartesian` VF with analytic derivatives + `astro::MEEDynamics` for rate equations.~~ | ~~Done~~ |
 | OrbitContinuation | `ODE::integrator()` | **High** | Same gap as DionysusLowThrust. Cannot generate orbital IG via integration. | (same fix) |
 | ~~Heteroclinic~~ | ~~`LGLInterpTable` + `make_periodic()`~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): LGLInterpTable already compatible with builder types. Full 4-stage port with STM manifolds + orbit-matching.~~ | ~~Done~~ |
 | ~~Heteroclinic~~ | ~~`InterpFunction`~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): `lgl_interp()` convenience function added. Used in orbit-matching constraints.~~ | ~~Done~~ |
