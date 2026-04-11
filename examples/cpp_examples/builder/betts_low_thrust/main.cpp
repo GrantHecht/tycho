@@ -16,11 +16,9 @@
 //
 // Objective: maximise final weight
 //
-// NOTE: This is a simplified version. The full Python example includes
-// zonal gravity perturbations computed via Cartesian-to-MEE conversions.
-// The C++ version implements the core MEE dynamics with a simplified
-// gravity model (two-body only) since RowMatrix/inverse and the full
-// composition chain for zonal gravity would require extensive helper code.
+// Full zonal gravity (J2/J3/J4) matching Python LTModel:
+//   MEE → Cartesian → Zonal gravity in Cartesian → RTN rotation
+//   Uses generated MEEToCartesian and MEEDynamics VFs.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -50,73 +48,119 @@ static const double Fstar = Mstar * Lstar / (Tstar * Tstar);
 static const double Astar = Lstar / (Tstar * Tstar);
 static const double Mustar = (Lstar * Lstar * Lstar) / (Tstar * Tstar);
 
-static const double Re = 20925662.73 / Lstar;
-static const double mdot_nd = (4.446618e-3 / (450.0 * g0)) / (Mstar / Tstar);
-static const double mu = mu_e / Mustar;
+static const double Re_nd = 20925662.73 / Lstar;
+static const double mu_nd = mu_e / Mustar;
 static const double Thrust_nd = 4.446618e-3 / Fstar;
-static const double Isp = 450.0 / Tstar;
-static const double gs = g0 / Astar;
+static const double Isp_nd = 450.0 / Tstar;
+static const double gs_nd = g0 / Astar;
+
+static constexpr double J2 = 1082.639e-6;
+static constexpr double J3 = -2.565e-6;
+static constexpr double J4 = -1.608e-6;
 
 static const double pt0 = 21837080.052835 / Lstar;
 static const double ptf = 40007346.015232 / Lstar;
 
 int main() {
-    // ── MEE dynamics (simplified: two-body only) ───────────────────────
-    // Full version would include J2/J3/J4 zonal harmonics in RTN frame.
-    // That requires RowMatrix/inverse for RTN basis transformation,
-    // which is a known API gap (see PAIN_POINTS.md).
+    // ── MEE dynamics with full J2/J3/J4 zonal gravity ─────────────────
+    //
+    // Composition chain (matching Python LTModel):
+    //   1. Extract MEE, weight, controls, throttle from ODE arguments
+    //   2. Thrust acceleration in RTN: gs*T*(1+0.01*tau)*U_hat / w
+    //   3. Zonal gravity: MEE→Cart→ZonalGrav(Cart)→RTN rotation
+    //   4. Total accel = thrust + zonal gravity
+    //   5. MEE rates via generated MEEDynamics(mu)
+    //   6. Full ODE = stack(MEE_rates, weight_rate)
 
     auto args = ODEArguments(7, 3, 1);
     // State: [p, f, g, h, k, L, w] at indices 0-6
     // Time: index 7
     // Controls: [ur, ut, un] at indices 8, 9, 10
     // Static param: [tau] at index 11
-    auto p = args.coeff(0);
-    auto f = args.coeff(1);
-    auto g = args.coeff(2);
-    auto h = args.coeff(3);
-    auto k = args.coeff(4);
-    auto L = args.coeff(5);
-    auto ww = args.coeff(6); // weight (w would shadow other vars)
 
-    auto sinL = sin(L);
-    auto cosL = cos(L);
-    auto sqp = sqrt(p) / std::sqrt(mu);
-
-    auto hk = args.segment<2>(3);
-    auto w_mee = 1.0 + f * cosL + g * sinL;
-    auto s2 = 1.0 + hk.squared_norm();
-
-    // Control direction (normalised)
-    // We'll use the un-normalized controls and add a norm=1 constraint
+    auto MEEs = args.head<6>();
+    auto ww = args.coeff(6); // weight
+    auto U = args.segment<3>(8).normalized(); // control direction (unit vector)
     auto tau = args.coeff(11);
 
-    // Thrust acceleration: gs * T * (1 + 0.01*tau) / w
-    auto T_eff = gs * Thrust_nd * (1.0 + 0.01 * tau);
-    auto acc_r = T_eff * args.coeff(8) / ww;
-    auto acc_t = T_eff * args.coeff(9) / ww;
-    auto acc_n = T_eff * args.coeff(10) / ww;
+    // ── Thrust acceleration in RTN ────────────────────────────────────
+    auto wwdot = (-1.0) * Thrust_nd * (1.0 + 0.01 * tau) / Isp_nd;
+    auto acc_T = gs_nd * Thrust_nd * (1.0 + 0.01 * tau) * U / ww;
 
-    // MEE equations of motion (two-body only, no J2-J4)
-    auto pdot = 2.0 * (p / w_mee) * acc_t;
-    auto fdot = acc_r * sinL + ((w_mee + 1.0) * cosL + f) * (acc_t / w_mee) -
-                (h * sinL - k * cosL) * (g * acc_n / w_mee);
-    auto gdot = (-1.0) * acc_r * cosL + ((w_mee + 1.0) * sinL + g) * (acc_t / w_mee) +
-                (h * sinL - k * cosL) * (f * acc_n / w_mee);
-    auto hdot = cosL * (s2 * acc_n / w_mee / 2.0);
-    auto kdot = sinL * (s2 * acc_n / w_mee / 2.0);
-    auto Ldot = mu * (w_mee / p) * (w_mee / p) + (1.0 / w_mee) * (h * sinL - k * cosL) * acc_n;
+    // ── Zonal gravity (J2/J3/J4) in RTN frame ────────────────────────
+    // Step (a): MEE → Cartesian [R(3), V(3)]
+    auto mee_to_cart = astro::MEEToCartesian(mu_nd);
+    auto cart_state = mee_to_cart.eval(MEEs); // 6-output: [Rx, Ry, Rz, Vx, Vy, Vz]
+    auto R = cart_state.head<3>();
+    auto V = cart_state.tail<3>();
 
-    // Weight rate: wwdot = -T*(1+0.01*tau) / Isp
-    auto wwdot = (-1.0) * Thrust_nd * (1.0 + 0.01 * tau) / Isp;
+    // Step (b): Zonal gravity in Cartesian frame (Eq. 6.46-6.49)
+    auto Ir = R.normalized();
 
-    auto pdot_s = pdot * sqp;
-    auto fdot_s = fdot * sqp;
-    auto gdot_s = gdot * sqp;
-    auto hdot_s = hdot * sqp;
-    auto kdot_s = kdot * sqp;
+    // North pole direction [0, 0, 1] as constant VF
+    Eigen::Vector3d north_vec;
+    north_vec << 0.0, 0.0, 1.0;
+    auto North = Constant<-1, 3>(args.input_rows(), north_vec);
 
-    auto ode_expr = StackedOutputs{pdot_s, fdot_s, gdot_s, hdot_s, kdot_s, Ldot, wwdot};
+    // In = (North - Ir*(Ir.dot(North))).normalized()
+    auto In = (North - Ir * Ir.dot(North)).normalized();
+
+    // sin/cos of geocentric latitude
+    auto sphi = Ir.coeff<2>();
+    auto cphi = sqrt(1.0 - sphi * sphi);
+
+    // Legendre polynomials and their derivatives
+    auto sphi2 = sphi * sphi;
+    auto sphi3 = sphi2 * sphi;
+    auto sphi4 = sphi2 * sphi2;
+
+    auto P2 = 0.5 * (3.0 * sphi2 - 1.0);
+    auto P3 = 0.5 * (5.0 * sphi3 - 3.0 * sphi);
+    auto P4 = (35.0 / 8.0) * sphi4 - (30.0 / 8.0) * sphi2 + 3.0 / 8.0;
+
+    auto D2 = 3.0 * sphi;
+    auto D3 = 0.5 * (15.0 * sphi2 - 3.0);
+    auto D4 = (35.0 / 2.0) * sphi3 - (30.0 / 4.0) * sphi;
+
+    // Accumulate gr and gn from J2, J3, J4
+    // For each k in {2,3,4}: gn += Dk * Jk * (Re/r)^k
+    //                         gr += (k+1) * Pk * Jk * (Re/r)^k
+    auto r = R.norm();
+    auto Re_over_r = Re_nd / r;
+    auto Re_r2 = Re_over_r * Re_over_r;
+    auto Re_r3 = Re_r2 * Re_over_r;
+    auto Re_r4 = Re_r3 * Re_over_r;
+
+    auto gn_sum = D2 * J2 * Re_r2 + D3 * J3 * Re_r3 + D4 * J4 * Re_r4;
+    auto gr_sum =
+        3.0 * P2 * J2 * Re_r2 + 4.0 * P3 * J3 * Re_r3 + 5.0 * P4 * J4 * Re_r4;
+
+    auto gn = gn_sum * cphi;
+    auto gr = gr_sum;
+
+    // Gcart = (gn*In - gr*Ir) * (-mu / R.squared_norm())
+    auto Gcart = (gn * In - gr * Ir) * ((-mu_nd) / R.squared_norm());
+
+    // Step (c): RTN basis from Cartesian [R, V]
+    auto Rhat = R.normalized();
+    auto Nhat = R.cross(V).normalized();
+    auto That = Nhat.cross(R).normalized();
+
+    // Step (d): RTN rotation matrix (3x3, row-major: rows = Rhat, That, Nhat)
+    auto RTN_vec = stack(Rhat, That, Nhat); // 9-element vector
+    auto M = RowMatrix(RTN_vec, 3, 3);
+
+    // Step (e): grav_rtn = M * Gcart
+    auto grav_rtn = M * Gcart;
+
+    // ── Total acceleration and MEE rates ──────────────────────────────
+    auto acc = acc_T + grav_rtn;
+
+    // MEEDynamics takes [p,f,g,h,k,L, ur,ut,un] (9 inputs) → 6 MEE rates
+    auto mee_dyn = astro::MEEDynamics(mu_nd);
+    auto Xdot = GenericFunction<-1, -1>(mee_dyn.eval(stack(MEEs, acc)));
+
+    auto ode_expr = StackedOutputs{Xdot, wwdot};
 
     auto ode = ODE(ode_expr, 7, 3, 1)
                    .var_names({{"p", 0},
@@ -131,31 +175,38 @@ int main() {
                    .var_names({{"tau", 11}});
 
     // ── Initial state ──────────────────────────────────────────────────
+    // Phase vector: [p, f, g, h, k, L, w, t, ur, ut, un, tau]
     Eigen::VectorXd X0(12);
     X0.setZero();
-    X0[0] = pt0;
-    X0[3] = -0.25396764647494;
-    X0[5] = M_PI;
-    X0[6] = 1.0 / Fstar; // initial weight non-dim
-    X0[9] = 1.0;         // tangential thrust initially
-    X0[11] = -25.0;      // throttle param
+    X0[0] = pt0;                  // p0
+    X0[3] = -0.25396764647494;    // h0 = tan(i/2)*cos(RAAN)
+    X0[5] = M_PI;                 // L0
+    X0[6] = 1.0 / Fstar;         // w0 (initial weight, non-dim)
+    X0[8] = 0.0;                  // ur
+    X0[9] = 1.0;                  // ut (prograde initially)
+    X0[10] = 0.0;                 // un
+    X0[11] = -25.0;               // throttle param
 
-    // ── Initial guess ──────────────────────────────────────────────────
+    // ── Initial guess via control-law integrator ──────────────────────
     const double tfig = 90000.0 / Tstar;
-    const int nPts = 500;
-    std::vector<Eigen::VectorXd> trajIG;
-    trajIG.reserve(nPts);
 
-    for (int i = 0; i < nPts; ++i) {
-        const double s = static_cast<double>(i) / (nPts - 1);
-        Eigen::VectorXd state(12);
-        state = X0;
-        // Lerp semi-latus rectum
-        state[0] = pt0 + (ptf - pt0) * s;
-        state[5] = M_PI + 2.0 * M_PI * 10.0 * s; // advance true longitude
-        state[7] = tfig * s;
-        trajIG.push_back(state);
-    }
+    // Prograde control law: velocity direction in RTN frame
+    // RTNBasis(Cart) * V_hat, where Cart = MEEToCart(MEEs)
+    auto ig_mee_to_cart = astro::MEEToCartesian(mu_nd);
+    auto ig_args = Arguments<6>(); // MEE elements input
+    auto ig_cart = ig_mee_to_cart.eval(ig_args);
+    auto ig_R = ig_cart.head<3>();
+    auto ig_V = ig_cart.tail<3>();
+    auto ig_Rhat = ig_R.normalized();
+    auto ig_Nhat = ig_R.cross(ig_V).normalized();
+    auto ig_That = ig_Nhat.cross(ig_R).normalized();
+    auto ig_RTN_vec = stack(ig_Rhat, ig_That, ig_Nhat);
+    auto ig_M = RowMatrix(ig_RTN_vec, 3, 3);
+    auto ig_prograde = ig_M * ig_V.normalized();
+
+    auto integ =
+        ode.integrator(0.1, GenericFunction<-1, -1>(ig_prograde), {"p", "f", "g", "h", "k", "L"});
+    auto trajIG = integ.integrate_dense(X0, tfig);
 
     // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 16; // Start with few segments for adaptive mesh
@@ -175,12 +226,20 @@ int main() {
     }
     phase.set_control_mode(ControlModes::NoSpline);
 
-    // Radius bounds (keep orbit physical)
-    // TODO: RadFunc needs MEE-to-radius conversion, skipping for simplified version
+    // Radius bounds: r = p / w where w = 1 + f*cos(L) + g*sin(L)
+    {
+        auto rad_args = Arguments<6>();
+        auto p_r = rad_args.coeff<0>();
+        auto f_r = rad_args.coeff<1>();
+        auto g_r = rad_args.coeff<2>();
+        auto L_r = rad_args.coeff<5>();
+        auto w_r = 1.0 + f_r * cos(L_r) + g_r * sin(L_r);
+        auto rad = p_r / w_r;
+        phase.add_lu_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(rad),
+                                {"p", "f", "g", "h", "k", "L"}, Re_nd, 10.0 * Re_nd);
+    }
 
-    // Terminal constraints (simplified: just hit target semi-latus rectum)
-    // The full Python version has 4 equality + 1 inequality from Betts eq 6.52-6.56.
-    // Implementing the key ones:
+    // Terminal constraints: Betts eq 6.52-6.56
     {
         // eq 6.52: p - ptf = 0
         auto eq1_args = Arguments<6>();
@@ -227,9 +286,7 @@ int main() {
     phase.set_mesh_tol(1.0e-7);
 
     // ── Solve ──────────────────────────────────────────────────────────
-    std::cout << "=== Betts Low Thrust: LEO-to-MEO with simplified dynamics ===\n";
-    std::cout << "(Full version requires J2/J3/J4 zonal harmonics via RowMatrix/inverse,\n"
-              << " which is a known C++ builder API gap. Using two-body-only dynamics.)\n\n";
+    std::cout << "=== Betts Low Thrust: LEO-to-MEO with J2/J3/J4 zonal gravity ===\n\n";
 
     phase.optimize_solve();
 
@@ -246,7 +303,7 @@ int main() {
     std::cout << "  Throttle Parameter: " << std::fixed << std::setprecision(2) << throttle_param
               << "\n";
 
-    // This is a simplified version - always pass with note
-    std::cout << "\nBettsLowThrust: PASSED (simplified — no J2/J3/J4; see API gaps)\n";
-    return 0;
+    bool converged = !traj.empty() && final_weight > 0.0;
+    std::cout << "\nBettsLowThrust: " << (converged ? "PASSED" : "FAILED") << "\n";
+    return converged ? 0 : 1;
 }
