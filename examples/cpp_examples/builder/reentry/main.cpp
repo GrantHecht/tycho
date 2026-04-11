@@ -181,12 +181,12 @@ int main() {
 
     // ── Solve (unconstrained) ──────────────────────────────────────────
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
-    phase.solve_optimize();
+    auto flag1 = phase.solve_optimize();
 
     // Refine to more segments
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
-    phase.optimize();
+    auto flag2 = phase.optimize();
 
     auto traj1 = phase.return_traj();
 
@@ -194,7 +194,7 @@ int main() {
     std::cout << "Reentry: re-solving with heating rate constraint...\n" << std::flush;
     phase.add_upper_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(qfunc()),
                                {"h", "v", "alpha"}, Qlimit, 1.0 / Qlimit);
-    phase.optimize();
+    auto flag3 = phase.optimize();
 
     auto traj2 = phase.return_traj();
     const double crossrange1 = traj1.back()[1] * 180.0 / M_PI;
@@ -208,6 +208,11 @@ int main() {
     std::cout << "Reentry (builder): cross-range (Q limited)  = " << crossrange2
               << " deg, tf = " << final_time2 << " s\n";
 
+    // Verify convergence and trajectory plausibility
+    if (flag3 > PSIOPT::ConvergenceFlags::ACCEPTABLE || crossrange2 <= 0.0) {
+        std::cerr << "Reentry (builder): FAILED\n";
+        return EXIT_FAILURE;
+    }
     std::cout << "Reentry (builder): PASSED\n";
     return EXIT_SUCCESS;
 }

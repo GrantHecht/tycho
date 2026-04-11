@@ -161,7 +161,7 @@ int main() {
         std::cout << "\nTopputtoLowThrust: PASSED (partial convergence)\n";
         return 0;
     } else {
-        std::cout << "\nTopputtoLowThrust: PASSED (with convergence notes)\n";
-        return 0;
+        std::cerr << "\nTopputtoLowThrust: FAILED\n";
+        return 1;
     }
 }

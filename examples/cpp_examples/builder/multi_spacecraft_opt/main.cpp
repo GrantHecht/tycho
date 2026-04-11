@@ -235,8 +235,9 @@ int main() {
     if (ok) {
         std::cout << "  All spacecraft rendezvous at common point\n";
         std::cout << "\nMultiSpacecraftOpt: PASSED\n";
+        return 0;
     } else {
-        std::cout << "\nMultiSpacecraftOpt: PASSED (with convergence notes)\n";
+        std::cerr << "\nMultiSpacecraftOpt: FAILED (elevated position errors)\n";
+        return 1;
     }
-    return 0;
 }

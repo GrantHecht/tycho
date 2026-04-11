@@ -198,8 +198,9 @@ int main() {
     bool ok = (n_orbits >= 3) && (y_err < 1e-8) && (vx_err < 1e-8);
     if (ok) {
         std::cout << "\nOrbitContinuation: PASSED\n";
+        return 0;
     } else {
-        std::cout << "\nOrbitContinuation: PASSED (computed " << n_orbits << " orbits)\n";
+        std::cerr << "\nOrbitContinuation: FAILED (periodicity or orbit count insufficient)\n";
+        return 1;
     }
-    return 0;
 }

@@ -231,7 +231,7 @@ static ODE build_torquefree_ode(const Eigen::Vector3d &I2) {
 ///////////////////////////////////////////////////////////////////////////////
 // Form2 — Servicer-only ODE, target via LGLInterpTable
 ///////////////////////////////////////////////////////////////////////////////
-static void run_form2() {
+static bool run_form2() {
     std::cout << "=== OptimalDocking Form2: LGLInterpTable target ===\n\n";
 
     Eigen::Vector3d Ivec;
@@ -331,16 +331,18 @@ static void run_form2() {
 
     if (flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form2: PASSED\n\n";
+        return true;
     } else {
-        std::cout << "  Form2: FAILED (convergence flag = " << static_cast<int>(flag)
+        std::cerr << "  Form2: FAILED (convergence flag = " << static_cast<int>(flag)
                   << ")\n\n";
+        return false;
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Form1 — Full 20-state ODE (servicer + target)
 ///////////////////////////////////////////////////////////////////////////////
-static void run_form1() {
+static bool run_form1() {
     std::cout << "=== OptimalDocking Form1: Full 20-state ODE ===\n\n";
 
     Eigen::Vector3d Ivec;
@@ -421,15 +423,17 @@ static void run_form1() {
 
     if (flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form1: PASSED\n\n";
+        return true;
     } else {
-        std::cout << "  Form1: FAILED (convergence flag = " << static_cast<int>(flag)
+        std::cerr << "  Form1: FAILED (convergence flag = " << static_cast<int>(flag)
                   << ")\n\n";
+        return false;
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 int main() {
-    run_form2();
-    run_form1();
-    return 0;
+    bool ok2 = run_form2();
+    bool ok1 = run_form1();
+    return (ok1 && ok2) ? 0 : 1;
 }

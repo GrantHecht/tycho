@@ -186,8 +186,9 @@ int main() {
 
     if (ok) {
         std::cout << "\nSimpleLowThrust: PASSED\n";
+        return 0;
     } else {
-        std::cout << "\nSimpleLowThrust: PASSED (with elevated errors on some objectives)\n";
+        std::cerr << "\nSimpleLowThrust: FAILED (elevated boundary errors)\n";
+        return 1;
     }
-    return 0;
 }

@@ -194,7 +194,7 @@ int main() {
 
     // ── Solve ──────────────────────────────────────────────────────────
     std::cout << "=== Dionysus Low Thrust: Earth-to-Asteroid Mass-Optimal Transfer ===\n";
-    phase.optimize();
+    auto flag = phase.optimize();
 
     auto traj = phase.return_traj();
     double final_mass_nd = traj.back()[6];
@@ -216,9 +216,10 @@ int main() {
 
     if (converged) {
         std::cout << "\nDionysusLowThrust: PASSED\n";
+        return 0;
     } else {
-        std::cout << "\nDionysusLowThrust: PASSED (MEE dynamics implemented inline; "
-                  << "convergence may differ from Python reference which uses full astro model)\n";
+        std::cerr << "\nDionysusLowThrust: FAILED (boundary errors elevated; "
+                  << "MEE dynamics inline, convergence may differ from Python)\n";
+        return 1;
     }
-    return 0;
 }
