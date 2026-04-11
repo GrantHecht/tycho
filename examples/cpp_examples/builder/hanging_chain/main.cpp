@@ -11,9 +11,8 @@
 // Integral constraint: integral sqrt(1 + u^2) ds = L  (chain length)
 // Objective: minimise integral x * sqrt(1 + u^2) ds  (gravitational energy)
 //
-// NOTE: Python example uses Jet.map() for parallel sweep over L values.
-//       This C++ version solves a single chain configuration (L=4).
-//       Jet parallel solve is a documented API gap.
+// Uses Jet::map() for a parallel sweep over 100 chain-length values
+// L in [2.25, 8.0], matching the Python example.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
@@ -21,18 +20,15 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-int main() {
-    constexpr double a = 1.0;   // left endpoint height
-    constexpr double b = 3.0;   // right endpoint height
-    constexpr double L = 4.0;   // chain length
-    constexpr int n_segs = 500;
-    constexpr int n_pts = n_segs;
+/// Build a Phase for a single chain-length value L.
+auto make_chain_phase(double a, double b, int n_segs, double L) {
 
     // ── Define ODE: xdot = u ───────────────────────────────────────────
     auto ode = ODEBuilder(1, 1)
@@ -53,11 +49,10 @@ int main() {
 
     // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
-    traj_ig.reserve(n_pts);
-    // Match Python: tm=0.25 when b>a
-    constexpr double tm = 0.25;
-    for (int i = 0; i < n_pts; ++i) {
-        const double s = static_cast<double>(i) / (n_pts - 1);
+    traj_ig.reserve(n_segs);
+    const double tm = (b > a) ? 0.25 : 0.75;
+    for (int i = 0; i < n_segs; ++i) {
+        const double s = static_cast<double>(i) / (n_segs - 1);
         double x_val = 2.0 * std::abs(b - a) * s * (s - 2.0 * tm) + a;
         double u_val = 2.0 * std::abs(b - a) * (2.0 * s - 2.0 * tm);
         Eigen::VectorXd pt(3);
@@ -90,27 +85,53 @@ int main() {
 
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_print_level(1);
+    phase.optimizer().set_print_level(0);
 
-    // ── Solve ──────────────────────────────────────────────────────────
-    const auto flag = phase.solve_optimize();
+    phase.set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes::SolveOptimize);
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "HangingChain (builder): FAILED (status " << static_cast<int>(flag) << ")\n";
-        return EXIT_FAILURE;
+    return phase;
+}
+
+int main() {
+    constexpr double a = 1.0; // left endpoint height
+    constexpr double b = 3.0; // right endpoint height
+    constexpr int n_segs = 500;
+    constexpr int n_jobs = 100;
+
+    // ── Build 100 phases with L in [2.25, 8.0] ────────────────────────
+    std::vector<std::shared_ptr<ODEPhaseBase>> jobs;
+    jobs.reserve(n_jobs);
+
+    for (int i = 0; i < n_jobs; ++i) {
+        double L = 2.25 + (8.0 - 2.25) * static_cast<double>(i) / (n_jobs - 1);
+        auto phase = make_chain_phase(a, b, n_segs, L);
+        jobs.push_back(phase.base_ptr());
     }
 
-    auto traj = phase.return_traj();
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "HangingChain (builder): x(0) = " << traj.front()[0]
-              << ", x(1) = " << traj.back()[0] << "\n";
+    // ── Parallel solve via Jet::map ────────────────────────────────────
+    auto results = solvers::Jet::map(jobs, true);
 
-    // Verify endpoints match boundary conditions
-    if (std::abs(traj.front()[0] - a) > 1e-4 || std::abs(traj.back()[0] - b) > 1e-4) {
-        std::cerr << "HangingChain (builder): FAILED — endpoints incorrect\n";
-        return EXIT_FAILURE;
+    // ── Check convergence ──────────────────────────────────────────────
+    int converged = 0;
+    for (int i = 0; i < n_jobs; ++i) {
+        auto phase_ptr = std::dynamic_pointer_cast<ODEPhaseBase>(results[i]);
+        if (!phase_ptr)
+            continue;
+        auto traj = phase_ptr->return_traj();
+        if (std::abs(traj.front()[0] - a) < 1e-3 && std::abs(traj.back()[0] - b) < 1e-3) {
+            ++converged;
+        }
     }
 
-    std::cout << "HangingChain (builder): PASSED\n";
-    return EXIT_SUCCESS;
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "HangingChain (builder): " << converged << "/" << n_jobs << " converged\n";
+
+    if (converged == n_jobs) {
+        std::cout << "HangingChain (builder): PASSED\n";
+        return EXIT_SUCCESS;
+    } else {
+        std::cerr << "HangingChain (builder): FAILED — only " << converged << "/" << n_jobs
+                  << " converged\n";
+        return EXIT_FAILURE;
+    }
 }

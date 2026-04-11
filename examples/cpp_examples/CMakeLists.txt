@@ -91,3 +91,8 @@ foreach(_ex IN LISTS _all_example_targets)
         set_tests_properties(cpp_example_${_ex} PROPERTIES TIMEOUT 300)
     endif()
 endforeach()
+
+# Jet::map() sweep examples need more time than single-solve examples
+if(TARGET hanging_chain_builder)
+    set_tests_properties(cpp_example_hanging_chain_builder PROPERTIES TIMEOUT 600)
+endif()
