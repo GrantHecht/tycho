@@ -8,14 +8,11 @@
 // Control: [F]                            (applied force)
 //
 // ODE: Uses mass matrix inversion M^{-1} * Q
-//   M = [[m1+m2, m2*l*cos(theta)], [cos(theta), l]]
+//   M = [[cos(theta), l], [m1+m2, m2*l*cos(theta)]]   (row-major)
 //   Q = [-g*sin(theta), F + m2*l*sin(theta)*thetadot^2]
 //   [xddot, thetaddot] = M^{-1} * Q
 //
-// NOTE: Python uses vf.RowMatrix(...).inverse() * Q convenience API.
-//       In C++, RowMatrix/inverse are not free functions; we compute the
-//       2x2 inverse analytically via det = a*d - b*c.
-//       Documented as API gap: no RowMatrix/inverse in C++ expression DSL.
+// Uses RowMatrix().inverse() * Q, matching Python vf.RowMatrix API.
 //
 // Objective: minimise integral(F^2)
 ///////////////////////////////////////////////////////////////////////////////
@@ -52,25 +49,19 @@ int main() {
                        auto thetadot = args.x_var(3);
                        auto F = args.u_var(0);
 
-                       // Mass matrix M (row-major):
-                       //   [[m1+m2,            m2*l*cos(theta)],
-                       //    [cos(theta),        l              ]]
-                       // M = [[m1+m2, m2*l*cos(theta)], [cos(theta), l]]
-                       double a = m1 + m2;
-                       auto b_val = m2 * l * cos(theta);
-                       auto c_val = cos(theta);
-                       double d_val = l;
-
                        // Force vector Q:
-                       auto Q0 = (-g) * sin(theta);
-                       auto Q1 = F + m2 * l * sin(theta) * thetadot * thetadot;
+                       auto Q = stack((-g) * sin(theta),
+                                      F + m2 * l * sin(theta) * thetadot * thetadot);
 
-                       // Analytic 2x2 inverse: M^{-1} = (1/det) * [[d, -b], [-c, a]]
-                       auto det = a * d_val - b_val * c_val;
-                       auto xddot = (d_val * Q0 - b_val * Q1) / det;
-                       auto thetaddot = ((-1.0) * c_val * Q0 + a * Q1) / det;
+                       // Mass matrix M (row-major): [[cos(theta), l], [m1+m2, m2*l*cos(theta)]]
+                       // Scalar constants must be promoted to VF expressions for stack()
+                       auto l_vf = theta * 0.0 + l;
+                       auto a_vf = theta * 0.0 + (m1 + m2);
+                       auto Mvec = stack(cos(theta), l_vf, a_vf, m2 * l * cos(theta));
+                       auto M = RowMatrix(Mvec, 2, 2);
+                       auto accel = M.inverse() * Q;
 
-                       return stack(xdot, thetadot, xddot, thetaddot);
+                       return stack(xdot, thetadot, accel);
                    })
                    .var_names({{"x", 0}, {"theta", 1}, {"xdot", 2}, {"thetadot", 3},
                                {"t", 4}, {"F", 5}})
