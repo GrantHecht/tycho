@@ -69,9 +69,15 @@ class AssetHeaderGen:
         VectorParams=[],  # [(Vec,Cppname,Description),]
         MatrixParams=[],  # [(Mat,Cppname,Description),]
         docstr="A doc string",
+        namespace="tycho::astro",
+        include_path="tycho/detail/vf/core/vector_function.h",
+        gen_build_method=False,
     ):
 
         self.Name = Name
+        self.namespace = namespace
+        self.include_path = include_path
+        self.gen_build_method = gen_build_method
         self.ninputs = len(Xs)
         self.noutputs = len(F)
 
@@ -276,15 +282,18 @@ class AssetHeaderGen:
         vflambda += ")"
         members += "\n\n"
 
-        buildfunc = "static void Build(py::module & m){\n"
-        buildfunc += '\tm.def("{0:}",\n'.format(self.Name)
-        buildfunc += "\t[](" + typedarglist + "){\n"
-        buildfunc += "\t\t return GenericFunction<-1,{1:}>({0:}( {2:} ));\n".format(
-            self.Name, osize, untypearglist
-        )
-        buildfunc += "\t},\n"
-        buildfunc += '\t"{0:}"'.format(self.docstr)
-        buildfunc += ");\n}"
+        if self.gen_build_method:
+            buildfunc = "static void Build(py::module & m){\n"
+            buildfunc += '\tm.def("{0:}",\n'.format(self.Name)
+            buildfunc += "\t[](" + typedarglist + "){\n"
+            buildfunc += "\t\t return GenericFunction<-1,{1:}>({0:}( {2:} ));\n".format(
+                self.Name, osize, untypearglist
+            )
+            buildfunc += "\t},\n"
+            buildfunc += '\t"{0:}"'.format(self.docstr)
+            buildfunc += ");\n}"
+        else:
+            buildfunc = ""
 
         return classname + usingbase + basetypes + members + ctor + buildfunc
 
@@ -427,9 +436,10 @@ class AssetHeaderGen:
 
         print(a + b + c + d + e)
 
-    def make_header(self):
+    def make_header(self, output_dir=None):
 
-        include = '#include "ASSET_VectorFunctions.h" \n namespace ASSET { \n'
+        include = '#pragma once\n#include "{}"\nnamespace {} {{\n'.format(
+            self.include_path, self.namespace)
         a = self.gen_class_header()
         b = self.gen_compute_impl()
         c = self.gen_compute_jacobian_impl()
@@ -439,5 +449,8 @@ class AssetHeaderGen:
         text = include + a + b + c + d + e
 
         fname = self.Name + ".h"
+        if output_dir:
+            import os
+            fname = os.path.join(output_dir, fname)
         with open(fname, "w") as text_file:
             text_file.write(text)
