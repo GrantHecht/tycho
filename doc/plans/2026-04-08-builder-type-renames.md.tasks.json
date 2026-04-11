@@ -1,0 +1,13 @@
+{
+  "planPath": "doc/plans/2026-04-08-builder-type-renames.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Create feature branch", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Rename static DSL ODE -> StaticODE in ode.h", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Update all references to old static DSL ODE names", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Rename RuntimeODE -> ODE", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Rename OptimalControlProblem -> OptimalControlProblemBase", "status": "pending", "blockedBy": [2]},
+    {"id": 5, "subject": "Task 5: Rename OCP -> OptimalControlProblem", "status": "pending", "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Full verification and push", "status": "pending", "blockedBy": [3, 5]}
+  ],
+  "lastUpdated": "2026-04-08T00:00:00Z"
+}

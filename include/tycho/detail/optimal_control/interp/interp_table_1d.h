@@ -19,6 +19,7 @@
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
+using tycho::InterpType;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
 using utils::SZ_SUM;
@@ -31,7 +32,6 @@ using vf::ThreadingFlags;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using tycho::InterpType;
 
 struct InterpTable1D {
 
@@ -58,8 +58,7 @@ struct InterpTable1D {
     InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
         set_data(Ts, Vs, axis, kind);
     }
-    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis,
-                  InterpType kind) {
+    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis, InterpType kind) {
         MatType Vstmp = Vs.transpose();
         set_data(Ts, Vstmp, 1, kind);
     }

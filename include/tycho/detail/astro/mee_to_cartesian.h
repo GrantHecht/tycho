@@ -46,8 +46,8 @@ struct MEEToCartesian
         Scalar x4 = x_[4];
         Scalar x5 = x_[5];
         Scalar x6 = cos(x5);
-        Scalar x7 = x3*x3;
-        Scalar x8 = x4*x4;
+        Scalar x7 = (x3*x3);
+        Scalar x8 = (x4*x4);
         Scalar x9 = x7 - x8;
         Scalar x10 = sin(x5);
         Scalar x11 = x10*x3;
@@ -87,8 +87,8 @@ struct MEEToCartesian
         Scalar x4 = x_[4];
         Scalar x5 = x_[5];
         Scalar x6 = cos(x5);
-        Scalar x7 = x3*x3;
-        Scalar x8 = x4*x4;
+        Scalar x7 = (x3*x3);
+        Scalar x8 = (x4*x4);
         Scalar x9 = x7 - x8;
         Scalar x10 = sin(x5);
         Scalar x11 = x10*x3;
@@ -131,7 +131,7 @@ struct MEEToCartesian
         Scalar x48 = x31 + x40 + x47;
         Scalar x49 = x38*x48;
         Scalar x50 = x0*x14;
-        Scalar x51 = x17/x18*x18;
+        Scalar x51 = x17/(x18*x18);
         Scalar x52 = x50*x51;
         Scalar x53 = 2*x45 + 2*x46;
         Scalar x54 = -x0*x17*x19*x53;
@@ -233,8 +233,8 @@ struct MEEToCartesian
         Scalar LM4 = adjvars[4];
         Scalar LM5 = adjvars[5];
         Scalar x6 = cos(x5);
-        Scalar x7 = x3*x3;
-        Scalar x8 = x4*x4;
+        Scalar x7 = (x3*x3);
+        Scalar x8 = (x4*x4);
         Scalar x9 = x7 - x8;
         Scalar x10 = sin(x5);
         Scalar x11 = x10*x3;
@@ -410,8 +410,8 @@ struct MEEToCartesian
         Scalar x181 = x179*x44;
         Scalar x182 = x114*x77;
         Scalar x183 = x116*x154 + x116*x155 - x148*x158;
-        Scalar x184 = x6*x6;
-        Scalar x185 = x17/x19*x19*x19;
+        Scalar x184 = (x6*x6);
+        Scalar x185 = x17/(x19*x19*x19);
         Scalar x186 = x0*x185;
         Scalar x187 = x184*x186;
         Scalar x188 = 4*x160;
@@ -455,7 +455,7 @@ struct MEEToCartesian
         Scalar x226 = x160*x225;
         Scalar x227 = x197*x72;
         Scalar x228 = x225*x6;
-        Scalar x229 = x10*x10;
+        Scalar x229 = (x10*x10);
         Scalar x230 = x186*x229;
         Scalar x231 = 2*x230;
         Scalar x232 = x213*x229;

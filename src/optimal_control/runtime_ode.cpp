@@ -78,8 +78,7 @@ ODE::DynIntegrator ODE::integrator(double defstep, GenericFunction<-1, -1> ulaw,
     return DynIntegrator(make_dyn_ode(), defstep, ulaw, varlocs);
 }
 
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
-                                   GenericFunction<-1, -1> ulaw,
+ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
                                    const Eigen::VectorXi &varlocs) const {
     return DynIntegrator(make_dyn_ode(), method, defstep, ulaw, varlocs);
 }
@@ -92,8 +91,7 @@ ODE::DynIntegrator ODE::integrator(double defstep, GenericFunction<-1, -1> ulaw,
     return DynIntegrator(make_dyn_ode(), defstep, ulaw, registry_->resolve(varlocs));
 }
 
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
-                                   GenericFunction<-1, -1> ulaw,
+ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
                                    std::initializer_list<std::string> varlocs) const {
     check_registry();
     return DynIntegrator(make_dyn_ode(), method, defstep, ulaw, registry_->resolve(varlocs));
@@ -129,8 +127,7 @@ ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
 
 // LGL interpolation table (auto control locations)
 
-ODE::DynIntegrator ODE::integrator(double defstep,
-                                   std::shared_ptr<oc::LGLInterpTable> tab) const {
+ODE::DynIntegrator ODE::integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab) const {
     return DynIntegrator(make_dyn_ode(), defstep, std::move(tab));
 }
 

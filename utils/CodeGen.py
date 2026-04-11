@@ -84,19 +84,26 @@ class TychoHeaderGen:
         self.Hess = self.Grad.jacobian(self.Inputs)
         print("Finished Hessian")
 
-        # ── Identify parameter-only subexpressions for precomputation ────
-        # Run CSE on the full expression set to find subexpressions that
-        # depend only on constructor parameters. These are stored for
-        # the class header (member declarations + constructor init).
-        # The _gen_cse_body() method handles per-method substitution.
+        # Precomputed parameter-only subexpressions.
+        # Substituted into Func/Jac/Grad/Hess at the SymPy level so that
+        # per-method CSE naturally uses the member symbols (pcN_).
         self._precomputed = []  # [(member_name, resolved_expr), ...]
         self._identify_precomputed()
 
     def _identify_precomputed(self):
-        """Find param-only CSE subexpressions for constructor precomputation."""
+        """Find param-only CSE subexpressions and substitute into expressions.
+
+        Runs CSE on the full expression set, identifies subexpressions that
+        depend only on constructor parameters (not inputs), then rebuilds
+        Func/Jac/Grad/Hess with member symbols (pcN_) in place of those
+        subexpressions. Works by expanding all input-dependent CSE variables
+        back while keeping param-only ones as pcN_ atoms, so per-method CSE
+        in _gen_cse_body() naturally re-optimizes without duplicating the
+        precomputed work.
+        """
         print("Identifying parameter-only subexpressions")
-        all_cses, _ = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
-        param_cses, _ = self._partition_cses(all_cses)
+        all_cses, reduced = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
+        param_cses, input_cses = self._partition_cses(all_cses)
 
         if not param_cses:
             print("  No parameter-only subexpressions found")
@@ -104,21 +111,45 @@ class TychoHeaderGen:
 
         print(f"  Found {len(param_cses)} parameter-only subexpressions")
 
-        # Store with resolved member names. Each precomputed expr may
-        # reference earlier precomputed values via their CSE symbols —
-        # resolve those to member names (pcN_) for the constructor.
-        member_syms = {}  # cse_sym → member Symbol
+        # Build param CSE sym → member sym map and constructor expressions
+        param_map = {}  # cse_sym → member_sym
         for i, (cse_sym, cse_expr) in enumerate(param_cses):
             member_name = f"pc{i}_"
             member_sym = sp.Symbol(member_name)
-            member_syms[cse_sym] = member_sym
+            param_map[cse_sym] = member_sym
+            # Constructor expression: resolve earlier CSE refs to pcN_
+            resolved = cse_expr.subs(
+                [(s, m) for s, m in param_map.items() if s != cse_sym])
+            self._precomputed.append((member_name, resolved))
 
-            resolved_expr = cse_expr
-            for prev_sym, prev_member in member_syms.items():
-                if prev_sym == cse_sym:
-                    break
-                resolved_expr = resolved_expr.subs(prev_sym, prev_member)
-            self._precomputed.append((member_name, resolved_expr))
+        # Build expansion map for all CSE symbols:
+        # - param CSE syms → pcN_ member symbols
+        # - input CSE syms → their RHS with all CSE refs fully expanded
+        #   (param refs become pcN_, input refs become their expanded forms)
+        expansion = dict(param_map)
+        for cse_sym, cse_expr in input_cses:
+            expanded = cse_expr
+            for s, repl in expansion.items():
+                expanded = expanded.subs(s, repl)
+            expansion[cse_sym] = expanded
+
+        # Expand reduced expressions: replace all CSE symbols with their
+        # expanded forms. The result contains pcN_ atoms but no CSE vars.
+        print("  Substituting into Func/Jac/Grad/Hess")
+        subs_list = list(expansion.items())
+        new_exprs = []
+        for item in reduced:
+            if isinstance(item, sp.Matrix):
+                new_exprs.append(item.subs(subs_list))
+            elif isinstance(item, list):
+                new_exprs.append([e.subs(subs_list) for e in item])
+            else:
+                new_exprs.append(item.subs(subs_list))
+
+        self.Func = new_exprs[0]
+        self.Jac = new_exprs[1]
+        self.Grad = new_exprs[2]
+        self.Hess = new_exprs[3]
 
     def _partition_cses(self, cses):
         """Split CSE list into (param_only, input_dependent).
@@ -158,12 +189,15 @@ class TychoHeaderGen:
         if powcount == 0:
             return expr
 
-        # Convert integer pows to multiplies: pow(x, 2) → x*x
+        # Convert integer pows to multiplies: pow(x, 2) → (x*x)
+        # Parentheses prevent precedence bugs in denominator context
+        # e.g. 1/pow(x, 2) → 1/(x*x) not 1/x*x
         for i in range(2, 16):
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*{i}\s*\)")
-            repl = r"\g<var>"
+            repl = r"(\g<var>"
             for j in range(1, i):
                 repl += r"*\g<var>"
+            repl += r")"
             expr = re.sub(regex, repl, expr)
 
         # Convert pow(x, 0.5) → sqrt(x), pow(x, 1.5) → sqrt(x)*x, etc.
@@ -274,52 +308,14 @@ class TychoHeaderGen:
     # ── CSE generation with precomputed hoisting ────────────────────────
 
     def _gen_cse_body(self, exprs):
-        """Run CSE on exprs, partition into param-only and input-dependent.
+        """Run CSE on exprs and return (cses, reduced_exprs).
 
-        Returns (param_cses, input_cses, reduced_exprs) where param_cses
-        use member variable names (pcN_) and input_cses are normal CSE.
+        Parameter-only subexpressions have already been substituted with
+        member symbols (pcN_) in _identify_precomputed(), so no partitioning
+        is needed here — CSE just operates on what remains.
         """
         cses, reduced = sp.cse(exprs)
-        param_cses, input_cses = self._partition_cses(cses)
-
-        if not param_cses:
-            return [], input_cses, reduced
-
-        # Build substitution map: param CSE sym → member symbol
-        subs_map = {}
-        for i, ((cse_sym, _), (member_name, _)) in enumerate(
-                zip(param_cses, self._precomputed)):
-            subs_map[cse_sym] = sp.Symbol(member_name)
-
-        # Substitute into input-dependent CSE RHS expressions
-        new_input_cses = []
-        for sym, expr in input_cses:
-            for cse_sym, member_sym in subs_map.items():
-                expr = expr.subs(cse_sym, member_sym)
-            new_input_cses.append((sym, expr))
-
-        # Substitute into reduced expressions
-        new_reduced = []
-        for item in reduced:
-            if isinstance(item, sp.Matrix):
-                new_item = item.copy()
-                for cse_sym, member_sym in subs_map.items():
-                    new_item = new_item.subs(cse_sym, member_sym)
-                new_reduced.append(new_item)
-            elif isinstance(item, list):
-                new_list = []
-                for elem in item:
-                    for cse_sym, member_sym in subs_map.items():
-                        elem = elem.subs(cse_sym, member_sym)
-                    new_list.append(elem)
-                new_reduced.append(new_list)
-            else:
-                new_elem = item
-                for cse_sym, member_sym in subs_map.items():
-                    new_elem = new_elem.subs(cse_sym, member_sym)
-                new_reduced.append(new_elem)
-
-        return param_cses, new_input_cses, new_reduced
+        return cses, reduced
 
     # ── class header generation ─────────────────────────────────────────
 
@@ -421,8 +417,8 @@ class TychoHeaderGen:
         lines.append("")
 
         body_lines = self._gen_input_names()
-        _, input_cses, funcs = self._gen_cse_body(self.Func)
-        body_lines += self._gen_cselist(input_cses)
+        cses, funcs = self._gen_cse_body(self.Func)
+        body_lines += self._gen_cselist(cses)
         body_lines.append("")
         for i, F in enumerate(funcs[0]):
             body_lines.append(self._assignment(f"_fx_[{i}]", sp.ccode(F), False))
@@ -448,8 +444,8 @@ class TychoHeaderGen:
         lines.append("")
 
         body_lines = self._gen_input_names()
-        _, input_cses, funcs = self._gen_cse_body([self.Func, self.Jac])
-        body_lines += self._gen_cselist(input_cses)
+        cses, funcs = self._gen_cse_body([self.Func, self.Jac])
+        body_lines += self._gen_cselist(cses)
         body_lines.append("")
 
         for i, F in enumerate(funcs[0]):
@@ -492,9 +488,9 @@ class TychoHeaderGen:
 
         body_lines = self._gen_input_names()
         body_lines += self._gen_mult_names()
-        _, input_cses, funcs = self._gen_cse_body(
+        cses, funcs = self._gen_cse_body(
             [self.Func, self.Jac, self.Grad, self.Hess])
-        body_lines += self._gen_cselist(input_cses)
+        body_lines += self._gen_cselist(cses)
         body_lines.append("")
 
         for i, F in enumerate(funcs[0]):

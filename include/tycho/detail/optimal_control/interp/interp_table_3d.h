@@ -20,6 +20,7 @@
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
+using tycho::InterpType;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
 using utils::SZ_SUM;
@@ -32,7 +33,6 @@ using vf::ThreadingFlags;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
-using tycho::InterpType;
 
 struct InterpTable3D {
 

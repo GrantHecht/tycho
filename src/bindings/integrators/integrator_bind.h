@@ -30,10 +30,14 @@ using namespace tycho::integrators;
 namespace bind {
 
 inline IVPAlg parse_ivp_alg(const std::string &str) {
-    if (str == "DOPRI54" || str == "DP54") return IVPAlg::DOPRI54;
-    if (str == "DOPRI87" || str == "DP87") return IVPAlg::DOPRI87;
-    if (str == "RK4" || str == "RK4Classic") return IVPAlg::RK4Classic;
-    if (str == "DOPRI5" || str == "DP5") return IVPAlg::DOPRI5;
+    if (str == "DOPRI54" || str == "DP54")
+        return IVPAlg::DOPRI54;
+    if (str == "DOPRI87" || str == "DP87")
+        return IVPAlg::DOPRI87;
+    if (str == "RK4" || str == "RK4Classic")
+        return IVPAlg::RK4Classic;
+    if (str == "DOPRI5" || str == "DP5")
+        return IVPAlg::DOPRI5;
     throw std::invalid_argument(fmt::format("Unknown IVP algorithm: '{}'", str));
 }
 
@@ -41,9 +45,8 @@ template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj
     obj.def("integrator", [](const DODE &od, double ds) { return Integrator<DODE>(od, ds); });
 
     // IVPAlg enum overload
-    obj.def("integrator", [](const DODE &od, IVPAlg meth, double ds) {
-        return Integrator<DODE>(od, meth, ds);
-    });
+    obj.def("integrator",
+            [](const DODE &od, IVPAlg meth, double ds) { return Integrator<DODE>(od, meth, ds); });
     // String overload — converts to IVPAlg at the binding layer
     obj.def("integrator", [](const DODE &od, std::string meth, double ds) {
         return Integrator<DODE>(od, parse_ivp_alg(meth), ds);
@@ -62,11 +65,10 @@ template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj
         obj.def("integrator",
                 [](const DODE &od, IVPAlg meth, double ds, std::shared_ptr<LGLInterpTable> u,
                    const Eigen::VectorXi &v) { return Integrator<DODE>(od, meth, ds, u, v); });
-        obj.def("integrator",
-                [](const DODE &od, std::string meth, double ds, std::shared_ptr<LGLInterpTable> u,
-                   const Eigen::VectorXi &v) {
-                    return Integrator<DODE>(od, parse_ivp_alg(meth), ds, u, v);
-                });
+        obj.def("integrator", [](const DODE &od, std::string meth, double ds,
+                                 std::shared_ptr<LGLInterpTable> u, const Eigen::VectorXi &v) {
+            return Integrator<DODE>(od, parse_ivp_alg(meth), ds, u, v);
+        });
         obj.def("integrator",
                 [](const DODE &od, IVPAlg meth, double ds, std::shared_ptr<LGLInterpTable> u) {
                     return Integrator<DODE>(od, meth, ds, u);

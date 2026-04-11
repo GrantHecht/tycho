@@ -181,7 +181,7 @@ int main() {
     X0[0] = pt0;                  // p0
     X0[3] = -0.25396764647494;    // h0 = tan(i/2)*cos(RAAN)
     X0[5] = M_PI;                 // L0
-    X0[6] = 1.0 / Fstar;         // w0 (initial weight, non-dim)
+    X0[6] = 1.0 / Fstar;          // w0 (initial weight, non-dim)
     X0[8] = 0.0;                  // ur
     X0[9] = 1.0;                  // ut (prograde initially)
     X0[10] = 0.0;                 // un

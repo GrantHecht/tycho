@@ -110,10 +110,10 @@ class OptimalControlProblem {
                                   const std::vector<std::string> &vars_a, int phase_b,
                                   PhaseRegionFlags region_b,
                                   const std::vector<std::string> &vars_b) {
-        auto idx_a = resolve_link_vars(*phases_.at(static_cast<std::size_t>(phase_a)), region_a,
-                                       vars_a);
-        auto idx_b = resolve_link_vars(*phases_.at(static_cast<std::size_t>(phase_b)), region_b,
-                                       vars_b);
+        auto idx_a =
+            resolve_link_vars(*phases_.at(static_cast<std::size_t>(phase_a)), region_a, vars_a);
+        auto idx_b =
+            resolve_link_vars(*phases_.at(static_cast<std::size_t>(phase_b)), region_b, vars_b);
         return ocp_.add_direct_link_equal_con(phase_a, region_a, idx_a, phase_b, region_b, idx_b);
     }
 

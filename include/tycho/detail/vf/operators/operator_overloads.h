@@ -381,8 +381,7 @@ decltype(auto) operator*(const MatrixFunctionView<M1, M1Rows, M1Cols_M2Rows, M1M
 template <class M1, int M1Rows, int M1Cols, int M1Major, class Func, int IR, int OR>
 decltype(auto) operator*(const MatrixFunctionView<M1, M1Rows, M1Cols, M1Major> &m,
                          const DenseFunctionBase<Func, IR, OR> &v) {
-    auto col_vec =
-        MatrixFunctionView<Func, -1, 1, Eigen::ColMajor>(v.derived(), m.matrix_cols_, 1);
+    auto col_vec = MatrixFunctionView<Func, -1, 1, Eigen::ColMajor>(v.derived(), m.matrix_cols_, 1);
 
     using MatFunc1 = MatrixFunctionView<M1, M1Rows, M1Cols, M1Major>;
     using MatFunc2 = MatrixFunctionView<Func, -1, 1, Eigen::ColMajor>;
@@ -406,8 +405,7 @@ GenericFunction<IR, OR> DenseFunctionBase<Derived, IR, OR>::pack() const {
 template <class Func, int MRows, int MCols, int MMajor>
 auto MatrixFunctionView<Func, MRows, MCols, MMajor>::inverse() const {
     if (this->matrix_rows_ != this->matrix_cols_) {
-        throw std::invalid_argument(
-            "MatrixFunctionView::inverse: matrix must be square");
+        throw std::invalid_argument("MatrixFunctionView::inverse: matrix must be square");
     }
     int size = this->matrix_rows_;
     GenericFunction<-1, -1> inv_func;
@@ -429,18 +427,16 @@ auto MatrixFunctionView<Func, MRows, MCols, MMajor>::inverse() const {
 template <class QFunc, int QIR, int QOR, class VFunc, int VIR, int VOR>
 auto quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR> &q,
                  const DenseFunctionBase<VFunc, VIR, VOR> &v) {
-    auto qinv = StackedOutputs{q.derived().template head<3>() * (-1.0),
-                               q.derived().template coeff<3>()};
+    auto qinv =
+        StackedOutputs{q.derived().template head<3>() * (-1.0), q.derived().template coeff<3>()};
     auto vq = v.derived().template padded_lower<1>();
     auto qvq = FunctionQuatProduct<QFunc, decltype(vq)>{q.derived(), vq};
-    return FunctionQuatProduct<decltype(qvq), decltype(qinv)>{qvq, qinv}
-        .template head<3>();
+    return FunctionQuatProduct<decltype(qvq), decltype(qinv)>{qvq, qinv}.template head<3>();
 }
 
 /// Overload accepting Eigen::Vector3d for the vector argument.
 template <class QFunc, int QIR, int QOR>
-auto quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR> &q,
-                 const Eigen::Vector3d &v) {
+auto quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR> &q, const Eigen::Vector3d &v) {
     auto v_const = Constant<-1, 3>(q.derived().input_rows(), v);
     return quat_rotate(q, v_const);
 }
@@ -450,15 +446,13 @@ auto quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR> &q,
 /// Element-wise product: VF * Eigen::VectorXd.
 /// Uses RowScaled internally (same as Python binding).
 template <class Func, int IR, int OR>
-auto cwise_product(const DenseFunctionBase<Func, IR, OR> &f,
-                   const Eigen::VectorXd &v) {
+auto cwise_product(const DenseFunctionBase<Func, IR, OR> &f, const Eigen::VectorXd &v) {
     return RowScaled<Func>(f.derived(), v);
 }
 
 /// Element-wise product: Eigen::VectorXd * VF (commutative).
 template <class Func, int IR, int OR>
-auto cwise_product(const Eigen::VectorXd &v,
-                   const DenseFunctionBase<Func, IR, OR> &f) {
+auto cwise_product(const Eigen::VectorXd &v, const DenseFunctionBase<Func, IR, OR> &f) {
     return RowScaled<Func>(f.derived(), v);
 }
 

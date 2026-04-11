@@ -79,8 +79,8 @@ class ODE {
     /// Create a Phase from this ODE with a trajectory guess and segment count.
     /// When lerp_ig is true, sparse waypoints are interpolated onto the
     /// collocation mesh via set_traj(traj, num_segments, true).
-    Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
-                int num_segments, bool lerp_ig = false) const;
+    Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj, int num_segments,
+                bool lerp_ig = false) const;
 
     // ── Integrator construction ────────────────────────────────────────
 
@@ -102,19 +102,16 @@ class ODE {
 
     /// With constant control vector.
     DynIntegrator integrator(double defstep, const Eigen::VectorXd &u_const) const;
-    DynIntegrator integrator(IVPAlg method, double defstep,
-                             const Eigen::VectorXd &u_const) const;
+    DynIntegrator integrator(IVPAlg method, double defstep, const Eigen::VectorXd &u_const) const;
 
     /// With LGL interpolation table + explicit control locations.
     DynIntegrator integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab,
                              const Eigen::VectorXi &ulocs) const;
-    DynIntegrator integrator(IVPAlg method, double defstep,
-                             std::shared_ptr<oc::LGLInterpTable> tab,
+    DynIntegrator integrator(IVPAlg method, double defstep, std::shared_ptr<oc::LGLInterpTable> tab,
                              const Eigen::VectorXi &ulocs) const;
 
     /// With LGL interpolation table (auto control locations).
-    DynIntegrator integrator(double defstep,
-                             std::shared_ptr<oc::LGLInterpTable> tab) const;
+    DynIntegrator integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab) const;
     DynIntegrator integrator(IVPAlg method, double defstep,
                              std::shared_ptr<oc::LGLInterpTable> tab) const;
 

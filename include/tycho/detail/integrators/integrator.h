@@ -172,8 +172,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
-    Integrator(const DODE &dode, IVPAlg meth, double defstep,
-               std::shared_ptr<LGLInterpTable> tab, const Eigen::VectorXi &ulocs)
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab,
+               const Eigen::VectorXi &ulocs)
         : Integrator() {
 
         Eigen::VectorXi varlocs(1);
@@ -187,8 +187,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                const Eigen::VectorXi &ulocs)
         : Integrator(dode, IVPAlg::DOPRI87, defstep, tab, ulocs) {}
 
-    Integrator(const DODE &dode, IVPAlg meth, double defstep,
-               std::shared_ptr<LGLInterpTable> tab)
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator() {
 
         // Bug waiting to happen when LGL interp table is re-factored
@@ -546,12 +545,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         switch (this->rk_method_) {
         case IVPAlg::DOPRI54: {
-            this->stepper_compute_impl<IVPAlg::DOPRI54, Scalar>(x, tf, xf, xf_est, true,
-                                                                   xdot_prev, domidpoint, xf_mid);
+            this->stepper_compute_impl<IVPAlg::DOPRI54, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
+                                                                domidpoint, xf_mid);
         } break;
         case IVPAlg::DOPRI87: {
-            this->stepper_compute_impl<IVPAlg::DOPRI87, Scalar>(x, tf, xf, xf_est, false,
-                                                                   xdot_prev, domidpoint, xf_mid);
+            this->stepper_compute_impl<IVPAlg::DOPRI87, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
+                                                                domidpoint, xf_mid);
         } break;
         default: {
         }

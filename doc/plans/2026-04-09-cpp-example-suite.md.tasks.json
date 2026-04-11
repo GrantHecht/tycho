@@ -1,0 +1,31 @@
+{
+  "planPath": "doc/plans/2026-04-09-cpp-example-suite.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Build System Infrastructure & Gap Tracking", "status": "completed"},
+    {"id": 1, "subject": "Task 1: VanDerPol (Tier 1)", "status": "completed"},
+    {"id": 2, "subject": "Task 2: BrysonDenham (Tier 1)", "status": "completed"},
+    {"id": 3, "subject": "Task 3: MountainCar (Tier 1)", "status": "completed"},
+    {"id": 4, "subject": "Task 4: AnalyticExample (Tier 1)", "status": "completed"},
+    {"id": 5, "subject": "Task 5: BikeObstacle (Tier 1)", "status": "completed"},
+    {"id": 6, "subject": "Task 6: FreeFlyingRobot (Tier 1)", "status": "completed"},
+    {"id": 7, "subject": "Task 7: CartPole (Tier 2)", "status": "completed"},
+    {"id": 8, "subject": "Task 8: ParallelParking (Tier 2)", "status": "completed"},
+    {"id": 9, "subject": "Task 9: HangingChain (Tier 2)", "status": "completed"},
+    {"id": 10, "subject": "Task 10: Reentry (Tier 2)", "status": "completed"},
+    {"id": 11, "subject": "Task 11: MinimumTimeToClimb (Tier 2)", "status": "completed"},
+    {"id": 12, "subject": "Task 12: GoddardRocket (Tier 3)", "status": "completed"},
+    {"id": 13, "subject": "Task 13: MultiPhaseCannon (Tier 3)", "status": "completed"},
+    {"id": 14, "subject": "Task 14: MultiPhaseZermelo (Tier 3)", "status": "completed"},
+    {"id": 15, "subject": "Task 15: SimpleLowThrust (Tier 4)", "status": "completed"},
+    {"id": 16, "subject": "Task 16: TopputtoLowThrust (Tier 4)", "status": "completed"},
+    {"id": 17, "subject": "Task 17: DionysusLowThrust (Tier 4)", "status": "completed"},
+    {"id": 18, "subject": "Task 18: BettsLowThrust (Tier 4)", "status": "completed"},
+    {"id": 19, "subject": "Task 19: OrbitContinuation (Tier 4)", "status": "completed"},
+    {"id": 20, "subject": "Task 20: Heteroclinic (Tier 5)", "status": "completed"},
+    {"id": 21, "subject": "Task 21: OptimalDocking (Tier 5)", "status": "completed"},
+    {"id": 22, "subject": "Task 22: MultiSpacecraftOpt (Tier 5)", "status": "completed"},
+    {"id": 23, "subject": "Task 23: MinTimeTClimbTables (Tier 6)", "status": "completed"},
+    {"id": 24, "subject": "Task 24: Final Verification & CLAUDE.md Update", "status": "completed"}
+  ],
+  "lastUpdated": "2026-04-10T00:00:00Z"
+}
