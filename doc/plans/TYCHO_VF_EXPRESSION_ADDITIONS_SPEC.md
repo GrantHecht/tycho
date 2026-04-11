@@ -45,14 +45,20 @@ auto RowMatrix(Func&& f, int rows, int cols)
 The returned `MatrixFunctionView` supports:
 
 **`.inverse()` member** — returns a new `MatrixFunctionView` wrapping
-`MatrixInverse` composed with self. Dispatches to `MatrixInverse<2>`,
-`MatrixInverse<3>`, or `MatrixInverse<-1>` based on runtime matrix size.
-Throws if matrix is not square. Matches the Python binding implementation
-in `matrix_function_build.cpp` lines 180-200.
+`MatrixInverse` composed with self. Dispatches to
+`MatrixInverse<2, MMajor>`, `MatrixInverse<3, MMajor>`, or
+`MatrixInverse<-1, MMajor>` based on runtime matrix size, where `MMajor`
+is the view's own major-order constant (e.g., `Eigen::RowMajor` for
+`RowMatrix`). Throws if matrix is not square. Matches the Python binding
+implementation in `matrix_function_build.cpp` lines 180-200.
 
-**`operator*` for matrix-function product** — `MatrixFunctionView * VF`
-returns a VF expression (the matrix applied to a vector). Uses
-`MatrixFunctionProduct` internally. Matches the Python `__mul__` binding.
+**`operator*` for matrix-vector product** — An `operator*` between two
+`MatrixFunctionView`s already exists in `operator_overloads.h`. What's
+missing is `MatrixFunctionView * DenseFunctionBase` (matrix applied to a
+vector VF expression), which wraps the VF in a column-vector
+`MatrixFunctionView` then delegates to the existing matrix-matrix
+`operator*`. This new overload goes in `operator_overloads.h` alongside
+the existing matrix operators.
 
 Usage:
 ```cpp
@@ -86,8 +92,18 @@ auto qvq = FunctionQuatProduct{q, vq};
 return FunctionQuatProduct{qvq, qinv}.head<3>();
 ```
 
+Output size validation (`q` must produce 4 elements, `v` must produce 3)
+is enforced at runtime by `FunctionQuatProduct`'s constructor — it throws
+on mismatched sizes. No `static_assert` is possible since sizes are
+dynamic.
+
 Also add an overload accepting `Eigen::Vector3d` for the vector argument
 (wraps in `Constant<>` internally).
+
+**Include dependencies:** The implementation file for `quat_rotate` must
+include `vector_products.h` (for `FunctionQuatProduct`) and the
+stacked-outputs header (for `StackedOutputs`). If placed in
+`binary_math.h`, these includes must be added there.
 
 ### 3. cwise_product Eigen Overloads
 
@@ -106,8 +122,17 @@ auto cwise_product(const Eigen::VectorXd& v,
                    const DenseFunctionBase<Func, IR, OR>& f);
 ```
 
-Internally wraps the Eigen vector using `RowScaled<Func>` — the same
-approach the Python bindings use in `dense_function_base_bind.h`.
+Internally wraps the Eigen vector using `RowScaled<Func>` (via
+`f.derived()`) — the same approach the Python bindings use in
+`dense_function_base_bind.h`.
+
+**Note:** Element-wise multiplication of a VF by an Eigen vector is
+already reachable via the existing `operator*(DenseFunctionBase,
+Eigen::MatrixBase)` in `operator_overloads.h`, which also uses
+`RowScaled`. The explicit `cwise_product` overloads are added for
+discoverability and symmetry with the `cwise_product(VF, VF)` free
+function — users searching for "cwise_product" should find it works with
+Eigen vectors too.
 
 ## Verification
 
@@ -133,10 +158,13 @@ Update C++ examples that use workarounds:
 
 **New/modified VF headers:**
 - `include/tycho/detail/vf/operators/binary_math.h` — `cwise_product` Eigen
-  overloads, `quat_rotate` free function
+  overloads, `quat_rotate` free function (+ include `vector_products.h`
+  and stacked-outputs header)
 - `include/tycho/detail/vf/operators/matrix_function.h` — `RowMatrix` free
-  function, `.inverse()` member on `MatrixFunctionView`, `operator*` for
-  matrix-function product (if not already present as member)
+  function, `.inverse()` member on `MatrixFunctionView`
+- `include/tycho/detail/vf/operators/operator_overloads.h` — new
+  `operator*(MatrixFunctionView, DenseFunctionBase)` overload for
+  matrix-vector product
 
 **Examples:**
 - `examples/cpp_examples/builder/cart_pole/main.cpp`
