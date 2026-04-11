@@ -1,6 +1,6 @@
 import numpy as np
 import sympy as sp
-from CodeGen import AssetHeaderGen
+from CodeGen import TychoHeaderGen
 
 
 def MEE():
@@ -39,7 +39,7 @@ def MEE():
 
     Eq = sp.Matrix([pdot, fdot, gdot, hdot, kdot, Ldot]) * sqp
 
-    header = AssetHeaderGen(
+    header = TychoHeaderGen(
         "MEETest",
         Eq,
         sp.Matrix(Xs),
@@ -77,7 +77,7 @@ def CR3BP():
 
     Eq = sp.Matrix([x_dot, y_dot, z_dot, x_ddot, y_ddot, z_ddot])
 
-    header = AssetHeaderGen(
+    header = TychoHeaderGen(
         "CR3BPTest",
         Eq,
         sp.Matrix(Xs),

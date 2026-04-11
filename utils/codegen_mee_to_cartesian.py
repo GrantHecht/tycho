@@ -1,6 +1,6 @@
 import os
 import sympy as sp
-from CodeGen import AssetHeaderGen
+from CodeGen import TychoHeaderGen
 
 
 def MEEToCartesian():
@@ -39,14 +39,14 @@ def MEEToCartesian():
 
     Eq = sp.Matrix([x_pos, y_pos, z_pos, vx, vy, vz])
 
-    header = AssetHeaderGen(
+    header = TychoHeaderGen(
         "MEEToCartesian",
         Eq,
         sp.Matrix(Xs),
         [(mu, "Gravitational Parameter")],
         docstr="MEE to Cartesian state conversion",
         namespace="tycho::astro",
-        include_path="tycho/detail/vf/core/vector_function.h",
+        include_path="tycho/vector_functions.h",
         gen_build_method=False,
     )
 
