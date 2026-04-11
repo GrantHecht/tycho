@@ -148,7 +148,7 @@ int main() {
 
     // Step (d): RTN rotation matrix (3x3, row-major: rows = Rhat, That, Nhat)
     auto RTN_vec = stack(Rhat, That, Nhat); // 9-element vector
-    auto M = RowMatrix(RTN_vec, 3, 3);
+    auto M = row_matrix(RTN_vec, 3, 3);
 
     // Step (e): grav_rtn = M * Gcart
     auto grav_rtn = M * Gcart;
@@ -201,7 +201,7 @@ int main() {
     auto ig_Nhat = ig_R.cross(ig_V).normalized();
     auto ig_That = ig_Nhat.cross(ig_R).normalized();
     auto ig_RTN_vec = stack(ig_Rhat, ig_That, ig_Nhat);
-    auto ig_M = RowMatrix(ig_RTN_vec, 3, 3);
+    auto ig_M = row_matrix(ig_RTN_vec, 3, 3);
     auto ig_prograde = ig_M * ig_V.normalized();
 
     auto integ =

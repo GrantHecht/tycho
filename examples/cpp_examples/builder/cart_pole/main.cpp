@@ -12,7 +12,7 @@
 //   Q = [-g*sin(theta), F + m2*l*sin(theta)*thetadot^2]
 //   [xddot, thetaddot] = M^{-1} * Q
 //
-// Uses RowMatrix().inverse() * Q, matching Python vf.RowMatrix API.
+// Uses row_matrix().inverse() * Q, matching Python vf.RowMatrix API.
 //
 // Objective: minimise integral(F^2)
 ///////////////////////////////////////////////////////////////////////////////
@@ -58,7 +58,7 @@ int main() {
                        auto l_vf = theta * 0.0 + l;
                        auto a_vf = theta * 0.0 + (m1 + m2);
                        auto Mvec = stack(cos(theta), l_vf, a_vf, m2 * l * cos(theta));
-                       auto M = RowMatrix(Mvec, 2, 2);
+                       auto M = row_matrix(Mvec, 2, 2);
                        auto accel = M.inverse() * Q;
 
                        return stack(xdot, thetadot, accel);

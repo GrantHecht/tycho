@@ -40,7 +40,7 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
 
 /// Construct a row-major MatrixFunctionView from any VF expression.
 template <class Func, int IR, int OR>
-auto RowMatrix(const DenseFunctionBase<Func, IR, OR> &f, int rows, int cols) {
+auto row_matrix(const DenseFunctionBase<Func, IR, OR> &f, int rows, int cols) {
     return MatrixFunctionView<Func, -1, -1, Eigen::RowMajor>(f.derived(), rows, cols);
 }
 

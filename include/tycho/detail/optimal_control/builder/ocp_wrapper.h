@@ -174,17 +174,6 @@ class OptimalControlProblem {
                 method));
     }
 
-    /// Find the index of a Phase in phases_ by pointer comparison.
-    int find_phase_index(Phase &p) const {
-        for (int i = 0; i < static_cast<int>(phases_.size()); ++i) {
-            if (phases_[static_cast<std::size_t>(i)] == &p)
-                return i;
-        }
-        throw std::invalid_argument(
-            "OptimalControlProblem::add_direct_link_equal_con: phase not found "
-            "— was it added via add_phase()?");
-    }
-
     /// Resolve variable names for a link constraint, respecting region.
     /// ODEParams names get P-relative translation; StaticParams use the SP registry.
     Eigen::VectorXi resolve_link_vars(Phase &p, PhaseRegionFlags region,
@@ -203,6 +192,9 @@ class OptimalControlProblem {
     }
 
     OptimalControlProblemBase ocp_;
+    /// Raw Phase pointers for int-indexed name resolution in add_direct_link_equal_con.
+    /// Lifetime requirement: all Phase objects added via add_phase() must outlive
+    /// this OptimalControlProblem.  Typical usage (stack-local phases) satisfies this.
     std::vector<Phase *> phases_;
 };
 

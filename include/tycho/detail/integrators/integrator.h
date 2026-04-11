@@ -552,8 +552,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->stepper_compute_impl<IVPAlg::DOPRI87, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
                                                                 domidpoint, xf_mid);
         } break;
-        default: {
-        }
+        default:
+            throw std::logic_error("stepper_compute: unsupported IVPAlg for adaptive stepping");
         }
     }
 
