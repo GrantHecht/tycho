@@ -25,6 +25,15 @@ namespace tycho {
 using namespace tycho::vf;
 using namespace tycho::oc;
 
+inline InterpType parse_interp_type(const std::string &str) {
+    if (str == "cubic" || str == "Cubic")
+        return InterpType::Cubic;
+    if (str == "linear" || str == "Linear")
+        return InterpType::Linear;
+    throw std::invalid_argument(
+        fmt::format("Unknown interpolation type: '{}'", str));
+}
+
 // ── InterpTable1D
 // ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable1DBuild(nb::module_ &m) {
@@ -41,6 +50,18 @@ inline void InterpTable1DBuild(nb::module_ &m) {
 
     obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, std::string>(), nb::arg("vts"),
             nb::arg("tvar") = -1, nb::arg("kind") = std::string("cubic"));
+
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, int, InterpType>(),
+            nb::arg("ts"), nb::arg("vs"), nb::arg("axis") = 0,
+            nb::arg("kind") = InterpType::Cubic);
+
+    obj.def(nb::init<const Eigen::VectorXd &, const MatType &, int, InterpType>(),
+            nb::arg("ts"), nb::arg("vs"), nb::arg("axis") = 0,
+            nb::arg("kind") = InterpType::Cubic);
+
+    obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, InterpType>(),
+            nb::arg("vts"), nb::arg("tvar") = -1,
+            nb::arg("kind") = InterpType::Cubic);
 
     obj.def("interp", nb::overload_cast<double>(&InterpTable1D::interp, nb::const_));
     obj.def("interp",
@@ -105,6 +126,11 @@ inline void InterpTable2DBuild(nb::module_ &m) {
                      const Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &, std::string>(),
             nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = std::string("cubic"));
 
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &,
+                     const Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &, InterpType>(),
+            nb::arg("xs"), nb::arg("ys"), nb::arg("z"),
+            nb::arg("kind") = InterpType::Cubic);
+
     obj.def("interp", nb::overload_cast<double, double>(&InterpTable2D::interp, nb::const_));
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_));
@@ -161,6 +187,11 @@ inline void InterpTable3DBuild(nb::module_ &m) {
             nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("fs"),
             nb::arg("kind") = std::string("cubic"), nb::arg("cache") = false);
 
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const Eigen::VectorXd &,
+                     const Eigen::Tensor<double, 3> &, InterpType, bool>(),
+            nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("fs"),
+            nb::arg("kind") = InterpType::Cubic, nb::arg("cache") = false);
+
     obj.def("interp",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_));
     obj.def("interp_deriv1",
@@ -213,6 +244,12 @@ inline void InterpTable4DBuild(nb::module_ &m) {
                  const Eigen::VectorXd &, const Eigen::Tensor<double, 4> &, std::string, bool>(),
         nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("ws"), nb::arg("fs"),
         nb::arg("kind") = std::string("cubic"), nb::arg("cache") = false);
+
+    obj.def(
+        nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const Eigen::VectorXd &,
+                 const Eigen::VectorXd &, const Eigen::Tensor<double, 4> &, InterpType, bool>(),
+        nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("ws"), nb::arg("fs"),
+        nb::arg("kind") = InterpType::Cubic, nb::arg("cache") = false);
 
     obj.def("interp",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_));
