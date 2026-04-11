@@ -122,9 +122,8 @@ class Phase {
     int add_inequal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
                         std::initializer_list<std::string> var_names,
                         ScaleType scale = ScaleModes::AUTO) {
-        return phase_->add_inequal_con(flag, func,
-                                       resolve_for_region(flag, var_names, "add_inequal_con"),
-                                       scale);
+        return phase_->add_inequal_con(
+            flag, func, resolve_for_region(flag, var_names, "add_inequal_con"), scale);
     }
 
     int add_state_objective(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
@@ -143,17 +142,17 @@ class Phase {
     int add_lu_func_bound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
                           std::initializer_list<std::string> var_names, double lower, double upper,
                           double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->add_lu_func_bound(
-            flag, func, resolve_for_region(flag, var_names, "add_lu_func_bound"), lower, upper,
-            scale, scale_t);
+        return phase_->add_lu_func_bound(flag, func,
+                                         resolve_for_region(flag, var_names, "add_lu_func_bound"),
+                                         lower, upper, scale, scale_t);
     }
 
     int add_lu_norm_bound(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
                           double lower, double upper, double scale = 1.0,
                           ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->add_lu_norm_bound(
-            flag, resolve_for_region(flag, var_names, "add_lu_norm_bound"), lower, upper, scale,
-            scale_t);
+        return phase_->add_lu_norm_bound(flag,
+                                         resolve_for_region(flag, var_names, "add_lu_norm_bound"),
+                                         lower, upper, scale, scale_t);
     }
 
     int add_lower_func_bound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
@@ -426,6 +425,10 @@ class Phase {
         phase_->set_num_partitions(nparts, qp_threads);
     }
 
+    void set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes mode) {
+        phase_->jet_job_mode_ = mode;
+    }
+
     void set_units(const Eigen::VectorXd &units) { phase_->set_units(units); }
     void set_units(std::initializer_list<std::pair<std::string, double>> unit_vals) {
         phase_->set_units(registry_.make_units(unit_vals));
@@ -446,8 +449,7 @@ class Phase {
 
     // ── Static param naming ────────────────────────────────────────────
 
-    void set_static_param_names(
-        std::initializer_list<std::pair<std::string, int>> names) {
+    void set_static_param_names(std::initializer_list<std::pair<std::string, int>> names) {
         sp_names_.clear();
         for (const auto &[name, idx] : names)
             add_static_param_name(name, idx);
@@ -527,18 +529,16 @@ class Phase {
     // ── Mixed variable source constraints (index-based) ────────────────
 
     int add_equal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
-                      const Eigen::VectorXi &xtup_vars,
-                      const Eigen::VectorXi &ode_param_vars,
+                      const Eigen::VectorXi &xtup_vars, const Eigen::VectorXi &ode_param_vars,
                       const Eigen::VectorXi &static_param_vars,
                       ScaleType scale = ScaleModes::AUTO) {
         return phase_->add_equal_con(flag, func, VarIndexType(xtup_vars),
-                                     VarIndexType(ode_param_vars),
-                                     VarIndexType(static_param_vars), scale);
+                                     VarIndexType(ode_param_vars), VarIndexType(static_param_vars),
+                                     scale);
     }
 
     int add_inequal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
-                        const Eigen::VectorXi &xtup_vars,
-                        const Eigen::VectorXi &ode_param_vars,
+                        const Eigen::VectorXi &xtup_vars, const Eigen::VectorXi &ode_param_vars,
                         const Eigen::VectorXi &static_param_vars,
                         ScaleType scale = ScaleModes::AUTO) {
         return phase_->add_inequal_con(flag, func, VarIndexType(xtup_vars),
@@ -547,14 +547,12 @@ class Phase {
     }
 
     int add_lu_func_bound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
-                          const Eigen::VectorXi &xtup_vars,
-                          const Eigen::VectorXi &ode_param_vars,
+                          const Eigen::VectorXi &xtup_vars, const Eigen::VectorXi &ode_param_vars,
                           const Eigen::VectorXi &static_param_vars, double lower, double upper,
                           double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->add_lu_func_bound(flag, func, VarIndexType(xtup_vars),
-                                         VarIndexType(ode_param_vars),
-                                         VarIndexType(static_param_vars), lower, upper, scale,
-                                         scale_t);
+        return phase_->add_lu_func_bound(
+            flag, func, VarIndexType(xtup_vars), VarIndexType(ode_param_vars),
+            VarIndexType(static_param_vars), lower, upper, scale, scale_t);
     }
 
     int add_lower_func_bound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
@@ -607,8 +605,7 @@ class Phase {
                           const std::vector<std::string> &xtup_names,
                           const std::vector<std::string> &ode_param_names,
                           const std::vector<std::string> &static_param_names, double lower,
-                          double upper, double scale = 1.0,
-                          ScaleType scale_t = ScaleModes::AUTO) {
+                          double upper, double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
         auto xtup_idx = resolve_names_to_indices(xtup_names, "add_lu_func_bound");
         auto op_idx = resolve_ode_param_names(ode_param_names, "add_lu_func_bound");
         auto sp_idx = resolve_sp_names(static_param_names, "add_lu_func_bound");
@@ -624,8 +621,9 @@ class Phase {
         auto xtup_idx = resolve_names_to_indices(xtup_names, "add_lower_func_bound");
         auto op_idx = resolve_ode_param_names(ode_param_names, "add_lower_func_bound");
         auto sp_idx = resolve_sp_names(static_param_names, "add_lower_func_bound");
-        return phase_->add_lower_func_bound(flag, func, VarIndexType(xtup_idx), VarIndexType(op_idx),
-                                            VarIndexType(sp_idx), lower, scale, scale_t);
+        return phase_->add_lower_func_bound(flag, func, VarIndexType(xtup_idx),
+                                            VarIndexType(op_idx), VarIndexType(sp_idx), lower,
+                                            scale, scale_t);
     }
 
     int add_upper_func_bound(PhaseRegionFlags flag, GenericFunction<-1, 1> func,
@@ -636,8 +634,9 @@ class Phase {
         auto xtup_idx = resolve_names_to_indices(xtup_names, "add_upper_func_bound");
         auto op_idx = resolve_ode_param_names(ode_param_names, "add_upper_func_bound");
         auto sp_idx = resolve_sp_names(static_param_names, "add_upper_func_bound");
-        return phase_->add_upper_func_bound(flag, func, VarIndexType(xtup_idx), VarIndexType(op_idx),
-                                            VarIndexType(sp_idx), upper, scale, scale_t);
+        return phase_->add_upper_func_bound(flag, func, VarIndexType(xtup_idx),
+                                            VarIndexType(op_idx), VarIndexType(sp_idx), upper,
+                                            scale, scale_t);
     }
 
     // ── Solve ───────────────────────────────────────────────────────────
@@ -712,9 +711,9 @@ class Phase {
     int resolve_sp_single(const std::string &name, const char *method) const {
         auto idx = resolve_sp(name);
         if (idx.size() != 1)
-            throw std::invalid_argument(fmt::format(
-                "Phase::{}: static param '{}' maps to {} indices, expected 1", method, name,
-                idx.size()));
+            throw std::invalid_argument(
+                fmt::format("Phase::{}: static param '{}' maps to {} indices, expected 1", method,
+                            name, idx.size()));
         return idx[0];
     }
 
@@ -773,9 +772,9 @@ class Phase {
         for (int i = 0; i < static_cast<int>(names.size()); ++i) {
             auto resolved = registry_.resolve(names[i]);
             if (resolved.size() != 1)
-                throw std::invalid_argument(fmt::format(
-                    "Phase::{}: XtUP var '{}' maps to {} indices, expected 1", method, names[i],
-                    resolved.size()));
+                throw std::invalid_argument(
+                    fmt::format("Phase::{}: XtUP var '{}' maps to {} indices, expected 1", method,
+                                names[i], resolved.size()));
             idx[i] = resolved[0];
         }
         return idx;
@@ -790,14 +789,14 @@ class Phase {
         for (int i = 0; i < static_cast<int>(names.size()); ++i) {
             auto resolved = registry_.resolve(names[i]);
             if (resolved.size() != 1)
-                throw std::invalid_argument(fmt::format(
-                    "Phase::{}: ODE param '{}' maps to {} indices, expected 1", method, names[i],
-                    resolved.size()));
+                throw std::invalid_argument(
+                    fmt::format("Phase::{}: ODE param '{}' maps to {} indices, expected 1", method,
+                                names[i], resolved.size()));
             idx[i] = resolved[0] - p_offset;
             if (idx[i] < 0 || idx[i] >= registry_.pvars())
-                throw std::invalid_argument(fmt::format(
-                    "Phase::{}: '{}' (XtUP index {}) is not in the P-block", method, names[i],
-                    resolved[0]));
+                throw std::invalid_argument(
+                    fmt::format("Phase::{}: '{}' (XtUP index {}) is not in the P-block", method,
+                                names[i], resolved[0]));
         }
         return idx;
     }
