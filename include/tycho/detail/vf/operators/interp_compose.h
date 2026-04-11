@@ -6,6 +6,7 @@
 #include "tycho/detail/optimal_control/interp/interp_table_2d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_3d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_4d.h"
+#include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 #include "tycho/detail/vf/expressions/stacked.h"
 
@@ -92,6 +93,24 @@ auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
             const DenseFunctionBase<Func, IR, OR> &xyzw) {
     return GenericFunction<-1, 1>(
         oc::InterpFunction4D(table).eval(xyzw.derived()));
+}
+
+// ── LGL trajectory interpolation ───────────────────────────────────
+
+/// Return a GenericFunction wrapping an LGLInterpTable (not yet composed
+/// with a time expression). Call .eval(t_expr) on the result to compose.
+inline auto lgl_interp(const std::shared_ptr<oc::LGLInterpTable> &table,
+                       const Eigen::VectorXi &vars) {
+    return GenericFunction<-1, -1>(oc::InterpFunction<-1>(table, vars));
+}
+
+/// Compose an LGLInterpTable with a VF time expression directly.
+template <class Func, int IR, int OR>
+auto lgl_interp(const std::shared_ptr<oc::LGLInterpTable> &table,
+                const Eigen::VectorXi &vars,
+                const DenseFunctionBase<Func, IR, OR> &t_expr) {
+    return GenericFunction<-1, -1>(
+        oc::InterpFunction<-1>(table, vars).eval(t_expr.derived()));
 }
 
 } // namespace tycho::vf
