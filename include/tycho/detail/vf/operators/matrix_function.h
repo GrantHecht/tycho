@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cassert>
+
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::vf {
@@ -28,7 +30,9 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
 
     MatrixFunctionView(Func f, int rows, int cols)
         : Func(f), MatrixRowsCols<MRows, MCols>(rows, cols) {
-        // make sure row col consistent with orows
+        assert(rows > 0 && cols > 0 && "MatrixFunctionView: rows and cols must be positive");
+        assert((f.output_rows() < 0 || rows * cols == f.output_rows())
+               && "MatrixFunctionView: rows * cols must match function output size");
     }
 
     /// Return the matrix inverse as a new MatrixFunctionView.

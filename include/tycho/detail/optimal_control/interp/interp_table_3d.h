@@ -159,18 +159,8 @@ struct InterpTable3D {
     }
 
     InterpTable3D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
-                  const Eigen::Tensor<double, 3> &Fs, std::string kind, bool cache) {
-        InterpType k;
-        if (kind == "cubic" || kind == "Cubic") {
-            k = InterpType::Cubic;
-        } else if (kind == "linear" || kind == "Linear") {
-            k = InterpType::Linear;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
-        // Delegate to enum constructor via placement-style initialization
-        *this = InterpTable3D(Xs, Ys, Zs, Fs, k, cache);
-    }
+                  const Eigen::Tensor<double, 3> &Fs, std::string kind, bool cache)
+        : InterpTable3D(Xs, Ys, Zs, Fs, parse_interp_type(kind), cache) {}
 
     void calc_derivs() {
 

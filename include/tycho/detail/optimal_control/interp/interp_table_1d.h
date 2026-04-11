@@ -104,43 +104,8 @@ struct InterpTable1D {
         }
         set_data(Ts, Vs, 1, kind);
     }
-    InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, std::string kind) {
-
-        if (Vts.size() == 0) {
-            throw std::invalid_argument("Input is empty");
-        }
-        if (Vts[0].size() < 2) {
-            throw std::invalid_argument("Invalid sized value-time data.");
-        }
-
-        if (tvar < 0) {
-            tvar = Vts[0].size() + tvar;
-        }
-        if (tvar > Vts[0].size() - 1 || tvar < 0) {
-            throw std::invalid_argument("Invalid time variable index");
-        }
-
-        Eigen::VectorXd Ts(Vts.size());
-
-        Eigen::MatrixXd Vs(Vts[0].size() - 1, Vts.size());
-
-        for (int i = 0; i < Vts.size(); i++) {
-            int isize = Vts[i].size();
-            if (isize != Vts[0].size()) {
-                throw std::invalid_argument("All value-time vectors must have same size");
-            }
-            int shift = 0;
-            for (int j = 0; j < isize; j++) {
-                if (j == tvar) {
-                    Ts[i] = Vts[i][j];
-                    shift = 1;
-                } else {
-                    Vs.col(i)[j - shift] = Vts[i][j];
-                }
-            }
-        }
-        set_data(Ts, Vs, 1, kind);
-    }
+    InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, std::string kind)
+        : InterpTable1D(Vts, tvar, parse_interp_type(kind)) {}
 
     void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
 
@@ -189,15 +154,7 @@ struct InterpTable1D {
     }
 
     void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
-        InterpType k;
-        if (kind == "cubic" || kind == "Cubic") {
-            k = InterpType::Cubic;
-        } else if (kind == "linear" || kind == "Linear") {
-            k = InterpType::Linear;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
-        set_data(Ts, Vs, axis, k);
+        set_data(Ts, Vs, axis, parse_interp_type(kind));
     }
 
     void calc_derivs() {

@@ -180,17 +180,8 @@ struct InterpTable4D {
 
     InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
                   const Eigen::VectorXd &Ws, const Eigen::Tensor<double, 4> &Fs, std::string kind,
-                  bool cache) {
-        InterpType k;
-        if (kind == "cubic" || kind == "Cubic") {
-            k = InterpType::Cubic;
-        } else if (kind == "linear" || kind == "Linear") {
-            k = InterpType::Linear;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
-        *this = InterpTable4D(Xs, Ys, Zs, Ws, Fs, k, cache);
-    }
+                  bool cache)
+        : InterpTable4D(Xs, Ys, Zs, Ws, Fs, parse_interp_type(kind), cache) {}
 
     static int find_elem(const Eigen::VectorXd &ts, bool teven, double t) {
         int elem;

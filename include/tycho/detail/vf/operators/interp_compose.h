@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <memory>
 
 #include "tycho/detail/optimal_control/interp/interp_table_1d.h"
@@ -16,6 +17,7 @@ namespace tycho::vf {
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable1D> &table,
             const DenseFunctionBase<Func, IR, OR> &input) {
+    assert(table && "interp: table pointer must not be null");
     if (table->vlen_ == 1) {
         return GenericFunction<-1, -1>(
             oc::InterpFunction1D<1>(table).eval(input.derived()));
@@ -30,6 +32,7 @@ auto interp(const std::shared_ptr<oc::InterpTable1D> &table,
 template <class Func, int IR, int OR>
 auto interp_scalar(const std::shared_ptr<oc::InterpTable1D> &table,
                    const DenseFunctionBase<Func, IR, OR> &input) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction1D<1>(table).eval(input.derived()));
 }
@@ -39,6 +42,7 @@ template <class F1, int IR1, int OR1, class F2, int IR2, int OR2>
 auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
             const DenseFunctionBase<F1, IR1, OR1> &x,
             const DenseFunctionBase<F2, IR2, OR2> &y) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction2D(table).eval(stack(x.derived(), y.derived())));
 }
@@ -47,6 +51,7 @@ auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
             const DenseFunctionBase<Func, IR, OR> &xy) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction2D(table).eval(xy.derived()));
 }
@@ -59,6 +64,7 @@ auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
             const DenseFunctionBase<F1, IR1, OR1> &x,
             const DenseFunctionBase<F2, IR2, OR2> &y,
             const DenseFunctionBase<F3, IR3, OR3> &z) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction3D(table).eval(
             stack(x.derived(), y.derived(), z.derived())));
@@ -68,6 +74,7 @@ auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
             const DenseFunctionBase<Func, IR, OR> &xyz) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction3D(table).eval(xyz.derived()));
 }
@@ -82,6 +89,7 @@ auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
             const DenseFunctionBase<F2, IR2, OR2> &y,
             const DenseFunctionBase<F3, IR3, OR3> &z,
             const DenseFunctionBase<F4, IR4, OR4> &w) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction4D(table).eval(
             stack(x.derived(), y.derived(), z.derived(), w.derived())));
@@ -91,6 +99,7 @@ auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
             const DenseFunctionBase<Func, IR, OR> &xyzw) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, 1>(
         oc::InterpFunction4D(table).eval(xyzw.derived()));
 }
@@ -101,6 +110,7 @@ auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
 /// with a time expression). Call .eval(t_expr) on the result to compose.
 inline auto lgl_interp(const std::shared_ptr<oc::LGLInterpTable> &table,
                        const Eigen::VectorXi &vars) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, -1>(oc::InterpFunction<-1>(table, vars));
 }
 
@@ -109,6 +119,7 @@ template <class Func, int IR, int OR>
 auto lgl_interp(const std::shared_ptr<oc::LGLInterpTable> &table,
                 const Eigen::VectorXi &vars,
                 const DenseFunctionBase<Func, IR, OR> &t_expr) {
+    assert(table && "interp: table pointer must not be null");
     return GenericFunction<-1, -1>(
         oc::InterpFunction<-1>(table, vars).eval(t_expr.derived()));
 }

@@ -131,15 +131,7 @@ struct InterpTable2D {
 
     void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
                   std::string kind) {
-        InterpType k;
-        if (kind == "cubic" || kind == "Cubic") {
-            k = InterpType::Cubic;
-        } else if (kind == "linear" || kind == "Linear") {
-            k = InterpType::Linear;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
-        set_data(Xs, Ys, Zs, k);
+        set_data(Xs, Ys, Zs, parse_interp_type(kind));
     }
 
     void calc_derivs() {
