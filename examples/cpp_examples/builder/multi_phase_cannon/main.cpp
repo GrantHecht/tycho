@@ -113,50 +113,8 @@ auto make_energy_constraint() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Initial guess generation via integration with event detection
+// Initial guess generation via ODE::integrator() with event detection
 ///////////////////////////////////////////////////////////////////////////////
-
-struct IntegResult {
-    std::vector<Eigen::VectorXd> traj;
-};
-
-IntegResult euler_integrate(double v0, double gamma0, double h0, double r0,
-                            double t0, double rad, double dt, double tf,
-                            int stop_mode) {
-    // stop_mode: 0 = stop when hdot < 0 (ascent end)
-    //            1 = stop when h < 0 (descent end)
-    IntegResult res;
-    double v = v0, gam = gamma0, h = h0, r = r0, t = t0;
-
-    int max_steps = 200000;
-    for (int i = 0; i < max_steps; ++i) {
-        // Phase vector: [v, gamma, h, r, t, rad]
-        Eigen::VectorXd pt(6);
-        pt << v, gam, h, r, t, rad;
-        res.traj.push_back(pt);
-
-        double M = MFunc_val(rad);
-        double S = SFunc_val(rad);
-        double rho = RhoAir * std::exp(-h / h_scale);
-        double D = 0.5 * CD * rho * v * v * S;
-
-        double vdot = -D / M - g * std::sin(gam);
-        double gamdot = -g * std::cos(gam) / v;
-        double hdot = v * std::sin(gam);
-        double rdot = v * std::cos(gam);
-
-        v   += vdot * dt;
-        gam += gamdot * dt;
-        h   += hdot * dt;
-        r   += rdot * dt;
-        t   += dt;
-
-        if (stop_mode == 0 && hdot < 0.0) break;
-        if (stop_mode == 1 && h < 0.0) break;
-        if (t > tf) break;
-    }
-    return res;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // main
@@ -170,27 +128,51 @@ int main() {
     const double gamma0 = 45.0 * M_PI / 180.0;
     const double v0 = std::sqrt(2.0 * E0 / m0) * 0.99;
 
+    // ── Build ODE ──────────────────────────────────────────────────────
+    auto ode = make_cannon_ode();
+
     std::cout << "MultiPhaseCannon (builder): generating initial guesses ...\n" << std::flush;
 
-    // Ascent: integrate until hdot < 0
-    auto ascent = euler_integrate(v0, gamma0, h0, r0, 0.0, rad0, 0.001, 60.0 / Tstar, 0);
+    // Create integrator
+    auto integ = ode.integrator(0.01);
+    integ.set_abs_tol(1.0e-14);
 
-    // Descent: integrate from end of ascent until h < 0
-    auto &last = ascent.traj.back();
-    auto descent = euler_integrate(last[0], last[1], last[2], last[3],
-                                   last[4], rad0, 0.001,
-                                   last[4] + 1000.0 / Tstar, 1);
+    // Initial state: [v, gamma, h, r, t, rad]
+    Eigen::VectorXd IG = Eigen::VectorXd::Zero(6);
+    IG[0] = v0;
+    IG[1] = gamma0;
+    IG[2] = h0;
+    IG[3] = r0;
+    IG[5] = rad0;
 
-    std::cout << "  Ascent IG: " << ascent.traj.size() << " pts\n";
-    std::cout << "  Descent IG: " << descent.traj.size() << " pts\n";
+    // Ascent event: v*sin(gamma) crossing zero (hdot = 0 at apogee)
+    // EventPack = (event_func, direction, action): direction=0 (any), action=1 (stop)
+    using EventPack = decltype(integ)::EventPack;
 
-    // ── Build ODE and phases ──────────────────────────────────────────
-    auto ode = make_cannon_ode();
+    auto ascent_args = ODEArguments(4, 0, 1);
+    auto ascent_event_expr = ascent_args.coeff(0) * sin(ascent_args.coeff(1));
+    auto ascent_event = GenericFunction<-1, 1>(ascent_event_expr);
+
+    auto [ascent_traj, ascent_events] =
+        integ.integrate_dense(IG, 60.0 / Tstar,
+                              std::vector<EventPack>{EventPack{ascent_event, 0, 1}}, false);
+
+    // Descent event: h crossing zero (ground impact)
+    auto descent_args = ODEArguments(4, 0, 1);
+    auto descent_event_expr = descent_args.coeff(2); // h
+    auto descent_event = GenericFunction<-1, 1>(descent_event_expr);
+
+    auto [descent_traj, descent_events] =
+        integ.integrate_dense(ascent_traj.back(), ascent_traj.back()[4] + 1000.0 / Tstar,
+                              std::vector<EventPack>{EventPack{descent_event, 0, 1}}, false);
+
+    std::cout << "  Ascent IG: " << ascent_traj.size() << " pts\n";
+    std::cout << "  Descent IG: " << descent_traj.size() << " pts\n";
     const auto tmode = TranscriptionModes::LGL5;
     const int nsegs = 128;
 
     // ── Ascent phase ──────────────────────────────────────────────────
-    auto aphase = ode.phase(tmode, ascent.traj, nsegs);
+    auto aphase = ode.phase(tmode, ascent_traj, nsegs);
 
     // ODE param lower bound: rad >= 0
     // ODEParams region expects raw ODE param index (0), not phase vector index
@@ -219,7 +201,7 @@ int main() {
     aphase.add_boundary_value(PhaseRegionFlags::Back, "gamma", 0.0);
 
     // ── Descent phase ─────────────────────────────────────────────────
-    auto dphase = ode.phase(tmode, descent.traj, nsegs);
+    auto dphase = ode.phase(tmode, descent_traj, nsegs);
 
     // Back BC: h = 0 (ground)
     dphase.add_boundary_value(PhaseRegionFlags::Back, "h", 0.0);

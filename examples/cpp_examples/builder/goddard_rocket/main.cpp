@@ -103,42 +103,31 @@ auto make_path_constraint() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Simple initial guess via Euler integration
+// Initial guess via ODE::integrator() with control law and stop function
 ///////////////////////////////////////////////////////////////////////////////
 
-std::vector<Eigen::VectorXd> make_initial_guess() {
-    // Integrate forward with u=1 until mass = mf, then u=0 until v < 0
-    const double dt_phys = 0.01;  // physical dt in non-dim time
-    const int max_steps = 100000;
+std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
+    // Control law: u = 1 if m > mf, else 0
+    auto ulaw_args = Arguments<1>();
+    Eigen::Matrix<double, 1, 1> one_val, zero_val;
+    one_val << 1.0;
+    zero_val << 0.0;
+    auto ulaw_expr = IfElseFunction(ulaw_args.coeff<0>() > mf,
+                                    Constant<1, 1>(1, one_val),
+                                    Constant<1, 1>(1, zero_val));
+    auto ulaw = GenericFunction<-1, -1>(ulaw_expr);
 
-    std::vector<Eigen::VectorXd> traj;
+    auto integ = ode.integrator(0.01, ulaw, {"m"});
 
-    double h = 0.0, v = 0.0, m_val = m0, t = 0.0;
+    // Initial state: [h, v, m, t, u]
+    Eigen::VectorXd X0 = Eigen::VectorXd::Zero(5);
+    X0[2] = m0;  // mass
+    X0[4] = 1.0; // control (will be overwritten by control law)
 
-    for (int step = 0; step < max_steps; ++step) {
-        double u_val = (m_val > mf) ? 1.0 : 0.0;
+    // Stop when velocity goes negative (rocket falling)
+    auto stop_fn = [](const Eigen::Ref<const Eigen::VectorXd> &x) { return x[1] < 0.0; };
 
-        Eigen::VectorXd pt(5);
-        pt << h, v, m_val, t, u_val;
-        traj.push_back(pt);
-
-        // Euler step
-        double hdot = v;
-        double rho = std::exp(-h / h_ref);
-        double vdot = (u_val * Tmag - sigma * v * v * rho) / m_val - g;
-        double mdot = -u_val * Tmag / c;
-
-        h += hdot * dt_phys;
-        v += vdot * dt_phys;
-        m_val += mdot * dt_phys;
-        t += dt_phys;
-
-        // Stop when velocity goes negative (rocket falling)
-        if (v < 0.0)
-            break;
-    }
-
-    return traj;
+    return integ.integrate_dense(X0, 60.0 / Tstar, 1000, stop_fn);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -146,9 +135,12 @@ std::vector<Eigen::VectorXd> make_initial_guess() {
 ///////////////////////////////////////////////////////////////////////////////
 
 int main() {
+    // ── Build ODE and generate initial guess ───────────────────────────
+    auto ode = make_goddard_ode();
+
     std::cout << "GoddardRocket (builder): generating initial guess ...\n" << std::flush;
 
-    auto TrajIG = make_initial_guess();
+    auto TrajIG = make_initial_guess(ode);
     if (TrajIG.size() < 10) {
         std::cerr << "GoddardRocket: initial guess too short\n";
         return 1;
@@ -156,9 +148,6 @@ int main() {
 
     std::cout << "  Initial guess: " << TrajIG.size() << " points, tf = "
               << TrajIG.back()[3] * Tstar << " s\n";
-
-    // ── Build multi-phase formulation ──────────────────────────────────
-    auto ode = make_goddard_ode();
     const int n = static_cast<int>(TrajIG.size()) / 3;
 
     std::vector<Eigen::VectorXd> TrajIG1(TrajIG.begin(), TrajIG.begin() + n);

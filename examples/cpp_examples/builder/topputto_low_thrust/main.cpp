@@ -64,28 +64,20 @@ int main() {
                                {"u", 5},
                                {"alpha", 6}});
 
-    // ── Initial guess: outward spiral ──────────────────────────────────
-    // Time-optimal IG
-    const double tf_guess = 130.0;
-    const int nPts = 1000;
-    std::vector<Eigen::VectorXd> toptIG;
-    toptIG.reserve(nPts);
-    for (int i = 0; i < nPts; ++i) {
-        const double s = static_cast<double>(i) / (nPts - 1);
-        const double t = tf_guess * s;
-        const double r_val = 1.0 + (RF - 1.0) * s;
-        const double v_circ = std::sqrt(1.0 / r_val);
+    // ── Initial guess: outward spiral via integrator ─────────────────
+    auto integ = ode.integrator(0.01);
 
-        Eigen::VectorXd pt(7);
-        pt[0] = r_val;
-        pt[1] = 2.0 * M_PI * s; // theta
-        pt[2] = 0.0;             // vr
-        pt[3] = v_circ;          // vtheta (circular)
-        pt[4] = t;
-        pt[5] = 0.99;            // u (near full thrust)
-        pt[6] = 0.0;             // alpha
-        toptIG.push_back(pt);
-    }
+    // Initial state: [r, theta, vr, vtheta, t, u, alpha]
+    Eigen::VectorXd IState = Eigen::VectorXd::Zero(7);
+    IState[0] = 1.0;    // r = 1
+    IState[3] = 1.0;    // vtheta = 1 (circular)
+    IState[5] = 0.99;   // u (near full thrust)
+    IState[6] = 0.0;    // alpha
+
+    // Stop when radius exceeds target
+    auto stop_fn = [RF](const Eigen::Ref<const Eigen::VectorXd> &x) { return x[0] > RF; };
+
+    auto toptIG = integ.integrate_dense(IState, 130.0, 1000, stop_fn);
 
     // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 400;
@@ -126,25 +118,9 @@ int main() {
     std::cout << "\n=== Fuel-optimal transfer ===\n";
     phase.remove_state_objective(0);
 
-    // Reset with mass-optimal IG (different spiral)
-    std::vector<Eigen::VectorXd> moptIG;
-    moptIG.reserve(nPts);
-    const double tf_guess2 = 160.0;
-    for (int i = 0; i < nPts; ++i) {
-        const double s = static_cast<double>(i) / (nPts - 1);
-        const double t = tf_guess2 * s;
-        const double r_val = 1.0 + (RF - 1.0) * s;
-        const double v_circ = std::sqrt(1.0 / r_val);
-        Eigen::VectorXd pt(7);
-        pt[0] = r_val;
-        pt[1] = 2.0 * M_PI * s;
-        pt[2] = 0.0;
-        pt[3] = v_circ;
-        pt[4] = t;
-        pt[5] = 0.5;
-        pt[6] = 0.0;
-        moptIG.push_back(pt);
-    }
+    // Reset with mass-optimal IG (different spiral, lower thrust)
+    IState[5] = 0.5; // lower throttle for fuel-optimal
+    auto moptIG = integ.integrate_dense(IState, 160.0, 1000, stop_fn);
     phase.set_traj(moptIG, nSeg);
 
     {

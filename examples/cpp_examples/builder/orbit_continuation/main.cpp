@@ -87,21 +87,14 @@ ODE make_cr3bp_ode(double mu_val) {
 // Solve for a periodic orbit (half-period symmetric)
 ///////////////////////////////////////////////////////////////////////////////
 
+// Integrator step size for orbit propagation
+static constexpr double integ_dt = 3.1415 / 10000.0;
+
 std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorXd &ig, double tf,
                                              const std::vector<int> &fix_init = {0, 1, 2}) {
-    // Simple integration for initial guess
-    const int steps = 1000;
-    std::vector<Eigen::VectorXd> trajGuess;
-    trajGuess.reserve(steps);
-    for (int i = 0; i < steps; ++i) {
-        double s = static_cast<double>(i) / (steps - 1);
-        Eigen::VectorXd pt(7);
-        pt.head<6>() = ig.head<6>();
-        pt[6] = tf * s;
-        // Simple Euler-ish propagation isn't needed with the solver
-        // Just use the IG state with time varying
-        trajGuess.push_back(pt);
-    }
+    // Integrate initial guess using ODE::integrator()
+    auto integ = ode.integrator(integ_dt);
+    auto trajGuess = integ.integrate_dense(ig, tf, 1000);
 
     constexpr int nSeg = 150;
     auto phase = ode.phase(TranscriptionModes::LGL3, trajGuess, nSeg);
