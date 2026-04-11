@@ -40,7 +40,8 @@ ODEArguments = _tychopy.OptimalControl.ODEArguments
 OptimalControlProblem = _tychopy.OptimalControl.OptimalControlProblem
 PhaseInterface = _tychopy.OptimalControl.PhaseInterface
 PhaseRegionFlags = _tychopy.OptimalControl.PhaseRegionFlags
-RKOptions = _tychopy.OptimalControl.RKOptions
+IVPAlg = _tychopy.OptimalControl.IVPAlg
+RKOptions = IVPAlg  # backwards compat alias
 StateConstraint = _tychopy.OptimalControl.StateConstraint
 StateObjective = _tychopy.OptimalControl.StateObjective
 
