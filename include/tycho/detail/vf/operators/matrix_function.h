@@ -30,7 +30,19 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
         : Func(f), MatrixRowsCols<MRows, MCols>(rows, cols) {
         // make sure row col consistent with orows
     }
+
+    /// Return the matrix inverse as a new MatrixFunctionView.
+    /// Dispatches to MatrixInverse<2,Major>, <3,Major>, or <-1,Major>.
+    /// Throws if matrix is not square.
+    /// Defined out-of-line in operator_overloads.h (needs GenericFunction + MatrixInverse).
+    auto inverse() const;
 };
+
+/// Construct a row-major MatrixFunctionView from any VF expression.
+template <class Func, int IR, int OR>
+auto RowMatrix(const DenseFunctionBase<Func, IR, OR> &f, int rows, int cols) {
+    return MatrixFunctionView<Func, -1, -1, Eigen::RowMajor>(f.derived(), rows, cols);
+}
 
 template <class Func1, class... Funcs>
 struct ColMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func1::ORC,
