@@ -1,5 +1,16 @@
+"""Generate MEEToCartesian VectorFunction with analytic derivatives.
+
+Usage:
+    cd utils && conda run -n tycho python codegen_mee_to_cartesian.py
+
+Output:
+    include/tycho/detail/astro/MEEToCartesian.h
+"""
+
 import os
+
 import sympy as sp
+
 from CodeGen import TychoHeaderGen
 
 
@@ -9,6 +20,8 @@ def MEEToCartesian():
     Input:  [p, f, g, h, k, L] — Modified Equinoctial Elements
     Output: [x, y, z, vx, vy, vz] — Cartesian state
     Parameter: mu — gravitational parameter
+
+    Formulas match kepler_utils.h modified_to_cartesian().
     """
     Xs = sp.symbols("x:6")
     p, f, g, h, k, L = Xs
@@ -31,10 +44,12 @@ def MEEToCartesian():
     z_pos = 2 * Xscale * (h * sinL - k * cosL)
 
     # Velocity
-    vx = -Vscale * (sinL + a2 * sinL - 2 * h * k * cosL
-                    + g - 2 * f * h * k + a2 * g)
-    vy = -Vscale * (-cosL + a2 * cosL + 2 * h * k * sinL
-                    - f + 2 * g * h * k + a2 * f)
+    vx = -Vscale * (
+        sinL + a2 * sinL - 2 * h * k * cosL + g - 2 * f * h * k + a2 * g
+    )
+    vy = -Vscale * (
+        -cosL + a2 * cosL + 2 * h * k * sinL - f + 2 * g * h * k + a2 * f
+    )
     vz = 2 * Vscale * (h * cosL + k * sinL + f * h + g * k)
 
     Eq = sp.Matrix([x_pos, y_pos, z_pos, vx, vy, vz])
@@ -45,14 +60,15 @@ def MEEToCartesian():
         sp.Matrix(Xs),
         [(mu, "Gravitational Parameter")],
         docstr="MEE to Cartesian state conversion",
-        namespace="tycho::astro",
-        include_path="tycho/vector_functions.h",
-        gen_build_method=False,
     )
 
-    output_dir = os.path.join(os.path.dirname(__file__),
-                              "..", "include", "tycho", "detail", "astro")
-    header.make_header(output_dir=output_dir)
+    output_dir = os.path.join(
+        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro"
+    )
+    header.make_header(
+        output_dir=output_dir,
+        script_name="utils/codegen_mee_to_cartesian.py",
+    )
     print(f"Generated MEEToCartesian.h in {output_dir}")
 
 
