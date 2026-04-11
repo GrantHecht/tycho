@@ -423,7 +423,7 @@ auto MatrixFunctionView<Func, MRows, MCols, MMajor>::inverse() const {
 /////////////////////// quat_rotate ////////////////////////////////////////
 
 /// Rotate a 3-element vector by a 4-element quaternion (scalar-last).
-/// Computes: q * (v, 0) * q_inv, then extracts the 3-element vector part.
+/// Computes: q * (v, 0) * conj(q), extracting the vector part (assumes unit quaternion).
 template <class QFunc, int QIR, int QOR, class VFunc, int VIR, int VOR>
 auto quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR> &q,
                  const DenseFunctionBase<VFunc, VIR, VOR> &v) {

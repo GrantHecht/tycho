@@ -50,6 +50,9 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
     auto phase_ptr = std::make_shared<oc::ODEPhase<DynODE>>(ode, mode, traj, num_segments);
 
     if (lerp_ig) {
+        // Re-set trajectory with linear interpolation between waypoints.
+        // The constructor distributes traj normally; set_traj(..., true)
+        // replaces that with a lerp IG (sparse waypoint interpolation).
         phase_ptr->set_traj(traj, num_segments, true);
     }
 
