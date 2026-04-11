@@ -8,9 +8,10 @@
 // State  : [h, v, fpa, m]   (altitude, velocity, flight path angle, mass)
 // Control: [alpha]           (angle of attack)
 //
-// Uses simplified inline atmospheric model. The full table-based model is
-// in the Tier 6 example min_time_climb_tables. This version uses analytic
-// approximations that produce plausible (not exact) trajectories.
+// Uses table-based aero/atmosphere data matching the Python version exactly.
+// Aero data: CLalpha(Mach), CD0(Mach), eta(Mach) via InterpTable1D
+// Atmosphere: rho(alt), sos(alt) via InterpTable1D
+// Thrust: Thrust(Mach, alt) via InterpTable2D
 //
 // Objective: minimise climb time
 // Features: adaptive mesh refinement, HighestOrderSpline control
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 using namespace tycho;
@@ -65,53 +67,117 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 50;
 
+    // ── Aerodynamic data (function of Mach number) ────────────────────
+    Eigen::VectorXd AeroMach(11);
+    AeroMach << 0, 0.4, 0.6, 0.75, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8;
+
+    Eigen::VectorXd Clalpha_data(11);
+    Clalpha_data << 3.44, 3.44, 3.44, 3.44, 3.44, 3.58, 4.44, 3.44, 3.01, 2.86, 2.44;
+
+    Eigen::VectorXd CD0_data(11);
+    CD0_data << 0.013, 0.013, 0.013, 0.013, 0.013, 0.014, 0.031, 0.041, 0.039, 0.036, 0.035;
+
+    Eigen::VectorXd eta_data(11);
+    eta_data << 0.54, 0.54, 0.54, 0.54, 0.54, 0.75, 0.79, 0.78, 0.89, 0.93, 0.93;
+
+    // ── Atmosphere data (1976 US standard atmosphere) ─────────────────
+    // 45 data points: [altitude(m), density(kg/m^3), speed_of_sound(m/s)]
+    // clang-format off
+    Eigen::VectorXd alts(45);
+    alts << -2000, 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000,
+            18000, 20000, 22000, 24000, 26000, 28000, 30000, 32000, 34000, 36000,
+            38000, 40000, 42000, 44000, 46000, 48000, 50000, 52000, 54000, 56000,
+            58000, 60000, 62000, 64000, 66000, 68000, 70000, 72000, 74000, 76000,
+            78000, 80000, 82000, 84000, 86000;
+
+    Eigen::VectorXd rhos(45);
+    rhos << 1.478e00, 1.225e00, 1.007e00, 8.193e-01, 6.601e-01, 5.258e-01,
+            4.135e-01, 3.119e-01, 2.279e-01, 1.665e-01, 1.216e-01, 8.891e-02,
+            6.451e-02, 4.694e-02, 3.426e-02, 2.508e-02, 1.841e-02, 1.355e-02,
+            9.887e-03, 7.257e-03, 5.366e-03, 3.995e-03, 2.995e-03, 2.259e-03,
+            1.714e-03, 1.317e-03, 1.027e-03, 8.055e-04, 6.389e-04, 5.044e-04,
+            3.962e-04, 3.096e-04, 2.407e-04, 1.860e-04, 1.429e-04, 1.091e-04,
+            8.281e-05, 6.236e-05, 4.637e-05, 3.430e-05, 2.523e-05, 1.845e-05,
+            1.341e-05, 9.690e-06, 6.955e-06;
+
+    Eigen::VectorXd soss(45);
+    soss << 3.479e02, 3.403e02, 3.325e02, 3.246e02, 3.165e02, 3.081e02,
+            2.995e02, 2.951e02, 2.951e02, 2.951e02, 2.951e02, 2.951e02,
+            2.964e02, 2.977e02, 2.991e02, 3.004e02, 3.017e02, 3.030e02,
+            3.065e02, 3.101e02, 3.137e02, 3.172e02, 3.207e02, 3.241e02,
+            3.275e02, 3.298e02, 3.298e02, 3.288e02, 3.254e02, 3.220e02,
+            3.186e02, 3.151e02, 3.115e02, 3.080e02, 3.044e02, 3.007e02,
+            2.971e02, 2.934e02, 2.907e02, 2.880e02, 2.853e02, 2.825e02,
+            2.797e02, 2.769e02, 2.741e02;
+    // clang-format on
+
+    // ── Thrust data (Mach x altitude) ────────────────────────────────
+    Eigen::VectorXd ThrustMach(10);
+    ThrustMach << 0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8;
+
+    Eigen::VectorXd ThrustAlt(11);
+    ThrustAlt << 304.8 * -0.5, 304.8 * 0, 304.8 * 5, 304.8 * 10, 304.8 * 15,
+                 304.8 * 20, 304.8 * 25, 304.8 * 30, 304.8 * 40, 304.8 * 50,
+                 304.8 * 70;
+
+    // Raw data is 10 rows (Mach) x 11 cols (Alt), stored here transposed
+    // to 11 rows (Alt) x 10 cols (Mach) matching InterpTable2D: rows=ys, cols=xs
+    using RowMajorMat = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    RowMajorMat ThrustData(11, 10);
+    // clang-format off
+    // Each row = one altitude, each column = one Mach number, values in lbf * 4448.2 -> Newtons
+    ThrustData <<
+        24.2, 28.0, 28.3, 30.8, 34.5, 37.9, 36.1, 36.1, 36.1, 36.1,
+        24.2, 28.0, 28.3, 30.8, 34.5, 37.9, 36.1, 36.1, 36.1, 36.1,
+        24.0, 24.6, 25.2, 27.2, 30.3, 34.3, 38.0, 36.6, 35.2, 33.8,
+        20.3, 21.1, 21.9, 23.8, 26.6, 30.4, 34.9, 38.5, 42.1, 45.7,
+        17.3, 18.1, 18.7, 20.5, 23.2, 26.8, 31.3, 36.1, 38.7, 41.3,
+        14.5, 15.2, 15.9, 17.3, 19.8, 23.3, 27.3, 31.6, 35.7, 39.8,
+        12.2, 12.8, 13.4, 14.7, 16.8, 19.8, 23.6, 28.1, 32.0, 34.6,
+        10.2, 10.7, 11.2, 12.3, 14.1, 16.8, 20.1, 24.2, 28.1, 31.1,
+         5.7,  6.5,  7.3,  8.1,  9.4, 11.2, 13.4, 16.2, 19.3, 21.7,
+         3.4,  3.9,  4.4,  4.9,  5.6,  6.8,  8.3, 10.0, 11.9, 13.3,
+         0.1,  0.2,  0.4,  0.8,  1.1,  1.4,  1.7,  2.2,  2.9,  3.1;
+    // clang-format on
+    ThrustData *= 4448.2; // Convert from klbf to Newtons
+
+    // ── Build interpolation tables ───────────────────────────────────
+    auto rhoTab = std::make_shared<InterpTable1D>(alts, rhos, 0, InterpType::Cubic);
+    auto sosTab = std::make_shared<InterpTable1D>(alts, soss, 0, InterpType::Cubic);
+    auto ClalphaTab = std::make_shared<InterpTable1D>(AeroMach, Clalpha_data, 0, InterpType::Cubic);
+    auto etaTab = std::make_shared<InterpTable1D>(AeroMach, eta_data, 0, InterpType::Cubic);
+    auto CD0Tab = std::make_shared<InterpTable1D>(AeroMach, CD0_data, 0, InterpType::Cubic);
+    auto ThrustTab =
+        std::make_shared<InterpTable2D>(ThrustMach, ThrustAlt, ThrustData, InterpType::Cubic);
+
     // ── Define ODE ─────────────────────────────────────────────────────
-    // Simplified inline atmospheric model
     auto ode =
         ODEBuilder(4, 1)
-            .define([mu_nd, Re_nd, S_nd, vexhaust_nd, Lstar, Vstar, Rhostar, Fstar](auto &args) {
+            .define([=](auto &args) {
                 auto h = args.x_var(0);
                 auto v = args.x_var(1);
                 auto fpa = args.x_var(2);
                 auto mass = args.x_var(3);
                 auto alpha = args.u_var(0);
 
-                auto r = h + Re_nd;
-                auto grav = mu_nd / (r * r);
-
-                // Simplified ISA atmosphere (non-dim):
-                auto rho = (1.225 / Rhostar) * exp((-Lstar / 8500.0) * h);
-
-                // Speed of sound: troposphere T=288.15-6.5e-3*h, sos=sqrt(1.4*287*T)
-                // Simplified: sos ≈ 340.3 * sqrt(1 - h_dim/44330)
-                // In non-dim: use linear approx in Mach range
-                auto sos_nd = 340.3 / Vstar; // sea level, constant approx
-
-                auto Mach = v / sos_nd;
+                auto rho = interp_scalar(rhoTab, h * Lstar) / Rhostar;
+                auto sos = interp_scalar(sosTab, h * Lstar) / Vstar;
+                auto Mach = v / sos;
+                auto CD0 = interp_scalar(CD0Tab, Mach);
+                auto Clalpha = interp_scalar(ClalphaTab, Mach);
+                auto eta_val = interp_scalar(etaTab, Mach);
+                auto Thrust = interp(ThrustTab, Mach, h * Lstar) / Fstar;
+                auto CD = CD0 + eta_val * Clalpha * (alpha * alpha);
+                auto CL = Clalpha * alpha;
                 auto q = 0.5 * rho * v * v;
-
-                // Aero model (simplified from Bryson data):
-                constexpr double CLa = 3.44;
-                auto CD0 = 0.013 + 0.0144 * Mach * Mach;
-                auto eta_val = 0.15;
-                auto CL = CLa * alpha;
-                auto CD = CD0 + eta_val * CLa * alpha * alpha;
-
                 auto D = q * S_nd * CD;
                 auto L = q * S_nd * CL;
-
-                // Thrust model: simplified afterburning turbofan
-                // T = T_SL * (1 + 0.5*M) * (rho/rho0)^0.7
-                // At sea level: ~80 kN. At 20 km (rho/rho0 ≈ 0.07): ~15 kN
-                auto rho_ratio = rho * Rhostar / 1.225;
-                auto T = (80000.0 / Fstar) * (1.0 + 0.5 * Mach) *
-                         CwisePow(rho_ratio, 0.7);
-
+                auto r = h + Re_nd;
                 auto hdot = v * sin(fpa);
-                auto vdot = (T * cos(alpha) - D) / mass - grav * sin(fpa);
-                auto fpadot =
-                    (T * sin(alpha) + L) / (mass * v) + cos(fpa) * (v / r - grav / v);
-                auto mdot = (-1.0) * T / vexhaust_nd;
+                auto vdot = (Thrust * cos(alpha) - D) / mass - mu_nd * sin(fpa) / (r * r);
+                auto fpadot = (Thrust * sin(alpha) + L) / (mass * v) +
+                              cos(fpa) * (v / r - mu_nd / (v * (r * r)));
+                auto mdot = (-1.0) * Thrust / vexhaust_nd;
 
                 return stack(hdot, vdot, fpadot, mdot);
             })

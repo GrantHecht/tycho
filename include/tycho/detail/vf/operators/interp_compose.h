@@ -11,12 +11,26 @@
 
 namespace tycho::vf {
 
-// ── 1D: single VF input ────────────────────────────────────────────
+// ── 1D: single VF input (general, multi-output) ───────────────────
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable1D> &table,
             const DenseFunctionBase<Func, IR, OR> &input) {
+    if (table->vlen_ == 1) {
+        return GenericFunction<-1, -1>(
+            oc::InterpFunction1D<1>(table).eval(input.derived()));
+    }
     return GenericFunction<-1, -1>(
         oc::InterpFunction1D<-1>(table).eval(input.derived()));
+}
+
+// ── 1D scalar: single VF input, scalar-valued table ───────────────
+// Use this overload when the table returns a single value and the
+// result must participate in VF operator/ or operator*(scalar, VF).
+template <class Func, int IR, int OR>
+auto interp_scalar(const std::shared_ptr<oc::InterpTable1D> &table,
+                   const DenseFunctionBase<Func, IR, OR> &input) {
+    return GenericFunction<-1, 1>(
+        oc::InterpFunction1D<1>(table).eval(input.derived()));
 }
 
 // ── 2D: two scalar VF inputs ───────────────────────────────────────
