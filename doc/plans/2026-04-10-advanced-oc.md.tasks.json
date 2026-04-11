@@ -1,0 +1,10 @@
+{
+  "planPath": "doc/plans/2026-04-10-advanced-oc.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: lgl_interp() convenience function", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Full Heteroclinic port", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: OptimalDocking Form2", "status": "pending", "blockedBy": [0]},
+    {"id": 3, "subject": "Task 3: Full verification", "status": "pending", "blockedBy": [1, 2]}
+  ],
+  "lastUpdated": "2026-04-10T00:00:00Z"
+}
