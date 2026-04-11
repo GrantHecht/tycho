@@ -9,10 +9,13 @@
 
 #pragma once
 
+#include "tycho/detail/integrators/integrator.h"
 #include "tycho/detail/optimal_control/builder/var_registry.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/phase/ode.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
+#include <initializer_list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -33,6 +36,7 @@ class Phase; // forward
 class ODE {
   public:
     using DynODE = GenericODE<GenericFunction<-1, -1>, -1, -1, -1>;
+    using DynIntegrator = integrators::Integrator<DynODE>;
 
     /// Construct from any VectorFunction expression and explicit sizes.
     template <typename Func>
@@ -77,6 +81,42 @@ class ODE {
     /// collocation mesh via set_traj(traj, num_segments, true).
     Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                 int num_segments, bool lerp_ig = false) const;
+
+    // ── Integrator construction ────────────────────────────────────────
+
+    /// Basic (no control law).
+    DynIntegrator integrator(double defstep) const;
+    DynIntegrator integrator(IVPAlg method, double defstep) const;
+
+    /// With control law — index-based variable locations.
+    DynIntegrator integrator(double defstep, GenericFunction<-1, -1> ulaw,
+                             const Eigen::VectorXi &varlocs) const;
+    DynIntegrator integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
+                             const Eigen::VectorXi &varlocs) const;
+
+    /// With control law — named variable locations.
+    DynIntegrator integrator(double defstep, GenericFunction<-1, -1> ulaw,
+                             std::initializer_list<std::string> varlocs) const;
+    DynIntegrator integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
+                             std::initializer_list<std::string> varlocs) const;
+
+    /// With constant control vector.
+    DynIntegrator integrator(double defstep, const Eigen::VectorXd &u_const) const;
+    DynIntegrator integrator(IVPAlg method, double defstep,
+                             const Eigen::VectorXd &u_const) const;
+
+    /// With LGL interpolation table + explicit control locations.
+    DynIntegrator integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab,
+                             const Eigen::VectorXi &ulocs) const;
+    DynIntegrator integrator(IVPAlg method, double defstep,
+                             std::shared_ptr<oc::LGLInterpTable> tab,
+                             const Eigen::VectorXi &ulocs) const;
+
+    /// With LGL interpolation table (auto control locations).
+    DynIntegrator integrator(double defstep,
+                             std::shared_ptr<oc::LGLInterpTable> tab) const;
+    DynIntegrator integrator(IVPAlg method, double defstep,
+                             std::shared_ptr<oc::LGLInterpTable> tab) const;
 
     // ── Convenience (delegate to VarRegistry) ───────────────────────────
 
@@ -153,6 +193,9 @@ class ODE {
                 "ODE: no variable names registered (call var_names() first)");
         }
     }
+
+    /// Build a DynODE with FlatMap populated from VarRegistry.
+    DynODE make_dyn_ode() const;
 };
 
 } // namespace tycho
