@@ -84,9 +84,74 @@ class TychoHeaderGen:
         self.Hess = self.Grad.jacobian(self.Inputs)
         print("Finished Hessian")
 
+        # ── Identify parameter-only subexpressions for precomputation ────
+        # Run CSE on the full expression set to find subexpressions that
+        # depend only on constructor parameters. These are stored for
+        # the class header (member declarations + constructor init).
+        # The _gen_cse_body() method handles per-method substitution.
+        self._precomputed = []  # [(member_name, resolved_expr), ...]
+        self._identify_precomputed()
+
+    def _identify_precomputed(self):
+        """Find param-only CSE subexpressions for constructor precomputation."""
+        print("Identifying parameter-only subexpressions")
+        all_cses, _ = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
+        param_cses, _ = self._partition_cses(all_cses)
+
+        if not param_cses:
+            print("  No parameter-only subexpressions found")
+            return
+
+        print(f"  Found {len(param_cses)} parameter-only subexpressions")
+
+        # Store with resolved member names. Each precomputed expr may
+        # reference earlier precomputed values via their CSE symbols —
+        # resolve those to member names (pcN_) for the constructor.
+        member_syms = {}  # cse_sym → member Symbol
+        for i, (cse_sym, cse_expr) in enumerate(param_cses):
+            member_name = f"pc{i}_"
+            member_sym = sp.Symbol(member_name)
+            member_syms[cse_sym] = member_sym
+
+            resolved_expr = cse_expr
+            for prev_sym, prev_member in member_syms.items():
+                if prev_sym == cse_sym:
+                    break
+                resolved_expr = resolved_expr.subs(prev_sym, prev_member)
+            self._precomputed.append((member_name, resolved_expr))
+
+    def _partition_cses(self, cses):
+        """Split CSE list into (param_only, input_dependent).
+
+        A CSE variable is parameter-only if its RHS expression contains
+        no input symbols and no CSE variables that depend on inputs.
+        """
+        param_syms = set()
+        for P, _ in self.ScalarParams:
+            param_syms.add(P)
+        for Vec, _, _ in self.VectorParams:
+            for elem in Vec:
+                param_syms.add(elem)
+        for Mat, _, _ in self.MatrixParams:
+            for elem in Mat:
+                param_syms.add(elem)
+
+        # Track which CSE symbols are parameter-only
+        param_only_syms = set()
+        param_cses = []
+        input_cses = []
+
+        for sym, expr in cses:
+            free = expr.free_symbols
+            if free <= (param_syms | param_only_syms):
+                param_only_syms.add(sym)
+                param_cses.append((sym, expr))
+            else:
+                input_cses.append((sym, expr))
+
+        return param_cses, input_cses
+
     # ── pow simplification ──────────────────────────────────────────────
-    # After CSE, all sub-expressions are named x0..xN, so the simple
-    # variable-name regex ([A-Za-z_]\w*) reliably matches them.
 
     def powsimp(self, expr):
         powcount = expr.count("pow")
@@ -119,7 +184,7 @@ class TychoHeaderGen:
             repl += r"))"
             expr = re.sub(regex, repl, expr)
 
-        # Convert pow(x, -0.5) → Scalar(1.0)/sqrt(x), pow(x, -1.5) → ...
+        # Convert pow(x, -0.5) → Scalar(1.0)/sqrt(x)
         for i in range(0, 7):
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*-{i}\.5\s*\)")
             repl = r"(Scalar(1.0)/(sqrt(\g<var>)"
@@ -194,50 +259,67 @@ class TychoHeaderGen:
                         expr = re.sub(regex, replname, expr)
                         wrapscalar = True
 
+        # Check for precomputed member references (pcN_)
+        for member_name, _ in self._precomputed:
+            if member_name in expr:
+                wrapscalar = True
+
         if wrapscalar:
             expr = "Scalar(" + expr + ")"
 
-        # Apply pow simplification (works on CSE variable names)
         expr = self.powsimp(expr)
 
         return expr
 
-    # ── parameter-only CSE hoisting ─────────────────────────────────────
-    # Identify CSE variables that depend only on constructor parameters
-    # (not on input x_[i]), so they can be precomputed once in the ctor.
+    # ── CSE generation with precomputed hoisting ────────────────────────
 
-    def _partition_cses(self, cses):
-        """Split CSE list into (param_only, input_dependent).
+    def _gen_cse_body(self, exprs):
+        """Run CSE on exprs, partition into param-only and input-dependent.
 
-        A CSE variable is parameter-only if its RHS expression contains
-        no input symbols and no CSE variables that depend on inputs.
+        Returns (param_cses, input_cses, reduced_exprs) where param_cses
+        use member variable names (pcN_) and input_cses are normal CSE.
         """
-        param_syms = set()
-        for P, _ in self.ScalarParams:
-            param_syms.add(P)
-        for Vec, _, _ in self.VectorParams:
-            for elem in Vec:
-                param_syms.add(elem)
-        for Mat, _, _ in self.MatrixParams:
-            for elem in Mat:
-                param_syms.add(elem)
+        cses, reduced = sp.cse(exprs)
+        param_cses, input_cses = self._partition_cses(cses)
 
-        # Track which CSE symbols are parameter-only
-        param_only_syms = set()
-        param_cses = []
-        input_cses = []
+        if not param_cses:
+            return [], input_cses, reduced
 
-        for sym, expr in cses:
-            free = expr.free_symbols
-            # An expression is parameter-only if all its free symbols are
-            # either parameters or previously-classified param-only CSE syms
-            if free <= (param_syms | param_only_syms):
-                param_only_syms.add(sym)
-                param_cses.append((sym, expr))
+        # Build substitution map: param CSE sym → member symbol
+        subs_map = {}
+        for i, ((cse_sym, _), (member_name, _)) in enumerate(
+                zip(param_cses, self._precomputed)):
+            subs_map[cse_sym] = sp.Symbol(member_name)
+
+        # Substitute into input-dependent CSE RHS expressions
+        new_input_cses = []
+        for sym, expr in input_cses:
+            for cse_sym, member_sym in subs_map.items():
+                expr = expr.subs(cse_sym, member_sym)
+            new_input_cses.append((sym, expr))
+
+        # Substitute into reduced expressions
+        new_reduced = []
+        for item in reduced:
+            if isinstance(item, sp.Matrix):
+                new_item = item.copy()
+                for cse_sym, member_sym in subs_map.items():
+                    new_item = new_item.subs(cse_sym, member_sym)
+                new_reduced.append(new_item)
+            elif isinstance(item, list):
+                new_list = []
+                for elem in item:
+                    for cse_sym, member_sym in subs_map.items():
+                        elem = elem.subs(cse_sym, member_sym)
+                    new_list.append(elem)
+                new_reduced.append(new_list)
             else:
-                input_cses.append((sym, expr))
+                new_elem = item
+                for cse_sym, member_sym in subs_map.items():
+                    new_elem = new_elem.subs(cse_sym, member_sym)
+                new_reduced.append(new_elem)
 
-        return param_cses, input_cses
+        return param_cses, new_input_cses, new_reduced
 
     # ── class header generation ─────────────────────────────────────────
 
@@ -254,8 +336,6 @@ class TychoHeaderGen:
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
         lines.append("")
 
-        # Collect all parameter-only CSE vars to declare as members
-        # (computed in _build_text via _precomputed_cses)
         # Members: scalar params + vector/matrix params
         for P, Descr in self.ScalarParams:
             lines.append(f"{I}double {P}; // {Descr}")
@@ -267,10 +347,13 @@ class TychoHeaderGen:
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
         lines.append(f"{I}static constexpr bool is_vectorizable = true;")
-        lines.append("")
 
-        # Precomputed member declarations (filled by _build_text)
-        lines.append("{PRECOMPUTED_MEMBERS}")
+        # Precomputed member declarations
+        if self._precomputed:
+            lines.append("")
+            lines.append(f"{I}// Precomputed from constructor parameters")
+            for member_name, _ in self._precomputed:
+                lines.append(f"{I}double {member_name};")
         lines.append("")
 
         # Constructor params
@@ -306,7 +389,19 @@ class TychoHeaderGen:
         else:
             lines.append(f"{I}{self.Name}({paramstr}) {{")
         lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
-        lines.append("{PRECOMPUTED_INIT}")
+
+        # Precomputed initializations (use std:: prefix for math
+        # functions since VF overloads may shadow them in this scope)
+        if self._precomputed:
+            for member_name, expr in self._precomputed:
+                rhs = str(sp.ccode(expr))
+                rhs = self.powsimp(rhs)
+                # Prefix bare math functions with std::
+                for fn in ["sqrt", "sin", "cos", "tan", "asin",
+                           "acos", "atan", "atan2", "exp", "log"]:
+                    rhs = re.sub(rf"\b{fn}\(", f"std::{fn}(", rhs)
+                lines.append(f"{I}{I}{member_name} = {rhs};")
+
         lines.append(f"{I}}}")
         lines.append("")
 
@@ -326,11 +421,10 @@ class TychoHeaderGen:
         lines.append("")
 
         body_lines = self._gen_input_names()
-        cses, func = sp.cse(self.Func)
-        _, input_cses = self._partition_cses(cses)
+        _, input_cses, funcs = self._gen_cse_body(self.Func)
         body_lines += self._gen_cselist(input_cses)
         body_lines.append("")
-        for i, F in enumerate(func[0]):
+        for i, F in enumerate(funcs[0]):
             body_lines.append(self._assignment(f"_fx_[{i}]", sp.ccode(F), False))
         lines += [f"{I}{I}{l}" for l in body_lines]
 
@@ -354,8 +448,7 @@ class TychoHeaderGen:
         lines.append("")
 
         body_lines = self._gen_input_names()
-        cses, funcs = sp.cse([self.Func, self.Jac])
-        _, input_cses = self._partition_cses(cses)
+        _, input_cses, funcs = self._gen_cse_body([self.Func, self.Jac])
         body_lines += self._gen_cselist(input_cses)
         body_lines.append("")
 
@@ -399,8 +492,8 @@ class TychoHeaderGen:
 
         body_lines = self._gen_input_names()
         body_lines += self._gen_mult_names()
-        cses, funcs = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
-        _, input_cses = self._partition_cses(cses)
+        _, input_cses, funcs = self._gen_cse_body(
+            [self.Func, self.Jac, self.Grad, self.Hess])
         body_lines += self._gen_cselist(input_cses)
         body_lines.append("")
 
@@ -466,42 +559,6 @@ class TychoHeaderGen:
             f.write(text)
 
     def _build_text(self, script_name=None):
-        I = _IND
-
-        # Run a representative CSE to find parameter-only subexpressions.
-        # Use the full [Func, Jac, Grad, Hess] CSE since compute_all is
-        # the most complete and its CSE variables are a superset.
-        print("Identifying parameter-only CSE variables")
-        all_cses, _ = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
-        param_cses, _ = self._partition_cses(all_cses)
-        print(f"  {len(param_cses)} parameter-only, "
-              f"{len(all_cses) - len(param_cses)} input-dependent")
-
-        # Generate precomputed member declarations and ctor init
-        precomputed_members = ""
-        precomputed_init = ""
-        if param_cses:
-            precomputed_members = f"{I}// Precomputed from constructor parameters\n"
-            for sym, expr in param_cses:
-                precomputed_members += f"{I}double {sym}_;\n"
-            precomputed_init_lines = []
-            for sym, expr in param_cses:
-                rhs = str(sp.ccode(expr))
-                # Replace parameter symbols with member names
-                for P, _ in self.ScalarParams:
-                    rhs = re.sub(rf"\b{P}\b", str(P), rhs)
-                # Replace references to other precomputed vars with
-                # their member names (suffixed with _)
-                for prev_sym, _ in param_cses:
-                    if prev_sym == sym:
-                        break
-                    rhs = re.sub(rf"\b{prev_sym}\b", f"{prev_sym}_", rhs)
-                # Apply powsimp to ctor-computed expressions
-                rhs = self.powsimp(rhs)
-                precomputed_init_lines.append(f"{I}{I}{sym}_ = {rhs};")
-            precomputed_init = "\n".join(precomputed_init_lines)
-
-        # Build sections
         copyright = _COPYRIGHT.format(
             script=script_name or "TychoHeaderGen")
         include = f'#pragma once\n#include "{self.include_path}"\n'
@@ -512,30 +569,4 @@ class TychoHeaderGen:
         all_impl = self.gen_compute_all()
         ns_close = f"}};\n\n}} // namespace {self.namespace}\n"
 
-        text = copyright + include + ns_open + header + compute + jacobian + all_impl + ns_close
-
-        # Substitute precomputed placeholders
-        text = text.replace("{PRECOMPUTED_MEMBERS}", precomputed_members)
-        text = text.replace("{PRECOMPUTED_INIT}\n", precomputed_init + "\n" if precomputed_init else "")
-
-        # In compute method bodies, replace param-only CSE variable
-        # references with their precomputed member names (x_N → x_N_)
-        for sym, _ in param_cses:
-            sym_str = str(sym)
-            # Only replace inside method bodies (after the class header),
-            # and only whole-word matches. Don't replace declarations.
-            # The CSE variable appears as "Scalar xN = ..." (declaration)
-            # and as just "xN" in expressions. We want to:
-            # 1. Remove the declaration line from method bodies
-            # 2. Replace usage references with the member name
-            text = re.sub(
-                rf"^(\s+)Scalar {sym_str} = [^;]+;\n",
-                "", text, flags=re.MULTILINE)
-            # Replace references in expressions (but not in member decl)
-            # Use a negative lookbehind for "double " to avoid replacing
-            # the member declaration itself
-            text = re.sub(
-                rf"(?<!double )(?<!Scalar )\b{sym_str}\b(?!_)",
-                f"{sym_str}_", text)
-
-        return text
+        return copyright + include + ns_open + header + compute + jacobian + all_impl + ns_close

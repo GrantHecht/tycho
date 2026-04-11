@@ -24,8 +24,6 @@ struct MEEToCartesian
     double mu; // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
 
-
-
     MEEToCartesian() {
         this->set_io_rows(6, 6);
     }
