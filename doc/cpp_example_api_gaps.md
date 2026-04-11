@@ -20,12 +20,12 @@
 | BettsLowThrust | Zonal gravity via `RowMatrix`/`inverse` | High | Full J2/J3/J4 zonal gravity requires Cartesian-to-RTN rotation via `RowMatrix().inverse()` composition. Same gap as CartPole. | (same fix as CartPole) |
 | BettsLowThrust | MEE-to-Cartesian composition | Medium | Full dynamics chain: MEE → Cartesian (via `MEECartFunc`) → zonal gravity → RTN → MEE rates. Multi-level VF composition works in Python but is complex in C++. | Document composition patterns |
 | OrbitContinuation | `ODE::integrator()` | **High** | Same gap as DionysusLowThrust. Cannot generate orbital IG via integration. | (same fix) |
-| Heteroclinic | `LGLInterpTable` + `make_periodic()` | High | Required for orbit-matching constraints in heteroclinic connection. Not accessible from builder API. | Expose LGLInterpTable for builder API use |
-| Heteroclinic | `InterpFunction` | High | Required for time-dependent boundary conditions (orbit position/velocity matching). | Expose InterpFunction for builder API |
-| Heteroclinic | STM integration (`integrate_stm_parallel`) | High | Required for manifold computation via monodromy matrix eigendecomposition. Not in builder API. | Expose STM integration for builder API |
+| ~~Heteroclinic~~ | ~~`LGLInterpTable` + `make_periodic()`~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): LGLInterpTable already compatible with builder types. Full 4-stage port with STM manifolds + orbit-matching.~~ | ~~Done~~ |
+| ~~Heteroclinic~~ | ~~`InterpFunction`~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): `lgl_interp()` convenience function added. Used in orbit-matching constraints.~~ | ~~Done~~ |
+| ~~Heteroclinic~~ | ~~STM integration (`integrate_stm_parallel`)~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): DynIntegrator inherits all STM methods. Used for monodromy matrix eigendecomposition.~~ | ~~Done~~ |
 | OptimalDocking | `quat_rotate` | High | Python `vf.quat_rotate(q, v)` not available in C++ VF DSL. Only `quat_product` exists. | Add `quat_rotate()` free function to C++ VF DSL |
 | OptimalDocking | `cwise_product(Eigen::Vector)` | Medium | `cwise_product()` requires a VF expression argument, not an `Eigen::VectorXd`. Must wrap in `Constant<>` first. | Add overload accepting Eigen vectors |
-| OptimalDocking | `InterpTable` for target trajectory | High | Form2 requires interpolated target trajectory for time-dependent BC. Same gap as MinTimeToClimb. | (same fix) |
+| ~~OptimalDocking~~ | ~~`InterpTable` for target trajectory~~ | ~~High~~ | ~~RESOLVED (Subsystem 5): Form2 implemented with LGLInterpTable + lgl_interp() for target trajectory. 6x faster than Form1.~~ | ~~Done~~ |
 | MultiSpacecraftOpt | `PhasePack` link constraints | Low | Works but verbose. Must construct `PhasePack` tuples manually and use `ocp.base()`. | Add named-variable link constraint helpers to OCP wrapper |
 | MultiSpacecraftOpt | `sub_variables` on Phase wrapper | Medium | Not on Phase wrapper. Must use `phase.base().sub_variables(flag, idx, val)`. | Forward to Phase wrapper |
 | ~~MinTimeClimbTables~~ | ~~`InterpTable1D`/`InterpTable2D` in ODE~~ | ~~High~~ | ~~RESOLVED (Subsystem 4): Same fix as MinTimeToClimb. Full table-based aero with `interp_scalar()` and `interp()`.~~ | ~~Done~~ |
