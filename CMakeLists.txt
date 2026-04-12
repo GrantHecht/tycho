@@ -299,17 +299,36 @@ list(APPEND RELEASE_FLAGS ${FP_FLAGS})
 ################################################################################
 # Sanitizers (opt-in; off by default)
 #
-# TYCHO_ENABLE_SANITIZERS=ON enables AddressSanitizer + UndefinedBehaviorSanitizer
-# on all tycho targets and the _tychopy extension. Intended for debugging UB /
-# memory errors locally, not production.
+# Two mutually exclusive modes:
 #
-# Usage from Python:
-#   LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so) \
-#     conda run -n tycho python <script.py>
+# TYCHO_ENABLE_SANITIZERS=ON
+#     AddressSanitizer + UndefinedBehaviorSanitizer. Catches heap/stack
+#     overflow, use-after-free, leaks, and common UB (null derefs, signed
+#     overflow, misaligned loads, ...). Does NOT catch uninitialized reads.
+#     Usage from Python:
+#       LD_PRELOAD=/usr/lib/clang/<ver>/lib/.../libclang_rt.asan.so \
+#         conda run -n tycho python <script.py>
+#
+# TYCHO_ENABLE_MSAN=ON (clang only)
+#     MemorySanitizer. Catches reads of uninitialized memory. Much higher
+#     false-positive rate because any write by a non-instrumented library
+#     (MKL, libiomp5, libstdc++ on Fedora) "poisons" its outputs. Use with
+#     MSAN_OPTIONS=exitcode=0:halt_on_error=0 and grep tycho source paths
+#     out of the noise. The MSan runtime is linked statically — no
+#     LD_PRELOAD needed, just run the sanitized binary directly.
+#
+# You cannot enable both at the same time (ASan and MSan are mutually
+# exclusive in the clang runtime).
 ################################################################################
 set(TYCHO_ENABLE_SANITIZERS OFF CACHE BOOL
     "Enable AddressSanitizer + UndefinedBehaviorSanitizer on tycho targets")
+set(TYCHO_ENABLE_MSAN OFF CACHE BOOL
+    "Enable MemorySanitizer on tycho targets (clang only; mutually exclusive with TYCHO_ENABLE_SANITIZERS)")
 set(SANITIZER_COMPILE_FLAGS "")
+if(TYCHO_ENABLE_SANITIZERS AND TYCHO_ENABLE_MSAN)
+    message(FATAL_ERROR
+        "TYCHO_ENABLE_SANITIZERS and TYCHO_ENABLE_MSAN are mutually exclusive. Pick one.")
+endif()
 if(TYCHO_ENABLE_SANITIZERS)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         list(APPEND SANITIZER_COMPILE_FLAGS
@@ -334,6 +353,50 @@ if(TYCHO_ENABLE_SANITIZERS)
         message(STATUS "Sanitizers ENABLED (AddressSanitizer + UBSan)")
     else()
         message(WARNING "TYCHO_ENABLE_SANITIZERS: unsupported compiler, ignoring")
+    endif()
+endif()
+if(TYCHO_ENABLE_MSAN)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list(APPEND SANITIZER_COMPILE_FLAGS
+             "-fsanitize=memory"
+             "-fsanitize-memory-track-origins=2"
+             "-fno-omit-frame-pointer"
+             "-fsanitize-recover=all"
+             "-g")
+        add_link_options(-fsanitize=memory)
+        # Note: Fedora compiler-rt only ships static libclang_rt.msan.a, so we
+        # cannot LD_PRELOAD an MSan runtime into an un-instrumented Python
+        # interpreter the way we do for ASan. To use MSan you must build a
+        # standalone C++ binary (e.g. a cpp_examples/ reproducer) that links
+        # the MSan runtime statically and exercises the suspect code path
+        # directly. Loading _tychopy.so into Python under MSan will fail with
+        # unresolved __msan_* symbols — this is expected.
+        message(STATUS "MemorySanitizer ENABLED (clang, track-origins=2) — standalone binaries only")
+    else()
+        message(FATAL_ERROR "TYCHO_ENABLE_MSAN requires clang (got ${CMAKE_CXX_COMPILER_ID})")
+    endif()
+endif()
+
+################################################################################
+# Auto-init trivial stack/aggregate variables (debug aid)
+#
+# TYCHO_AUTO_INIT_STACK=ON fills uninitialized trivial stack variables with
+# 0xAAAA... (clang/gcc 12+). This makes reads of uninitialized memory produce
+# deterministic poison values instead of whatever the compiler happens to
+# leave on the stack — handy for reproducing UB that ASan misses.
+#
+# Cheap to enable (no runtime cost at -O3 for values that get optimized out,
+# small cost for values that actually live on the stack). Off by default to
+# match production behavior, but safe to ship.
+################################################################################
+set(TYCHO_AUTO_INIT_STACK OFF CACHE BOOL
+    "Fill trivial uninitialized stack variables with 0xAA poison pattern (debug aid)")
+if(TYCHO_AUTO_INIT_STACK)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        list(APPEND SANITIZER_COMPILE_FLAGS "-ftrivial-auto-var-init=pattern")
+        message(STATUS "Trivial auto-var init ENABLED (pattern 0xAA)")
+    else()
+        message(WARNING "TYCHO_AUTO_INIT_STACK: unsupported compiler, ignoring")
     endif()
 endif()
 

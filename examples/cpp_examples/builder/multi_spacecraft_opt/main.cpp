@@ -207,6 +207,7 @@ int main() {
     // jumps small enough for the optimizer to track without diverging.
     std::cout << "\nContinuation over angular spreads...\n";
     std::vector<double> thetas = {20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0};
+    PSIOPT::ConvergenceFlags flag = PSIOPT::ConvergenceFlags::CONVERGED;
     for (size_t j = 1; j < thetas.size(); ++j) {
         double theta_max = thetas[j];
         for (int i = 0; i < N; ++i) {
@@ -221,7 +222,7 @@ int main() {
         // This re-solves the feasibility problem first, which is critical after
         // substituting new initial conditions that can drive the linear model
         // residuals away from the previous iterate's basin.
-        auto flag = ocp.optimize();
+        flag = ocp.optimize();
         if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
             flag = ocp.solve_optimize();
         }
