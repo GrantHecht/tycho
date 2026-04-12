@@ -135,6 +135,38 @@ Other candidates:
 
 ---
 
+## Update 2026-04-12 — Single-phase is pathological; multi-phase regression confirmed
+
+Built a minimal **single-phase** min-time reproducer
+(`doc/plans/single_phase_regression_test.py`). It **diverges in both tycho and
+asset_asrl**, so the single-phase min-time formulation is inherently ill-posed
+(degenerate local min at `tf ≈ 0`) — it is **not** a regression signal.
+
+Re-verified the original multi-phase reproducer:
+- `conda run -n asset_test python /tmp/psiopt_regression_test_camel.py` → **PASS**
+- `conda run -n tycho      python /tmp/psiopt_regression_test.py      ` → **FAIL**
+
+So the regression only appears in the multi-phase OCP with link constraints, which
+points the finger back at **link-constraint machinery** (`add_link_equal_con`,
+`add_link_param_equal_con`, or the OCP indexer handling of link-param variables
+in the KKT matrix). Per-phase evaluation is not the bug on its own.
+
+### Next diagnostic steps
+
+1. **Two-phase minimum reproducer** — shrink from N=10 to N=2 phases and verify the
+   regression still triggers. Then the diff surface is tiny enough to step through.
+2. **Diff tycho vs asset on the link-constraint implementation**:
+   - `src/optimal_control/optimal_control_problem.cpp` (tycho)
+   - `src/OptimalControl/OptimalControlProblemBase.cpp` (asset)
+   Look for how `LinkEqualCon` / `LinkParamEqualCon` compute sparsity, scale, and
+   feed into the NLP Jacobian. The type-erasure refactor (`ac92cae`) could have
+   corrupted the link-function storage or its argument binding.
+3. **Run the multi-phase reproducer with `print_level=3`** in both tycho and
+   asset_asrl, and compare the initial-iterate KKT inf, primal residuals, and
+   the link-parameter values.
+
+---
+
 ## How to continue the investigation
 
 1. **Bisect through tycho commits 2a4cc72..ac92cae** to find the exact commit that introduces the divergence. Each iteration takes ~3 minutes (build + 10s test) so the full bisect of ~6 PRs is ~30 minutes.
