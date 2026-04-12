@@ -1,0 +1,21 @@
+{
+  "planPath": "doc/plans/2026-04-11-pr-review-fixes.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Fix stepper_compute empty default", "status": "completed"},
+    {"id": 2, "subject": "Task 2: OCP wrapper cleanup — dead code + lifetime docs", "status": "completed"},
+    {"id": 3, "subject": "Task 3: Rename RowMatrix -> row_matrix", "status": "completed"},
+    {"id": 4, "subject": "Task 4: Fix reentry convergence", "status": "completed"},
+    {"id": 5, "subject": "Task 5: Fix topputto_low_thrust convergence", "status": "completed"},
+    {"id": 6, "subject": "Task 6: Fix simple_low_thrust convergence", "status": "completed"},
+    {"id": 7, "subject": "Task 7: Fix dionysus_low_thrust convergence", "status": "completed"},
+    {"id": 8, "subject": "Task 8: Fix multi_spacecraft_opt convergence", "status": "completed"},
+    {"id": 9, "subject": "Task 9: Fix optimal_docking convergence", "status": "completed"},
+    {"id": 10, "subject": "Task 10: Fix orbit_continuation convergence", "status": "completed"},
+    {"id": 11, "subject": "Task 11: Fix comments — quat_rotate and ODE::phase()", "status": "completed"},
+    {"id": 12, "subject": "Task 12: Update stale entries in cpp_example_api_gaps.md", "status": "completed"},
+    {"id": 13, "subject": "Task 13: InterpTable constructor dedup + centralize parsing", "status": "completed"},
+    {"id": 14, "subject": "Task 14: Debug-only asserts in VF expression layer", "status": "completed"},
+    {"id": 15, "subject": "Task 15: Build, format, and verify", "status": "completed", "blockedBy": [1,2,3,4,5,6,7,8,9,10,11,12,13,14]}
+  ],
+  "lastUpdated": "2026-04-11T21:30:00Z"
+}
