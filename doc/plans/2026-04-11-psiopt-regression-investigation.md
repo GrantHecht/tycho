@@ -151,19 +151,69 @@ points the finger back at **link-constraint machinery** (`add_link_equal_con`,
 `add_link_param_equal_con`, or the OCP indexer handling of link-param variables
 in the KKT matrix). Per-phase evaluation is not the bug on its own.
 
+### Diagnostic results (2026-04-12)
+
+- **N=2 reproducer behaves the same as N=10**, so link-constraint cardinality is
+  not the issue. `doc/plans/n2_regression_tycho.py` diverges, `n2_regression_asset.py`
+  converges in 81 iters to `tf=5.9493, pos_norm=0.9754`.
+- **Iteration-0 comparison** at `print_level=3`:
+  - Asset: `ECons Inf = 3.42e-01`, `AlphaP = 1.32e-1`, `AlphaD = 2.49e-1`
+  - Tycho: `ECons Inf = 1.00e+00`, `AlphaP = 8.76e-3`, `AlphaD = 5.22e-3`
+  Same IG, same problem, but different initial constraint residual in tycho.
+- **Tycho is non-deterministic across runs**: 5 consecutive invocations of the
+  N=2 script produced `tf_nd ∈ {−0.11, −129805, −3.47, 674, 2.37}` with equally
+  varied `pos_norm`. Asset produces identical results every run.
+  - Non-determinism persists with `OMP_NUM_THREADS=1` and
+    `typy.Utils.set_num_threads(1)` (not a threading race).
+  - Non-determinism persists when the bump-allocator capacity is pre-grown to
+    20M elements (not an overflow-path bug).
+  - Non-determinism occurs even across calls to `solve()` within a single
+    Python process — so it's not process-startup state.
+- **Narrowing:**
+  - **No link constraints** (pure per-phase OCP): **deterministic** across runs
+    (every run: `lp6 = 6.283185`, same flag). Still ends at a degenerate local
+    min, but reproducibly.
+  - **With `add_link_equal_con`** only (no link-param equal con): **non-
+    deterministic**, same class of garbage results.
+  - **With `add_forward_link_equal_con`**: also non-deterministic.
+- **At the VF level**: `GenericFunction<-1,-1>` built from `Args(14).head(7) - Args(14).tail(7)`
+  returns identical `compute` / `jacobian` values across repeated calls — the
+  bug is not in the constraint function itself.
+
+### Conclusion
+
+The link-constraint evaluation path reads uninitialized memory **after** the
+constraint function is stored in the NLP. Candidates, in order of suspicion:
+
+1. **`OptimalControlProblemBase::transcribe_links` assembly into `nlp_`** — the
+   `Func = IOScaled<decltype(Func)>(Eq.func_, ...)` wrap builds a local scaled
+   function that is then stored via `ConstraintFunction(Func, VC[0], VC[1])`.
+   If `ConstraintFunction` captures by reference rather than by value somewhere
+   (or if `GFStorage::emplace` moves from a temporary that is subsequently
+   destroyed), the constraint evaluates against freed memory. **Not** the
+   auto-scaling branch — the reproducer leaves `auto_scaling_ = false`, so the
+   wrap is skipped and `Func = Eq.func_` goes straight into ConstraintFunction.
+2. **`LinkFunction` storage in `std::map<int, LinkConstraint>`** — the map
+   values are copied when the map rehashes/rebalances. If `LinkFunction`'s
+   copy constructor silently drops some member (e.g., `output_scales_`
+   default-constructed in the copy but not in the source), a subsequent
+   `ConstraintFunction(Eq.func_, ...)` sees a zeroed or garbage scale.
+3. **`ConstraintFunction` constructor sizing the Jacobian workspace** — if it
+   allocates a scratch `VectorXd` / `MatrixXd` and does not zero-init it
+   before the first `compute_jacobian`, a sparse accumulate-into pattern
+   could pick up stale stack values.
+
 ### Next diagnostic steps
 
-1. **Two-phase minimum reproducer** — shrink from N=10 to N=2 phases and verify the
-   regression still triggers. Then the diff surface is tiny enough to step through.
-2. **Diff tycho vs asset on the link-constraint implementation**:
-   - `src/optimal_control/optimal_control_problem.cpp` (tycho)
-   - `src/OptimalControl/OptimalControlProblemBase.cpp` (asset)
-   Look for how `LinkEqualCon` / `LinkParamEqualCon` compute sparsity, scale, and
-   feed into the NLP Jacobian. The type-erasure refactor (`ac92cae`) could have
-   corrupted the link-function storage or its argument binding.
-3. **Run the multi-phase reproducer with `print_level=3`** in both tycho and
-   asset_asrl, and compare the initial-iterate KKT inf, primal residuals, and
-   the link-parameter values.
+1. **Print the raw constraint output** at iteration 0 — add a debug print
+   in `NonLinearProgram::compute_equalities` or equivalent to dump the link
+   constraint's Fx value. If it varies across runs for the same input, the
+   corruption is in the constraint eval itself.
+2. **Enable AddressSanitizer** on a debug build and run the N=2 reproducer.
+   This should flag the uninitialized read directly with a stack trace.
+3. **Audit `ConstraintFunction` copy/move semantics** in tycho vs asset. The
+   type-erased function may be stored by value in one and by reference in the
+   other.
 
 ---
 
