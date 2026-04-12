@@ -233,19 +233,37 @@ clang 21 + Fedora `compiler-rt` at `STRICT` FP mode, preloading
   reads — that would need MemorySanitizer, which conflicts with ASan and
   needs a fully-instrumented libstdc++).
 
-### Hypotheses ranked after ASan results
+### Update 2026-04-12 — NLP state after transcribe is fully deterministic
 
-1. **KKT assembly initializes a sparse-triplet workspace from a scratch
-   buffer that is only partially written** — e.g., `inner_kkt_starts_` or
-   `inner_gradient_starts_` in `SolverIndexingData` is sized from a stale
-   `num_funcappl_` that was computed before the link constraint was added.
-   The corresponding KKT slots read uninitialized scratch memory each call.
-   ASan would NOT catch this because the scratch is a `Eigen::VectorXd` whose
-   memory is heap-allocated (ASan sees it as "initialized" to whatever
-   default-construction produced, even if semantically stale).
+Dumped the full post-`transcribe(True,True)` state (indexer sizes, `v_index_`,
+`c_index_`, input/output rows, variable counts, link-param locations, etc.)
+across three consecutive runs of the N=2 reproducer. All 3097 lines of
+output are **bit-identical**.
+
+**Implication:** link-constraint indexing setup is fully deterministic. The
+corruption is downstream of `transcribe_links()` — it must happen *during*
+the numerical path of `solve()`, i.e., in one of:
+
+- `ConstraintFunction::constraints_jacobian` (or siblings) reading a scratch
+  buffer that is only partially written
+- `NonLinearProgram::kkt_fill_*` accumulating into a pre-existing sparse
+  matrix whose prior values are not zeroed per iteration
+- PSIOPT's own internal workspace reusing a `VectorXd` / `MatrixXd` from a
+  prior iteration without fully overwriting it
+
+This moves hypothesis #1 (indexing corruption) to the bottom of the list.
+
+### Hypotheses ranked after ASan + transcribe-dump results
+
+1. **Numerical scratch buffer reused without full re-init per iteration.**
+   Most likely inside `NonLinearProgram` or PSIOPT's KKT assembly — a
+   `VectorXd` or sparse matrix is resized once, then accumulated into each
+   iteration via `+=`, but a rare code path (link constraints only) writes
+   to a different subset of indices than the previous iteration filled,
+   leaving stale values in the unwritten slots.
 2. **MKL Pardiso receives a slightly different `nnz` / `csr` layout each
-   run** due to a hash-unstable assembly order. Not likely though — asset uses
-   the exact same Pardiso path.
+   run** due to a hash-unstable assembly order. Unlikely — asset uses the
+   exact same Pardiso path and is fully deterministic.
 3. **Wild pointer dereference landing inside memory that happens to be
    "live" ASan-wise** — e.g., a stale `shared_ptr` that was upgraded from
    weak. Less likely given the shared-ptr refactor audit.
