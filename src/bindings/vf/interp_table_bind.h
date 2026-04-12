@@ -25,13 +25,8 @@ namespace tycho {
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-inline InterpType parse_interp_type(const std::string &str) {
-    if (str == "cubic" || str == "Cubic")
-        return InterpType::Cubic;
-    if (str == "linear" || str == "Linear")
-        return InterpType::Linear;
-    throw std::invalid_argument(fmt::format("Unknown interpolation type: '{}'", str));
-}
+// parse_interp_type() is now defined in tycho/detail/optimal_control/interp/interp_type.h
+// and available wherever InterpType is used.
 
 // ── InterpTable1D
 // ─────────────────────────────────────────────────────────────────────────────────

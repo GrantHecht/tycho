@@ -11,7 +11,6 @@
 #include "test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
-#include <string>
 
 namespace TychoTest {
 
@@ -40,7 +39,7 @@ BUILD_ODE_FROM_EXPRESSION(SHO, SHO_Impl, double);
 // SHO error helper for convergence order tests
 ///////////////////////////////////////////////////////////////////////////////
 
-inline double sho_error(const std::string &method, double h) {
+inline double sho_error(IVPAlg method, double h) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, method, h);
     integ.adaptive_ = false; // Fixed step

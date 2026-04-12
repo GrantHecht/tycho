@@ -15,7 +15,7 @@ using namespace TychoTest;
 
 TEST_F(IntegratorTest, SHOSTMVsAnalytical) {
     SHO ode(0.0);
-    Integrator<SHO> integ(ode, "DOPRI87", 0.01);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 
@@ -41,7 +41,7 @@ TEST_F(IntegratorTest, SHOSTMVsAnalytical) {
 
 TEST_F(IntegratorTest, STMIdentityAtZeroTime) {
     SHO ode(0.0);
-    Integrator<SHO> integ(ode, "DOPRI87", 0.01);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-13);
 
     Eigen::Vector3d x0;
@@ -58,7 +58,7 @@ TEST_F(IntegratorTest, STMIdentityAtZeroTime) {
 
 TEST_F(IntegratorTest, STMComposition) {
     SHO ode(0.0);
-    Integrator<SHO> integ(ode, "DOPRI87", 0.01);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 
@@ -86,7 +86,7 @@ TEST_F(IntegratorTest, STMComposition) {
 
 TEST_F(IntegratorTest, KeplerSTMDeterminant) {
     Kepler kep(398600.4418);
-    Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
+    Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 
@@ -108,7 +108,7 @@ TEST_F(IntegratorTest, KeplerSTMDeterminant) {
 
 TEST_F(IntegratorTest, STMParallelSingleTrajectoryMatchesSerial) {
     Kepler kep(398600.4418);
-    Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
+    Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 
@@ -144,7 +144,7 @@ TEST_F(IntegratorTest, STMParallelSingleTrajectorySerialFallback) {
     ScopedThreadCount guard(1); // Force serial fallback (restores on scope exit)
 
     Kepler kep(398600.4418);
-    Integrator<Kepler> integ(kep, "DOPRI87", 10.0);
+    Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 

@@ -13,8 +13,8 @@ using namespace TychoTest;
 
 TEST_F(IntegratorTest, DOPRI54ConvergenceOrder) {
     double h1 = 0.1, h2 = 0.05;
-    double e1 = sho_error("DOPRI54", h1);
-    double e2 = sho_error("DOPRI54", h2);
+    double e1 = sho_error(IVPAlg::DOPRI54, h1);
+    double e2 = sho_error(IVPAlg::DOPRI54, h2);
 
     // Expected order ~5 (uses DOPRI5 stepper): slope = log(e1/e2) / log(h1/h2)
     double slope = std::log(e1 / e2) / std::log(h1 / h2);
@@ -27,8 +27,8 @@ TEST_F(IntegratorTest, DOPRI87ConvergenceOrder) {
     // The integrator internally recomputes step count and actual step size,
     // so the nominal h ratio is approximate; accept order >= 6.
     double h1 = 0.5, h2 = 0.25;
-    double e1 = sho_error("DOPRI87", h1);
-    double e2 = sho_error("DOPRI87", h2);
+    double e1 = sho_error(IVPAlg::DOPRI87, h1);
+    double e2 = sho_error(IVPAlg::DOPRI87, h2);
 
     double slope = std::log(e1 / e2) / std::log(h1 / h2);
     EXPECT_GT(slope, 6.0) << "DOPRI87 convergence order too low: " << slope;

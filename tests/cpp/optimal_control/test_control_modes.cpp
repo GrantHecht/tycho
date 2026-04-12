@@ -22,7 +22,7 @@ class ControlModeTest : public OptimalControlTest {};
 
 namespace {
 
-ODE make_brach_ode() {
+ODE make_control_modes_brach_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
             auto v = args.x_var(2);
@@ -74,7 +74,7 @@ Phase make_brach_phase_with_mode(ODE &ode, ControlModes mode) {
 } // namespace
 
 TEST_F(ControlModeTest, HighestOrderSplineConverges) {
-    auto ode = make_brach_ode();
+    auto ode = make_control_modes_brach_ode();
     auto phase = make_brach_phase_with_mode(ode, ControlModes::HighestOrderSpline);
 
     auto status = phase.solve_optimize();
@@ -86,7 +86,7 @@ TEST_F(ControlModeTest, HighestOrderSplineConverges) {
 }
 
 TEST_F(ControlModeTest, FirstOrderSplineConverges) {
-    auto ode = make_brach_ode();
+    auto ode = make_control_modes_brach_ode();
     auto phase = make_brach_phase_with_mode(ode, ControlModes::FirstOrderSpline);
 
     auto status = phase.solve_optimize();
@@ -98,7 +98,7 @@ TEST_F(ControlModeTest, FirstOrderSplineConverges) {
 }
 
 TEST_F(ControlModeTest, NoSplineConverges) {
-    auto ode = make_brach_ode();
+    auto ode = make_control_modes_brach_ode();
     auto phase = make_brach_phase_with_mode(ode, ControlModes::NoSpline);
 
     auto status = phase.solve_optimize();
@@ -110,7 +110,7 @@ TEST_F(ControlModeTest, NoSplineConverges) {
 }
 
 TEST_F(ControlModeTest, BlockConstantConverges) {
-    auto ode = make_brach_ode();
+    auto ode = make_control_modes_brach_ode();
     auto phase = make_brach_phase_with_mode(ode, ControlModes::BlockConstant);
 
     auto status = phase.solve_optimize();

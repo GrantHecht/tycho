@@ -14,7 +14,7 @@ using namespace TychoTest;
 TEST_F(IntegratorTest, AdaptiveToleranceAdherence) {
     SHO ode(0.0);
     double tol = 1e-10;
-    Integrator<SHO> integ(ode, "DOPRI87", 0.1);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.1);
     integ.set_abs_tol(tol);
     integ.set_rel_tol(tol);
 
@@ -33,11 +33,11 @@ TEST_F(IntegratorTest, AdaptiveToleranceAdherence) {
 TEST_F(IntegratorTest, TightVsLooseToleranceComparison) {
     SHO ode(0.0);
 
-    Integrator<SHO> integ_tight(ode, "DOPRI87", 0.1);
+    Integrator<SHO> integ_tight(ode, IVPAlg::DOPRI87, 0.1);
     integ_tight.set_abs_tol(1e-13);
     integ_tight.set_rel_tol(1e-13);
 
-    Integrator<SHO> integ_loose(ode, "DOPRI87", 0.1);
+    Integrator<SHO> integ_loose(ode, IVPAlg::DOPRI87, 0.1);
     integ_loose.set_abs_tol(1e-6);
     integ_loose.set_rel_tol(1e-6);
 
@@ -57,11 +57,11 @@ TEST_F(IntegratorTest, TightVsLooseToleranceComparison) {
 TEST_F(IntegratorTest, MethodComparison) {
     SHO ode(0.0);
 
-    Integrator<SHO> integ54(ode, "DOPRI54", 0.1);
+    Integrator<SHO> integ54(ode, IVPAlg::DOPRI54, 0.1);
     integ54.set_abs_tol(1e-10);
     integ54.set_rel_tol(1e-10);
 
-    Integrator<SHO> integ87(ode, "DOPRI87", 0.1);
+    Integrator<SHO> integ87(ode, IVPAlg::DOPRI87, 0.1);
     integ87.set_abs_tol(1e-10);
     integ87.set_rel_tol(1e-10);
 
