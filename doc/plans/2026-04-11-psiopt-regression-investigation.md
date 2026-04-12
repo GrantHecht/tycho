@@ -203,9 +203,65 @@ constraint function is stored in the NLP. Candidates, in order of suspicion:
    before the first `compute_jacobian`, a sparse accumulate-into pattern
    could pick up stale stack values.
 
+### Update 2026-04-12 — ASan/UBSan results
+
+Wired AddressSanitizer + UBSan into CMake via `TYCHO_ENABLE_SANITIZERS=ON`
+(adds `-fsanitize=address,undefined` + `-shared-libsan` on clang so the
+runtime can be LD_PRELOADed into Python). Built the N=2 reproducer under
+clang 21 + Fedora `compiler-rt` at `STRICT` FP mode, preloading
+`/usr/lib/clang/21/lib/x86_64-redhat-linux-gnu/libclang_rt.asan.so`.
+
+**ASan/UBSan findings:**
+- One UBSan hit at `src/bindings/type_casters.h:193` — `memcpy(dst, nullptr, 0)`
+  from `Eigen::VectorXi` with `size()==0`. Fixed separately (guard the memcpy
+  and allocate at least one element).
+- After the type_casters fix: **no ASan or UBSan diagnostics** on the N=2
+  multi-phase reproducer across 3 consecutive runs. The reproducer still
+  diverges and still reports different `tf_nd` every run.
+- Non-determinism narrowed further:
+  - `MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_CBWR=COMPATIBLE PYTHONHASHSEED=0`:
+    still non-deterministic, but only in trailing digits
+    (`tf_nd ≈ -82000 ± 4000` across runs). This is the footprint of
+    ill-conditioned numerics being amplified, not wildly different
+    iteration paths — the iterate is diverging toward `-∞ · t` where
+    small perturbations explode.
+  - Disabling ASLR (`setarch -R`) did not help.
+- All fast-path instrumentation is clean, which means the source of
+  perturbation is **either in a non-instrumented library** (statically linked
+  MKL Pardiso or libiomp5) or is a **legitimate uninitialized-read that ASan
+  cannot see** (ASan catches heap/stack OOB and UAF, not uninitialized
+  reads — that would need MemorySanitizer, which conflicts with ASan and
+  needs a fully-instrumented libstdc++).
+
+### Hypotheses ranked after ASan results
+
+1. **KKT assembly initializes a sparse-triplet workspace from a scratch
+   buffer that is only partially written** — e.g., `inner_kkt_starts_` or
+   `inner_gradient_starts_` in `SolverIndexingData` is sized from a stale
+   `num_funcappl_` that was computed before the link constraint was added.
+   The corresponding KKT slots read uninitialized scratch memory each call.
+   ASan would NOT catch this because the scratch is a `Eigen::VectorXd` whose
+   memory is heap-allocated (ASan sees it as "initialized" to whatever
+   default-construction produced, even if semantically stale).
+2. **MKL Pardiso receives a slightly different `nnz` / `csr` layout each
+   run** due to a hash-unstable assembly order. Not likely though — asset uses
+   the exact same Pardiso path.
+3. **Wild pointer dereference landing inside memory that happens to be
+   "live" ASan-wise** — e.g., a stale `shared_ptr` that was upgraded from
+   weak. Less likely given the shared-ptr refactor audit.
+
 ### Next diagnostic steps
 
-1. **Print the raw constraint output** at iteration 0 — add a debug print
+1. Dump `nlp_->equality_constraints_[link_idx].index_data_` after
+   `transcribe_links()` — compare `v_index_`, `c_index_`, and the inner
+   starts across runs. If any of those differ, the corruption is in
+   indexing setup, not constraint evaluation.
+2. Rebuild with MemorySanitizer (even with false positives, the first few
+   flagged reads in link-constraint territory will be meaningful).
+3. Add a debug print at the top of `ConstraintFunction::constraints_jacobian`
+   that dumps `X.segment(v_index_)` for the link constraint — if that differs
+   run-to-run, the variable gather is reading from uninitialized state.
+4. **Print the raw constraint output** at iteration 0 — add a debug print
    in `NonLinearProgram::compute_equalities` or equivalent to dump the link
    constraint's Fx value. If it varies across runs for the same input, the
    corruption is in the constraint eval itself.

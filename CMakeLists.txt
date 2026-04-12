@@ -294,10 +294,52 @@ endif()
 
 list(APPEND RELEASE_FLAGS ${SIMD_FLAGS})
 list(APPEND RELEASE_FLAGS ${FP_FLAGS})
- 
+
+
+################################################################################
+# Sanitizers (opt-in; off by default)
+#
+# TYCHO_ENABLE_SANITIZERS=ON enables AddressSanitizer + UndefinedBehaviorSanitizer
+# on all tycho targets and the _tychopy extension. Intended for debugging UB /
+# memory errors locally, not production.
+#
+# Usage from Python:
+#   LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so) \
+#     conda run -n tycho python <script.py>
+################################################################################
+set(TYCHO_ENABLE_SANITIZERS OFF CACHE BOOL
+    "Enable AddressSanitizer + UndefinedBehaviorSanitizer on tycho targets")
+set(SANITIZER_COMPILE_FLAGS "")
+if(TYCHO_ENABLE_SANITIZERS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        list(APPEND SANITIZER_COMPILE_FLAGS
+             "-fsanitize=address,undefined"
+             "-fno-omit-frame-pointer"
+             # Default to recoverable UBSan so the process continues past the
+             # first diagnostic; use UBSAN_OPTIONS=halt_on_error=1 at runtime
+             # to turn this back on.
+             "-fsanitize-recover=all"
+             "-g")
+        # Apply link flags globally so _tychopy and any executable target
+        # (tests, examples) link against libasan/libubsan correctly.
+        add_link_options(-fsanitize=address,undefined)
+        # On clang, force the dynamic sanitizer runtime so _tychopy.so can be
+        # loaded into Python via LD_PRELOAD=$(clang -print-file-name=
+        # libclang_rt.asan-x86_64.so). Without this, clang links libclang_rt.asan.a
+        # statically, which produces duplicate-symbol errors at dlopen time.
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            list(APPEND SANITIZER_COMPILE_FLAGS "-shared-libsan")
+            add_link_options(-shared-libsan)
+        endif()
+        message(STATUS "Sanitizers ENABLED (AddressSanitizer + UBSan)")
+    else()
+        message(WARNING "TYCHO_ENABLE_SANITIZERS: unsupported compiler, ignoring")
+    endif()
+endif()
 
 # Combine Flags
 set(COMPILE_FLAGS ${COMMON_FLAGS})
+list(APPEND COMPILE_FLAGS ${SANITIZER_COMPILE_FLAGS})
 # Wrap each flag individually in a genex to avoid broken genex fragments.
 # Embedding a semicolon-separated list inside a single genex breaks the
 # generator expression when CMake stores it as a list property (e.g.,
@@ -407,7 +449,7 @@ if(UNIX AND NOT APPLE)
   # find_package(OpenMP REQUIRED)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     list(APPEND COMPILE_FLAGS "-fopenmp=libiomp5")
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GCC")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GCC|GNU")
     list(APPEND COMPILE_FLAGS "-fopenmp")
   endif()
 elseif(APPLE)
