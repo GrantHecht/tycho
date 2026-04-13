@@ -42,6 +42,8 @@ template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
     // refactor accidentally added `fx = x` assignments here, which caused
     // e.g. multi_spacecraft_opt to diverge because the value-lock residual
     // was reported as the locked state itself (|[rx=1, vy=1, ...]|_inf = 1).
+    // Fixed in commit 8ffc2a9; regression test in
+    // tests/cpp/vector_functions/test_vf_value_lock.cpp.
 
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> & /*x*/,

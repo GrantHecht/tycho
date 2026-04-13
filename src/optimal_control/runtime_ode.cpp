@@ -63,6 +63,12 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
 }
 
 // ── Integrator construction ────────────────────────────────────────────
+//
+// Construct a DynIntegrator from the ODE. Each overload returns an
+// integrator that owns a fresh copy of the ODE (via make_dyn_ode).
+// Unless an explicit IVPAlg is passed, the default method is DOPRI87.
+// Overloads taking a std::shared_ptr<LGLInterpTable> share ownership of
+// the table with the integrator — the caller may keep its own reference.
 
 // Basic (no control law)
 

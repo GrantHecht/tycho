@@ -25,9 +25,6 @@ namespace tycho {
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-// parse_interp_type() is now defined in tycho/detail/optimal_control/interp/interp_type.h
-// and available wherever InterpType is used.
-
 // ── InterpTable1D
 // ─────────────────────────────────────────────────────────────────────────────────
 inline void InterpTable1DBuild(nb::module_ &m) {

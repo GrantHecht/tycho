@@ -96,16 +96,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     using EventPack = std::tuple<GenericFunction<-1, 1>, int, int>;
     using EventLocsType = std::vector<std::vector<ODEState<double>>>;
 
-    /// <summary>
-    /// The type for the differentiable stepper function.
-    /// Psuedo ODE is a compostion of the ode and control function(if any)
-    /// </summary>
-    /// <typeparam name="PseudoODE"></typeparam>
+    /// Differentiable stepper type: RK stepper over (ODE ∘ control) composed function.
     template <class PseudoODE, IVPAlg RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
 
-    /// <summary>
-    /// Wraps stepper types with RKoptions types
-    /// </summary>
     using StepperWrapperType = GenericFunction<SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
     using ControllerType = GenericFunction<-1, -1>;
     using StopFuncType = GenericConditional<-1>;
@@ -231,6 +224,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument(
                 "IVPAlg::RK4Classic and IVPAlg::DOPRI5 do not support adaptive step control. "
                 "Set adaptive = false before using these methods.");
+        default:
+            throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
     }
 
@@ -2071,41 +2066,64 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&stm_op, etc.).
+            // Collect *all* failure messages so no root cause is lost; if more
+            // than one segment failed, rethrow a composite runtime_error rather
+            // than dropping secondaries to stderr.
             std::exception_ptr ex;
+            std::string primary_msg;
+            std::vector<std::string> extra_msgs;
             for (int i = 0; i < n_parts; i++) {
                 try {
                     auto [xf, jx] = results[i].get();
                     jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                     if (i == (n_parts - 1))
                         xs[i + 1] = xf;
-                } catch (...) {
-                    if (!ex)
+                } catch (const std::exception &e) {
+                    if (!ex) {
                         ex = std::current_exception();
-                    int suppressed = 0;
+                        primary_msg = e.what();
+                    }
                     for (int j = i + 1; j < n_parts; j++) {
                         try {
                             results[j].get();
-                        } catch (const std::exception &e) {
-                            if (suppressed == 0)
-                                std::fprintf(stderr,
-                                             "[Tycho] integrate_stm_parallel: additional segment "
-                                             "also failed: %s\n",
-                                             e.what());
-                            ++suppressed;
+                        } catch (const std::exception &je) {
+                            extra_msgs.emplace_back(je.what());
                         } catch (...) {
-                            ++suppressed;
+                            extra_msgs.emplace_back("<non-std::exception>");
                         }
                     }
-                    if (suppressed > 1)
-                        std::fprintf(stderr,
-                                     "[Tycho] integrate_stm_parallel: %d additional exceptions "
-                                     "suppressed\n",
-                                     suppressed - 1);
+                    break;
+                } catch (...) {
+                    if (!ex) {
+                        ex = std::current_exception();
+                        primary_msg = "<non-std::exception>";
+                    }
+                    for (int j = i + 1; j < n_parts; j++) {
+                        try {
+                            results[j].get();
+                        } catch (const std::exception &je) {
+                            extra_msgs.emplace_back(je.what());
+                        } catch (...) {
+                            extra_msgs.emplace_back("<non-std::exception>");
+                        }
+                    }
                     break;
                 }
             }
-            if (ex)
-                std::rethrow_exception(ex);
+            if (ex) {
+                if (extra_msgs.empty()) {
+                    std::rethrow_exception(ex);
+                }
+                std::string joined =
+                    "integrate_stm_parallel: primary segment failure: " + primary_msg +
+                    "; additional failures (" + std::to_string(extra_msgs.size()) + "): ";
+                for (size_t k = 0; k < extra_msgs.size(); ++k) {
+                    if (k)
+                        joined += " | ";
+                    joined += extra_msgs[k];
+                }
+                throw std::runtime_error(joined);
+            }
         } else {
             for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);
