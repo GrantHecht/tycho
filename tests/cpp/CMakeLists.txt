@@ -70,6 +70,9 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_ode_expressions.cpp
     vector_functions/test_vf_composition_chains.cpp
     vector_functions/test_vf_hessian.cpp
+    vector_functions/test_vf_interp_compose.cpp
+    vector_functions/test_vf_value_lock.cpp
+    vector_functions/test_vf_matrix_view_errors.cpp
     vector_functions/test_vector_functions.cpp
     vector_functions/test_cwise_segment_sum_jacobian.cpp
     vector_functions/test_cwise_jacobian_stress.cpp
