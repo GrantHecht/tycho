@@ -1,8 +1,17 @@
 # PSIOPT Regression — `multi_spacecraft_opt` Convergence Failure
 
-**Status:** Identified — root cause narrowed, fix not yet implemented.
+**Status:** **RESOLVED** (2026-04-13). Root cause was a refactor error in
+`LockArgs::compute_impl` where `fx = x` was accidentally written, turning
+`add_value_lock` constraints into self-referential residuals. Asset's
+historical behavior is for `LockArgs::compute_impl` to leave `fx`
+untouched (PSIOPT zeroes the RHS per iteration, so leaving it alone
+makes the lock a structural no-op that relies on `sub_variables`). Fix:
+remove all `fx = x` assignments in `include/tycho/detail/vf/common/value_lock.h`.
 
-**TL;DR:** Asset_asrl converges this problem to a physically meaningful solution (`tf=0.947 periods`, positions on the unit circle). Tycho diverges to a degenerate local minimum (`tf≈0.002` or negative, positions scattered). The bug is **not** in the PSIOPT algorithmic code (tycho has all the relevant asset fixes). It is most likely in tycho's post-fork refactor of the VectorFunction type erasure system, which would corrupt gradient/Hessian evaluation in subtle ways that manifest as optimizer divergence.
+This document describes the multi-day investigation that isolated the
+bug. The summary below remains for historical context.
+
+**TL;DR:** Asset_asrl converges this problem to a physically meaningful solution (`tf=0.947 periods`, positions on the unit circle). Tycho diverges to a degenerate local minimum (`tf≈0.002` or negative, positions scattered). **(FIXED)** The bug was in `LockArgs::compute_impl` writing `fx = x` which made the value-lock constraint residual equal the locked value (`|[rx=1, vy=1, ...]|_∞ = 1.0`) instead of 0, driving the interior-point step size to near-zero at iter 0 and diverging.
 
 ---
 
@@ -268,26 +277,76 @@ This moves hypothesis #1 (indexing corruption) to the bottom of the list.
    "live" ASan-wise** — e.g., a stale `shared_ptr` that was upgraded from
    weak. Less likely given the shared-ptr refactor audit.
 
-### Next diagnostic steps
+## Update 2026-04-13 — Root cause found and fixed
 
-1. Dump `nlp_->equality_constraints_[link_idx].index_data_` after
-   `transcribe_links()` — compare `v_index_`, `c_index_`, and the inner
-   starts across runs. If any of those differ, the corruption is in
-   indexing setup, not constraint evaluation.
-2. Rebuild with MemorySanitizer (even with false positives, the first few
-   flagged reads in link-constraint territory will be meaningful).
-3. Add a debug print at the top of `ConstraintFunction::constraints_jacobian`
-   that dumps `X.segment(v_index_)` for the link constraint — if that differs
-   run-to-run, the variable gather is reading from uninitialized state.
-4. **Print the raw constraint output** at iteration 0 — add a debug print
-   in `NonLinearProgram::compute_equalities` or equivalent to dump the link
-   constraint's Fx value. If it varies across runs for the same input, the
-   corruption is in the constraint eval itself.
-2. **Enable AddressSanitizer** on a debug build and run the N=2 reproducer.
-   This should flag the uninitialized read directly with a stack trace.
-3. **Audit `ConstraintFunction` copy/move semantics** in tycho vs asset. The
-   type-erased function may be stored by value in one and by reference in the
-   other.
+The non-determinism was two unrelated issues stacked on each other:
+
+1. **MKL Pardiso multi-threaded non-determinism.** With default
+   `qp_threads=8`, Pardiso's parallel LDLT factorization uses
+   non-associative reductions whose output varies across runs. Not a bug
+   per se (MKL documents this), but it masked the underlying algorithmic
+   regression by making the divergence look non-deterministic. Setting
+   `ocp.optimizer.set_qp_threads(1)` makes each run bit-identical and
+   exposes the real bug.
+
+2. **`LockArgs::compute_impl` wrote `fx = x`.** In
+   `include/tycho/detail/vf/common/value_lock.h`, all three compute
+   variants (`compute_impl`, `compute_jacobian_impl`,
+   `compute_jacobian_adjointgradient_adjointhessian_impl`) had lines
+   like `fx = x;`. Asset's historical source (`src/OptimalControl/ValueLock.h`)
+   leaves those assignments commented out — the body is intentionally
+   empty. Leaving `fx` alone matters because PSIOPT zeroes the RHS at
+   the start of each iteration, so an untouched `fx` contributes a
+   residual of 0. Writing `fx = x` makes the "value lock" constraint
+   report a residual equal to the substituted lock value
+   (`circ_state(r=1, θ=0) = [1, 0, 0, 0, 1, 0, 0]`), and
+   `||·||_∞ = 1.0` shows up as the iter-0 `ECons Inf` in the PSIOPT
+   table — exactly the symptom that kicked off this investigation.
+
+   The constraint is enforced structurally by
+   `ODEPhaseBase::sub_variables()` replacing the primal variables with
+   fixed values before the solver ever reads them; `LockArgs` is
+   effectively a placeholder used to tell the OCP indexer "these are
+   equality constraints" so the substitution mechanism has something
+   to hook into. With `fx = x`, the constraint is instead a pinning
+   equation whose RHS is the substituted state, which is not zero.
+
+**Diagnostic path that finally worked:**
+
+1. Narrow the reproducer to N=2 phases (`doc/plans/n2_regression_*.py`)
+   and build an equivalent C++ standalone (`examples/cpp_examples/builder/n2_repro`).
+2. Force `qp_threads=1` to make the C++ reproducer deterministic.
+3. Compare iter-0 state against asset_asrl: **tycho ECons Inf = 1.0000
+   vs asset 0.3420**.
+4. Dump each equality constraint type separately:
+   - Link constraints: match asset (max = 0.342).
+   - Phase dynamics defects: tiny (~4.2e-6).
+   - The max-1.0 element isn't either of those — it's in phase 0's
+     front value-lock block.
+5. Temporarily instrument `fill_iter_info` to print the argmax and
+   window around it. Pattern `[1, 0, 0, 0, 1, 0, 0]` exactly matches
+   the substituted circular-orbit state — proving the residual is the
+   locked value itself.
+6. `grep -rn LockArgs` → find the divergent `fx = x` lines vs asset's
+   commented-out block.
+
+Multiple earlier diagnostic paths were followed and documented in this
+file because the symptoms were confusing. Leaving the history in place
+because each false lead taught us something useful about what the bug
+*wasn't*.
+
+**Fix:** `include/tycho/detail/vf/common/value_lock.h` — make all three
+compute variants leave `fx` alone.
+
+**Verified:**
+
+- `n2_repro`: `flag=0, tf_nd=6.565 (~1.04 periods), pos_norm=0.994`.
+  Matches asset.
+- `multi_spacecraft_opt_builder`: converges to `tf=0.9469` initial + full
+  continuation sweep to θ=90° with physical rendezvous.
+- Full `ctest` (591 tests): 100% passed.
+- Python example suite (38 scripts): 30 passed (8 skipped on missing
+  basemap), 0 failed.
 
 ---
 

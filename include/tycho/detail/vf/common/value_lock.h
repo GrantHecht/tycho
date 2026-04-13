@@ -24,35 +24,48 @@ template <int USZ> struct LockArgs : VectorFunction<LockArgs<USZ>, USZ, USZ> {
 
     LockArgs(int usz) { this->set_io_rows(usz, usz); }
     LockArgs() {}
+
+    // Note: LockArgs is a "value-lock" constraint. It pairs with
+    // ODEPhaseBase::sub_variables() which replaces the corresponding primal
+    // variables with fixed substituted values *before* the constraint is
+    // evaluated. Because the variables are never seen by the optimizer,
+    // the only useful residual at eval time is 0 — the constraint is
+    // structurally "satisfied" as long as the substitution has happened.
+    //
+    // compute_impl / compute_jacobian_impl therefore intentionally leave
+    // `fx` untouched (PSIOPT zeroes the RHS between iterations, so `fx`
+    // enters as 0). Writing `fx = x` would leak the substituted values
+    // back into the residual and cause a spurious non-zero constraint
+    // error at every iteration.
+    //
+    // This matches asset_asrl's historical behavior — an earlier tycho
+    // refactor accidentally added `fx = x` assignments here, which caused
+    // e.g. multi_spacecraft_opt to diverge because the value-lock residual
+    // was reported as the locked state itself (|[rx=1, vy=1, ...]|_inf = 1).
+
     template <class InType, class OutType>
-    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
-                             Eigen::MatrixBase<OutType> const &fx_) const {
-        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        fx = x;
+    inline void compute_impl(const Eigen::MatrixBase<InType> & /*x*/,
+                             Eigen::MatrixBase<OutType> const & /*fx_*/) const {
+        // intentionally empty — see note above
     }
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
-                                      Eigen::MatrixBase<OutType> const &fx_,
+    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> & /*x*/,
+                                      Eigen::MatrixBase<OutType> const & /*fx_*/,
                                       Eigen::MatrixBase<JacType> const &jx_) const {
-        typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
-        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        fx = x;
         jx.diagonal().setOnes();
     }
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        const Eigen::MatrixBase<InType> &x, Eigen::MatrixBase<OutType> const &fx_,
+        const Eigen::MatrixBase<InType> & /*x*/, Eigen::MatrixBase<OutType> const & /*fx_*/,
         Eigen::MatrixBase<JacType> const &jx_, Eigen::MatrixBase<AdjGradType> const &adjgrad_,
-        Eigen::MatrixBase<AdjHessType> const &adjhess_,
+        Eigen::MatrixBase<AdjHessType> const & /*adjhess_*/,
         const Eigen::MatrixBase<AdjVarType> &adjvars) const {
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
-        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
-        fx = x;
         jx.diagonal().setOnes();
-        adjgrad = adjvars;
+        adjgrad = adjvars; // identity Jacobian => adjgrad = J^T * adjvars = adjvars
     }
 };
 
