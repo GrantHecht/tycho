@@ -41,7 +41,6 @@ add_subdirectory(builder/orbit_continuation)
 add_subdirectory(builder/heteroclinic)
 add_subdirectory(builder/optimal_docking)
 add_subdirectory(builder/multi_spacecraft_opt)
-add_subdirectory(builder/n2_repro)
 
 # New builder examples (Tier 6: interpolation tables)
 add_subdirectory(builder/min_time_climb_tables)
@@ -64,7 +63,7 @@ set(_all_example_targets
     simple_low_thrust_builder topputto_low_thrust_builder dionysus_low_thrust_builder
     betts_low_thrust_builder orbit_continuation_builder
     # Builder (Tier 5)
-    heteroclinic_builder optimal_docking_builder multi_spacecraft_opt_builder n2_repro
+    heteroclinic_builder optimal_docking_builder multi_spacecraft_opt_builder
     # Builder (Tier 6)
     min_time_climb_tables_builder
 )
