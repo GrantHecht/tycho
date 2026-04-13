@@ -569,7 +569,9 @@ struct InterpTable3D {
                            "WARNING: x coordinate falls outside of InterpTable3D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable3D: query x={} is outside table x range [{}, {}]",
+                                    x, xs_[0], xs_[xs_.size() - 1]));
                 }
             }
             double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
@@ -578,7 +580,9 @@ struct InterpTable3D {
                            "WARNING: y coordinate falls outside of InterpTable3D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable3D: query y={} is outside table y range [{}, {}]",
+                                    y, ys_[0], ys_[ys_.size() - 1]));
                 }
             }
             double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
@@ -587,7 +591,9 @@ struct InterpTable3D {
                            "WARNING: z coordinate falls outside of InterpTable3D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable3D: query z={} is outside table z range [{}, {}]",
+                                    z, zs_[0], zs_[zs_.size() - 1]));
                 }
             }
         }

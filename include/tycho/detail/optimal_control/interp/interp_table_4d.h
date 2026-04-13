@@ -2660,7 +2660,9 @@ struct InterpTable4D {
                            "WARNING: x coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable4D: query x={} is outside table x range [{}, {}]",
+                                    x, xs_[0], xs_[xs_.size() - 1]));
                 }
             }
             double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
@@ -2669,7 +2671,9 @@ struct InterpTable4D {
                            "WARNING: y coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable4D: query y={} is outside table y range [{}, {}]",
+                                    y, ys_[0], ys_[ys_.size() - 1]));
                 }
             }
             double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
@@ -2678,7 +2682,9 @@ struct InterpTable4D {
                            "WARNING: z coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable4D: query z={} is outside table z range [{}, {}]",
+                                    z, zs_[0], zs_[zs_.size() - 1]));
                 }
             }
             double weps = std::numeric_limits<double>::epsilon() * wtotal_;
@@ -2687,7 +2693,9 @@ struct InterpTable4D {
                            "WARNING: w coordinate falls outside of InterpTable4D range. Data is "
                            "being extrapolated!!\n");
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable4D: query w={} is outside table w range [{}, {}]",
+                                    w, ws_[0], ws_[ws_.size() - 1]));
                 }
             }
         }

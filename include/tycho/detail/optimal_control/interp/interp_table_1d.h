@@ -233,7 +233,9 @@ struct InterpTable1D {
                            "being extrapolated!!\n",
                            t);
                 if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
+                    throw std::invalid_argument(
+                        fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
+                                    ts_[0], ts_[ts_.size() - 1]));
                 }
             }
         }
