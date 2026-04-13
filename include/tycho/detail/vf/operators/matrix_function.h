@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include <cassert>
+#include <stdexcept>
+#include <string>
 
 #include "tycho/detail/vf/core/vector_function.h"
 
@@ -30,9 +31,18 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
 
     MatrixFunctionView(Func f, int rows, int cols)
         : Func(f), MatrixRowsCols<MRows, MCols>(rows, cols) {
-        assert(rows > 0 && cols > 0 && "MatrixFunctionView: rows and cols must be positive");
-        assert((f.output_rows() < 0 || rows * cols == f.output_rows()) &&
-               "MatrixFunctionView: rows * cols must match function output size");
+        if (rows <= 0 || cols <= 0) {
+            throw std::invalid_argument(
+                "MatrixFunctionView: rows and cols must be positive (got rows=" +
+                std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
+        }
+        const int out = f.output_rows();
+        if (out >= 0 && rows * cols != out) {
+            throw std::invalid_argument(
+                "MatrixFunctionView: rows * cols must match function output size (got rows=" +
+                std::to_string(rows) + ", cols=" + std::to_string(cols) +
+                ", output_rows=" + std::to_string(out) + ")");
+        }
     }
 
     /// Return the matrix inverse as a new MatrixFunctionView.
