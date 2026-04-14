@@ -100,28 +100,90 @@ std::vector<Eigen::VectorXd> make_circ_traj(double r, double theta_deg, double t
 // main
 ///////////////////////////////////////////////////////////////////////////////
 
+// Linear-spaced vector (numpy-compatible) — N values inclusive of endpoints.
+static std::vector<double> linspace(double a, double b, int n) {
+    std::vector<double> out(n);
+    if (n == 1) {
+        out[0] = a;
+        return out;
+    }
+    for (int i = 0; i < n; ++i)
+        out[i] = a + (b - a) * static_cast<double>(i) / (n - 1);
+    return out;
+}
+
+// Forward declaration: the Python reference wraps the whole optimisation
+// pipeline in MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc, NSegs). The
+// C++ port mirrors the same signature and returns just a success flag; the
+// caller iterates over several acceleration values for the continuation.
+static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>> &trajs,
+                                 const std::vector<std::vector<Eigen::VectorXd>> &all_istates,
+                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs);
+
 int main() {
-    constexpr int N = 10;          // Number of spacecraft (matches Python reference)
-    constexpr double LTacc = 0.01; // Low-thrust acceleration
-    constexpr int NSegs = 75;
-    const double Theta0 = 20.0;    // Initial angular spread (degrees)
+    constexpr int N = 10;       // Number of spacecraft (matches Python: n = 10)
+    constexpr int NSegs = 75;   // Matches Python default NSegs = 75.
 
     std::cout << "=== Multi-Spacecraft Optimisation (" << N << " spacecraft) ===\n\n";
 
-    // ── Build ODE ──────────────────────────────────────────────────────
-    auto ode = make_lt_ode(1.0, LTacc);
-
     // ── Generate initial conditions and trajectory guesses ─────────────
-    std::vector<std::vector<Eigen::VectorXd>> trajs;
-    std::vector<Eigen::VectorXd> istates;
-    for (int i = 0; i < N; ++i) {
-        double theta = Theta0 * static_cast<double>(i) / (N - 1);
-        trajs.push_back(make_circ_traj(1.0, theta, 2.0 * M_PI, 300));
-        istates.push_back(make_circ_state(1.0, theta));
+    // Python:
+    //   Thetas = np.linspace(20, 180, 20)
+    //   TrajsIG = [MakeCircTraj(1, theta, 2.0*pi, 300) for theta in np.linspace(0, Thetas[0], n)]
+    //   SetPointIG = TrajsIG[int((n-1)/2)][-1][0:7]
+    //   for Theta in Thetas:
+    //       IStates = [MakeCircIG(1, theta) for theta in np.linspace(0, Theta, n)]
+    //       AllIGs.append(IStates)
+    const auto thetas = linspace(20.0, 180.0, 20);
+
+    auto ig_thetas = linspace(0.0, thetas[0], N);
+    std::vector<std::vector<Eigen::VectorXd>> trajs_ig;
+    trajs_ig.reserve(N);
+    for (double th : ig_thetas)
+        trajs_ig.push_back(make_circ_traj(1.0, th, 2.0 * M_PI, 300));
+
+    // Set point IG: middle spacecraft's final state from the initial sweep.
+    Eigen::VectorXd set_point_ig = trajs_ig[(N - 1) / 2].back().head<7>();
+
+    // Build the full continuation ladder: one IState list per angular spread.
+    std::vector<std::vector<Eigen::VectorXd>> all_istates;
+    all_istates.reserve(thetas.size());
+    for (double theta_max : thetas) {
+        auto sweep = linspace(0.0, theta_max, N);
+        std::vector<Eigen::VectorXd> istates;
+        istates.reserve(N);
+        for (double th : sweep)
+            istates.push_back(make_circ_state(1.0, th));
+        all_istates.push_back(std::move(istates));
     }
 
-    // Set point IG: middle spacecraft's final state
-    auto set_point = trajs[N / 2].back().head<7>();
+    // ── Outer continuation over acceleration ──────────────────────────
+    // Python: accs = np.linspace(0.015, 0.005, 2)  →  {0.015, 0.005}
+    const auto accs = linspace(0.015, 0.005, 2);
+    for (double a : accs) {
+        std::cout << "Running continuation at ltacc = " << std::fixed << std::setprecision(4) << a
+                  << "\n";
+        if (!run_multi_spacecraft(trajs_ig, all_istates, set_point_ig, a, NSegs)) {
+            std::cerr << "MultiSpacecraftOpt: continuation at ltacc=" << a << " FAILED\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    std::cout << "\nMultiSpacecraftOpt: PASSED\n";
+    return EXIT_SUCCESS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Per-acceleration continuation loop — mirrors Python's MultSpaceCraft()
+///////////////////////////////////////////////////////////////////////////////
+
+static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>> &trajs,
+                                 const std::vector<std::vector<Eigen::VectorXd>> &all_istates,
+                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs) {
+    const int N = static_cast<int>(trajs.size());
+
+    // ── Build ODE ──────────────────────────────────────────────────────
+    auto ode = make_lt_ode(1.0, ltacc);
 
     // ── Build OptimalControlProblem ────────────────────────────────────
     OptimalControlProblem ocp;
@@ -133,15 +195,12 @@ int main() {
     std::vector<Phase> phases;
     phases.reserve(N);
     for (int i = 0; i < N; ++i) {
-        auto phase = ode.phase(TranscriptionModes::LGL5, trajs[i], NSegs);
+        auto phase = ode.phase(TranscriptionModes::LGL5, trajs[i], n_segs);
         phase.set_control_mode(ControlModes::BlockConstant);
 
-        // Lock initial state (value from istates, not from IG)
+        // Lock initial state (value from istates, not from IG) — matches
+        // Python's add_value_lock("Front", range(0, 7)).
         phase.add_value_lock(PhaseRegionFlags::Front, {"R", "V", "t"});
-
-        // Substitute actual initial conditions
-        Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
-        phase.sub_variables(PhaseRegionFlags::Front, front_idx, istates[i].head<7>());
 
         // Control norm bound
         phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.01, 1.0, 1.0);
@@ -154,8 +213,9 @@ int main() {
     }
 
     // ── Link constraints: all phases end at same state ─────────────────
-    // Set link parameters (free terminal state)
-    ocp.base().set_link_params(set_point);
+    // Set link parameters (free terminal state) — matches Python
+    // `ocp.set_link_params(SetPointIG[0:7])`.
+    ocp.base().set_link_params(set_point_ig);
 
     // Link function: back state of phase - link params = 0
     auto link_func_expr = Arguments<14>().head<7>() - Arguments<14>().tail<7>();
@@ -190,74 +250,46 @@ int main() {
     ocp.optimizer().set_print_level(1);
     ocp.optimizer().set_max_ls_iters(1);
 
-    // ── Solve ──────────────────────────────────────────────────────────
-    std::cout << "Solving initial configuration...\n";
-    auto flag_init_solve = ocp.solve();
-    if (flag_init_solve > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "MultiSpacecraftOpt: initial solve FAILED\n";
-        return EXIT_FAILURE;
-    }
-    auto flag_init_opt = ocp.optimize();
-    if (flag_init_opt > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "MultiSpacecraftOpt: initial optimize FAILED\n";
-        return EXIT_FAILURE;
-    }
-
-    auto link_params = ocp.base().return_link_params();
-    double rendezvous_time = link_params[6] / (2.0 * M_PI);
-    std::cout << "\n  Rendezvous time: " << std::fixed << std::setprecision(4) << rendezvous_time
-              << " orbital periods\n";
-    std::cout << "  Rendezvous pos: (" << std::setprecision(4) << link_params[0] << ", "
-              << link_params[1] << ", " << link_params[2] << ")\n";
-
-    // ── Continuation: increase angular spread ──────────────────────────
-    // Matches Python's linspace(20, 90, 8) step size to keep continuation
-    // jumps small enough for the optimizer to track without diverging.
-    std::cout << "\nContinuation over angular spreads...\n";
-    std::vector<double> thetas = {20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0};
+    // ── Continuation over all angular spreads ─────────────────────────
+    // Mirrors Python's MultSpaceCraft loop: for each angular spread Ist in
+    // IStates, substitute new front states, re-transcribe every 8 iterates
+    // to keep the problem well conditioned, then solve+optimize (first
+    // iterate) or optimize-with-solve-optimize-fallback (subsequent).
     PSIOPT::ConvergenceFlags flag = PSIOPT::ConvergenceFlags::CONVERGED;
-    for (size_t j = 1; j < thetas.size(); ++j) {
-        double theta_max = thetas[j];
+    Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
+    for (size_t j = 0; j < all_istates.size(); ++j) {
+        const auto &istates = all_istates[j];
         for (int i = 0; i < N; ++i) {
-            double theta_i = theta_max * static_cast<double>(i) / (N - 1);
-            auto istate = make_circ_state(1.0, theta_i);
-            Eigen::VectorXi front_idx_sub = Eigen::VectorXi::LinSpaced(7, 0, 6);
-            phases[i].sub_variables(PhaseRegionFlags::Front, front_idx_sub,
-                                    istate.head<7>());
+            phases[i].sub_variables(PhaseRegionFlags::Front, front_idx, istates[i].head<7>());
         }
 
-        // Python falls back to solve_optimize() when optimize() doesn't converge.
-        // This re-solves the feasibility problem first, which is critical after
-        // substituting new initial conditions that can drive the linear model
-        // residuals away from the previous iterate's basin.
+        if (j > 0 && j % 8 == 0) {
+            ocp.base().transcribe(false, false);
+        }
+
+        if (j == 0) {
+            auto solve_flag = ocp.solve();
+            if (solve_flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+                std::cerr << "  MultiSpacecraftOpt: initial solve FAILED at j=0\n";
+                return false;
+            }
+        }
+
         flag = ocp.optimize();
-        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED) {
             flag = ocp.solve_optimize();
         }
-        link_params = ocp.base().return_link_params();
-        rendezvous_time = link_params[6] / (2.0 * M_PI);
-        std::cout << "  Theta=" << std::fixed << std::setprecision(0) << theta_max
-                  << " deg: tf=" << std::setprecision(4) << rendezvous_time << " periods\n";
+
+        auto link_params = ocp.base().return_link_params();
+        double rendezvous_time = link_params[6] / (2.0 * M_PI);
+        std::cout << "  j=" << std::setw(2) << j << " tf=" << std::fixed << std::setprecision(4)
+                  << rendezvous_time << " periods\n";
     }
 
-    // ── Verification ───────────────────────────────────────────────────
-    // NOTE: The problem formulation has a degenerate local minimum at
-    // tf ~ 0 (and sometimes negative) because the time variable is not
-    // bounded below.  Both the Python reference and this C++ port find
-    // this local minimum when starting from the supplied IG — see the
-    // verification run with matched parameters in PR review notes.
-    // We therefore match Python's behaviour: verify only that the final
-    // optimize call reported an ACCEPTABLE convergence flag.  Physical
-    // position verification would incorrectly flag the converged (but
-    // degenerate) solution as a failure.
-    std::cout << "\n=== Verification ===\n";
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "\nMultiSpacecraftOpt: FAILED (final optimize status "
-                  << static_cast<int>(flag) << ")\n";
-        return 1;
+        std::cerr << "  MultiSpacecraftOpt: final optimize status " << static_cast<int>(flag)
+                  << "\n";
+        return false;
     }
-    std::cout << "  Final optimize converged (rendezvous tf = " << std::fixed
-              << std::setprecision(4) << rendezvous_time << " periods)\n";
-    std::cout << "\nMultiSpacecraftOpt: PASSED\n";
-    return 0;
+    return true;
 }

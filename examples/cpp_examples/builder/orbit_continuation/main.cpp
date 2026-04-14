@@ -91,8 +91,9 @@ ODE make_cr3bp_ode(double mu_val) {
 static constexpr double integ_dt = 3.1415 / 10000.0;
 
 std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorXd &ig, double tf,
-                                             const std::vector<int> &fix_init = {0, 1, 2}) {
-    // Integrate initial guess using ODE::integrator()
+                                            const std::vector<int> &fix_init = {0, 1, 2}) {
+    // Integrate initial guess using ODE::integrator() — matches Python
+    // odeItg = ode.integrator(dt); trajGuess = odeItg.integrate_dense(ig, tf, 1000).
     auto integ = ode.integrator().step(integ_dt).build();
     auto trajGuess = integ.integrate_dense(ig, tf, 1000);
 
@@ -100,18 +101,16 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
     auto phase = ode.phase(TranscriptionModes::LGL3, trajGuess, nSeg);
     phase.set_num_partitions(8);
 
-    // Fix specified initial conditions
+    // Fix specified initial-guess components (matches Python's fixInit loop).
     for (int idx : fix_init) {
         phase.add_boundary_value(PhaseRegionFlags::Front, idx, ig[idx]);
     }
-    // Initial y=0, vx=0, t=0
-    Eigen::VectorXi front_fix(3);
-    front_fix << 3, 6, -1; // dummy, will do individually
-    phase.add_boundary_value(PhaseRegionFlags::Front, 1, 0.0); // y = 0 (if not already fixed)
-    phase.add_boundary_value(PhaseRegionFlags::Front, 3, 0.0); // vx = 0
-    phase.add_boundary_value(PhaseRegionFlags::Front, 6, 0.0); // t = 0
+    // Python also fixes vx=0 and t=0 at the front unconditionally (indices
+    // [3, 6]). Half-period symmetry is enforced via the Back BC below.
+    phase.add_boundary_value(PhaseRegionFlags::Front, 3, 0.0);
+    phase.add_boundary_value(PhaseRegionFlags::Front, 6, 0.0);
 
-    // Back BC: y=0, vx=0
+    // Back BC: y = 0, vx = 0, vz = 0 — half-period crossing of the x-z plane.
     phase.add_boundary_value(PhaseRegionFlags::Back, 1, 0.0);
     phase.add_boundary_value(PhaseRegionFlags::Back, 3, 0.0);
     phase.add_boundary_value(PhaseRegionFlags::Back, 5, 0.0);
@@ -126,84 +125,98 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Basic continuation: step ig[cIdx] by dx until sign(x[cIdx] - lim) flips.
+// Mirrors Python's `contin()` — runs until the continuation variable crosses
+// `lim` (sign change of (x[cIdx] - lim) from the previous iterate).
+///////////////////////////////////////////////////////////////////////////////
+
+std::vector<std::vector<Eigen::VectorXd>>
+contin(const ODE &ode, const Eigen::VectorXd &ig, double tf, int cIdx, double dx, double lim,
+       const std::vector<int> &fix_init = {0, 1, 2}) {
+    std::vector<std::vector<Eigen::VectorXd>> traj_list;
+    auto first = solve_periodic(ode, ig, tf, fix_init);
+    if (first.empty())
+        return traj_list;
+    traj_list.push_back(first);
+
+    int sign = (traj_list.back().front()[cIdx] - lim) >= 0.0 ? 1 : -1;
+    int sign_last = sign;
+    while (sign == sign_last) {
+        Eigen::VectorXd g = traj_list.back().front();
+        double t = traj_list.back().back()[6];
+        g[cIdx] += dx;
+
+        auto sol = solve_periodic(ode, g, t, fix_init);
+        if (sol.empty())
+            break;
+
+        traj_list.push_back(sol);
+        sign_last = sign;
+        sign = (traj_list.back().front()[cIdx] - lim) >= 0.0 ? 1 : -1;
+    }
+    return traj_list;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // main
 ///////////////////////////////////////////////////////////////////////////////
 
 int main() {
     auto ode = make_cr3bp_ode(mu);
 
-    // L1 Lyapunov initial guess
-    Eigen::VectorXd ig(7);
-    ig.setZero();
-    ig[0] = 0.8234; // x
-    ig[4] = 0.1263; // vy
-    double tf = 1.3;
+    std::cout << "=== Orbit Continuation: CR3BP L1 families (Earth-Moon) ===\n\n";
 
-    std::cout << "=== Orbit Continuation: L1 Lyapunov orbits in Earth-Moon CR3BP ===\n\n";
+    // ── L1 Lyapunov family ─────────────────────────────────────────────
+    Eigen::VectorXd ig_lyap(7);
+    ig_lyap.setZero();
+    ig_lyap[0] = 0.8234; // x
+    ig_lyap[4] = 0.1263; // vy
+    double tf_lyap = 1.3;
 
-    // Solve first orbit
-    std::cout << "Solving initial Lyapunov orbit...\n";
-    auto traj = solve_periodic(ode, ig, tf);
-
-    if (traj.empty()) {
-        std::cerr << "Failed to converge initial orbit\n";
-        return 1;
+    std::cout << "L1 Lyapunov continuation...\n";
+    auto lyap_family = contin(ode, ig_lyap, tf_lyap, /*cIdx=*/0, /*dx=*/-0.001, /*lim=*/0.77);
+    if (lyap_family.empty()) {
+        std::cerr << "  Failed to converge initial Lyapunov orbit\n";
+        return EXIT_FAILURE;
     }
+    std::cout << "  Computed " << lyap_family.size() << " Lyapunov orbits\n";
 
-    double period = traj.back()[6];
-    std::cout << "  Initial orbit: x0 = " << std::fixed << std::setprecision(6) << traj[0][0]
-              << ", period = " << std::setprecision(4) << period << "\n";
+    // ── Northern L1 Halo family ────────────────────────────────────────
+    Eigen::VectorXd ig_halo(7);
+    ig_halo.setZero();
+    ig_halo[0] = 0.8234;
+    ig_halo[4] = 0.1263;
+    double tf_halo = 1.3715;
 
-    // Continuation: step x0 inward toward Moon
-    const double dx = -0.001;
-    const double x_limit = 0.80;
-    const int max_steps = 20;
-    int n_orbits = 1;
-
-    std::vector<std::vector<Eigen::VectorXd>> orbit_family;
-    orbit_family.push_back(traj);
-
-    for (int step = 0; step < max_steps; ++step) {
-        auto prev = orbit_family.back();
-        Eigen::VectorXd next_ig = prev[0];
-        double next_tf = prev.back()[6];
-        next_ig[0] += dx;
-
-        auto sol = solve_periodic(ode, next_ig, next_tf);
-        if (sol.empty()) {
-            std::cout << "  Continuation stopped: solver failed at step " << step << "\n";
-            break;
-        }
-
-        orbit_family.push_back(sol);
-        n_orbits++;
-
-        std::cout << "  Step " << step + 1 << ": x0 = " << std::fixed << std::setprecision(6)
-                  << sol[0][0] << ", period = " << std::setprecision(4) << sol.back()[6] << "\n";
-
-        if (sol[0][0] < x_limit) {
-            std::cout << "  Reached continuation limit\n";
-            break;
-        }
+    std::cout << "L1 Halo continuation...\n";
+    auto halo_family =
+        contin(ode, ig_halo, tf_halo, /*cIdx=*/2, /*dx=*/0.001, /*lim=*/0.214, {1, 2, 5});
+    if (halo_family.empty()) {
+        std::cerr << "  Failed to converge initial Halo orbit\n";
+        return EXIT_FAILURE;
     }
+    std::cout << "  Computed " << halo_family.size() << " Halo orbits\n";
 
     // ── Verification ───────────────────────────────────────────────────
     std::cout << "\n=== Results ===\n";
-    std::cout << "  Total orbits computed: " << n_orbits << "\n";
+    std::cout << "  Lyapunov orbits: " << lyap_family.size() << "\n";
+    std::cout << "  Halo orbits:     " << halo_family.size() << "\n";
 
-    // Check periodicity of last orbit
-    auto &last = orbit_family.back();
-    double y_err = std::abs(last.back()[1]);
-    double vx_err = std::abs(last.back()[3]);
-    std::cout << "  Last orbit periodicity: |y(tf)| = " << std::scientific << std::setprecision(2)
-              << y_err << ", |vx(tf)| = " << vx_err << "\n";
-
-    bool ok = (n_orbits >= 3) && (y_err < 1e-8) && (vx_err < 1e-8);
+    // Check periodicity (y, vx) at half-period crossing for both families.
+    auto check_periodicity = [](const std::vector<Eigen::VectorXd> &orbit, const char *name) {
+        double y_err = std::abs(orbit.back()[1]);
+        double vx_err = std::abs(orbit.back()[3]);
+        std::cout << "  " << name << " last orbit: |y(tf)| = " << std::scientific
+                  << std::setprecision(2) << y_err << ", |vx(tf)| = " << vx_err << "\n";
+        return y_err < 1e-8 && vx_err < 1e-8;
+    };
+    bool ok = check_periodicity(lyap_family.back(), "Lyapunov") &&
+              check_periodicity(halo_family.back(), "Halo") && lyap_family.size() >= 3 &&
+              halo_family.size() >= 3;
     if (ok) {
         std::cout << "\nOrbitContinuation: PASSED\n";
-        return 0;
-    } else {
-        std::cerr << "\nOrbitContinuation: FAILED (periodicity or orbit count insufficient)\n";
-        return 1;
+        return EXIT_SUCCESS;
     }
+    std::cerr << "\nOrbitContinuation: FAILED (periodicity or orbit count insufficient)\n";
+    return EXIT_FAILURE;
 }

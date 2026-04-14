@@ -65,36 +65,21 @@ int main() {
                    .var_names({{"t", 6}})
                    .var_group("u", 7, 3);
 
-    // ── Initial guess: outward spiral ──────────────────────────────────
-    // Create a spiral trajectory from r0 to rf as initial guess
-    const double tf_guess = 6.4 * M_PI;
-    const int nPts = 500;
-    std::vector<Eigen::VectorXd> trajIG;
-    trajIG.reserve(nPts);
-    for (int i = 0; i < nPts; ++i) {
-        const double s = static_cast<double>(i) / (nPts - 1);
-        const double t = tf_guess * s;
-        const double r = r0 + (rf - r0) * s;
-        const double v = std::sqrt(mu / r);
-        // Orbit angle: integrate angular rate roughly
-        const double theta = t * v / r;
+    // ── Initial guess: forward-integrate the ODE with prograde thrust ──
+    // Matches Python reference: u = normalize(V) * 0.8, sampled from the
+    // velocity slots [3, 4, 5]. The resulting trajectory satisfies the
+    // dynamics exactly (defects ≈ 0) — a hand-rolled analytic spiral
+    // leaves O(1) defects and puts the solver on a near-saddle that is
+    // extremely sensitive to floating-point ordering.
+    Eigen::VectorXd XIG(10);
+    XIG.setZero();
+    XIG.head<7>() = X0;
 
-        Eigen::VectorXd pt(10);
-        pt.setZero();
-        pt[0] = r * std::cos(theta);
-        pt[1] = r * std::sin(theta);
-        pt[2] = 0.0;
-        pt[3] = -v * std::sin(theta);
-        pt[4] = v * std::cos(theta);
-        pt[5] = 0.0;
-        pt[6] = t;
-        // Control: tangential thrust direction (prograde)
-        double umag = 0.8;
-        pt[7] = -umag * std::sin(theta);
-        pt[8] = umag * std::cos(theta);
-        pt[9] = 0.0;
-        trajIG.push_back(pt);
-    }
+    auto u_law_args = Arguments<3>();
+    auto u_law = GenericFunction<-1, -1>(u_law_args.normalized() * 0.8);
+
+    auto ig_integ = ode.integrator().step(0.01).control(u_law, {"V"}).build();
+    auto trajIG = ig_integ.integrate_dense(XIG, 6.4 * M_PI, 100);
 
     // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 256;
@@ -119,7 +104,11 @@ int main() {
     // ── Objective 1: Minimum time ──────────────────────────────────────
     std::cout << "=== Phase 1: Minimum time transfer ===\n";
     phase.add_delta_time_objective(1.0);
-    phase.solve_optimize();
+    auto flag_time = phase.solve_optimize();
+    if (flag_time > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "SimpleLowThrust: time-optimal solve_optimize failed\n";
+        return EXIT_FAILURE;
+    }
 
     auto time_optimal = phase.return_traj();
     double tf_time = time_optimal.back()[6];
@@ -138,7 +127,11 @@ int main() {
     }
 
     phase.optimizer().set_max_ls_iters(0);
-    phase.optimize();
+    auto flag_power = phase.optimize();
+    if (flag_power > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "SimpleLowThrust: power-optimal optimize failed\n";
+        return EXIT_FAILURE;
+    }
 
     auto power_optimal = phase.return_traj();
     double tf_power = power_optimal.back()[6];
@@ -155,7 +148,11 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u"});
     }
     phase.optimizer().set_max_ls_iters(2);
-    phase.optimize();
+    auto flag_mass = phase.optimize();
+    if (flag_mass > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "SimpleLowThrust: mass-optimal optimize failed\n";
+        return EXIT_FAILURE;
+    }
 
     auto mass_optimal = phase.return_traj();
     double tf_mass = mass_optimal.back()[6];
