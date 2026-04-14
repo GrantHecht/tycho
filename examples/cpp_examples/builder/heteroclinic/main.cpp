@@ -1,19 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Heteroclinic Connection — C++ example (Builder API)
-//
-// Ported from examples/python_examples/Heteroclinic.py
-//
-// Finds a heteroclinic connection between L1 and L2 orbit families in the
-// Earth-Moon CR3BP. Full 4-stage pipeline:
-//   1. Compute periodic L1 and L2 Lyapunov orbits via optimal control
-//   2. Compute unstable/stable invariant manifolds via STM eigendecomposition
-//   3. Find closest connection between manifold arms
-//   4. Optimize heteroclinic connection with orbit-matching constraints
-//
-// State  : [x, y, z, vx, vy, vz]  (6 states, no controls)
-// Phase vector: [x, y, z, vx, vy, vz, t]
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <Eigen/Eigenvalues>
 #include <cmath>
@@ -33,17 +17,9 @@ static constexpr double MuMoon = 4.9048695e12;
 static const double mu = MuMoon / (MuEarth + MuMoon);
 static constexpr double LD = 384400000.0; // Earth-Moon distance (m)
 
-///////////////////////////////////////////////////////////////////////////////
-// Helpers
-///////////////////////////////////////////////////////////////////////////////
-
 static Eigen::Vector3d normalize_vec(const Eigen::Vector3d &v) {
     return v / v.norm();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Libration point computation
-///////////////////////////////////////////////////////////////////////////////
 
 // Compute L1 position (between primaries)
 static Eigen::Vector3d compute_l1() {
@@ -73,10 +49,6 @@ static Eigen::Vector3d compute_l2() {
     return Eigen::Vector3d(1.0 - mu + guess, 0.0, 0.0);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Lissajous orbit initial guess generator
-///////////////////////////////////////////////////////////////////////////////
-
 // Compute the CR3BP acceleration Jacobian (Omega_xx, Omega_yy, Omega_zz)
 // at a given position for linearized dynamics
 static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
@@ -104,7 +76,6 @@ static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
 }
 
 // Generate Lissajous orbit initial guess around a libration point
-// Matches Python CR3BPFrame.GenLissajousImpl
 std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp,
                                             double xnd, double znd,
                                             double phideg, double psideg,
@@ -147,10 +118,6 @@ std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp,
     return traj;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// CR3BP ODE builder
-///////////////////////////////////////////////////////////////////////////////
-
 ODE make_cr3bp_ode() {
     auto args = ODEArguments(6, 0, 0);
     auto X = args.head<3>();
@@ -183,10 +150,6 @@ ODE make_cr3bp_ode() {
         .var_names({{"t", 6}});
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Jacobi constant function
-///////////////////////////////////////////////////////////////////////////////
-
 auto make_jacobi_func() {
     auto args = Arguments<6>();
     auto r = args.head<3>();
@@ -205,10 +168,6 @@ auto make_jacobi_func() {
 
     return r.head<2>().squared_norm() + (gt1 + gt2) * 2.0 - v.squared_norm();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Stage 1: Solve for periodic orbit
-///////////////////////////////////////////////////////////////////////////////
 
 std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
                                          const std::vector<Eigen::VectorXd> &orbit_ig,
@@ -237,10 +196,6 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
 
     return phase.return_traj();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Stage 2: Compute invariant manifold via STM eigendecomposition
-///////////////////////////////////////////////////////////////////////////////
 
 using Trajectory = std::vector<Eigen::VectorXd>;
 
@@ -340,10 +295,6 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
     return manifolds;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Stage 3: Find closest connection between manifold arms
-///////////////////////////////////////////////////////////////////////////////
-
 std::pair<Trajectory, Trajectory>
 find_closest_connection(const std::vector<Trajectory> &orbs1,
                         const std::vector<Trajectory> &orbs2) {
@@ -363,10 +314,6 @@ find_closest_connection(const std::vector<Trajectory> &orbs1,
 
     return {orbs1[best_i], orbs2[best_j]};
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Stage 4: Optimize heteroclinic connection
-///////////////////////////////////////////////////////////////////////////////
 
 std::pair<Trajectory, Trajectory>
 make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2,
@@ -472,10 +419,6 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
 
     return {traj1, traj2};
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
 
 int main() {
     auto ode = make_cr3bp_ode();

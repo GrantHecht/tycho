@@ -1,23 +1,5 @@
-///////////////////////////////////////////////////////////////////////////////
-// Minimum Time to Climb (Table-based) — C++ example (Builder API)
-//
-// Ported from examples/python_examples/MinimumTimeToClimb.py
 // Source: Bryson, Desai, Hoffman, "Energy-State Approximation in Performance
 //         Optimization of Supersonic Aircraft", J. Aircraft, 1969
-//
-// State  : [h, v, fpa, m]   (altitude, velocity, flight path angle, mass)
-// Control: [alpha]           (angle of attack)
-//
-// Demonstrates InterpTable1D and InterpTable2D usage in the C++ builder API.
-// All aero/atmosphere/thrust data uses table interpolation matching the
-// Python version exactly:
-//   - InterpTable1D: rho(alt), speed_of_sound(alt), CLalpha(Mach),
-//                    CD0(Mach), eta(Mach)
-//   - InterpTable2D: Thrust(Mach, alt)
-//
-// Objective: minimise climb time
-// Features: adaptive mesh refinement, HighestOrderSpline control
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -69,7 +51,6 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 50;
 
-    // ── Aerodynamic data (function of Mach number) ────────────────────
     Eigen::VectorXd AeroMach(11);
     AeroMach << 0, 0.4, 0.6, 0.75, 0.8, 0.9, 1.0, 1.2, 1.4, 1.6, 1.8;
 
@@ -82,8 +63,7 @@ int main() {
     Eigen::VectorXd eta_data(11);
     eta_data << 0.54, 0.54, 0.54, 0.54, 0.54, 0.75, 0.79, 0.78, 0.89, 0.93, 0.93;
 
-    // ── Atmosphere data (1976 US standard atmosphere) ─────────────────
-    // 45 data points: [altitude(m), density(kg/m^3), speed_of_sound(m/s)]
+    // 1976 US standard atmosphere
     // clang-format off
     Eigen::VectorXd alts(45);
     alts << -2000, 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000,
@@ -113,7 +93,6 @@ int main() {
             2.797e02, 2.769e02, 2.741e02;
     // clang-format on
 
-    // ── Thrust data (Mach x altitude) ────────────────────────────────
     Eigen::VectorXd ThrustMach(10);
     ThrustMach << 0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8;
 
@@ -122,8 +101,8 @@ int main() {
                  304.8 * 20, 304.8 * 25, 304.8 * 30, 304.8 * 40, 304.8 * 50,
                  304.8 * 70;
 
-    // Raw data is 10 rows (Mach) x 11 cols (Alt), stored here transposed
-    // to 11 rows (Alt) x 10 cols (Mach) matching InterpTable2D: rows=ys, cols=xs
+    // Transposed from source (Mach-rows × Alt-cols) to Alt-rows × Mach-cols
+    // so rows=ys, cols=xs as InterpTable2D expects.
     using RowMajorMat = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
     RowMajorMat ThrustData(11, 10);
     // clang-format off
@@ -143,7 +122,6 @@ int main() {
     // clang-format on
     ThrustData *= 4448.2; // Convert from klbf to Newtons
 
-    // ── Build interpolation tables ───────────────────────────────────
     auto rhoTab = std::make_shared<InterpTable1D>(alts, rhos, 0, InterpType::Cubic);
     auto sosTab = std::make_shared<InterpTable1D>(alts, soss, 0, InterpType::Cubic);
     auto ClalphaTab = std::make_shared<InterpTable1D>(AeroMach, Clalpha_data, 0, InterpType::Cubic);
@@ -152,7 +130,6 @@ int main() {
     auto ThrustTab =
         std::make_shared<InterpTable2D>(ThrustMach, ThrustAlt, ThrustData, InterpType::Cubic);
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode =
         ODEBuilder(4, 1)
             .define([=](auto &args) {
@@ -187,7 +164,6 @@ int main() {
                 {{"h", 0}, {"v", 1}, {"fpa", 2}, {"m", 3}, {"t", 4}, {"alpha", 5}})
             .build();
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
@@ -202,7 +178,6 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
     phase.set_control_mode(ControlModes::HighestOrderSpline);
 
@@ -221,7 +196,6 @@ int main() {
 
     phase.add_delta_time_objective(1.0);
 
-    // Adaptive mesh refinement
     phase.set_adaptive_mesh(true);
     phase.set_mesh_tol(1.0e-7);
     phase.set_max_mesh_iters(10);
@@ -233,7 +207,6 @@ int main() {
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_max_ls_iters(2);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     std::cout << "MinTimeClimbTables: solving...\n" << std::flush;
     const auto flag = phase.solve_optimize();
 

@@ -1,19 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Multi-Phase Zermelo Navigation — C++ example (Builder API)
-//
-// Ported from examples/python_examples/MultiPhaseZermelo.py
-// Extension of the single-phase builder/zermelo example.
-//
-// Navigate through a sequence of waypoints, with one phase per segment.
-// Phases are linked via OptimalControlProblem to enforce position and time
-// continuity.  Tests multiple wind models.
-//
-// State  : [x, y]    (2D position)
-// Control: [theta]   (heading angle)
-//
-// Objective: minimise total travel time
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
@@ -24,10 +8,6 @@
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
-
-///////////////////////////////////////////////////////////////////////////////
-// Wind model factories (reuse patterns from builder/zermelo)
-///////////////////////////////////////////////////////////////////////////////
 
 ODE make_no_wind(double vMax) {
     return ODEBuilder(2, 1)
@@ -85,10 +65,6 @@ ODE make_var_wind(double vMax) {
         .build();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Multi-phase navigate: one phase per segment between waypoints
-///////////////////////////////////////////////////////////////////////////////
-
 struct NavResult {
     bool converged;
     double total_time;
@@ -101,7 +77,6 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
 
     const int numphase = static_cast<int>(points.size()) - 1;
 
-    // Generate linear initial guesses for each phase (cumulative time)
     std::vector<std::vector<Eigen::VectorXd>> trajG(numphase);
     double cumTime = 0.0;
     for (int i = 0; i < numphase; ++i) {
@@ -133,7 +108,6 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
         auto phase = ode.phase(TranscriptionModes::LGL3, trajG[i], nSeg);
         phase.set_num_partitions(8);
 
-        // Start/end boundary conditions
         if (i == 0) {
             phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"},
                                      Eigen::Vector2d(A));
@@ -145,26 +119,21 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
                                      Eigen::Vector2d(B));
         }
 
-        // Control bounds
         phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI, 1.0);
 
-        // Time objective
         phase.add_delta_time_objective(1.0);
         phase.add_lower_delta_time_bound(0.0);
 
-        // Solver settings
         phase.optimizer().set_econ_tol(tol);
         phase.optimizer().set_kkt_tol(tol);
 
         phases.push_back(std::move(phase));
     }
 
-    // Add all phases to OCP
     for (auto &p : phases) {
         ocp.add_phase(p);
     }
 
-    // Forward link: continuity in x, y, t between consecutive phases
     if (numphase > 1) {
         ocp.add_forward_link_equal_con(phases.front(), phases.back(), {"x", "y", "t"});
     }
@@ -187,21 +156,16 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
     return result;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// main — compare wind models (same waypoints as Python)
-///////////////////////////////////////////////////////////////////////////////
-
 int main() {
     int failures = 0;
 
     Eigen::Vector2d A(0.0, -1.0);
     Eigen::Vector2d B(1.0, 1.0);
     Eigen::Vector2d C(4.0, 0.0);
-    Eigen::Vector2d D = A;  // return to start
+    Eigen::Vector2d D = A;
 
     std::vector<Eigen::Vector2d> waypoints = {A, B, C, D};
 
-    // ── Test 1: No wind ───────────────────────────────────────────────
     {
         std::cout << "Solving: no wind (multi-phase) ... " << std::flush;
         auto ode = make_no_wind(1.0);
@@ -215,7 +179,6 @@ int main() {
         }
     }
 
-    // ── Test 2: Uniform wind ──────────────────────────────────────────
     {
         std::cout << "Solving: uniform wind (multi-phase) ... " << std::flush;
         constexpr double vM = 1.5;
@@ -229,7 +192,6 @@ int main() {
         }
     }
 
-    // ── Test 3: Constant-direction wind ───────────────────────────────
     {
         std::cout << "Solving: constant-direction wind (multi-phase) ... " << std::flush;
         constexpr double vM = 1.5;
@@ -243,7 +205,6 @@ int main() {
         }
     }
 
-    // ── Test 4: Variable wind ─────────────────────────────────────────
     {
         std::cout << "Solving: variable wind (multi-phase) ... " << std::flush;
         constexpr double vM = 1.5;
@@ -257,7 +218,6 @@ int main() {
         }
     }
 
-    // ── Summary ───────────────────────────────────────────────────────
     std::cout << "\nMultiPhaseZermelo (builder): " << (4 - failures)
               << "/4 wind models converged\n";
     // Uniform wind with multi-phase is a known difficult case (diverges

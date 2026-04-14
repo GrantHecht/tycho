@@ -1,24 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Orbit Continuation — C++ example (Builder API)
-//
-// Ported from examples/python_examples/OrbitContinuation.py
-//
-// Computes periodic orbits in the Earth-Moon CR3BP using numerical
-// continuation. Starts with an L1 Lyapunov orbit initial guess and
-// converges a single periodic orbit, then performs basic continuation
-// along the x-coordinate.
-//
-// State  : [x, y, z, vx, vy, vz]  (6 states, no controls)
-//
-// Phase vector: [x, y, z, vx, vy, vz, t]
-//                0  1  2   3   4   5   6
-//
-// This example demonstrates:
-//   - CR3BP dynamics via builder API
-//   - Periodic orbit boundary conditions
-//   - Numerical continuation scheme
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
@@ -29,25 +8,14 @@ using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-///////////////////////////////////////////////////////////////////////////////
-// Constants
-///////////////////////////////////////////////////////////////////////////////
-
-// Earth-Moon system
 static constexpr double MuEarth = 3.986004418e14; // m^3/s^2
 static constexpr double MuMoon = 4.9048695e12;    // m^3/s^2
 static constexpr double LD = 384400000.0;          // m (Earth-Moon distance)
 
-// Mass ratio
 static const double mu = MuMoon / (MuEarth + MuMoon);
-
-///////////////////////////////////////////////////////////////////////////////
-// Build CR3BP ODE via builder API
-///////////////////////////////////////////////////////////////////////////////
 
 ODE make_cr3bp_ode(double mu_val) {
     auto args = ODEArguments(6, 0, 0);
-    // State: [x, y, z, vx, vy, vz], time at index 6
     auto X = args.head<3>();
     auto V = args.segment<3>(3);
 
@@ -83,17 +51,10 @@ ODE make_cr3bp_ode(double mu_val) {
         .var_names({{"x", 0}, {"y", 1}, {"z", 2}, {"vx", 3}, {"vy", 4}, {"vz", 5}, {"t", 6}});
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Solve for a periodic orbit (half-period symmetric)
-///////////////////////////////////////////////////////////////////////////////
-
-// Integrator step size for orbit propagation
 static constexpr double integ_dt = 3.1415 / 10000.0;
 
 std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorXd &ig, double tf,
                                             const std::vector<int> &fix_init = {0, 1, 2}) {
-    // Integrate initial guess using ODE::integrator() — matches Python
-    // odeItg = ode.integrator(dt); trajGuess = odeItg.integrate_dense(ig, tf, 1000).
     auto integ = ode.integrator().step(integ_dt).build();
     auto trajGuess = integ.integrate_dense(ig, tf, 1000);
 
@@ -101,12 +62,11 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
     auto phase = ode.phase(TranscriptionModes::LGL3, trajGuess, nSeg);
     phase.set_num_partitions(8);
 
-    // Fix specified initial-guess components (matches Python's fixInit loop).
     for (int idx : fix_init) {
         phase.add_boundary_value(PhaseRegionFlags::Front, idx, ig[idx]);
     }
-    // Python also fixes vx=0 and t=0 at the front unconditionally (indices
-    // [3, 6]). Half-period symmetry is enforced via the Back BC below.
+    // vx=0 and t=0 fixed at the front unconditionally; half-period symmetry
+    // enforced via the Back BC below.
     phase.add_boundary_value(PhaseRegionFlags::Front, 3, 0.0);
     phase.add_boundary_value(PhaseRegionFlags::Front, 6, 0.0);
 
@@ -124,12 +84,7 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
     return phase.return_traj();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Basic continuation: step ig[cIdx] by dx until sign(x[cIdx] - lim) flips.
-// Mirrors Python's `contin()` — runs until the continuation variable crosses
-// `lim` (sign change of (x[cIdx] - lim) from the previous iterate).
-///////////////////////////////////////////////////////////////////////////////
-
+// Step ig[cIdx] by dx until sign(x[cIdx] - lim) flips.
 std::vector<std::vector<Eigen::VectorXd>>
 contin(const ODE &ode, const Eigen::VectorXd &ig, double tf, int cIdx, double dx, double lim,
        const std::vector<int> &fix_init = {0, 1, 2}) {
@@ -157,20 +112,15 @@ contin(const ODE &ode, const Eigen::VectorXd &ig, double tf, int cIdx, double dx
     return traj_list;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
-
 int main() {
     auto ode = make_cr3bp_ode(mu);
 
     std::cout << "=== Orbit Continuation: CR3BP L1 families (Earth-Moon) ===\n\n";
 
-    // ── L1 Lyapunov family ─────────────────────────────────────────────
     Eigen::VectorXd ig_lyap(7);
     ig_lyap.setZero();
-    ig_lyap[0] = 0.8234; // x
-    ig_lyap[4] = 0.1263; // vy
+    ig_lyap[0] = 0.8234;
+    ig_lyap[4] = 0.1263;
     double tf_lyap = 1.3;
 
     std::cout << "L1 Lyapunov continuation...\n";
@@ -181,7 +131,6 @@ int main() {
     }
     std::cout << "  Computed " << lyap_family.size() << " Lyapunov orbits\n";
 
-    // ── Northern L1 Halo family ────────────────────────────────────────
     Eigen::VectorXd ig_halo(7);
     ig_halo.setZero();
     ig_halo[0] = 0.8234;
@@ -197,12 +146,10 @@ int main() {
     }
     std::cout << "  Computed " << halo_family.size() << " Halo orbits\n";
 
-    // ── Verification ───────────────────────────────────────────────────
     std::cout << "\n=== Results ===\n";
     std::cout << "  Lyapunov orbits: " << lyap_family.size() << "\n";
     std::cout << "  Halo orbits:     " << halo_family.size() << "\n";
 
-    // Check periodicity (y, vx) at half-period crossing for both families.
     auto check_periodicity = [](const std::vector<Eigen::VectorXd> &orbit, const char *name) {
         double y_err = std::abs(orbit.back()[1]);
         double vx_err = std::abs(orbit.back()[3]);

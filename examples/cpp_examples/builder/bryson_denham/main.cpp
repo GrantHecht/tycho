@@ -1,16 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Bryson-Denham — C++ example (Builder API)
-//
-// Ported from examples/python_examples/BrysonDenham.py
-//
-// State  : [x, v]   (position, velocity)
-// Control: [u]       (acceleration)
-//
-// ODE: xdot = v, vdot = u
-// Constraint: x <= 1/9
-// Objective: minimise integral(u^2 / 2)
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
@@ -26,7 +13,6 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 32;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(2, 1)
                    .define([](auto &args) {
                        auto v = args.x_var(1);
@@ -36,17 +22,15 @@ int main() {
                    .var_names({{"x", 0}, {"v", 1}, {"t", 2}, {"u", 3}})
                    .build();
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
         const double s = static_cast<double>(i) / (n_pts - 1);
         Eigen::VectorXd pt(4);
-        pt << 0.0, 1.0 - 2.0 * s, s, 0.0;  // v: 1 -> -1
+        pt << 0.0, 1.0 - 2.0 * s, s, 0.0;
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "v", "t"},
@@ -54,10 +38,8 @@ int main() {
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "v", "t"},
                             Eigen::Vector3d(0.0, -1.0, 1.0));
 
-    // State upper bound: x <= 1/9
     phase.add_upper_var_bound(PhaseRegionFlags::Path, "x", 1.0 / 9.0);
 
-    // Integral objective: min integral(u^2 / 2)
     {
         auto obj_args = Arguments<1>();
         auto obj_expr = (obj_args.coeff<0>() * obj_args.coeff<0>()) / 2.0;
@@ -69,7 +51,6 @@ int main() {
     phase.optimizer().set_print_level(0);
     phase.set_num_partitions(1);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     const auto flag = phase.optimize();
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {

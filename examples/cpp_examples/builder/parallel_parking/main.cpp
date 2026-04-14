@@ -1,21 +1,5 @@
-///////////////////////////////////////////////////////////////////////////////
-// Parallel Parking — C++ example (Builder API)
-//
-// Ported from examples/python_examples/ParallelParking.py
 // Source: http://www.ee.ic.ac.uk/ICLOCS/ExampleParallelParking.html
 //         https://ieeexplore.ieee.org/document/7463491
-//
-// State  : [x, y, v, a, theta, phi]   (pos, vel, accel, heading, steering)
-// Control: [u1, u2]                    (jerk, steering rate)
-// Static : [k]                         (tanh smoothing constant)
-//
-// Objective: minimise time (~18.4 s expected)
-//
-// All API gaps previously noted here have been resolved:
-//   - Phase wrapper add_inequal_con supports mixed var sources (XtUP + SP)
-//   - refine_traj_manual() and sub_variable() are on the Phase wrapper
-//   - Phase::set_traj(traj, ndef, true) supports LerpIG interpolation
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -64,13 +48,11 @@ constexpr double SW = 2.0;
 constexpr double CL = 3.5;
 
 int main() {
-    // Car dimensions (m)
     constexpr double l_front = 0.839;
     constexpr double l_axes = 2.588;
     constexpr double l_rear = 0.657;
     constexpr double b_width = 1.771 / 2.0;
 
-    // Limits
     constexpr double phi_max = 33.0 * M_PI / 180.0;
     constexpr double v_max = 2.0;
     constexpr double a_max = 0.75;
@@ -78,7 +60,6 @@ int main() {
     constexpr double curvature_dot_max = 0.6;
     constexpr double xmin = -10.0, xmax_val = 7.5;
 
-    // Initial conditions
     constexpr double x0 = -5.14;
     constexpr double y0 = 1.41;
     constexpr double theta0 = 13.18 * M_PI / 180.0;
@@ -90,7 +71,6 @@ int main() {
 
     const double area_ref = (l_axes + l_front + l_rear) * 2.0 * b_width;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(6, 2)
                    .define([l_axes](auto &args) {
                        auto x = args.x_var(0);
@@ -116,8 +96,7 @@ int main() {
                                {"u2", 8}})
                    .build();
 
-    // ── Slot boundary constraint (8 inequalities) ──────────────────────
-    // Uses static param k — must go through base() API
+    // Slot boundary constraint (8 inequalities); uses static param k.
     auto make_slot_fn = []() {
         auto args = Arguments<4>(); // x, y, theta, k
         auto x = args.coeff<0>();
@@ -136,7 +115,6 @@ int main() {
                      DY - CL, (-1.0) * DY + fslot_fn(DX, k, SL, SW));
     };
 
-    // ── Corner collision avoidance (2 inequalities) ────────────────────
     auto make_corner_fn = [area_ref]() {
         auto args = Arguments<3>();
         auto x = args.coeff<0>();
@@ -168,7 +146,6 @@ int main() {
         return stack(eq1, eq2);
     };
 
-    // ── Final Y constraint ─────────────────────────────────────────────
     auto make_final_y_fn = []() {
         auto args = Arguments<2>();
         auto y = args.coeff<0>();
@@ -180,7 +157,6 @@ int main() {
                      y + sin(theta) * Dx_b + cos(theta) * Dy_b);
     };
 
-    // ── Curvature rate function ────────────────────────────────────────
     auto make_curv_fn = [l_axes]() {
         auto args = Arguments<2>();
         auto phi = args.coeff<0>();
@@ -188,7 +164,6 @@ int main() {
         return u2 / (l_axes * cos(phi) * cos(phi));
     };
 
-    // ── Initial guess ──────────────────────────────────────────────────
     auto make_state = [](double x, double y, double theta_deg, double t) {
         Eigen::VectorXd XtU(9);
         XtU.setZero();
@@ -205,16 +180,15 @@ int main() {
                                                make_state(1.0, -0.5, 20.0, 15),
                                                make_state(1.0, -1.0, 0.0, 25)};
 
-    // Create phase with dummy IG, then re-set with LerpIG=true
+    // Phase is first constructed with a dummy IG, then re-set from sparse
+    // waypoints with LERP interpolation.
     std::vector<Eigen::VectorXd> dummy_ig;
     for (int i = 0; i < 100; ++i) {
         double s = static_cast<double>(i) / 99.0;
         dummy_ig.push_back(waypoints.front() * (1.0 - s) + waypoints.back() * s);
     }
 
-    // ── Phase setup (coarse) ───────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, dummy_ig, n_segs1);
-    // Re-set with sparse waypoints + LERP interpolation
     phase.set_traj(waypoints, n_segs1, true);
 
     Eigen::VectorXd sp(1);
@@ -223,7 +197,6 @@ int main() {
     phase.set_static_param_names({{"k", 0}});
     phase.set_control_mode(ControlModes::BlockConstant);
 
-    // Boundary conditions
     Eigen::VectorXd front_bc(7);
     front_bc << x0, y0, 0.0, 0.0, theta0, 0.0, 0.0;
     phase.add_boundary_value(PhaseRegionFlags::Front,
@@ -231,7 +204,7 @@ int main() {
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"v", "a"}, Eigen::Vector2d(0.0, 0.0));
 
-    // Slot geometry constraints — uses mixed XtUP + static param sources
+    // Slot geometry constraints use mixed XtUP + static param sources.
     {
         Eigen::VectorXi xtup(3);
         xtup << 0, 1, 4;
@@ -243,29 +216,23 @@ int main() {
                               sp_idx, ScaleModes::AUTO);
     }
 
-    // Final Y constraint
     phase.add_inequal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(make_final_y_fn()),
                           {"y", "theta"});
 
-    // Variable bounds
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", xmin, xmax_val);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "v", -v_max, v_max);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "a", -a_max, a_max);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "phi", -phi_max, phi_max);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "u1", -u1_max, u1_max);
 
-    // Curvature rate bound
     phase.add_lu_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(make_curv_fn()),
                             {"phi", "u2"}, -curvature_dot_max, curvature_dot_max);
 
-    // Corner collision avoidance
     phase.add_inequal_con(PhaseRegionFlags::Path, GenericFunction<-1, -1>(make_corner_fn()),
                           {"x", "y", "theta"});
 
-    // Lock static parameter k
     phase.add_value_lock(PhaseRegionFlags::StaticParams, Eigen::VectorXi::Constant(1, 0));
 
-    // Objective: minimise time
     phase.add_delta_time_objective(1.0);
 
     phase.set_num_partitions(8);
@@ -273,7 +240,6 @@ int main() {
     phase.optimizer().set_max_iters(2000);
     phase.optimizer().set_print_level(1);
 
-    // ── Coarse solve ───────────────────────────────────────────────────
     std::cout << "ParallelParking: coarse solve (k=" << k1 << ", segs=" << n_segs1 << ")...\n"
               << std::flush;
     auto flag_coarse = phase.solve_optimize();
@@ -282,7 +248,6 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // ── Refine and re-solve with tighter k ─────────────────────────────
     std::cout << "ParallelParking: refining to " << n_segs2 << " segments, k=" << k2 << "...\n"
               << std::flush;
     phase.refine_traj_manual(n_segs2);
@@ -301,10 +266,8 @@ int main() {
     std::cout << "ParallelParking (builder): maneuver time = " << final_time
               << " s (paper: 18.426 s)\n";
 
-    // NOTE: This problem is sensitive to initial guess quality and solver
-    // settings. Both C++ and Python versions may not converge to the paper's
-    // 18.426 s value without careful tuning. We check that the solver runs
-    // to completion and produces a plausible maneuver time.
+    // Sensitive to initial guess and solver settings; accept any plausible
+    // maneuver time rather than insisting on the paper's 18.426 s value.
     if (final_time < 5.0 || final_time > 200.0) {
         std::cerr << "ParallelParking (builder): FAILED — time out of plausible range\n";
         return EXIT_FAILURE;

@@ -1,22 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Multi-Phase Cannonball — C++ example (Builder API)
-//
-// Ported from examples/python_examples/MultiPhaseCannon.py
 // Source: Dymos optimal control library (OpenMDAO)
-//
-// Find the cannonball radius that maximises range, subject to a fixed
-// launch energy budget.  Two phases: ascent (gamma -> 0) and descent
-// (h -> 0).  ODE parameter: ball radius.
-//
-// State   : [v, gamma, h, r]  (speed, FPA, altitude, range)
-// Control : none
-// ODE param: [rad]            (cannonball radius)
-//
-// API features exercised:
-//   - ODEBuilder(4, 0, 1) with ODE parameter
-//   - ocp.add_direct_link_equal_con() for ODE param linking
-//   - phase.add_inequal_con() with mixed XtUP + ODE param variable sources
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -27,10 +9,6 @@
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
-
-///////////////////////////////////////////////////////////////////////////////
-// Physical constants (non-dimensionalised)
-///////////////////////////////////////////////////////////////////////////////
 
 static constexpr double g0 = 9.81;
 static constexpr double Lstar = 1000.0;    // m
@@ -48,10 +26,6 @@ static const double h_scale = 8.44e3 / Lstar;
 static const double E0 = 400000.0 / Estar;
 static const double g = g0 / Astar;
 
-///////////////////////////////////////////////////////////////////////////////
-// Helper functions
-///////////////////////////////////////////////////////////////////////////////
-
 static double MFunc_val(double rad) {
     return (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad);
 }
@@ -60,12 +34,7 @@ static double SFunc_val(double rad) {
     return M_PI * (rad * rad);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// ODE factory — cannon dynamics with drag, ODE parameter = radius
-///////////////////////////////////////////////////////////////////////////////
-
 ODE make_cannon_ode() {
-    // 4 states, 0 controls, 1 ODE parameter
     return ODEBuilder(4, 0, 1)
         .define([](auto &args) {
             auto v     = args.x_var(0);
@@ -74,14 +43,11 @@ ODE make_cannon_ode() {
             auto r     = args.x_var(3);
             auto rad   = args.p_var(0);
 
-            // Mass and cross-section from radius
             auto M = (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad);
             auto S = M_PI * (rad * rad);
 
-            // Exponential atmosphere
             auto rho = RhoAir * exp(h * (-1.0 / h_scale));
 
-            // Drag
             auto D = (0.5 * CD) * rho * (v * v) * S;
 
             auto vdot     = D * (-1.0) / M - g * sin(gamma);
@@ -95,13 +61,7 @@ ODE make_cannon_ode() {
         .build();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Energy constraint function: E(v, rad) - E0 <= 0
-//
-// Takes 2 inputs: [v, rad] -> 0.5 * M(rad) * v^2 - E0
-// Scaled by 0.01 as in the Python example.
-///////////////////////////////////////////////////////////////////////////////
-
+// Energy constraint: 0.5 * M(rad) * v^2 - E0 <= 0, scaled by 0.01.
 auto make_energy_constraint() {
     auto args = Arguments<2>();
     auto v   = args.coeff<0>();
@@ -112,14 +72,6 @@ auto make_energy_constraint() {
     return GenericFunction<-1, -1>((E - E0) * 0.01);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Initial guess generation via ODE::integrator() with event detection
-///////////////////////////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
-
 int main() {
     const double rad0 = 0.1 / Lstar;
     const double h0 = 100.0 / Lstar;
@@ -128,16 +80,13 @@ int main() {
     const double gamma0 = 45.0 * M_PI / 180.0;
     const double v0 = std::sqrt(2.0 * E0 / m0) * 0.99;
 
-    // ── Build ODE ──────────────────────────────────────────────────────
     auto ode = make_cannon_ode();
 
     std::cout << "MultiPhaseCannon (builder): generating initial guesses ...\n" << std::flush;
 
-    // Create integrator
     auto integ = ode.integrator().step(0.01).build();
     integ.set_abs_tol(1.0e-14);
 
-    // Initial state: [v, gamma, h, r, t, rad]
     Eigen::VectorXd IG = Eigen::VectorXd::Zero(6);
     IG[0] = v0;
     IG[1] = gamma0;
@@ -146,7 +95,6 @@ int main() {
     IG[5] = rad0;
 
     // Ascent event: v*sin(gamma) crossing zero (hdot = 0 at apogee)
-    // EventPack = (event_func, direction, action): direction=0 (any), action=1 (stop)
     using EventPack = decltype(integ)::EventPack;
 
     auto ascent_args = ODEArguments(4, 0, 1);
@@ -159,7 +107,7 @@ int main() {
 
     // Descent event: h crossing zero (ground impact)
     auto descent_args = ODEArguments(4, 0, 1);
-    auto descent_event_expr = descent_args.coeff(2); // h
+    auto descent_event_expr = descent_args.coeff(2);
     auto descent_event = GenericFunction<-1, 1>(descent_event_expr);
 
     auto [descent_traj, descent_events] =
@@ -171,53 +119,41 @@ int main() {
     const auto tmode = TranscriptionModes::LGL5;
     const int nsegs = 128;
 
-    // ── Ascent phase ──────────────────────────────────────────────────
     auto aphase = ode.phase(tmode, ascent_traj, nsegs);
 
-    // ODE param lower bound: rad >= 0
-    // ODEParams region expects raw ODE param index (0), not phase vector index
+    // ODEParams region expects raw ODE param index, not phase vector index.
     aphase.add_lower_var_bound(PhaseRegionFlags::ODEParams, 0, 0.0, 1.0);
 
-    // Launch angle lower bound: gamma >= 0
     aphase.add_lower_var_bound(PhaseRegionFlags::Front, "gamma", 0.0, 1.0);
 
-    // Front BC: h, r, t
     Eigen::VectorXd front_vals(3);
     front_vals << h0, r0, 0.0;
     aphase.add_boundary_value(PhaseRegionFlags::Front, {"h", "r", "t"}, front_vals);
 
-    // Energy inequality at launch: 0.5 * M(rad) * v^2 - E0 <= 0
-    // This references both state var 0 (v) and ODE param var 0 (rad).
+    // Energy inequality references state var v (xvars=0) and ODE param rad (pvars=0).
     {
         auto efunc = make_energy_constraint();
-        Eigen::VectorXi xvars(1); xvars << 0;   // v
-        Eigen::VectorXi pvars(1); pvars << 0;   // rad (P-relative index)
+        Eigen::VectorXi xvars(1); xvars << 0;
+        Eigen::VectorXi pvars(1); pvars << 0;
         Eigen::VectorXi empty;
         aphase.add_inequal_con(
             PhaseRegionFlags::Front, efunc, xvars, pvars, empty, ScaleModes::AUTO);
     }
 
-    // Back BC: gamma = 0 (top of arc)
     aphase.add_boundary_value(PhaseRegionFlags::Back, "gamma", 0.0);
 
-    // ── Descent phase ─────────────────────────────────────────────────
     auto dphase = ode.phase(tmode, descent_traj, nsegs);
 
-    // Back BC: h = 0 (ground)
     dphase.add_boundary_value(PhaseRegionFlags::Back, "h", 0.0);
 
-    // Objective: maximise range (minimise -r at end)
     dphase.add_value_objective(PhaseRegionFlags::Back, "r", -1.0);
 
-    // ── OCP ───────────────────────────────────────────────────────────
     OptimalControlProblem ocp;
     ocp.add_phase(aphase);
     ocp.add_phase(dphase);
 
-    // Continuity in time-dependent vars: v, gamma, h, r, t
     ocp.add_forward_link_equal_con(aphase, dphase, {"v", "gamma", "h", "r", "t"});
 
-    // Link ODE params (radius) between phases
     {
         Eigen::VectorXi pvar(1); pvar << 0;
         ocp.add_direct_link_equal_con(
@@ -237,7 +173,6 @@ int main() {
         return 1;
     }
 
-    // ── Report ────────────────────────────────────────────────────────
     auto ascentTraj = aphase.return_traj();
     auto descentTraj = dphase.return_traj();
 

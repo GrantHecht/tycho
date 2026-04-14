@@ -1,17 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Space Shuttle Reentry — C++ example (Builder API)
-//
-// Ported from examples/python_examples/Reentry.py
 // Source: Betts, "Practical Methods for OC", Cambridge, 2009
-//
-// State  : [h, theta, v, gamma, psi]   (alt, downrange, speed, FPA, heading)
-// Control: [alpha, beta]                (AoA, bank angle)
-//
-// Two-step solve: unconstrained, then add heating rate constraint
-// Objective: maximise final cross-range (theta at tf)
-//
-// All API gaps previously noted here have been resolved.
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -25,7 +12,6 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 int main() {
-    // ── Non-dimensionalisation ─────────────────────────────────────────
     constexpr double g0 = 32.2;
     constexpr double W = 203000.0;
     constexpr double Lstar = 100000.0;
@@ -49,7 +35,6 @@ int main() {
     constexpr double c2 = 0.21286289e-3, c3 = -0.10117e-5;
     constexpr double Qlimit = 70.0;
 
-    // Boundary conditions
     const double ht0 = 260000.0 / Lstar;
     const double htf = 80000.0 / Lstar;
     const double vt0 = 25600.0 / Vstar;
@@ -62,7 +47,6 @@ int main() {
     constexpr int n_pts = 200;
     constexpr int n_segs = 40;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(5, 2)
                    .define([Re, S_ref, m, mu, rho0, h_ref, a0, a1, b0, b1, b2](auto &args) {
                        auto h = args.x_var(0);
@@ -108,11 +92,9 @@ int main() {
                                {"beta", 7}})
                    .build();
 
-    // ── Heating rate function ──────────────────────────────────────────
-    // Q = qa * qr where:
+    // Heating rate Q = qa * qr; operates on [h, v, alpha].
     //   qr = 17700 * sqrt(rhodim) * (0.0001*vdim)^3.07
     //   qa = c0 + c1*alphadeg + c2*alphadeg^2 + c3*alphadeg^3
-    // Operates on [h, v, alpha]
     auto qfunc = [rho0, h_ref, Rhostar, Vstar, c0, c1, c2, c3]() {
         auto args = Arguments<3>();
         auto qh = args.coeff<0>();
@@ -122,18 +104,15 @@ int main() {
         auto rhodim = rho0 * exp((-1.0 / h_ref) * qh) * Rhostar;
         auto vdim = qv * Vstar;
 
-        // qr = 17700 * sqrt(rhodim) * (0.0001*vdim)^3.07
         auto base_val = 0.0001 * vdim;
         auto qr = 17700.0 * sqrt(rhodim) * CwisePow(base_val, 3.07);
 
-        // qa = c0 + c1*alphadeg + c2*alphadeg^2 + c3*alphadeg^3
         auto qa = c0 + c1 * qalphadeg + c2 * qalphadeg * qalphadeg +
                   c3 * qalphadeg * qalphadeg * qalphadeg;
 
         return qa * qr;
     };
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
@@ -150,7 +129,6 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, n_segs);
 
     Eigen::VectorXd front_bc(6);
@@ -171,7 +149,6 @@ int main() {
     phase.add_boundary_value(PhaseRegionFlags::Back, {"h", "v", "gamma"},
                              Eigen::Vector3d(htf, vtf, gammatf));
 
-    // Objective: maximise theta(tf) => minimise -theta
     phase.add_delta_var_objective("theta", -1.0);
 
     phase.set_num_partitions(8);
@@ -179,7 +156,6 @@ int main() {
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_print_level(1);
 
-    // ── Solve (unconstrained) ──────────────────────────────────────────
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
     auto flag1 = phase.solve_optimize();
     if (flag1 > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
@@ -187,7 +163,6 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // Refine to more segments
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
     auto flag2 = phase.optimize();
@@ -198,7 +173,6 @@ int main() {
 
     auto traj1 = phase.return_traj();
 
-    // ── Add heating constraint and re-solve ────────────────────────────
     std::cout << "Reentry: re-solving with heating rate constraint...\n" << std::flush;
     phase.add_upper_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(qfunc()),
                                {"h", "v", "alpha"}, Qlimit, 1.0 / Qlimit);
@@ -216,7 +190,6 @@ int main() {
     std::cout << "Reentry (builder): cross-range (Q limited)  = " << crossrange2
               << " deg, tf = " << final_time2 << " s\n";
 
-    // Verify convergence and trajectory plausibility
     if (flag3 > PSIOPT::ConvergenceFlags::ACCEPTABLE || crossrange2 <= 0.0) {
         std::cerr << "Reentry (builder): FAILED\n";
         return EXIT_FAILURE;

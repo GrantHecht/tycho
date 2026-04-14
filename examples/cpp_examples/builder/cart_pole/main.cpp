@@ -1,21 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Cart-Pole Swing-Up — C++ example (Builder API)
-//
-// Ported from examples/python_examples/CartPole.py
 // Source: Kelly, M., "An introduction to trajectory optimization", SIAM Review, 2017
-//
-// State  : [x, theta, xdot, thetadot]   (cart pos, pole angle, velocities)
-// Control: [F]                            (applied force)
-//
-// ODE: Uses mass matrix inversion M^{-1} * Q
-//   M = [[cos(theta), l], [m1+m2, m2*l*cos(theta)]]   (row-major)
-//   Q = [-g*sin(theta), F + m2*l*sin(theta)*thetadot^2]
-//   [xddot, thetaddot] = M^{-1} * Q
-//
-// Uses row_matrix().inverse() * Q, matching Python vf.RowMatrix API.
-//
-// Objective: minimise integral(F^2)
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -40,7 +23,6 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 64;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(4, 1)
                    .define([l, m1, m2, g](auto &args) {
                        auto x = args.x_var(0);
@@ -49,11 +31,9 @@ int main() {
                        auto thetadot = args.x_var(3);
                        auto F = args.u_var(0);
 
-                       // Force vector Q:
                        auto Q = stack((-g) * sin(theta),
                                       F + m2 * l * sin(theta) * thetadot * thetadot);
 
-                       // Mass matrix M (row-major): [[cos(theta), l], [m1+m2, m2*l*cos(theta)]]
                        // Scalar constants must be promoted to VF expressions for stack()
                        auto l_vf = theta * 0.0 + l;
                        auto a_vf = theta * 0.0 + (m1 + m2);
@@ -67,7 +47,6 @@ int main() {
                                {"t", 4}, {"F", 5}})
                    .build();
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
@@ -78,26 +57,21 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
-    // Fix initial state and time
     Eigen::VectorXd front_bc(5);
     front_bc << 0.0, 0.0, 0.0, 0.0, 0.0;
     phase.add_boundary_value(PhaseRegionFlags::Front,
                             {"x", "theta", "xdot", "thetadot", "t"}, front_bc);
 
-    // Fix final state and time
     Eigen::VectorXd back_bc(5);
     back_bc << xf, M_PI, 0.0, 0.0, tf;
     phase.add_boundary_value(PhaseRegionFlags::Back,
                             {"x", "theta", "xdot", "thetadot", "t"}, back_bc);
 
-    // Bounds
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "F", -Fmax, Fmax);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -xmax, xmax);
 
-    // Integral objective: min integral(F^2)
     {
         auto obj_args = Arguments<1>();
         auto obj_expr = obj_args.coeff<0>() * obj_args.coeff<0>();
@@ -107,7 +81,6 @@ int main() {
     phase.set_num_partitions(8);
     phase.optimizer().set_print_level(1);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     const auto flag = phase.optimize();
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {

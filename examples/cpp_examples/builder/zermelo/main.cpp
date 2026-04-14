@@ -1,20 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Zermelo Navigation — C++ example (Builder API)
-//
-// Same problem as the Python examples (examples/Zermelo*.py), but
-// demonstrating the key Builder API advantage: composable wind functions
-// at runtime.  The static DSL approach requires 4 separate ODE types;
-// here we use a single navigate() function and pass different ODE
-// instances.
-//
-// State  : [x, y]    (2D position)
-// Control: [theta]   (heading angle)
-//
-// ODE:
-//   xdot = vMax * cos(theta) + wx(x, y, t)
-//   ydot = vMax * sin(theta) + wy(x, y, t)
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
@@ -29,16 +12,11 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-///////////////////////////////////////////////////////////////////////////////
-// navigate() — not templated!  Works with any ODE.
-///////////////////////////////////////////////////////////////////////////////
-
 std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
                                       const Eigen::VectorXd &B, double vMax) {
     constexpr int nSeg = 250;
     constexpr double tol = 1e-12;
 
-    // Linear initial guess
     const double dist = (B - A).norm();
     const double t0 = dist / vMax;
     const Eigen::VectorXd d = (B - A) / dist;
@@ -53,22 +31,17 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
         trajG.push_back(pt);
     }
 
-    // Construct phase with named variables
     auto phase = ode.phase(TranscriptionModes::LGL3, trajG, nSeg);
     phase.set_num_partitions(10);
 
-    // Boundary conditions — named variables
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"}, A);
     phase.add_boundary_value(PhaseRegionFlags::Front, "t", 0.0);
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, B);
 
-    // Control bounds
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
-    // Minimise travel time
     phase.add_delta_time_objective(1.0);
 
-    // Solver settings
     phase.optimizer().set_econ_tol(tol);
     phase.optimizer().set_kkt_tol(tol);
 
@@ -80,10 +53,6 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
     }
     return phase.return_traj();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Wind model factories — each returns an ODE
-///////////////////////////////////////////////////////////////////////////////
 
 ODE make_no_wind(double vMax) {
     return ODEBuilder(2, 1)
@@ -147,14 +116,9 @@ ODE make_var_wind(double vMax) {
         .build();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// main — compare wind models
-///////////////////////////////////////////////////////////////////////////////
-
 int main() {
     int failures = 0;
 
-    // Jacobian sanity check on variable wind model
     {
         auto ode = make_var_wind(1.25);
         Eigen::VectorXd tp(4);
@@ -174,7 +138,6 @@ int main() {
     A << 0.0, -1.0;
     B << 1.0, 1.0;
 
-    // No wind
     std::cout << "Solving: no wind ... " << std::flush;
     auto ode_nw = make_no_wind(1.0);
     auto traj1 = navigate(ode_nw, A, B, 1.0);
@@ -185,7 +148,6 @@ int main() {
         std::cout << std::fixed << std::setprecision(4) << "tf = " << traj1.back()[2] << " s\n";
     }
 
-    // Uniform wind
     std::cout << "Solving: uniform wind ... " << std::flush;
     constexpr double vM = 1.25;
     auto ode_uw = make_uniform_wind(vM, 0.5, 135.0 * M_PI / 180.0);
@@ -197,7 +159,6 @@ int main() {
         std::cout << "tf = " << traj2.back()[2] << " s\n";
     }
 
-    // Constant-direction wind
     std::cout << "Solving: constant-direction wind ... " << std::flush;
     auto ode_cd = make_const_dir_wind(vM, 45.0 * M_PI / 180.0);
     auto traj3 = navigate(ode_cd, A, B, vM);
@@ -208,7 +169,6 @@ int main() {
         std::cout << "tf = " << traj3.back()[2] << " s\n";
     }
 
-    // Variable-direction wind
     std::cout << "Solving: variable-direction wind ... " << std::flush;
     auto ode_vw = make_var_wind(vM);
     auto traj4 = navigate(ode_vw, A, B, vM);
@@ -219,7 +179,6 @@ int main() {
         std::cout << "tf = " << traj4.back()[2] << " s\n";
     }
 
-    // Summary
     std::cout << "\nZermelo (builder): " << (4 - failures) << "/4 wind models converged\n";
     return failures > 0 ? 1 : 0;
 }

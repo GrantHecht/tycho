@@ -1,15 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Analytic Example — C++ example (Builder API)
-//
-// Ported from examples/python_examples/AnalyticExample.py
 // Source: https://www.hindawi.com/journals/aaa/2014/851720/
-//
-// State  : [x]   (1 state)
-// Control: [u]   (1 control)
-//
-// ODE: xdot = 0.5*x + u
-// Objective: minimise integral(u^2 + x*u + 1.25*x^2)
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -29,7 +18,6 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 20;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(1, 1)
                    .define([](auto &args) {
                        auto x = args.x_var(0);
@@ -39,7 +27,6 @@ int main() {
                    .var_names({{"x", 0}, {"t", 1}, {"u", 2}})
                    .build();
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
@@ -49,14 +36,12 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "t"},
                             Eigen::Vector2d(x0_val, t0));
     phase.add_boundary_value(PhaseRegionFlags::Back, "t", tf);
 
-    // Integral objective: min integral(u^2 + x*u + 1.25*x^2)
     {
         auto obj_args = Arguments<2>();
         auto x = obj_args.coeff<0>();
@@ -65,7 +50,6 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"x", "u"});
     }
 
-    // ── Solve ──────────────────────────────────────────────────────────
     const auto flag = phase.optimize();
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {

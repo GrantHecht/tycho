@@ -1,17 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// HyperSensitive Problem — C++ example (Builder API)
-//
-// Same problem as the static DSL version.  Tests integral objectives with
-// named variables, adaptive mesh refinement, and MINDEG ordering.
-//
-// State  : [x]   (1 scalar state)
-// Control: [u]   (1 scalar control)
-//
-// ODE: xdot = -x + u
-//
-// Objective: minimise integral of (x^2 + u^2) / 2
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <iomanip>
 #include <iostream>
@@ -31,7 +17,6 @@ int main() {
     const double tf = 10000.0;
     constexpr int nSeg = 50;
 
-    // ── Define ODE via Builder API ──────────────────────────────────────
     auto ode = ODEBuilder(1, 1)
                    .define([](auto &args) {
                        auto x = args.x_var(0);
@@ -41,7 +26,6 @@ int main() {
                    .var_names({{"x", 0}, {"t", 1}, {"u", 2}})
                    .build();
 
-    // ── Initial trajectory guess ────────────────────────────────────────
     std::vector<Eigen::VectorXd> trajIG;
     trajIG.reserve(1000);
     for (int i = 0; i < 1000; ++i) {
@@ -51,27 +35,22 @@ int main() {
         trajIG.push_back(pt);
     }
 
-    // ── Construct phase ─────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL7, trajIG, nSeg);
 
     phase.set_control_mode(ControlModes::NoSpline);
 
-    // Boundary conditions
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "t"}, Eigen::Vector2d(xt0, 0.0));
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "t"}, Eigen::Vector2d(xtf, tf));
 
-    // Integral objective: minimise integral of (x^2 + u^2) / 2
     {
         auto obj_args = Arguments<2>();
         auto obj_expr = obj_args.squared_norm() / 2.0;
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"x", "u"});
     }
 
-    // Variable bounds
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -50.0, 50.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -50.0, 50.0);
 
-    // ── Solver settings ─────────────────────────────────────────────────
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_soe_ls_mode("L1");
     phase.optimizer().set_max_ls_iters(2);
@@ -81,7 +60,6 @@ int main() {
     // MINDEG ordering — needed for reliable convergence at tf=10000
     phase.optimizer().set_qp_ordering_mode("MINDEG");
 
-    // Adaptive mesh refinement
     phase.set_adaptive_mesh(true);
     phase.set_mesh_tol(1.0e-7);
     phase.optimizer().set_econ_tol(1.0e-7);
@@ -92,7 +70,6 @@ int main() {
     phase.set_mesh_red_factor(0.5);
     phase.set_mesh_err_factor(10.0);
 
-    // ── Solve ───────────────────────────────────────────────────────────
     std::cout << "Solving HyperSensitive problem (tf=" << std::fixed << std::setprecision(0) << tf
               << ") ...\n"
               << std::flush;
@@ -111,7 +88,6 @@ int main() {
         return 1;
     }
 
-    // Print trajectory summary
     auto traj = phase.return_traj();
     if (!traj.empty()) {
         std::cout << std::fixed << std::setprecision(6);

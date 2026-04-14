@@ -1,21 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Goddard Rocket — C++ example (Builder API)
-//
-// Ported from examples/python_examples/GoddardRocket.py
 // Source: Betts, "Practical Methods for OC", Cambridge, 2009, Section 4.14
-//
-// Classic Goddard rocket problem with singular arc.
-//
-// State  : [h, v, m]   (altitude, velocity, mass)
-// Control: [u]          (throttle 0..1)
-//
-// Multi-phase formulation:
-//   Phase 1: full thrust (u = 1)
-//   Phase 2: singular arc (path constraint determines u)
-//   Phase 3: coast (u = 0)
-//
-// Objective: maximise final altitude (minimise -h at tf)
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -26,10 +9,6 @@
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
-
-///////////////////////////////////////////////////////////////////////////////
-// Physical constants (non-dimensionalised)
-///////////////////////////////////////////////////////////////////////////////
 
 static constexpr double g0 = 32.2;
 static constexpr double W = 203000.0;
@@ -54,10 +33,6 @@ static const double sigma = 5.4915e-5 / sigmastar;
 static constexpr double m0 = 3.0;
 static constexpr double mf = 1.0;
 
-///////////////////////////////////////////////////////////////////////////////
-// ODE factory
-///////////////////////////////////////////////////////////////////////////////
-
 ODE make_goddard_ode() {
     return ODEBuilder(3, 1)
         .define([](auto &args) {
@@ -76,17 +51,8 @@ ODE make_goddard_ode() {
         .build();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Singular arc path constraint
-//
-// From Betts eq. 4.188: the constraint that defines the singular arc control
-// t1 = (u*Tmag - sigma*v^2*exp(-h/h_ref)) - g*m
-// t2 = (m*g / (1 + 4*(c/v) + 2*(c/v)^2)) * (c^2*(1+v/c)/(h_ref*g) - 1 - 2*c/v)
-// constraint: t1 - t2 = 0
-///////////////////////////////////////////////////////////////////////////////
-
+// From Betts eq. 4.188: constraint that defines the singular arc control.
 auto make_path_constraint() {
-    // Takes 4 args: [h, v, m, u]
     auto args = Arguments<4>();
     auto h = args.coeff<0>();
     auto v = args.coeff<1>();
@@ -102,12 +68,8 @@ auto make_path_constraint() {
     return GenericFunction<-1, -1>(t1 - t2);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Initial guess via ODE::integrator() with control law and stop function
-///////////////////////////////////////////////////////////////////////////////
-
 std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
-    // Control law: u = 1 if m > mf, else 0
+    // u = 1 while m > mf, else 0
     auto ulaw_args = Arguments<1>();
     Eigen::Matrix<double, 1, 1> one_val, zero_val;
     one_val << 1.0;
@@ -119,10 +81,9 @@ std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
 
     auto integ = ode.integrator().step(0.01).control(ulaw, {"m"}).build();
 
-    // Initial state: [h, v, m, t, u]
     Eigen::VectorXd X0 = Eigen::VectorXd::Zero(5);
-    X0[2] = m0;  // mass
-    X0[4] = 1.0; // control (will be overwritten by control law)
+    X0[2] = m0;
+    X0[4] = 1.0;
 
     // Stop when velocity goes negative (rocket falling)
     auto stop_fn = [](const Eigen::Ref<const Eigen::VectorXd> &x) { return x[1] < 0.0; };
@@ -130,12 +91,7 @@ std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
     return integ.integrate_dense(X0, 60.0 / Tstar, 1000, stop_fn);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
-
 int main() {
-    // ── Build ODE and generate initial guess ───────────────────────────
     auto ode = make_goddard_ode();
 
     std::cout << "GoddardRocket (builder): generating initial guess ...\n" << std::flush;
@@ -156,57 +112,46 @@ int main() {
 
     const auto tmode = TranscriptionModes::LGL3;
 
-    // ── Phase 1: full thrust (u = 1) ──────────────────────────────────
+    // Phase 1: full thrust (u = 1)
     auto phase1 = ode.phase(tmode, TrajIG1, 32);
 
-    // Front BC: h, v, m, t
     Eigen::VectorXd front_vals(4);
     front_vals << TrajIG[0][0], TrajIG[0][1], TrajIG[0][2], TrajIG[0][3];
     phase1.add_boundary_value(PhaseRegionFlags::Front, {"h", "v", "m", "t"}, front_vals);
 
-    // Fix control on path: u = 1
     phase1.add_boundary_value(PhaseRegionFlags::Path, "u", 1.0);
 
-    // ── Phase 2: singular arc ─────────────────────────────────────────
+    // Phase 2: singular arc
     auto phase2 = ode.phase(tmode, TrajIG2, 32);
     phase2.set_control_mode(ControlModes::NoSpline);
 
-    // Throttle bounds
     phase2.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0, 1.0, 1.0);
 
-    // Singular arc constraint
     auto path_con = make_path_constraint();
     phase2.add_equal_con(PhaseRegionFlags::Path, path_con, {"h", "v", "m", "u"});
 
-    // ── Phase 3: coast (u = 0) ────────────────────────────────────────
+    // Phase 3: coast (u = 0)
     auto phase3 = ode.phase(tmode, TrajIG3, 32);
 
-    // Fix control on path: u = 0
     phase3.add_boundary_value(PhaseRegionFlags::Path, "u", 0.0);
 
-    // Terminal BC: v = 0, m = mf
     Eigen::VectorXd back_vals(2);
     back_vals << 0.0, mf;
     phase3.add_boundary_value(PhaseRegionFlags::Back, {"v", "m"}, back_vals);
 
-    // Objective: maximise altitude at end (minimise -h)
     phase3.add_value_objective(PhaseRegionFlags::Back, "h", -1.0);
 
-    // ── OCP ───────────────────────────────────────────────────────────
     OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
     ocp.add_phase(phase3);
 
-    // Continuity across all phases: h, v, m, t
     ocp.add_forward_link_equal_con(phase1, phase3, {"h", "v", "m", "t"});
 
-    // Ensure non-negative phase durations
     phase1.add_lower_delta_time_bound(0.0);
     phase2.add_lower_delta_time_bound(0.0);
     phase3.add_lower_delta_time_bound(0.0);
 
-    // ── Solve ─────────────────────────────────────────────────────────
     std::cout << "Solving multi-phase Goddard rocket ...\n" << std::flush;
 
     ocp.optimizer().set_opt_ls_mode("L1");
@@ -220,7 +165,6 @@ int main() {
         return 1;
     }
 
-    // ── Report ────────────────────────────────────────────────────────
     auto traj1 = phase1.return_traj();
     auto traj2 = phase2.return_traj();
     auto traj3 = phase3.return_traj();

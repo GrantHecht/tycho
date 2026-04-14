@@ -1,20 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////
-// Simple Low Thrust — C++ example (Builder API)
-//
-// Ported from examples/python_examples/SimpleLowThrust.py
-//
-// Two-body + low-thrust circular orbit transfer with three objectives:
-//   1. Minimum time
-//   2. Minimum power (integral ||u||^2)
-//   3. Minimum fuel  (integral ||u||)
-//
-// State  : [rx, ry, rz, vx, vy, vz]  (6 Cartesian states)
-// Control: [ux, uy, uz]               (3 thrust direction controls)
-//
-// Phase vector: [rx, ry, rz, vx, vy, vz, t, ux, uy, uz]
-//                0    1    2   3   4   5   6   7   8   9
-///////////////////////////////////////////////////////////////////////////////
-
 #include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
@@ -29,27 +12,22 @@ int main() {
     constexpr double mu = 1.0;
     constexpr double acc = 0.02;
 
-    // Initial circular orbit
     const double r0 = 1.0;
     const double v0 = std::sqrt(mu / r0);
 
-    // Final circular orbit
     const double rf = 2.0;
     const double vf_val = std::sqrt(mu / rf);
 
-    // Initial state [rx, ry, rz, vx, vy, vz, t]
     Eigen::VectorXd X0(7);
     X0.setZero();
     X0[0] = r0;
     X0[4] = v0;
 
-    // Final state (position + velocity, no time)
     Eigen::VectorXd Xf(6);
     Xf.setZero();
     Xf[0] = rf;
     Xf[4] = vf_val;
 
-    // ── Build ODE ──────────────────────────────────────────────────────
     auto args = ODEArguments(6, 3, 0);
     auto R = args.head<3>();
     auto V = args.segment<3>(3);
@@ -65,12 +43,10 @@ int main() {
                    .var_names({{"t", 6}})
                    .var_group("u", 7, 3);
 
-    // ── Initial guess: forward-integrate the ODE with prograde thrust ──
-    // Matches Python reference: u = normalize(V) * 0.8, sampled from the
-    // velocity slots [3, 4, 5]. The resulting trajectory satisfies the
-    // dynamics exactly (defects ≈ 0) — a hand-rolled analytic spiral
-    // leaves O(1) defects and puts the solver on a near-saddle that is
-    // extremely sensitive to floating-point ordering.
+    // Forward-integrate with prograde thrust so the IG satisfies the
+    // dynamics exactly (defects ≈ 0). A hand-rolled analytic spiral leaves
+    // O(1) defects and places the solver on a near-saddle that is extremely
+    // sensitive to floating-point ordering.
     Eigen::VectorXd XIG(10);
     XIG.setZero();
     XIG.head<7>() = X0;
@@ -81,27 +57,21 @@ int main() {
     auto ig_integ = ode.integrator().step(0.01).control(u_law, {"V"}).build();
     auto trajIG = ig_integ.integrate_dense(XIG, 6.4 * M_PI, 100);
 
-    // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 256;
     auto phase = ode.phase(TranscriptionModes::LGL3, trajIG, nSeg);
 
-    // Front BC: full initial state + time
     phase.add_boundary_value(PhaseRegionFlags::Front, {"R", "V", "t"}, X0);
 
-    // Control norm bound
     phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.001, 1.0, 1.0);
 
-    // Back BC: final position + velocity (no time)
     phase.add_boundary_value(PhaseRegionFlags::Back, {"R", "V"}, Xf);
 
-    // ── Solver settings ────────────────────────────────────────────────
     phase.optimizer().set_print_level(1);
     phase.optimizer().set_bound_fraction(0.995);
     phase.optimizer().set_opt_ls_mode("L1");
     phase.optimizer().set_max_ls_iters(2);
     phase.optimizer().set_delta_h(1.0e-6);
 
-    // ── Objective 1: Minimum time ──────────────────────────────────────
     std::cout << "=== Phase 1: Minimum time transfer ===\n";
     phase.add_delta_time_objective(1.0);
     auto flag_time = phase.solve_optimize();
@@ -115,10 +85,8 @@ int main() {
     std::cout << "  Time-optimal tf = " << std::fixed << std::setprecision(4) << tf_time
               << " (ND)\n";
 
-    // Remove time objective
     phase.remove_state_objective(-1);
 
-    // ── Objective 2: Minimum power (integral ||u||^2) ──────────────────
     std::cout << "\n=== Phase 2: Minimum power transfer ===\n";
     {
         auto u_args = Arguments<3>();
@@ -140,7 +108,6 @@ int main() {
 
     phase.remove_integral_objective(-1);
 
-    // ── Objective 3: Minimum fuel (integral ||u||) ─────────────────────
     std::cout << "\n=== Phase 3: Minimum fuel transfer ===\n";
     {
         auto u_args = Arguments<3>();
@@ -159,7 +126,6 @@ int main() {
     std::cout << "  Mass-optimal tf = " << std::fixed << std::setprecision(4) << tf_mass
               << " (ND)\n";
 
-    // ── Verification ───────────────────────────────────────────────────
     bool ok = true;
     auto check_traj = [&](const std::string &name, const std::vector<Eigen::VectorXd> &traj) {
         double rfinal = traj.back().head<3>().norm();

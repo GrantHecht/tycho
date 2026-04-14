@@ -21,7 +21,6 @@ template <class Ptr> inline void require_interp_table(const Ptr &p, const char *
 }
 } // namespace detail
 
-// ── 1D: single VF input (general, multi-output) ───────────────────
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable1D> &table,
             const DenseFunctionBase<Func, IR, OR> &input) {
@@ -32,9 +31,8 @@ auto interp(const std::shared_ptr<oc::InterpTable1D> &table,
     return GenericFunction<-1, -1>(oc::InterpFunction1D<-1>(table).eval(input.derived()));
 }
 
-// ── 1D scalar: single VF input, scalar-valued table ───────────────
-// Use this overload when the table returns a single value and the
-// result must participate in VF operator/ or operator*(scalar, VF).
+// Use this overload when the table returns a single value and the result must
+// participate in VF operator/ or operator*(scalar, VF).
 template <class Func, int IR, int OR>
 auto interp_scalar(const std::shared_ptr<oc::InterpTable1D> &table,
                    const DenseFunctionBase<Func, IR, OR> &input) {
@@ -43,7 +41,6 @@ auto interp_scalar(const std::shared_ptr<oc::InterpTable1D> &table,
     return GenericFunction<-1, 1>(oc::InterpFunction1D<1>(table).eval(input.derived()));
 }
 
-// ── 2D: two scalar VF inputs ───────────────────────────────────────
 template <class F1, int IR1, int OR1, class F2, int IR2, int OR2>
 auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
             const DenseFunctionBase<F1, IR1, OR1> &x, const DenseFunctionBase<F2, IR2, OR2> &y) {
@@ -52,7 +49,6 @@ auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
         oc::InterpFunction2D(table).eval(stack(x.derived(), y.derived())));
 }
 
-// ── 2D: single 2-element VF input ──────────────────────────────────
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
             const DenseFunctionBase<Func, IR, OR> &xy) {
@@ -60,7 +56,6 @@ auto interp(const std::shared_ptr<oc::InterpTable2D> &table,
     return GenericFunction<-1, 1>(oc::InterpFunction2D(table).eval(xy.derived()));
 }
 
-// ── 3D: three scalar VF inputs ─────────────────────────────────────
 template <class F1, int IR1, int OR1, class F2, int IR2, int OR2, class F3, int IR3, int OR3>
 auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
             const DenseFunctionBase<F1, IR1, OR1> &x, const DenseFunctionBase<F2, IR2, OR2> &y,
@@ -70,7 +65,6 @@ auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
         oc::InterpFunction3D(table).eval(stack(x.derived(), y.derived(), z.derived())));
 }
 
-// ── 3D: single 3-element VF input ──────────────────────────────────
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
             const DenseFunctionBase<Func, IR, OR> &xyz) {
@@ -78,7 +72,6 @@ auto interp(const std::shared_ptr<oc::InterpTable3D> &table,
     return GenericFunction<-1, 1>(oc::InterpFunction3D(table).eval(xyz.derived()));
 }
 
-// ── 4D: four scalar VF inputs ──────────────────────────────────────
 template <class F1, int IR1, int OR1, class F2, int IR2, int OR2, class F3, int IR3, int OR3,
           class F4, int IR4, int OR4>
 auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
@@ -89,15 +82,12 @@ auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
         stack(x.derived(), y.derived(), z.derived(), w.derived())));
 }
 
-// ── 4D: single 4-element VF input ──────────────────────────────────
 template <class Func, int IR, int OR>
 auto interp(const std::shared_ptr<oc::InterpTable4D> &table,
             const DenseFunctionBase<Func, IR, OR> &xyzw) {
     detail::require_interp_table(table, "vf::interp: InterpTable4D pointer must not be null");
     return GenericFunction<-1, 1>(oc::InterpFunction4D(table).eval(xyzw.derived()));
 }
-
-// ── LGL trajectory interpolation ───────────────────────────────────
 
 /// Return a GenericFunction wrapping an LGLInterpTable (not yet composed
 /// with a time expression). Call .eval(t_expr) on the result to compose.

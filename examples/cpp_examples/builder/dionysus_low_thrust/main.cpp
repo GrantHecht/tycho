@@ -1,7 +1,4 @@
-// Dionysus Low Thrust — Junkins et al., AIAA J. Guidance (2019).
-// Mass-optimal low-thrust Earth-to-Dionysus transfer via MEE.
-// State [p, f, g, h, k, L, m], Control [ur, ut, un] (RTN unit direction).
-// MEE rates delegated to astro::MEEDynamics; CSI mass flow appended.
+// Source: Junkins et al., AIAA J. Guidance (2019).
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -13,11 +10,6 @@ using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-///////////////////////////////////////////////////////////////////////////////
-// Physical constants
-///////////////////////////////////////////////////////////////////////////////
-
-// Dimensional quantities
 static constexpr double Isp_dim = 3000.0;   // s
 static constexpr double Tmag_dim = 0.32;    // N
 static constexpr double mass_dim = 4000.0;  // kg
@@ -30,7 +22,6 @@ static constexpr double day = 86400.0;            // s
 
 static const double tf_dim = 3534.0 * day;
 
-// Characteristic quantities
 static const double Lstar = AU;
 static const double Tstar = std::sqrt(Lstar * Lstar * Lstar / MuSun);
 static const double Vstar = Lstar / Tstar;
@@ -38,7 +29,6 @@ static const double Mstar = mass_dim;
 static const double Astar = Lstar / (Tstar * Tstar);
 static const double Fstar = Mstar * Astar;
 
-// Non-dimensionalised parameters
 static const double mu = MuSun / (Lstar * Lstar * Lstar / (Tstar * Tstar));
 static const double Thrust = Tmag_dim / Fstar;
 static const double Isp = Isp_dim / Tstar;
@@ -50,7 +40,6 @@ static const double tf = tf_dim / Tstar;
 static const double mdot_nd = Thrust / (Isp * gs);
 
 int main() {
-    // Input layout: [state(7), t(1), u(3)] = 11 rows, indices 0-10.
     auto args = ODEArguments(7, 3, 0);
     auto MEEs = args.head<6>();        // [p, f, g, h, k, L]
     auto m = args.coeff(6);            // mass (non-dim, m/Mstar)
@@ -84,13 +73,11 @@ int main() {
                                {"t", 7}})
                    .var_group("u", 8, 3);
 
-    // ── Initial and final MEE states (already non-dimensionalised) ─────
     // From Junkins paper
     Eigen::VectorXd X0_mee(6), XF_mee(6);
     X0_mee << 0.99969, -0.00376, 0.01628, -7.702e-6, 6.188e-7, 14.161;
     XF_mee << 1.5536, 0.15303, -0.51994, 0.01618, 0.11814, 46.3302;
 
-    // ── Initial guess: linear interpolation ────────────────────────────
     const int nPts = 500;
     std::vector<Eigen::VectorXd> trajIG;
     trajIG.reserve(nPts);
@@ -98,39 +85,31 @@ int main() {
         const double s = static_cast<double>(i) / (nPts - 1);
         Eigen::VectorXd state(11);
         state.setZero();
-        // Lerp MEE elements
         state.head<6>() = X0_mee + (XF_mee - X0_mee) * s;
-        state[6] = 1.0; // mass (non-dim: starts at 1)
+        state[6] = 1.0;
         state[7] = tf * s;
-        // Default control: tangential thrust
         state[9] = 0.5;
         trajIG.push_back(state);
     }
 
-    // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 160;
     auto phase = ode.phase(TranscriptionModes::LGL5, trajIG, nSeg);
     phase.set_control_mode(ControlModes::BlockConstant);
 
-    // Front BC: MEE + mass + time
     Eigen::VectorXd front_val(8);
     front_val << X0_mee[0], X0_mee[1], X0_mee[2], X0_mee[3], X0_mee[4], X0_mee[5], 1.0, 0.0;
     phase.add_boundary_value(PhaseRegionFlags::Front, {"p", "f", "g", "h", "k", "L", "m", "t"},
                              front_val);
 
-    // Control norm bound
     phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.000001, 1.0, 1.0);
 
-    // Back BC: final time and MEE
     phase.add_boundary_value(PhaseRegionFlags::Back, "t", tf);
     Eigen::VectorXd back_mee(6);
     back_mee << XF_mee[0], XF_mee[1], XF_mee[2], XF_mee[3], XF_mee[4], XF_mee[5];
     phase.add_boundary_value(PhaseRegionFlags::Back, {"p", "f", "g", "h", "k", "L"}, back_mee);
 
-    // Objective: maximise final mass = minimise -m
     phase.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
-    // ── Solver settings ────────────────────────────────────────────────
     phase.set_num_partitions(8, 8);
     phase.optimizer().set_opt_ls_mode("AUGLANG");
     phase.optimizer().set_max_ls_iters(2);
@@ -140,7 +119,6 @@ int main() {
     phase.optimizer().set_delta_h(1.0e-6);
     phase.optimizer().set_econ_tol(1.0e-9);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     std::cout << "=== Dionysus Low Thrust: Earth-to-Asteroid Mass-Optimal Transfer ===\n";
     auto flag = phase.optimize();
 

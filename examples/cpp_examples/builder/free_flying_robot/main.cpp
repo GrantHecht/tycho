@@ -1,20 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Free Flying Robot — C++ example (Builder API)
-//
-// Ported from examples/python_examples/FreeFlyingRobotExample.py
 // Source: https://arxiv.org/pdf/1905.11898.pdf
-//
-// State  : [x, y, xdot, ydot, theta, omega]   (6 states)
-// Control: [u0, u1, u2, u3]                    (4 thrusters)
-//
-// ODE:
-//   [x,y]dot = [xdot, ydot]
-//   [xdot,ydot]dot = [cos(theta), sin(theta)] * (u0-u1+u2-u3)
-//   thetadot = omega
-//   omegadot = (u0-u1)*alpha + (u3-u2)*beta
-//
-// Objective: minimise integral(u0 + u1 + u2 + u3) (fuel)
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -34,7 +18,6 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 128;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(6, 4)
                    .define([alpha, beta](auto &args) {
                        auto xdot_st = args.x_var(2);
@@ -61,7 +44,6 @@ int main() {
                                {"u0", 7}, {"u1", 8}, {"u2", 9}, {"u3", 10}})
                    .build();
 
-    // ── Initial guess ──────────────────────────────────────────────────
     Eigen::VectorXd X0(7), XF(7);
     X0 << -10.0, -10.0, 0.0, 0.0, M_PI / 2.0, 0.0, 0.0;
     XF << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, tf;
@@ -76,7 +58,6 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front,
@@ -86,12 +67,10 @@ int main() {
                             {"x", "y", "xdot", "ydot", "theta", "omega", "t"},
                             XF);
 
-    // Control bounds: 0 <= ui <= 1
     for (const auto &u_name : {"u0", "u1", "u2", "u3"}) {
         phase.add_lu_var_bound(PhaseRegionFlags::Path, u_name, 0.0, 1.0, 1.0);
     }
 
-    // Integral objective: min integral(u0 + u1 + u2 + u3)
     {
         auto obj_args = Arguments<4>();
         auto obj_expr = obj_args.sum();
@@ -104,7 +83,6 @@ int main() {
     phase.optimizer().set_max_ls_iters(2);
     phase.optimizer().set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     const auto flag = phase.optimize();
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {

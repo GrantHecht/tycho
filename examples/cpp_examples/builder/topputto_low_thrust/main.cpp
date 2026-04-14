@@ -1,19 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Topputto Low Thrust — C++ example (Builder API)
-//
-// Ported from examples/python_examples/TopputtoLowThrust.py
 // Source: https://www.hindawi.com/journals/aaa/2014/851720/
-//
-// Low-thrust orbit transfer in polar coordinates.
-//
-// State  : [r, theta, vr, vtheta]  (4 states)
-// Control: [u, alpha]               (2 controls: throttle, steering angle)
-//
-// Phase vector: [r, theta, vr, vtheta, t, u, alpha]
-//                0     1    2      3    4  5    6
-//
-// Objectives: min time, then min fuel (integral of u)
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -30,26 +15,15 @@ int main() {
     const double RF = 4.0;
     const double VF = std::sqrt(1.0 / RF);
 
-    // ── Build ODE ──────────────────────────────────────────────────────
-    // r_dot    = vr
-    // theta_dot = vtheta / r
-    // vr_dot   = vtheta^2 / r - 1/r^2 + amax * u * sin(alpha)
-    // vtheta_dot = -(vtheta * vr) / r + amax * u * cos(alpha)
-
     auto args2 = ODEArguments(4, 2, 0);
-    // Layout: [r, theta, vr, vtheta, t, u, alpha] = indices 0-6
     auto r2 = args2.coeff(0);
     auto vr2 = args2.coeff(2);
     auto vtheta2 = args2.coeff(3);
-    auto u2 = args2.coeff(5);     // 4 states + 1 time = index 5
-    auto alpha2 = args2.coeff(6); // index 6
+    auto u2 = args2.coeff(5);
+    auto alpha2 = args2.coeff(6);
 
     auto rdot = vr2;
     auto thetadot = vtheta2 / r2;
-    // vr_dot = vtheta^2/r - 1/r^2 + amax*u*sin(alpha)
-    // Use: 1/r^2 = (1/r) * (1/r). Or: use pow(r, -2)
-    // Actually we can write vtheta^2/r - (r)^(-2) as vtheta^2/r - 1/(r*r)
-    // The issue is unary negation on a product. Let's restructure.
     auto vrdot = (vtheta2 * vtheta2 - 1.0 / r2) / r2 + amax * u2 * sin(alpha2);
     auto vthetadot = ((-1.0) * vtheta2 * vr2) / r2 + amax * u2 * cos(alpha2);
 
@@ -64,48 +38,40 @@ int main() {
                                {"u", 5},
                                {"alpha", 6}});
 
-    // ── Initial guess: outward spiral via integrator ─────────────────
     auto integ = ode.integrator().step(0.01).build();
 
-    // Initial state: [r, theta, vr, vtheta, t, u, alpha]
     Eigen::VectorXd IState = Eigen::VectorXd::Zero(7);
-    IState[0] = 1.0;    // r = 1
-    IState[3] = 1.0;    // vtheta = 1 (circular)
-    IState[5] = 0.99;   // u (near full thrust)
-    IState[6] = 0.0;    // alpha
+    IState[0] = 1.0;
+    IState[3] = 1.0;
+    IState[5] = 0.99;
+    IState[6] = 0.0;
 
     // Stop when radius exceeds target
     auto stop_fn = [RF](const Eigen::Ref<const Eigen::VectorXd> &x) { return x[0] > RF; };
 
     auto toptIG = integ.integrate_dense(IState, 130.0, 1000, stop_fn);
 
-    // ── Construct phase ────────────────────────────────────────────────
     constexpr int nSeg = 400;
     auto phase = ode.phase(TranscriptionModes::LGL3, toptIG, nSeg);
 
-    // Front BC
     Eigen::VectorXd front_val(5);
-    front_val << 1.0, 0.0, 0.0, 1.0, 0.0; // r=1, theta=0, vr=0, vtheta=v0=1, t=0
+    front_val << 1.0, 0.0, 0.0, 1.0, 0.0;
     phase.add_boundary_value(PhaseRegionFlags::Front, {"r", "theta", "vr", "vtheta", "t"},
                              front_val);
 
-    // Control bounds
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0001, 1.0, 100.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "alpha", -2.0 * M_PI, 2.0 * M_PI, 1.0);
 
-    // Back BC: r=RF, vr=0, vtheta=VF
     Eigen::VectorXd back_val(3);
     back_val << RF, 0.0, VF;
     phase.add_boundary_value(PhaseRegionFlags::Back, {"r", "vr", "vtheta"}, back_val);
 
-    // ── Solver settings ────────────────────────────────────────────────
     phase.optimizer().set_print_level(1);
     phase.optimizer().set_max_acc_iters(500);
     phase.optimizer().set_max_iters(1000);
     phase.optimizer().set_bound_fraction(0.995);
     phase.optimizer().set_delta_h(1.0e-5);
 
-    // ── Time-optimal ───────────────────────────────────────────────────
     std::cout << "=== Time-optimal transfer ===\n";
     phase.add_delta_time_objective(1.0 / 100.0);
     phase.solve_optimize_solve();
@@ -114,12 +80,10 @@ int main() {
     double tf_time = time_optimal.back()[4];
     std::cout << "  tf = " << std::fixed << std::setprecision(2) << tf_time << " (ND)\n";
 
-    // ── Mass-optimal ───────────────────────────────────────────────────
     std::cout << "\n=== Fuel-optimal transfer ===\n";
     phase.remove_state_objective(0);
 
-    // Reset with mass-optimal IG (different spiral, lower thrust)
-    IState[5] = 0.5; // lower throttle for fuel-optimal
+    IState[5] = 0.5;
     auto moptIG = integ.integrate_dense(IState, 160.0, 1000, stop_fn);
     phase.set_traj(moptIG, nSeg);
 
@@ -137,7 +101,6 @@ int main() {
     double tf_mass = mass_optimal.back()[4];
     std::cout << "  tf = " << std::fixed << std::setprecision(2) << tf_mass << " (ND)\n";
 
-    // ── Verification ───────────────────────────────────────────────────
     std::cout << "\n=== Verification ===\n";
     auto check_traj = [&](const std::string &name, const std::vector<Eigen::VectorXd> &traj) {
         double rfinal = traj.back()[0];

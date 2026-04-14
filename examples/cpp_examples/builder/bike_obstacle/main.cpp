@@ -1,22 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// Bike Obstacle Avoidance — C++ example (Builder API)
-//
-// Ported from examples/python_examples/BikeObstacle.py
 // Source: https://arxiv.org/pdf/2003.00142.pdf
-//
-// State  : [x, y, psi, v]   (position, heading, speed)
-// Control: [acc, alpha]      (acceleration, steering angle)
-//
-// ODE:
-//   beta = atan((la/(la+lb))*tan(alpha))
-//   xdot = v*cos(psi + beta)
-//   ydot = v*sin(psi + beta)
-//   psidot = v*sin(beta)/lb
-//   vdot = acc
-//
-// Obstacle: circular exclusion zone at (0, 50), r=5+2.5
-// Objective: minimise time
-///////////////////////////////////////////////////////////////////////////////
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -30,7 +12,6 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 int main() {
-    // Physical parameters
     constexpr double la = 1.58;   // front axle distance (m)
     constexpr double lb = 1.72;   // rear axle distance (m)
     constexpr double obsrad = 5.0;
@@ -38,22 +19,19 @@ int main() {
     constexpr double xobs = 0.0;
     constexpr double yobs = 50.0;
 
-    // Boundary conditions
     constexpr double x0 = 0.0, y0 = 0.0;
     constexpr double psi0 = M_PI / 2.0;
     constexpr double v0 = 15.0;
     constexpr double xf = 0.0, yf = 100.0;
 
-    // Bounds
     constexpr double accbound = 2.0;
     constexpr double vlbound = 5.0, vubound = 29.0;
-    constexpr double alpha_max = M_PI / 6.0;  // 30 deg
+    constexpr double alpha_max = M_PI / 6.0;
 
     constexpr double tf_guess = yf / v0;
     constexpr int n_pts = 100;
     constexpr int n_segs = 128;
 
-    // ── Define ODE ─────────────────────────────────────────────────────
     auto ode = ODEBuilder(4, 2)
                    .define([la, lb](auto &args) {
                        auto psi = args.x_var(2);
@@ -73,7 +51,6 @@ int main() {
                                {"t", 4}, {"acc", 5}, {"alpha", 6}})
                    .build();
 
-    // ── Obstacle constraint function ───────────────────────────────────
     // Returns 1 - ((x-xobs)/R)^2 - ((y-yobs)/R)^2 <= 0 for feasible
     auto obs_args = Arguments<2>();
     auto ox = obs_args.coeff<0>();
@@ -81,16 +58,15 @@ int main() {
     const double denom = obsrad + margin;
     auto ellips = ((ox - xobs) / denom) * ((ox - xobs) / denom) +
                   ((oy - yobs) / denom) * ((oy - yobs) / denom);
-    auto obs_con = 1.0 - ellips;  // <= 0 for feasible
+    auto obs_con = 1.0 - ellips;
 
-    // ── Initial guess ──────────────────────────────────────────────────
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
         const double s = static_cast<double>(i) / (n_pts - 1);
         const double t = tf_guess * s;
         Eigen::VectorXd pt(7);
-        pt[0] = obsrad + margin + 1.0;  // bias to side of obstacle
+        pt[0] = obsrad + margin + 1.0; // bias to side of obstacle
         pt[1] = yf * s;
         pt[2] = psi0;
         pt[3] = v0;
@@ -100,7 +76,6 @@ int main() {
         traj_ig.push_back(pt);
     }
 
-    // ── Phase setup ────────────────────────────────────────────────────
     auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front,
@@ -120,7 +95,6 @@ int main() {
 
     phase.optimizer().set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
 
-    // ── Solve ──────────────────────────────────────────────────────────
     const auto flag = phase.optimize();
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
