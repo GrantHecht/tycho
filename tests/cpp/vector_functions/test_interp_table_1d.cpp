@@ -87,7 +87,6 @@ TEST_F(InterpTable1DTest, OutOfBoundsThrowsByDefault) {
     for (int i = 0; i < 5; ++i) vs[i] = ref_fn_1d(ts[i]);
 
     oc::InterpTable1D table(ts, vs, InterpType::Cubic);
-    EXPECT_TRUE(table.throw_out_of_bounds_);
 
     EXPECT_THROW((void)table.interp(-0.1), std::invalid_argument);
     EXPECT_THROW((void)table.interp(1.5), std::invalid_argument);

@@ -31,14 +31,21 @@ class OptimalControlProblem {
 
     // ── Phase management ────────────────────────────────────────────────
 
-    int add_phase(Phase &p) {
-        phases_.push_back(&p);
-        return ocp_.add_phase(p.base_ptr());
+    // Takes a copy of the Phase wrapper and owns it via shared_ptr.
+    // The copy shallow-shares the underlying ODEPhaseBase through
+    // shared_ptr<ODEPhaseBase>, so constraints added via the caller's
+    // Phase continue to propagate to the OCP. Registry and static-param
+    // name mappings are snapshotted at add_phase() time — if the caller
+    // adds new var or sp names afterward, the OCP's name-resolution
+    // overloads won't see them.
+    int add_phase(Phase p) {
+        phases_.push_back(std::make_shared<Phase>(std::move(p)));
+        return ocp_.add_phase(phases_.back()->base_ptr());
     }
 
-    int add_phase(Phase &p, const std::string &name) {
-        phases_.push_back(&p);
-        return ocp_.add_phase(p.base_ptr(), name);
+    int add_phase(Phase p, const std::string &name) {
+        phases_.push_back(std::make_shared<Phase>(std::move(p)));
+        return ocp_.add_phase(phases_.back()->base_ptr(), name);
     }
 
     // ── Forward link constraints ────────────────────────────────────────
@@ -192,10 +199,12 @@ class OptimalControlProblem {
     }
 
     OptimalControlProblemBase ocp_;
-    /// Raw Phase pointers for int-indexed name resolution in add_direct_link_equal_con.
-    /// Lifetime requirement: all Phase objects added via add_phase() must outlive
-    /// this OptimalControlProblem.  Typical usage (stack-local phases) satisfies this.
-    std::vector<Phase *> phases_;
+    /// Owned Phase copies for int-indexed name resolution in
+    /// add_direct_link_equal_con. Each entry is a shared_ptr to the OCP's own
+    /// copy of the Phase wrapper — the copy shallow-shares the underlying
+    /// ODEPhaseBase via shared_ptr, so lifetime is independent of the caller's
+    /// Phase object and container storage.
+    std::vector<std::shared_ptr<Phase>> phases_;
 };
 
 } // namespace tycho

@@ -72,8 +72,6 @@ struct InterpTable4D {
 
     bool cache_alpha_ = false;
 
-    bool throw_out_of_bounds_ = true;
-
     InterpTable4D() {}
 
     InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
@@ -2650,31 +2648,29 @@ struct InterpTable4D {
     void interp_impl(double x, double y, double z, double w, int deriv, double &fval,
                      Eigen::Vector4<double> &dfxyzw, Eigen::Matrix4<double> &d2fxyzw) const {
 
-        if (throw_out_of_bounds_) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
-            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable4D: query x={} is outside table x range [{}, {}]", x,
-                                xs_[0], xs_[xs_.size() - 1]));
-            }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
-            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable4D: query y={} is outside table y range [{}, {}]", y,
-                                ys_[0], ys_[ys_.size() - 1]));
-            }
-            double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
-            if (z < (zs_[0] - zeps) || z > (zs_[zs_.size() - 1]) + zeps) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable4D: query z={} is outside table z range [{}, {}]", z,
-                                zs_[0], zs_[zs_.size() - 1]));
-            }
-            double weps = std::numeric_limits<double>::epsilon() * wtotal_;
-            if (w < (ws_[0] - weps) || w > (ws_[ws_.size() - 1]) + weps) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable4D: query w={} is outside table w range [{}, {}]", w,
-                                ws_[0], ws_[ws_.size() - 1]));
-            }
+        double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+        if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query x={} is outside table x range [{}, {}]", x,
+                            xs_[0], xs_[xs_.size() - 1]));
+        }
+        double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+        if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query y={} is outside table y range [{}, {}]", y,
+                            ys_[0], ys_[ys_.size() - 1]));
+        }
+        double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
+        if (z < (zs_[0] - zeps) || z > (zs_[zs_.size() - 1]) + zeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query z={} is outside table z range [{}, {}]", z,
+                            zs_[0], zs_[zs_.size() - 1]));
+        }
+        double weps = std::numeric_limits<double>::epsilon() * wtotal_;
+        if (w < (ws_[0] - weps) || w > (ws_[ws_.size() - 1]) + weps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query w={} is outside table w range [{}, {}]", w,
+                            ws_[0], ws_[ws_.size() - 1]));
         }
 
         auto [xelem, yelem, zelem, welem] = get_xyzwelems(x, y, z, w);

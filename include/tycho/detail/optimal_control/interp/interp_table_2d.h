@@ -51,8 +51,6 @@ struct InterpTable2D {
     InterpType interp_kind_ = InterpType::Cubic;
 
   public:
-    bool throw_out_of_bounds_ = true;
-
     bool xeven_ = true;
     bool yeven_ = true;
     int xsize_;
@@ -290,19 +288,17 @@ struct InterpTable2D {
     void interp_impl(double x, double y, int deriv, double &z, Eigen::Vector2<double> &dzxy,
                      Eigen::Matrix2<double> &d2zxy) const {
 
-        if (throw_out_of_bounds_) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
-            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable2D: query x={} is outside table x range [{}, {}]", x,
-                                xs_[0], xs_[xs_.size() - 1]));
-            }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
-            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable2D: query y={} is outside table y range [{}, {}]", y,
-                                ys_[0], ys_[ys_.size() - 1]));
-            }
+        double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+        if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable2D: query x={} is outside table x range [{}, {}]", x,
+                            xs_[0], xs_[xs_.size() - 1]));
+        }
+        double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+        if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable2D: query y={} is outside table y range [{}, {}]", y,
+                            ys_[0], ys_[ys_.size() - 1]));
         }
 
         auto [xelem, yelem] = get_xyelems(x, y);

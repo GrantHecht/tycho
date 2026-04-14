@@ -113,6 +113,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_control_modes.cpp
     optimal_control/test_sub_variables.cpp
     optimal_control/test_ocp_direct_link.cpp
+    optimal_control/test_ocp_phase_lifetime.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp

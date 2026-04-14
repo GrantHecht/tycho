@@ -51,7 +51,6 @@ struct InterpTable1D {
     int tsize_;
     double ttotal_;
     int vlen_;
-    bool throw_out_of_bounds_ = true;
 
     InterpTable1D() {}
 
@@ -216,13 +215,11 @@ struct InterpTable1D {
     template <class VType>
     void interp_impl(double t, int deriv, VType &v, VType &dv_dt, VType &dv2_dt2) const {
 
-        if (throw_out_of_bounds_) {
-            double eps = std::numeric_limits<double>::epsilon() * ttotal_;
-            if (t < (ts_[0] - eps) || t > (ts_[ts_.size() - 1] + eps)) {
-                throw std::invalid_argument(
-                    fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
-                                ts_[0], ts_[ts_.size() - 1]));
-            }
+        double eps = std::numeric_limits<double>::epsilon() * ttotal_;
+        if (t < (ts_[0] - eps) || t > (ts_[ts_.size() - 1] + eps)) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
+                            ts_[0], ts_[ts_.size() - 1]));
         }
 
         double telem = this->get_telem(t);

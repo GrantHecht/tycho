@@ -103,8 +103,6 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     obj.def("interp_deriv1", &InterpTable1D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable1D::interp_deriv2);
 
-    obj.def_rw("throw_out_of_bounds", &InterpTable1D::throw_out_of_bounds_);
-
     obj.def("sf", [](std::shared_ptr<InterpTable1D> &self) {
         if (self->vlen_ != 1) {
             throw std::invalid_argument(
@@ -139,7 +137,6 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_));
 
-    obj.def_rw("throw_out_of_bounds", &InterpTable2D::throw_out_of_bounds_);
 
     obj.def("interp_deriv1", &InterpTable2D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable2D::interp_deriv2);
@@ -207,7 +204,6 @@ inline void InterpTable3DBuild(nb::module_ &m) {
     obj.def("interp_deriv2",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp_deriv2, nb::const_));
 
-    obj.def_rw("throw_out_of_bounds", &InterpTable3D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_),
@@ -268,7 +264,6 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     obj.def("interp_deriv2", nb::overload_cast<double, double, double, double>(
                                  &InterpTable4D::interp_deriv2, nb::const_));
 
-    obj.def_rw("throw_out_of_bounds", &InterpTable4D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_),

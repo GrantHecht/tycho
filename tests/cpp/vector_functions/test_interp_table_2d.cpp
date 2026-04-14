@@ -76,7 +76,6 @@ TEST_F(InterpTable2DTest, OutOfBoundsThrowsByDefault) {
     auto zs = eval_grid_2d(xs, ys);
 
     oc::InterpTable2D table(xs, ys, zs, InterpType::Cubic);
-    EXPECT_TRUE(table.throw_out_of_bounds_);
 
     EXPECT_THROW((void)table.interp(-0.1, 0.5), std::invalid_argument);
     EXPECT_THROW((void)table.interp(0.5, 1.2), std::invalid_argument);

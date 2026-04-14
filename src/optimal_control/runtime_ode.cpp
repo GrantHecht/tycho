@@ -77,6 +77,8 @@ ODE::DynIntegrator IntegratorBuilder::build() const {
         return ODE::DynIntegrator(ode, method_, step_, ulaw_, varlocs_);
 
     case ControlKind::NamedLaw: {
+        // require_registry() throws if absent, so registry_ptr() is guaranteed
+        // non-null on the next line.
         ode_->require_registry();
         const auto *reg = ode_->registry_ptr();
         Eigen::VectorXi resolved = reg->resolve(name_varlocs_);

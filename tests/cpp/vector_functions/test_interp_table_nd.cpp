@@ -59,7 +59,6 @@ TEST_F(InterpTable3DTest, OutOfBoundsThrowsByDefault) {
     fs.setZero();
 
     oc::InterpTable3D table(xs, ys, zs, fs, InterpType::Cubic, false);
-    EXPECT_TRUE(table.throw_out_of_bounds_);
 
     EXPECT_THROW((void)table.interp(-0.1, 0.5, 0.5), std::invalid_argument);
     EXPECT_THROW((void)table.interp(0.5, 1.2, 0.5), std::invalid_argument);
@@ -96,7 +95,6 @@ TEST_F(InterpTable4DTest, OutOfBoundsThrowsByDefault) {
     fs.setZero();
 
     oc::InterpTable4D table(xs, ys, zs, ws, fs, InterpType::Cubic, false);
-    EXPECT_TRUE(table.throw_out_of_bounds_);
 
     EXPECT_THROW((void)table.interp(-0.1, 0.5, 0.5, 0.5), std::invalid_argument);
     EXPECT_THROW((void)table.interp(0.5, 0.5, 0.5, 1.2), std::invalid_argument);
