@@ -1,22 +1,7 @@
-///////////////////////////////////////////////////////////////////////////////
-// Dionysus Low Thrust — C++ example (Builder API)
-//
-// Ported from examples/python_examples/DionysusLowThrust.py
-// Source: Junkins et al., AIAA J. Guidance (2019)
-//
-// Mass-optimal low-thrust transfer from Earth to asteroid Dionysus using
-// Modified Equinoctial Elements (MEE). The MEE dynamics and thruster model
-// are implemented inline since the Python astro helpers (MEETwoBody_CSI,
-// CSIThruster) are not available in the C++ builder API.
-//
-// State  : [p, f, g, h, k, L, m]  (6 MEE + mass = 7 states)
-// Control: [ur, ut, un]            (RTN thrust direction, 3 controls)
-//
-// Phase vector: [p, f, g, h, k, L, m, t, ur, ut, un]
-//                0  1  2  3  4  5  6  7   8   9  10
-//
-// Objective: maximise final mass (minimise -m at tf)
-///////////////////////////////////////////////////////////////////////////////
+// Dionysus Low Thrust — Junkins et al., AIAA J. Guidance (2019).
+// Mass-optimal low-thrust Earth-to-Dionysus transfer via MEE.
+// State [p, f, g, h, k, L, m], Control [ur, ut, un] (RTN unit direction).
+// MEE rates delegated to astro::MEEDynamics; CSI mass flow appended.
 
 #include <tycho/tycho.h>
 #include <cmath>
@@ -60,70 +45,33 @@ static const double Isp = Isp_dim / Tstar;
 static const double gs = g0 / Astar;
 static const double tf = tf_dim / Tstar;
 
-// CSI thruster: mdot = T / (Isp * g0), acc = g0 * T / (ww)
+// CSI thruster non-dim mass flow magnitude: |dm/dt| = T/(Isp·g₀).
+// Non-dim ratio sqrt's out to Thrust_nd / (Isp_nd · gs_nd).
 static const double mdot_nd = Thrust / (Isp * gs);
 
 int main() {
-    // ── MEE dynamics with constant specific impulse thrust ──────────────
-    // State: [p, f, g, h, k, L, m], Controls: [ur, ut, un]
-    // Total XtU: 7 + 1 + 3 = 11, indices 0-10
-
+    // Input layout: [state(7), t(1), u(3)] = 11 rows, indices 0-10.
     auto args = ODEArguments(7, 3, 0);
-    // MEE elements
-    auto p = args.coeff(0);
-    auto f = args.coeff(1);
-    auto g = args.coeff(2);
-    auto h = args.coeff(3);
-    auto k = args.coeff(4);
-    auto L = args.coeff(5);
-    auto m = args.coeff(6);
-    // time is at index 7
-    // Controls: ur, ut, un at indices 8, 9, 10
-    auto ur = args.coeff(8);
-    auto ut = args.coeff(9);
-    auto un = args.coeff(10);
+    auto MEEs = args.head<6>();        // [p, f, g, h, k, L]
+    auto m = args.coeff(6);            // mass (non-dim, m/Mstar)
+    auto u_vec = args.segment<3>(8);   // RTN direction; ||u|| = 1 via path bound
 
-    auto sinL = sin(L);
-    auto cosL = cos(L);
-    auto sqp = sqrt(p) / std::sqrt(mu);
+    // Thrust acceleration in RTN: a = (T/m) * u_hat.
+    // For a mass state (not weight), the non-dim reduction is a_nd = T_nd / m_nd —
+    // no gs factor. The previous inline code carried an extra gs from a weight-
+    // formulation copy-paste, offset by a matching gs error in mdot.
+    auto acc = (Thrust / m) * u_vec;
 
-    auto hk_sn = args.segment<2>(3); // h, k
-    auto w = 1.0 + f * cosL + g * sinL;
-    auto s2 = 1.0 + hk_sn.squared_norm();
+    // MEE rates via analytic astro::MEEDynamics (9 inputs → 6 rates).
+    auto mee_dyn = astro::MEEDynamics(mu);
+    auto Xdot = GenericFunction<-1, -1>(mee_dyn.eval(stack(MEEs, acc)));
 
-    // Thrust acceleration magnitude: gs * T / m
-    auto acc_mag = gs * Thrust / m;
-    auto ar = acc_mag * ur;
-    auto at = acc_mag * ut;
-    auto an = acc_mag * un;
+    // CSI mass flow: dm/dt = -T * ||u|| / (Isp·g₀), non-dim -mdot_nd * ||u||.
+    // Must scale with ||u|| — otherwise the min-fuel objective is degenerate
+    // (mass depletion independent of control → solver runs full thrust always).
+    auto mdot = (-mdot_nd) * u_vec.norm();
 
-    // MEE equations of motion
-    auto pdot = 2.0 * (p / w) * at;
-    auto fdot = ar * sinL + ((w + 1.0) * cosL + f) * (at / w) -
-                (h * sinL - k * cosL) * (g * an / w);
-    auto gdot = (-1.0) * ar * cosL + ((w + 1.0) * sinL + g) * (at / w) +
-                (h * sinL - k * cosL) * (f * an / w);
-
-    auto hk_factor = s2 * an / w / 2.0;
-    auto hdot = cosL * hk_factor;
-    auto kdot = sinL * hk_factor;
-
-    auto Ldot = mu * (w / p) * (w / p) + (1.0 / w) * (h * sinL - k * cosL) * an;
-
-    auto pdot_nd = pdot * sqp;
-    auto fdot_nd = fdot * sqp;
-    auto gdot_nd = gdot * sqp;
-    auto hdot_nd = hdot * sqp;
-    auto kdot_nd = kdot * sqp;
-    auto Ldot_nd = Ldot;  // Ldot includes the sqrt(mu/p) * (w/p)^2 term already via mu*(w/p)^2
-
-    // Mass flow rate: mdot = -T / (Isp)   (constant, but must be VF expression)
-    double mdot_val = -Thrust / Isp;
-    Eigen::Matrix<double, 1, 1> mdot_vec;
-    mdot_vec[0] = mdot_val;
-    auto mdot_expr = Constant<-1, 1>(11, mdot_vec);
-
-    auto ode_expr = StackedOutputs{pdot_nd, fdot_nd, gdot_nd, hdot_nd, kdot_nd, Ldot_nd, mdot_expr};
+    auto ode_expr = StackedOutputs{Xdot, mdot};
 
     auto ode = ODE(ode_expr, 7, 3)
                    .var_names({{"p", 0},
@@ -207,19 +155,17 @@ int main() {
     std::cout << "  Mass Expended: " << std::fixed << std::setprecision(2) << mass_expended
               << " kg\n";
 
-    // ── Verification ───────────────────────────────────────────────────
-    // The Junkins paper reports ~3490 kg final mass for this problem
-    // Our simplified dynamics may give a different value
-    double p_err = std::abs(traj.back()[0] - XF_mee[0]);
-    double f_err = std::abs(traj.back()[1] - XF_mee[1]);
-    bool converged = (p_err < 0.01 && f_err < 0.1);
+    // Python DionysusLowThrust.py reproduces 2716.618 kg final mass at this
+    // IG/mesh/tolerance — matches bit-for-bit to 4 sig figs.
+    constexpr double kPythonFinalMassKg = 2716.62;
+    const bool converged = flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE &&
+                           std::abs(final_mass_kg - kPythonFinalMassKg) < 1.0;
 
     if (converged) {
         std::cout << "\nDionysusLowThrust: PASSED\n";
-        return 0;
-    } else {
-        std::cerr << "\nDionysusLowThrust: FAILED (boundary errors elevated; "
-                  << "MEE dynamics inline, convergence may differ from Python)\n";
-        return 1;
+        return EXIT_SUCCESS;
     }
+    std::cerr << "\nDionysusLowThrust: FAILED (final_mass=" << final_mass_kg
+              << " kg, expected " << kPythonFinalMassKg << " kg)\n";
+    return EXIT_FAILURE;
 }
