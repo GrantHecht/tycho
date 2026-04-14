@@ -65,7 +65,7 @@ int main() {
                                {"alpha", 6}});
 
     // ── Initial guess: outward spiral via integrator ─────────────────
-    auto integ = ode.integrator(0.01);
+    auto integ = ode.integrator().step(0.01).build();
 
     // Initial state: [r, theta, vr, vtheta, t, u, alpha]
     Eigen::VectorXd IState = Eigen::VectorXd::Zero(7);

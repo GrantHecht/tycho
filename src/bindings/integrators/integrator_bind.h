@@ -34,10 +34,6 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
         return IVPAlg::DOPRI54;
     if (str == "DOPRI87" || str == "DP87")
         return IVPAlg::DOPRI87;
-    if (str == "RK4" || str == "RK4Classic")
-        return IVPAlg::RK4Classic;
-    if (str == "DOPRI5" || str == "DP5")
-        return IVPAlg::DOPRI5;
     throw std::invalid_argument(fmt::format("Unknown IVP algorithm: '{}'", str));
 }
 

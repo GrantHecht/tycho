@@ -204,8 +204,11 @@ int main() {
     auto ig_M = row_matrix(ig_RTN_vec, 3, 3);
     auto ig_prograde = ig_M * ig_V.normalized();
 
-    auto integ =
-        ode.integrator(0.1, GenericFunction<-1, -1>(ig_prograde), {"p", "f", "g", "h", "k", "L"});
+    auto integ = ode.integrator()
+                     .step(0.1)
+                     .control(GenericFunction<-1, -1>(ig_prograde),
+                              {"p", "f", "g", "h", "k", "L"})
+                     .build();
     auto trajIG = integ.integrate_dense(X0, tfig);
 
     // ── Construct phase ────────────────────────────────────────────────

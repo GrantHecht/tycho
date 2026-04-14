@@ -117,7 +117,7 @@ std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
                                     Constant<1, 1>(1, zero_val));
     auto ulaw = GenericFunction<-1, -1>(ulaw_expr);
 
-    auto integ = ode.integrator(0.01, ulaw, {"m"});
+    auto integ = ode.integrator().step(0.01).control(ulaw, {"m"}).build();
 
     // Initial state: [h, v, m, t, u]
     Eigen::VectorXd X0 = Eigen::VectorXd::Zero(5);

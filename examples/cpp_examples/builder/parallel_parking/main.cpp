@@ -276,7 +276,11 @@ int main() {
     // ── Coarse solve ───────────────────────────────────────────────────
     std::cout << "ParallelParking: coarse solve (k=" << k1 << ", segs=" << n_segs1 << ")...\n"
               << std::flush;
-    phase.solve_optimize();
+    auto flag_coarse = phase.solve_optimize();
+    if (flag_coarse > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "ParallelParking (builder): coarse solve_optimize FAILED\n";
+        return EXIT_FAILURE;
+    }
 
     // ── Refine and re-solve with tighter k ─────────────────────────────
     std::cout << "ParallelParking: refining to " << n_segs2 << " segments, k=" << k2 << "...\n"
@@ -284,7 +288,11 @@ int main() {
     phase.refine_traj_manual(n_segs2);
     phase.sub_variable(PhaseRegionFlags::StaticParams, "k", k2);
     phase.optimizer().set_kkt_tol(1.0e-8);
-    phase.optimize();
+    auto flag_refine = phase.optimize();
+    if (flag_refine > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "ParallelParking (builder): refined optimize FAILED\n";
+        return EXIT_FAILURE;
+    }
 
     auto traj = phase.return_traj();
     const double final_time = traj.back()[6];

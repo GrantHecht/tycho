@@ -134,7 +134,7 @@ int main() {
     std::cout << "MultiPhaseCannon (builder): generating initial guesses ...\n" << std::flush;
 
     // Create integrator
-    auto integ = ode.integrator(0.01);
+    auto integ = ode.integrator().step(0.01).build();
     integ.set_abs_tol(1.0e-14);
 
     // Initial state: [v, gamma, h, r, t, rad]

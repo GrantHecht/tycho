@@ -222,8 +222,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         case IVPAlg::RK4Classic:
         case IVPAlg::DOPRI5:
             throw std::invalid_argument(
-                "IVPAlg::RK4Classic and IVPAlg::DOPRI5 do not support adaptive step control. "
-                "Set adaptive = false before using these methods.");
+                "IVPAlg::RK4Classic and IVPAlg::DOPRI5 are internal template-dispatch tags "
+                "used by the DOPRI54 adaptive stepper and rk_steppers.h constexpr branches. "
+                "They are not runtime-selectable. Use IVPAlg::DOPRI54 or IVPAlg::DOPRI87.");
         default:
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
@@ -2114,13 +2115,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 if (extra_msgs.empty()) {
                     std::rethrow_exception(ex);
                 }
+                // Cap secondary-failure detail at kMaxExtras to keep the
+                // composite message bounded under large n_parts.
+                constexpr size_t kMaxExtras = 5;
                 std::string joined =
                     "integrate_stm_parallel: primary segment failure: " + primary_msg +
                     "; additional failures (" + std::to_string(extra_msgs.size()) + "): ";
-                for (size_t k = 0; k < extra_msgs.size(); ++k) {
+                size_t shown = std::min(extra_msgs.size(), kMaxExtras);
+                for (size_t k = 0; k < shown; ++k) {
                     if (k)
                         joined += " | ";
                     joined += extra_msgs[k];
+                }
+                if (extra_msgs.size() > kMaxExtras) {
+                    joined += " | ... and " +
+                              std::to_string(extra_msgs.size() - kMaxExtras) + " more";
                 }
                 throw std::runtime_error(joined);
             }

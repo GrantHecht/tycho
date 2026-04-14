@@ -182,11 +182,19 @@ int main() {
     // ── Solve (unconstrained) ──────────────────────────────────────────
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
     auto flag1 = phase.solve_optimize();
+    if (flag1 > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "Reentry (builder): initial solve_optimize FAILED\n";
+        return EXIT_FAILURE;
+    }
 
     // Refine to more segments
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
     auto flag2 = phase.optimize();
+    if (flag2 > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "Reentry (builder): refined optimize FAILED\n";
+        return EXIT_FAILURE;
+    }
 
     auto traj1 = phase.return_traj();
 

@@ -37,33 +37,30 @@ struct InterpTable1D {
 
     using MatType = Eigen::Matrix<double, -1, -1>;
 
+  private:
+    // Cached derivative state: mutating any of these without rerunning
+    // calc_derivs() corrupts cubic evaluation. Access only via set_data().
     Eigen::VectorXd ts_;
     MatType vs_;
     MatType dvs_dts_;
-
     InterpType interp_kind_ = InterpType::Cubic;
+
+  public:
     bool teven_ = true;
     int axis_ = 0;
     int tsize_;
     double ttotal_;
     int vlen_;
-    bool warn_out_of_bounds_ = true;
-    bool throw_out_of_bounds_ = false;
+    bool throw_out_of_bounds_ = true;
 
     InterpTable1D() {}
 
     InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
         set_data(Ts, Vs, axis, kind);
     }
-    InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
-        set_data(Ts, Vs, axis, kind);
-    }
-    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis, InterpType kind) {
-        MatType Vstmp = Vs.transpose();
-        set_data(Ts, Vstmp, 1, kind);
-    }
-    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, int axis,
-                  std::string kind) {
+    // VectorXd value input is 1-dimensional, so axis is not user-selectable —
+    // the data is always stored along axis 1 internally.
+    InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, InterpType kind) {
         MatType Vstmp = Vs.transpose();
         set_data(Ts, Vstmp, 1, kind);
     }
@@ -104,8 +101,6 @@ struct InterpTable1D {
         }
         set_data(Ts, Vs, 1, kind);
     }
-    InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, std::string kind)
-        : InterpTable1D(Vts, tvar, parse_interp_type(kind)) {}
 
     void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
 
@@ -151,10 +146,6 @@ struct InterpTable1D {
 
         if (this->interp_kind_ == InterpType::Cubic)
             calc_derivs();
-    }
-
-    void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, std::string kind) {
-        set_data(Ts, Vs, axis, parse_interp_type(kind));
     }
 
     void calc_derivs() {
@@ -225,18 +216,12 @@ struct InterpTable1D {
     template <class VType>
     void interp_impl(double t, int deriv, VType &v, VType &dv_dt, VType &dv2_dt2) const {
 
-        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
+        if (throw_out_of_bounds_) {
             double eps = std::numeric_limits<double>::epsilon() * ttotal_;
             if (t < (ts_[0] - eps) || t > (ts_[ts_.size() - 1] + eps)) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: t= {0:} falls outside of InterpTable1D time range. Data is "
-                           "being extrapolated!!\n",
-                           t);
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument(
-                        fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
-                                    ts_[0], ts_[ts_.size() - 1]));
-                }
+                throw std::invalid_argument(
+                    fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
+                                ts_[0], ts_[ts_.size() - 1]));
             }
         }
 

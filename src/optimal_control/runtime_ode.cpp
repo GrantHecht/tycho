@@ -1,8 +1,8 @@
 // =============================================================================
-// Tycho — ODE::phase() and ODE::integrator() implementations
+// Tycho — ODE::phase() and IntegratorBuilder::build() implementations
 //
-// Defined out-of-line to avoid pulling heavy template headers into the
-// ODE header.
+// Defined out-of-line to avoid dragging ode_phase.h (and the ODEPhaseBase
+// transcription machinery) into the runtime_ode.h public header.
 //
 // Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt
 // =============================================================================
@@ -29,7 +29,7 @@ ODE::DynODE ODE::make_dyn_ode() const {
 // ── Phase construction ─────────────────────────────────────────────────
 
 Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
-                 int num_segments, bool lerp_ig) const {
+                 int num_segments) const {
     if (traj.empty())
         throw std::invalid_argument("ODE::phase: trajectory must not be empty");
     if (num_segments <= 0)
@@ -49,13 +49,6 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
 
     auto phase_ptr = std::make_shared<oc::ODEPhase<DynODE>>(ode, mode, traj, num_segments);
 
-    if (lerp_ig) {
-        // Re-set trajectory with linear interpolation between waypoints.
-        // The constructor distributes traj normally; set_traj(..., true)
-        // replaces that with a lerp IG (sparse waypoint interpolation).
-        phase_ptr->set_traj(traj, num_segments, true);
-    }
-
     if (registry_) {
         return Phase(phase_ptr, *registry_);
     }
@@ -63,86 +56,48 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
 }
 
 // ── Integrator construction ────────────────────────────────────────────
-//
-// Construct a DynIntegrator from the ODE. Each overload returns an
-// integrator that owns a fresh copy of the ODE (via make_dyn_ode).
-// Unless an explicit IVPAlg is passed, the default method is DOPRI87.
-// Overloads taking a std::shared_ptr<LGLInterpTable> share ownership of
-// the table with the integrator — the caller may keep its own reference.
 
-// Basic (no control law)
+IntegratorBuilder ODE::integrator() const { return IntegratorBuilder(*this); }
 
-ODE::DynIntegrator ODE::integrator(double defstep) const {
-    return DynIntegrator(make_dyn_ode(), defstep);
-}
+ODE::DynIntegrator IntegratorBuilder::build() const {
+    if (step_ <= 0.0) {
+        throw std::logic_error(
+            "IntegratorBuilder: .step(defstep) must be called with a positive value before "
+            ".build() (current step_ = " +
+            std::to_string(step_) + ")");
+    }
 
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep) const {
-    return DynIntegrator(make_dyn_ode(), method, defstep);
-}
+    auto ode = ode_->make_dyn_ode_public();
 
-// Control law — index-based
+    switch (kind_) {
+    case ControlKind::None:
+        return ODE::DynIntegrator(ode, method_, step_);
 
-ODE::DynIntegrator ODE::integrator(double defstep, GenericFunction<-1, -1> ulaw,
-                                   const Eigen::VectorXi &varlocs) const {
-    return DynIntegrator(make_dyn_ode(), defstep, ulaw, varlocs);
-}
+    case ControlKind::IndexedLaw:
+        return ODE::DynIntegrator(ode, method_, step_, ulaw_, varlocs_);
 
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
-                                   const Eigen::VectorXi &varlocs) const {
-    return DynIntegrator(make_dyn_ode(), method, defstep, ulaw, varlocs);
-}
+    case ControlKind::NamedLaw: {
+        ode_->require_registry();
+        const auto *reg = ode_->registry_ptr();
+        Eigen::VectorXi resolved = reg->resolve(name_varlocs_);
+        return ODE::DynIntegrator(ode, method_, step_, ulaw_, resolved);
+    }
 
-// Control law — named variable locations
+    case ControlKind::Const: {
+        Eigen::VectorXi tloc(1);
+        tloc[0] = ode.t_var();
+        GenericFunction<-1, -1> ucon = vf::Constant<-1, -1>(1, u_const_);
+        return ODE::DynIntegrator(ode, method_, step_, ucon, tloc);
+    }
 
-ODE::DynIntegrator ODE::integrator(double defstep, GenericFunction<-1, -1> ulaw,
-                                   std::initializer_list<std::string> varlocs) const {
-    check_registry();
-    return DynIntegrator(make_dyn_ode(), defstep, ulaw, registry_->resolve(varlocs));
-}
+    case ControlKind::TableIndexed:
+        return ODE::DynIntegrator(ode, method_, step_, tab_, varlocs_);
 
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep, GenericFunction<-1, -1> ulaw,
-                                   std::initializer_list<std::string> varlocs) const {
-    check_registry();
-    return DynIntegrator(make_dyn_ode(), method, defstep, ulaw, registry_->resolve(varlocs));
-}
-
-// Constant control vector
-
-ODE::DynIntegrator ODE::integrator(double defstep, const Eigen::VectorXd &u_const) const {
-    return DynIntegrator(make_dyn_ode(), defstep, u_const);
-}
-
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
-                                   const Eigen::VectorXd &u_const) const {
-    auto ode = make_dyn_ode();
-    Eigen::VectorXi tloc(1);
-    tloc[0] = ode.t_var();
-    GenericFunction<-1, -1> ucon = vf::Constant<-1, -1>(1, u_const);
-    return DynIntegrator(ode, method, defstep, ucon, tloc);
-}
-
-// LGL interpolation table + explicit control locations
-
-ODE::DynIntegrator ODE::integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab,
-                                   const Eigen::VectorXi &ulocs) const {
-    return DynIntegrator(make_dyn_ode(), defstep, std::move(tab), ulocs);
-}
-
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
-                                   std::shared_ptr<oc::LGLInterpTable> tab,
-                                   const Eigen::VectorXi &ulocs) const {
-    return DynIntegrator(make_dyn_ode(), method, defstep, std::move(tab), ulocs);
-}
-
-// LGL interpolation table (auto control locations)
-
-ODE::DynIntegrator ODE::integrator(double defstep, std::shared_ptr<oc::LGLInterpTable> tab) const {
-    return DynIntegrator(make_dyn_ode(), defstep, std::move(tab));
-}
-
-ODE::DynIntegrator ODE::integrator(IVPAlg method, double defstep,
-                                   std::shared_ptr<oc::LGLInterpTable> tab) const {
-    return DynIntegrator(make_dyn_ode(), method, defstep, std::move(tab));
+    case ControlKind::TableAuto:
+        return ODE::DynIntegrator(ode, method_, step_, tab_);
+    }
+    // unreachable
+    throw std::logic_error("IntegratorBuilder::build: unhandled ControlKind");
 }
 
 } // namespace tycho

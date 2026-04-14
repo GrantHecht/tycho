@@ -18,11 +18,17 @@
 
 namespace tycho {
 
+// User-selectable IVP algorithms: DOPRI54, DOPRI87. Only these are exposed via
+// the Python binding and the string parser. RK4Classic and DOPRI5 remain in the
+// enum because they serve as internal template-dispatch tags (DOPRI54's
+// adaptive stepper is instantiated against IVPAlg::DOPRI5 coefficients; see
+// integrator.h set_method), and rk_steppers.h uses them in constexpr branches.
+// They are not runtime-selectable — passing them to set_method throws.
 enum class IVPAlg {
-    DOPRI54,    // Dormand-Prince 5(4) — 6 stages, adaptive
+    DOPRI54,    // Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87,    // Dormand-Prince 8(7) — 13 stages, adaptive (default)
-    RK4Classic, // Classic RK4 — 4 stages, fixed step only
-    DOPRI5,     // Dormand-Prince 5 — 6 stages, fixed step only
+    RK4Classic, // Internal only: classic RK4 coefficient tag
+    DOPRI5,     // Internal only: DOPRI5 coefficient tag used by DOPRI54
 };
 
 } // namespace tycho

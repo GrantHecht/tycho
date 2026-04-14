@@ -242,7 +242,7 @@ static bool run_form2() {
 
     // ── Build torque-free ODE and integrate target trajectory ──────────
     auto torquefree_ode = build_torquefree_ode(Ivec);
-    auto integ_tf = torquefree_ode.integrator(0.01);
+    auto integ_tf = torquefree_ode.integrator().step(0.01).build();
     integ_tf.adaptive_ = true;
 
     const double SimTime = 600.0 / Tstar;
@@ -276,7 +276,7 @@ static bool run_form2() {
     X0[19] = -MaxTorque / 4.0;
 
     // ── Integrate initial guess ────────────────────────────────────────
-    auto integ = ode.integrator(0.01);
+    auto integ = ode.integrator().step(0.01).build();
     integ.adaptive_ = true;
     auto trajIG = integ.integrate_dense(X0, 200.0 / Tstar, 1000);
     std::cout << "  Initial guess: " << trajIG.size() << " points\n";
@@ -372,7 +372,7 @@ static bool run_form1() {
     X0[26] = -MaxTorque / 4.0;
 
     // ── Integrate initial guess ────────────────────────────────────────
-    auto integ = ode.integrator(0.01);
+    auto integ = ode.integrator().step(0.01).build();
     auto trajIG = integ.integrate_dense(X0, 200.0 / Tstar, 1000);
     std::cout << "  Initial guess: " << trajIG.size() << " points\n";
 

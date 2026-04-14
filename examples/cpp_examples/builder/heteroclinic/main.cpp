@@ -230,7 +230,10 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
 
     phase.optimizer().set_econ_tol(1.0e-12);
     phase.optimizer().set_print_level(1);
-    phase.solve();
+    auto flag = phase.solve();
+    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        return {}; // caller checks for empty
+    }
 
     return phase.return_traj();
 }
@@ -244,7 +247,7 @@ using Trajectory = std::vector<Eigen::VectorXd>;
 std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
                                      double dx, double dt, int nman = 100,
                                      bool stable = true) {
-    auto integ = ode.integrator(IVPAlg::DOPRI87, 0.01);
+    auto integ = ode.integrator().method(IVPAlg::DOPRI87).step(0.01).build();
     integ.set_abs_tol(1.0e-13);
 
     double period = orbit_in.back()[6];
@@ -445,7 +448,10 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
 
     ocp.optimizer().set_econ_tol(1.0e-9);
     ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimize();
+    auto flag = ocp.optimize();
+    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        return {}; // caller checks for empty
+    }
 
     auto traj1 = phase1.return_traj();
     auto traj2 = phase2.return_traj();

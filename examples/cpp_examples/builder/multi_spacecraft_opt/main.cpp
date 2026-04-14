@@ -192,8 +192,16 @@ int main() {
 
     // ── Solve ──────────────────────────────────────────────────────────
     std::cout << "Solving initial configuration...\n";
-    ocp.solve();
-    ocp.optimize();
+    auto flag_init_solve = ocp.solve();
+    if (flag_init_solve > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "MultiSpacecraftOpt: initial solve FAILED\n";
+        return EXIT_FAILURE;
+    }
+    auto flag_init_opt = ocp.optimize();
+    if (flag_init_opt > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "MultiSpacecraftOpt: initial optimize FAILED\n";
+        return EXIT_FAILURE;
+    }
 
     auto link_params = ocp.base().return_link_params();
     double rendezvous_time = link_params[6] / (2.0 * M_PI);

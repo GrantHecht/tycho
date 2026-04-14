@@ -93,7 +93,7 @@ static constexpr double integ_dt = 3.1415 / 10000.0;
 std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorXd &ig, double tf,
                                              const std::vector<int> &fix_init = {0, 1, 2}) {
     // Integrate initial guess using ODE::integrator()
-    auto integ = ode.integrator(integ_dt);
+    auto integ = ode.integrator().step(integ_dt).build();
     auto trajGuess = integ.integrate_dense(ig, tf, 1000);
 
     constexpr int nSeg = 150;
@@ -117,7 +117,10 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
     phase.add_boundary_value(PhaseRegionFlags::Back, 5, 0.0);
 
     phase.optimizer().set_econ_tol(1e-12);
-    phase.solve();
+    auto flag = phase.solve();
+    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        return {}; // caller checks for empty
+    }
 
     return phase.return_traj();
 }
