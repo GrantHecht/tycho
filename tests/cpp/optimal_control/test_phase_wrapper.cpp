@@ -320,3 +320,47 @@ TEST_F(PhaseWrapperTest, NamedEqualCon) {
 
     SUCCEED();
 }
+
+TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsEmptyName) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    EXPECT_THROW(phase.add_static_param_name("", 0), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsDuplicate) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    phase.add_static_param_name("mass", 0);
+    EXPECT_THROW(phase.add_static_param_name("mass", 1), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, AddStaticParamGroupRejectsEmptyName) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    EXPECT_THROW(phase.add_static_param_group("", 0, 3), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, AddStaticParamGroupRejectsNonPositiveCount) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    EXPECT_THROW(phase.add_static_param_group("g", 0, 0), std::invalid_argument);
+    EXPECT_THROW(phase.add_static_param_group("h", 0, -1), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, AddStaticParamGroupRejectsDuplicate) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    phase.add_static_param_group("v", 0, 3);
+    EXPECT_THROW(phase.add_static_param_group("v", 3, 3), std::invalid_argument);
+}
+
+TEST_F(PhaseWrapperTest, SetTrajLerpIgOverloadAccepted) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+
+    // 3-arg overload with lerp_ig = true — pin the wrapper forwards it.
+    // Pass a coarser grid to force the initial-guess lerp path to fire.
+    auto coarse = make_brach_guess();
+    coarse.resize(50);
+    EXPECT_NO_THROW(phase.set_traj(coarse, 8, /*lerp_ig=*/true));
+}

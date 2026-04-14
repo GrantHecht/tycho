@@ -105,3 +105,54 @@ TEST_F(SubVariablesPhaseTest, AddValueLockPinsInitialState) {
     EXPECT_NEAR(result.front()[1], locked_y0, 1e-8)
         << "Locked y0 was perturbed by the solve; residual is not structurally zero";
 }
+
+// Pin the named-overload sub_variables path (string resolution via registry)
+// — the full Phase solve verifies that the resolver returns the same index
+// the int-based overload would use.
+TEST_F(SubVariablesPhaseTest, NamedOverloadLocksFrontState) {
+    auto ode = make_trivial_ode();
+
+    const double locked_x0 = 0.1;
+    const double locked_y0 = 0.9;
+
+    auto traj_ig = make_linear_guess(locked_x0, locked_y0, 1.0, 1.0);
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, 16);
+
+    phase.add_value_lock(PhaseRegionFlags::Front, {"x", "y"});
+    const std::vector<std::string> names_xy{"x", "y"};
+    Eigen::Vector2d locked_vals(locked_x0, locked_y0);
+    phase.sub_variables(PhaseRegionFlags::Front, names_xy, locked_vals);
+
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"t"}, Eigen::Matrix<double, 1, 1>(0.0));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"t"}, Eigen::Matrix<double, 1, 1>(1.0));
+
+    Eigen::VectorXi front_xy(2);
+    front_xy << 0, 1;
+    Eigen::Vector2d back_val(1.0, 1.0);
+    phase.add_boundary_value(PhaseRegionFlags::Back, front_xy, back_val);
+
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 3, -5.0, 5.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -5.0, 5.0);
+    phase.add_integral_objective(
+        GenericFunction<-1, 1>(Arguments<2>().squared_norm()), {"u1", "u2"});
+
+    phase.optimizer().set_print_level(0);
+    auto status = phase.solve_optimize();
+    ASSERT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+
+    auto result = phase.return_traj();
+    EXPECT_NEAR(result.front()[0], locked_x0, 1e-8);
+    EXPECT_NEAR(result.front()[1], locked_y0, 1e-8);
+}
+
+// sub_variables with an unknown name must surface a diagnostic rather than
+// silently resolve to an invalid index — pins the resolve_for_region throw.
+TEST_F(SubVariablesPhaseTest, UnknownNameThrows) {
+    auto ode = make_trivial_ode();
+    auto traj_ig = make_linear_guess(0.0, 0.0, 1.0, 1.0);
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, 8);
+
+    const std::vector<std::string> bad{"not_a_variable"};
+    Eigen::Matrix<double, 1, 1> val(0.0);
+    EXPECT_THROW(phase.sub_variables(PhaseRegionFlags::Front, bad, val), std::invalid_argument);
+}
