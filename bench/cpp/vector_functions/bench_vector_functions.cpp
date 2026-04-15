@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "../bench_odes.h"
-#include <tycho/detail/astro/cr3bp_model.h>
+#include <tycho/astro.h>
 #include <benchmark/benchmark.h>
 
 using namespace tycho::astro;
@@ -128,34 +128,34 @@ static void BM_VF_ArgsSegment(benchmark::State &state) {
 BENCHMARK(BM_VF_ArgsSegment);
 
 ///////////////////////////////////////////////////////////////////////////////
-// CR3BP benchmarks
+// CRTBPDynamics benchmarks (9->6: 6 rotating-frame state + 3 extra accel)
 ///////////////////////////////////////////////////////////////////////////////
 
-static void BM_VF_CR3BP_Compute(benchmark::State &state) {
-    CR3BP ode(0.01215); // Earth-Moon mass ratio
-    Eigen::VectorXd x(7);
-    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0; // near L1
+static void BM_VF_CRTBPDynamics_Compute(benchmark::State &state) {
+    CRTBPDynamics dyn(0.01215); // Earth-Moon mass ratio
+    Eigen::VectorXd x(9);
+    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0; // near L1, zero accel
     Eigen::VectorXd fx(6);
     for (auto _ : state) {
         fx.setZero();
-        ode.compute(x, fx);
+        dyn.compute(x, fx);
         benchmark::DoNotOptimize(fx);
     }
 }
-BENCHMARK(BM_VF_CR3BP_Compute);
+BENCHMARK(BM_VF_CRTBPDynamics_Compute);
 
-static void BM_VF_CR3BP_ComputeJacobian(benchmark::State &state) {
-    CR3BP ode(0.01215);
-    Eigen::VectorXd x(7);
-    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0;
+static void BM_VF_CRTBPDynamics_ComputeJacobian(benchmark::State &state) {
+    CRTBPDynamics dyn(0.01215);
+    Eigen::VectorXd x(9);
+    x << 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0;
     Eigen::VectorXd fx(6);
-    Eigen::MatrixXd jx(6, 7);
+    Eigen::MatrixXd jx(6, 9);
     for (auto _ : state) {
         fx.setZero();
         jx.setZero();
-        ode.compute_jacobian(x, fx, jx);
+        dyn.compute_jacobian(x, fx, jx);
         benchmark::DoNotOptimize(fx);
         benchmark::DoNotOptimize(jx);
     }
 }
-BENCHMARK(BM_VF_CR3BP_ComputeJacobian);
+BENCHMARK(BM_VF_CRTBPDynamics_ComputeJacobian);
