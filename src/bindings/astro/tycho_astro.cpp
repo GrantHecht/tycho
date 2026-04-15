@@ -43,6 +43,12 @@ void tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
     mod.def("modified_dynamics",
             [](double mu) { return GenericFunction<-1, -1>(MEEDynamics(mu)); });
 
+    mod.def("cartesian_dynamics",
+            [](double mu) { return GenericFunction<-1, -1>(CartesianDynamics(mu)); });
+
+    mod.def("crtbp_dynamics",
+            [](double mu) { return GenericFunction<-1, -1>(CRTBPDynamics(mu)); });
+
     mod.def("j2_cartesian", [](double mu, double J2, double Rb) {
         return GenericFunction<-1, -1>(J2Cartesian_Impl::Definition(mu, J2, Rb));
     });
