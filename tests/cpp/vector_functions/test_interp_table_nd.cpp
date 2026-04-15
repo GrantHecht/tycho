@@ -85,6 +85,57 @@ TEST_F(InterpTable4DTest, ConstructAndEvalSmoke) {
     EXPECT_NEAR(v, ref_fn_4d(0.75, 1.1, 1.4, 0.6), 1e-2);
 }
 
+TEST_F(InterpTable3DTest, CubicFirstDerivativeMatchesFiniteDifference) {
+    const int n = 11;
+    auto xs = linspace_nd(0.0, 2.0, n);
+    auto ys = linspace_nd(0.0, 2.0, n);
+    auto zs = linspace_nd(0.0, 2.0, n);
+    Eigen::Tensor<double, 3> fs(n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k) fs(i, j, k) = ref_fn_3d(xs[i], ys[j], zs[k]);
+
+    oc::InterpTable3D table(xs, ys, zs, fs, InterpType::Cubic, false);
+    const double h = 1e-5;
+    const double x = 0.85, y = 1.2, z = 1.05;
+    auto [v, grad] = table.interp_deriv1(x, y, z);
+    double dfdx_fd = (table.interp(x + h, y, z) - table.interp(x - h, y, z)) / (2 * h);
+    double dfdy_fd = (table.interp(x, y + h, z) - table.interp(x, y - h, z)) / (2 * h);
+    double dfdz_fd = (table.interp(x, y, z + h) - table.interp(x, y, z - h)) / (2 * h);
+    EXPECT_NEAR(v, table.interp(x, y, z), 1e-12);
+    EXPECT_NEAR(grad[0], dfdx_fd, 1e-5);
+    EXPECT_NEAR(grad[1], dfdy_fd, 1e-5);
+    EXPECT_NEAR(grad[2], dfdz_fd, 1e-5);
+}
+
+TEST_F(InterpTable4DTest, CubicFirstDerivativeMatchesFiniteDifference) {
+    const int n = 9;
+    auto xs = linspace_nd(0.0, 2.0, n);
+    auto ys = linspace_nd(0.0, 2.0, n);
+    auto zs = linspace_nd(0.0, 2.0, n);
+    auto ws = linspace_nd(0.0, 2.0, n);
+    Eigen::Tensor<double, 4> fs(n, n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k)
+                for (int l = 0; l < n; ++l)
+                    fs(i, j, k, l) = ref_fn_4d(xs[i], ys[j], zs[k], ws[l]);
+
+    oc::InterpTable4D table(xs, ys, zs, ws, fs, InterpType::Cubic, false);
+    const double h = 1e-5;
+    const double x = 0.75, y = 1.1, z = 1.05, w = 0.6;
+    auto [v, grad] = table.interp_deriv1(x, y, z, w);
+    double dfdx_fd = (table.interp(x + h, y, z, w) - table.interp(x - h, y, z, w)) / (2 * h);
+    double dfdy_fd = (table.interp(x, y + h, z, w) - table.interp(x, y - h, z, w)) / (2 * h);
+    double dfdz_fd = (table.interp(x, y, z + h, w) - table.interp(x, y, z - h, w)) / (2 * h);
+    double dfdw_fd = (table.interp(x, y, z, w + h) - table.interp(x, y, z, w - h)) / (2 * h);
+    EXPECT_NEAR(v, table.interp(x, y, z, w), 1e-12);
+    EXPECT_NEAR(grad[0], dfdx_fd, 1e-4);
+    EXPECT_NEAR(grad[1], dfdy_fd, 1e-4);
+    EXPECT_NEAR(grad[2], dfdz_fd, 1e-4);
+    EXPECT_NEAR(grad[3], dfdw_fd, 1e-4);
+}
+
 TEST_F(InterpTable4DTest, OutOfBoundsThrowsByDefault) {
     const int n = 5;
     auto xs = linspace_nd(0.0, 1.0, n);

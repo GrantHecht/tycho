@@ -91,6 +91,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_kepler_propagation.cpp
     astro/test_lambert_solver.cpp
     astro/test_cr3bp.cpp
+    astro/test_mee_dynamics.cpp
 
     # Integrators
     integrators/test_integration_basic.cpp

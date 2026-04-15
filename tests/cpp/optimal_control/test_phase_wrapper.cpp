@@ -364,3 +364,22 @@ TEST_F(PhaseWrapperTest, SetTrajLerpIgOverloadAccepted) {
     coarse.resize(50);
     EXPECT_NO_THROW(phase.set_traj(coarse, 8, /*lerp_ig=*/true));
 }
+
+// resolve_for_region(ODEParams, ...) with an X-block name must throw via
+// the Batch A unification of the multi-name overload. Prior to the fix, the
+// multi-name path silently returned the raw XtUP index for non-ODEParams
+// regions, so a caller asking for an X-block var in the ODEParams region
+// would have silently installed a nonsense index instead of erroring.
+TEST_F(PhaseWrapperTest, ResolveForRegionODEParamsRejectsXBlockName) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    phase.add_static_param_group("alpha", 0, 1);
+
+    // Multi-name overload routes through the unified resolve_for_region.
+    EXPECT_THROW(
+        phase.add_boundary_value(PhaseRegionFlags::ODEParams, {"x"}, Eigen::VectorXd::Zero(1)),
+        std::invalid_argument);
+    // Single-name overload — symmetric behavior.
+    EXPECT_THROW(phase.add_boundary_value(PhaseRegionFlags::ODEParams, "x", 0.0),
+                 std::invalid_argument);
+}

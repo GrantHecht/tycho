@@ -107,6 +107,23 @@ TEST_F(InterpTable2DTest, ConstructorRejectsTooSmallAxes) {
     EXPECT_THROW(oc::InterpTable2D(xs, ys, zs, InterpType::Cubic), std::invalid_argument);
 }
 
+TEST_F(InterpTable2DTest, CubicFirstDerivativeMatchesFiniteDifference) {
+    auto xs = linspace_2d(0.0, 3.0, 21);
+    auto ys = linspace_2d(-1.0, 2.0, 17);
+    auto zs = eval_grid_2d(xs, ys);
+
+    oc::InterpTable2D table(xs, ys, zs, InterpType::Cubic);
+    const double h = 1e-5;
+    for (auto [x, y] : {std::pair{1.42, 0.5}, {0.9, 1.1}, {2.3, -0.25}}) {
+        auto [v, grad] = table.interp_deriv1(x, y);
+        double dzdx_fd = (table.interp(x + h, y) - table.interp(x - h, y)) / (2 * h);
+        double dzdy_fd = (table.interp(x, y + h) - table.interp(x, y - h)) / (2 * h);
+        EXPECT_NEAR(v, table.interp(x, y), 1e-12);
+        EXPECT_NEAR(grad[0], dzdx_fd, 1e-6) << "∂z/∂x FD mismatch at (" << x << "," << y << ")";
+        EXPECT_NEAR(grad[1], dzdy_fd, 1e-6) << "∂z/∂y FD mismatch at (" << x << "," << y << ")";
+    }
+}
+
 TEST_F(InterpTable2DTest, ConstructorRejectsMismatchedShape) {
     auto xs = linspace_2d(0.0, 1.0, 6);
     auto ys = linspace_2d(0.0, 1.0, 5);

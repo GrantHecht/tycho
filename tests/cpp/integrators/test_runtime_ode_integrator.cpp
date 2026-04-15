@@ -169,6 +169,48 @@ TEST_F(RuntimeIntegratorBuilderTest, NamedLawOnRegistrylessOdeThrows) {
         std::invalid_argument);
 }
 
+// IndexedLaw with an empty varlocs vector must throw from build() — pins
+// the per-branch validation added in the Batch A silent-failure hardening.
+TEST_F(RuntimeIntegratorBuilderTest, IndexedLawEmptyVarlocsThrows) {
+    auto ode = make_driven_sho_ode_unnamed();
+    auto u_args = Arguments<1>();
+    auto u_zero = GenericFunction<-1, -1>(u_args * 0.0);
+    Eigen::VectorXi empty_varlocs(0);
+    EXPECT_THROW(
+        { (void)ode.integrator().step(0.01).control(u_zero, empty_varlocs).build(); },
+        std::logic_error);
+}
+
+// TableIndexed with a null table pointer must throw from build(). Pins the
+// per-branch validation for ControlKind::TableIndexed.
+TEST_F(RuntimeIntegratorBuilderTest, TableIndexedNullTableThrows) {
+    auto ode = make_driven_sho_ode_unnamed();
+    std::shared_ptr<oc::LGLInterpTable> null_tab;
+    Eigen::VectorXi ulocs(1);
+    ulocs << 0;
+    EXPECT_THROW(
+        { (void)ode.integrator().step(0.01).control(null_tab, ulocs).build(); },
+        std::logic_error);
+}
+
+// TableAuto with a null table pointer must throw from build(). Pins the
+// per-branch validation for ControlKind::TableAuto.
+TEST_F(RuntimeIntegratorBuilderTest, TableAutoNullTableThrows) {
+    auto ode = make_driven_sho_ode_unnamed();
+    std::shared_ptr<oc::LGLInterpTable> null_tab;
+    EXPECT_THROW({ (void)ode.integrator().step(0.01).control(null_tab).build(); },
+                 std::logic_error);
+}
+
+// Const control with an empty u_const vector must throw from build(). Pins
+// the per-branch validation for ControlKind::Const.
+TEST_F(RuntimeIntegratorBuilderTest, ConstControlEmptyVectorThrows) {
+    auto ode = make_driven_sho_ode_unnamed();
+    Eigen::VectorXd empty_const(0);
+    EXPECT_THROW({ (void)ode.integrator().step(0.01).control(empty_const).build(); },
+                 std::logic_error);
+}
+
 // NamedLaw on a named ODE resolves successfully. Pins the happy path on the
 // registry lookup inside IntegratorBuilder::build for ControlKind::NamedLaw.
 TEST_F(RuntimeIntegratorBuilderTest, NamedLawOnNamedOdeResolvesAndIntegrates) {
