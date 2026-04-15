@@ -219,21 +219,18 @@ unchanged. This is the cleanest conversion of the four.
 
 #### `examples/cpp_examples/builder/multi_spacecraft_opt/main.cpp`
 
-Current inline form (main.cpp:19): inline Kepler with no extra acceleration.
-
-New form: stack a compile-time zero 3-vector onto the 6-D state argument
-using `Constant<6, 3>`:
+Current inline form (`make_lt_ode`, main.cpp:11-26): Kepler gravity plus
+low-thrust control `thrust = ltacc * u`. This example is structurally
+identical to `simple_low_thrust` — it has a 3-D control vector — so the
+conversion is the same:
 
 ```cpp
-auto args = Arguments<6>();
-Eigen::Vector3d zero_accel = Eigen::Vector3d::Zero();
-auto zero_const = Constant<6, 3>(6, zero_accel);
-auto dyn = astro::CartesianDynamics(mu);
-auto Xdot = GenericFunction<-1, -1>(dyn.eval(stack(args, zero_const)));
+auto dyn = astro::CartesianDynamics(mu_val);
+auto Xdot = GenericFunction<-1, -1>(dyn.eval(stack(r, v, ltacc * u)));
 ```
 
-Slightly more verbose than the original inline form but consistent, and
-the codegen'd analytic derivatives are the performance win.
+(or equivalently `stack(state, ltacc * u)` where `state = args.head<6>()`).
+No zero-accel stacking is needed here.
 
 #### `examples/cpp_examples/builder/orbit_continuation/main.cpp`
 
@@ -441,8 +438,11 @@ implementation plan via `writing-plans`):
   brainstorm.)
 - **Q:** Keep or delete `kepler_model.h`? **A:** Keep — solves a different
   problem.
-- **Q:** Zero-accel stacking style for `multi_spacecraft_opt`? **A:** Use
-  `Constant<6, 3>` with `Eigen::Vector3d::Zero()`.
+- **Q:** Zero-accel stacking style for uncontrolled CRTBP examples
+  (`orbit_continuation`, `heteroclinic`)? **A:** Use
+  `Constant<InputSize, 3>(InputSize, Eigen::Vector3d::Zero())` stacked
+  onto the state expression. (`multi_spacecraft_opt` does not need this
+  — it already has a 3-D control vector, same as `simple_low_thrust`.)
 - **Q:** Struct name — `CRTBPDynamics` vs. `CR3BPDynamics`? **A:**
   `CRTBPDynamics` (matches the filename the user specified and is
   consistent with the `MEEDynamics` naming).
