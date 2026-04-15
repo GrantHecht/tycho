@@ -339,21 +339,21 @@ class TychoHeaderGen:
         ``sqrt(_hp0_) * _hp0_`` with ``_hp0_`` assigned once as its own
         temporary — avoiding a runtime ``pow()`` call.
         """
-        halfpow_pre, rewritten = self._extract_halfpow_bases(exprs)
+        pre_cses, rewritten = self._extract_compound_pow_bases(exprs)
         cses, reduced = sp.cse(rewritten)
         # Prepend halfpow temporaries so they're emitted before the
         # regular CSE assignments that reference them.
-        return halfpow_pre + cses, reduced
+        return pre_cses + cses, reduced
 
-    def _extract_halfpow_bases(self, exprs):
+    def _extract_compound_pow_bases(self, exprs):
         """Pre-CSE: replace Pow(compound, n/2) bases with _hpN_ symbols.
 
-        Returns (halfpow_cses, rewritten_exprs) where ``halfpow_cses`` is a
+        Returns (pow_cses, rewritten_exprs) where ``pow_cses`` is a
         list of ``(Symbol, compound_base)`` pairs that should be emitted as
         assignments before the regular CSE body. Bases are de-duplicated by
         structural equality so identical compound bases share one temporary.
         """
-        halfpow_cses = []  # [(Symbol, compound_expr)]
+        pow_cses = []  # [(Symbol, compound_expr)]
         base_to_sym = {}  # compound_expr → Symbol
         counter = [0]
 
@@ -366,18 +366,25 @@ class TychoHeaderGen:
                 expr = expr.func(*new_args)
             if (
                 isinstance(expr, sp.Pow)
-                and isinstance(expr.exp, sp.Rational)
-                and expr.exp.q == 2
                 and not expr.base.is_Atom
                 and not expr.base.is_Symbol
             ):
-                base = expr.base
-                if base not in base_to_sym:
-                    sym = sp.Symbol(f"_hp{counter[0]}_")
-                    counter[0] += 1
-                    base_to_sym[base] = sym
-                    halfpow_cses.append((sym, base))
-                return sp.Pow(base_to_sym[base], expr.exp)
+                exp = expr.exp
+                # Accept half-integer exponents (Rational(n, 2)) and
+                # small integer exponents n >= 2. SymPy leaves Pow(Add, n)
+                # unexpanded for integer n, and the downstream regex only
+                # rewrites pow(sym, n) / pow(sym, n/2) when the base is a
+                # bare identifier — so compound bases need extraction.
+                is_half_int = isinstance(exp, sp.Rational) and exp.q == 2
+                is_small_int = isinstance(exp, sp.Integer) and 2 <= int(exp) <= 16
+                if is_half_int or is_small_int:
+                    base = expr.base
+                    if base not in base_to_sym:
+                        sym = sp.Symbol(f"_hp{counter[0]}_")
+                        counter[0] += 1
+                        base_to_sym[base] = sym
+                        pow_cses.append((sym, base))
+                    return sp.Pow(base_to_sym[base], exp)
             return expr
 
         def _apply(obj):
@@ -390,7 +397,7 @@ class TychoHeaderGen:
             return _rewrite(obj)
 
         rewritten = _apply(exprs)
-        return halfpow_cses, rewritten
+        return pow_cses, rewritten
 
     # ── class header generation ─────────────────────────────────────────
 
