@@ -28,7 +28,9 @@ void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
 void UtilsBuild(nb::module_ &m);
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+#ifdef TYCHO_HAS_EXTENSIONS
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
+#endif
 } // namespace tycho
 
 using namespace tycho;
@@ -168,5 +170,7 @@ NB_MODULE(_tychopy, m) {
     UtilsBuild(m);
     AstroBuild(reg, m);
 
+#ifdef TYCHO_HAS_EXTENSIONS
     ExtensionsBuild(reg, reg.extmod);
+#endif
 }
