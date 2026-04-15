@@ -29,13 +29,12 @@ int main() {
     Xf[4] = vf_val;
 
     auto args = ODEArguments(6, 3, 0);
-    auto R = args.head<3>();
-    auto V = args.segment<3>(3);
+    auto state = args.head<6>();
     auto u = args.tail<3>();
+    auto thrust_acc = acc * u;
 
-    auto grav = (-mu) * R.normalized_power<3>();
-    auto thrust = acc * u;
-    auto ode_expr = StackedOutputs{V, grav + thrust};
+    auto dyn = astro::CartesianDynamics(mu);
+    auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, thrust_acc)));
 
     auto ode = ODE(ode_expr, 6, 3)
                    .var_group("R", 0, 3)
