@@ -9,6 +9,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "astro_test_utils.h"
+#include "vf_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <tycho/tycho.h>
@@ -68,8 +69,11 @@ TEST(MEEDynamicsTest, CircularEquatorialZeroThrustLDotSweepsInL) {
         Eigen::Matrix<double, 6, 1> fx;
         fx.setZero();
         dyn.compute_impl(x, fx);
-        EXPECT_NEAR(fx[5], expected_L_dot, 1e-6) << "L̇ drifted at L=" << L;
-        EXPECT_NEAR(fx[0], 0.0, 1e-6) << "ṗ drifted at L=" << L;
+        // sqrt(mu/a^3) at the Earth scale is ~1e-3 rad/s; analytic closed-form
+        // permits a tight tolerance — anything looser would mask sign/column
+        // codegen errors.
+        EXPECT_NEAR(fx[5], expected_L_dot, 1e-12) << "L̇ drifted at L=" << L;
+        EXPECT_NEAR(fx[0], 0.0, 1e-12) << "ṗ drifted at L=" << L;
     }
 }
 
@@ -90,4 +94,38 @@ TEST(MEEDynamicsTest, NonTrivialMEEStateAllRatesFinite) {
         EXPECT_TRUE(std::isfinite(fx[i])) << "non-finite rate at index " << i;
     }
     EXPECT_GT(std::abs(fx[0]), 0.0) << "tangential thrust should drive ṗ ≠ 0";
+}
+
+TEST(MEEDynamicsTest, JacobianMatchesFiniteDifference) {
+    // Pin the analytic Jacobian against a central-difference Jacobian on
+    // several deterministic states with non-zero thrust. Catches sign flips,
+    // swapped f/g or h/k columns, and missing terms in the codegen output.
+    const double mu = MU_EARTH;
+    astro::MEEDynamics dyn(mu);
+    vf::GenericFunction<-1, -1> gf(dyn);
+
+    auto mee_leo = classic_to_modified<double>(leoClassic(), mu);
+
+    struct Case {
+        Eigen::Matrix<double, 9, 1> x;
+        double tol;
+        const char *label;
+    };
+    std::vector<Case> cases;
+    cases.push_back({build_mee_input(mee_leo, 0.0, 1e-3, 0.0), 1e-4, "LEO tangential"});
+    cases.push_back({build_mee_input(mee_leo, 1e-3, 0.0, 5e-4), 1e-4, "LEO radial+normal"});
+    cases.push_back({build_mee_input(mee_leo, -2e-4, 3e-4, -1e-4), 1e-4, "LEO mixed"});
+
+    // A second deterministic state at a different L to break any L-symmetry
+    // that could mask a Jacobian column error.
+    auto mee_shifted = mee_leo;
+    mee_shifted[5] = 1.7; // L
+    cases.push_back({build_mee_input(mee_shifted, 0.0, 1e-3, 0.0), 1e-4, "LEO L=1.7"});
+    cases.push_back({build_mee_input(mee_shifted, 5e-4, -2e-4, 1e-3), 1e-4, "LEO L=1.7 mixed"});
+
+    for (const auto &c : cases) {
+        SCOPED_TRACE(c.label);
+        Eigen::VectorXd x = c.x;
+        verify_jacobian_fd(gf, x, c.tol);
+    }
 }

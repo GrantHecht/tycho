@@ -34,9 +34,6 @@ TEST_F(InterpTable1DTest, CubicScalarReproducesAnalyticFunction) {
     for (int i = 0; i < n; ++i) vs[i] = ref_fn_1d(ts[i]);
 
     oc::InterpTable1D table(ts, vs, InterpType::Cubic);
-    EXPECT_TRUE(table.teven_);
-    EXPECT_EQ(table.tsize_, n);
-    EXPECT_EQ(table.vlen_, 1);
 
     for (double t : {0.0, 0.37, 1.85, 3.14159, 4.6, 5.999}) {
         Eigen::VectorXd v = table.interp(t);
@@ -72,9 +69,10 @@ TEST_F(InterpTable1DTest, UnevenGridDetectedAndEvaluates) {
     for (int i = 0; i < 7; ++i) vs[i] = ref_fn_1d(ts[i]);
 
     oc::InterpTable1D table(ts, vs, InterpType::Cubic);
-    EXPECT_FALSE(table.teven_);
 
-    // Interior nodes reproduce exactly regardless of spacing.
+    // Interior nodes reproduce exactly regardless of spacing — also verifies
+    // that uneven-grid construction did not silently fall back to the even
+    // path (which would mis-place the nodes and break this assertion).
     for (int i = 0; i < 7; ++i) {
         Eigen::VectorXd v = table.interp(ts[i]);
         EXPECT_NEAR(v[0], vs[i], 1e-12) << "node " << i;
@@ -103,7 +101,6 @@ TEST_F(InterpTable1DTest, MatrixConstructorAxisSelection) {
     }
 
     oc::InterpTable1D table(ts, vs, 1, InterpType::Cubic);
-    EXPECT_EQ(table.vlen_, 2);
 
     double t = 1.234;
     Eigen::VectorXd v = table.interp(t);

@@ -112,7 +112,6 @@ int main() {
 
     const auto tmode = TranscriptionModes::LGL3;
 
-    // Phase 1: full thrust (u = 1)
     auto phase1 = ode.phase(tmode, TrajIG1, 32);
 
     Eigen::VectorXd front_vals(4);
@@ -121,7 +120,6 @@ int main() {
 
     phase1.add_boundary_value(PhaseRegionFlags::Path, "u", 1.0);
 
-    // Phase 2: singular arc
     auto phase2 = ode.phase(tmode, TrajIG2, 32);
     phase2.set_control_mode(ControlModes::NoSpline);
 
@@ -130,7 +128,6 @@ int main() {
     auto path_con = make_path_constraint();
     phase2.add_equal_con(PhaseRegionFlags::Path, path_con, {"h", "v", "m", "u"});
 
-    // Phase 3: coast (u = 0)
     auto phase3 = ode.phase(tmode, TrajIG3, 32);
 
     phase3.add_boundary_value(PhaseRegionFlags::Path, "u", 0.0);

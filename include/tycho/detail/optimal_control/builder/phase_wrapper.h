@@ -675,8 +675,15 @@ class Phase {
     }
 
     /// Resolve a name and translate to region-relative index (single var).
+    /// StaticParams names live in a separate sp_names_ map, not the XtUP
+    /// registry, so route through resolve_sp_single — otherwise SP names
+    /// would surface as misleading "unknown name" errors.
     int resolve_for_region(PhaseRegionFlags region, const std::string &var_name,
                            const char *method) const {
+        if (region == PhaseRegionFlags::StaticParams) {
+            int sp_idx = resolve_sp_single(var_name, method);
+            return to_region_index(region, sp_idx);
+        }
         int xtup_idx = resolve_single(var_name, method);
         return to_region_index(region, xtup_idx);
     }
@@ -689,6 +696,13 @@ class Phase {
     Eigen::VectorXi resolve_for_region(PhaseRegionFlags region,
                                        std::initializer_list<std::string> var_names,
                                        const char *method) const {
+        if (region == PhaseRegionFlags::StaticParams) {
+            std::vector<std::string> as_vec(var_names.begin(), var_names.end());
+            auto idx = resolve_sp_names(as_vec, method);
+            for (int i = 0; i < idx.size(); ++i)
+                idx[i] = to_region_index(region, idx[i]);
+            return idx;
+        }
         auto idx = resolve(var_names);
         for (int i = 0; i < idx.size(); ++i)
             idx[i] = to_region_index(region, idx[i]);

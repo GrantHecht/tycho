@@ -21,36 +21,22 @@ static Eigen::Vector3d normalize_vec(const Eigen::Vector3d &v) {
     return v / v.norm();
 }
 
-// Compute L1 position (between primaries)
-static Eigen::Vector3d compute_l1() {
-    double gamma0 = std::pow((mu * (1.0 - mu)) / 3.0, 1.0 / 3.0);
+// Co-linear Lagrange point solver (L1 with sign=-1, L2 with sign=+1).
+// Iterates the standard CR3BP fixed-point relation; sign factors out the
+// only difference between the two cases.
+static Eigen::Vector3d compute_lagrange_colinear(int sign, double mu_val) {
+    double gamma0 = std::pow((mu_val * (1.0 - mu_val)) / 3.0, 1.0 / 3.0);
     double guess = gamma0 + 1.0;
     while (std::abs(guess - gamma0) > 1.0e-14) {
         gamma0 = guess;
         guess = std::pow(
-            (mu * (gamma0 - 1.0) * (gamma0 - 1.0)) /
-                (3.0 - 2.0 * mu - gamma0 * (3.0 - mu - gamma0)),
+            (mu_val * (gamma0 + sign) * (gamma0 + sign)) /
+                (3.0 - 2.0 * mu_val + sign * gamma0 * (3.0 - mu_val + sign * gamma0)),
             1.0 / 3.0);
     }
-    return Eigen::Vector3d(1.0 - mu - guess, 0.0, 0.0);
+    return Eigen::Vector3d(1.0 - mu_val + sign * guess, 0.0, 0.0);
 }
 
-// Compute L2 position (beyond smaller primary)
-static Eigen::Vector3d compute_l2() {
-    double gamma0 = std::pow((mu * (1.0 - mu)) / 3.0, 1.0 / 3.0);
-    double guess = gamma0 + 1.0;
-    while (std::abs(guess - gamma0) > 1.0e-14) {
-        gamma0 = guess;
-        guess = std::pow(
-            (mu * (gamma0 + 1.0) * (gamma0 + 1.0)) /
-                (3.0 - 2.0 * mu + gamma0 * (3.0 - mu + gamma0)),
-            1.0 / 3.0);
-    }
-    return Eigen::Vector3d(1.0 - mu + guess, 0.0, 0.0);
-}
-
-// Compute the CR3BP acceleration Jacobian (Omega_xx, Omega_yy, Omega_zz)
-// at a given position for linearized dynamics
 static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
                                   double &Oxx, double &Oyy, double &Ozz) {
     double x = pos[0], y = pos[1], z = pos[2];
@@ -75,7 +61,6 @@ static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
           3.0 * mu_val * z * z / r2_5;
 }
 
-// Generate Lissajous orbit initial guess around a libration point
 std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp,
                                             double xnd, double znd,
                                             double phideg, double psideg,
@@ -208,7 +193,6 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
     double period = orbit_in.back()[6];
     auto orbit = integ.integrate_dense(orbit_in[0], period, nman);
 
-    // Build times vector: each orbit point propagated for one full period
     Eigen::VectorXd times(orbit.size());
     for (int i = 0; i < static_cast<int>(orbit.size()); ++i) {
         times[i] = orbit[i][6] + period;
@@ -217,55 +201,47 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
     const int ncores = 8;
     auto stm_results = integ.integrate_stm_parallel(orbit, times, ncores);
 
-    // Compute eigenvectors of monodromy matrix and perturb along
-    // stable/unstable direction
     std::vector<Eigen::VectorXd> eig_igs;
     eig_igs.reserve(2 * orbit.size());
 
     for (int i = 0; i < static_cast<int>(stm_results.size()); ++i) {
         auto &[xf, jac] = stm_results[i];
 
-        // Extract 6x6 state transition matrix
         Eigen::MatrixXd stm = jac.block(0, 0, 6, 6);
         Eigen::EigenSolver<Eigen::MatrixXd> solver(stm);
         auto vals = solver.eigenvalues();
         auto vecs = solver.eigenvectors();
 
-        // Sort eigenvalue indices by magnitude
         std::vector<int> idxs(6);
         std::iota(idxs.begin(), idxs.end(), 0);
         std::sort(idxs.begin(), idxs.end(), [&](int a, int b) {
             return std::abs(vals[a]) < std::abs(vals[b]);
         });
 
-        // Stable = smallest eigenvalue, unstable = largest
+        // Monodromy convention: smallest |λ| is the stable direction,
+        // largest is the unstable direction.
         int eig_idx = stable ? idxs[0] : idxs[5];
         Eigen::Vector3d vec = vecs.col(eig_idx).head<3>().real();
         vec = normalize_vec(vec);
 
-        // Positive perturbation
         Eigen::VectorXd xp = orbit[i];
         xp.head<3>() += vec * dx;
         eig_igs.push_back(xp);
 
-        // Negative perturbation
         Eigen::VectorXd xm = orbit[i];
         xm.head<3>() -= vec * dx;
         eig_igs.push_back(xm);
     }
 
-    // Propagation time: negative for stable manifold
     double prop_dt = stable ? -dt : dt;
     Eigen::VectorXd ts(eig_igs.size());
     for (int i = 0; i < static_cast<int>(eig_igs.size()); ++i) {
         ts[i] = eig_igs[i][6] + prop_dt;
     }
 
-    // Event: crossing Moon's x position
     auto cross_moon_args = Arguments<7>();
     auto cross_moon_func = GenericFunction<-1, 1>(cross_moon_args.coeff<0>() - (1.0 - mu));
 
-    // Event: cull trajectories leaving region of interest
     auto cull_args = Arguments<7>();
     Eigen::Vector3d p2_loc;
     p2_loc << 1.0 - mu, 0.0, 0.0;
@@ -282,7 +258,6 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
 
     auto results = integ.integrate_dense_parallel(eig_igs, ts, events, ncores);
 
-    // Filter: keep trajectories that crossed moon and weren't culled
     std::vector<Trajectory> manifolds;
     for (auto &[traj, eventlocs] : results) {
         if (eventlocs[0].size() == 1 && eventlocs[1].empty()) {
@@ -319,21 +294,17 @@ std::pair<Trajectory, Trajectory>
 make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2,
                   const Trajectory &l1_orbit, const Trajectory &l2_orbit) {
 
-    // Build periodic orbit interpolation tables
     auto orbit_tab1 = std::make_shared<LGLInterpTable>(l1_orbit);
     orbit_tab1->make_periodic();
 
     auto orbit_tab2 = std::make_shared<LGLInterpTable>(l2_orbit);
     orbit_tab2->make_periodic();
 
-    // Variable index vectors for interp functions
     Eigen::VectorXi pos_vars(3);
     pos_vars[0] = 0; pos_vars[1] = 1; pos_vars[2] = 2;
     Eigen::VectorXi vel_vars(3);
     vel_vars[0] = 3; vel_vars[1] = 4; vel_vars[2] = 5;
 
-    // Position constraint: R - PosFunc(t) = 0
-    // Input: [x, y, z, t] -> phase indices [0,1,2,6]
     auto make_pos_con = [&](const std::shared_ptr<LGLInterpTable> &tab) {
         auto rt_args = Arguments<4>();
         auto R = rt_args.head<3>();
@@ -341,8 +312,6 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
         return GenericFunction<-1, -1>(R - lgl_interp(tab, pos_vars, t));
     };
 
-    // DV objective: ||V - VelFunc(t)||^2
-    // Input: [vx, vy, vz, t] -> phase indices [3,4,5,6]
     auto make_dv_obj = [&](const std::shared_ptr<LGLInterpTable> &tab) {
         auto vt_args = Arguments<4>();
         auto V = vt_args.head<3>();
@@ -350,13 +319,11 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
         return GenericFunction<-1, 1>((V - lgl_interp(tab, vel_vars, t)).squared_norm());
     };
 
-    // Index vectors for constraint/objective application
     Eigen::VectorXi pos_t_idx(4);
     pos_t_idx[0] = 0; pos_t_idx[1] = 1; pos_t_idx[2] = 2; pos_t_idx[3] = 6;
     Eigen::VectorXi vel_t_idx(4);
     vel_t_idx[0] = 3; vel_t_idx[1] = 4; vel_t_idx[2] = 5; vel_t_idx[3] = 6;
 
-    // Phase 1: unstable manifold arc (skip first point, which is on-orbit)
     Trajectory man1_traj(man1.begin() + 1, man1.end());
     auto phase1 = ode.phase(TranscriptionModes::LGL7, man1_traj, 50);
 
@@ -366,27 +333,22 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     phase1.add_lower_var_bound(PhaseRegionFlags::Front, 6, -l1_period);
     phase1.add_upper_var_bound(PhaseRegionFlags::Front, 6, 2.0 * l1_period);
 
-    // Departing from Orbit1
     phase1.add_equal_con(PhaseRegionFlags::Front, make_pos_con(orbit_tab1), pos_t_idx);
     phase1.add_state_objective(PhaseRegionFlags::Front, make_dv_obj(orbit_tab1), vel_t_idx);
 
-    // Phase 2: stable manifold arc (skip last point, which is on-orbit)
     Trajectory man2_traj(man2.begin(), man2.end() - 1);
     auto phase2 = ode.phase(TranscriptionModes::LGL7, man2_traj, 50);
 
-    // Arriving at Orbit2
     phase2.add_equal_con(PhaseRegionFlags::Back, make_pos_con(orbit_tab2), pos_t_idx);
     phase2.add_state_objective(PhaseRegionFlags::Back, make_dv_obj(orbit_tab2), vel_t_idx);
 
     phase1.add_lower_var_bound(PhaseRegionFlags::Back, 6, -l2_period);
     phase1.add_upper_var_bound(PhaseRegionFlags::Back, 6, 2.0 * l2_period);
 
-    // Build OCP
     auto ocp = OptimalControlProblem();
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
-    // Forward link: continuity in position and velocity
     Eigen::VectorXi link_vars(6);
     link_vars[0] = 0; link_vars[1] = 1; link_vars[2] = 2;
     link_vars[3] = 3; link_vars[4] = 4; link_vars[5] = 5;
@@ -403,7 +365,6 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     auto traj1 = phase1.return_traj();
     auto traj2 = phase2.return_traj();
 
-    // Compute delta-V
     double t1_dep = traj1.front()[6];
     auto orb1_state = orbit_tab1->interpolate(t1_dep);
     double dv1 = (traj1.front().segment<3>(3) - orb1_state.segment<3>(3)).norm();
@@ -431,13 +392,10 @@ int main() {
 
     std::cout << "=== Heteroclinic Connection in Earth-Moon CR3BP ===\n\n";
 
-    // Compute libration points
-    auto L1 = compute_l1();
-    auto L2 = compute_l2();
+    auto L1 = compute_lagrange_colinear(-1, mu);
+    auto L2 = compute_lagrange_colinear(+1, mu);
     std::cout << "L1 = " << std::fixed << std::setprecision(6) << L1[0] << "\n";
     std::cout << "L2 = " << std::fixed << std::setprecision(6) << L2[0] << "\n\n";
-
-    // ── Stage 1: Compute periodic orbits ──────────────────────────────
 
     // Generate Lissajous initial guesses (matching Python: xnd=0.03, znd=0)
     auto L1ig = gen_lissajous(L1, 0.03, 0.0, 180.0, 0.0, 1.0, 100);
@@ -463,8 +421,6 @@ int main() {
     std::cout << "  L2 orbit: x0=" << std::fixed << std::setprecision(6) << L2Orbit[0][0]
               << ", period=" << std::setprecision(4) << L2Orbit.back()[6] << "\n";
 
-    // ── Stage 2: Compute manifolds ─────────────────────────────────────
-
     std::cout << "\nComputing unstable L1 manifold...\n";
     auto unstable_l1 = get_manifold(ode, L1Orbit, dx, dt, nman, false);
     std::cout << "  Unstable L1 manifold: " << unstable_l1.size() << " arms\n";
@@ -478,18 +434,13 @@ int main() {
         return 1;
     }
 
-    // ── Stage 3: Find closest connection ───────────────────────────────
-
     std::cout << "\nFinding closest connection...\n";
     auto [traj1_ig, traj2_ig] = find_closest_connection(unstable_l1, stable_l2);
     double conn_dist = (traj1_ig.back().head<6>() - traj2_ig.back().head<6>()).norm();
     std::cout << "  Connection distance: " << std::scientific << std::setprecision(4)
               << conn_dist << "\n";
 
-    // Reverse Man2 (stable manifold arrives backwards in time)
     std::reverse(traj2_ig.begin(), traj2_ig.end());
-
-    // ── Stage 4: Optimize heteroclinic connection ──────────────────────
 
     std::cout << "\nOptimizing heteroclinic connection...\n";
     auto [traj1, traj2] = make_heteroclinic(ode, traj1_ig, traj2_ig, L1Orbit, L2Orbit);

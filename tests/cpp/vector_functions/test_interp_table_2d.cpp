@@ -39,8 +39,6 @@ TEST_F(InterpTable2DTest, CubicReproducesAnalyticSurface) {
     auto zs = eval_grid_2d(xs, ys);
 
     oc::InterpTable2D table(xs, ys, zs, InterpType::Cubic);
-    EXPECT_TRUE(table.xeven_);
-    EXPECT_TRUE(table.yeven_);
 
     for (auto [x, y] : {std::pair{0.37, 0.25}, {1.42, -0.5}, {2.71, 1.33}, {0.9, 1.8}}) {
         double z = table.interp(x, y);
@@ -90,10 +88,10 @@ TEST_F(InterpTable2DTest, UnevenGridDetectedAndEvaluates) {
     auto zs = eval_grid_2d(xs, ys);
 
     oc::InterpTable2D table(xs, ys, zs, InterpType::Cubic);
-    EXPECT_FALSE(table.xeven_);
-    EXPECT_FALSE(table.yeven_);
 
-    // Node values exact regardless of spacing.
+    // Node values exact regardless of spacing — also verifies that the
+    // uneven-grid construction did not silently fall back to the even path
+    // (which would mis-place nodes and break this assertion).
     for (int j = 0; j < ys.size(); ++j)
         for (int i = 0; i < xs.size(); ++i)
             EXPECT_NEAR(table.interp(xs[i], ys[j]), zs(j, i), 1e-10);

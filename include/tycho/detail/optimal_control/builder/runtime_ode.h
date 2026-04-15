@@ -116,13 +116,12 @@ class ODE {
     /// Build the fully-dynamic GenericODE.
     DynODE generic_ode() const { return DynODE(func_, xvars_, uvars_, pvars_); }
 
-    DynODE make_dyn_ode_public() const { return make_dyn_ode(); }
-    void require_registry() const { check_registry(); }
-    const VarRegistry *registry_ptr() const {
-        return registry_ ? &*registry_ : nullptr;
-    }
-
   private:
+    // IntegratorBuilder reaches into make_dyn_ode(), check_registry(), and
+    // registry_ during build(); friending keeps those helpers private rather
+    // than widening the public ODE surface.
+    friend class IntegratorBuilder;
+
     GenericFunction<-1, -1> func_;
     int xvars_ = 0;
     int uvars_ = 0;

@@ -64,7 +64,7 @@ ODE::DynIntegrator IntegratorBuilder::build() const {
             std::to_string(step_) + ")");
     }
 
-    auto ode = ode_->make_dyn_ode_public();
+    auto ode = ode_->make_dyn_ode();
 
     switch (kind_) {
     case ControlKind::None:
@@ -82,13 +82,8 @@ ODE::DynIntegrator IntegratorBuilder::build() const {
             throw std::logic_error("IntegratorBuilder::build: .control(ulaw, names) was called "
                                    "with an empty name list");
         }
-        ode_->require_registry();
-        const auto *reg = ode_->registry_ptr();
-        if (reg == nullptr) {
-            throw std::logic_error("IntegratorBuilder::build: ODE registry is null after "
-                                   "require_registry() — this is a library bug");
-        }
-        Eigen::VectorXi resolved = reg->resolve(name_varlocs_);
+        ode_->check_registry();
+        Eigen::VectorXi resolved = ode_->registry_->resolve(name_varlocs_);
         return ODE::DynIntegrator(ode, method_, step_, ulaw_, resolved);
     }
 

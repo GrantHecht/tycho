@@ -136,6 +136,59 @@ TEST_F(InterpTable4DTest, CubicFirstDerivativeMatchesFiniteDifference) {
     EXPECT_NEAR(grad[3], dfdw_fd, 1e-4);
 }
 
+TEST_F(InterpTable3DTest, UnevenGridConstructorReproducesNodes) {
+    // 1D/2D tests pin the even/uneven dispatch already; mirror the check
+    // for 3D since the constructor branches are nearly-identical template
+    // instantiations and have been a historical source of bugs.
+    Eigen::VectorXd xs(7);
+    xs << 0.0, 0.15, 0.5, 1.05, 1.4, 1.85, 2.4;
+    Eigen::VectorXd ys(6);
+    ys << 0.0, 0.3, 0.7, 1.2, 1.7, 2.2;
+    Eigen::VectorXd zs(5);
+    zs << 0.0, 0.4, 0.95, 1.55, 2.1;
+    Eigen::Tensor<double, 3> fs(xs.size(), ys.size(), zs.size());
+    for (int i = 0; i < xs.size(); ++i)
+        for (int j = 0; j < ys.size(); ++j)
+            for (int k = 0; k < zs.size(); ++k)
+                fs(i, j, k) = ref_fn_3d(xs[i], ys[j], zs[k]);
+
+    oc::InterpTable3D table(xs, ys, zs, fs, InterpType::Cubic, false);
+
+    // Spot-check a handful of nodes — they must be reproduced exactly even on
+    // an uneven grid.
+    for (int i : {0, 3, 6})
+        for (int j : {0, 2, 5})
+            for (int k : {0, 4})
+                EXPECT_NEAR(table.interp(xs[i], ys[j], zs[k]), fs(i, j, k), 1e-10)
+                    << "node (" << i << "," << j << "," << k << ")";
+}
+
+TEST_F(InterpTable4DTest, UnevenGridConstructorReproducesNodes) {
+    Eigen::VectorXd xs(6);
+    xs << 0.0, 0.2, 0.55, 1.0, 1.45, 2.0;
+    Eigen::VectorXd ys(5);
+    ys << 0.0, 0.3, 0.85, 1.4, 2.0;
+    Eigen::VectorXd zs(5);
+    zs << 0.0, 0.35, 0.9, 1.5, 2.0;
+    Eigen::VectorXd ws(5);
+    ws << 0.0, 0.4, 0.95, 1.5, 2.0;
+    Eigen::Tensor<double, 4> fs(xs.size(), ys.size(), zs.size(), ws.size());
+    for (int i = 0; i < xs.size(); ++i)
+        for (int j = 0; j < ys.size(); ++j)
+            for (int k = 0; k < zs.size(); ++k)
+                for (int l = 0; l < ws.size(); ++l)
+                    fs(i, j, k, l) = ref_fn_4d(xs[i], ys[j], zs[k], ws[l]);
+
+    oc::InterpTable4D table(xs, ys, zs, ws, fs, InterpType::Cubic, false);
+
+    for (int i : {0, 5})
+        for (int j : {0, 2, 4})
+            for (int k : {0, 4})
+                for (int l : {0, 2, 4})
+                    EXPECT_NEAR(table.interp(xs[i], ys[j], zs[k], ws[l]), fs(i, j, k, l), 1e-10)
+                        << "node (" << i << "," << j << "," << k << "," << l << ")";
+}
+
 TEST_F(InterpTable4DTest, OutOfBoundsThrowsByDefault) {
     const int n = 5;
     auto xs = linspace_nd(0.0, 1.0, n);

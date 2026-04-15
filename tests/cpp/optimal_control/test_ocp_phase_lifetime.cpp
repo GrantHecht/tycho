@@ -75,10 +75,18 @@ TEST_F(OcpPhaseLifetimeTest, StableHeapStorageSupportsIntNamedResolution) {
         ocp.add_phase(*up);
 
     const std::vector<std::string> names_x{"x"};
-    EXPECT_NO_THROW(ocp.add_direct_link_equal_con(0, PhaseRegionFlags::Back, names_x, 1,
-                                                  PhaseRegionFlags::Front, names_x));
-    EXPECT_NO_THROW(ocp.add_direct_link_equal_con(1, PhaseRegionFlags::Back, names_x, 2,
-                                                  PhaseRegionFlags::Front, names_x));
+    int link_01 = -1;
+    int link_12 = -1;
+    ASSERT_NO_THROW(link_01 = ocp.add_direct_link_equal_con(0, PhaseRegionFlags::Back, names_x, 1,
+                                                            PhaseRegionFlags::Front, names_x));
+    ASSERT_NO_THROW(link_12 = ocp.add_direct_link_equal_con(1, PhaseRegionFlags::Back, names_x, 2,
+                                                            PhaseRegionFlags::Front, names_x));
+    // Pin that the OCP actually committed both link constraints — a stale
+    // pointer that segfaulted on access would surface here, and a silent
+    // resolution failure would return a sentinel/-1 instead of a valid idx.
+    EXPECT_GE(link_01, 0);
+    EXPECT_GE(link_12, 0);
+    EXPECT_NE(link_01, link_12);
 }
 
 // Post-add_phase static-param name additions on the caller's Phase must be
@@ -107,6 +115,10 @@ TEST_F(OcpPhaseLifetimeTest, PostAddPhaseStaticParamNamesVisible) {
     p1.add_static_param_name("sp0", 0);
 
     const std::vector<std::string> names_sp{"sp0"};
-    EXPECT_NO_THROW(ocp.add_direct_link_equal_con(0, PhaseRegionFlags::StaticParams, names_sp, 1,
-                                                  PhaseRegionFlags::StaticParams, names_sp));
+    int sp_link = -1;
+    ASSERT_NO_THROW(sp_link = ocp.add_direct_link_equal_con(0, PhaseRegionFlags::StaticParams,
+                                                            names_sp, 1,
+                                                            PhaseRegionFlags::StaticParams,
+                                                            names_sp));
+    EXPECT_GE(sp_link, 0);
 }

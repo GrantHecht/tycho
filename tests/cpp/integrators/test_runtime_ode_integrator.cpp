@@ -211,6 +211,85 @@ TEST_F(RuntimeIntegratorBuilderTest, ConstControlEmptyVectorThrows) {
                  std::logic_error);
 }
 
+namespace {
+
+// Build a 5-point LGL3 table over t in [0, π] with u ≡ 0, suitable for
+// feeding the driven SHO control input through TableAuto / TableIndexed.
+// State columns x, v are dummies — the integrator only samples the u column.
+std::shared_ptr<oc::LGLInterpTable> make_zero_control_table() {
+    std::vector<Eigen::VectorXd> xtudat;
+    const int N = 5;
+    for (int i = 0; i < N; ++i) {
+        Eigen::VectorXd row(4); // [x, v, t, u]
+        const double t = std::numbers::pi * i / (N - 1);
+        row << 0.0, 0.0, t, 0.0;
+        xtudat.push_back(row);
+    }
+    return std::make_shared<oc::LGLInterpTable>(2, 1, TranscriptionModes::LGL3, xtudat,
+                                                static_cast<int>(xtudat.size()) - 1);
+}
+
+} // namespace
+
+// IndexedLaw with u(t) = 0 (taking time as the only input) reduces the driven
+// SHO to the unforced SHO, so x(π) = -1, v(π) = 0. Pins the IndexedLaw build
+// arm end-to-end.
+TEST_F(RuntimeIntegratorBuilderTest, IndexedLawHappyPath) {
+    auto ode = make_driven_sho_ode_unnamed();
+
+    auto u_args = Arguments<1>();
+    auto u_zero = GenericFunction<-1, -1>(u_args * 0.0);
+
+    Eigen::VectorXi varlocs(1);
+    varlocs[0] = 2; // t index in the [x, v, t, u] layout
+
+    auto integ = ode.integrator().step(0.01).control(u_zero, varlocs).build();
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    Eigen::Vector4d x0;
+    x0 << 1.0, 0.0, 0.0, 0.0;
+    auto xf = integ.integrate(x0, std::numbers::pi);
+    EXPECT_NEAR(xf[0], -1.0, 1e-9);
+    EXPECT_NEAR(xf[1], 0.0, 1e-9);
+}
+
+// TableAuto: ulocs auto-resolved to the u column(s) of the table. Same
+// reduction-to-unforced-SHO check as the Const/Indexed paths.
+TEST_F(RuntimeIntegratorBuilderTest, TableAutoHappyPath) {
+    auto ode = make_driven_sho_ode_unnamed();
+    auto tab = make_zero_control_table();
+
+    auto integ = ode.integrator().step(0.01).control(tab).build();
+    integ.set_abs_tol(1e-10);
+    integ.set_rel_tol(1e-10);
+
+    Eigen::Vector4d x0;
+    x0 << 1.0, 0.0, 0.0, 0.0;
+    auto xf = integ.integrate(x0, std::numbers::pi);
+    EXPECT_NEAR(xf[0], -1.0, 1e-7);
+    EXPECT_NEAR(xf[1], 0.0, 1e-7);
+}
+
+// TableIndexed: explicit ulocs picks the u column out of the table.
+TEST_F(RuntimeIntegratorBuilderTest, TableIndexedHappyPath) {
+    auto ode = make_driven_sho_ode_unnamed();
+    auto tab = make_zero_control_table();
+
+    Eigen::VectorXi ulocs(1);
+    ulocs[0] = 3; // u column in the [x, v, t, u] table layout
+
+    auto integ = ode.integrator().step(0.01).control(tab, ulocs).build();
+    integ.set_abs_tol(1e-10);
+    integ.set_rel_tol(1e-10);
+
+    Eigen::Vector4d x0;
+    x0 << 1.0, 0.0, 0.0, 0.0;
+    auto xf = integ.integrate(x0, std::numbers::pi);
+    EXPECT_NEAR(xf[0], -1.0, 1e-7);
+    EXPECT_NEAR(xf[1], 0.0, 1e-7);
+}
+
 // NamedLaw on a named ODE resolves successfully. Pins the happy path on the
 // registry lookup inside IntegratorBuilder::build for ControlKind::NamedLaw.
 TEST_F(RuntimeIntegratorBuilderTest, NamedLawOnNamedOdeResolvesAndIntegrates) {

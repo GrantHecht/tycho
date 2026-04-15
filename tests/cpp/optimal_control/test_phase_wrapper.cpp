@@ -60,7 +60,13 @@ TEST_F(PhaseWrapperTest, NamedBoundaryValue) {
     // Named overload for back
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
 
-    SUCCEED(); // Construction and constraint addition didn't throw
+    // Pin the underlying name->index map so a future registry refactor that
+    // breaks resolution but still type-checks fails this test instead of
+    // silently mis-routing constraints.
+    EXPECT_EQ(phase.base().idx("x")[0], 0);
+    EXPECT_EQ(phase.base().idx("y")[0], 1);
+    EXPECT_EQ(phase.base().idx("v")[0], 2);
+    EXPECT_EQ(phase.base().idx("t")[0], 3);
 }
 
 TEST_F(PhaseWrapperTest, IndexBasedPassthrough) {
@@ -92,7 +98,7 @@ TEST_F(PhaseWrapperTest, NamedLUVarBound) {
     // Index passthrough
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("theta")[0], 4);
 }
 
 TEST_F(PhaseWrapperTest, DeltaTimeObjective) {
@@ -260,7 +266,7 @@ TEST_F(PhaseWrapperTest, NamedLowerVarBound) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     phase.add_lower_var_bound(PhaseRegionFlags::Path, "theta", -0.1);
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("theta")[0], 4);
 }
 
 TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
@@ -269,7 +275,7 @@ TEST_F(PhaseWrapperTest, NamedUpperVarBound) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     phase.add_upper_var_bound(PhaseRegionFlags::Path, "theta", 2.0);
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("theta")[0], 4);
 }
 
 TEST_F(PhaseWrapperTest, NamedValueObjective) {
@@ -278,7 +284,7 @@ TEST_F(PhaseWrapperTest, NamedValueObjective) {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
 
     phase.add_value_objective(PhaseRegionFlags::Front, "v", 1.0);
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("v")[0], 2);
 }
 
 TEST_F(PhaseWrapperTest, BoundaryValueSizeMismatchThrows) {
@@ -297,7 +303,7 @@ TEST_F(PhaseWrapperTest, NamedDeltaVarEqualCon) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
     phase.add_delta_var_equal_con("v", 5.0);
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("v")[0], 2);
 }
 
 TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
@@ -305,7 +311,7 @@ TEST_F(PhaseWrapperTest, NamedLowerDeltaVarBound) {
     auto traj = make_brach_guess();
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
     phase.add_lower_delta_var_bound("v", 0.0);
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("v")[0], 2);
 }
 
 TEST_F(PhaseWrapperTest, NamedEqualCon) {
@@ -318,7 +324,7 @@ TEST_F(PhaseWrapperTest, NamedEqualCon) {
     GenericFunction<-1, -1> identity(args);
     phase.add_equal_con(PhaseRegionFlags::Front, identity, {"x"});
 
-    SUCCEED();
+    EXPECT_EQ(phase.base().idx("x")[0], 0);
 }
 
 TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsEmptyName) {

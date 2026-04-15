@@ -45,10 +45,9 @@ int main() {
     auto m = args.coeff(6);            // mass (non-dim, m/Mstar)
     auto u_vec = args.segment<3>(8);   // RTN direction; ||u|| = 1 via path bound
 
-    // Thrust acceleration in RTN: a = (T/m) * u_hat.
-    // For a mass state (not weight), the non-dim reduction is a_nd = T_nd / m_nd —
-    // no gs factor. The previous inline code carried an extra gs from a weight-
-    // formulation copy-paste, offset by a matching gs error in mdot.
+    // Mass-state formulation: a_nd = T_nd / m_nd, no gs factor (the
+    // weight-state formulation would carry one — keeping the two consistent
+    // with mdot below is what makes the min-fuel objective well-posed).
     auto acc = (Thrust / m) * u_vec;
 
     // MEE rates via analytic astro::MEEDynamics (9 inputs → 6 rates).
@@ -133,8 +132,9 @@ int main() {
     std::cout << "  Mass Expended: " << std::fixed << std::setprecision(2) << mass_expended
               << " kg\n";
 
-    // Python DionysusLowThrust.py reproduces 2716.618 kg final mass at this
-    // IG/mesh/tolerance — matches bit-for-bit to 4 sig figs.
+    // Reference final mass from the Python DionysusLowThrust.py example at
+    // matching IG/mesh/tolerance. Update both sides if the Python example
+    // changes.
     constexpr double kPythonFinalMassKg = 2716.62;
     const bool converged = flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE &&
                            std::abs(final_mass_kg - kPythonFinalMassKg) < 1.0;
