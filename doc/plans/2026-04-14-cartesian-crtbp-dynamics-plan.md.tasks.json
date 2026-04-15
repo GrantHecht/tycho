@@ -12,8 +12,8 @@
     {"id": 9, "subject": "Task 9: Convert multi_spacecraft_opt example", "status": "completed", "blockedBy": [4]},
     {"id": 10, "subject": "Task 10: Convert orbit_continuation example", "status": "completed", "blockedBy": [4]},
     {"id": 11, "subject": "Task 11: Convert heteroclinic example", "status": "completed", "blockedBy": [4]},
-    {"id": 12, "subject": "Task 12: Delete cr3bp_model.h and parity scaffolding", "status": "in_progress", "blockedBy": [5, 6, 7, 8, 9, 10, 11]},
-    {"id": 13, "subject": "Task 13: Unbuild extensions subdirectory", "status": "pending", "blockedBy": [12]},
+    {"id": 12, "subject": "Task 12: Delete cr3bp_model.h and parity scaffolding", "status": "completed", "blockedBy": [5, 6, 7, 8, 9, 10, 11]},
+    {"id": 13, "subject": "Task 13: Unbuild extensions subdirectory", "status": "in_progress", "blockedBy": [12]},
     {"id": 14, "subject": "Task 14: Pre-merge verification + PR", "status": "pending", "blockedBy": [13]}
   ],
   "lastUpdated": "2026-04-14T00:00:00Z"

@@ -98,7 +98,10 @@ target_compile_definitions(_tychopy PUBLIC TYCHO_PYTHON_BINDINGS)
 # Prevent CMake from auto-defining _tychopy_EXPORTS on the module target; the macro
 # is absent from the reused pch_bindings PCH, which causes a -Wclang-cl-pch mismatch.
 set_target_properties(_tychopy PROPERTIES DEFINE_SYMBOL "")
-target_link_libraries(_tychopy PUBLIC tycho tycho_extensions_bindings)
+target_link_libraries(_tychopy PUBLIC tycho)
+if(TARGET tycho_extensions_bindings)
+    target_link_libraries(_tychopy PUBLIC tycho_extensions_bindings)
+endif()
 target_sources(_tychopy PRIVATE $<TARGET_OBJECTS:_tychopy_heavy>)
 target_include_directories(_tychopy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(_tychopy REUSE_FROM pch_bindings)

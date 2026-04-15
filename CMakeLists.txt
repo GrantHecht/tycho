@@ -685,7 +685,11 @@ endif()
 include(GNUInstallDirs)
 add_subdirectory(src)
 
-add_subdirectory(extensions)
+# add_subdirectory(extensions)
+# Unbuilt as a side-effect of cr3bp_model.h removal (Tycho_Extensions.h
+# referenced the deleted legacy CR3BP type). The extension mechanism
+# itself is under review; see
+# doc/plans/2026-04-14-cartesian-crtbp-dynamics-design.md.
 
 
 # Documentation
