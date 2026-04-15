@@ -346,55 +346,81 @@ class TychoHeaderGen:
         return pre_cses + cses, reduced
 
     def _extract_compound_pow_bases(self, exprs):
-        """Pre-CSE: replace Pow(compound, n/2) bases with _hpN_ symbols.
+        """Pre-CSE: extract compound bases of Pow into ``_hpN_`` temporaries.
 
-        Returns (pow_cses, rewritten_exprs) where ``pow_cses`` is a
-        list of ``(Symbol, compound_base)`` pairs that should be emitted as
-        assignments before the regular CSE body. Bases are de-duplicated by
-        structural equality so identical compound bases share one temporary.
+        Matches ``Pow(base, n/2)`` (half-integer exponents) and
+        ``Pow(base, Integer(n))`` for ``2 <= n <= 16`` when ``base`` is
+        compound (not an Atom or bare Symbol). Each unique compound base
+        is assigned a fresh ``_hpN_`` symbol, and **every** occurrence of
+        that base in the expression tree — inside Pow or not — is replaced
+        with the symbol. This prevents CSE from later re-extracting the
+        same compound as a duplicate temporary.
+
+        Returns ``(pow_cses, rewritten_exprs)`` where ``pow_cses`` is an
+        ordered list of ``(Symbol, base_expr)`` pairs to be emitted as
+        leading assignments in the compute body. Later entries may
+        reference earlier ones (nested extractions), so the RHS of each
+        entry is itself xreplace-folded with the partial map accumulated
+        up to that point.
         """
-        pow_cses = []  # [(Symbol, compound_expr)]
-        base_to_sym = {}  # compound_expr → Symbol
-        counter = [0]
+        collected = []  # compound bases in post-order (deepest first)
+        seen = set()
 
-        def _rewrite(expr):
+        def _collect(expr):
             if not isinstance(expr, sp.Basic) or expr.is_Atom:
-                return expr
-            # Post-order: rewrite args first.
-            new_args = tuple(_rewrite(a) for a in expr.args)
-            if new_args != expr.args:
-                expr = expr.func(*new_args)
+                return
+            for a in expr.args:
+                _collect(a)
             if (
                 isinstance(expr, sp.Pow)
                 and not expr.base.is_Atom
                 and not expr.base.is_Symbol
             ):
                 exp = expr.exp
-                # Accept half-integer exponents (Rational(n, 2)) and
-                # small integer exponents n >= 2. SymPy leaves Pow(Add, n)
-                # unexpanded for integer n, and the downstream regex only
-                # rewrites pow(sym, n) / pow(sym, n/2) when the base is a
-                # bare identifier — so compound bases need extraction.
                 is_half_int = isinstance(exp, sp.Rational) and exp.q == 2
                 is_small_int = isinstance(exp, sp.Integer) and 2 <= int(exp) <= 16
                 if is_half_int or is_small_int:
                     base = expr.base
-                    if base not in base_to_sym:
-                        sym = sp.Symbol(f"_hp{counter[0]}_")
-                        counter[0] += 1
-                        base_to_sym[base] = sym
-                        pow_cses.append((sym, base))
-                    return sp.Pow(base_to_sym[base], exp)
-            return expr
+                    if base not in seen:
+                        seen.add(base)
+                        collected.append(base)
+
+        def _walk(obj):
+            if isinstance(obj, sp.Matrix):
+                for e in obj:
+                    _collect(e)
+            elif isinstance(obj, (list, tuple)):
+                for e in obj:
+                    _walk(e)
+            elif isinstance(obj, sp.Basic):
+                _collect(obj)
+
+        _walk(exprs)
+
+        if not collected:
+            return [], exprs
+
+        # Build pow_cses with incremental substitution so nested bases
+        # reference earlier _hpN_ entries (e.g. _hp1_ = _hp0_² + y² + z²).
+        pow_cses = []
+        partial_map = {}
+        for i, base in enumerate(collected):
+            sym = sp.Symbol(f"_hp{i}_")
+            pow_cses.append((sym, base.xreplace(partial_map)))
+            partial_map[base] = sym
+
+        full_map = partial_map
 
         def _apply(obj):
             if isinstance(obj, sp.Matrix):
-                return obj.applyfunc(_rewrite)
+                return obj.xreplace(full_map)
             if isinstance(obj, list):
                 return [_apply(e) for e in obj]
             if isinstance(obj, tuple):
                 return tuple(_apply(e) for e in obj)
-            return _rewrite(obj)
+            if isinstance(obj, sp.Basic):
+                return obj.xreplace(full_map)
+            return obj
 
         rewritten = _apply(exprs)
         return pow_cses, rewritten
