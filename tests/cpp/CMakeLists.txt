@@ -90,7 +90,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_kepler_edge_cases.cpp
     astro/test_kepler_propagation.cpp
     astro/test_lambert_solver.cpp
-    astro/test_cr3bp.cpp
+    astro/test_crtbp_dynamics.cpp
     astro/test_crtbp_parity.cpp
     astro/test_mee_dynamics.cpp
     astro/test_mee_to_cartesian.cpp
