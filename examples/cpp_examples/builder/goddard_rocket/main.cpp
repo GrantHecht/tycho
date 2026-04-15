@@ -138,6 +138,18 @@ int main() {
 
     phase3.add_value_objective(PhaseRegionFlags::Back, "h", -1.0);
 
+    // Mirror the Python example: enable auto-scaling per phase + at the OCP
+    // level so PSIOPT runs with conditioned KKT regardless of how the
+    // problem was non-dimensionalized. Without this the unscaled solve is
+    // sensitive to multi-threaded floating-point ordering and can flake.
+    auto units = ode.make_units({{"h", 1.0}, {"v", 1.0}, {"m", 1.0}, {"t", 1.0}});
+    phase1.set_units(units);
+    phase2.set_units(units);
+    phase3.set_units(units);
+    phase1.set_auto_scaling(true);
+    phase2.set_auto_scaling(true);
+    phase3.set_auto_scaling(true);
+
     OptimalControlProblem ocp;
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
@@ -148,6 +160,8 @@ int main() {
     phase1.add_lower_delta_time_bound(0.0);
     phase2.add_lower_delta_time_bound(0.0);
     phase3.add_lower_delta_time_bound(0.0);
+
+    ocp.set_auto_scaling(true, true);
 
     std::cout << "Solving multi-phase Goddard rocket ...\n" << std::flush;
 
