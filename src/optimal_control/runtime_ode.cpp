@@ -15,7 +15,6 @@
 
 namespace tycho {
 
-// ── Private helper ─────────────────────────────────────────────────────
 
 ODE::DynODE ODE::make_dyn_ode() const {
     DynODE ode = generic_ode();
@@ -26,7 +25,6 @@ ODE::DynODE ODE::make_dyn_ode() const {
     return ode;
 }
 
-// ── Phase construction ─────────────────────────────────────────────────
 
 Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                  int num_segments) const {
@@ -55,7 +53,6 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
     return Phase(phase_ptr, VarRegistry(xvars_, uvars_, pvars_));
 }
 
-// ── Integrator construction ────────────────────────────────────────────
 
 IntegratorBuilder ODE::integrator() const { return IntegratorBuilder(*this); }
 
@@ -74,18 +71,32 @@ ODE::DynIntegrator IntegratorBuilder::build() const {
         return ODE::DynIntegrator(ode, method_, step_);
 
     case ControlKind::IndexedLaw:
+        if (varlocs_.size() == 0) {
+            throw std::logic_error("IntegratorBuilder::build: .control(ulaw, varlocs) was called "
+                                   "with an empty varlocs vector");
+        }
         return ODE::DynIntegrator(ode, method_, step_, ulaw_, varlocs_);
 
     case ControlKind::NamedLaw: {
-        // require_registry() throws if absent, so registry_ptr() is guaranteed
-        // non-null on the next line.
+        if (name_varlocs_.empty()) {
+            throw std::logic_error("IntegratorBuilder::build: .control(ulaw, names) was called "
+                                   "with an empty name list");
+        }
         ode_->require_registry();
         const auto *reg = ode_->registry_ptr();
+        if (reg == nullptr) {
+            throw std::logic_error("IntegratorBuilder::build: ODE registry is null after "
+                                   "require_registry() — this is a library bug");
+        }
         Eigen::VectorXi resolved = reg->resolve(name_varlocs_);
         return ODE::DynIntegrator(ode, method_, step_, ulaw_, resolved);
     }
 
     case ControlKind::Const: {
+        if (u_const_.size() == 0) {
+            throw std::logic_error("IntegratorBuilder::build: .control(u_const) was called with "
+                                   "an empty u_const vector");
+        }
         Eigen::VectorXi tloc(1);
         tloc[0] = ode.t_var();
         GenericFunction<-1, -1> ucon = vf::Constant<-1, -1>(1, u_const_);
@@ -93,13 +104,26 @@ ODE::DynIntegrator IntegratorBuilder::build() const {
     }
 
     case ControlKind::TableIndexed:
+        if (!tab_) {
+            throw std::logic_error("IntegratorBuilder::build: .control(tab, ulocs) was called "
+                                   "with a null LGLInterpTable");
+        }
+        if (varlocs_.size() == 0) {
+            throw std::logic_error("IntegratorBuilder::build: .control(tab, ulocs) was called "
+                                   "with an empty ulocs vector");
+        }
         return ODE::DynIntegrator(ode, method_, step_, tab_, varlocs_);
 
     case ControlKind::TableAuto:
+        if (!tab_) {
+            throw std::logic_error(
+                "IntegratorBuilder::build: .control(tab) was called with a null LGLInterpTable");
+        }
         return ODE::DynIntegrator(ode, method_, step_, tab_);
     }
-    // unreachable
-    throw std::logic_error("IntegratorBuilder::build: unhandled ControlKind");
+    // Exhaustive switch above — no default:. Any ControlKind added later
+    // without a case label is a clang -Wswitch error at compile time.
+    __builtin_unreachable();
 }
 
 } // namespace tycho

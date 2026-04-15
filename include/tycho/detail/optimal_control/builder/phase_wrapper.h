@@ -54,7 +54,6 @@ class Phase {
         }
     }
 
-    // ── Named-variable constraint overloads ─────────────────────────────
 
     int add_boundary_value(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
                            const Eigen::VectorXd &values, ScaleType scale = ScaleModes::AUTO) {
@@ -218,7 +217,6 @@ class Phase {
         return phase_->add_integral_param_function(func, resolve(var_names), accum_parm, scale);
     }
 
-    // ── Index-based overloads (direct passthrough) ──────────────────────
 
     int add_boundary_value(PhaseRegionFlags flag, const Eigen::VectorXi &indices,
                            const Eigen::VectorXd &values, ScaleType scale = ScaleModes::AUTO) {
@@ -339,7 +337,6 @@ class Phase {
         return phase_->add_integral_param_function(func, VarIndexType(vars), accum_parm, scale);
     }
 
-    // ── Delta-time / delta-var objectives ───────────────────────────────
 
     int add_delta_time_objective(double scale, ScaleType scale_t = ScaleModes::AUTO) {
         return phase_->add_delta_time_objective(scale, scale_t);
@@ -403,7 +400,6 @@ class Phase {
         return phase_->add_upper_delta_time_bound(upper, scale, scale_t);
     }
 
-    // ── Phase configuration ─────────────────────────────────────────────
 
     void set_auto_scaling(bool enable) { phase_->set_auto_scaling(enable); }
     void set_adaptive_mesh(bool enable) { phase_->set_adaptive_mesh(enable); }
@@ -426,7 +422,7 @@ class Phase {
     }
 
     void set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes mode) {
-        phase_->jet_job_mode_ = mode;
+        phase_->set_jet_job_mode(mode);
     }
 
     void set_units(const Eigen::VectorXd &units) { phase_->set_units(units); }
@@ -447,7 +443,6 @@ class Phase {
         phase_->set_static_params(parm, units);
     }
 
-    // ── Static param naming ────────────────────────────────────────────
 
     void set_static_param_names(std::initializer_list<std::pair<std::string, int>> names) {
         sp_names_.clear();
@@ -481,14 +476,12 @@ class Phase {
         sp_names_.emplace(name, std::move(idx));
     }
 
-    // ── Trajectory refinement ──────────────────────────────────────────
 
     void refine_traj_manual(int ndef) { phase_->refine_traj_manual(ndef); }
     void refine_traj_manual(const Eigen::VectorXd &dbs, const Eigen::VectorXi &dpb) {
         phase_->refine_traj_manual(dbs, dpb);
     }
 
-    // ── Variable substitution ──────────────────────────────────────────
 
     void sub_variable(PhaseRegionFlags region, int var, double val) {
         phase_->sub_variable(region, var, val);
@@ -519,14 +512,12 @@ class Phase {
         phase_->sub_variables(region, idx, vals);
     }
 
-    // ── Constraint/objective removal ───────────────────────────────────
 
     void remove_state_objective(int idx) { phase_->remove_state_objective(idx); }
     void remove_integral_objective(int idx) { phase_->remove_integral_objective(idx); }
     void remove_equal_con(int idx) { phase_->remove_equal_con(idx); }
     void remove_inequal_con(int idx) { phase_->remove_inequal_con(idx); }
 
-    // ── Mixed variable source constraints (index-based) ────────────────
 
     int add_equal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
                       const Eigen::VectorXi &xtup_vars, const Eigen::VectorXi &ode_param_vars,
@@ -575,7 +566,6 @@ class Phase {
                                             VarIndexType(static_param_vars), upper, scale, scale_t);
     }
 
-    // ── Mixed variable source constraints (named) ──────────────────────
 
     int add_equal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
                       const std::vector<std::string> &xtup_names,
@@ -639,7 +629,6 @@ class Phase {
                                             scale, scale_t);
     }
 
-    // ── Solve ───────────────────────────────────────────────────────────
 
     PSIOPT::ConvergenceFlags solve() { return phase_->solve(); }
     PSIOPT::ConvergenceFlags optimize() { return phase_->optimize(); }
@@ -647,7 +636,6 @@ class Phase {
     PSIOPT::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
     PSIOPT::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
 
-    // ── Results ─────────────────────────────────────────────────────────
 
     std::vector<Eigen::VectorXd> return_traj() const { return phase_->return_traj(); }
     Eigen::VectorXd return_static_params() const { return phase_->return_static_params(); }
@@ -657,7 +645,6 @@ class Phase {
     std::vector<Eigen::VectorXd> return_traj_error() const { return phase_->return_traj_error(); }
     bool mesh_converged() const { return phase_->mesh_converged_; }
 
-    // ── Access underlying objects ───────────────────────────────────────
 
     ODEPhaseBase &base() { return *phase_; }
     const ODEPhaseBase &base() const { return *phase_; }
@@ -665,7 +652,6 @@ class Phase {
     PSIOPT &optimizer() { return *phase_->optimizer_; }
     const VarRegistry &registry() const { return registry_; }
 
-    // ── Name resolution (public for OCP wrapper) ────────────────────────
 
     /// Translate a XtUP-space index to the region-relative index that
     /// ODEPhaseBase expects.  For ODEParams, subtract the P-block offset.
@@ -696,14 +682,16 @@ class Phase {
     }
 
     /// Resolve names and translate to region-relative indices (multi var).
+    /// Calls to_region_index unconditionally — the helper is a no-op for
+    /// non-ODEParams regions, which keeps both single- and multi-name
+    /// overloads symmetric and protects against future regions that need
+    /// their own translation.
     Eigen::VectorXi resolve_for_region(PhaseRegionFlags region,
                                        std::initializer_list<std::string> var_names,
                                        const char *method) const {
         auto idx = resolve(var_names);
-        if (region == PhaseRegionFlags::ODEParams) {
-            for (int i = 0; i < idx.size(); ++i)
-                idx[i] = to_region_index(region, idx[i]);
-        }
+        for (int i = 0; i < idx.size(); ++i)
+            idx[i] = to_region_index(region, idx[i]);
         return idx;
     }
 

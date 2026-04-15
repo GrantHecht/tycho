@@ -36,8 +36,13 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
                 "MatrixFunctionView: rows and cols must be positive (got rows=" +
                 std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
         }
+        // output_rows() is always >= 0 at runtime: it returns the compile-time
+        // OR for non-dynamic functions, and otherwise the runtime output_rows_val
+        // which is zero-initialized and set by the backing expression during
+        // construction. A zero result here indicates a function that never had
+        // its output size established — catch it as a shape mismatch.
         const int out = f.output_rows();
-        if (out >= 0 && rows * cols != out) {
+        if (rows * cols != out) {
             throw std::invalid_argument(
                 "MatrixFunctionView: rows * cols must match function output size (got rows=" +
                 std::to_string(rows) + ", cols=" + std::to_string(cols) +

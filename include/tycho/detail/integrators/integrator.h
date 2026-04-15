@@ -156,15 +156,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                const Eigen::VectorXi &varlocs)
         : Integrator(dode, IVPAlg::DOPRI87, defstep, ucon,
                      ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
-    Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v) : Integrator() {
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const Eigen::VectorXd &v)
+        : Integrator() {
 
         Eigen::VectorXi tloc(1);
         tloc[0] = dode.t_var();
         GenericFunction<-1, -1> ucon = Constant<-1, -1>(1, v);
-        this->set_method(IVPAlg::DOPRI87, dode, defstep, true, ucon, tloc);
+        this->set_method(meth, dode, defstep, true, ucon, tloc);
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
+    Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v)
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, v) {}
     Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab,
                const Eigen::VectorXi &ulocs)
         : Integrator() {

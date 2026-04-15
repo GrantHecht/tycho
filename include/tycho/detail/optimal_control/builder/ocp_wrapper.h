@@ -29,26 +29,23 @@ class OptimalControlProblem {
   public:
     OptimalControlProblem() = default;
 
-    // ── Phase management ────────────────────────────────────────────────
 
-    // Takes a copy of the Phase wrapper and owns it via shared_ptr.
-    // The copy shallow-shares the underlying ODEPhaseBase through
-    // shared_ptr<ODEPhaseBase>, so constraints added via the caller's
-    // Phase continue to propagate to the OCP. Registry and static-param
-    // name mappings are snapshotted at add_phase() time — if the caller
-    // adds new var or sp names afterward, the OCP's name-resolution
-    // overloads won't see them.
-    int add_phase(Phase p) {
-        phases_.push_back(std::make_shared<Phase>(std::move(p)));
-        return ocp_.add_phase(phases_.back()->base_ptr());
+    // The OCP stores a raw pointer to each Phase passed to add_phase. The
+    // caller must keep every added Phase alive (and not relocated, e.g. not
+    // inside a std::vector<Phase> that may reallocate) for the lifetime of
+    // the OCP. Name-resolution overloads (add_direct_link_equal_con by int
+    // phase index) read the caller's live VarRegistry and sp-name map, so
+    // names registered on the Phase after add_phase are visible to the OCP.
+    int add_phase(Phase &p) {
+        phases_.push_back(&p);
+        return ocp_.add_phase(p.base_ptr());
     }
 
-    int add_phase(Phase p, const std::string &name) {
-        phases_.push_back(std::make_shared<Phase>(std::move(p)));
-        return ocp_.add_phase(phases_.back()->base_ptr(), name);
+    int add_phase(Phase &p, const std::string &name) {
+        phases_.push_back(&p);
+        return ocp_.add_phase(p.base_ptr(), name);
     }
 
-    // ── Forward link constraints ────────────────────────────────────────
 
     /// Link phases with named variables.
     /// Creates equality constraints between consecutive phase pairs from p1
@@ -95,7 +92,6 @@ class OptimalControlProblem {
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), vars);
     }
 
-    // ── Direct link constraints ─────────────────────────────────────────
 
     /// Index-based (int phase indices).
     int add_direct_link_equal_con(int phase_a, PhaseRegionFlags region_a,
@@ -135,7 +131,6 @@ class OptimalControlProblem {
                                               phase_b.base_ptr(), region_b, idx_b);
     }
 
-    // ── Solve ───────────────────────────────────────────────────────────
 
     PSIOPT::ConvergenceFlags solve() {
         check_has_phases("solve");
@@ -154,7 +149,6 @@ class OptimalControlProblem {
         return ocp_.optimize_solve();
     }
 
-    // ── Settings ────────────────────────────────────────────────────────
 
     void set_auto_scaling(bool autoscale, bool applytophases = true) {
         ocp_.set_auto_scaling(autoscale, applytophases);
@@ -166,7 +160,6 @@ class OptimalControlProblem {
     void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
     void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
 
-    // ── Optimizer / base access ─────────────────────────────────────────
 
     PSIOPT &optimizer() { return *ocp_.optimizer_; }
 
@@ -199,12 +192,11 @@ class OptimalControlProblem {
     }
 
     OptimalControlProblemBase ocp_;
-    /// Owned Phase copies for int-indexed name resolution in
-    /// add_direct_link_equal_con. Each entry is a shared_ptr to the OCP's own
-    /// copy of the Phase wrapper — the copy shallow-shares the underlying
-    /// ODEPhaseBase via shared_ptr, so lifetime is independent of the caller's
-    /// Phase object and container storage.
-    std::vector<std::shared_ptr<Phase>> phases_;
+    /// Raw pointers to caller-owned Phase wrappers, used for int-indexed
+    /// name resolution in add_direct_link_equal_con. The caller must keep
+    /// each referenced Phase alive (and not relocated) for the lifetime of
+    /// the OCP — see add_phase() for the contract.
+    std::vector<Phase *> phases_;
 };
 
 } // namespace tycho

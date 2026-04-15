@@ -50,6 +50,11 @@ int tycho::oc::ODEPhaseBase::add_delta_var_equal_con(VarIndexType var, double va
 
 int tycho::oc::ODEPhaseBase::add_value_lock(RegionType reg, VarIndexType args, ScaleType scale_t) {
     int argsize = this->get_xt_up_vars(get_region(reg), args).size();
+    if (argsize == 0) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::add_value_lock: args resolved to zero variables — either the args "
+            "list is empty or the region contains no matching variables");
+    }
     return this->add_equal_con(reg, SubstitutedVarPlaceholder<-1>(argsize), args, scale_t);
 }
 
