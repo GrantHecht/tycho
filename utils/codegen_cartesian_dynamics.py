@@ -10,7 +10,6 @@ Output:
 import os
 
 import sympy as sp
-
 from CodeGen import TychoHeaderGen
 
 
@@ -45,7 +44,7 @@ def CartesianDynamics():
         "CartesianDynamics",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "Gravitational Parameter")],
+        [(mu, "Gravitational Parameter", "mu > 0.0")],
         docstr="Cartesian two-body dynamics with extra acceleration",
     )
 

@@ -2131,8 +2131,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     joined += extra_msgs[k];
                 }
                 if (extra_msgs.size() > kMaxExtras) {
-                    joined += " | ... and " +
-                              std::to_string(extra_msgs.size() - kMaxExtras) + " more";
+                    joined +=
+                        " | ... and " + std::to_string(extra_msgs.size() - kMaxExtras) + " more";
                 }
                 throw std::runtime_error(joined);
             }

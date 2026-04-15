@@ -26,7 +26,7 @@ namespace tycho {
 using oc::GenericODE;
 using vf::GenericFunction;
 
-class Phase;            // forward
+class Phase;             // forward
 class IntegratorBuilder; // forward
 
 /// A runtime-defined ODE wrapping a type-erased VectorFunction and optional
@@ -54,7 +54,6 @@ class ODE {
         validate();
     }
 
-
     ODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         ensure_registry();
         for (const auto &[name, idx] : names)
@@ -74,11 +73,9 @@ class ODE {
         return *this;
     }
 
-
     /// Create a Phase from this ODE with a trajectory guess and segment count.
     Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                 int num_segments) const;
-
 
     /// Returns a fluent builder for constructing a DynIntegrator.
     /// Configure the step size (required) via .step(double), and optionally
@@ -86,7 +83,6 @@ class ODE {
     /// .control(...). Call .build() to materialize the integrator. See
     /// IntegratorBuilder below for the full API.
     IntegratorBuilder integrator() const;
-
 
     Eigen::VectorXd make_input(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
@@ -97,7 +93,6 @@ class ODE {
         check_registry();
         return registry_->make_units(vals);
     }
-
 
     int xvars() const { return xvars_; }
     int uvars() const { return uvars_; }

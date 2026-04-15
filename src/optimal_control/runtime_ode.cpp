@@ -15,7 +15,6 @@
 
 namespace tycho {
 
-
 ODE::DynODE ODE::make_dyn_ode() const {
     DynODE ode = generic_ode();
     if (registry_) {
@@ -24,7 +23,6 @@ ODE::DynODE ODE::make_dyn_ode() const {
     }
     return ode;
 }
-
 
 Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                  int num_segments) const {
@@ -52,7 +50,6 @@ Phase ODE::phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &tr
     }
     return Phase(phase_ptr, VarRegistry(xvars_, uvars_, pvars_));
 }
-
 
 IntegratorBuilder ODE::integrator() const { return IntegratorBuilder(*this); }
 

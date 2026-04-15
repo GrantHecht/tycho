@@ -19,6 +19,15 @@ import sympy as sp
 # Indent unit used in generated code
 _IND = "    "
 
+# Supported pow exponent ranges. Shared between powsimp (the regex-based
+# post-CSE rewriter) and _extract_compound_pow_bases (the pre-CSE walker
+# that lifts compound bases out of Pow). Keeping both in sync prevents a
+# compound base from being lifted into an _hpN_ temporary that powsimp
+# then fails to rewrite, leaving a literal pow() call in generated code.
+_POW_INT_RANGE = range(2, 17)  # pow(x, 2) .. pow(x, 16)
+_POW_NEG_INT_RANGE = range(1, 17)  # pow(x, -1) .. pow(x, -16)
+_POW_HALF_INT_RANGE = range(0, 7)  # pow(x, ±0.5) .. pow(x, ±6.5)
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -46,9 +55,9 @@ class TychoHeaderGen:
         Name,
         F,
         Xs,
-        ScalarParams=[],  # [(Symbol, Description),]
-        VectorParams=[],  # [(Vec, Cppname, Description),]
-        MatrixParams=[],  # [(Mat, Cppname, Description),]
+        ScalarParams=[],  # [(Symbol, Description) | (Symbol, Description, Constraint)]
+        VectorParams=[],  # [(Vec, Cppname, Description) | (..., Constraint)]
+        MatrixParams=[],  # [(Mat, Cppname, Description) | (..., Constraint)]
         docstr="A doc string",
         namespace="tycho::astro",
         include_path="tycho/vector_functions.h",
@@ -66,27 +75,62 @@ class TychoHeaderGen:
         # underscore form (e.g. mu → mu_) so the generated compute bodies
         # reference the C++ member directly. The original (non-underscore)
         # name is preserved as the constructor parameter name.
+        #
+        # Each scalar param is normalized to a 3-tuple
+        # (member_sym, descr, constraint_or_None). The optional third
+        # element is a C++ boolean expression written in terms of the
+        # caller-facing (non-underscore) parameter name; it is emitted as
+        # an ``if (!(<expr>)) throw std::invalid_argument(...);`` check at
+        # the top of the valued constructor and any auto-generated setter.
         param_subs = {}
         renamed_scalar_params = []
         self._ctor_arg_for = {}
-        for sym, descr in ScalarParams:
+        for entry in ScalarParams:
+            if len(entry) == 2:
+                sym, descr = entry
+                constraint = None
+            elif len(entry) == 3:
+                sym, descr, constraint = entry
+            else:
+                raise ValueError(
+                    f"ScalarParams entry must be (Symbol, Description) or "
+                    f"(Symbol, Description, Constraint); got {entry!r}"
+                )
             name = str(sym)
             if name.endswith("_"):
-                renamed_scalar_params.append((sym, descr))
+                renamed_scalar_params.append((sym, descr, constraint))
                 continue
             new_sym = sp.Symbol(name + "_")
             param_subs[sym] = new_sym
-            renamed_scalar_params.append((new_sym, descr))
+            renamed_scalar_params.append((new_sym, descr, constraint))
             self._ctor_arg_for[name + "_"] = name
 
         if param_subs:
             F = sp.Matrix(list(F)).xreplace(param_subs)
 
+        # Normalize vector/matrix params to 4-tuples
+        # (Payload, cpp_name, descr, constraint_or_None).
+        def _normalize_compound(entries, kind):
+            out = []
+            for entry in entries:
+                if len(entry) == 3:
+                    payload, name, descr = entry
+                    constraint = None
+                elif len(entry) == 4:
+                    payload, name, descr, constraint = entry
+                else:
+                    raise ValueError(
+                        f"{kind} entry must be (Payload, Name, Description) or "
+                        f"(Payload, Name, Description, Constraint); got {entry!r}"
+                    )
+                out.append((payload, name, descr, constraint))
+            return out
+
         self.Func = sp.Matrix(list(F))
         self.Inputs = sp.Matrix(list(Xs))
         self.ScalarParams = renamed_scalar_params
-        self.VectorParams = VectorParams
-        self.MatrixParams = MatrixParams
+        self.VectorParams = _normalize_compound(VectorParams, "VectorParams")
+        self.MatrixParams = _normalize_compound(MatrixParams, "MatrixParams")
 
         self.docstr = docstr
 
@@ -179,12 +223,12 @@ class TychoHeaderGen:
         no input symbols and no CSE variables that depend on inputs.
         """
         param_syms = set()
-        for P, _ in self.ScalarParams:
+        for P, _, _ in self.ScalarParams:
             param_syms.add(P)
-        for Vec, _, _ in self.VectorParams:
+        for Vec, _, _, _ in self.VectorParams:
             for elem in Vec:
                 param_syms.add(elem)
-        for Mat, _, _ in self.MatrixParams:
+        for Mat, _, _, _ in self.MatrixParams:
             for elem in Mat:
                 param_syms.add(elem)
 
@@ -213,7 +257,7 @@ class TychoHeaderGen:
         # Convert integer pows to multiplies: pow(x, 2) → (x*x)
         # Parentheses prevent precedence bugs in denominator context
         # e.g. 1/pow(x, 2) → 1/(x*x) not 1/x*x
-        for i in range(2, 16):
+        for i in _POW_INT_RANGE:
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*{i}\s*\)")
             repl = r"(\g<var>"
             for j in range(1, i):
@@ -222,7 +266,7 @@ class TychoHeaderGen:
             expr = re.sub(regex, repl, expr)
 
         # Convert pow(x, 0.5) → sqrt(x), pow(x, 1.5) → sqrt(x)*x, etc.
-        for i in range(0, 7):
+        for i in _POW_HALF_INT_RANGE:
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*{i}\.5\s*\)")
             repl = r"(sqrt(\g<var>)"
             for j in range(1, i + 1):
@@ -231,7 +275,7 @@ class TychoHeaderGen:
             expr = re.sub(regex, repl, expr)
 
         # Convert pow(x, -N) → Scalar(1.0)/(x*x*...)
-        for i in range(1, 16):
+        for i in _POW_NEG_INT_RANGE:
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*-{i}\s*\)")
             repl = r"(Scalar(1.0)/(\g<var>"
             for j in range(1, i):
@@ -240,7 +284,7 @@ class TychoHeaderGen:
             expr = re.sub(regex, repl, expr)
 
         # Convert pow(x, -0.5) → Scalar(1.0)/sqrt(x)
-        for i in range(0, 7):
+        for i in _POW_HALF_INT_RANGE:
             regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*-{i}\.5\s*\)")
             repl = r"(Scalar(1.0)/(sqrt(\g<var>)"
             for j in range(1, i + 1):
@@ -284,12 +328,12 @@ class TychoHeaderGen:
     def fixup(self, expr):
         wrapscalar = False
 
-        for Param, Descr in self.ScalarParams:
+        for Param, _, _ in self.ScalarParams:
             Name = str(Param)
             if Name in expr:
                 wrapscalar = True
 
-        for Vec, Name, Descr in self.VectorParams:
+        for Vec, Name, _, _ in self.VectorParams:
             for i, elem in enumerate(Vec):
                 symname = str(elem)
                 if symname in expr:
@@ -298,7 +342,7 @@ class TychoHeaderGen:
                     expr = re.sub(symname, replname, expr)
                     wrapscalar = True
 
-        for Mat, Name, Descr in self.MatrixParams:
+        for Mat, Name, _, _ in self.MatrixParams:
             rows = len(Mat)
             cols = len(Mat[0])
             for i in range(0, rows):
@@ -359,12 +403,12 @@ class TychoHeaderGen:
         """Pre-CSE: extract compound bases of Pow into ``_hpN_`` temporaries.
 
         Matches ``Pow(base, n/2)`` (half-integer exponents) and
-        ``Pow(base, Integer(n))`` for ``2 <= n <= 16`` when ``base`` is
-        compound (not an Atom or bare Symbol). Each unique compound base
-        is assigned a fresh ``_hpN_`` symbol, and **every** occurrence of
-        that base in the expression tree — inside Pow or not — is replaced
-        with the symbol. This prevents CSE from later re-extracting the
-        same compound as a duplicate temporary.
+        ``Pow(base, Integer(n))`` for ``n`` in ``_POW_INT_RANGE`` when
+        ``base`` is compound (not an Atom or bare Symbol). Each unique
+        compound base is assigned a fresh ``_hpN_`` symbol, and **every**
+        occurrence of that base in the expression tree — inside Pow or
+        not — is replaced with the symbol. This prevents CSE from later
+        re-extracting the same compound as a duplicate temporary.
 
         Returns ``(pow_cses, rewritten_exprs)`` where ``pow_cses`` is an
         ordered list of ``(Symbol, base_expr)`` pairs to be emitted as
@@ -372,9 +416,45 @@ class TychoHeaderGen:
         reference earlier ones (nested extractions), so the RHS of each
         entry is itself xreplace-folded with the partial map accumulated
         up to that point.
+
+        See also: ``gen_compute_all`` Hessian two-pass emission, which
+        depends on this extraction not producing aliases between
+        ``_hx_(i,j)`` reads and writes.
         """
+        # Collision guard: make sure no user-supplied symbol matches the
+        # ``_hpN_`` namespace this extractor reserves. If a caller named
+        # an input or scalar parameter ``_hp0_``, the xreplace pass below
+        # would silently clobber it and produce a redeclared-member C++
+        # error (or worse, a silently incorrect compute body). Mirror the
+        # rationale of the CSE ``start=self.ninputs`` fix in _gen_cse_body.
+        _HPN_RE = re.compile(r"^_hp\d+_$")
+        reserved = []
+        for s in self._input_syms:
+            if _HPN_RE.match(str(s)):
+                reserved.append(str(s))
+        for P, _, _ in self.ScalarParams:
+            if _HPN_RE.match(str(P)):
+                reserved.append(str(P))
+        for Vec, _, _, _ in self.VectorParams:
+            for elem in Vec:
+                if _HPN_RE.match(str(elem)):
+                    reserved.append(str(elem))
+        for Mat, _, _, _ in self.MatrixParams:
+            for elem in Mat:
+                if _HPN_RE.match(str(elem)):
+                    reserved.append(str(elem))
+        if reserved:
+            raise ValueError(
+                f"TychoHeaderGen: symbol(s) {reserved} collide with the "
+                f"_hpN_ reserved namespace used by _extract_compound_pow_bases. "
+                f"Rename the user-facing symbols."
+            )
+
         collected = []  # compound bases in post-order (deepest first)
         seen = set()
+
+        _int_lo = _POW_INT_RANGE.start
+        _int_hi = _POW_INT_RANGE.stop - 1
 
         def _collect(expr):
             if not isinstance(expr, sp.Basic) or expr.is_Atom:
@@ -388,7 +468,9 @@ class TychoHeaderGen:
             ):
                 exp = expr.exp
                 is_half_int = isinstance(exp, sp.Rational) and exp.q == 2
-                is_small_int = isinstance(exp, sp.Integer) and 2 <= int(exp) <= 16
+                is_small_int = (
+                    isinstance(exp, sp.Integer) and _int_lo <= int(exp) <= _int_hi
+                )
                 if is_half_int or is_small_int:
                     base = expr.base
                     if base not in seen:
@@ -437,9 +519,68 @@ class TychoHeaderGen:
 
     # ── class header generation ─────────────────────────────────────────
 
+    # ── precomputed-assignment helpers ──────────────────────────────────
+
+    def _precompute_rhs(self, expr):
+        """Render a precomputed-member RHS: ccode → powsimp → std::<fn> prefix.
+
+        Shared between the valued constructor and per-parameter setters so
+        the two emit byte-identical assignment lines.
+        """
+        rhs = str(sp.ccode(expr))
+        rhs = self.powsimp(rhs)
+        for fn in (
+            "sqrt",
+            "sin",
+            "cos",
+            "tan",
+            "asin",
+            "acos",
+            "atan",
+            "atan2",
+            "exp",
+            "log",
+        ):
+            rhs = re.sub(rf"\b{fn}\(", f"std::{fn}(", rhs)
+        return rhs
+
+    def _gen_precompute_assignments(self, targets, indent):
+        """Emit ``member = rhs;`` lines for the given precompute targets.
+
+        ``targets`` is a list of ``(member_name, expr)`` tuples (typically
+        a subset of ``self._precomputed`` preserving its order).
+        """
+        return [
+            f"{indent}{name} = {self._precompute_rhs(expr)};" for name, expr in targets
+        ]
+
+    def _affected_precomputed(self, root_param_names):
+        """Return the (ordered) subset of self._precomputed whose expressions
+        depend — directly or via earlier ``pcK_`` — on any of the given
+        parameters.
+
+        ``root_param_names`` is an iterable of strings (member-form names,
+        e.g. ``'mu_'``). Dependency order is preserved by walking
+        ``self._precomputed`` in its stored order; any ``pcN_`` whose
+        free symbols intersect either the roots or any previously-affected
+        ``pcK_`` is itself affected and appended.
+        """
+        roots = {sp.Symbol(n) for n in root_param_names}
+        affected = []
+        affected_syms = set()
+        for member_name, expr in self._precomputed:
+            free = expr.free_symbols
+            if (free & roots) or (free & affected_syms):
+                affected.append((member_name, expr))
+                affected_syms.add(sp.Symbol(member_name))
+        return affected
+
+    # ── class header generation ─────────────────────────────────────────
+
     def gen_class_header(self):
         I = _IND
         dm = "DenseDerivativeMode::Analytic"
+        nan_init = "std::numeric_limits<double>::quiet_NaN()"
 
         lines = []
         lines.append(f"struct {self.Name}")
@@ -454,87 +595,136 @@ class TychoHeaderGen:
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
         lines.append("")
 
-        # Members: scalar params + vector/matrix params
-        for P, Descr in self.ScalarParams:
-            lines.append(f"{I}double {P}; // {Descr}")
-        for Vec, Name, Descr in self.VectorParams:
+        # Members — scalar params get NSDMI NaN defaults so a nullary-
+        # constructed instance fails loudly (NaN propagation) instead of
+        # producing garbage from uninitialized memory. Vector/matrix
+        # params default-construct to zero via EIGEN_INITIALIZE_MATRICES_BY_ZERO.
+        for P, Descr, _ in self.ScalarParams:
+            lines.append(f"{I}double {P} = {nan_init}; // {Descr}")
+        for Vec, Name, Descr, _ in self.VectorParams:
             vsize = len(Vec)
             lines.append(f"{I}Eigen::Matrix<double, {vsize}, 1> {Name}; // {Descr}")
-        for Mat, Name, Descr in self.MatrixParams:
+        for Mat, Name, Descr, _ in self.MatrixParams:
             rows, cols = len(Mat), len(Mat[0])
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
         lines.append(f"{I}static constexpr bool is_vectorizable = true;")
 
-        # Precomputed member declarations
+        # Precomputed member declarations — also NSDMI NaN so a
+        # nullary-constructed instance propagates NaN through the compute
+        # path instead of silently reading zero-initialized bytes.
         if self._precomputed:
             lines.append("")
             lines.append(f"{I}// Precomputed from constructor parameters")
             for member_name, _ in self._precomputed:
-                lines.append(f"{I}double {member_name};")
+                lines.append(f"{I}double {member_name} = {nan_init};")
         lines.append("")
 
         # Constructor params (use the original non-underscore name so the
         # caller-facing API is e.g. MEEDynamics(double mu) rather than mu_).
-        params = []
-        for P, Descr in self.ScalarParams:
-            ctor_arg = self._ctor_arg_for.get(str(P), str(P))
-            params.append(f"double {ctor_arg}")
-        for Vec, Name, Descr in self.VectorParams:
-            vsize = len(Vec)
-            params.append(f"const Eigen::Matrix<double, {vsize}, 1>& {Name}")
-        for Mat, Name, Descr in self.MatrixParams:
-            rows, cols = len(Mat), len(Mat[0])
-            params.append(f"const Eigen::Matrix<double, {rows}, {cols}>& {Name}")
+        def _ctor_args():
+            out = []
+            for P, _, _ in self.ScalarParams:
+                out.append((self._ctor_arg_for.get(str(P), str(P)), "double", False))
+            for Vec, Name, _, _ in self.VectorParams:
+                vsize = len(Vec)
+                out.append((Name, f"const Eigen::Matrix<double, {vsize}, 1>&", True))
+            for Mat, Name, _, _ in self.MatrixParams:
+                rows, cols = len(Mat), len(Mat[0])
+                out.append(
+                    (Name, f"const Eigen::Matrix<double, {rows}, {cols}>&", True)
+                )
+            return out
 
-        paramstr = ", ".join(params)
-        assigns = []
-        for P, _ in self.ScalarParams:
-            ctor_arg = self._ctor_arg_for.get(str(P), str(P))
-            assigns.append(f"{P}({ctor_arg})")
-        for Vec, Name, _ in self.VectorParams:
-            assigns.append(f"{Name}({Name})")
-        for Mat, Name, _ in self.MatrixParams:
-            assigns.append(f"{Name}({Name})")
-        initlist = ", ".join(assigns)
+        ctor_args = _ctor_args()
+        paramstr = ", ".join(f"{ty} {nm}" for nm, ty, _ in ctor_args)
 
-        # Default constructor
+        # Zip param entries with their validation constraints and the
+        # member-form name used for assignment.
+        def _param_records():
+            """Yield (member_name, ctor_arg_name, constraint, kind) per param.
+
+            kind is one of 'scalar' | 'vector' | 'matrix'.
+            """
+            for P, _, constraint in self.ScalarParams:
+                ctor_arg = self._ctor_arg_for.get(str(P), str(P))
+                yield (str(P), ctor_arg, constraint, "scalar")
+            for Vec, Name, _, constraint in self.VectorParams:
+                yield (Name, Name, constraint, "vector")
+            for Mat, Name, _, constraint in self.MatrixParams:
+                yield (Name, Name, constraint, "matrix")
+
+        def _validation_lines(ctor_arg, constraint, indent):
+            """Emit an ``if (!(<expr>)) throw ...;`` block for a constraint.
+
+            Constraints are written in the caller-facing name (e.g. ``mu``)
+            which matches both ``ctor_arg`` and the setter arg, so the
+            same string compiles unchanged in both contexts.
+            """
+            if not constraint:
+                return []
+            msg = f"{self.Name}: {ctor_arg} must satisfy {constraint}"
+            return [
+                f"{indent}if (!({constraint}))",
+                f"{indent}{I}throw std::invalid_argument(",
+                f'{indent}{I}{I}"{msg}");',
+            ]
+
+        # Default constructor — NSDMI defaults plus set_io_rows.
         lines.append(f"{I}{self.Name}() {{")
         lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
         lines.append(f"{I}}}")
+        lines.append("")
 
-        # Parameterized constructor
-        if initlist:
-            lines.append(f"{I}{self.Name}({paramstr})")
-            lines.append(f"{I}{I}: {initlist} {{")
-        else:
-            lines.append(f"{I}{self.Name}({paramstr}) {{")
+        # Parameterized constructor.
+        #
+        # Validation must precede any assignment, so we use a function-body
+        # initializer rather than a member-initializer list — this keeps
+        # the emitted shape identical to each per-parameter setter body,
+        # and lets the shared _gen_precompute_assignments helper drive
+        # both call sites.
+        lines.append(f"{I}{self.Name}({paramstr}) {{")
+        for member_name, ctor_arg, constraint, _ in _param_records():
+            lines += _validation_lines(ctor_arg, constraint, 2 * I)
         lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
-
-        # Precomputed initializations (use std:: prefix for math
-        # functions since VF overloads may shadow them in this scope)
+        for member_name, ctor_arg, _, kind in _param_records():
+            lines.append(f"{I}{I}{member_name} = {ctor_arg};")
         if self._precomputed:
-            for member_name, expr in self._precomputed:
-                rhs = str(sp.ccode(expr))
-                rhs = self.powsimp(rhs)
-                # Prefix bare math functions with std::
-                for fn in [
-                    "sqrt",
-                    "sin",
-                    "cos",
-                    "tan",
-                    "asin",
-                    "acos",
-                    "atan",
-                    "atan2",
-                    "exp",
-                    "log",
-                ]:
-                    rhs = re.sub(rf"\b{fn}\(", f"std::{fn}(", rhs)
-                lines.append(f"{I}{I}{member_name} = {rhs};")
-
+            lines += self._gen_precompute_assignments(self._precomputed, 2 * I)
         lines.append(f"{I}}}")
         lines.append("")
+
+        # Per-parameter setters. Each setter re-runs the param's
+        # constraint, assigns the member, and recomputes any precomputed
+        # member that transitively depends on this param (walking the
+        # pcN_ dependency graph stored in self._precomputed).
+        #
+        # For compound (vector/matrix) params, dependency detection must
+        # be in terms of the *underlying element symbols* supplied in the
+        # SymPy payload, not the C++ container name — the precomputed
+        # expressions contain e.g. ``v0, v1, v2``, never a symbol literally
+        # named ``v``. Matches the iteration convention in _partition_cses.
+        for member_name, ctor_arg, constraint, kind in _param_records():
+            if kind == "scalar":
+                ty = "double"
+                dep_roots = [member_name]
+            elif kind == "vector":
+                Vec = next(V for V, N, _, _ in self.VectorParams if N == member_name)
+                ty = f"const Eigen::Matrix<double, {len(Vec)}, 1>&"
+                dep_roots = [str(elem) for elem in Vec]
+            else:  # matrix
+                Mat = next(M for M, N, _, _ in self.MatrixParams if N == member_name)
+                ty = f"const Eigen::Matrix<double, {len(Mat)}, {len(Mat[0])}>&"
+                dep_roots = [str(elem) for elem in Mat]
+            setter_name = f"set_{ctor_arg}"
+            lines.append(f"{I}void {setter_name}({ty} {ctor_arg}) {{")
+            lines += _validation_lines(ctor_arg, constraint, 2 * I)
+            lines.append(f"{I}{I}{member_name} = {ctor_arg};")
+            affected = self._affected_precomputed(dep_roots)
+            if affected:
+                lines += self._gen_precompute_assignments(affected, 2 * I)
+            lines.append(f"{I}}}")
+            lines.append("")
 
         return "\n".join(lines) + "\n"
 
@@ -702,13 +892,34 @@ class TychoHeaderGen:
 
     def make_header(self, output_dir=None, script_name=None):
         text = self._build_text(script_name=script_name)
+
+        # Defense-in-depth: no compound ``pow(...)`` calls should survive
+        # the combination of _extract_compound_pow_bases and powsimp. If
+        # one does, it means an exponent outside _POW_INT_RANGE /
+        # _POW_HALF_INT_RANGE slipped through, or a base shape the walker
+        # doesn't normalize (e.g. a Mul) escaped. Fail the codegen run
+        # rather than silently emit an unoptimized runtime pow() call.
+        if "pow(" in text:
+            raise RuntimeError(
+                f"TychoHeaderGen({self.Name}): generated text contains an "
+                f"unoptimized pow(...) call — check that exponents are in "
+                f"_POW_INT_RANGE / _POW_HALF_INT_RANGE and that compound "
+                f"bases are lifted by _extract_compound_pow_bases."
+            )
+
         # Tycho convention: header files are snake_case even when the type
         # they declare is PascalCase (e.g. MEEDynamics → mee_dynamics.h).
         fname = self._snake_case(self.Name) + ".h"
         if output_dir:
             fname = os.path.join(output_dir, fname)
-        with open(fname, "w") as f:
+
+        # Atomic write: stage to a sibling ``.tmp`` file, then ``os.replace``.
+        # A SymPy/codegen failure partway through must not leave a
+        # half-written header committed in the tree.
+        tmp = fname + ".tmp"
+        with open(tmp, "w") as f:
             f.write(text)
+        os.replace(tmp, fname)
 
     @staticmethod
     def _snake_case(name):
@@ -719,7 +930,14 @@ class TychoHeaderGen:
 
     def _build_text(self, script_name=None):
         copyright = _COPYRIGHT.format(script=script_name or "TychoHeaderGen")
-        include = f'#pragma once\n#include "{self.include_path}"\n'
+        include = (
+            f"#pragma once\n"
+            f"\n"
+            f"#include <limits>\n"
+            f"#include <stdexcept>\n"
+            f"\n"
+            f'#include "{self.include_path}"\n'
+        )
         ns_open = f"\nnamespace {self.namespace} {{\n\n{_USING_DECLS}\n"
         header = self.gen_class_header()
         compute = self.gen_compute_impl()

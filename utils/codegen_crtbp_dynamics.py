@@ -10,11 +10,21 @@ Output:
 import os
 
 import sympy as sp
-
 from CodeGen import TychoHeaderGen
 
 
 def CRTBPDynamics():
+    """Generate CR3BP rotating-frame dynamics VectorFunction.
+
+    Input:  [x, y, z, vx, vy, vz, ax, ay, az] — 6 rotating-frame state
+            (position + velocity) plus 3 extra accelerations.
+    Output: [xdot, ydot, zdot, vxdot, vydot, vzdot]
+    Parameter: mu — CR3BP mass ratio (0 < mu < 1)
+
+    Dynamics: classical CR3BP with Coriolis and centrifugal terms plus
+    attractions from both primaries, with a user-supplied perturbation
+    added to the accelerations.
+    """
     Xs = sp.symbols("x:9")
     x, y, z, vx, vy, vz, ax, ay, az = Xs
     mu = sp.symbols("mu")
@@ -49,7 +59,7 @@ def CRTBPDynamics():
         "CRTBPDynamics",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "CR3BP Mass Ratio")],
+        [(mu, "CR3BP Mass Ratio", "mu > 0.0 && mu < 1.0")],
         docstr="CR3BP rotating-frame dynamics with extra acceleration",
     )
 
