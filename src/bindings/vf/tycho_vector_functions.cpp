@@ -102,6 +102,10 @@ void tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     reg.Build_Register<IOScaled<Gen>>(mod, "IOScaled");
 
+    nb::enum_<InterpType>(mod, "InterpType")
+        .value("Cubic", InterpType::Cubic)
+        .value("Linear", InterpType::Linear);
+
     InterpTable1DBuild(mod);
     InterpTable2DBuild(mod);
     InterpTable3DBuild(mod);

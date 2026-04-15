@@ -70,6 +70,15 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_ode_expressions.cpp
     vector_functions/test_vf_composition_chains.cpp
     vector_functions/test_vf_hessian.cpp
+    vector_functions/test_vf_interp_compose.cpp
+    vector_functions/test_interp_table_1d.cpp
+    vector_functions/test_interp_table_2d.cpp
+    vector_functions/test_interp_table_nd.cpp
+    vector_functions/test_vf_value_lock.cpp
+    vector_functions/test_vf_matrix_view_errors.cpp
+    vector_functions/test_vf_quat_rotate.cpp
+    vector_functions/test_vf_cwise_product.cpp
+    vector_functions/test_vf_matrix_function.cpp
     vector_functions/test_vector_functions.cpp
     vector_functions/test_cwise_segment_sum_jacobian.cpp
     vector_functions/test_cwise_jacobian_stress.cpp
@@ -82,6 +91,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_kepler_propagation.cpp
     astro/test_lambert_solver.cpp
     astro/test_cr3bp.cpp
+    astro/test_mee_dynamics.cpp
+    astro/test_mee_to_cartesian.cpp
 
     # Integrators
     integrators/test_integration_basic.cpp
@@ -89,6 +100,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_integration_stm.cpp
     integrators/test_integration_adaptive.cpp
     integrators/test_integration_dense.cpp
+    integrators/test_runtime_ode_integrator.cpp
+    integrators/test_parallel_stm_errors.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp
@@ -100,6 +113,9 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_phase_wrapper.cpp
     optimal_control/test_builder_brachistochrone.cpp
     optimal_control/test_control_modes.cpp
+    optimal_control/test_sub_variables.cpp
+    optimal_control/test_ocp_direct_link.cpp
+    optimal_control/test_ocp_phase_lifetime.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
@@ -155,6 +171,14 @@ set_property(TARGET tycho_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 set_target_properties(tycho_tests PROPERTIES
     UNITY_BUILD ON
     UNITY_BUILD_BATCH_SIZE 8
+)
+
+# Eigen::Tensor in interp_table_nd interacts poorly with unity batching of
+# tycho VF headers that rely on transitive <fmt/color.h> inclusion —
+# keep this TU standalone.
+set_source_files_properties(
+    vector_functions/test_interp_table_nd.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
 # Reduce optimization level for tests to improve compile time.

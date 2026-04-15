@@ -10,5 +10,6 @@
 #include "tycho/detail/astro/cr3bp_model.h"
 #include "tycho/detail/astro/j2.h"
 #include "tycho/detail/astro/mee_dynamics.h"
+#include "tycho/detail/astro/mee_to_cartesian.h"
 #include "tycho/detail/astro/lambert_solvers.h"
 #include "tycho/detail/astro/thruster_models.h"

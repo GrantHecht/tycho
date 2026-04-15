@@ -15,10 +15,12 @@
 #pragma once
 #include <unsupported/Eigen/CXX11/Tensor>
 
+#include "tycho/detail/optimal_control/interp/interp_type.h"
 #include "tycho/detail/vf/core/vector_function.h"
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
+using tycho::InterpType;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
 using utils::SZ_SUM;
@@ -34,8 +36,9 @@ using vf::VectorFunction;
 
 struct InterpTable4D {
 
-    enum class InterpType { cubic_interp, linear_interp };
-
+  private:
+    // Cached derivative state: mutating any of these without rerunning
+    // calc_derivs() corrupts cubic evaluation. Access only via set_data().
     Eigen::VectorXd xs_;
     Eigen::VectorXd ys_;
     Eigen::VectorXd zs_;
@@ -50,8 +53,9 @@ struct InterpTable4D {
 
     Eigen::Tensor<Eigen::Matrix<double, 256, 1>, 4> alphavecs_;
 
-    InterpType interp_kind_ = InterpType::linear_interp;
+    InterpType interp_kind_ = InterpType::Linear;
 
+  public:
     bool xeven_ = true;
     bool yeven_ = true;
     bool zeven_ = true;
@@ -68,15 +72,11 @@ struct InterpTable4D {
 
     bool cache_alpha_ = false;
 
-    bool warn_out_of_bounds_ = true;
-    bool throw_out_of_bounds_ = false;
-
     InterpTable4D() {}
 
     InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
-                  const Eigen::VectorXd &Ws,
-
-                  const Eigen::Tensor<double, 4> &Fs, std::string kind, bool cache) {
+                  const Eigen::VectorXd &Ws, const Eigen::Tensor<double, 4> &Fs, InterpType kind,
+                  bool cache) {
 
         this->xs_ = Xs;
         this->ys_ = Ys;
@@ -85,14 +85,7 @@ struct InterpTable4D {
 
         this->fs_ = Fs;
         this->cache_alpha_ = cache;
-
-        if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind_ = InterpType::cubic_interp;
-        } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind_ = InterpType::linear_interp;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
+        this->interp_kind_ = kind;
 
         xsize_ = xs_.size();
         ysize_ = ys_.size();
@@ -178,7 +171,7 @@ struct InterpTable4D {
             this->weven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
             this->calc_derivs();
             if (this->cache_alpha_) {
                 this->cache_alphavecs();
@@ -2655,44 +2648,29 @@ struct InterpTable4D {
     void interp_impl(double x, double y, double z, double w, int deriv, double &fval,
                      Eigen::Vector4<double> &dfxyzw, Eigen::Matrix4<double> &d2fxyzw) const {
 
-        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
-            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: x coordinate falls outside of InterpTable4D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
-            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: y coordinate falls outside of InterpTable4D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
-            double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
-            if (z < (zs_[0] - zeps) || z > (zs_[zs_.size() - 1]) + zeps) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: z coordinate falls outside of InterpTable4D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
-            double weps = std::numeric_limits<double>::epsilon() * wtotal_;
-            if (w < (ws_[0] - weps) || w > (ws_[ws_.size() - 1]) + weps) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: w coordinate falls outside of InterpTable4D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
+        double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+        if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query x={} is outside table x range [{}, {}]", x,
+                            xs_[0], xs_[xs_.size() - 1]));
+        }
+        double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+        if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query y={} is outside table y range [{}, {}]", y,
+                            ys_[0], ys_[ys_.size() - 1]));
+        }
+        double zeps = std::numeric_limits<double>::epsilon() * ztotal_;
+        if (z < (zs_[0] - zeps) || z > (zs_[zs_.size() - 1]) + zeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query z={} is outside table z range [{}, {}]", z,
+                            zs_[0], zs_[zs_.size() - 1]));
+        }
+        double weps = std::numeric_limits<double>::epsilon() * wtotal_;
+        if (w < (ws_[0] - weps) || w > (ws_[ws_.size() - 1]) + weps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable4D: query w={} is outside table w range [{}, {}]", w,
+                            ws_[0], ws_[ws_.size() - 1]));
         }
 
         auto [xelem, yelem, zelem, welem] = get_xyzwelems(x, y, z, w);
@@ -2707,7 +2685,7 @@ struct InterpTable4D {
         double zf = (z - zs_[zelem]) / zstep;
         double wf = (w - ws_[welem]) / wstep;
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
             Eigen::Matrix<double, 256, 1> alphavec = this->get_alphavec(xelem, yelem, zelem, welem);
 
             double xf2 = xf * xf;

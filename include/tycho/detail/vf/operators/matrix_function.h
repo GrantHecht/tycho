@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <stdexcept>
+#include <string>
+
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::vf {
@@ -28,9 +31,37 @@ struct MatrixFunctionView : Func, MatrixRowsCols<MRows, MCols> {
 
     MatrixFunctionView(Func f, int rows, int cols)
         : Func(f), MatrixRowsCols<MRows, MCols>(rows, cols) {
-        // make sure row col consistent with orows
+        if (rows <= 0 || cols <= 0) {
+            throw std::invalid_argument(
+                "MatrixFunctionView: rows and cols must be positive (got rows=" +
+                std::to_string(rows) + ", cols=" + std::to_string(cols) + ")");
+        }
+        // output_rows() is always >= 0 at runtime: it returns the compile-time
+        // OR for non-dynamic functions, and otherwise the runtime output_rows_val
+        // which is zero-initialized and set by the backing expression during
+        // construction. A zero result here indicates a function that never had
+        // its output size established — catch it as a shape mismatch.
+        const int out = f.output_rows();
+        if (rows * cols != out) {
+            throw std::invalid_argument(
+                "MatrixFunctionView: rows * cols must match function output size (got rows=" +
+                std::to_string(rows) + ", cols=" + std::to_string(cols) +
+                ", output_rows=" + std::to_string(out) + ")");
+        }
     }
+
+    /// Return the matrix inverse as a new MatrixFunctionView.
+    /// Dispatches to MatrixInverse<2,Major>, <3,Major>, or <-1,Major>.
+    /// Throws if matrix is not square.
+    /// Defined out-of-line in operator_overloads.h (needs GenericFunction + MatrixInverse).
+    auto inverse() const;
 };
+
+/// Construct a row-major MatrixFunctionView from any VF expression.
+template <class Func, int IR, int OR>
+auto row_matrix(const DenseFunctionBase<Func, IR, OR> &f, int rows, int cols) {
+    return MatrixFunctionView<Func, -1, -1, Eigen::RowMajor>(f.derived(), rows, cols);
+}
 
 template <class Func1, class... Funcs>
 struct ColMajorMatrix : MatrixFunctionView<StackedOutputs<Func1, Funcs...>, Func1::ORC,

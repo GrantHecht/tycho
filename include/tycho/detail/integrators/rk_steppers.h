@@ -44,7 +44,7 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
-template <class DODE, RKOptions RKOp>
+template <class DODE, IVPAlg RKOp>
 struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
     using Base = VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
     VF_TYPE_ALIASES(Base);
@@ -387,7 +387,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {}
 };
 
-template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
+template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
     static auto Definition(const DODE &ode) {
         auto ks0 = std::tuple{};
         return compute_xf<-1, decltype(ks0)>(ode, ks0);
@@ -500,7 +500,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
 
     template <int Elem, class Args, class KF>
     static auto final_state_sum(const DODE &ode, const Args &args, const KF &kf) {
-        if constexpr (RKOp == RKOptions::RK4Classic) {
+        if constexpr (RKOp == IVPAlg::RK4Classic) {
             return make_sum(kf * BCoeff<3>().value, args.template head<DODE::XV>(),
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 0>() *
@@ -511,7 +511,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 2>() *
                                 BCoeff<2>().value);
-        } else if constexpr (RKOp == RKOptions::DOPRI5) {
+        } else if constexpr (RKOp == IVPAlg::DOPRI5) {
             return make_sum(kf * BCoeff<5>(), args.template head<DODE::XV>(),
                             args.template tail<DODE::XV *(RKCoeffs<RKOp>::Stages - 1)>()
                                     .template segment<DODE::XV, DODE::XV * 0>() *
@@ -542,7 +542,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl {
     }
 };
 
-template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
+template <class DODE, IVPAlg RKOp> struct RKStepper_Impl_NEW {
 
     template <int Stg, int Elem> struct ACoeff : StaticScaleBase<ACoeff<Stg, Elem>> {
         static constexpr double value = RKCoeffs<RKOp>::ACoeffs[Stg][Elem];
@@ -631,7 +631,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
     template <int Elem, class Args, class KF>
     static auto final_state_sum(const DODE &ode, const Args &args, const KF &kf) {
         //// Finish this
-        if constexpr (RKOp == RKOptions::RK4Classic) {
+        if constexpr (RKOp == IVPAlg::RK4Classic) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;
@@ -651,7 +651,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                 args.template tail<TAILSIZE>(tailsize)
                         .template segment<DODE::XV, SZ_PROD<DODE::XV, 2>::value>(2 * xv, xv) *
                     BCoeff<2>().value);
-        } else if constexpr (RKOp == RKOptions::DOPRI5) {
+        } else if constexpr (RKOp == IVPAlg::DOPRI5) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;
@@ -679,7 +679,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
                 args.template tail<TAILSIZE>(tailsize)
                         .template segment<DODE::XV, SZ_PROD<DODE::XV, 4>::value>(4 * xv, xv) *
                     BCoeff<4>().value);
-        } else if constexpr (RKOp == RKOptions::DOPRI87) {
+        } else if constexpr (RKOp == IVPAlg::DOPRI87) {
 
             // constexpr int XV       = DODE::XV;
             constexpr int TAILSIZE = SZ_PROD<DODE::XV, (RKCoeffs<RKOp>::Stages - 1)>::value;
@@ -742,7 +742,7 @@ template <class DODE, RKOptions RKOp> struct RKStepper_Impl_NEW {
     }
 };
 
-template <class DODE, RKOptions RKOp>
+template <class DODE, IVPAlg RKOp>
 struct RKStepper_NEW
     : VectorExpression<RKStepper_NEW<DODE, RKOp>, RKStepper_Impl_NEW<DODE, RKOp>, const DODE &> {
     using Base =
@@ -781,7 +781,7 @@ struct RKStepper_NEW
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {}
 };
 
-template <class DODE, RKOptions RKOp>
+template <class DODE, IVPAlg RKOp>
 struct RKStepper2 : VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC,
                                    DenseDerivativeMode::FDiffFwd, DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<RKStepper2<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC,

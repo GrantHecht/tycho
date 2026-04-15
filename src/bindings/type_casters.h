@@ -189,8 +189,13 @@ template <> struct type_caster<Eigen::VectorXi> {
                       "VectorXi::Scalar must be 32-bit on this platform");
         using Array = nb::ndarray<nb::numpy, int32_t>; // int32_t guarantees np.int32 dtype
         size_t shape[1] = {(size_t)src.size()};
-        int32_t *data = new int32_t[src.size()];
-        std::memcpy(data, src.data(), src.size() * sizeof(int32_t));
+        // Always allocate >= 1 so the returned pointer is valid (src.size() can
+        // be 0 for empty phase regions); memcpy is skipped in that case to
+        // avoid a UBSan "nonnull-attribute" diagnostic from memcpy's src arg.
+        int32_t *data = new int32_t[src.size() > 0 ? static_cast<size_t>(src.size()) : 1];
+        if (src.size() > 0) {
+            std::memcpy(data, src.data(), static_cast<size_t>(src.size()) * sizeof(int32_t));
+        }
         nb::capsule deleter(data, [](void *p) noexcept { delete[] (int32_t *)p; });
         Array arr(data, 1, shape, deleter);
         return make_caster<Array>::from_cpp(arr, rv_policy::take_ownership, cleanup);

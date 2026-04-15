@@ -32,15 +32,38 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     using MatType = InterpTable1D::MatType;
     auto obj = nb::class_<InterpTable1D>(m, "InterpTable1D");
 
-    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, int, std::string>(),
-            nb::arg("ts"), nb::arg("vs"), nb::arg("axis") = 0,
-            nb::arg("kind") = std::string("cubic"));
+    // String -> InterpType conversion happens here at the binding layer.
+    obj.def(
+        "__init__",
+        [](InterpTable1D *self, const Eigen::VectorXd &ts, const Eigen::VectorXd &vs,
+           const std::string &kind) { new (self) InterpTable1D(ts, vs, parse_interp_type(kind)); },
+        nb::arg("ts"), nb::arg("vs"), nb::arg("kind") = std::string("cubic"));
 
-    obj.def(nb::init<const Eigen::VectorXd &, const MatType &, int, std::string>(), nb::arg("ts"),
-            nb::arg("vs"), nb::arg("axis") = 0, nb::arg("kind") = std::string("cubic"));
+    obj.def(
+        "__init__",
+        [](InterpTable1D *self, const Eigen::VectorXd &ts, const MatType &vs, int axis,
+           const std::string &kind) {
+            new (self) InterpTable1D(ts, vs, axis, parse_interp_type(kind));
+        },
+        nb::arg("ts"), nb::arg("vs"), nb::arg("axis") = 0,
+        nb::arg("kind") = std::string("cubic"));
 
-    obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, std::string>(), nb::arg("vts"),
-            nb::arg("tvar") = -1, nb::arg("kind") = std::string("cubic"));
+    obj.def(
+        "__init__",
+        [](InterpTable1D *self, const std::vector<Eigen::VectorXd> &vts, int tvar,
+           const std::string &kind) {
+            new (self) InterpTable1D(vts, tvar, parse_interp_type(kind));
+        },
+        nb::arg("vts"), nb::arg("tvar") = -1, nb::arg("kind") = std::string("cubic"));
+
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, InterpType>(),
+            nb::arg("ts"), nb::arg("vs"), nb::arg("kind") = InterpType::Cubic);
+
+    obj.def(nb::init<const Eigen::VectorXd &, const MatType &, int, InterpType>(), nb::arg("ts"),
+            nb::arg("vs"), nb::arg("axis") = 0, nb::arg("kind") = InterpType::Cubic);
+
+    obj.def(nb::init<const std::vector<Eigen::VectorXd> &, int, InterpType>(), nb::arg("vts"),
+            nb::arg("tvar") = -1, nb::arg("kind") = InterpType::Cubic);
 
     obj.def("interp", nb::overload_cast<double>(&InterpTable1D::interp, nb::const_));
     obj.def("interp",
@@ -80,9 +103,6 @@ inline void InterpTable1DBuild(nb::module_ &m) {
     obj.def("interp_deriv1", &InterpTable1D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable1D::interp_deriv2);
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable1D::warn_out_of_bounds_);
-    obj.def_rw("throw_out_of_bounds", &InterpTable1D::throw_out_of_bounds_);
-
     obj.def("sf", [](std::shared_ptr<InterpTable1D> &self) {
         if (self->vlen_ != 1) {
             throw std::invalid_argument(
@@ -101,16 +121,22 @@ inline void InterpTable2DBuild(nb::module_ &m) {
     using MatType = InterpTable2D::MatType;
     auto obj = nb::class_<InterpTable2D>(m, "InterpTable2D");
 
-    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &,
-                     const Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &, std::string>(),
-            nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = std::string("cubic"));
+    obj.def(
+        "__init__",
+        [](InterpTable2D *self, const Eigen::VectorXd &xs, const Eigen::VectorXd &ys,
+           const MatType &z, const std::string &kind) {
+            new (self) InterpTable2D(xs, ys, z, parse_interp_type(kind));
+        },
+        nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = std::string("cubic"));
+
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const MatType &,
+                     InterpType>(),
+            nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = InterpType::Cubic);
 
     obj.def("interp", nb::overload_cast<double, double>(&InterpTable2D::interp, nb::const_));
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable2D::warn_out_of_bounds_);
-    obj.def_rw("throw_out_of_bounds", &InterpTable2D::throw_out_of_bounds_);
 
     obj.def("interp_deriv1", &InterpTable2D::interp_deriv1);
     obj.def("interp_deriv2", &InterpTable2D::interp_deriv2);
@@ -156,10 +182,20 @@ inline void InterpTable3DBuild(nb::module_ &m) {
 
     auto obj = nb::class_<InterpTable3D>(m, "InterpTable3D");
 
+    obj.def(
+        "__init__",
+        [](InterpTable3D *self, const Eigen::VectorXd &xs, const Eigen::VectorXd &ys,
+           const Eigen::VectorXd &zs, const Eigen::Tensor<double, 3> &fs, const std::string &kind,
+           bool cache) {
+            new (self) InterpTable3D(xs, ys, zs, fs, parse_interp_type(kind), cache);
+        },
+        nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("fs"),
+        nb::arg("kind") = std::string("cubic"), nb::arg("cache") = false);
+
     obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const Eigen::VectorXd &,
-                     const Eigen::Tensor<double, 3> &, std::string, bool>(),
+                     const Eigen::Tensor<double, 3> &, InterpType, bool>(),
             nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("fs"),
-            nb::arg("kind") = std::string("cubic"), nb::arg("cache") = false);
+            nb::arg("kind") = InterpType::Cubic, nb::arg("cache") = false);
 
     obj.def("interp",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_));
@@ -168,8 +204,6 @@ inline void InterpTable3DBuild(nb::module_ &m) {
     obj.def("interp_deriv2",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp_deriv2, nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable3D::warn_out_of_bounds_);
-    obj.def_rw("throw_out_of_bounds", &InterpTable3D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double>(&InterpTable3D::interp, nb::const_),
@@ -209,10 +243,19 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     auto obj = nb::class_<InterpTable4D>(m, "InterpTable4D");
 
     obj.def(
-        nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const Eigen::VectorXd &,
-                 const Eigen::VectorXd &, const Eigen::Tensor<double, 4> &, std::string, bool>(),
+        "__init__",
+        [](InterpTable4D *self, const Eigen::VectorXd &xs, const Eigen::VectorXd &ys,
+           const Eigen::VectorXd &zs, const Eigen::VectorXd &ws,
+           const Eigen::Tensor<double, 4> &fs, const std::string &kind, bool cache) {
+            new (self) InterpTable4D(xs, ys, zs, ws, fs, parse_interp_type(kind), cache);
+        },
         nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("ws"), nb::arg("fs"),
         nb::arg("kind") = std::string("cubic"), nb::arg("cache") = false);
+
+    obj.def(nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const Eigen::VectorXd &,
+                     const Eigen::VectorXd &, const Eigen::Tensor<double, 4> &, InterpType, bool>(),
+            nb::arg("xs"), nb::arg("ys"), nb::arg("zs"), nb::arg("ws"), nb::arg("fs"),
+            nb::arg("kind") = InterpType::Cubic, nb::arg("cache") = false);
 
     obj.def("interp",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_));
@@ -221,8 +264,6 @@ inline void InterpTable4DBuild(nb::module_ &m) {
     obj.def("interp_deriv2", nb::overload_cast<double, double, double, double>(
                                  &InterpTable4D::interp_deriv2, nb::const_));
 
-    obj.def_rw("warn_out_of_bounds", &InterpTable4D::warn_out_of_bounds_);
-    obj.def_rw("throw_out_of_bounds", &InterpTable4D::throw_out_of_bounds_);
 
     obj.def("__call__",
             nb::overload_cast<double, double, double, double>(&InterpTable4D::interp, nb::const_),

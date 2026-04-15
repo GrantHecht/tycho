@@ -22,8 +22,8 @@
 
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
-using tycho::vf::LockArgs;
 using tycho::vf::StackedOutputs;
+using tycho::vf::SubstitutedVarPlaceholder;
 
 int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType args,
                                                 const std::variant<double, VectorXd> &value_t,
@@ -50,7 +50,12 @@ int tycho::oc::ODEPhaseBase::add_delta_var_equal_con(VarIndexType var, double va
 
 int tycho::oc::ODEPhaseBase::add_value_lock(RegionType reg, VarIndexType args, ScaleType scale_t) {
     int argsize = this->get_xt_up_vars(get_region(reg), args).size();
-    return this->add_equal_con(reg, LockArgs<-1>(argsize), args, scale_t);
+    if (argsize == 0) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::add_value_lock: args resolved to zero variables — either the args "
+            "list is empty or the region contains no matching variables");
+    }
+    return this->add_equal_con(reg, SubstitutedVarPlaceholder<-1>(argsize), args, scale_t);
 }
 
 int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType scale_t) {

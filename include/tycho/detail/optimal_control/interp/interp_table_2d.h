@@ -13,12 +13,14 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/detail/optimal_control/interp/interp_type.h"
 #include "tycho/detail/utils/timer.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
+using tycho::InterpType;
 using utils::SZ_MAX;
 using utils::SZ_PROD;
 using utils::SZ_SUM;
@@ -34,24 +36,21 @@ using vf::VectorFunction;
 
 struct InterpTable2D {
 
-    enum class InterpType { cubic_interp, linear_interp };
-
-    Eigen::VectorXd xs_;
-    Eigen::VectorXd ys_;
-
     using MatType = Eigen::Matrix<double, -1, -1, Eigen::RowMajor>;
 
+  private:
+    // Cached derivative state: mutating any of these without rerunning
+    // calc_derivs() corrupts cubic evaluation. Access only via set_data().
+    Eigen::VectorXd xs_;
+    Eigen::VectorXd ys_;
     MatType zs_;
     MatType dzxs_;
     MatType dzys_;
     MatType dzys_dxs_;
-
     Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor> all_dat_;
+    InterpType interp_kind_ = InterpType::Cubic;
 
-    bool warn_out_of_bounds_ = true;
-    bool throw_out_of_bounds_ = false;
-
-    InterpType interp_kind_ = InterpType::cubic_interp;
+  public:
     bool xeven_ = true;
     bool yeven_ = true;
     int xsize_;
@@ -62,20 +61,14 @@ struct InterpTable2D {
     InterpTable2D() {}
 
     InterpTable2D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
-                  std::string kind) {
+                  InterpType kind) {
         set_data(Xs, Ys, Zs, kind);
     }
 
     void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
-                  std::string kind) {
+                  InterpType kind) {
 
-        if (kind == "cubic" || kind == "Cubic") {
-            this->interp_kind_ = InterpType::cubic_interp;
-        } else if (kind == "linear" || kind == "Linear") {
-            this->interp_kind_ = InterpType::linear_interp;
-        } else {
-            throw std::invalid_argument("Unrecognized interpolation type");
-        }
+        this->interp_kind_ = kind;
 
         this->xs_ = Xs;
         this->ys_ = Ys;
@@ -127,7 +120,7 @@ struct InterpTable2D {
             this->yeven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::cubic_interp)
+        if (this->interp_kind_ == InterpType::Cubic)
             calc_derivs();
     }
 
@@ -295,26 +288,17 @@ struct InterpTable2D {
     void interp_impl(double x, double y, int deriv, double &z, Eigen::Vector2<double> &dzxy,
                      Eigen::Matrix2<double> &d2zxy) const {
 
-        if (warn_out_of_bounds_ || throw_out_of_bounds_) {
-            double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
-            if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: x coordinate falls outside of InterpTable2D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
-            double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
-            if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "WARNING: y coordinate falls outside of InterpTable2D range. Data is "
-                           "being extrapolated!!\n");
-                if (throw_out_of_bounds_) {
-                    throw std::invalid_argument("");
-                }
-            }
+        double xeps = std::numeric_limits<double>::epsilon() * xtotal_;
+        if (x < (xs_[0] - xeps) || x > (xs_[xs_.size() - 1] + xeps)) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable2D: query x={} is outside table x range [{}, {}]", x,
+                            xs_[0], xs_[xs_.size() - 1]));
+        }
+        double yeps = std::numeric_limits<double>::epsilon() * ytotal_;
+        if (y < (ys_[0] - yeps) || y > (ys_[ys_.size() - 1]) + yeps) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable2D: query y={} is outside table y range [{}, {}]", y,
+                            ys_[0], ys_[ys_.size() - 1]));
         }
 
         auto [xelem, yelem] = get_xyelems(x, y);
@@ -325,7 +309,7 @@ struct InterpTable2D {
         double xf = (x - xs_[xelem]) / xstep;
         double yf = (y - ys_[yelem]) / ystep;
 
-        if (this->interp_kind_ == InterpType::cubic_interp) {
+        if (this->interp_kind_ == InterpType::Cubic) {
 
             double yf2 = yf * yf;
             double yf3 = yf2 * yf;

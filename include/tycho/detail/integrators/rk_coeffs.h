@@ -16,23 +16,34 @@
 
 #include <array>
 
-namespace tycho::integrators {
+namespace tycho {
 
-enum class RKOptions {
+// User-selectable IVP algorithms: DOPRI54, DOPRI87. Only these are exposed via
+// the Python binding and the string parser. RK4Classic and DOPRI5 remain in the
+// enum because they serve as internal template-dispatch tags (DOPRI54's
+// adaptive stepper is instantiated against IVPAlg::DOPRI5 coefficients; see
+// integrator.h set_method), and rk_steppers.h uses them in constexpr branches.
+// They are not runtime-selectable — passing them to set_method throws.
+enum class IVPAlg {
+    DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
+    DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
-    RK438,
-    DOPRI54,
-    DOPRI87,
-    RK54,
-    RK78,
-    Ralston3,
-    Ralston2,
-    DOPRI5
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// set_method() throws on this value. Do not expose via bindings.
+    DOPRI5,
 };
 
-template <RKOptions opt> struct RKCoeffs {};
+} // namespace tycho
 
-template <> struct RKCoeffs<RKOptions::RK4Classic> {
+namespace tycho::integrators {
+
+using tycho::IVPAlg;
+
+template <IVPAlg opt> struct RKCoeffs {};
+
+template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr int Stages = 4;
     static constexpr bool is_diag_ = true;
     static constexpr bool EmbeddedCorrector = false;
@@ -48,7 +59,7 @@ template <> struct RKCoeffs<RKOptions::RK4Classic> {
     static constexpr STDarray<double, 4> CCoeffs = {0, 0, 0, 0};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI54> {
+template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr int Stages = 7;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = true;
@@ -80,7 +91,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI54> {
         0.1178653667448159, -0.0899577761820872, 0.0478086164722679};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI5> {
+template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr int Stages = 6;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = false;
@@ -103,7 +114,7 @@ template <> struct RKCoeffs<RKOptions::DOPRI5> {
         5179.0 / 57600.0, 0.0, 7571.0 / 16695.0, 393 / 640.0, -92097 / 339200.0, 187 / 2100.0};
 };
 
-template <> struct RKCoeffs<RKOptions::DOPRI87> {
+template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr int Stages = 13;
     static constexpr bool is_diag_ = false;
     static constexpr bool EmbeddedCorrector = true;

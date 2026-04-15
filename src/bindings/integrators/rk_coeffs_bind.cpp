@@ -20,10 +20,9 @@ using namespace tycho::vf;
 using namespace tycho::integrators;
 
 void RKFlagsBuild(nb::module_ &m) {
-    nb::enum_<RKOptions>(m, "RKOptions")
-        .value("RK4", RKOptions::RK4Classic)
-        .value("DOPRI54", RKOptions::DOPRI54)
-        .value("DOPRI87", RKOptions::DOPRI87);
+    nb::enum_<IVPAlg>(m, "IVPAlg")
+        .value("DOPRI54", IVPAlg::DOPRI54)
+        .value("DOPRI87", IVPAlg::DOPRI87);
 }
 
 } // namespace tycho

@@ -236,7 +236,6 @@ int main() {
     auto yf_vec = classic_to_cartesian(oelems, mu);
     Eigen::VectorXd yf = yf_vec;
 
-    // Generate initial guesses for each phase
     const int nPts = 1000;
     std::vector<Eigen::VectorXd> IG1, IG2, IG3, IG4;
 

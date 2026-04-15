@@ -14,7 +14,7 @@ using namespace TychoTest;
 
 TEST_F(IntegratorTest, DenseOutputBoundaryConsistency) {
     SHO ode(0.0);
-    Integrator<SHO> integ(ode, "DOPRI87", 0.01);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 
@@ -37,7 +37,7 @@ TEST_F(IntegratorTest, DenseOutputBoundaryConsistency) {
 
 TEST_F(IntegratorTest, DenseOutputVsAnalytical) {
     SHO ode(0.0);
-    Integrator<SHO> integ(ode, "DOPRI87", 0.01);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-13);
     integ.set_rel_tol(1e-13);
 

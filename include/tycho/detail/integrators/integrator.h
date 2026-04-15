@@ -96,16 +96,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     using EventPack = std::tuple<GenericFunction<-1, 1>, int, int>;
     using EventLocsType = std::vector<std::vector<ODEState<double>>>;
 
-    /// <summary>
-    /// The type for the differentiable stepper function.
-    /// Psuedo ODE is a compostion of the ode and control function(if any)
-    /// </summary>
-    /// <typeparam name="PseudoODE"></typeparam>
-    template <class PseudoODE, RKOptions RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
+    /// Differentiable stepper type: RK stepper over (ODE ∘ control) composed function.
+    template <class PseudoODE, IVPAlg RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
 
-    /// <summary>
-    /// Wraps stepper types with RKoptions types
-    /// </summary>
     using StepperWrapperType = GenericFunction<SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
     using ControllerType = GenericFunction<-1, -1>;
     using StopFuncType = GenericConditional<-1>;
@@ -128,12 +121,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     bool use_controller_ = false;
     ControllerType controller_;
     StepperWrapperType stepper_;
-    RKOptions rk_method_ = RKOptions::DOPRI54;
+    IVPAlg rk_method_ = IVPAlg::DOPRI87;
 
   public:
     Integrator() { this->enable_vectorization_ = true; }
 
-    Integrator(const DODE &dode, std::string meth, double defstep) : Integrator() {
+    Integrator(const DODE &dode, IVPAlg meth, double defstep) : Integrator() {
         // Use in_place_type to sidestep MSVC variant overload-resolution
         // ambiguity between the int and Eigen::VectorXi alternatives.
         ControlIndexType empty_ci{std::in_place_type<Eigen::VectorXi>};
@@ -141,8 +134,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
-    Integrator(const DODE &dode, double defstep) : Integrator(dode, "DOPRI87", defstep) {}
-    Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
+    Integrator(const DODE &dode, double defstep) : Integrator(dode, IVPAlg::DOPRI87, defstep) {}
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
         : Integrator() {
 
@@ -152,28 +145,31 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     // VectorXi overloads: explicitly wrap into ControlIndexType to avoid MSVC
     // variant implicit-conversion ambiguity (int vs VectorXi alternatives).
-    Integrator(const DODE &dode, std::string meth, double defstep, const ControllerType &ucon,
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const ControllerType &ucon,
                const Eigen::VectorXi &varlocs)
         : Integrator(dode, meth, defstep, ucon,
                      ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
     Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
                const ControlIndexType &varlocs_t)
-        : Integrator(dode, "DOPRI87", defstep, ucon, varlocs_t) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, ucon, varlocs_t) {}
     Integrator(const DODE &dode, double defstep, const ControllerType &ucon,
                const Eigen::VectorXi &varlocs)
-        : Integrator(dode, "DOPRI87", defstep, ucon,
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, ucon,
                      ControlIndexType{std::in_place_type<Eigen::VectorXi>, varlocs}) {}
-    Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v) : Integrator() {
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, const Eigen::VectorXd &v)
+        : Integrator() {
 
         Eigen::VectorXi tloc(1);
         tloc[0] = dode.t_var();
         GenericFunction<-1, -1> ucon = Constant<-1, -1>(1, v);
-        this->set_method("DOPRI87", dode, defstep, true, ucon, tloc);
+        this->set_method(meth, dode, defstep, true, ucon, tloc);
         this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
-    Integrator(const DODE &dode, std::string meth, double defstep,
-               std::shared_ptr<LGLInterpTable> tab, const Eigen::VectorXi &ulocs)
+    Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v)
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, v) {}
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab,
+               const Eigen::VectorXi &ulocs)
         : Integrator() {
 
         Eigen::VectorXi varlocs(1);
@@ -185,10 +181,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab,
                const Eigen::VectorXi &ulocs)
-        : Integrator(dode, "DOPRI87", defstep, tab, ulocs) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, tab, ulocs) {}
 
-    Integrator(const DODE &dode, std::string meth, double defstep,
-               std::shared_ptr<LGLInterpTable> tab)
+    Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator() {
 
         // Bug waiting to happen when LGL interp table is re-factored
@@ -208,29 +203,37 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_rel_tol(0);       // Must Be called after set_method!!!
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab)
-        : Integrator(dode, "DOPRI87", defstep, tab) {}
+        : Integrator(dode, IVPAlg::DOPRI87, defstep, tab) {}
 
-    void set_method(std::string str, const DODE &dode, double defstep, bool usecontrol,
+    void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
         this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
 
-        if (str == "DOPRI54" || str == "DP54") {
-            this->rk_method_ = RKOptions::DOPRI54;
+        switch (alg) {
+        case IVPAlg::DOPRI54:
+            this->rk_method_ = IVPAlg::DOPRI54;
             this->error_order_ = 4;
             // Using DOPRI5 rather than DOPRI54 here is not a mistake
-            this->init_stepper_and_controller<RKOptions::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
-        } else if (str == "DOPRI87" || str == "DP87") {
-            this->rk_method_ = RKOptions::DOPRI87;
+            this->init_stepper_and_controller<IVPAlg::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
+            break;
+        case IVPAlg::DOPRI87:
+            this->rk_method_ = IVPAlg::DOPRI87;
             this->error_order_ = 7;
-            this->init_stepper_and_controller<RKOptions::DOPRI87>(dode, usecontrol, ucon,
-                                                                  varlocs_t);
-        } else {
-            throw std::invalid_argument("Invalid integration method '{0:}'.");
+            this->init_stepper_and_controller<IVPAlg::DOPRI87>(dode, usecontrol, ucon, varlocs_t);
+            break;
+        case IVPAlg::RK4Classic:
+        case IVPAlg::DOPRI5:
+            throw std::invalid_argument(
+                "IVPAlg::RK4Classic and IVPAlg::DOPRI5 are internal template-dispatch tags "
+                "used by the DOPRI54 adaptive stepper and rk_steppers.h constexpr branches. "
+                "They are not runtime-selectable. Use IVPAlg::DOPRI54 or IVPAlg::DOPRI87.");
+        default:
+            throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
     }
 
-    template <RKOptions RKOp>
+    template <IVPAlg RKOp>
     void init_stepper_and_controller(const DODE &odet, bool usecontrol,
                                      const GenericFunction<-1, -1> &ucon,
                                      const ControlIndexType &varlocs_t) {
@@ -409,7 +412,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     }
 
-    template <RKOptions RKOp, class Scalar>
+    template <IVPAlg RKOp, class Scalar>
     inline void stepper_compute_impl(const ODEState<Scalar> &x, Scalar tf, ODEState<Scalar> &xf,
                                      ODEState<Scalar> &xf_est, bool dofsal,
                                      ODEDeriv<Scalar> &xdot_prev, bool domidpoint,
@@ -540,16 +543,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                 bool domidpoint, ODEState<Scalar> &xf_mid) const {
 
         switch (this->rk_method_) {
-        case RKOptions::DOPRI54: {
-            this->stepper_compute_impl<RKOptions::DOPRI54, Scalar>(x, tf, xf, xf_est, true,
-                                                                   xdot_prev, domidpoint, xf_mid);
+        case IVPAlg::DOPRI54: {
+            this->stepper_compute_impl<IVPAlg::DOPRI54, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
+                                                                domidpoint, xf_mid);
         } break;
-        case RKOptions::DOPRI87: {
-            this->stepper_compute_impl<RKOptions::DOPRI87, Scalar>(x, tf, xf, xf_est, false,
-                                                                   xdot_prev, domidpoint, xf_mid);
+        case IVPAlg::DOPRI87: {
+            this->stepper_compute_impl<IVPAlg::DOPRI87, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
+                                                                domidpoint, xf_mid);
         } break;
-        default: {
-        }
+        default:
+            throw std::logic_error("stepper_compute: unsupported IVPAlg for adaptive stepping");
         }
     }
 
@@ -2067,41 +2070,72 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&stm_op, etc.).
+            // Collect *all* failure messages so no root cause is lost; if more
+            // than one segment failed, rethrow a composite runtime_error rather
+            // than dropping secondaries to stderr.
             std::exception_ptr ex;
+            std::string primary_msg;
+            std::vector<std::string> extra_msgs;
             for (int i = 0; i < n_parts; i++) {
                 try {
                     auto [xf, jx] = results[i].get();
                     jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                     if (i == (n_parts - 1))
                         xs[i + 1] = xf;
-                } catch (...) {
-                    if (!ex)
+                } catch (const std::exception &e) {
+                    if (!ex) {
                         ex = std::current_exception();
-                    int suppressed = 0;
+                        primary_msg = e.what();
+                    }
                     for (int j = i + 1; j < n_parts; j++) {
                         try {
                             results[j].get();
-                        } catch (const std::exception &e) {
-                            if (suppressed == 0)
-                                std::fprintf(stderr,
-                                             "[Tycho] integrate_stm_parallel: additional segment "
-                                             "also failed: %s\n",
-                                             e.what());
-                            ++suppressed;
+                        } catch (const std::exception &je) {
+                            extra_msgs.emplace_back(je.what());
                         } catch (...) {
-                            ++suppressed;
+                            extra_msgs.emplace_back("<non-std::exception>");
                         }
                     }
-                    if (suppressed > 1)
-                        std::fprintf(stderr,
-                                     "[Tycho] integrate_stm_parallel: %d additional exceptions "
-                                     "suppressed\n",
-                                     suppressed - 1);
+                    break;
+                } catch (...) {
+                    if (!ex) {
+                        ex = std::current_exception();
+                        primary_msg = "<non-std::exception>";
+                    }
+                    for (int j = i + 1; j < n_parts; j++) {
+                        try {
+                            results[j].get();
+                        } catch (const std::exception &je) {
+                            extra_msgs.emplace_back(je.what());
+                        } catch (...) {
+                            extra_msgs.emplace_back("<non-std::exception>");
+                        }
+                    }
                     break;
                 }
             }
-            if (ex)
-                std::rethrow_exception(ex);
+            if (ex) {
+                if (extra_msgs.empty()) {
+                    std::rethrow_exception(ex);
+                }
+                // Cap secondary-failure detail at kMaxExtras to keep the
+                // composite message bounded under large n_parts.
+                constexpr size_t kMaxExtras = 5;
+                std::string joined =
+                    "integrate_stm_parallel: primary segment failure: " + primary_msg +
+                    "; additional failures (" + std::to_string(extra_msgs.size()) + "): ";
+                size_t shown = std::min(extra_msgs.size(), kMaxExtras);
+                for (size_t k = 0; k < shown; ++k) {
+                    if (k)
+                        joined += " | ";
+                    joined += extra_msgs[k];
+                }
+                if (extra_msgs.size() > kMaxExtras) {
+                    joined += " | ... and " +
+                              std::to_string(extra_msgs.size() - kMaxExtras) + " more";
+                }
+                throw std::runtime_error(joined);
+            }
         } else {
             for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);
