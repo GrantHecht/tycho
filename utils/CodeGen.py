@@ -139,7 +139,8 @@ class TychoHeaderGen:
             param_map[cse_sym] = member_sym
             # Constructor expression: resolve earlier CSE refs to pcN_
             resolved = cse_expr.subs(
-                [(s, m) for s, m in param_map.items() if s != cse_sym])
+                [(s, m) for s, m in param_map.items() if s != cse_sym]
+            )
             self._precomputed.append((member_name, resolved))
 
         # Build expansion map for all CSE symbols:
@@ -249,9 +250,7 @@ class TychoHeaderGen:
 
         # Fractional forms: pow(x, 3.0/2.0) style
         for i in range(1, 10, 2):
-            regex = re.compile(
-                rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*{i}\.0/2\.0\s*\)"
-            )
+            regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*{i}\.0/2\.0\s*\)")
             repl = r"(sqrt(\g<var>)"
             for j in range(0, int((i - 1) / 2)):
                 repl += r"*\g<var>"
@@ -259,9 +258,7 @@ class TychoHeaderGen:
             expr = re.sub(regex, repl, expr)
 
         for i in range(1, 10, 2):
-            regex = re.compile(
-                rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*-{i}\.0/2\.0\s*\)"
-            )
+            regex = re.compile(rf"pow\((?P<var>[A-Za-z_]\w*)\s*,\s*-{i}\.0/2\.0\s*\)")
             repl = r"(Scalar(1.0)/(sqrt(\g<var>)"
             for j in range(0, int((i - 1) / 2)):
                 repl += r"*\g<var>"
@@ -333,9 +330,67 @@ class TychoHeaderGen:
         Parameter-only subexpressions have already been substituted with
         member symbols (pcN_) in _identify_precomputed(), so no partitioning
         is needed here — CSE just operates on what remains.
+
+        Before running CSE, we walk the expression tree and extract compound
+        bases of half-integer powers (``Pow(base, Rational(n, 2))`` with an
+        Add/Mul base) into fresh ``_hpN_`` symbols. This gives the downstream
+        regex post-processor a bare identifier to rewrite, so expressions
+        like ``pow((x0*x0 + x1*x1 + x2*x2), 3.0/2.0)`` become
+        ``sqrt(_hp0_) * _hp0_`` with ``_hp0_`` assigned once as its own
+        temporary — avoiding a runtime ``pow()`` call.
         """
-        cses, reduced = sp.cse(exprs)
-        return cses, reduced
+        halfpow_pre, rewritten = self._extract_halfpow_bases(exprs)
+        cses, reduced = sp.cse(rewritten)
+        # Prepend halfpow temporaries so they're emitted before the
+        # regular CSE assignments that reference them.
+        return halfpow_pre + cses, reduced
+
+    def _extract_halfpow_bases(self, exprs):
+        """Pre-CSE: replace Pow(compound, n/2) bases with _hpN_ symbols.
+
+        Returns (halfpow_cses, rewritten_exprs) where ``halfpow_cses`` is a
+        list of ``(Symbol, compound_base)`` pairs that should be emitted as
+        assignments before the regular CSE body. Bases are de-duplicated by
+        structural equality so identical compound bases share one temporary.
+        """
+        halfpow_cses = []  # [(Symbol, compound_expr)]
+        base_to_sym = {}  # compound_expr → Symbol
+        counter = [0]
+
+        def _rewrite(expr):
+            if not isinstance(expr, sp.Basic) or expr.is_Atom:
+                return expr
+            # Post-order: rewrite args first.
+            new_args = tuple(_rewrite(a) for a in expr.args)
+            if new_args != expr.args:
+                expr = expr.func(*new_args)
+            if (
+                isinstance(expr, sp.Pow)
+                and isinstance(expr.exp, sp.Rational)
+                and expr.exp.q == 2
+                and not expr.base.is_Atom
+                and not expr.base.is_Symbol
+            ):
+                base = expr.base
+                if base not in base_to_sym:
+                    sym = sp.Symbol(f"_hp{counter[0]}_")
+                    counter[0] += 1
+                    base_to_sym[base] = sym
+                    halfpow_cses.append((sym, base))
+                return sp.Pow(base_to_sym[base], expr.exp)
+            return expr
+
+        def _apply(obj):
+            if isinstance(obj, sp.Matrix):
+                return obj.applyfunc(_rewrite)
+            if isinstance(obj, list):
+                return [_apply(e) for e in obj]
+            if isinstance(obj, tuple):
+                return tuple(_apply(e) for e in obj)
+            return _rewrite(obj)
+
+        rewritten = _apply(exprs)
+        return halfpow_cses, rewritten
 
     # ── class header generation ─────────────────────────────────────────
 
@@ -345,10 +400,14 @@ class TychoHeaderGen:
 
         lines = []
         lines.append(f"struct {self.Name}")
-        lines.append(f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
-                      f"{self.noutputs}, {dm}, {dm}> {{")
-        lines.append(f"{I}using Base = VectorFunction<{self.Name}, "
-                      f"{self.ninputs}, {self.noutputs}, {dm}, {dm}>;")
+        lines.append(
+            f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
+            f"{self.noutputs}, {dm}, {dm}> {{"
+        )
+        lines.append(
+            f"{I}using Base = VectorFunction<{self.Name}, "
+            f"{self.ninputs}, {self.noutputs}, {dm}, {dm}>;"
+        )
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
         lines.append("")
 
@@ -416,8 +475,18 @@ class TychoHeaderGen:
                 rhs = str(sp.ccode(expr))
                 rhs = self.powsimp(rhs)
                 # Prefix bare math functions with std::
-                for fn in ["sqrt", "sin", "cos", "tan", "asin",
-                           "acos", "atan", "atan2", "exp", "log"]:
+                for fn in [
+                    "sqrt",
+                    "sin",
+                    "cos",
+                    "tan",
+                    "asin",
+                    "acos",
+                    "atan",
+                    "atan2",
+                    "exp",
+                    "log",
+                ]:
                     rhs = re.sub(rf"\b{fn}\(", f"std::{fn}(", rhs)
                 lines.append(f"{I}{I}{member_name} = {rhs};")
 
@@ -478,8 +547,9 @@ class TychoHeaderGen:
         for col in range(self.ninputs):
             for row in range(self.noutputs):
                 expr = funcs[1][row, col]
-                body_lines.append(self._assignment(
-                    f"_jx_({row},{col})", sp.ccode(expr), False))
+                body_lines.append(
+                    self._assignment(f"_jx_({row},{col})", sp.ccode(expr), False)
+                )
 
         lines += [f"{I}{I}{l}" for l in body_lines]
         lines.append(f"{I}}}")
@@ -494,7 +564,9 @@ class TychoHeaderGen:
         lines.append(f"{I}template <class InType, class OutType, class JacType,")
         lines.append(f"{I}{I}{I}{I} class AdjGradType, class AdjHessType,")
         lines.append(f"{I}{I}{I}{I} class AdjVarType>")
-        lines.append(f"{I}inline void compute_jacobian_adjointgradient_adjointhessian_impl(")
+        lines.append(
+            f"{I}inline void compute_jacobian_adjointgradient_adjointhessian_impl("
+        )
         lines.append(f"{I}{I}CVecRef<InType> x_,")
         lines.append(f"{I}{I}CVecRef<OutType> fx_,")
         lines.append(f"{I}{I}CMatRef<JacType> jx_,")
@@ -511,8 +583,7 @@ class TychoHeaderGen:
 
         body_lines = self._gen_input_names()
         body_lines += self._gen_mult_names()
-        cses, funcs = self._gen_cse_body(
-            [self.Func, self.Jac, self.Grad, self.Hess])
+        cses, funcs = self._gen_cse_body([self.Func, self.Jac, self.Grad, self.Hess])
         body_lines += self._gen_cselist(cses)
         body_lines.append("")
 
@@ -521,23 +592,29 @@ class TychoHeaderGen:
         body_lines.append("")
         for col in range(self.ninputs):
             for row in range(self.noutputs):
-                body_lines.append(self._assignment(
-                    f"_jx_({row},{col})", sp.ccode(funcs[1][row, col]), False))
+                body_lines.append(
+                    self._assignment(
+                        f"_jx_({row},{col})", sp.ccode(funcs[1][row, col]), False
+                    )
+                )
         body_lines.append("")
         for row in range(self.ninputs):
-            body_lines.append(self._assignment(
-                f"_gx_[{row}]", sp.ccode(funcs[2][row]), False))
+            body_lines.append(
+                self._assignment(f"_gx_[{row}]", sp.ccode(funcs[2][row]), False)
+            )
 
         # Hessian — exploit symmetry: compute upper triangle, copy lower
         body_lines.append("")
         n = self.ninputs
         for col in range(n):
             for row in range(col + 1):  # upper triangle only
-                body_lines.append(self._assignment(
-                    f"_hx_({row},{col})", sp.ccode(funcs[3][row, col]), False))
-            for row in range(col + 1, n):  # lower triangle = copy
                 body_lines.append(
-                    f"_hx_({row},{col}) = _hx_({col},{row});")
+                    self._assignment(
+                        f"_hx_({row},{col})", sp.ccode(funcs[3][row, col]), False
+                    )
+                )
+            for row in range(col + 1, n):  # lower triangle = copy
+                body_lines.append(f"_hx_({row},{col}) = _hx_({col},{row});")
 
         lines += [f"{I}{I}{l}" for l in body_lines]
         lines.append(f"{I}}}")
@@ -553,16 +630,19 @@ class TychoHeaderGen:
         return f"{prefix}{lhs} = {rhs};"
 
     def _gen_input_names(self):
-        return [self._assignment(str(X), f"x_[{i}]", True)
-                for i, X in enumerate(self.Inputs)]
+        return [
+            self._assignment(str(X), f"x_[{i}]", True)
+            for i, X in enumerate(self.Inputs)
+        ]
 
     def _gen_mult_names(self):
-        return [self._assignment(str(L), f"adjvars[{i}]", True)
-                for i, L in enumerate(self.LMults)]
+        return [
+            self._assignment(str(L), f"adjvars[{i}]", True)
+            for i, L in enumerate(self.LMults)
+        ]
 
     def _gen_cselist(self, cses):
-        return [self._assignment(str(cse[0]), sp.ccode(cse[1]), True)
-                for cse in cses]
+        return [self._assignment(str(cse[0]), sp.ccode(cse[1]), True) for cse in cses]
 
     # ── output ──────────────────────────────────────────────────────────
 
@@ -587,8 +667,7 @@ class TychoHeaderGen:
         return s.lower()
 
     def _build_text(self, script_name=None):
-        copyright = _COPYRIGHT.format(
-            script=script_name or "TychoHeaderGen")
+        copyright = _COPYRIGHT.format(script=script_name or "TychoHeaderGen")
         include = f'#pragma once\n#include "{self.include_path}"\n'
         ns_open = f"\nnamespace {self.namespace} {{\n\n{_USING_DECLS}\n"
         header = self.gen_class_header()
@@ -597,4 +676,13 @@ class TychoHeaderGen:
         all_impl = self.gen_compute_all()
         ns_close = f"}};\n\n}} // namespace {self.namespace}\n"
 
-        return copyright + include + ns_open + header + compute + jacobian + all_impl + ns_close
+        return (
+            copyright
+            + include
+            + ns_open
+            + header
+            + compute
+            + jacobian
+            + all_impl
+            + ns_close
+        )
