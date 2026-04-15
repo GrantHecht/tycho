@@ -340,8 +340,18 @@ class TychoHeaderGen:
         temporary — avoiding a runtime ``pow()`` call.
         """
         pre_cses, rewritten = self._extract_compound_pow_bases(exprs)
-        cses, reduced = sp.cse(rewritten)
-        # Prepend halfpow temporaries so they're emitted before the
+        # Force CSE variable naming to start past the input-symbol range
+        # (x0 .. x{ninputs-1}). SymPy's default numbering picks ``x0, x1, ...``
+        # skipping free symbols of the expression tree, but the xreplace
+        # pass in _extract_compound_pow_bases can hide input symbols behind
+        # ``_hpN_`` temporaries — e.g. if every occurrence of ``cos(x5)``
+        # becomes ``_hp1_``, then ``x5`` is no longer a free symbol of the
+        # reduced tree, and CSE would happily mint it as a fresh temporary,
+        # colliding with the ``Scalar x5 = x_[5];`` input unpack at the top
+        # of the compute body.
+        cse_syms = sp.numbered_symbols("x", start=self.ninputs)
+        cses, reduced = sp.cse(rewritten, symbols=cse_syms)
+        # Prepend compound-pow temporaries so they're emitted before the
         # regular CSE assignments that reference them.
         return pre_cses + cses, reduced
 
@@ -636,17 +646,25 @@ class TychoHeaderGen:
                 self._assignment(f"_gx_[{row}]", sp.ccode(funcs[2][row]), False)
             )
 
-        # Hessian — exploit symmetry: compute upper triangle, copy lower
+        # Hessian — exploit symmetry: compute upper triangle, then copy to
+        # lower. Must be two separate passes: interleaving the copy inside
+        # the upper-triangle loop reads cells that have not been written
+        # yet (e.g. at col=0, _hx_(1,0) = _hx_(0,1) but _hx_(0,1) is not
+        # assigned until col=1), leaving the lower triangle filled with
+        # whatever the matrix was initialized to — zeros in tycho, because
+        # the build enables EIGEN_INITIALIZE_MATRICES_BY_ZERO.
         body_lines.append("")
         n = self.ninputs
         for col in range(n):
-            for row in range(col + 1):  # upper triangle only
+            for row in range(col + 1):  # upper triangle: write
                 body_lines.append(
                     self._assignment(
                         f"_hx_({row},{col})", sp.ccode(funcs[3][row, col]), False
                     )
                 )
-            for row in range(col + 1, n):  # lower triangle = copy
+        body_lines.append("")
+        for col in range(n):
+            for row in range(col + 1, n):  # lower triangle: copy from upper
                 body_lines.append(f"_hx_({row},{col}) = _hx_({col},{row});")
 
         lines += [f"{I}{I}{l}" for l in body_lines]
