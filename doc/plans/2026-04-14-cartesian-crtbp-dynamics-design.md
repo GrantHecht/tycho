@@ -115,10 +115,12 @@ extra acceleration components in the inertial frame).
 
 **Parameter:** `mu` (gravitational parameter).
 
-**Notes:** CSE will hoist `r^3` and any `mu`-only subexpressions to precomputed
-members where applicable. No `mu`-only subexpressions exist for Cartesian
-two-body, but the codegen framework will still produce `pc0_`-style members
-if CSE finds any. The header should compile to ~100-200 lines of generated code.
+**Notes:** `r^3` depends on the position inputs and is therefore CSE'd at
+per-call scope inside each `compute_*` method, not hoisted to precomputed
+constructor-time members. There are no `mu`-only subexpressions in
+Cartesian two-body, so the generated `CartesianDynamics` struct will likely
+have zero `pc0_`-style members — only `mu_` itself. The header should
+compile to ~100-200 lines of generated code.
 
 #### `utils/codegen_crtbp_dynamics.py`
 
