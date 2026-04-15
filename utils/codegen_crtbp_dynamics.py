@@ -15,23 +15,12 @@ from CodeGen import TychoHeaderGen
 
 
 def CRTBPDynamics():
-    """Generate CR3BP rotating-frame dynamics VectorFunction.
-
-    Input:  [x, y, z, vx, vy, vz, ax, ay, az] — 6 rotating-frame state + 3 extra accelerations
-    Output: [xdot, ydot, zdot, vxdot, vydot, vzdot]
-    Parameter: mu — CR3BP mass ratio m2 / (m1 + m2)
-
-    Frame: rotating frame with primaries at (-mu, 0, 0) and (1 - mu, 0, 0).
-    Dynamics: standard Coriolis + centrifugal + two-body attractions, plus
-    user-supplied perturbation.
-    """
     Xs = sp.symbols("x:9")
     x, y, z, vx, vy, vz, ax, ay, az = Xs
     mu = sp.symbols("mu")
 
     one_minus_mu = 1 - mu
 
-    # Distance to primary (at -mu, 0, 0) and secondary (at 1 - mu, 0, 0)
     dx1 = x + mu
     dx2 = x - one_minus_mu
     d1 = sp.sqrt(dx1**2 + y**2 + z**2)
@@ -39,8 +28,6 @@ def CRTBPDynamics():
     inv_d1_3 = 1 / d1**3
     inv_d2_3 = 1 / d2**3
 
-    # Gravitational accelerations (rotating frame: gravity only, Coriolis and
-    # centrifugal added below)
     g1x = -one_minus_mu * dx1 * inv_d1_3
     g1y = -one_minus_mu * y * inv_d1_3
     g1z = -one_minus_mu * z * inv_d1_3
