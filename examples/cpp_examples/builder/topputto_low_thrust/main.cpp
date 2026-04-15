@@ -74,7 +74,14 @@ int main() {
 
     std::cout << "=== Time-optimal transfer ===\n";
     phase.add_delta_time_objective(1.0 / 100.0);
-    phase.solve_optimize_solve();
+    {
+        const auto flag = phase.solve_optimize_solve();
+        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            std::cerr << "TopputtoLowThrust: time-optimal solve_optimize_solve failed (status "
+                      << static_cast<int>(flag) << ")\n";
+            return EXIT_FAILURE;
+        }
+    }
 
     auto time_optimal = phase.return_traj();
     double tf_time = time_optimal.back()[4];
@@ -93,9 +100,23 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(fuel_obj), {"u"});
     }
 
-    phase.optimize_solve();
+    {
+        const auto flag = phase.optimize_solve();
+        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            std::cerr << "TopputtoLowThrust: fuel-optimal initial optimize_solve failed (status "
+                      << static_cast<int>(flag) << ")\n";
+            return EXIT_FAILURE;
+        }
+    }
     phase.refine_traj_manual(800);
-    phase.optimize_solve();
+    {
+        const auto flag = phase.optimize_solve();
+        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            std::cerr << "TopputtoLowThrust: fuel-optimal refined optimize_solve failed (status "
+                      << static_cast<int>(flag) << ")\n";
+            return EXIT_FAILURE;
+        }
+    }
 
     auto mass_optimal = phase.return_traj();
     double tf_mass = mass_optimal.back()[4];

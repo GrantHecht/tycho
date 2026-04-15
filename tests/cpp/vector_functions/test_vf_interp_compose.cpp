@@ -7,7 +7,7 @@
 // code could segfault in production instead of surfacing a diagnostic.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "test_utils.h"
+#include "vf_test_utils.h"
 #include <gtest/gtest.h>
 #include <tycho/tycho.h>
 
@@ -214,4 +214,104 @@ TEST_F(InterpComposeHappyPathTest, Interp4D_PackedVector_MatchesDirect) {
     fx.setZero();
     composed.compute(x, fx);
     EXPECT_NEAR(fx[0], table->interp(x[0], x[1], x[2], x[3]), 1e-12);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Finite-difference Jacobian checks for 3D/4D interp_compose. These guard
+// against stack-axis reordering regressions in compute_jacobian (the direct
+// compute() tests above only exercise values, not derivatives).
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(InterpComposeHappyPathTest, Interp3D_Jacobian_MatchesFD) {
+    const int n = 9;
+    auto xs = linspace_compose(0.0, 2.0, n);
+    auto ys = linspace_compose(0.0, 2.0, n);
+    auto zs = linspace_compose(0.0, 2.0, n);
+    Eigen::Tensor<double, 3> fs(n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k)
+                fs(i, j, k) =
+                    std::sin(0.5 * xs[i]) + 0.3 * ys[j] * ys[j] - 0.2 * zs[k] + 0.1 * xs[i] * zs[k];
+
+    auto table = std::make_shared<oc::InterpTable3D>(xs, ys, zs, fs, InterpType::Cubic, false);
+    auto args = Arguments<3>();
+    auto composed = vf::interp(table, args);
+
+    Eigen::VectorXd x(3);
+    x << 0.85, 1.2, 1.65;
+    verify_jacobian_fd(composed, x, 1e-5);
+}
+
+TEST_F(InterpComposeHappyPathTest, Interp3D_ThreeScalars_Jacobian_MatchesFD) {
+    const int n = 9;
+    auto xs = linspace_compose(0.0, 2.0, n);
+    auto ys = linspace_compose(0.0, 2.0, n);
+    auto zs = linspace_compose(0.0, 2.0, n);
+    Eigen::Tensor<double, 3> fs(n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k)
+                fs(i, j, k) = 0.4 * xs[i] * xs[i] - 0.25 * ys[j] + 0.6 * std::cos(0.7 * zs[k]);
+
+    auto table = std::make_shared<oc::InterpTable3D>(xs, ys, zs, fs, InterpType::Cubic, false);
+    auto args = Arguments<3>();
+    auto xseg = args.template segment<1>(0);
+    auto yseg = args.template segment<1>(1);
+    auto zseg = args.template segment<1>(2);
+    auto composed = vf::interp(table, xseg, yseg, zseg);
+
+    Eigen::VectorXd x(3);
+    x << 1.10, 0.60, 1.35;
+    verify_jacobian_fd(composed, x, 1e-5);
+}
+
+TEST_F(InterpComposeHappyPathTest, Interp4D_Jacobian_MatchesFD) {
+    const int n = 7;
+    auto xs = linspace_compose(0.0, 2.0, n);
+    auto ys = linspace_compose(0.0, 2.0, n);
+    auto zs = linspace_compose(0.0, 2.0, n);
+    auto ws = linspace_compose(0.0, 2.0, n);
+    Eigen::Tensor<double, 4> fs(n, n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k)
+                for (int l = 0; l < n; ++l)
+                    fs(i, j, k, l) = std::sin(0.4 * xs[i]) * std::cos(0.3 * ys[j]) +
+                                     0.1 * zs[k] + 0.05 * ws[l] * ws[l] + 0.08 * xs[i] * ws[l];
+
+    auto table = std::make_shared<oc::InterpTable4D>(xs, ys, zs, ws, fs, InterpType::Cubic, false);
+    auto args = Arguments<4>();
+    auto composed = vf::interp(table, args);
+
+    Eigen::VectorXd x(4);
+    x << 0.75, 1.1, 1.4, 0.6;
+    verify_jacobian_fd(composed, x, 1e-5);
+}
+
+TEST_F(InterpComposeHappyPathTest, Interp4D_FourScalars_Jacobian_MatchesFD) {
+    const int n = 7;
+    auto xs = linspace_compose(0.0, 2.0, n);
+    auto ys = linspace_compose(0.0, 2.0, n);
+    auto zs = linspace_compose(0.0, 2.0, n);
+    auto ws = linspace_compose(0.0, 2.0, n);
+    Eigen::Tensor<double, 4> fs(n, n, n, n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            for (int k = 0; k < n; ++k)
+                for (int l = 0; l < n; ++l)
+                    fs(i, j, k, l) = 0.3 * xs[i] - 0.2 * ys[j] * ys[j] +
+                                     0.4 * std::sin(0.5 * zs[k]) + 0.15 * ws[l];
+
+    auto table = std::make_shared<oc::InterpTable4D>(xs, ys, zs, ws, fs, InterpType::Cubic, false);
+    auto args = Arguments<4>();
+    auto xseg = args.template segment<1>(0);
+    auto yseg = args.template segment<1>(1);
+    auto zseg = args.template segment<1>(2);
+    auto wseg = args.template segment<1>(3);
+    auto composed = vf::interp(table, xseg, yseg, zseg, wseg);
+
+    Eigen::VectorXd x(4);
+    x << 1.25, 0.70, 1.50, 0.95;
+    verify_jacobian_fd(composed, x, 1e-5);
 }

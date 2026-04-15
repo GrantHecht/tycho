@@ -222,7 +222,15 @@ int main() {
 
     std::cout << "=== Betts Low Thrust: LEO-to-MEO with J2/J3/J4 zonal gravity ===\n\n";
 
-    phase.optimize_solve();
+    const auto flag = phase.optimize_solve();
+    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        std::cerr << "BettsLowThrust: FAILED (status " << static_cast<int>(flag) << ")\n";
+        return EXIT_FAILURE;
+    }
+    if (!phase.mesh_converged()) {
+        std::cerr << "BettsLowThrust: FAILED (adaptive mesh did not converge)\n";
+        return EXIT_FAILURE;
+    }
 
     auto traj = phase.return_traj();
     double final_weight = traj.back()[6] * Fstar;
@@ -237,7 +245,6 @@ int main() {
     std::cout << "  Throttle Parameter: " << std::fixed << std::setprecision(2) << throttle_param
               << "\n";
 
-    bool converged = !traj.empty() && final_weight > 0.0;
-    std::cout << "\nBettsLowThrust: " << (converged ? "PASSED" : "FAILED") << "\n";
-    return converged ? 0 : 1;
+    std::cout << "\nBettsLowThrust: PASSED\n";
+    return EXIT_SUCCESS;
 }
