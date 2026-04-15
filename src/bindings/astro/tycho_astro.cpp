@@ -14,7 +14,6 @@
 // =============================================================================
 
 #include "astro/tycho_astro.h"
-#include "tycho/detail/astro/cr3bp_model.h"
 
 namespace tycho {
 using namespace tycho::vf;
