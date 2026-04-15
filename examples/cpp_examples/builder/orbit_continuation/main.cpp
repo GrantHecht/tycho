@@ -16,34 +16,13 @@ static const double mu = MuMoon / (MuEarth + MuMoon);
 
 ODE make_cr3bp_ode(double mu_val) {
     auto args = ODEArguments(6, 0, 0);
-    auto X = args.head<3>();
-    auto V = args.segment<3>(3);
+    auto state = args.head<6>();
 
-    Eigen::Vector3d p1loc;
-    p1loc << -mu_val, 0.0, 0.0;
-    Eigen::Vector3d p2loc;
-    p2loc << 1.0 - mu_val, 0.0, 0.0;
+    Eigen::Vector3d zero3 = Eigen::Vector3d::Zero();
+    auto zero_accel = Constant<7, 3>(7, zero3);
 
-    auto p1_const = Constant<7, 3>(7, p1loc);
-    auto p2_const = Constant<7, 3>(7, p2loc);
-
-    auto dvec = X - p1_const;
-    auto rvec = X - p2_const;
-
-    auto x = X.coeff<0>();
-    auto y = X.coeff<1>();
-    auto xdot = V.coeff<0>();
-    auto ydot = V.coeff<1>();
-
-    auto rot_x = 2.0 * ydot + x;
-    auto rot_y = (-2.0) * xdot + y;
-
-    auto rot_terms = StackedOutputs{rot_x, rot_y};
-
-    auto acc = rot_terms.padded_lower<1>() - (1.0 - mu_val) * dvec.normalized_power<3>() -
-               mu_val * rvec.normalized_power<3>();
-
-    auto ode_expr = StackedOutputs{V, acc};
+    auto dyn = astro::CRTBPDynamics(mu_val);
+    auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, zero_accel)));
 
     return ODE(ode_expr, 6, 0)
         .var_group("R", 0, 3)
