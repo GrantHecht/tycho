@@ -54,7 +54,6 @@ class ODE {
         validate();
     }
 
-    // ── Named variable registration (fluent) ────────────────────────────
 
     ODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         ensure_registry();
@@ -75,13 +74,11 @@ class ODE {
         return *this;
     }
 
-    // ── Phase construction ──────────────────────────────────────────────
 
     /// Create a Phase from this ODE with a trajectory guess and segment count.
     Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                 int num_segments) const;
 
-    // ── Integrator construction ────────────────────────────────────────
 
     /// Returns a fluent builder for constructing a DynIntegrator.
     /// Configure the step size (required) via .step(double), and optionally
@@ -90,7 +87,6 @@ class ODE {
     /// IntegratorBuilder below for the full API.
     IntegratorBuilder integrator() const;
 
-    // ── Convenience (delegate to VarRegistry) ───────────────────────────
 
     Eigen::VectorXd make_input(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
@@ -102,7 +98,6 @@ class ODE {
         return registry_->make_units(vals);
     }
 
-    // ── Accessors ───────────────────────────────────────────────────────
 
     int xvars() const { return xvars_; }
     int uvars() const { return uvars_; }
@@ -121,7 +116,6 @@ class ODE {
     /// Build the fully-dynamic GenericODE.
     DynODE generic_ode() const { return DynODE(func_, xvars_, uvars_, pvars_); }
 
-    // ── Internal (used by IntegratorBuilder) ────────────────────────────
     DynODE make_dyn_ode_public() const { return make_dyn_ode(); }
     void require_registry() const { check_registry(); }
     const VarRegistry *registry_ptr() const {

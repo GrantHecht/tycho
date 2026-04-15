@@ -22,11 +22,11 @@ struct MEEToCartesian : VectorFunction<MEEToCartesian, 6, 6, DenseDerivativeMode
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    double mu; // Gravitational Parameter
+    double mu_; // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
 
     MEEToCartesian() { this->set_io_rows(6, 6); }
-    MEEToCartesian(double mu) : mu(mu) { this->set_io_rows(6, 6); }
+    MEEToCartesian(double mu) : mu_(mu) { this->set_io_rows(6, 6); }
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x_, CVecRef<OutType> fx_) const {
@@ -57,7 +57,7 @@ struct MEEToCartesian : VectorFunction<MEEToCartesian, 6, 6, DenseDerivativeMode
         Scalar x18 = x16 * x17;
         Scalar x19 = x10 * x9;
         Scalar x20 = x1 * x3;
-        Scalar x21 = Scalar(x14 * sqrt(mu / x0));
+        Scalar x21 = Scalar(x14 * sqrt(mu_ / x0));
         Scalar x22 = x2 * x4;
 
         _fx_[0] = x15 * (x13 + x6);
@@ -115,7 +115,7 @@ struct MEEToCartesian : VectorFunction<MEEToCartesian, 6, 6, DenseDerivativeMode
         Scalar x34 = -x24 + x25;
         Scalar x35 = x2 * x9 - x31 * x32 + x33 + x34;
         Scalar x36 = 1.0 / x0;
-        Scalar x37 = Scalar(sqrt(mu * x36));
+        Scalar x37 = Scalar(sqrt(mu_ * x36));
         Scalar x38 = x17 * x37;
         Scalar x39 = x35 * x38;
         Scalar x40 = x2 * x4;
@@ -260,7 +260,7 @@ struct MEEToCartesian : VectorFunction<MEEToCartesian, 6, 6, DenseDerivativeMode
         Scalar x35 = -x25 + x26;
         Scalar x36 = x2 * x9 - x33 * x4 + x34 + x35;
         Scalar x37 = 1.0 / x0;
-        Scalar x38 = Scalar(sqrt(mu * x37));
+        Scalar x38 = Scalar(sqrt(mu_ * x37));
         Scalar x39 = x17 * x38;
         Scalar x40 = x36 * x39;
         Scalar x41 = x2 * x4;

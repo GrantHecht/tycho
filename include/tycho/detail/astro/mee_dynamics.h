@@ -22,7 +22,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    double mu; // Gravitational Parameter
+    double mu_; // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
 
     // Precomputed from constructor parameters
@@ -30,9 +30,9 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     double pc1_;
 
     MEEDynamics() { this->set_io_rows(9, 6); }
-    MEEDynamics(double mu) : mu(mu) {
+    MEEDynamics(double mu) : mu_(mu) {
         this->set_io_rows(9, 6);
-        pc0_ = std::sqrt(mu);
+        pc0_ = std::sqrt(mu_);
         pc1_ = 1.0 / pc0_;
     }
 
@@ -71,7 +71,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
         _fx_[2] = x18 * (x1 * x19 + x14 * (x10 * x17 + x2) - x6 * x9);
         _fx_[3] = x20 * x9;
         _fx_[4] = x10 * x20;
-        _fx_[5] = Scalar(x18 * (mu * (x12 * x12) / (x0 * x0) + x19));
+        _fx_[5] = Scalar(x18 * (mu_ * (x12 * x12) / (x0 * x0) + x19));
     }
 
     template <class InType, class OutType, class JacType>
@@ -128,7 +128,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
         Scalar x41 = x22 * x40;
         Scalar x42 = x36 * x41;
         Scalar x43 = (x14 * x14);
-        Scalar x44 = Scalar(mu / (x0 * x0));
+        Scalar x44 = Scalar(mu_ / (x0 * x0));
         Scalar x45 = x30 + x43 * x44;
         Scalar x46 = 1.0 / x43;
         Scalar x47 = x46 * x7;
@@ -301,7 +301,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
         Scalar x47 = x40 * x46;
         Scalar x48 = (x14 * x14);
         Scalar x49 = (Scalar(1.0) / (x0 * x0));
-        Scalar x50 = Scalar(mu * x49);
+        Scalar x50 = Scalar(mu_ * x49);
         Scalar x51 = x34 + x48 * x50;
         Scalar x52 = 3 * x31;
         Scalar x53 = x16 * x52;
@@ -572,7 +572,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
                       x264 * x91 + x59 * x97 + x78;
         Scalar x308 = x233 * x306;
         Scalar x309 = x109 - x112 * x54 * x63 * x7 + x125 * x59 - x273 + x279 * x61;
-        Scalar x310 = Scalar(-2 * mu * x14 * x49 * x9 + x168 + x224 * x90);
+        Scalar x310 = Scalar(-2 * mu_ * x14 * x49 * x9 + x168 + x224 * x90);
         Scalar x311 = x139 * x238;
         Scalar x312 = x282 * x58;
         Scalar x313 = x54 * x81;
@@ -762,14 +762,14 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
         _hx_(1, 5) = Scalar(-LM4 * x138 - LM4 * x285 + x139 * x192 * x45 + x182 +
                             x183 * (-x10 * x107 * x277 + x16 * x73 - x250 * x276 - x275 + x280) +
                             x184 * (-x245 * x270 - x271 * x272 - x274) +
-                            x242 * (2 * mu * x49 * x9 * x94 - x107 * x276 - x281) - x252 * x284 -
+                            x242 * (2 * mu_ * x49 * x9 * x94 - x107 * x276 - x281) - x252 * x284 -
                             x276 * x283);
-        _hx_(2, 5) =
-            Scalar(LM1 * pc1_ * x30 * (x15 * x7 * x73 - x245 * x306 - x271 * x81 - x275 - x307) +
-                   LM2 * pc1_ * x30 * (-x114 * x277 - x250 * x308 - x309) +
-                   (1.0 / 2.0) * LM3 * pc1_ * x111 * x191 * x30 * x54 * x8 - LM3 * x285 -
-                   LM4 * x311 + LM5 * pc1_ * x30 * (2 * mu * x11 * x49 * x94 - x107 * x308 - x310) -
-                   x180 - x253 * x284 - x283 * x308);
+        _hx_(2, 5) = Scalar(
+            LM1 * pc1_ * x30 * (x15 * x7 * x73 - x245 * x306 - x271 * x81 - x275 - x307) +
+            LM2 * pc1_ * x30 * (-x114 * x277 - x250 * x308 - x309) +
+            (1.0 / 2.0) * LM3 * pc1_ * x111 * x191 * x30 * x54 * x8 - LM3 * x285 - LM4 * x311 +
+            LM5 * pc1_ * x30 * (2 * mu_ * x11 * x49 * x94 - x107 * x308 - x310) - x180 -
+            x253 * x284 - x283 * x308);
         _hx_(3, 5) = -LM3 * x158 + LM3 * x318 + LM4 * x144 + LM4 * x319 + x148 * x259 +
                      x183 * x316 - x184 * x320 + x186 - x187 + x188;
         _hx_(4, 5) = -LM3 * x159 + LM3 * x328 + LM4 * x146 + LM4 * x329 - LM5 * x149 - x183 * x330 +

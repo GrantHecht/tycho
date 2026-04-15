@@ -62,9 +62,29 @@ class TychoHeaderGen:
         self.ninputs = len(Xs)
         self.noutputs = len(F)
 
+        # Rename scalar param symbols to the member-convention trailing
+        # underscore form (e.g. mu → mu_) so the generated compute bodies
+        # reference the C++ member directly. The original (non-underscore)
+        # name is preserved as the constructor parameter name.
+        param_subs = {}
+        renamed_scalar_params = []
+        self._ctor_arg_for = {}
+        for sym, descr in ScalarParams:
+            name = str(sym)
+            if name.endswith("_"):
+                renamed_scalar_params.append((sym, descr))
+                continue
+            new_sym = sp.Symbol(name + "_")
+            param_subs[sym] = new_sym
+            renamed_scalar_params.append((new_sym, descr))
+            self._ctor_arg_for[name + "_"] = name
+
+        if param_subs:
+            F = sp.Matrix(list(F)).xreplace(param_subs)
+
         self.Func = sp.Matrix(list(F))
         self.Inputs = sp.Matrix(list(Xs))
-        self.ScalarParams = ScalarParams
+        self.ScalarParams = renamed_scalar_params
         self.VectorParams = VectorParams
         self.MatrixParams = MatrixParams
 
@@ -352,10 +372,12 @@ class TychoHeaderGen:
                 lines.append(f"{I}double {member_name};")
         lines.append("")
 
-        # Constructor params
+        # Constructor params (use the original non-underscore name so the
+        # caller-facing API is e.g. MEEDynamics(double mu) rather than mu_).
         params = []
         for P, Descr in self.ScalarParams:
-            params.append(f"double {P}")
+            ctor_arg = self._ctor_arg_for.get(str(P), str(P))
+            params.append(f"double {ctor_arg}")
         for Vec, Name, Descr in self.VectorParams:
             vsize = len(Vec)
             params.append(f"const Eigen::Matrix<double, {vsize}, 1>& {Name}")
@@ -366,7 +388,8 @@ class TychoHeaderGen:
         paramstr = ", ".join(params)
         assigns = []
         for P, _ in self.ScalarParams:
-            assigns.append(f"{P}({P})")
+            ctor_arg = self._ctor_arg_for.get(str(P), str(P))
+            assigns.append(f"{P}({ctor_arg})")
         for Vec, Name, _ in self.VectorParams:
             assigns.append(f"{Name}({Name})")
         for Mat, Name, _ in self.MatrixParams:
@@ -548,11 +571,20 @@ class TychoHeaderGen:
 
     def make_header(self, output_dir=None, script_name=None):
         text = self._build_text(script_name=script_name)
-        fname = self.Name + ".h"
+        # Tycho convention: header files are snake_case even when the type
+        # they declare is PascalCase (e.g. MEEDynamics → mee_dynamics.h).
+        fname = self._snake_case(self.Name) + ".h"
         if output_dir:
             fname = os.path.join(output_dir, fname)
         with open(fname, "w") as f:
             f.write(text)
+
+    @staticmethod
+    def _snake_case(name):
+        # MEEDynamics → mee_dynamics, MEEToCartesian → mee_to_cartesian
+        s = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+        s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
+        return s.lower()
 
     def _build_text(self, script_name=None):
         copyright = _COPYRIGHT.format(

@@ -25,7 +25,7 @@ namespace tycho::vf {
 // correct sparsity pattern.
 //
 // compute_impl explicitly writes fx = 0 rather than relying on the caller
-// to pre-zero the RHS buffer. The earlier LockArgs implementation wrote
+// to pre-zero the RHS buffer. An earlier implementation in this file wrote
 // fx = x and corrupted multi-phase solves; the current implementation
 // writes the correct zero residual unconditionally so any future caller
 // (unit test, new transcription, direct .compute()) sees the same
