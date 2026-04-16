@@ -178,6 +178,74 @@ TEST_F(CRTBPDynamicsTest, JacobianMatchesFiniteDifferenceOfCompute) {
     }
 }
 
+TEST_F(CRTBPDynamicsTest, JacobiConstantApproximatelyConserved) {
+    // Jacobi's integral C = 2U - v^2 is a constant of motion for the
+    // classical CR3BP (zero extra acceleration). A sign or coefficient
+    // error baked into both compute() and compute_jacobian() would pass
+    // adjoint-consistency and finite-difference checks but break this
+    // invariant — integrating forward in time lets numerical error
+    // accumulate on any wrong term.
+    //
+    // RK4 at h=1e-3 over t=1 gives global error ~1e-12 on a smooth
+    // trajectory; a 1e-8 threshold leaves headroom while still being
+    // tight enough to catch real dynamics bugs.
+    const double mu = 0.012150585;  // Earth-Moon
+    astro::CRTBPDynamics dyn(mu);
+
+    auto jacobi_C = [&](const Eigen::VectorXd& s) {
+        const double x = s[0], y = s[1], z = s[2];
+        const double vx = s[3], vy = s[4], vz = s[5];
+        const double dx1 = x + mu;
+        const double dx2 = x - (1.0 - mu);
+        const double r1 = std::sqrt(dx1 * dx1 + y * y + z * z);
+        const double r2 = std::sqrt(dx2 * dx2 + y * y + z * z);
+        const double U = 0.5 * (x * x + y * y) + (1.0 - mu) / r1 + mu / r2;
+        const double v2 = vx * vx + vy * vy + vz * vz;
+        return 2.0 * U - v2;
+    };
+
+    // State: planar orbit seeded near L1 region with a small out-of-plane
+    // component so z-dynamics are exercised. Extra-accel tail is zero.
+    Eigen::VectorXd s(9);
+    s << 0.82, 0.0, 0.01, 0.0, 0.15, 0.02, 0.0, 0.0, 0.0;
+
+    const double C0 = jacobi_C(s);
+    const double h = 1e-3;
+    const int nsteps = 1000;
+
+    Eigen::VectorXd k1(6), k2(6), k3(6), k4(6);
+    Eigen::VectorXd tmp(9);
+    auto step = [&](const Eigen::VectorXd& sin, double step_h) {
+        k1.setZero();
+        k2.setZero();
+        k3.setZero();
+        k4.setZero();
+        dyn.compute(sin, k1);
+        tmp = sin;
+        tmp.head<6>() += 0.5 * step_h * k1;
+        dyn.compute(tmp, k2);
+        tmp = sin;
+        tmp.head<6>() += 0.5 * step_h * k2;
+        dyn.compute(tmp, k3);
+        tmp = sin;
+        tmp.head<6>() += step_h * k3;
+        dyn.compute(tmp, k4);
+        Eigen::VectorXd out = sin;
+        out.head<6>() += (step_h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+        return out;
+    };
+
+    double max_dev = 0.0;
+    for (int i = 0; i < nsteps; ++i) {
+        s = step(s, h);
+        double C = jacobi_C(s);
+        max_dev = std::max(max_dev, std::abs(C - C0));
+    }
+    EXPECT_LT(max_dev, 1e-8)
+        << "Jacobi constant drifted by " << max_dev << " over " << nsteps
+        << " RK4 steps (h=" << h << "); C0=" << C0;
+}
+
 TEST_F(CRTBPDynamicsTest, L1ApproximateLocation) {
     // Earth-Moon system: mu ~ 0.012150585
     // L1 is between the two bodies, on the x-axis between them.

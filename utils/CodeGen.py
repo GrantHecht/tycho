@@ -330,7 +330,7 @@ class TychoHeaderGen:
 
         for Param, _, _ in self.ScalarParams:
             Name = str(Param)
-            if Name in expr:
+            if re.search(rf"\b{re.escape(Name)}\b", expr):
                 wrapscalar = True
 
         for Vec, Name, _, _ in self.VectorParams:
@@ -356,7 +356,7 @@ class TychoHeaderGen:
 
         # Check for precomputed member references (pcN_)
         for member_name, _ in self._precomputed:
-            if member_name in expr:
+            if re.search(rf"\b{re.escape(member_name)}\b", expr):
                 wrapscalar = True
 
         if wrapscalar:
