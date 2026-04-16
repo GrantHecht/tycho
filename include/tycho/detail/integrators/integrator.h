@@ -421,7 +421,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using RKData = RKCoeffs<RKOp>;
         constexpr int Stages = RKData::Stages;
         constexpr int Stgsm1 = RKData::Stages - 1;
-        constexpr bool is_diag_ = RKData::is_diag_;
 
         auto Impl = [&](auto &k_vals, auto &xtup) {
             xtup = x;
@@ -438,14 +437,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             if constexpr (true) {
                 for (int i = 0; i < Stgsm1; i++) {
-                    Scalar ti = t0 + RKData::Times[i] * h;
+                    Scalar ti = t0 + RKData::C[i] * h;
                     xtup = x;
                     xtup[this->ode_.t_var()] = ti;
                     const int ip1 = i + 1;
-                    const int js = is_diag_ ? i : 0;
+                    const int js = 0;
                     for (int j = js; j < ip1; j++) {
                         xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                            Scalar(RKData::ACoeffs[i][j]) * k_vals[j];
+                            Scalar(RKData::A[i][j]) * k_vals[j];
                     }
 
                     this->update_control(xtup);
@@ -460,18 +459,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 tycho::utils::constexpr_for_loop(
                     std::integral_constant<int, 0>(), std::integral_constant<int, Stgsm1>(),
                     [&](auto i) {
-                        Scalar ti = t0 + RKData::Times[i.value] * h;
+                        Scalar ti = t0 + RKData::C[i.value] * h;
                         xtup = x;
                         xtup[tvar] = ti;
                         constexpr int ip1 = i.value + 1;
-                        const int js = is_diag_ ? i.value : 0;
 
                         tycho::utils::constexpr_for_loop(
                             std::integral_constant<int, 0>(), std::integral_constant<int, ip1>(),
                             [&](auto j) {
-                                if constexpr (RKData::ACoeffs[i.value][j.value] != 0.0) {
+                                if constexpr (RKData::A[i.value][j.value] != 0.0) {
                                     xtup.template segment<DODE::XV>(0, tvar) +=
-                                        Scalar(RKData::ACoeffs[i.value][j.value]) * k_vals[j.value];
+                                        Scalar(RKData::A[i.value][j.value]) * k_vals[j.value];
                                 }
                             });
 
@@ -486,7 +484,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             xtup[this->ode_.t_var()] = tf;
             for (int i = 0; i < Stages; i++) {
                 xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                    Scalar(RKData::BCoeffs[i]) * k_vals[i];
+                    Scalar(RKData::B[i]) * k_vals[i];
             }
 
             this->update_control(xtup);
@@ -503,7 +501,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             for (int i = 0; i < Stages; i++) {
                 xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                    Scalar(RKData::CCoeffs[i]) * k_vals[i];
+                    Scalar(RKData::Bhat[i]) * k_vals[i];
             }
 
             xf_est = xtup; // Estimate
@@ -515,14 +513,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                 for (int i = 0; i < Stages; i++) {
                     xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                        Scalar(RKData::MidCoeffs[i] / 2.0) * k_vals[i];
+                        Scalar(RKData::Bmid[i] / 2.0) * k_vals[i];
                 }
 
                 if constexpr (!RKData::FSAL) {
                     k_vals.back().setZero();
                     this->ode_.compute(xf, k_vals.back());
                     xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                        Scalar(RKData::MidCoeffs.back() / 2.0) * k_vals.back() * h;
+                        Scalar(RKData::Bmid.back() / 2.0) * k_vals.back() * h;
                     xdot_prev = k_vals.back();
                 }
 
