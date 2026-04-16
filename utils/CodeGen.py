@@ -339,7 +339,7 @@ class TychoHeaderGen:
                 if symname in expr:
                     replname = "({0:}[{1:}])".format(Name, i)
                     regex = re.compile(rf"\b{symname}\b")
-                    expr = re.sub(symname, replname, expr)
+                    expr = re.sub(regex, replname, expr)
                     wrapscalar = True
 
         for Mat, Name, _, _ in self.MatrixParams:
