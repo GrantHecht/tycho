@@ -15,7 +15,13 @@
 #pragma once
 #include <sstream>
 
+#include "tycho/detail/integrators/adaptive_driver.h"
+#include "tycho/detail/integrators/event_handler.h"
+#include "tycho/detail/integrators/parallel_driver.h"
 #include "tycho/detail/integrators/rk_steppers.h"
+#include "tycho/detail/integrators/step_controller.h"
+#include "tycho/detail/integrators/stepper.h"
+#include "tycho/detail/integrators/stm_driver.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 #include "tycho/detail/vf/type_erasure/generic_conditional.h"
@@ -399,8 +405,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
   protected:
     double calc_hnext(double h, double err, double accerr) const {
-        return this->step_frac_ * h *
-               pow((accerr / err), 1.0 / (this->error_order_ + err_pow_fac_));
+        IController ctrl;
+        ctrl.safety = this->step_frac_;
+        ctrl.exponent_bias = this->err_pow_fac_;
+        return ctrl.propose_step(h, err / accerr, this->error_order_);
     }
 
     template <class State> void update_control(State &xtup) const {
