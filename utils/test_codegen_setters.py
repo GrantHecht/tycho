@@ -4,6 +4,8 @@ Run with:
     conda run -n tycho python -m pytest utils/test_codegen_setters.py -v
 """
 
+import re
+
 import pytest
 import sympy as sp
 from CodeGen import TychoHeaderGen
@@ -249,3 +251,116 @@ def test_make_header_writes_atomically(tmp_path):
     assert not (tmp_path / "toy.h.tmp").exists()
     text = (tmp_path / "toy.h").read_text()
     assert "void set_k(double k)" in text
+
+
+# ── Hessian two-pass emission ordering ─────────────────────────────────────
+
+
+def _hx_lines(text):
+    """Return the subset of lines from ``text`` that mention ``_hx_(``."""
+    return [ln.strip() for ln in text.splitlines() if "_hx_(" in ln]
+
+
+def test_hessian_emission_is_two_pass_upper_then_copy():
+    """Lock in the Hessian two-pass emission ordering.
+
+    Regression guard: prior to the fix, the upper-triangle assignment and
+    the lower-triangle copy were interleaved in a single loop. That reads
+    ``_hx_(col,row)`` before it has been assigned, so the lower triangle
+    ended up zero-filled (masked by ``EIGEN_INITIALIZE_MATRICES_BY_ZERO``
+    and by PSIOPT's upper-only reader). Anyone refactoring
+    ``gen_compute_all`` who merges the loops reintroduces the bug.
+
+    Assertions on a 3-input toy function:
+      1. Every ``_hx_(row,col) = _hx_(col,row);`` copy is for the lower
+         triangle (row > col).
+      2. Every such copy appears strictly AFTER the corresponding
+         upper-triangle write of ``_hx_(col,row)``.
+      3. No upper-triangle entry ever appears as a copy (row <= col must
+         always be a compute assignment, not a ``_hx_(...)=_hx_(...);``).
+    """
+    x0, x1, x2 = sp.symbols("x0 x1 x2")
+    # Dense Hessian: every (i,j) entry is nonzero so all 9 cells appear.
+    Eq = sp.Matrix([x0 * x1 * x2 + x0**2 + x1**2 + x2**2])
+    gen = TychoHeaderGen("Dense", Eq, sp.Matrix([x0, x1, x2]), [])
+    text = gen.gen_compute_all()
+
+    hx = _hx_lines(text)
+    assert hx, "expected _hx_ lines in gen_compute_all output"
+
+    copy_re = re.compile(r"_hx_\((\d+),(\d+)\)\s*=\s*_hx_\((\d+),(\d+)\);")
+    lhs_re = re.compile(r"_hx_\((\d+),(\d+)\)\s*=")
+
+    upper_write_index = {}  # (row,col) -> line index of first write
+    for idx, ln in enumerate(hx):
+        # Classify as copy first; only lines that are NOT copies are
+        # compute-writes. This avoids regex-lookahead subtleties.
+        if copy_re.match(ln):
+            continue
+        m = lhs_re.match(ln)
+        if m:
+            r, c = int(m.group(1)), int(m.group(2))
+            # Upper triangle compute writes: row <= col.
+            assert r <= c, (
+                f"write to lower triangle _hx_({r},{c}) in compute loop — "
+                f"the two-pass split is broken"
+            )
+            upper_write_index.setdefault((r, c), idx)
+
+    for idx, ln in enumerate(hx):
+        m = copy_re.match(ln)
+        if not m:
+            continue
+        dst_r, dst_c = int(m.group(1)), int(m.group(2))
+        src_r, src_c = int(m.group(3)), int(m.group(4))
+        # Copy must be lower ← upper, mirrored across the diagonal.
+        assert dst_r > dst_c, f"non-lower copy target _hx_({dst_r},{dst_c})"
+        assert (src_r, src_c) == (dst_c, dst_r), (
+            f"copy _hx_({dst_r},{dst_c}) = _hx_({src_r},{src_c}) is not a "
+            f"diagonal mirror"
+        )
+        src_idx = upper_write_index.get((src_r, src_c))
+        assert src_idx is not None, (
+            f"_hx_({dst_r},{dst_c}) copies from _hx_({src_r},{src_c}) which "
+            f"was never written — upper-triangle pass is incomplete"
+        )
+        assert src_idx < idx, (
+            f"_hx_({dst_r},{dst_c}) copies from _hx_({src_r},{src_c}) "
+            f"(written at line {src_idx}) before it has been assigned "
+            f"(copy at line {idx}) — upper and copy loops are interleaved"
+        )
+
+
+# ── pow() scan strips comments ──────────────────────────────────────────────
+
+
+def test_pow_scan_ignores_comment_text(tmp_path):
+    """The defense-in-depth ``pow(`` scan must not false-trip on comments.
+
+    The scan exists to catch unoptimized runtime ``pow(...)`` calls in the
+    generated compute body. A docstring or other comment that contains the
+    literal substring ``pow(`` must not abort codegen.
+    """
+    Xs, Eq, k = _toy_inputs_and_eq()
+    gen = TychoHeaderGen(
+        "Toy",
+        Eq,
+        sp.Matrix(Xs),
+        [(k, "gain", "k > 0.0")],
+        docstr="Uses std::pow(k, 2) internally — historical note.",
+    )
+    # Inject a synthetic comment into the built text to simulate a future
+    # path where docstrings or user comments land in the header. The scan
+    # must tolerate ``pow(`` inside both line and block comments.
+    orig = gen._build_text
+
+    def patched(script_name=None):
+        text = orig(script_name=script_name)
+        return (
+            "// mentions pow( in a line comment\n"
+            "/* and pow( inside a block comment */\n"
+        ) + text
+
+    gen._build_text = patched  # type: ignore[assignment]
+    # Must not raise.
+    gen.make_header(output_dir=str(tmp_path))

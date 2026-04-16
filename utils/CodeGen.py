@@ -899,7 +899,14 @@ class TychoHeaderGen:
         # _POW_HALF_INT_RANGE slipped through, or a base shape the walker
         # doesn't normalize (e.g. a Mul) escaped. Fail the codegen run
         # rather than silently emit an unoptimized runtime pow() call.
-        if "pow(" in text:
+        #
+        # Scan only the compute bodies: strip C++ line and block comments
+        # before checking so a docstring (or any future user-supplied
+        # comment) containing the literal ``pow(`` cannot spuriously abort
+        # codegen.
+        _no_block = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+        _no_comments = re.sub(r"//[^\n]*", "", _no_block)
+        if "pow(" in _no_comments:
             raise RuntimeError(
                 f"TychoHeaderGen({self.Name}): generated text contains an "
                 f"unoptimized pow(...) call — check that exponents are in "

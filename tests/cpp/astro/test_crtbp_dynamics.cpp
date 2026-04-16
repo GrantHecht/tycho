@@ -6,6 +6,7 @@
 
 #include <tycho/tycho.h>
 #include "test_utils.h"
+#include <array>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <stdexcept>
@@ -91,6 +92,90 @@ TEST_F(CRTBPDynamicsTest, SetMuRecomputesPrecomputed) {
     // set_mu must also re-run validation.
     EXPECT_THROW(dyn_set.set_mu(-1.0), std::invalid_argument);
     EXPECT_THROW(dyn_set.set_mu(1.0), std::invalid_argument);
+}
+
+namespace {
+
+// Hand-coded reference for CR3BP rotating-frame dynamics with extra
+// acceleration forcing. Independent of the SymPy source the codegen
+// consumed, so a sign flip baked into both compute and compute_jacobian
+// of the generated header would still fail this comparison.
+Eigen::VectorXd crtbp_reference_fx(double mu, const Eigen::VectorXd& s) {
+    const double x = s[0], y = s[1], z = s[2];
+    const double vx = s[3], vy = s[4], vz = s[5];
+    const double ax = s[6], ay = s[7], az = s[8];
+    const double one_minus_mu = 1.0 - mu;
+    const double dx1 = x + mu;
+    const double dx2 = x - one_minus_mu;
+    const double r1 = std::sqrt(dx1 * dx1 + y * y + z * z);
+    const double r2 = std::sqrt(dx2 * dx2 + y * y + z * z);
+    const double inv_r1_3 = 1.0 / (r1 * r1 * r1);
+    const double inv_r2_3 = 1.0 / (r2 * r2 * r2);
+
+    Eigen::VectorXd fx(6);
+    fx[0] = vx;
+    fx[1] = vy;
+    fx[2] = vz;
+    fx[3] = 2.0 * vy + x - one_minus_mu * dx1 * inv_r1_3 - mu * dx2 * inv_r2_3 + ax;
+    fx[4] = -2.0 * vx + y - one_minus_mu * y * inv_r1_3 - mu * y * inv_r2_3 + ay;
+    fx[5] = -one_minus_mu * z * inv_r1_3 - mu * z * inv_r2_3 + az;
+    return fx;
+}
+
+}  // namespace
+
+TEST_F(CRTBPDynamicsTest, ValueMatchesReferenceAtRandomStates) {
+    const double mu = 0.012150585;  // Earth-Moon
+    astro::CRTBPDynamics dyn(mu);
+    const std::array<int, 5> seeds{600, 601, 602, 603, 604};
+    for (int seed : seeds) {
+        Eigen::VectorXd s = TychoTest::deterministic_random_vector(9, seed, -1.0, 1.0);
+        // Keep position scaled so r1, r2 stay well away from zero.
+        s.head<3>() *= 0.8;
+        s[0] += 0.3;  // bias off the primaries
+        s.segment<3>(3) *= 0.5;
+        s.tail<3>() *= 0.01;
+
+        Eigen::VectorXd fx(6);
+        fx.setZero();
+        dyn.compute(s, fx);
+        Eigen::VectorXd fx_ref = crtbp_reference_fx(mu, s);
+        EXPECT_TRUE(fx.isApprox(fx_ref, 1e-12))
+            << "seed=" << seed << " fx=\n" << fx << "\nref=\n" << fx_ref;
+    }
+}
+
+TEST_F(CRTBPDynamicsTest, JacobianMatchesFiniteDifferenceOfCompute) {
+    const double mu = 0.012150585;
+    astro::CRTBPDynamics dyn(mu);
+    Eigen::VectorXd s(9);
+    s << 0.5, 0.1, -0.05, 0.05, 0.5, -0.02, 0.1, -0.2, 0.05;
+
+    Eigen::VectorXd fx(6);
+    Eigen::MatrixXd jx(6, 9);
+    fx.setZero();
+    jx.setZero();
+    dyn.compute_jacobian(s, fx, jx);
+
+    const double h = 1e-6;
+    Eigen::MatrixXd jx_fd(6, 9);
+    for (int j = 0; j < 9; ++j) {
+        Eigen::VectorXd sp_ = s, sm = s;
+        sp_[j] += h;
+        sm[j] -= h;
+        Eigen::VectorXd fp(6), fm(6);
+        fp.setZero();
+        fm.setZero();
+        dyn.compute(sp_, fp);
+        dyn.compute(sm, fm);
+        jx_fd.col(j) = (fp - fm) / (2.0 * h);
+    }
+    for (int i = 0; i < 6; ++i) {
+        for (int j = 0; j < 9; ++j) {
+            EXPECT_NEAR(jx(i, j), jx_fd(i, j), 1e-6)
+                << "Jacobian mismatch vs fd at (" << i << "," << j << ")";
+        }
+    }
 }
 
 TEST_F(CRTBPDynamicsTest, L1ApproximateLocation) {
