@@ -9,10 +9,10 @@
     {"id": 5, "subject": "Task 5: Extract adaptive_driver.h", "status": "completed", "blockedBy": [2, 3, 4]},
     {"id": 6, "subject": "Task 6: Extract stm_driver.h", "status": "completed", "blockedBy": [1]},
     {"id": 7, "subject": "Task 7: Extract parallel_driver.h", "status": "completed", "blockedBy": [5]},
-    {"id": 8, "subject": "Task 8: Refactor integrator.h to Delegate (partial — 8.1, 8.3 done; 8.2, 8.4, 8.5, 8.6, 8.7 deferred to SP2)", "status": "completed", "blockedBy": [5, 6, 7]},
+    {"id": 8, "subject": "Task 8: Refactor integrator.h to Delegate (partial — 8.1, 8.3, 8.5 scalar path done; 8.2, 8.4, 8.6, 8.7 deferred to SP2)", "status": "completed", "blockedBy": [5, 6, 7]},
     {"id": 9, "subject": "Task 9: Clean Up rk_steppers.h", "status": "completed", "blockedBy": [1]},
     {"id": 10, "subject": "Task 10: Introduce Variant Dispatch (deferred to SP2)", "status": "pending", "blockedBy": [8]},
-    {"id": 11, "subject": "Task 11: Final Verification and Cleanup", "status": "pending", "blockedBy": [8, 9, 10]}
+    {"id": 11, "subject": "Task 11: Final Verification and Cleanup", "status": "completed", "blockedBy": [8, 9, 10]}
   ],
-  "lastUpdated": "2026-04-16T19:35:00Z"
+  "lastUpdated": "2026-04-16T19:55:00Z"
 }
