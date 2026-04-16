@@ -63,7 +63,9 @@ static constexpr std::array<std::array<double, Stages-1>, Stages-1> A;  // renam
 static constexpr std::array<double, Stages-1> C;    // renamed from Times (abscissae)
 static constexpr std::array<double, Stages> B;       // renamed from BCoeffs (weights)
 static constexpr std::array<double, Stages> Bhat;    // renamed from CCoeffs (embedded weights)
-static constexpr std::array<double, Stages> Bmid;    // renamed from MidCoeffs (optional)
+
+static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+static constexpr std::array<double, BmidSize> Bmid;  // renamed from MidCoeffs (optional)
 ```
 
 Standard Butcher tableau notation per Hairer, Norsett & Wanner.
