@@ -189,3 +189,56 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     target_compile_options(tycho_tests PRIVATE $<$<CONFIG:Release>:-O1>)
     target_compile_options(tycho_tests_light PRIVATE $<$<CONFIG:Release>:-O1>)
 endif()
+
+#-------------------------------------------------------------------------------
+# Golden regression corpus — generator + regression tests
+#-------------------------------------------------------------------------------
+set(_GOLDEN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/integrators/regression/golden")
+
+add_executable(generate_golden integrators/regression/generate_golden.cpp)
+target_compile_options(generate_golden PRIVATE ${COMPILE_FLAGS})
+target_include_directories(generate_golden PRIVATE ${_TYCHO_TEST_COMMON_INCLUDES})
+target_include_directories(generate_golden PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_link_libraries(generate_golden PRIVATE tycho GTest::gtest)
+target_compile_definitions(generate_golden PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET generate_golden PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(generate_golden PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+if(UNIX)
+    target_link_options(generate_golden PRIVATE ${LINKER_FLAGS})
+endif()
+
+set(TYCHO_REGRESSION_IVP_SOURCES
+    integrators/regression/test_regression_ivp.cpp
+)
+tycho_add_test_executable(tycho_regression_ivp TYCHO_REGRESSION_IVP_SOURCES)
+target_include_directories(tycho_regression_ivp PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_regression_ivp PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET tycho_regression_ivp PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_regression_ivp PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+
+set(TYCHO_REGRESSION_TRANSCRIPTION_SOURCES
+    integrators/regression/test_regression_transcription.cpp
+)
+tycho_add_test_executable(tycho_regression_transcription TYCHO_REGRESSION_TRANSCRIPTION_SOURCES)
+target_include_directories(tycho_regression_transcription PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_regression_transcription PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET tycho_regression_transcription PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_regression_transcription PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
