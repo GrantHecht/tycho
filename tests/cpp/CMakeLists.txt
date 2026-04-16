@@ -45,6 +45,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_tuple_iterator.cpp
     utils/test_var_registry.cpp
     optimal_control/test_ode_sizes.cpp
+    integrators/test_step_controller.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
