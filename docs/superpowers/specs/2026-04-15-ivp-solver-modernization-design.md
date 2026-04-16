@@ -68,7 +68,41 @@ static constexpr std::array<double, Stages> Bmid;    // renamed from MidCoeffs (
 
 Standard Butcher tableau notation per Hairer, Norsett & Wanner.
 
-The `DOPRI5` internal tag is removed; `RK4Classic` stays as internal-only.
+**A matrix indexing:** `A[i]` corresponds to Butcher row `i+2` (the first
+stage has no A coefficients). For FSAL methods, the last row of the full
+Butcher A matrix equals `B`; this row IS stored in `A` (e.g., DOPRI54 has
+`Stages-1 = 6` rows representing stages 2 through 7).
+
+**Bmid sizing:** For non-FSAL methods (DOPRI87), midpoint interpolation
+requires an extra derivative evaluation at the final state. `Bmid` has
+`Stages + 1` elements for non-FSAL methods (the last element scales this
+extra derivative) and `Stages` elements for FSAL methods. Use a constexpr
+helper: `static constexpr int BmidSize = FSAL ? Stages : Stages + 1;`
+
+**`is_diag_` removed.** Only RK4Classic used it (to skip zero A entries in
+diagonal methods). The generic stage loop already skips zero coefficients
+via compile-time checks on `A[i][j] == 0.0`, making `is_diag_` redundant.
+The `RKStepper` transcription code that reads `is_diag_` is updated to use
+the generic zero-skipping path.
+
+**`RK4Classic`** gets the new required fields (`FSAL = false`,
+`HasEmbedded = false`, `Order = 4`, `ErrorOrder = 0`) so it compiles as a
+valid `RKCoeffs` specialization. It remains internal-only (not exposed via
+bindings, not selectable at runtime).
+
+**DOPRI5 internal tag handling:** `DOPRI5` is removed as a user-facing
+`IVPAlg` enum value. However, the transcription stepper for DOPRI54
+currently uses the 6-stage `DOPRI5` tableau (no embedded weights, no FSAL
+stage). Two options: (a) keep `RKCoeffs<IVPAlg::DOPRI5>` as a private
+tableau accessed only by `init_stepper_and_controller`, or (b) use
+`RKCoeffs<IVPAlg::DOPRI54>` for the transcription stepper and ignore
+`Bhat`/FSAL since the transcription path only needs the `B` weights.
+
+We choose **(a)** for SP1: `DOPRI5` stays in the enum but is marked
+`/// \internal` and remains unreachable from `set_method()`. This
+preserves bit-identical transcription stepper behavior. SP2 may revisit
+if the 7-stage path proves equivalent.
+
 All coefficient values remain bit-identical; this is a rename + interface
 normalization.
 
@@ -101,6 +135,30 @@ State: `k_` stage buffer, `k_fsal_` cached first-stage derivative,
 `fsal_valid_` flag. Allocated once at construction. FSAL is fully internal
 to the stepper; the driver calls `step()` and `reset_fsal()` without knowing
 whether the method uses FSAL.
+
+**FSAL state machine:** (a) `fsal_valid_` starts `false` at construction.
+(b) After any accepted step on a FSAL method, the stepper copies the final
+stage evaluation into `k_fsal_` and sets `fsal_valid_ = true`. (c) On the
+next `step()` call, if `fsal_valid_`, the first stage uses `k_fsal_`
+instead of evaluating the ODE. (d) `reset_fsal()` sets `fsal_valid_ = false`
+— the driver calls this after a rejected step or at the start of a new
+integration. (e) For non-FSAL methods (DOPRI87, Vern*), `fsal_valid_` is
+always false. However, when `compute_midpoint = true`, the stepper still
+performs an extra ODE evaluation at the final state `xf` to obtain the
+derivative needed for midpoint interpolation (stored internally, not
+exposed as FSAL).
+
+**Control-function composition:** The current IVP stepper calls
+`update_control(xtup)` at every stage to fill in control variables via
+direct state mutation. The transcription stepper instead pre-composes the
+control function into the ODE via `NestedFunction` + `GenericODE` at
+construction time. The refactored `Stepper` follows the transcription
+stepper's approach: `Integrator::set_method()` composes the control
+function into the ODE before constructing the `Stepper`. The `Stepper`
+receives a fully composed ODE and does not call `update_control` per
+stage. This unifies both paths and eliminates mutable state mutation
+during stage evaluation. For uncontrolled ODEs (`DODE::UV == 0`), no
+composition is needed and the raw ODE is used directly.
 
 `Scalar` template parameter allows `double` (scalar path) and
 `DefaultSuperScalar` (SIMD batch path) using distinct stepper instances.
@@ -180,6 +238,14 @@ struct EventHandler {
 
 Extracted from inline event logic in both adaptive loops.
 
+**Event storage requirement:** When events are active, the driver always
+stores states and derivatives (even if the user did not request dense output),
+because event refinement requires building an interpolation table. This
+matches the current behavior (the `integrate` method with events sets
+`storestates=true, storederivs=true, storemidpoints=true`). The
+`Integrator` is responsible for building the `LGLInterpTable` from stored
+states/derivatives and passing it to `resolve_events`.
+
 ### STM Driver (`stm_driver.h`)
 
 Coordination layer for sensitivity computation. Contains
@@ -194,6 +260,10 @@ SIMD batch orchestration. Packs N scalar trajectories into
 `AdaptiveDriver<Alg, Controller, DODE, DefaultSuperScalar>` with per-lane
 done-flags, and unpacks results. Per-lane bookkeeping (which trajectories
 are still running, repacking when a lane finishes) lives here.
+
+Regression test 6 specifically verifies that `ParallelDriver` lane
+packing/unpacking produces results identical to N sequential scalar
+integrations (i.e., the SIMD batching is faithful, not just the stepper).
 
 ### Integrator (`integrator.h`)
 
@@ -364,9 +434,11 @@ From `~/.julia/packages/OrdinaryDiffEqCore/bDZEh/src/alg_utils.jl` lines
 - Default `β₁ = 7 / (10 · order)`
 - Default `qmin = 1/5`, `qmax = 10`
 
-Per-algorithm overrides:
-- DP5: `β₂ = 4/100`, `β₁ = 1/order - 3β₂/4` (PI controller)
-- DP8: `β₂ = 0` (I-controller, not PI), `qmin = 1/3`, `qmax = 6`
+Per-algorithm overrides (DP5 = DOPRI54, DP8 = DOPRI87 in Tycho):
+- DOPRI54 (DP5): `β₂ = 4/100`, `β₁ = 1/order - 3β₂/4` (PI controller)
+- DOPRI87 (DP8): `β₂ = 0` (I-controller, not PI), `qmin = 1/3`, `qmax = 6`.
+  Note: DOPRI87's current I-controller in Tycho already matches Julia's
+  default. SP3 changes primarily affect DOPRI54 and new methods.
 - Tsit5: default PI (β₂ = 2/25, β₁ = 7/50)
 - BS3: default PI (β₂ = 2/15, β₁ = 7/30)
 - BS5: default PI (β₂ = 2/25, β₁ = 7/50)
@@ -420,6 +492,33 @@ Potential directions: cache stage values during IVP to avoid re-evaluation in
 `calculate_jacobian`, reduce type-erasure overhead, parallelize Jacobian chain.
 
 ---
+
+## Compile-Time Impact
+
+The variant-based dispatch means every `Integrator<DODE>` TU instantiates
+all algorithm alternatives. Currently 2 algorithms (DOPRI54, DOPRI87);
+SP2 adds 6 more for 8 total. With 1 controller type (SP1) and 2 scalar
+types (double, DefaultSuperScalar), the variant holds 8 alternatives per
+scalar type = 16 total driver instantiations per DODE.
+
+SP3 adds 2-3 controller types, but the controller is a template parameter
+on `AdaptiveDriver`, NOT on the variant directly. The variant is
+parameterized on `IVPAlg` only; the controller type is fixed per variant
+(selected at `set_method` time based on algorithm defaults). So the
+variant stays at 8 alternatives per scalar type regardless of controller
+count.
+
+Mitigation strategies:
+- `extern template` declarations for built-in ODE types
+  (CartesianDynamics, CRTBPDynamics, MEEDynamics) in the header, with
+  explicit instantiation in a single .cpp per ODE type
+- The `heavy_compile` ninja pool auto-limits concurrent heavy TUs
+- User-defined ODEs pay the cost once in their own TU
+
+Monitor: if SP2's 8-method variant causes binding TUs to exceed 8 GB RAM,
+consider splitting the variant into two tiers (common methods DOPRI54 +
+DOPRI87 + Tsit5 always instantiated; others instantiated on demand via
+a separate factory).
 
 ## Design Decisions Log
 
