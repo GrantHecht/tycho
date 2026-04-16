@@ -1300,75 +1300,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     Jacobian<double> calculate_jacobian(const std::vector<ODEState<double>> &xs) const {
-
-        Jacobian<double> jx(this->output_rows(), this->input_rows());
-        jx.setZero();
-        Hessian<double> jxall(this->input_rows(), this->input_rows());
-        jxall.setIdentity();
-
-        Input<double> stepper_input(this->input_rows());
-        ODEState<double> stepper_output(this->ode_.input_rows());
-        Jacobian<double> stepper_jacobian(this->output_rows(), this->input_rows());
-        Jacobian<double> jactmp(this->output_rows(), this->input_rows());
-
-        int n = xs.size();
-        int numsteps = xs.size() - 1;
-
-        constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
-
-        Input<tycho::DefaultSuperScalar> stepper_input_ss(this->input_rows());
-        ODEState<tycho::DefaultSuperScalar> stepper_output_ss(this->ode_.input_rows());
-        Jacobian<tycho::DefaultSuperScalar> stepper_jacobian_ss(this->output_rows(),
-                                                                this->input_rows());
-
-        auto scalar_impl = [&](int i) {
-            stepper_input.head(this->ode_.input_rows()) = xs[i];
-            stepper_input[this->ode_.input_rows()] = xs[i + 1][this->ode_.t_var()];
-
-            stepper_output.setZero();
-            stepper_jacobian.setZero();
-
-            this->stepper_.compute_jacobian(stepper_input, stepper_output, stepper_jacobian);
-            jactmp.noalias() = stepper_jacobian * jxall;
-            jxall.template topRows<Base::ORC>(this->output_rows()) = jactmp;
-        };
-
-        auto vector_impl = [&](int i) {
-            stepper_output_ss.setZero();
-            stepper_jacobian_ss.setZero();
-
-            for (int j = 0; j < vsize; j++) {
-                for (int k = 0; k < this->ode_.input_rows(); k++) {
-                    stepper_input_ss.head(this->ode_.input_rows())[k][j] = xs[i + j][k];
-                }
-                stepper_input_ss[this->ode_.input_rows()][j] = xs[i + j + 1][this->ode_.t_var()];
-            }
-            this->stepper_.compute_jacobian(stepper_input_ss, stepper_output_ss,
-                                            stepper_jacobian_ss);
-
-            for (int j = 0; j < vsize; j++) {
-                for (int k = 0; k < this->input_rows(); k++) {
-                    for (int l = 0; l < this->output_rows(); l++) {
-                        stepper_jacobian(l, k) = stepper_jacobian_ss(l, k)[j];
-                    }
-                }
-                jactmp.noalias() = stepper_jacobian * jxall;
-                jxall.template topRows<Base::ORC>(this->output_rows()) = jactmp;
-            }
-        };
-
-        int packs = (this->enable_vectorization_) ? numsteps / vsize : 0;
-
-        for (int i = 0; i < packs; i++) {
-            vector_impl(i * vsize);
-        }
-        for (int i = packs * vsize; i < numsteps; i++) {
-            scalar_impl(i);
-        }
-
-        jx = jxall.template topRows<Base::ORC>(this->output_rows());
-
-        return jx;
+        return STMDriver::calculate_jacobian(this->stepper_, this->ode_, xs, this->input_rows(),
+                                             this->output_rows(), this->enable_vectorization_);
     }
 
     std::tuple<Jacobian<double>, Hessian<double>>

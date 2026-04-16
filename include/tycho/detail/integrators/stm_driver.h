@@ -51,8 +51,8 @@ struct STMDriver {
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        typename DODE::template Input<tycho::DefaultSuperScalar> stepper_input_ss(input_rows);
-        typename DODE::template Input<tycho::DefaultSuperScalar> stepper_output_ss(ode.input_rows());
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_input_ss(input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_output_ss(ode.input_rows());
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_jacobian_ss(output_rows,
                                                                               input_rows);
 
@@ -175,8 +175,8 @@ struct STMDriver {
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
 
-        typename DODE::template Input<tycho::DefaultSuperScalar> stepper_input_ss(input_rows);
-        typename DODE::template Input<tycho::DefaultSuperScalar> stepper_output_ss(ode.input_rows());
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_input_ss(input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_output_ss(ode.input_rows());
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_jacobian_ss(output_rows,
                                                                               input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jxall_ss(input_rows, input_rows);
