@@ -218,8 +218,8 @@ struct InterpTable1D {
         double eps = std::numeric_limits<double>::epsilon() * ttotal_;
         if (t < (ts_[0] - eps) || t > (ts_[ts_.size() - 1] + eps)) {
             throw std::invalid_argument(
-                fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t,
-                            ts_[0], ts_[ts_.size() - 1]));
+                fmt::format("InterpTable1D: query t={} is outside table range [{}, {}]", t, ts_[0],
+                            ts_[ts_.size() - 1]));
         }
 
         double telem = this->get_telem(t);

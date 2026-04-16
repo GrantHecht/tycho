@@ -10,13 +10,12 @@ using namespace tycho::oc;
 
 ODE make_lt_ode(double mu_val, double ltacc) {
     auto args = ODEArguments(6, 3, 0);
-    auto r = args.head<3>();
-    auto v = args.segment<3>(3);
+    auto state = args.head<6>();
     auto u = args.tail<3>();
+    auto thrust_acc = ltacc * u;
 
-    auto grav = (-mu_val) * r.normalized_power<3>();
-    auto thrust = ltacc * u;
-    auto ode_expr = StackedOutputs{v, grav + thrust};
+    auto dyn = astro::CartesianDynamics(mu_val);
+    auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, thrust_acc)));
 
     return ODE(ode_expr, 6, 3)
         .var_group("R", 0, 3)

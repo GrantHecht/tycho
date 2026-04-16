@@ -58,14 +58,14 @@ TEST_F(VFCompositionTest, KeplerODEAdjointConsistency) {
     verify_adjoint_consistency(kep, x, lm, 1e-8);
 }
 
-TEST_F(VFCompositionTest, CR3BPODEAdjointConsistency) {
+TEST_F(VFCompositionTest, CRTBPDynamicsAdjointConsistency) {
     double mu = 0.012150585; // Earth-Moon
-    CR3BP cr3bp(mu);
-    EXPECT_EQ(cr3bp.input_rows(), 7);
-    EXPECT_EQ(cr3bp.output_rows(), 6);
+    astro::CRTBPDynamics dyn(mu);
+    EXPECT_EQ(dyn.input_rows(), 9);  // 6 state + 3 extra-acceleration
+    EXPECT_EQ(dyn.output_rows(), 6);
 
-    Eigen::VectorXd x(7);
-    x << 0.5, 0.1, 0.0, 0.0, 0.5, 0.0, 0.0;
+    Eigen::VectorXd x(9);
+    x << 0.5, 0.1, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0;
     Eigen::VectorXd lm = deterministic_random_vector(6, 203, -1.0, 1.0);
-    verify_adjoint_consistency(cr3bp, x, lm, 1e-10);
+    verify_adjoint_consistency(dyn, x, lm, 1e-10);
 }

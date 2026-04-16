@@ -29,7 +29,6 @@ class OptimalControlProblem {
   public:
     OptimalControlProblem() = default;
 
-
     // The OCP stores a raw pointer to each Phase passed to add_phase. The
     // caller must keep every added Phase alive (and not relocated, e.g. not
     // inside a std::vector<Phase> that may reallocate) for the lifetime of
@@ -45,7 +44,6 @@ class OptimalControlProblem {
         phases_.push_back(&p);
         return ocp_.add_phase(p.base_ptr(), name);
     }
-
 
     /// Link phases with named variables.
     /// Creates equality constraints between consecutive phase pairs from p1
@@ -92,7 +90,6 @@ class OptimalControlProblem {
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), vars);
     }
 
-
     /// Index-based (int phase indices).
     int add_direct_link_equal_con(int phase_a, PhaseRegionFlags region_a,
                                   const Eigen::VectorXi &vars_a, int phase_b,
@@ -131,7 +128,6 @@ class OptimalControlProblem {
                                               phase_b.base_ptr(), region_b, idx_b);
     }
 
-
     PSIOPT::ConvergenceFlags solve() {
         check_has_phases("solve");
         return ocp_.solve();
@@ -149,7 +145,6 @@ class OptimalControlProblem {
         return ocp_.optimize_solve();
     }
 
-
     void set_auto_scaling(bool autoscale, bool applytophases = true) {
         ocp_.set_auto_scaling(autoscale, applytophases);
     }
@@ -159,7 +154,6 @@ class OptimalControlProblem {
     void set_mesh_tol(double t) { ocp_.set_mesh_tol(t); }
     void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
     void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
-
 
     PSIOPT &optimizer() { return *ocp_.optimizer_; }
 

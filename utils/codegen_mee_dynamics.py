@@ -10,7 +10,6 @@ Output:
 import os
 
 import sympy as sp
-
 from CodeGen import TychoHeaderGen
 
 
@@ -35,16 +34,20 @@ def MEEDynamics():
     s2 = 1 + h**2 + k**2
 
     pdot = 2 * (p / w) * ut
-    fdot = sum([
-        ur * sinL,
-        ((w + 1) * cosL + f) * (ut / w),
-        -(h * sinL - k * cosL) * (g * un / w),
-    ])
-    gdot = sum([
-        -ur * cosL,
-        ((w + 1) * sinL + g) * (ut / w),
-        (h * sinL - k * cosL) * (f * un / w),
-    ])
+    fdot = sum(
+        [
+            ur * sinL,
+            ((w + 1) * cosL + f) * (ut / w),
+            -(h * sinL - k * cosL) * (g * un / w),
+        ]
+    )
+    gdot = sum(
+        [
+            -ur * cosL,
+            ((w + 1) * sinL + g) * (ut / w),
+            (h * sinL - k * cosL) * (f * un / w),
+        ]
+    )
     hdot = cosL * ((s2 * un / w) / 2)
     kdot = sinL * ((s2 * un / w) / 2)
     Ldot = mu * (w / p) * (w / p) + (1 / w) * (h * sinL - k * cosL) * un
@@ -55,7 +58,7 @@ def MEEDynamics():
         "MEEDynamics",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "Gravitational Parameter")],
+        [(mu, "Gravitational Parameter", "mu > 0.0")],
         docstr="Modified Equinoctial Element Dynamics",
     )
 

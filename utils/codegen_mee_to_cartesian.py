@@ -10,7 +10,6 @@ Output:
 import os
 
 import sympy as sp
-
 from CodeGen import TychoHeaderGen
 
 
@@ -44,12 +43,8 @@ def MEEToCartesian():
     z_pos = 2 * Xscale * (h * sinL - k * cosL)
 
     # Velocity
-    vx = -Vscale * (
-        sinL + a2 * sinL - 2 * h * k * cosL + g - 2 * f * h * k + a2 * g
-    )
-    vy = -Vscale * (
-        -cosL + a2 * cosL + 2 * h * k * sinL - f + 2 * g * h * k + a2 * f
-    )
+    vx = -Vscale * (sinL + a2 * sinL - 2 * h * k * cosL + g - 2 * f * h * k + a2 * g)
+    vy = -Vscale * (-cosL + a2 * cosL + 2 * h * k * sinL - f + 2 * g * h * k + a2 * f)
     vz = 2 * Vscale * (h * cosL + k * sinL + f * h + g * k)
 
     Eq = sp.Matrix([x_pos, y_pos, z_pos, vx, vy, vz])
@@ -58,7 +53,7 @@ def MEEToCartesian():
         "MEEToCartesian",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "Gravitational Parameter")],
+        [(mu, "Gravitational Parameter", "mu > 0.0")],
         docstr="MEE to Cartesian state conversion",
     )
 

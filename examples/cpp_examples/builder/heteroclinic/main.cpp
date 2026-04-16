@@ -105,29 +105,13 @@ std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp,
 
 ODE make_cr3bp_ode() {
     auto args = ODEArguments(6, 0, 0);
-    auto X = args.head<3>();
-    auto V = args.segment<3>(3);
+    auto state = args.head<6>();
 
-    Eigen::Vector3d p1loc;
-    p1loc << -mu, 0.0, 0.0;
-    Eigen::Vector3d p2loc;
-    p2loc << 1.0 - mu, 0.0, 0.0;
+    Eigen::Vector3d zero3 = Eigen::Vector3d::Zero();
+    auto zero_accel = Constant<7, 3>(7, zero3);
 
-    auto p1c = Constant<7, 3>(7, p1loc);
-    auto p2c = Constant<7, 3>(7, p2loc);
-
-    auto dvec = X - p1c;
-    auto rvec = X - p2c;
-
-    auto x = X.coeff<0>();
-    auto y = X.coeff<1>();
-    auto xdot = V.coeff<0>();
-    auto ydot = V.coeff<1>();
-
-    auto acc = StackedOutputs{2.0 * ydot + x, (-2.0) * xdot + y}.padded_lower<1>() -
-               (1.0 - mu) * dvec.normalized_power<3>() - mu * rvec.normalized_power<3>();
-
-    auto ode_expr = StackedOutputs{V, acc};
+    auto dyn = astro::CRTBPDynamics(mu);
+    auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, zero_accel)));
 
     return ODE(ode_expr, 6, 0)
         .var_group("R", 0, 3)

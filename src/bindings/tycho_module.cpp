@@ -28,7 +28,14 @@ void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
 void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
 void UtilsBuild(nb::module_ &m);
 void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+// TYCHO_HAS_EXTENSIONS is defined by src/bindings/CMakeLists.txt when the
+// extensions/ subdirectory is built. The guard gates both the forward
+// declaration below and the call site further down so linking succeeds
+// when extensions are unbuilt. CMake prints a STATUS message at configure
+// time indicating which branch was taken.
+#ifdef TYCHO_HAS_EXTENSIONS
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
+#endif
 } // namespace tycho
 
 using namespace tycho;
@@ -168,5 +175,7 @@ NB_MODULE(_tychopy, m) {
     UtilsBuild(m);
     AstroBuild(reg, m);
 
+#ifdef TYCHO_HAS_EXTENSIONS
     ExtensionsBuild(reg, reg.extmod);
+#endif
 }

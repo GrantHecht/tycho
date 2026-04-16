@@ -1,0 +1,20 @@
+{
+  "planPath": "doc/plans/2026-04-14-cartesian-crtbp-dynamics-plan.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: CartesianDynamics codegen + header", "status": "completed"},
+    {"id": 2, "subject": "Task 2: CRTBPDynamics codegen + header", "status": "completed", "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Wire new headers into umbrella and bindings", "status": "completed", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Physics parity checkpoint (temporary)", "status": "completed", "blockedBy": [3]},
+    {"id": 5, "subject": "Task 5: Port test_cr3bp.cpp to CRTBPDynamics", "status": "completed", "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Port CR3BP ODE test in test_vf_ode_expressions", "status": "completed", "blockedBy": [4]},
+    {"id": 7, "subject": "Task 7: Port CR3BP benchmarks to CRTBPDynamics", "status": "completed", "blockedBy": [4]},
+    {"id": 8, "subject": "Task 8: Convert simple_low_thrust example", "status": "completed", "blockedBy": [4]},
+    {"id": 9, "subject": "Task 9: Convert multi_spacecraft_opt example", "status": "completed", "blockedBy": [4]},
+    {"id": 10, "subject": "Task 10: Convert orbit_continuation example", "status": "completed", "blockedBy": [4]},
+    {"id": 11, "subject": "Task 11: Convert heteroclinic example", "status": "completed", "blockedBy": [4]},
+    {"id": 12, "subject": "Task 12: Delete cr3bp_model.h and parity scaffolding", "status": "completed", "blockedBy": [5, 6, 7, 8, 9, 10, 11]},
+    {"id": 13, "subject": "Task 13: Unbuild extensions subdirectory", "status": "completed", "blockedBy": [12]},
+    {"id": 14, "subject": "Task 14: Pre-merge verification + PR", "status": "completed", "blockedBy": [13]}
+  ],
+  "lastUpdated": "2026-04-14T00:00:00Z"
+}

@@ -54,7 +54,6 @@ class Phase {
         }
     }
 
-
     int add_boundary_value(PhaseRegionFlags flag, std::initializer_list<std::string> var_names,
                            const Eigen::VectorXd &values, ScaleType scale = ScaleModes::AUTO) {
         auto idx = resolve_for_region(flag, var_names, "add_boundary_value");
@@ -217,7 +216,6 @@ class Phase {
         return phase_->add_integral_param_function(func, resolve(var_names), accum_parm, scale);
     }
 
-
     int add_boundary_value(PhaseRegionFlags flag, const Eigen::VectorXi &indices,
                            const Eigen::VectorXd &values, ScaleType scale = ScaleModes::AUTO) {
         return phase_->add_boundary_value(flag, indices, values, scale);
@@ -337,7 +335,6 @@ class Phase {
         return phase_->add_integral_param_function(func, VarIndexType(vars), accum_parm, scale);
     }
 
-
     int add_delta_time_objective(double scale, ScaleType scale_t = ScaleModes::AUTO) {
         return phase_->add_delta_time_objective(scale, scale_t);
     }
@@ -400,7 +397,6 @@ class Phase {
         return phase_->add_upper_delta_time_bound(upper, scale, scale_t);
     }
 
-
     void set_auto_scaling(bool enable) { phase_->set_auto_scaling(enable); }
     void set_adaptive_mesh(bool enable) { phase_->set_adaptive_mesh(enable); }
     void set_control_mode(ControlModes mode) { phase_->set_control_mode(mode); }
@@ -443,7 +439,6 @@ class Phase {
         phase_->set_static_params(parm, units);
     }
 
-
     void set_static_param_names(std::initializer_list<std::pair<std::string, int>> names) {
         sp_names_.clear();
         for (const auto &[name, idx] : names)
@@ -476,12 +471,10 @@ class Phase {
         sp_names_.emplace(name, std::move(idx));
     }
 
-
     void refine_traj_manual(int ndef) { phase_->refine_traj_manual(ndef); }
     void refine_traj_manual(const Eigen::VectorXd &dbs, const Eigen::VectorXi &dpb) {
         phase_->refine_traj_manual(dbs, dpb);
     }
-
 
     void sub_variable(PhaseRegionFlags region, int var, double val) {
         phase_->sub_variable(region, var, val);
@@ -512,12 +505,10 @@ class Phase {
         phase_->sub_variables(region, idx, vals);
     }
 
-
     void remove_state_objective(int idx) { phase_->remove_state_objective(idx); }
     void remove_integral_objective(int idx) { phase_->remove_integral_objective(idx); }
     void remove_equal_con(int idx) { phase_->remove_equal_con(idx); }
     void remove_inequal_con(int idx) { phase_->remove_inequal_con(idx); }
-
 
     int add_equal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
                       const Eigen::VectorXi &xtup_vars, const Eigen::VectorXi &ode_param_vars,
@@ -565,7 +556,6 @@ class Phase {
                                             VarIndexType(ode_param_vars),
                                             VarIndexType(static_param_vars), upper, scale, scale_t);
     }
-
 
     int add_equal_con(PhaseRegionFlags flag, GenericFunction<-1, -1> func,
                       const std::vector<std::string> &xtup_names,
@@ -629,13 +619,11 @@ class Phase {
                                             scale, scale_t);
     }
 
-
     PSIOPT::ConvergenceFlags solve() { return phase_->solve(); }
     PSIOPT::ConvergenceFlags optimize() { return phase_->optimize(); }
     PSIOPT::ConvergenceFlags solve_optimize() { return phase_->solve_optimize(); }
     PSIOPT::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
     PSIOPT::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
-
 
     std::vector<Eigen::VectorXd> return_traj() const { return phase_->return_traj(); }
     Eigen::VectorXd return_static_params() const { return phase_->return_static_params(); }
@@ -645,13 +633,11 @@ class Phase {
     std::vector<Eigen::VectorXd> return_traj_error() const { return phase_->return_traj_error(); }
     bool mesh_converged() const { return phase_->mesh_converged_; }
 
-
     ODEPhaseBase &base() { return *phase_; }
     const ODEPhaseBase &base() const { return *phase_; }
     std::shared_ptr<ODEPhaseBase> base_ptr() { return phase_; }
     PSIOPT &optimizer() { return *phase_->optimizer_; }
     const VarRegistry &registry() const { return registry_; }
-
 
     /// Translate a XtUP-space index to the region-relative index that
     /// ODEPhaseBase expects.  For ODEParams, subtract the P-block offset.
