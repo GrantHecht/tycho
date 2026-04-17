@@ -555,3 +555,4 @@ examples/python_examples/Plots/**
 docs/superpowers/
 # Git worktrees
 .worktrees/
+bench/julia_reference/.julia/
