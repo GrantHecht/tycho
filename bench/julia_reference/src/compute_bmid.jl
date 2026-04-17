@@ -14,7 +14,15 @@ r = [
 ]
 
 θ = 0.5
-for (i, ri) in enumerate(r)
-    bi = ri[1]*θ + ri[2]*θ^2 + ri[3]*θ^3 + ri[4]*θ^4
-    @printf("  Bmid[%d] = %.17e\n", i-1, bi)
+# Tycho convention: Bmid[i] = 2·b_i(Θ=0.5), because stepper_compute_impl applies
+# a factor of (1/2) when summing (x_mid = x + Σ (Bmid[i]/2) · k_i, with k_i = h·f_i).
+# Julia convention: sol(Θ) = x + h · Σ b_i(Θ) · f_i.
+# Match: Σ Bmid[i] = 2 · Σ b_i(0.5) = 2 · 0.5 = 1.0 (sanity).
+let totalsum = 0.0
+    for (i, ri) in enumerate(r)
+        bi = ri[1]*θ + ri[2]*θ^2 + ri[3]*θ^3 + ri[4]*θ^4
+        @printf("  Bmid[%d] = %.17e\n", i-1, 2*bi)
+        totalsum += 2*bi
+    end
+    @printf("# Σ Bmid = %.17e (expected: 1.0)\n", totalsum)
 end

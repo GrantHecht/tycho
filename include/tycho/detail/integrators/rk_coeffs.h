@@ -250,12 +250,15 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
         2.324710524099774 - (-0.45808210592918697),
         0.0 - 0.015151515151515152};
 
-    // Bmid from Tsit5Interp at θ=0.5; derived via bench/julia_reference/src/compute_bmid.jl.
-    // Sanity check: Σ Bmid[i] = 0.5 (consistent with interpolant weight for y'=1).
+    // Bmid: stored in Tycho convention as 2·b_i(Θ=0.5), where b_i is Julia's
+    // Tsit5Interp polynomial. The factor of 2 cancels the 1/2 applied in
+    // stepper_compute_impl's midpoint sum, yielding sol(Θ=0.5) exactly.
+    // Derived via bench/julia_reference/src/compute_bmid.jl.
+    // Sanity: Σ Bmid[i] = 1.0 (matches existing DOPRI54 Bmid convention).
     static constexpr std::array<double, BmidSize> Bmid = {
-        1.07412352300968780e-01,  1.13562499999999983e-02,  3.95609030560453101e-01,
-        -3.44752143525935306e-01, 1.31618536495816496e+00,  -1.01706085429365167e+00,
-        3.12500000000000000e-02};
+        2.14824704601937561e-01,  2.27124999999999966e-02,  7.91218061120906202e-01,
+        -6.89504287051870612e-01, 2.63237072991632992e+00,  -2.03412170858730335e+00,
+        6.25000000000000000e-02};
 };
 
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
