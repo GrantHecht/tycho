@@ -18,10 +18,47 @@
 
 namespace tycho {
 
-// User-selectable IVP algorithms: DOPRI54, DOPRI87. Only these are exposed via
-// the Python binding and the string parser. RK4Classic and DOPRI5 remain in the
-// enum because they serve as internal template-dispatch tags (DOPRI54's
-// adaptive stepper is instantiated against IVPAlg::DOPRI5 coefficients; see
+// RKCoeffs dense-output schema (SP2):
+//
+//   Main integration tableau:
+//     Stages         — main integration f-evals per step
+//     A, B, C        — standard Butcher tableau
+//     Bhat           — embedded (error-estimator) weights (zeros if !HasEmbedded)
+//     FSAL           — last main stage equals next step's first stage
+//     HasMidpoint    — does this method support midpoint dense output?
+//
+//   Dense-output extras (SP2):
+//     InterpStages   — # of *additional* f-evals needed for the method's
+//                      interpolation polynomial, beyond the main Stages.
+//                      0 means "no extras" (Tsit5, BS3, DOPRI54, DOPRI87).
+//     LastStageIsFxf — does k_{Stages-1} (the last main stage) equal f(xf)?
+//                      True for FSAL methods (by construction). Also true for
+//                      BS5/Vern7/Vern8/Vern9 (their perform_step evaluates the
+//                      last main stage at (t+h, xf) with a-row equal to B).
+//                      False only for DOPRI87 (needs an explicit f(xf)).
+//     BmidStages     — total k-values referenced by the midpoint sum:
+//                      Stages + InterpStages + (LastStageIsFxf ? 0 : 1).
+//     ExtraA         — InterpStages × (Stages + InterpStages) a-matrix; row e
+//                      builds the argument to f for extra stage e:
+//                        x_e = x + h · Σ_{j<Stages+e} ExtraA[e][j] · k_j
+//                      (k_0..k_{Stages-1} are main; k_Stages..k_{Stages+e-1} are
+//                       prior extras.)
+//     ExtraC         — c-value for each extra stage (t_e = t0 + ExtraC[e]·h).
+//     Bmid           — weights for the midpoint sum, stored as 2·b_i(Θ=0.5)
+//                      where b_i(Θ) is Julia's interpolation polynomial.
+//                      Factor of 2 cancels the /2 applied inside
+//                      stepper_compute_impl. Σ Bmid[i] = 1.0 sanity-check.
+//                      Layout:
+//                        Bmid[0..Stages-1]                     — main stages
+//                        Bmid[Stages]                          — f(xf) term (only if !LastStageIsFxf)
+//                        Bmid[Stages + offset .. BmidStages-1] — extra stages
+//                        (offset = LastStageIsFxf ? 0 : 1)
+//
+// User-selectable IVP algorithms: DOPRI54, DOPRI87, Tsit5. Only these are
+// exposed via the Python binding and the string parser. RK4Classic, DOPRI5,
+// and Tsit5Trans remain in the enum because they serve as internal
+// template-dispatch tags (DOPRI54's adaptive stepper is instantiated against
+// IVPAlg::DOPRI5 coefficients; Tsit5's transcription path uses Tsit5Trans; see
 // integrator.h set_method), and rk_steppers.h uses them in constexpr branches.
 // They are not runtime-selectable — passing them to set_method throws.
 enum class IVPAlg {
@@ -73,6 +110,11 @@ template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // fixed-step, no dense output
 
+    // SP2 dense-output schema fields — all zero because HasMidpoint=false.
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
+
     static constexpr std::array<std::array<double, 3>, 3> A = {
         std::array<double, 3>{rat(1, 2), 0.0, 0.0},
         std::array<double, 3>{0.0, rat(1, 2), 0.0},
@@ -90,7 +132,12 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr bool FSAL = true;
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
-    static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+
+    // SP2 dense-output schema fields (no extra interpolation stages — DOPRI54
+    // uses its own 5th-order interpolation polynomial over existing main stages).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = FSAL;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // Butcher tableau — matches Julia OrdinaryDiffEqLowOrderRK DP5ConstantCache
     // (generic T::Type variant with rational coefficients).
@@ -113,7 +160,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
         rat(5179, 57600),   0.0,            rat(7571, 16695), rat(393, 640),
         rat(-92097, 339200), rat(187, 2100), rat(1, 40)};
 
-    static constexpr std::array<double, BmidSize> Bmid = {
+    static constexpr std::array<double, BmidStages> Bmid = {
         0.2002686376600479, 0.0000000000000000,  0.7836643588368518, -0.0596492035318963,
         0.1178653667448159, -0.0899577761820872, 0.0478086164722679};
 };
@@ -125,6 +172,11 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+
+    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // 6-stage non-FSAL transcription companion for DOPRI54 — same first 6
     // stages as DOPRI54's A matrix with the FSAL-last row dropped.
@@ -151,7 +203,13 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
-    static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+
+    // SP2 dense-output schema fields — DOPRI87's last main stage is not f(xf),
+    // so the midpoint branch must evaluate f(xf) as an extra k-value. No other
+    // interpolation stages are needed.
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // Butcher tableau — matches Julia OrdinaryDiffEqHighOrderRK DP8ConstantCache
     // (generic T::Type variant with rational coefficients).
@@ -223,7 +281,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
                                                     rat(2, 45),
                                                     0};
 
-    static constexpr std::array<double, BmidSize> Bmid = {
+    static constexpr std::array<double, BmidStages> Bmid = {
         0.0820626072147879,  0.0000000000000000, 0.0000000000000000,  0.0000000000000000,
         0.0000000000000000,  0.1020112560398276, 0.4777861354824404,  0.6193740287992207,
         -0.4344650943510704, 0.1566681135866386, -0.0037228739431160, 0.0141456884053577,
@@ -237,7 +295,12 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
     static constexpr bool FSAL = true;
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
-    static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+
+    // SP2 dense-output schema fields (Tsit5's own 4th-order interpolation
+    // polynomial uses only the 7 main stages; no extras needed).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = FSAL;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 6 rows (stages 2..7). Row i holds A[i+2, 0..i+1].
     // Source: OrdinaryDiffEqTsit5 Tsit5ConstantCacheActual (CompiledFloats variant)
@@ -277,7 +340,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
     // stepper_compute_impl's midpoint sum, yielding sol(Θ=0.5) exactly.
     // Derived via bench/julia_reference/src/compute_bmid.jl.
     // Sanity: Σ Bmid[i] = 1.0 (matches existing DOPRI54 Bmid convention).
-    static constexpr std::array<double, BmidSize> Bmid = {
+    static constexpr std::array<double, BmidStages> Bmid = {
         2.14824704601937561e-01,  2.27124999999999966e-02,  7.91218061120906202e-01,
         -6.89504287051870612e-01, 2.63237072991632992e+00,  -2.03412170858730335e+00,
         6.25000000000000000e-02};
@@ -290,6 +353,11 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+
+    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 5 rows (stages 2..6), same as RKCoeffs<IVPAlg::Tsit5> rows 0..4
     static constexpr std::array<std::array<double, 5>, 5> A = {

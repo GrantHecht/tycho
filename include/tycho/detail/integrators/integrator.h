@@ -436,8 +436,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         using RKData = RKCoeffs<RKOp>;
         constexpr int Stages = RKData::Stages;
         constexpr int Stgsm1 = RKData::Stages - 1;
+        // k_vals_extra layout (see RKCoeffs dense-output schema):
+        //   [0]                 — f(xf)·h when !LastStageIsFxf (DOPRI87)
+        //   [offset..offset+e]  — extra interpolation stages (BS5/Vern*)
+        //   offset = LastStageIsFxf ? 0 : 1
+        constexpr int ExtraOffset = RKData::LastStageIsFxf ? 0 : 1;
+        constexpr int ExtraCount = RKData::InterpStages + ExtraOffset;
 
-        auto Impl = [&](auto &k_vals, auto &xtup) {
+        auto Impl = [&](auto &k_vals, auto &xtup, auto &k_vals_extra) {
             xtup = x;
             Scalar t0 = xtup[this->ode_.t_var()];
             Scalar h = tf - t0;
@@ -506,7 +512,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             xf = xtup; // Next State
 
             if (dofsal || domidpoint) {
-                if constexpr (RKData::FSAL) {
+                if constexpr (RKData::FSAL || RKData::LastStageIsFxf) {
                     xdot_prev = k_vals.back() * (1.0 / h);
                 }
             }
@@ -523,20 +529,55 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             if (domidpoint) {
 
+                // For LastStageIsFxf=false methods (DOPRI87), evaluate f(xf)·h
+                // into k_vals_extra[0]. FSAL and LastStageIsFxf=true methods
+                // already have f(xf)·h in k_vals[Stages-1].
+                if constexpr (!RKData::LastStageIsFxf) {
+                    this->ode_.compute(xf, k_vals_extra[0]);
+                    k_vals_extra[0] *= h;
+                    xdot_prev = k_vals_extra[0] * (1.0 / h);
+                }
+
+                // Compute interpolation extra stages (BS5/Vern*). Each extra
+                // stage e builds x_e = x + h·Σ ExtraA[e][j]·k_j, then evaluates
+                // f(t_e, x_e)·h into k_vals_extra[ExtraOffset + e].
+                if constexpr (RKData::InterpStages > 0) {
+                    for (int e = 0; e < RKData::InterpStages; e++) {
+                        xtup = x;
+                        xtup[this->ode_.t_var()] = t0 + RKData::ExtraC[e] * h;
+                        for (int j = 0; j < Stages; j++) {
+                            xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
+                                Scalar(RKData::ExtraA[e][j]) * k_vals[j];
+                        }
+                        for (int j = 0; j < e; j++) {
+                            xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
+                                Scalar(RKData::ExtraA[e][Stages + j]) *
+                                k_vals_extra[ExtraOffset + j];
+                        }
+                        this->update_control(xtup);
+                        this->ode_.compute(xtup, k_vals_extra[ExtraOffset + e]);
+                        k_vals_extra[ExtraOffset + e] *= h;
+                    }
+                }
+
+                // Assemble xf_mid = x + h·Σ (Bmid[i]/2)·k_i over main, f(xf)
+                // (if !LastStageIsFxf), and all extra stages.
                 xtup = x;
                 xtup[this->ode_.t_var()] = t0 + h / 2.0;
-
                 for (int i = 0; i < Stages; i++) {
                     xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
                         Scalar(RKData::Bmid[i] / 2.0) * k_vals[i];
                 }
-
-                if constexpr (!RKData::FSAL) {
-                    k_vals.back().setZero();
-                    this->ode_.compute(xf, k_vals.back());
+                if constexpr (!RKData::LastStageIsFxf) {
                     xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
-                        Scalar(RKData::Bmid.back() / 2.0) * k_vals.back() * h;
-                    xdot_prev = k_vals.back();
+                        Scalar(RKData::Bmid[Stages] / 2.0) * k_vals_extra[0];
+                }
+                if constexpr (RKData::InterpStages > 0) {
+                    for (int e = 0; e < RKData::InterpStages; e++) {
+                        xtup.template segment<DODE::XV>(0, this->ode_.x_vars()) +=
+                            Scalar(RKData::Bmid[Stages + ExtraOffset + e] / 2.0) *
+                            k_vals_extra[ExtraOffset + e];
+                    }
                 }
 
                 this->update_control(xtup);
@@ -547,7 +588,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode_.output_rows(), 1),
-            TempSpec<ODEState<Scalar>>(this->ode_.input_rows(), 1));
+            TempSpec<ODEState<Scalar>>(this->ode_.input_rows(), 1),
+            ArrayOfTempSpecs<ODEDeriv<Scalar>, ExtraCount>(this->ode_.output_rows(), 1));
     }
 
     template <class Scalar>
