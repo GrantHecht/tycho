@@ -27,7 +27,8 @@ void RKFlagsBuild(nb::module_ &m) {
         .value("BS3", IVPAlg::BS3)
         .value("BS5", IVPAlg::BS5)
         .value("Vern7", IVPAlg::Vern7)
-        .value("Vern8", IVPAlg::Vern8);
+        .value("Vern8", IVPAlg::Vern8)
+        .value("Vern9", IVPAlg::Vern9);
 }
 
 } // namespace tycho
