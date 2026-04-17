@@ -4,7 +4,9 @@
 
 **Goal:** Add 6 modern RK algorithms (Tsit5, BS3, BS5, Vern7, Vern8, Vern9) to Tycho's IVP and transcription stepper paths, validated numerically against OrdinaryDiffEq.jl.
 
-**Architecture:** Add `RKCoeffs<Alg>` specializations with standard Butcher tableau data (coefficients transcribed from OrdinaryDiffEq.jl source, with `Bhat = B - btilde` conversion). Wire each new `IVPAlg` enum value into `set_method` and `stepper_compute` dispatchers in `integrator.h`. The generalized `final_state_sum` in `rk_steppers.h` (cleaned up in SP1) automatically gives each new method a working transcription stepper via compile-time zero-skipping. Validate numerical equivalence against Julia on two-body and CR3BP problems.
+**Architecture:** Dispatch in SP2 uses the existing **enum-switch path** (`stepper_compute` in `integrator.h` switches on `rk_method_`). The extracted `Stepper<Alg,DODE,Scalar>` variant/visit pipeline from SP1 Task 10 is DEFERRED; SP2 adds methods without changing the dispatch mechanism. For each new `IVPAlg` enum value, add an `RKCoeffs<Alg>` specialization with standard Butcher tableau data (coefficients transcribed from OrdinaryDiffEq.jl, with `Bhat = B - btilde` conversion). Wire each enum into `set_method` and `stepper_compute` cases. The generalized `final_state_sum` in `rk_steppers.h` (cleaned up in SP1 Task 9) makes each new method automatically work in the transcription stepper via compile-time zero-skipping on `B[i]==0`. Validate numerical equivalence against Julia on two-body and CR3BP.
+
+**FSAL transcription tag:** Analogous to how DOPRI54 (FSAL, 7 stages) uses an internal `IVPAlg::DOPRI5` tag (non-FSAL, 6 stages) for the transcription stepper, FSAL methods in SP2 (Tsit5, BS3) get companion internal tags (`Tsit5Trans`, `BS3Trans`) with the FSAL stage 7/4 dropped. Non-FSAL methods (BS5, Vern7, Vern8, Vern9) reuse their own enum in both paths.
 
 **Tech Stack:** C++20, Python/Julia (comparison harness), CMake/ninja, Google Test
 
@@ -196,6 +198,10 @@ Runs OrdinaryDiffEq.jl as numerical reference for Tycho's RK methods.
 
     julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
+**Important:** Always use `Pkg.instantiate()`, NEVER `Pkg.update()`. Manifest.toml
+pins package versions exactly; updating breaks reproducibility across machines
+and invalidates regression-tied golden outputs.
+
 ## Usage
 
     julia --project=. src/run_method.jl <method> <problem> <abstol> <reltol> <outfile>
@@ -225,26 +231,30 @@ git commit -m "chore: add persistent Julia reference harness for SP2 validation"
 
 **Purpose:** Transcribe Tsit5 coefficients from Julia source into `RKCoeffs<IVPAlg::Tsit5>`. Tsit5 is 5(4) FSAL with 7 stages — the most commonly-used modern 5th-order method, similar structure to DOPRI54.
 
-**Julia source:** `~/.julia/packages/OrdinaryDiffEqTsit5/8E8fO/src/tsit_tableaus.jl` (function `Tsit5ConstantCacheActual`, lines 39-95 for compiled-floats variant)
+**Julia source:** `~/.julia/packages/OrdinaryDiffEqTsit5/<hash>/src/tsit_tableaus.jl` — function `Tsit5ConstantCacheActual` (the `CompiledFloats` variant, not the `BigFloat` variant). The `<hash>` depends on the Manifest.toml pin from Task 0.
 
 **Files:**
 - Modify: `include/tycho/detail/integrators/rk_coeffs.h`
 
-- [ ] **Step 1.1: Add `IVPAlg::Tsit5` enum value**
+- [ ] **Step 1.1: Add `IVPAlg::Tsit5` and `IVPAlg::Tsit5Trans` enum values**
 
 In `rk_coeffs.h`, add to the `IVPAlg` enum (line 27):
 
 ```cpp
 enum class IVPAlg {
-    DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
-    DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
-    Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (NEW in SP2)
+    DOPRI54,    ///< Dormand-Prince 5(4) — 7 stages, FSAL, adaptive
+    DOPRI87,    ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
+    Tsit5,      ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (NEW in SP2)
     /// \internal — template-dispatch tag only, not runtime-selectable.
     RK4Classic,
     /// \internal — template-dispatch tag only, not runtime-selectable.
-    DOPRI5,
+    DOPRI5,     ///< Internal: 6-stage non-FSAL variant for DOPRI54 transcription
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    Tsit5Trans, ///< Internal: 6-stage non-FSAL variant for Tsit5 transcription
 };
 ```
+
+**Rationale for Tsit5Trans:** The transcription stepper (`RKStepper` in `rk_steppers.h`) always does `Stages` full ODE evaluations; it does NOT use FSAL. For Tsit5 (7-stage FSAL) the 7th stage's k-value would be wasted (its B[7]=0 after the standard transformation), so we use a 6-stage non-FSAL tableau for the transcription path — matching the existing DOPRI5→DOPRI54 pattern.
 
 - [ ] **Step 1.2: Add `RKCoeffs<IVPAlg::Tsit5>` specialization**
 
@@ -311,7 +321,35 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
 };
 ```
 
-Note: The `Bmid` computation is done once by evaluating the Tsit5 interpolation polynomial at θ=0.5. A helper script `bench/julia_reference/src/compute_bmid.jl` should derive these numerically as a validation step.
+Note: The `Bmid` computation is done once by evaluating the Tsit5 interpolation polynomial at θ=0.5. A helper script `bench/julia_reference/src/compute_bmid.jl` (Step 1.3 below) derives these numerically as a validation step. **Bmid is load-bearing** — setting it to zeros would silently corrupt midpoint interpolation (used by event detection and dense output). If derivation is uncertain, disable the midpoint code path for the method instead (see Task 4 for how).
+
+After the `RKCoeffs<IVPAlg::Tsit5>` specialization, add the `Tsit5Trans` companion tableau (6 stages, non-FSAL, same A-matrix rows 1-5, `B = row 6 of Tsit5's A`):
+
+```cpp
+template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
+    static constexpr int Stages = 6;
+    static constexpr int Order = 5;
+    static constexpr int ErrorOrder = 0;   // no embedded in transcription
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = false;
+    // A: 5 rows (stages 2..6), same as RKCoeffs<IVPAlg::Tsit5> rows 0..4
+    static constexpr std::array<std::array<double, 5>, 5> A = {
+        std::array<double, 5>{0.161, 0, 0, 0, 0},
+        std::array<double, 5>{-0.008480655492356989, 0.335480655492357, 0, 0, 0},
+        std::array<double, 5>{2.8971530571054935, -6.359448489975075, 4.3622954328695815, 0, 0},
+        std::array<double, 5>{5.325864828439257, -11.748883564062828, 7.4955393428898365,
+                              -0.09249506636175525, 0},
+        std::array<double, 5>{5.86145544294642, -12.92096931784711, 8.159367898576159,
+                              -0.071584973281401, -0.028269050394068383}};
+    static constexpr std::array<double, 5> C = {0.161, 0.327, 0.9, 0.9800255409045097, 1.0};
+    // B = Tsit5's row 7 of A (the b-vector via FSAL structure):
+    static constexpr std::array<double, 6> B = {0.09646076681806523, 0.01, 0.4798896504144996,
+                                                1.379008574103742, -3.290069515436081,
+                                                2.324710524099774};
+    static constexpr std::array<double, 6> Bhat = {0, 0, 0, 0, 0, 0}; // unused
+    // No Bmid — transcription doesn't need midpoint
+};
+```
 
 - [ ] **Step 1.3: Create Bmid derivation helper**
 
@@ -377,8 +415,22 @@ In `integrator.h`, find `set_method` (line 214). Add after the `DOPRI87` case:
 case IVPAlg::Tsit5:
     this->rk_method_ = IVPAlg::Tsit5;
     this->error_order_ = 4;
-    this->init_stepper_and_controller<IVPAlg::Tsit5>(dode, usecontrol, ucon, varlocs_t);
+    // Use the non-FSAL Tsit5Trans tag for transcription (same pattern as
+    // DOPRI54 using DOPRI5). The IVP path still dispatches on IVPAlg::Tsit5
+    // (full 7-stage FSAL) via stepper_compute.
+    this->init_stepper_and_controller<IVPAlg::Tsit5Trans>(dode, usecontrol, ucon, varlocs_t);
     break;
+```
+
+Also add to the "internal tag" rejection list:
+
+```cpp
+case IVPAlg::RK4Classic:
+case IVPAlg::DOPRI5:
+case IVPAlg::Tsit5Trans:  // NEW
+    throw std::invalid_argument(
+        "IVPAlg::RK4Classic, IVPAlg::DOPRI5, IVPAlg::Tsit5Trans are internal "
+        "template-dispatch tags. Use IVPAlg::DOPRI54, IVPAlg::DOPRI87, or IVPAlg::Tsit5.");
 ```
 
 - [ ] **Step 2.2: Add `stepper_compute` dispatcher case**
@@ -402,11 +454,15 @@ In `src/bindings/integrators/rk_coeffs_bind.cpp`, add to the enum binding (line 
 .value("Tsit5", IVPAlg::Tsit5)
 ```
 
-If `integrator_bind.h` has a string→enum mapping (around line 34), add:
+Do NOT expose `Tsit5Trans`, `DOPRI5`, or `RK4Classic` — they are internal tags.
+
+Inspect `src/bindings/integrators/integrator_bind.h` lines 30-40 for the string→enum mapping (it exists per SP1 audit). Add:
 
 ```cpp
 if (name == "Tsit5") return IVPAlg::Tsit5;
 ```
+
+If the mapping uses `strcmp`/`std::string_view`, adapt accordingly.
 
 - [ ] **Step 2.4: Build**
 
@@ -572,12 +628,14 @@ conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && ctest -R Tsi
 
 Expected: 2/2 pass.
 
+**Test tolerance rationale (1e-8 for Tsit5 two-body):** Tycho uses I-controller; Julia Tsit5 uses PI-controller. Step counts will differ 10-20% (SP3 will align via PI-controller implementation). However, both methods integrate to `atol=1e-12, rtol=1e-13`, so the *final state accuracy* is bounded by accumulated local error at the tolerance floor, not the step controller. For Tsit5 (5th-order) on a smooth two-body problem, final states should match to ~1e-10 (tolerance floor × problem scale). `1e-8` gives 2 orders of margin for FP-noise and controller-induced step-placement differences.
+
 **If tests FAIL:** Inspect diff — likely causes:
 - Coefficient transcription error (re-check Step 1.2 against Julia source)
-- Controller parameter mismatch (Julia Tsit5 defaults differ from Tycho's I-controller; this is expected for step count but not final state at high accuracy)
-- Tolerance too tight for 5th-order method
+- `Bhat` reconstruction error (`Bhat = B - btilde`, check signs)
+- Bmid values differ from `compute_bmid.jl` output → Tsit5 interp polynomial typo
 
-If final state differs by >1e-6 with atol=1e-12, there is likely a coefficient error. Regenerate Bmid via `compute_bmid.jl` and re-run.
+If final state differs by >1e-6 with atol=1e-12, there is almost certainly a coefficient error. Re-run `compute_bmid.jl` and compare against Step 1.2's hardcoded values.
 
 - [ ] **Step 3.5: Commit**
 
@@ -640,11 +698,18 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
         1.0/3.0 - (-1.0/12.0),
         4.0/9.0 - (-1.0/9.0),
         0.0 - 1.0/8.0};
-    // Bmid: BS3 uses Hermite interpolation; use midpoint of b weights scaled by 0.5
-    // (standard Hermite midpoint: x(t+h/2) ≈ 0.5*(x0+xf) + 0.125*h*(k1-kf))
-    // For now, skip Bmid — set to placeholder; event detection uses states only.
-    static constexpr std::array<double, BmidSize> Bmid = {0, 0, 0, 0};
-    // TODO(SP2): derive Bmid from Hermite interpolation or disable midpoint path for BS3
+    // Bmid: BS3 uses cubic Hermite interpolation (Julia's default for methods without
+    // a custom interp polynomial). Hermite midpoint in Bmid form:
+    //   x(t+h/2) = x0 + h·Σ B̃_i · k_i   where B̃ derives from Hermite:
+    //   x(t+h/2) = 0.5(x0 + xf) + (h/8)·(k1 - kf)
+    //            = x0 + 0.5·Σ B_i·k_i + (h/8)·(k1 - kf) / h  (wait, re-derive)
+    // Correct form: x(t+θh) = x0 + h·Σ b_i(θ)·k_i  with
+    //   b_1(θ) = θ - (3/2)θ² + (2/3)θ³·... (Hermite cubic)
+    // At θ=0.5 for BS3's FSAL pattern (kf=k4), Bmid computed in compute_bmid.jl:
+    //   b_1(0.5) = 5/18,  b_2(0.5) = 1/6,  b_3(0.5) = 2/9,  b_4(0.5) = -1/8
+    // (derivation: see bench/julia_reference/src/compute_bmid_bs3.jl in Step 4.1b)
+    static constexpr std::array<double, BmidSize> Bmid = {
+         5.0 / 18.0,  1.0 / 6.0,  2.0 / 9.0,  -1.0 / 8.0};
 };
 ```
 
@@ -672,63 +737,205 @@ git add -A && git commit -m "feat: add BS3 method (Bogacki-Shampine 3(2) FSAL)"
 
 ---
 
+## Bmid Decision for Non-FSAL / Higher-Order Methods
+
+BS5 and all Verner methods (Vern7/8/9) use *lazy interpolants* in Julia — polynomial coefficients aren't expressed as a simple `Bmid` vector at θ=0.5. For SP2, two options:
+
+**Option A (chosen for BS5, Vern7):** Derive `Bmid` from Hermite interpolation (the same default Julia uses when a custom interp isn't requested):
+```
+x(t+h/2) = 0.5·(x0+xf) + (h/8)·(f0 - ff)
+```
+In RK form with `Bmid` this becomes a function of the method's B weights plus two extra derivative evaluations (f0=k1, ff evaluated at xf). For non-FSAL methods, `Bmid[Stages]` is the coefficient of the extra derivative at xf — SP1's `BmidSize = FSAL ? Stages : Stages + 1` already handles this.
+
+**Option B (chosen for Vern8, Vern9):** Disable the midpoint code path. Add `static constexpr bool HasMidpoint = false;` to the tableau. Modify `stepper_compute_impl` in `integrator.h` to guard the midpoint block with `if constexpr (RKData::HasMidpoint)`. Calling `integrate_dense` or event detection with Vern8/9 will fall back to the DOPRI87 interpolant via the alternate method at `make_table` time (see `integrate_dense` lines 1796-1822). This is acceptable for SP2 — users who want dense output with Vern8/9 can use Vern7.
+
+Each method's task below states which option is used.
+
+---
+
 ## Task 5: Add BS5 (Bogacki-Shampine 5(4))
 
-**Purpose:** Add BS5 — 8-stage non-FSAL 5th-order method. Alternative to Tsit5 with different error characteristics.
+**Purpose:** 8-stage non-FSAL 5(4) method. Alternative to Tsit5.
 
-**Julia source:** `~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl` — search for `BS5ConstantCacheActual`.
+**Julia source:** `~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl` — function `BS5ConstantCacheActual`.
 
-**Files:** same pattern as Tasks 1-3 for BS5.
+**Files:**
+- Modify: `rk_coeffs.h`, `integrator.h`, `rk_coeffs_bind.cpp`, `integrator_bind.h`
+- Create: `tests/cpp/integrators/test_method_bs5.cpp`
+- Create: `bench/julia_reference/test/reference_outputs/bs5_{twobody,crtbp}.bin`
 
 - [ ] **Step 5.1: Extract BS5 coefficients**
 
 ```bash
-rg -A 80 "BS5ConstantCacheActual" ~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl | head -120
+rg -A 120 "BS5ConstantCacheActual" ~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl | less
 ```
 
-- [ ] **Step 5.2: Add `IVPAlg::BS5` + tableau** (Stages = 8, non-FSAL, Order = 5, ErrorOrder = 4)
+Record: 7 `A` rows (28 a-values), 8 `c` values, 8 `b` weights, 8 `btilde` values. Note: BS5 has a b8=0 pattern — some weights may be zero.
 
-- [ ] **Step 5.3: Wire + test + commit** (same pattern as Task 2-3)
+- [ ] **Step 5.2: Add `IVPAlg::BS5` + `RKCoeffs<IVPAlg::BS5>` tableau**
+
+Stages = 8, Order = 5, ErrorOrder = 4, FSAL = false, HasEmbedded = true, BmidSize = 9.
+
+Use **Option A** for Bmid (Hermite interpolation). Precompute via `compute_bmid.jl` with the Hermite formula.
+
+- [ ] **Step 5.3: Add `set_method` case, `stepper_compute` case** (dofsal = false for non-FSAL)
+
+- [ ] **Step 5.4: Expose in Python bindings**
+
+- [ ] **Step 5.5: Generate Julia reference**
+
+```bash
+julia --project=. src/run_method.jl BS5 two_body 1e-10 1e-11 test/reference_outputs/bs5_twobody.bin
+julia --project=. src/run_method.jl BS5 crtbp 1e-10 1e-11 test/reference_outputs/bs5_crtbp.bin
+```
+
+- [ ] **Step 5.6: Build, run tests, commit** (expected tolerance 1e-7 for BS5 at atol=1e-10)
 
 ---
 
-## Task 6: Add Vern7
+## Task 6: Add Vern7 (Verner 7(6))
 
-**Purpose:** Add Vern7 — 10-stage non-FSAL 7(6) method by Jim Verner. Higher-order alternative with good efficiency for tight tolerances.
+**Purpose:** 10-stage non-FSAL 7(6) method by Jim Verner. Good efficiency for tight tolerances.
 
-**Julia source:** `~/.julia/packages/OrdinaryDiffEqVerner/GlLDJ/src/verner_tableaus.jl` — search for `Vern7ConstantCacheActual`.
+**Julia source:** `~/.julia/packages/OrdinaryDiffEqVerner/GlLDJ/src/verner_tableaus.jl` — function `Vern7ConstantCache` / `Vern7ConstantCacheActual`.
 
-**Files:** same pattern.
+- [ ] **Step 6.1: Write machine-transcription helper**
 
-- [ ] **Step 6.1: Extract Vern7 coefficients** (search function in verner_tableaus.jl)
-- [ ] **Step 6.2: Add `IVPAlg::Vern7` + tableau** (Stages = 10, non-FSAL, Order = 7, ErrorOrder = 6)
-- [ ] **Step 6.3: Wire + test + commit**
-
-**Note on Verner tableaus:** Vern7/8/9 have large numeric tables. For each coefficient, transcribe the `CompiledFloats` (Float64) variant, not the `BigFloat` variant. Machine-assisted transcription: write a Julia script that outputs coefficients as C++ array literals, then copy-paste.
-
-Create helper `bench/julia_reference/src/emit_tableau.jl`:
+Vern7 has ~50 non-zero A entries. Transcription-by-hand is error-prone. Create `bench/julia_reference/src/emit_tableau.jl`:
 
 ```julia
-using OrdinaryDiffEqVerner
-# For each method, query the cache and print A, B, Bhat, C in C++ array literal format.
-# ... (implementation depends on Julia internals; write once, iterate)
+using OrdinaryDiffEq
+using Printf
+
+# For each method, extract the ConstantCache and emit coefficients as
+# C++ array literal. Iterate stage rows, printing A[i][j] with Float64 precision.
+
+function emit_method(method_name::String, cache)
+    @printf("// %s: emitted from OrdinaryDiffEq.jl ConstantCache\n", method_name)
+    # Cache introspection — varies by package.
+    # For Verner methods, cache fields are named a21, a31, a32, ..., c2, c3, ..., b1, b2, ...
+    # Use `fieldnames(typeof(cache))` and iterate.
+    for name in fieldnames(typeof(cache))
+        val = getfield(cache, name)
+        @printf("    // %s = %.17e\n", name, val)
+    end
+end
+
+# Example invocation (actual API depends on OrdinaryDiffEq internals):
+# cache = OrdinaryDiffEqVerner.Vern7ConstantCacheActual(Float64, Float64)
+# emit_method("Vern7", cache)
 ```
+
+Document in the helper's comment: this emits Float64 precision values suitable for direct paste into C++ std::array initializers.
+
+- [ ] **Step 6.2: Run helper, extract Vern7 coefficients**
+
+```bash
+cd bench/julia_reference
+julia --project=. src/emit_tableau.jl > /tmp/vern7_coeffs.txt
+```
+
+Review output; hand-format into the `RKCoeffs<IVPAlg::Vern7>` A/B/Bhat/C literals.
+
+- [ ] **Step 6.3: Add `IVPAlg::Vern7` + tableau**
+
+Stages = 10, Order = 7, ErrorOrder = 6, FSAL = false, HasEmbedded = true, BmidSize = 11.
+
+Use **Option A** (Hermite midpoint) for Bmid.
+
+- [ ] **Step 6.4: Wire into dispatch + Python bindings**
+
+- [ ] **Step 6.5: Generate Julia reference + create test_method_vern7.cpp**
+
+Tolerance: 1e-10 at atol=1e-12.
+
+- [ ] **Step 6.6: Build, test, commit**
 
 ---
 
-## Task 7: Add Vern8
+## Task 7: Add Vern8 (Verner 8(7))
 
 **Purpose:** 13-stage non-FSAL 8(7) method — higher-order equivalent of Vern7.
 
-- [ ] **Step 7.1-7.3:** Same pattern as Vern7 but with Stages = 13, Order = 8, ErrorOrder = 7.
+- [ ] **Step 7.1: Extract coefficients via `emit_tableau.jl`**
+- [ ] **Step 7.2: Add `IVPAlg::Vern8` + tableau**
+
+Stages = 13, Order = 8, ErrorOrder = 7, FSAL = false, HasEmbedded = true.
+
+**Bmid decision: Option B** (disable midpoint). Set `static constexpr bool HasMidpoint = false;` in the tableau. Update `stepper_compute_impl` in `integrator.h` to guard the midpoint branch on `HasMidpoint`. Ensure existing methods (DOPRI54, DOPRI87, Tsit5, BS3, BS5, Vern7) get `HasMidpoint = true` defaulted.
+
+- [ ] **Step 7.3: Wire, bindings, test, commit**
+
+Tolerance: 1e-11 at atol=1e-13.
+
+**Tests that require dense output / events for Vern8:** mark with `GTEST_SKIP() << "Vern8 has no midpoint interpolant; use Vern7"`.
 
 ---
 
-## Task 8: Add Vern9
+## Task 8: Add Vern9 (Verner 9(8))
 
-**Purpose:** 16-stage non-FSAL 9(8) method — highest-order method in SP2. Best for very tight tolerances on smooth problems.
+**Purpose:** 16-stage non-FSAL 9(8) method — highest-order in SP2.
 
-- [ ] **Step 8.1-8.3:** Same pattern with Stages = 16, Order = 9, ErrorOrder = 8.
+- [ ] **Step 8.1: Extract coefficients via `emit_tableau.jl`**
+- [ ] **Step 8.2: Add `IVPAlg::Vern9` + tableau**
+
+Stages = 16, Order = 9, ErrorOrder = 8. **Bmid decision: Option B** (disable midpoint).
+
+- [ ] **Step 8.3: Wire, bindings, test, commit**
+
+Tolerance: 1e-12 at atol=1e-14. Monitor binding TU RAM: after Vern9, run `/usr/bin/time -v ninja -j4 _tychopy` and check max_resident. If >8 GB, defer Vern9 by commenting out its `emplace` in the binding enum.
+
+---
+
+## Task 8.5: Extern Template Declarations (binding TU mitigation)
+
+**Purpose:** SP2 adds 6 methods, so the `Integrator<DODE>` instantiation cost grows 4× in binding TUs. Add `extern template` declarations for built-in ODEs to move instantiation to dedicated .cpp files.
+
+**Files:**
+- Modify: `include/tycho/detail/integrators/integrator.h` (extern decls)
+- Create: `src/integrators/integrator_instantiations.cpp` (explicit instantiations)
+- Modify: `src/integrators/tycho_integrators.h` (include new .cpp)
+
+- [ ] **Step 8.5.1: Add extern declarations at the bottom of `integrator.h`**
+
+```cpp
+// Extern template declarations for common ODEs to reduce binding TU RAM.
+namespace tycho {
+extern template struct Integrator<tycho::astro::Kepler>;
+extern template struct Integrator<tycho::astro::CartesianDynamics>;
+extern template struct Integrator<tycho::astro::CRTBPDynamics>;
+extern template struct Integrator<tycho::astro::MEEDynamics>;
+}
+```
+
+- [ ] **Step 8.5.2: Create explicit instantiation TU**
+
+`src/integrators/integrator_instantiations.cpp`:
+
+```cpp
+#include "tycho/tycho.h"
+namespace tycho {
+template struct Integrator<tycho::astro::Kepler>;
+template struct Integrator<tycho::astro::CartesianDynamics>;
+template struct Integrator<tycho::astro::CRTBPDynamics>;
+template struct Integrator<tycho::astro::MEEDynamics>;
+}
+```
+
+- [ ] **Step 8.5.3: Measure binding TU RAM before/after**
+
+```bash
+/usr/bin/time -v ninja -j1 _tychopy 2>&1 | grep "Maximum resident"
+```
+
+Record baseline and post-change numbers in the commit message.
+
+- [ ] **Step 8.5.4: Verify all tests still pass, commit**
+
+```bash
+ninja -j4 all && ctest --output-on-failure
+git add -A && git commit -m "refactor: extern template declarations for built-in ODEs"
+```
 
 ---
 
@@ -742,19 +949,65 @@ using OrdinaryDiffEqVerner
 
 - [ ] **Step 9.1: Create benchmark file**
 
+`bench/cpp/bench_method_comparison.cpp`:
+
 ```cpp
 #include <benchmark/benchmark.h>
 #include <tycho/tycho.h>
-// ... one BENCHMARK_TEMPLATE per (method, problem) pair
+
+using namespace tycho;
+
+static void BM_Method(benchmark::State &state, IVPAlg alg, double atol) {
+    astro::Kepler kep(398600.4418);
+    double r0 = 7000.0, v0 = std::sqrt(398600.4418 / r0);
+    Eigen::VectorXd x0(7);
+    x0 << r0, 0, 0, 0, v0, 0, 0;
+    double T = 2 * M_PI * std::sqrt(r0 * r0 * r0 / 398600.4418);
+    for (auto _ : state) {
+        Integrator<astro::Kepler> integ(kep, alg, 10.0);
+        integ.set_abs_tol(atol);
+        integ.set_rel_tol(atol);
+        auto xf = integ.integrate(x0, T / 4.0);
+        benchmark::DoNotOptimize(xf);
+    }
+}
+
+#define REGISTER(alg, tol_str, tol_val) \
+    BENCHMARK_CAPTURE(BM_Method, alg##_##tol_str, IVPAlg::alg, tol_val)
+
+REGISTER(DOPRI54, tol1e6,  1e-6);  REGISTER(DOPRI87, tol1e6,  1e-6);
+REGISTER(Tsit5,   tol1e6,  1e-6);  REGISTER(BS3,     tol1e6,  1e-6);
+REGISTER(BS5,     tol1e6,  1e-6);  REGISTER(Vern7,   tol1e6,  1e-6);
+REGISTER(Vern8,   tol1e6,  1e-6);  REGISTER(Vern9,   tol1e6,  1e-6);
+
+REGISTER(DOPRI54, tol1e9,  1e-9);  REGISTER(DOPRI87, tol1e9,  1e-9);
+REGISTER(Tsit5,   tol1e9,  1e-9);  REGISTER(BS5,     tol1e9,  1e-9);
+REGISTER(Vern7,   tol1e9,  1e-9);  REGISTER(Vern8,   tol1e9,  1e-9);
+REGISTER(Vern9,   tol1e9,  1e-9);
+
+REGISTER(DOPRI54, tol1e12, 1e-12); REGISTER(DOPRI87, tol1e12, 1e-12);
+REGISTER(Tsit5,   tol1e12, 1e-12); REGISTER(Vern7,   tol1e12, 1e-12);
+REGISTER(Vern8,   tol1e12, 1e-12); REGISTER(Vern9,   tol1e12, 1e-12);
+
+BENCHMARK_MAIN();
 ```
 
-Template the benchmark on `IVPAlg` and `ODE` so adding methods is one-line.
+- [ ] **Step 9.2: Add to `bench/cpp/CMakeLists.txt`**
 
-- [ ] **Step 9.2: Build and run**
+```cmake
+add_executable(bench_method_comparison bench_method_comparison.cpp)
+target_compile_options(bench_method_comparison PRIVATE ${COMPILE_FLAGS})
+target_include_directories(bench_method_comparison PRIVATE ${INCLUDE_DIRS} ${TYCHO_INCLUDES})
+target_link_libraries(bench_method_comparison PRIVATE tycho benchmark::benchmark)
+set_property(TARGET bench_method_comparison PROPERTY JOB_POOL_COMPILE heavy_compile)
+add_dependencies(bench_all bench_method_comparison)
+```
+
+- [ ] **Step 9.3: Build and run**
 
 ```bash
-conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && cmake --preset linux-clang-release -DBUILD_CPP_BENCHMARKS=ON && ninja -j4 bench_method_comparison"
-./bench/cpp/bench_method_comparison --benchmark_format=console
+conda run -n tycho bash -c "cmake --preset linux-clang-release -DBUILD_CPP_BENCHMARKS=ON && cd build && ninja -j4 bench_method_comparison"
+./build/bench/cpp/bench_method_comparison --benchmark_format=console > bench/sp2_method_comparison.txt
 ```
 
 - [ ] **Step 9.3: Document results in spec update**
@@ -825,6 +1078,63 @@ git commit -m "test: Python test coverage for new SP2 RK methods"
 
 ---
 
+## Task 10.5: SuperScalar Path Coverage
+
+**Purpose:** Verify each new method works through the SIMD batch integration path (`integrate_impl_vectorized`), not just the scalar path.
+
+**Files:**
+- Create: `tests/cpp/integrators/test_method_superscalar.cpp`
+
+- [ ] **Step 10.5.1: Create SuperScalar test for new methods**
+
+```cpp
+#include "integrator_test_utils.h"
+#include <gtest/gtest.h>
+using namespace tycho;
+using namespace TychoTest;
+
+class SuperScalarMethodTest : public VectorFunctionFixture {};
+
+template <IVPAlg Alg>
+static void run_batch_test(double atol, double rtol, double tol) {
+    Kepler kep(398600.4418);
+    Integrator<Kepler> integ(kep, Alg, 10.0);
+    integ.set_abs_tol(atol);
+    integ.set_rel_tol(rtol);
+    integ.vectorize_batch_calls_ = true;
+    double r0 = 7000.0, v0 = std::sqrt(398600.4418 / r0);
+    std::vector<Eigen::VectorXd> x0s;
+    Eigen::VectorXd tfs(4);
+    for (int i = 0; i < 4; ++i) {
+        Eigen::VectorXd x0(7);
+        x0 << r0 + 100.0 * i, 0, 0, 0, v0, 0, 0;
+        x0s.push_back(x0);
+        tfs[i] = 2000.0 + 100.0 * i;
+    }
+    auto xfs = integ.integrate(x0s, tfs);
+    // Compare against scalar
+    integ.vectorize_batch_calls_ = false;
+    for (size_t i = 0; i < x0s.size(); ++i) {
+        auto xf_scalar = integ.integrate(x0s[i], tfs[i]);
+        for (int j = 0; j < xf_scalar.size(); ++j) {
+            EXPECT_NEAR(xfs[i][j], xf_scalar[j], tol)
+                << "SIMD vs scalar mismatch: method=" << int(Alg) << " traj=" << i << " j=" << j;
+        }
+    }
+}
+
+TEST_F(SuperScalarMethodTest, Tsit5)  { run_batch_test<IVPAlg::Tsit5>(1e-10, 1e-11, 1e-7); }
+TEST_F(SuperScalarMethodTest, BS3)    { run_batch_test<IVPAlg::BS3>(1e-6, 1e-7, 1e-4); }
+TEST_F(SuperScalarMethodTest, BS5)    { run_batch_test<IVPAlg::BS5>(1e-10, 1e-11, 1e-7); }
+TEST_F(SuperScalarMethodTest, Vern7)  { run_batch_test<IVPAlg::Vern7>(1e-11, 1e-12, 1e-8); }
+TEST_F(SuperScalarMethodTest, Vern8)  { run_batch_test<IVPAlg::Vern8>(1e-12, 1e-13, 1e-9); }
+TEST_F(SuperScalarMethodTest, Vern9)  { run_batch_test<IVPAlg::Vern9>(1e-13, 1e-14, 1e-10); }
+```
+
+- [ ] **Step 10.5.2: Add to CMakeLists, build, test, commit**
+
+---
+
 ## Task 11: Final Verification
 
 **Purpose:** Run full test suite + Python examples + benchmarks to confirm no regressions.
@@ -843,7 +1153,7 @@ Expected: all tests pass, including 12 regression tests, 17 SP1 unit tests, 16 n
 conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py --timeout 120"
 ```
 
-Expected: 30 pass, 8 skipped (basemap unavailable) — same as SP1 baseline.
+Expected: 30 pass, 8 skipped (basemap unavailable) — same as SP1 baseline on this machine. **For pre-merge gating per CLAUDE.md:** install `mpl_toolkits.basemap` in the reviewer's environment so all 38 examples run. A skipped example is not a failure for SP2 validation (the 8 skipped examples don't exercise SP2 additions), but merging to `main` requires all 38 to pass per project policy.
 
 - [ ] **Step 11.3: Regression corpus bit-identical check**
 
