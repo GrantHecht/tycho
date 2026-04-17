@@ -34,8 +34,10 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
         return IVPAlg::DOPRI54;
     if (str == "DOPRI87" || str == "DP87")
         return IVPAlg::DOPRI87;
+    if (str == "Tsit5")
+        return IVPAlg::Tsit5;
     throw std::invalid_argument(fmt::format(
-        "Unknown IVP algorithm: '{}'; accepted values: DOPRI54, DP54, DOPRI87, DP87", str));
+        "Unknown IVP algorithm: '{}'; accepted values: DOPRI54, DP54, DOPRI87, DP87, Tsit5", str));
 }
 
 template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj) {
