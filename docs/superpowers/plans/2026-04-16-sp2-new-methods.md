@@ -24,6 +24,8 @@
 - `rk_steppers.h`'s `RKStepper_Impl::final_state_sum` is generalized (per-algorithm branches deleted in SP1 Task 9)
 - Golden regression corpus (12 cases) protects existing DOPRI54/DOPRI87 behavior
 
+**New SP2 precondition:** Add `static constexpr bool HasMidpoint = true;` to the existing DOPRI54 / DOPRI87 / RK4Classic / DOPRI5 `RKCoeffs` specializations in `rk_coeffs.h` as a mechanical first step of Task 1 (before adding any new method). This enables Vern8/Vern9's `HasMidpoint = false` opt-out (Option B) without breaking existing methods.
+
 ---
 
 ## Task 0: Set Up Persistent Julia Comparison Harness
@@ -713,9 +715,13 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
 };
 ```
 
-- [ ] **Step 4.3: Wire into dispatch (set_method + stepper_compute + bindings)**
+- [ ] **Step 4.3: Add `BS3Trans` internal tag**
 
-Mirror Task 2 with `BS3`. Set `error_order_ = 2` and `dofsal = true`.
+Like Tsit5/Tsit5Trans, BS3 is FSAL, so the transcription stepper needs a companion non-FSAL 3-stage tag. Add `IVPAlg::BS3Trans` to the enum and `RKCoeffs<IVPAlg::BS3Trans>` with Stages = 3, Order = 3, ErrorOrder = 0, FSAL = false, HasEmbedded = false. The A matrix drops BS3's last FSAL row; C and B are derived identically to the Tsit5Trans pattern.
+
+- [ ] **Step 4.4: Wire into dispatch (set_method + stepper_compute + bindings)**
+
+Mirror Task 2 with `BS3`. `init_stepper_and_controller<IVPAlg::BS3Trans>` (not `BS3`) for the transcription path. Set `error_order_ = 2` and `dofsal = true` in `stepper_compute`. Add `BS3Trans` to the internal-tag rejection list in `set_method`.
 
 - [ ] **Step 4.4: Generate Julia reference and test**
 
