@@ -45,6 +45,24 @@ namespace tycho::integrators {
 
 using tycho::IVPAlg;
 
+// Compile-time rational helper for transcribing Butcher tableau coefficients.
+//
+// Mirrors Julia's `N // D` rational notation used in OrdinaryDiffEq.jl's
+// generic (`T::Type`) tableau variants. For Float64 targets, `rat(N, D)` is
+// bit-identical to Julia's `convert(Float64, N // D)` because both perform
+// IEEE 754 round-to-nearest on a single division.
+//
+// Usage convention in RKCoeffs specializations:
+//   - Use `rat(N, D)` for rational coefficients (matches Julia `N // D`).
+//   - Use Float64 literals for irrational coefficients, copied from Julia's
+//     `CompiledFloats` variant (matches Julia `convert(Float64, big"...")`).
+//
+// `long long` covers any denominator we encounter (up to 2^63 - 1); all
+// existing Verner/BS/Tsit5 denominators fit well within this range.
+constexpr double rat(long long n, long long d) {
+    return static_cast<double>(n) / static_cast<double>(d);
+}
+
 template <IVPAlg opt> struct RKCoeffs {};
 
 template <> struct RKCoeffs<IVPAlg::RK4Classic> {
@@ -56,11 +74,12 @@ template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr bool HasMidpoint = false; // fixed-step, no dense output
 
     static constexpr std::array<std::array<double, 3>, 3> A = {
-        std::array<double, 3>{0.5, 0.0, 0.0}, std::array<double, 3>{0.0, 0.5, 0.0},
+        std::array<double, 3>{rat(1, 2), 0.0, 0.0},
+        std::array<double, 3>{0.0, rat(1, 2), 0.0},
         std::array<double, 3>{0.0, 0.0, 1.0}};
 
-    static constexpr std::array<double, 3> C = {0.5, 0.5, 1.0};
-    static constexpr std::array<double, 4> B = {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0};
+    static constexpr std::array<double, 3> C = {rat(1, 2), rat(1, 2), 1.0};
+    static constexpr std::array<double, 4> B = {rat(1, 6), rat(1, 3), rat(1, 3), rat(1, 6)};
     static constexpr std::array<double, 4> Bhat = {0, 0, 0, 0};
 };
 
@@ -73,24 +92,26 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr bool HasMidpoint = true;
     static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
 
+    // Butcher tableau — matches Julia OrdinaryDiffEqLowOrderRK DP5ConstantCache
+    // (generic T::Type variant with rational coefficients).
     static constexpr std::array<std::array<double, 6>, 6> A = {
-        std::array<double, 6>{1 / 5.0, 0, 0, 0, 0, 0},
-        std::array<double, 6>{3.0 / 40.0, 9 / 40.0, 0, 0, 0, 0},
-        std::array<double, 6>{44.0 / 45.0, -56.0 / 15.0, 32.0 / 9.0, 0, 0, 0},
-        std::array<double, 6>{19372.0 / 6561.0, -25360.0 / 2187.0, 64448.0 / 6561.0, -212.0 / 729.0,
-                            0, 0},
-        std::array<double, 6>{9017.0 / 3168.0, -355.0 / 33.0, 46732 / 5247.0, 49.0 / 176.0,
-                            -5103.0 / 18656.0, 0},
-        std::array<double, 6>{35.0 / 384.0, 0.0, 500.0 / 1113.0, 125 / 192.0, -2187.0 / 6784.0,
-                            11.0 / 84.0}};
+        std::array<double, 6>{rat(1, 5), 0, 0, 0, 0, 0},
+        std::array<double, 6>{rat(3, 40), rat(9, 40), 0, 0, 0, 0},
+        std::array<double, 6>{rat(44, 45), rat(-56, 15), rat(32, 9), 0, 0, 0},
+        std::array<double, 6>{rat(19372, 6561), rat(-25360, 2187), rat(64448, 6561),
+                              rat(-212, 729), 0, 0},
+        std::array<double, 6>{rat(9017, 3168), rat(-355, 33), rat(46732, 5247), rat(49, 176),
+                              rat(-5103, 18656), 0},
+        std::array<double, 6>{rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784),
+                              rat(11, 84)}};
 
-    static constexpr std::array<double, 6> C = {1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0,
-                                                8.0 / 9.0, 1.0,        1.0};
+    static constexpr std::array<double, 6> C = {rat(1, 5), rat(3, 10), rat(4, 5),
+                                                rat(8, 9),  1.0,       1.0};
     static constexpr std::array<double, 7> B = {
-        35.0 / 384.0, 0.0, 500.0 / 1113.0, 125.0 / 192.0, -2187 / 6784.0, 11.0 / 84.0, 0.0};
+        rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784), rat(11, 84), 0.0};
     static constexpr std::array<double, 7> Bhat = {
-        5179.0 / 57600.0,  0.0,          7571.0 / 16695.0, 393 / 640.0,
-        -92097 / 339200.0, 187 / 2100.0, 1.0 / 40.0};
+        rat(5179, 57600),   0.0,            rat(7571, 16695), rat(393, 640),
+        rat(-92097, 339200), rat(187, 2100), rat(1, 40)};
 
     static constexpr std::array<double, BmidSize> Bmid = {
         0.2002686376600479, 0.0000000000000000,  0.7836643588368518, -0.0596492035318963,
@@ -105,20 +126,22 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
+    // 6-stage non-FSAL transcription companion for DOPRI54 — same first 6
+    // stages as DOPRI54's A matrix with the FSAL-last row dropped.
     static constexpr std::array<std::array<double, 5>, 5> A = {
-        std::array<double, 5>{1 / 5.0, 0, 0, 0, 0},
-        std::array<double, 5>{3.0 / 40.0, 9 / 40.0, 0, 0, 0},
-        std::array<double, 5>{44.0 / 45.0, -56.0 / 15.0, 32.0 / 9.0, 0, 0},
-        std::array<double, 5>{19372.0 / 6561.0, -25360.0 / 2187.0, 64448.0 / 6561.0, -212.0 / 729.0,
-                            0},
-        std::array<double, 5>{9017.0 / 3168.0, -355.0 / 33.0, 46732 / 5247.0, 49.0 / 176.0,
-                            -5103.0 / 18656.0}};
+        std::array<double, 5>{rat(1, 5), 0, 0, 0, 0},
+        std::array<double, 5>{rat(3, 40), rat(9, 40), 0, 0, 0},
+        std::array<double, 5>{rat(44, 45), rat(-56, 15), rat(32, 9), 0, 0},
+        std::array<double, 5>{rat(19372, 6561), rat(-25360, 2187), rat(64448, 6561),
+                              rat(-212, 729), 0},
+        std::array<double, 5>{rat(9017, 3168), rat(-355, 33), rat(46732, 5247), rat(49, 176),
+                              rat(-5103, 18656)}};
 
-    static constexpr std::array<double, 5> C = {1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0};
+    static constexpr std::array<double, 5> C = {rat(1, 5), rat(3, 10), rat(4, 5), rat(8, 9), 1.0};
     static constexpr std::array<double, 6> B = {
-        35.0 / 384.0, 0.0, 500.0 / 1113.0, 125.0 / 192.0, -2187 / 6784.0, 11.0 / 84.0};
+        rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784), rat(11, 84)};
     static constexpr std::array<double, 6> Bhat = {
-        5179.0 / 57600.0, 0.0, 7571.0 / 16695.0, 393 / 640.0, -92097 / 339200.0, 187 / 2100.0};
+        rat(5179, 57600), 0.0, rat(7571, 16695), rat(393, 640), rat(-92097, 339200), rat(187, 2100)};
 };
 
 template <> struct RKCoeffs<IVPAlg::DOPRI87> {
@@ -130,76 +153,75 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr bool HasMidpoint = true;
     static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
 
+    // Butcher tableau — matches Julia OrdinaryDiffEqHighOrderRK DP8ConstantCache
+    // (generic T::Type variant with rational coefficients).
     static constexpr std::array<std::array<double, 12>, 12> A = {
-        std::array<double, 12>{1.0 / 18.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        std::array<double, 12>{1.0 / 48.0, 1.0 / 16.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        std::array<double, 12>{1.0 / 32.0, 0, 3.0 / 32.0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        std::array<double, 12>{5.0 / 16.0, 0, -75.0 / 64.0, 75.0 / 64.0, 0, 0, 0, 0, 0, 0, 0, 0},
-
-        std::array<double, 12>{3.0 / 80.0, 0, 0, 3.0 / 16.0, 3.0 / 20.0, 0, 0, 0, 0, 0, 0, 0},
-        std::array<double, 12>{29443841.0 / 614563906.0, 0, 0, 77736538.0 / 692538347.0,
-                             -28693883.0 / 1125000000.0, 23124283.0 / 1800000000.0, 0, 0, 0, 0, 0,
-                             0},
-        std::array<double, 12>{16016141.0 / 946692911.0, 0, 0, 61564180.0 / 158732637.0,
-                             22789713.0 / 633445777.0, 545815736.0 / 2771057229.0,
-                             -180193667.0 / 1043307555.0, 0, 0, 0, 0, 0},
-        std::array<double, 12>{39632708.0 / 573591083.0, 0, 0, -433636366.0 / 683701615.0,
-                             -421739975.0 / 2616292301.0, 100302831.0 / 723423059.0,
-                             790204164.0 / 839813087.0, 800635310.0 / 3783071287.0, 0, 0, 0, 0},
-
-        std::array<double, 12>{246121993.0 / 1340847787.0, 0, 0, -37695042795.0 / 15268766246.0,
-                             -309121744.0 / 1061227803.0, -12992083.0 / 490766935.0,
-                             6005943493.0 / 2108947869.0, 393006217.0 / 1396673457.0,
-                             123872331.0 / 1001029789.0, 0, 0, 0},
-        std::array<double, 12>{-1028468189.0 / 846180014.0, 0, 0, 8478235783.0 / 508512852.0,
-                             1311729495.0 / 1432422823.0, -10304129995.0 / 1701304382.0,
-                             -48777925059.0 / 3047939560.0, 15336726248.0 / 1032824649,
-                             -45442868181.0 / 3398467696, 3065993473.0 / 597172653.0, 0, 0},
-        std::array<double, 12>{185892177.0 / 718116043.0, 0, 0, -3185094517.0 / 667107341.0,
-                             -477755414.0 / 1098053517.0, -703635378.0 / 230739211.0,
-                             5731566787.0 / 1027545527, 5232866602.0 / 850066563.0,
-                             -4093664535.0 / 808688257.0, 3962137247.0 / 1805957418,
-                             65686358.0 / 487910083.0, 0},
-        std::array<double, 12>{403863854.0 / 491063109.0, 0, 0, -5068492393.0 / 434740067.0,
-                             -411421997.0 / 543043805.0, 652783627.0 / 914296604.0,
-                             11173962825.0 / 925320556, -13158990841.0 / 6184727034.0,
-                             3936647629.0 / 1978049680.0, -160528059.0 / 685178525,
-                             248638103.0 / 1413531060.0, 0},
-
+        std::array<double, 12>{rat(1, 18), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(1, 48), rat(1, 16), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(1, 32), 0, rat(3, 32), 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(5, 16), 0, rat(-75, 64), rat(75, 64), 0, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(3, 80), 0, 0, rat(3, 16), rat(3, 20), 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(29443841, 614563906), 0, 0, rat(77736538, 692538347),
+                               rat(-28693883, 1125000000), rat(23124283, 1800000000), 0, 0, 0, 0, 0,
+                               0},
+        std::array<double, 12>{rat(16016141, 946692911), 0, 0, rat(61564180, 158732637),
+                               rat(22789713, 633445777), rat(545815736, 2771057229),
+                               rat(-180193667, 1043307555), 0, 0, 0, 0, 0},
+        std::array<double, 12>{rat(39632708, 573591083), 0, 0, rat(-433636366, 683701615),
+                               rat(-421739975, 2616292301), rat(100302831, 723423059),
+                               rat(790204164, 839813087), rat(800635310, 3783071287), 0, 0, 0, 0},
+        std::array<double, 12>{rat(246121993, 1340847787), 0, 0, rat(-37695042795, 15268766246),
+                               rat(-309121744, 1061227803), rat(-12992083, 490766935),
+                               rat(6005943493, 2108947869), rat(393006217, 1396673457),
+                               rat(123872331, 1001029789), 0, 0, 0},
+        std::array<double, 12>{rat(-1028468189, 846180014), 0, 0, rat(8478235783, 508512852),
+                               rat(1311729495, 1432422823), rat(-10304129995, 1701304382),
+                               rat(-48777925059, 3047939560), rat(15336726248, 1032824649),
+                               rat(-45442868181, 3398467696), rat(3065993473, 597172653), 0, 0},
+        std::array<double, 12>{rat(185892177, 718116043), 0, 0, rat(-3185094517, 667107341),
+                               rat(-477755414, 1098053517), rat(-703635378, 230739211),
+                               rat(5731566787, 1027545527), rat(5232866602, 850066563),
+                               rat(-4093664535, 808688257), rat(3962137247, 1805957418),
+                               rat(65686358, 487910083), 0},
+        std::array<double, 12>{rat(403863854, 491063109), 0, 0, rat(-5068492393, 434740067),
+                               rat(-411421997, 543043805), rat(652783627, 914296604),
+                               rat(11173962825, 925320556), rat(-13158990841, 6184727034),
+                               rat(3936647629, 1978049680), rat(-160528059, 685178525),
+                               rat(248638103, 1413531060), 0},
     };
 
-    static constexpr std::array<double, 12> C = {1.0 / 18.0,   1.0 / 12.0,
-                                                  1.0 / 8,      5.0 / 16.0,
-                                                  3.0 / 8.0,    59.0 / 400.0,
-                                                  93.0 / 200.0, 5490023248.0 / 9719169821.0,
-                                                  13.0 / 20.0,  1201146811.0 / 1299019798.0,
-                                                  1.0,          1.0};
-    static constexpr std::array<double, 13> B = {14005451.0 / 335480064.0,
-                                                  0,
-                                                  0,
-                                                  0,
-                                                  0,
-                                                  -59238493.0 / 1068277825.0,
-                                                  181606767.0 / 758867731.0,
-                                                  561292985.0 / 797845732.0,
-                                                  -1041891430.0 / 1371343529.0,
-                                                  760417239.0 / 1151165299.0,
-                                                  118820643.0 / 751138087.0,
-                                                  -528747749.0 / 2220607170.0,
-                                                  1.0 / 4.0};
-    static constexpr std::array<double, 13> Bhat = {13451932.0 / 455176623.0,
-                                                     0,
-                                                     0,
-                                                     0,
-                                                     0,
-                                                     -808719846.0 / 976000145.0,
-                                                     1757004468.0 / 5645159321.0,
-                                                     656045339.0 / 265891186.0,
-                                                     -3867574721.0 / 1518517206.0,
-                                                     465885868.0 / 322736535.0,
-                                                     53011238.0 / 667516719.0,
-                                                     2.0 / 45.0,
-                                                     0};
+    static constexpr std::array<double, 12> C = {rat(1, 18),      rat(1, 12),
+                                                 rat(1, 8),       rat(5, 16),
+                                                 rat(3, 8),       rat(59, 400),
+                                                 rat(93, 200),    rat(5490023248, 9719169821),
+                                                 rat(13, 20),     rat(1201146811, 1299019798),
+                                                 1.0,             1.0};
+    static constexpr std::array<double, 13> B = {rat(14005451, 335480064),
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 rat(-59238493, 1068277825),
+                                                 rat(181606767, 758867731),
+                                                 rat(561292985, 797845732),
+                                                 rat(-1041891430, 1371343529),
+                                                 rat(760417239, 1151165299),
+                                                 rat(118820643, 751138087),
+                                                 rat(-528747749, 2220607170),
+                                                 rat(1, 4)};
+    static constexpr std::array<double, 13> Bhat = {rat(13451932, 455176623),
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    rat(-808719846, 976000145),
+                                                    rat(1757004468, 5645159321),
+                                                    rat(656045339, 265891186),
+                                                    rat(-3867574721, 1518517206),
+                                                    rat(465885868, 322736535),
+                                                    rat(53011238, 667516719),
+                                                    rat(2, 45),
+                                                    0};
 
     static constexpr std::array<double, BmidSize> Bmid = {
         0.0820626072147879,  0.0000000000000000, 0.0000000000000000,  0.0000000000000000,

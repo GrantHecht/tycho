@@ -10,6 +10,8 @@
 
 **Bmid storage convention:** `Bmid[i] = 2·b_i(Θ=0.5)` in Julia's formulation `sol(Θ) = x + h·Σ b_i(Θ)·f_i`. The factor of 2 cancels the `/2.0` applied inside `stepper_compute_impl`'s midpoint sum. Sanity check: Σ Bmid = 1.0 (consistent with the existing DOPRI54/DOPRI87 Bmid arrays).
 
+**Coefficient storage convention (rational form):** Tycho transcribes coefficients from Julia's generic (`T::Type`) tableau variant. A `constexpr double rat(long long, long long)` helper in `rk_coeffs.h` mirrors Julia's `N // D` rational notation. Use `rat(N, D)` for rational coefficients (bit-identical to Julia's `convert(Float64, N//D)` via IEEE 754 round-to-nearest). Use Float64 literals for irrational coefficients, copied from Julia's `CompiledFloats` variant (bit-identical to Julia's `convert(Float64, big"...")`). All existing methods (DOPRI54, DOPRI87, RK4Classic, DOPRI5) have been migrated to `rat()` form — new methods follow suit.
+
 **FSAL transcription tag:** Analogous to how DOPRI54 (FSAL, 7 stages) uses an internal `IVPAlg::DOPRI5` tag (non-FSAL, 6 stages) for the transcription stepper, FSAL methods in SP2 (Tsit5, BS3) get companion internal tags (`Tsit5Trans`, `BS3Trans`) with the FSAL stage 7/4 dropped. Non-FSAL methods (BS5, Vern7, Vern8, Vern9) reuse their own enum in both paths.
 
 **Tech Stack:** C++20, Python/Julia (comparison harness), CMake/ninja, Google Test
@@ -902,20 +904,17 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
     static constexpr int BmidStages = Stages;     // = 4
 
     // A: 3 rows (stages 2..4). Last row is b (FSAL).
+    // Julia source: BS3ConstantCache (generic T::Type variant, rational coefficients).
     static constexpr std::array<std::array<double, 3>, 3> A = {
-        std::array<double, 3>{0.5, 0, 0},          // a21
-        std::array<double, 3>{0.0, 0.75, 0},       // a31, a32
-        std::array<double, 3>{2.0/9.0, 1.0/3.0, 4.0/9.0}  // b (FSAL)
+        std::array<double, 3>{rat(1, 2), 0, 0},           // a21 = 1 // 2
+        std::array<double, 3>{0, rat(3, 4), 0},           // a32 = 3 // 4
+        std::array<double, 3>{rat(2, 9), rat(1, 3), rat(4, 9)}   // b (FSAL): 2/9, 1/3, 4/9
     };
-    static constexpr std::array<double, 3> C = {0.5, 0.75, 1.0};
-    static constexpr std::array<double, 4> B = {2.0/9.0, 1.0/3.0, 4.0/9.0, 0.0};
-    // btilde = (7/24 - 2/9, 1/4 - 1/3, 1/3 - 4/9, 1/8 - 0) = (5/72, -1/12, -1/9, 1/8)
-    // Bhat = B - btilde
-    static constexpr std::array<double, 4> Bhat = {
-        2.0/9.0 - 5.0/72.0,
-        1.0/3.0 - (-1.0/12.0),
-        4.0/9.0 - (-1.0/9.0),
-        0.0 - 1.0/8.0};
+    static constexpr std::array<double, 3> C = {rat(1, 2), rat(3, 4), 1.0};
+    static constexpr std::array<double, 4> B = {rat(2, 9), rat(1, 3), rat(4, 9), 0.0};
+    // Bhat = 2nd-order embedded weights from the Bogacki-Shampine 1989 paper.
+    // Equivalent to Julia's b + btilde, where btilde = bhat - b = (5/72, -1/12, -1/9, 1/8).
+    static constexpr std::array<double, 4> Bhat = {rat(7, 24), rat(1, 4), rat(1, 3), rat(1, 8)};
 
     // Bmid: BS3 falls back to cubic Hermite in Julia (no BS3-specific *Interp
     // table in OrdinaryDiffEqLowOrderRK; confirmed by grep for BS3 in interpolants.jl,
