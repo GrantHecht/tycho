@@ -248,16 +248,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->error_order_ = 6;
             this->init_stepper_and_controller<IVPAlg::Vern7Trans>(dode, usecontrol, ucon, varlocs_t);
             break;
+        case IVPAlg::Vern8:
+            this->rk_method_ = IVPAlg::Vern8;
+            this->error_order_ = 7;
+            this->init_stepper_and_controller<IVPAlg::Vern8Trans>(dode, usecontrol, ucon, varlocs_t);
+            break;
         case IVPAlg::RK4Classic:
         case IVPAlg::DOPRI5:
         case IVPAlg::Tsit5Trans:
         case IVPAlg::BS3Trans:
         case IVPAlg::BS5Trans:
         case IVPAlg::Vern7Trans:
+        case IVPAlg::Vern8Trans:
             throw std::invalid_argument(
                 "Internal template-dispatch tags (RK4Classic, DOPRI5, Tsit5Trans, BS3Trans, "
-                "BS5Trans, Vern7Trans) are not runtime-selectable. Use IVPAlg::DOPRI54, "
-                "IVPAlg::DOPRI87, IVPAlg::Tsit5, IVPAlg::BS3, IVPAlg::BS5, or IVPAlg::Vern7.");
+                "BS5Trans, Vern7Trans, Vern8Trans) are not runtime-selectable. Use IVPAlg::DOPRI54, "
+                "IVPAlg::DOPRI87, IVPAlg::Tsit5, IVPAlg::BS3, IVPAlg::BS5, IVPAlg::Vern7, or "
+                "IVPAlg::Vern8.");
         default:
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
@@ -637,6 +644,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } break;
         case IVPAlg::Vern7: {
             this->stepper_compute_impl<IVPAlg::Vern7, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
+                                                               domidpoint, xf_mid);
+        } break;
+        case IVPAlg::Vern8: {
+            this->stepper_compute_impl<IVPAlg::Vern8, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
                                                                domidpoint, xf_mid);
         } break;
         default:
