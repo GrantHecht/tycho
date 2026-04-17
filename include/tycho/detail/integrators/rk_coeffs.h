@@ -27,12 +27,16 @@ namespace tycho {
 enum class IVPAlg {
     DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
+    Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (SP2)
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     DOPRI5,
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// 6-stage non-FSAL transcription companion for Tsit5. Do not expose via bindings.
+    Tsit5Trans,
 };
 
 } // namespace tycho
@@ -49,6 +53,7 @@ template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr int ErrorOrder = 0;
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false; // fixed-step, no dense output
 
     static constexpr std::array<std::array<double, 3>, 3> A = {
         std::array<double, 3>{0.5, 0.0, 0.0}, std::array<double, 3>{0.0, 0.5, 0.0},
@@ -65,6 +70,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr int ErrorOrder = 4;
     static constexpr bool FSAL = true;
     static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
     static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
 
     static constexpr std::array<std::array<double, 6>, 6> A = {
@@ -97,6 +103,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr int ErrorOrder = 0;
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
     static constexpr std::array<std::array<double, 5>, 5> A = {
         std::array<double, 5>{1 / 5.0, 0, 0, 0, 0},
@@ -120,6 +127,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr int ErrorOrder = 7;
     static constexpr bool FSAL = false;
     static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
     static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
 
     static constexpr std::array<std::array<double, 12>, 12> A = {
@@ -198,6 +206,83 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
         0.0000000000000000,  0.1020112560398276, 0.4777861354824404,  0.6193740287992207,
         -0.4344650943510704, 0.1566681135866386, -0.0037228739431160, 0.0141456884053577,
         0.0138169474640115,  -0.0276768086980947};
+};
+
+template <> struct RKCoeffs<IVPAlg::Tsit5> {
+    static constexpr int Stages = 7;
+    static constexpr int Order = 5;
+    static constexpr int ErrorOrder = 4;
+    static constexpr bool FSAL = true;
+    static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
+    static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+
+    // A: 6 rows (stages 2..7). Row i holds A[i+2, 0..i+1].
+    // Source: OrdinaryDiffEqTsit5 Tsit5ConstantCacheActual (CompiledFloats variant)
+    static constexpr std::array<std::array<double, 6>, 6> A = {
+        std::array<double, 6>{0.161, 0, 0, 0, 0, 0},
+        std::array<double, 6>{-0.008480655492356989, 0.335480655492357, 0, 0, 0, 0},
+        std::array<double, 6>{2.8971530571054935, -6.359448489975075, 4.3622954328695815, 0, 0, 0},
+        std::array<double, 6>{5.325864828439257, -11.748883564062828, 7.4955393428898365,
+                              -0.09249506636175525, 0, 0},
+        std::array<double, 6>{5.86145544294642, -12.92096931784711, 8.159367898576159,
+                              -0.071584973281401, -0.028269050394068383, 0},
+        // Row 7 (FSAL) = b vector itself:
+        std::array<double, 6>{0.09646076681806523, 0.01, 0.4798896504144996,
+                              1.379008574103742, -3.290069515436081, 2.324710524099774}};
+
+    static constexpr std::array<double, 6> C = {0.161, 0.327, 0.9, 0.9800255409045097, 1.0, 1.0};
+
+    // B (5th-order weights): 7th row of A (FSAL structure) with b7 = 0.
+    static constexpr std::array<double, 7> B = {0.09646076681806523, 0.01, 0.4798896504144996,
+                                                1.379008574103742, -3.290069515436081,
+                                                2.324710524099774, 0.0};
+
+    // Bhat = B - btilde. btilde from tsit_tableaus.jl:
+    // (-0.001780011052225777, -0.0008164344596567469, 0.007880878010261995,
+    //  -0.1447110071732629, 0.5823571654525552, -0.45808210592918697, 0.015151515151515152)
+    static constexpr std::array<double, 7> Bhat = {
+        0.09646076681806523 - (-0.001780011052225777),
+        0.01 - (-0.0008164344596567469),
+        0.4798896504144996 - 0.007880878010261995,
+        1.379008574103742 - (-0.1447110071732629),
+        -3.290069515436081 - 0.5823571654525552,
+        2.324710524099774 - (-0.45808210592918697),
+        0.0 - 0.015151515151515152};
+
+    // Bmid from Tsit5Interp at θ=0.5; derived via bench/julia_reference/src/compute_bmid.jl.
+    // Sanity check: Σ Bmid[i] = 0.5 (consistent with interpolant weight for y'=1).
+    static constexpr std::array<double, BmidSize> Bmid = {
+        1.07412352300968780e-01,  1.13562499999999983e-02,  3.95609030560453101e-01,
+        -3.44752143525935306e-01, 1.31618536495816496e+00,  -1.01706085429365167e+00,
+        3.12500000000000000e-02};
+};
+
+template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
+    static constexpr int Stages = 6;
+    static constexpr int Order = 5;
+    static constexpr int ErrorOrder = 0;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+
+    // A: 5 rows (stages 2..6), same as RKCoeffs<IVPAlg::Tsit5> rows 0..4
+    static constexpr std::array<std::array<double, 5>, 5> A = {
+        std::array<double, 5>{0.161, 0, 0, 0, 0},
+        std::array<double, 5>{-0.008480655492356989, 0.335480655492357, 0, 0, 0},
+        std::array<double, 5>{2.8971530571054935, -6.359448489975075, 4.3622954328695815, 0, 0},
+        std::array<double, 5>{5.325864828439257, -11.748883564062828, 7.4955393428898365,
+                              -0.09249506636175525, 0},
+        std::array<double, 5>{5.86145544294642, -12.92096931784711, 8.159367898576159,
+                              -0.071584973281401, -0.028269050394068383}};
+
+    static constexpr std::array<double, 5> C = {0.161, 0.327, 0.9, 0.9800255409045097, 1.0};
+
+    // B = Tsit5's row 7 of A (the b-vector via FSAL structure):
+    static constexpr std::array<double, 6> B = {0.09646076681806523, 0.01, 0.4798896504144996,
+                                                1.379008574103742, -3.290069515436081,
+                                                2.324710524099774};
+    static constexpr std::array<double, 6> Bhat = {0, 0, 0, 0, 0, 0}; // unused
 };
 
 } // namespace tycho::integrators
