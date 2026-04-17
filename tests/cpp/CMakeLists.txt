@@ -253,6 +253,7 @@ set(_JULIA_REFERENCE_DIR "${CMAKE_SOURCE_DIR}/bench/julia_reference")
 
 set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_method_tsit5.cpp
+    integrators/test_method_bs3.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE

@@ -65,6 +65,7 @@ enum class IVPAlg {
     DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
     Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (SP2)
+    BS3,     ///< Bogacki-Shampine 3(2) — 4 stages, FSAL, adaptive (SP2)
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
@@ -74,6 +75,9 @@ enum class IVPAlg {
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// 6-stage non-FSAL transcription companion for Tsit5. Do not expose via bindings.
     Tsit5Trans,
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// 3-stage non-FSAL transcription companion for BS3. Do not expose via bindings.
+    BS3Trans,
 };
 
 } // namespace tycho
@@ -344,6 +348,76 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
         2.14824704601937561e-01,  2.27124999999999966e-02,  7.91218061120906202e-01,
         -6.89504287051870612e-01, 2.63237072991632992e+00,  -2.03412170858730335e+00,
         6.25000000000000000e-02};
+};
+
+template <> struct RKCoeffs<IVPAlg::BS3> {
+    static constexpr int Stages = 4;
+    static constexpr int Order = 3;
+    static constexpr int ErrorOrder = 2;
+    static constexpr bool FSAL = true;
+    static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
+
+    // SP2 dense-output schema fields (BS3 falls back to Hermite cubic in Julia;
+    // no extras needed).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = FSAL;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
+
+    // A: 3 rows (stages 2..4). Row 3 (FSAL) equals b-vector.
+    // Source: OrdinaryDiffEqLowOrderRK BS3ConstantCache (generic T::Type
+    // variant with rational coefficients).
+    static constexpr std::array<std::array<double, 3>, 3> A = {
+        std::array<double, 3>{rat(1, 2), 0, 0},
+        std::array<double, 3>{0, rat(3, 4), 0},
+        std::array<double, 3>{rat(2, 9), rat(1, 3), rat(4, 9)}};
+
+    static constexpr std::array<double, 3> C = {rat(1, 2), rat(3, 4), 1.0};
+    static constexpr std::array<double, 4> B = {rat(2, 9), rat(1, 3), rat(4, 9), 0.0};
+
+    // Bhat = 2nd-order embedded weights from Bogacki-Shampine 1989 paper.
+    // Equivalent to Julia's b + btilde where btilde = bhat - b = (5/72, -1/12, -1/9, 1/8).
+    static constexpr std::array<double, 4> Bhat = {rat(7, 24), rat(1, 4), rat(1, 3), rat(1, 8)};
+
+    // Bmid: BS3 has no dedicated interp polynomial in OrdinaryDiffEqLowOrderRK
+    // (confirmed by grep for BS3 in interpolants.jl, interp_func.jl,
+    // low_order_rk_addsteps.jl — zero matches). Julia falls back to Hermite
+    // cubic at Θ=0.5 via the generic dense-output path.
+    //
+    //   Hermite cubic at Θ=0.5:
+    //     y_mid = y_0 + h·Σ [B_i/2 + (1/8)·δ_{i,1} - (1/8)·δ_{i,FSAL-last}] · f_i
+    //   BS3 FSAL: last stage k_4 = f(xf), B_4 = 0.
+    //     b_1(0.5) = B_1/2 + 1/8 = 1/9 + 1/8 = 17/72
+    //     b_2(0.5) = B_2/2       = 1/6
+    //     b_3(0.5) = B_3/2       = 2/9
+    //     b_4(0.5) = B_4/2 - 1/8 = -1/8
+    //   Σ b_i(0.5) = 1/2 ✓. Tycho stores 2·b_i(0.5): Σ = 1.0 ✓.
+    static constexpr std::array<double, BmidStages> Bmid = {
+        rat(17, 36), rat(1, 3), rat(4, 9), rat(-1, 4)};
+};
+
+template <> struct RKCoeffs<IVPAlg::BS3Trans> {
+    static constexpr int Stages = 3;
+    static constexpr int Order = 3;
+    static constexpr int ErrorOrder = 0;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+
+    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
+
+    // A: 2 rows (stages 2..3), same as RKCoeffs<IVPAlg::BS3> rows 0..1
+    static constexpr std::array<std::array<double, 2>, 2> A = {
+        std::array<double, 2>{rat(1, 2), 0}, std::array<double, 2>{0, rat(3, 4)}};
+
+    static constexpr std::array<double, 2> C = {rat(1, 2), rat(3, 4)};
+
+    // B = BS3's b-vector (without the FSAL trailing zero):
+    static constexpr std::array<double, 3> B = {rat(2, 9), rat(1, 3), rat(4, 9)};
+    static constexpr std::array<double, 3> Bhat = {0, 0, 0}; // unused
 };
 
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
