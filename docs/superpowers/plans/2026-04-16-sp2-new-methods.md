@@ -6,6 +6,10 @@
 
 **Architecture:** Dispatch in SP2 uses the existing **enum-switch path** (`stepper_compute` in `integrator.h` switches on `rk_method_`). The extracted `Stepper<Alg,DODE,Scalar>` variant/visit pipeline from SP1 Task 10 is DEFERRED; SP2 adds methods without changing the dispatch mechanism. For each new `IVPAlg` enum value, add an `RKCoeffs<Alg>` specialization with standard Butcher tableau data (coefficients transcribed from OrdinaryDiffEq.jl, with `Bhat = B - btilde` conversion). Wire each enum into `set_method` and `stepper_compute` cases. The generalized `final_state_sum` in `rk_steppers.h` (cleaned up in SP1 Task 9) makes each new method automatically work in the transcription stepper via compile-time zero-skipping on `B[i]==0`. Validate numerical equivalence against Julia on two-body and CR3BP.
 
+**Midpoint / dense output:** The `xf_mid` from each accepted step feeds Tycho's LGL5 interpolation table, which is the backbone of event detection (`find_events` via `interpolate_ref`) and dense resampling (`integrate_dense(n, ...)`). LGL5 needs `(x_n, f(x_n), x_mid, x_{n+1}, f(x_{n+1}))` per segment to hit its 5th-order accuracy. To preserve end-to-end accuracy consistent with the integrator order, SP2 transcribes the **exact** Julia interpolation polynomial for each new method, evaluated at Θ=0.5. For methods whose polynomial requires additional "lazy" f-evaluations beyond the main integration stages (BS5: 3 extra, Vern7: 6, Vern8: 8, Vern9: 10), the stepper computes those extras only when `domidpoint=true` (zero cost when midpoint isn't requested). Tsit5 needs no extras (7-stage interp uses only main stages). BS3 uses Hermite (Julia's default for BS3). Task 3.5 extends the schema and step loop to support extras.
+
+**Bmid storage convention:** `Bmid[i] = 2·b_i(Θ=0.5)` in Julia's formulation `sol(Θ) = x + h·Σ b_i(Θ)·f_i`. The factor of 2 cancels the `/2.0` applied inside `stepper_compute_impl`'s midpoint sum. Sanity check: Σ Bmid = 1.0 (consistent with the existing DOPRI54/DOPRI87 Bmid arrays).
+
 **FSAL transcription tag:** Analogous to how DOPRI54 (FSAL, 7 stages) uses an internal `IVPAlg::DOPRI5` tag (non-FSAL, 6 stages) for the transcription stepper, FSAL methods in SP2 (Tsit5, BS3) get companion internal tags (`Tsit5Trans`, `BS3Trans`) with the FSAL stage 7/4 dropped. Non-FSAL methods (BS5, Vern7, Vern8, Vern9) reuse their own enum in both paths.
 
 **Tech Stack:** C++20, Python/Julia (comparison harness), CMake/ninja, Google Test
@@ -24,7 +28,10 @@
 - `rk_steppers.h`'s `RKStepper_Impl::final_state_sum` is generalized (per-algorithm branches deleted in SP1 Task 9)
 - Golden regression corpus (12 cases) protects existing DOPRI54/DOPRI87 behavior
 
-**New SP2 precondition:** Add `static constexpr bool HasMidpoint = true;` to the existing DOPRI54 / DOPRI87 / RK4Classic / DOPRI5 `RKCoeffs` specializations in `rk_coeffs.h` as a mechanical first step of Task 1 (before adding any new method). This enables Vern8/Vern9's `HasMidpoint = false` opt-out (Option B) without breaking existing methods.
+**New SP2 preconditions:**
+1. **`HasMidpoint` flag** on existing specializations (DOPRI54 / DOPRI87 / RK4Classic / DOPRI5 / Tsit5 / Tsit5Trans) — done in Task 1. Set `true` for methods that support midpoint (DOPRI54, DOPRI87, Tsit5), `false` for transcription-only tags (RK4Classic, DOPRI5, Tsit5Trans).
+2. **Dense-output schema extension** — Task 3.5 adds `InterpStages`, `ExtraA`, `ExtraC`, `BmidStages`, `LastStageIsFxf` fields to `RKCoeffs` and extends `stepper_compute_impl` to compute extra stages when `domidpoint=true`. Existing methods default to `InterpStages=0` with no behavior change.
+3. **Tsit5 Bmid correction** — committed separately: original Tsit5 Bmid stored `b_i(0.5)` instead of `2·b_i(0.5)`, half the correct value. Fixed before Task 2.
 
 ---
 
@@ -639,13 +646,217 @@ Expected: 2/2 pass.
 
 If final state differs by >1e-6 with atol=1e-12, there is almost certainly a coefficient error. Re-run `compute_bmid.jl` and compare against Step 1.2's hardcoded values.
 
-- [ ] **Step 3.5: Commit**
+- [ ] **Step 3.6: Commit**
 
 ```bash
 git add tests/cpp/integrators/test_method_tsit5.cpp tests/cpp/CMakeLists.txt \
         bench/julia_reference/test/reference_outputs/tsit5_twobody.bin \
         bench/julia_reference/test/reference_outputs/tsit5_crtbp.bin
 git commit -m "test: validate Tsit5 against OrdinaryDiffEq.jl reference"
+```
+
+---
+
+## Task 3.5: Extend Stepper Infrastructure for Extra Interpolation Stages
+
+**Purpose:** Add schema and step-loop support for interpolation "lazy stages" beyond the main integration stages. This is the foundation BS5, Vern7, Vern8, and Vern9 will rely on. Tsit5 and BS3 need no extras, so existing methods remain untouched.
+
+**Files:**
+- Modify: `include/tycho/detail/integrators/rk_coeffs.h` (add new schema fields; update existing specializations)
+- Modify: `include/tycho/detail/integrators/integrator.h` (extend `stepper_compute_impl`'s `domidpoint` branch)
+
+- [ ] **Step 3.5.1: Document the extended schema in a comment in `rk_coeffs.h`**
+
+Add at top of file, above `enum class IVPAlg`:
+
+```cpp
+// RKCoeffs dense-output schema (SP2):
+//
+//   Main integration tableau:
+//     Stages         — main integration f-evals per step
+//     A, B, C        — standard Butcher tableau
+//     Bhat           — embedded (error-estimator) weights (zeros if !HasEmbedded)
+//     FSAL           — last main stage equals next step's first stage
+//     HasMidpoint    — does this method support midpoint dense output?
+//
+//   Dense-output extras (SP2):
+//     InterpStages   — # of *additional* f-evals needed for the method's
+//                      interpolation polynomial, beyond the main Stages.
+//                      0 means "no extras" (Tsit5, BS3, DOPRI54, DOPRI87).
+//     LastStageIsFxf — does k_Stages (the last main stage) equal f(xf)?
+//                      True for FSAL methods (by construction). Also true for
+//                      BS5/Vern7/Vern8/Vern9 because their perform_step evaluates
+//                      the last main stage at (t+h, xf) with a-row equal to B.
+//                      False only for DOPRI87 (which needs an explicit f(xf)).
+//     BmidStages     — total k-values referenced by the midpoint sum:
+//                      Stages + InterpStages + (LastStageIsFxf ? 0 : 1).
+//     ExtraA         — InterpStages × (Stages + InterpStages) a-matrix; row e
+//                      builds the argument to f for extra stage e:
+//                        x_e = x + h · Σ_{j<Stages+e} ExtraA[e][j] · k_j
+//                      (k_0..k_{Stages-1} are main; k_Stages..k_{Stages+e-1} are
+//                       prior extras.)
+//     ExtraC         — c-value for each extra stage (t_e = t0 + ExtraC[e]·h).
+//     Bmid           — weights for the midpoint sum, stored as 2·b_i(Θ=0.5)
+//                      where b_i(Θ) is Julia's interpolation polynomial.
+//                      Factor of 2 cancels the /2 applied inside
+//                      stepper_compute_impl. Σ Bmid[i] = 1.0 sanity-check.
+//                      Layout:
+//                        Bmid[0..Stages-1]                 — main stages
+//                        Bmid[Stages]                      — f(xf) term (only if !LastStageIsFxf)
+//                        Bmid[Stages + offset .. BmidStages-1]  — extra stages
+//                        (offset = LastStageIsFxf ? 0 : 1)
+```
+
+- [ ] **Step 3.5.2: Add defaults to existing specializations**
+
+For each existing specialization (DOPRI54, DOPRI87, Tsit5, RK4Classic, DOPRI5, Tsit5Trans), add:
+
+```cpp
+static constexpr int InterpStages = 0;
+static constexpr bool LastStageIsFxf = FSAL;  // overridden to false only for DOPRI87
+static constexpr int BmidStages = Stages + InterpStages + (LastStageIsFxf ? 0 : 1);
+```
+
+Explicit override for DOPRI87:
+```cpp
+static constexpr bool LastStageIsFxf = false;  // k_13 is not f(xf); needs extra eval
+```
+
+Retire the old `BmidSize` alias in favor of `BmidStages` (they compute the same value for `InterpStages=0`). Use `replace_all` rename via sed for consistency, then verify no other references.
+
+- [ ] **Step 3.5.3: Extend `stepper_compute_impl` `domidpoint` branch**
+
+Current code in `integrator.h` lines 517–538:
+```cpp
+if (domidpoint) {
+    xtup = x;
+    xtup[t_var] = t0 + h/2.0;
+    for (int i = 0; i < Stages; i++) {
+        xtup.segment(...) += (Bmid[i]/2) * k_vals[i];
+    }
+    if constexpr (!RKData::FSAL) {
+        k_vals.back().setZero();
+        ode_.compute(xf, k_vals.back());           // f(xf)
+        xtup.segment(...) += (Bmid.back()/2) * k_vals.back() * h;
+        xdot_prev = k_vals.back();
+    }
+    xf_mid = xtup;
+}
+```
+
+Replace with (full extension):
+
+```cpp
+if (domidpoint) {
+    // Step A: ensure k-value for f(xf) is available.
+    // For FSAL methods, k_vals[Stages-1] already == f(xf)·h.
+    // For LastStageIsFxf=true non-FSAL methods (BS5/Vern*), also k_vals[Stages-1] == f(xf)·h.
+    // For LastStageIsFxf=false (DOPRI87 only), compute f(xf) and store into k_vals_extra[0].
+    //
+    // k_vals_extra layout:
+    //   k_vals_extra[0]         — f(xf)·h if !LastStageIsFxf, else first interp extra
+    //   k_vals_extra[0..InterpStages-1 + offset] — interp extras
+    //   where offset = LastStageIsFxf ? 0 : 1
+    constexpr int offset = RKData::LastStageIsFxf ? 0 : 1;
+    if constexpr (!RKData::LastStageIsFxf) {
+        ode_.compute(xf, k_vals_extra[0]);
+        k_vals_extra[0] *= h;
+    }
+
+    // Step B: compute extra interpolation stages (if any).
+    if constexpr (RKData::InterpStages > 0) {
+        for (int e = 0; e < RKData::InterpStages; e++) {
+            xtup = x;
+            xtup[t_var] = t0 + RKData::ExtraC[e] * h;
+            // main stages
+            for (int j = 0; j < RKData::Stages; j++) {
+                if constexpr (RKData::ExtraA[e][j] != 0.0) {   // skip zeros at compile time if desired
+                    xtup.segment(...) += RKData::ExtraA[e][j] * k_vals[j];
+                }
+            }
+            // prior extra stages
+            for (int j = 0; j < e; j++) {
+                xtup.segment(...) += RKData::ExtraA[e][RKData::Stages + j] * k_vals_extra[offset + j];
+            }
+            ode_.compute(xtup, k_vals_extra[offset + e]);
+            k_vals_extra[offset + e] *= h;
+        }
+    }
+
+    // Step C: build xf_mid via Bmid sum.
+    xtup = x;
+    xtup[t_var] = t0 + h/2.0;
+    for (int i = 0; i < RKData::Stages; i++) {
+        xtup.segment(...) += (RKData::Bmid[i]/2.0) * k_vals[i];
+    }
+    if constexpr (!RKData::LastStageIsFxf) {
+        // Bmid[Stages] weights f(xf)·h, which is k_vals_extra[0].
+        xtup.segment(...) += (RKData::Bmid[RKData::Stages]/2.0) * k_vals_extra[0];
+    }
+    if constexpr (RKData::InterpStages > 0) {
+        for (int e = 0; e < RKData::InterpStages; e++) {
+            xtup.segment(...) += (RKData::Bmid[RKData::Stages + offset + e] / 2.0) *
+                                  k_vals_extra[offset + e];
+        }
+    }
+
+    // Step D: xdot_prev update for LastStageIsFxf=false methods
+    //         (FSAL and BS5/Vern* get xdot_prev via existing FSAL path earlier).
+    if constexpr (!RKData::LastStageIsFxf) {
+        xdot_prev = k_vals_extra[0] * (1.0 / h);   // unscaled f(xf)
+    }
+
+    xf_mid = xtup;
+}
+```
+
+Notes on implementation:
+- `k_vals_extra` is a new `ArrayOfTempSpecs<ODEDeriv<Scalar>, InterpStages + (LastStageIsFxf ? 0 : 1)>` allocated by the existing `BumpAllocator::allocate_run` call. Size is a compile-time constant per `RKOp` specialization.
+- When both `InterpStages == 0` and `LastStageIsFxf == true` (Tsit5, BS3, DOPRI54), the extras array has size 0 — confirm `ArrayOfTempSpecs<T, 0>` is well-defined, or add a constexpr-if guard that omits the allocation.
+- The `if constexpr (RKData::ExtraA[e][j] != 0.0)` comment is optional compile-time zero-skipping — plain runtime loop is also fine and simpler.
+- The FSAL path for `xdot_prev` (line 502 in existing code) is unchanged. It runs when `dofsal || domidpoint` and handles FSAL methods. The new Step D only fires for non-FSAL, non-LastStageIsFxf methods (i.e., DOPRI87).
+
+- [ ] **Step 3.5.4: Update the BumpAllocator allocation**
+
+Current:
+```cpp
+BumpAllocator::allocate_run(
+    Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(output_rows, 1),
+    TempSpec<ODEState<Scalar>>(input_rows, 1));
+```
+
+Extend to:
+```cpp
+constexpr int ExtraCount = RKData::InterpStages + (RKData::LastStageIsFxf ? 0 : 1);
+if constexpr (ExtraCount == 0) {
+    BumpAllocator::allocate_run(
+        Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(output_rows, 1),
+        TempSpec<ODEState<Scalar>>(input_rows, 1));
+} else {
+    BumpAllocator::allocate_run(
+        Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(output_rows, 1),
+        TempSpec<ODEState<Scalar>>(input_rows, 1),
+        ArrayOfTempSpecs<ODEDeriv<Scalar>, ExtraCount>(output_rows, 1));
+}
+```
+
+Update `Impl` lambda signature to accept the third temp argument. The lambda's capture of `k_vals_extra` comes through the allocate_run callback protocol.
+
+- [ ] **Step 3.5.5: Build and run existing regression tests**
+
+```bash
+conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && ninja -j4 tycho_tests tycho_tests_light"
+conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && ctest --output-on-failure"
+```
+
+Expected: all 12 existing DOPRI54/DOPRI87 regression cases pass — no behavior change because `InterpStages=0` for existing methods and the new paths are compile-time-skipped.
+
+- [ ] **Step 3.5.6: Commit**
+
+```bash
+git add include/tycho/detail/integrators/rk_coeffs.h \
+        include/tycho/detail/integrators/integrator.h
+git commit -m "feat: extend RK dense-output schema with InterpStages/ExtraA/ExtraC (SP2)"
 ```
 
 ---
@@ -683,7 +894,12 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
     static constexpr int ErrorOrder = 2;
     static constexpr bool FSAL = true;
     static constexpr bool HasEmbedded = true;
-    static constexpr int BmidSize = FSAL ? Stages : Stages + 1;
+    static constexpr bool HasMidpoint = true;
+
+    // SP2 dense-output schema fields (all defaults; no extra stages needed)
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = true;  // FSAL
+    static constexpr int BmidStages = Stages;     // = 4
 
     // A: 3 rows (stages 2..4). Last row is b (FSAL).
     static constexpr std::array<std::array<double, 3>, 3> A = {
@@ -700,18 +916,23 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
         1.0/3.0 - (-1.0/12.0),
         4.0/9.0 - (-1.0/9.0),
         0.0 - 1.0/8.0};
-    // Bmid: BS3 uses cubic Hermite interpolation (Julia's default for methods without
-    // a custom interp polynomial). Hermite midpoint in Bmid form:
-    //   x(t+h/2) = x0 + h·Σ B̃_i · k_i   where B̃ derives from Hermite:
-    //   x(t+h/2) = 0.5(x0 + xf) + (h/8)·(k1 - kf)
-    //            = x0 + 0.5·Σ B_i·k_i + (h/8)·(k1 - kf) / h  (wait, re-derive)
-    // Correct form: x(t+θh) = x0 + h·Σ b_i(θ)·k_i  with
-    //   b_1(θ) = θ - (3/2)θ² + (2/3)θ³·... (Hermite cubic)
-    // At θ=0.5 for BS3's FSAL pattern (kf=k4), Bmid computed in compute_bmid.jl:
-    //   b_1(0.5) = 5/18,  b_2(0.5) = 1/6,  b_3(0.5) = 2/9,  b_4(0.5) = -1/8
-    // (derivation: see bench/julia_reference/src/compute_bmid_bs3.jl in Step 4.1b)
-    static constexpr std::array<double, BmidSize> Bmid = {
-         5.0 / 18.0,  1.0 / 6.0,  2.0 / 9.0,  -1.0 / 8.0};
+
+    // Bmid: BS3 falls back to cubic Hermite in Julia (no BS3-specific *Interp
+    // table in OrdinaryDiffEqLowOrderRK; confirmed by grep for BS3 in interpolants.jl,
+    // interp_func.jl, low_order_rk_addsteps.jl — zero matches). Tycho therefore
+    // derives Bmid from the Hermite cubic at Θ=0.5 using the method's B vector:
+    //
+    //   Hermite cubic: y(Θ) = (1-3Θ²+2Θ³)·y₀ + (3Θ²-2Θ³)·y₁
+    //                         + h·(Θ-2Θ²+Θ³)·f₀ + h·(-Θ²+Θ³)·f₁
+    //   At Θ=0.5:      y_mid = 0.5·(y₀+y₁) + (h/8)·(f₀-f₁)
+    //   For FSAL methods (f₁=k_s): b_i(0.5) = 0.5·B_i, with corrections:
+    //     b_1(0.5) += +1/8  (f₀ contribution)
+    //     b_s(0.5) += -1/8  (f₁ contribution, on the FSAL-last stage)
+    //
+    // BS3 values: b_i(0.5) = (17/72, 1/6, 2/9, -1/8). Sum = 36/72 = 0.5 ✓.
+    // Tycho stores 2·b_i(0.5): (17/36, 1/3, 4/9, -1/4). Sum = 1.0 ✓.
+    static constexpr std::array<double, BmidStages> Bmid = {
+        17.0 / 36.0,  1.0 / 3.0,  4.0 / 9.0,  -1.0 / 4.0};
 };
 ```
 
@@ -743,117 +964,213 @@ git add -A && git commit -m "feat: add BS3 method (Bogacki-Shampine 3(2) FSAL)"
 
 ---
 
-## Bmid Decision for Non-FSAL / Higher-Order Methods
+## Midpoint Policy (SP2 revision — supersedes prior Option A/B/C discussion)
 
-BS5 and all Verner methods (Vern7/8/9) use *lazy interpolants* in Julia — polynomial coefficients aren't expressed as a simple `Bmid` vector at θ=0.5. For SP2, two options:
+**All new methods match Julia's exact interpolant at Θ=0.5.** The dense-output schema introduced in Task 3.5 carries the additional f-evaluations ("extra stages") each method's interpolant polynomial needs beyond the main integration stages.
 
-**Option A (chosen for BS5, Vern7):** Derive `Bmid` from Hermite interpolation (the same default Julia uses when a custom interp isn't requested):
-```
-x(t+h/2) = 0.5·(x0+xf) + (h/8)·(f0 - ff)
-```
-In RK form with `Bmid` this becomes a function of the method's B weights plus two extra derivative evaluations (f0=k1, ff evaluated at xf). For non-FSAL methods, `Bmid[Stages]` is the coefficient of the extra derivative at xf — SP1's `BmidSize = FSAL ? Stages : Stages + 1` already handles this.
+Per-method summary:
 
-**Option B (chosen for Vern8, Vern9):** Disable the midpoint code path. Add `static constexpr bool HasMidpoint = false;` to the tableau. Modify `stepper_compute_impl` in `integrator.h` to guard the midpoint block with `if constexpr (RKData::HasMidpoint)`. Calling `integrate_dense` or event detection with Vern8/9 will fall back to the DOPRI87 interpolant via the alternate method at `make_table` time (see `integrate_dense` lines 1796-1822). This is acceptable for SP2 — users who want dense output with Vern8/9 can use Vern7.
+| Method   | Stages | InterpStages | `LastStageIsFxf` | `BmidStages` | Julia source |
+|----------|--------|--------------|-----------------|--------------|-------------|
+| DOPRI54  | 7      | 0            | true (FSAL)     | 7            | existing (unchanged) |
+| DOPRI87  | 13     | 0            | false           | 14           | existing (unchanged) |
+| Tsit5    | 7      | 0            | true (FSAL)     | 7            | `tsit_tableaus.jl` `Tsit5Interp` |
+| BS3      | 4      | 0            | true (FSAL)     | 4            | generic Hermite (Julia default for BS3) |
+| BS5      | 8      | 3            | true            | 11           | `low_order_rk_tableaus.jl` `BS5Interp` + `_ode_addsteps!(BS5ConstantCache)` |
+| Vern7    | 10     | 6            | true            | 16           | `verner_addsteps.jl` + `verner_tableaus.jl` `Vern7ExtraStages` + `interpolants.jl` |
+| Vern8    | 13     | 8            | true            | 21           | `verner_addsteps.jl` + `Vern8ExtraStages` + `interpolants.jl` |
+| Vern9    | 16     | 10           | true            | 26           | `verner_addsteps.jl` + `Vern9ExtraStages` + `interpolants.jl` |
 
-Each method's task below states which option is used.
+`LastStageIsFxf` = "the last main integration stage's k-value equals `f(xf)`." True for FSAL methods trivially. Also true for BS5/Vern7/Vern8/Vern9 because their last main stage is evaluated at `(t+h, xf)` with a-row equal to the b-vector — a standard property of those methods' Butcher tableaus. False only for DOPRI87 (which requires an explicit extra `f(xf)` eval when midpoint is needed — existing behavior, unchanged). This property determines whether `BmidStages` needs a `+1` slot for `f(xf)`.
+
+**Vern9 caveat:** Vern9's perform_step computes 16 internal f-evaluations, but Julia's interpolation polynomial uses only a subset (k_1 and k_8..k_16). In Tycho's model we store all 16 main stages anyway; the `Bmid` weights for the unused internal stages (k_2..k_7) are 0. No special-casing in the stepper — just zero weights.
 
 ---
 
 ## Task 5: Add BS5 (Bogacki-Shampine 5(4))
 
-**Purpose:** 8-stage non-FSAL 5(4) method. Alternative to Tsit5.
+**Purpose:** 8-stage non-FSAL 5(4) method with 3-stage lazy interpolant (Julia's `BS5Interp`). First SP2 method to exercise the Task 3.5 extra-stage infrastructure.
 
-**Julia source:** `~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl` — function `BS5ConstantCacheActual`.
+**Julia sources:**
+- Main tableau: `~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl` — function `BS5ConstantCache`
+- Extra stages: `low_order_rk_addsteps.jl` — `_ode_addsteps!(...cache::BS5ConstantCache...)` — 3 extra stages k_9, k_10, k_11
+- Interpolant polynomial: `low_order_rk_tableaus.jl` — function `BS5Interp_polyweights` — provides `r_ij` coefficients for stages {1, 3, 4, 5, 6, 7, 8, 9, 10, 11}. (Stage 2 has zero interp contribution — BS5's b_2 = 0.)
+- Interp evaluation: `interpolants.jl` — lines around `@bs5unpack` / `@bs5pre0`
 
 **Files:**
-- Modify: `rk_coeffs.h`, `integrator.h`, `rk_coeffs_bind.cpp`, `integrator_bind.h`
+- Modify: `include/tycho/detail/integrators/rk_coeffs.h`
+- Modify: `include/tycho/detail/integrators/integrator.h` (set_method + stepper_compute cases)
+- Modify: `src/bindings/integrators/rk_coeffs_bind.cpp`, `integrator_bind.h`
 - Create: `tests/cpp/integrators/test_method_bs5.cpp`
+- Create: `bench/julia_reference/src/compute_bmid_bs5.jl`
 - Create: `bench/julia_reference/test/reference_outputs/bs5_{twobody,crtbp}.bin`
 
-- [ ] **Step 5.1: Extract BS5 coefficients**
+- [ ] **Step 5.1: Transcribe BS5 main tableau**
 
-```bash
-rg -A 120 "BS5ConstantCacheActual" ~/.julia/packages/OrdinaryDiffEqLowOrderRK/5x2GR/src/low_order_rk_tableaus.jl | less
+`Stages = 8, Order = 5, ErrorOrder = 4, FSAL = false, HasEmbedded = true, HasMidpoint = true, InterpStages = 3, LastStageIsFxf = true` (BS5's k_8 is evaluated at (t+h, xf) with a_{8,j} = b_j, so k_8 = f(xf)), `BmidStages = 8 + 3 = 11`.
+
+Transcribe the 7 A rows (a21; a31, a32; a41, a42, a43; a51, a52, a53, a54; a61, a62, a63, a64, a65; a71, a72, a73, a74, a75, a76; a81, a83, a84, a85, a86, a87) and 8-long C, B, Bhat vectors. Source all numeric values from `BS5ConstantCache` (`T::Type{<:CompiledFloats}` variant for bit-identical Float64 values).
+
+- [ ] **Step 5.2: Transcribe BS5 extra-stage tableau**
+
+From `_ode_addsteps!(...BS5ConstantCache...)`, rows for k_9, k_10, k_11:
+
+```cpp
+// BS5 extra-stage tableau — computes k_9, k_10, k_11 when midpoint is requested.
+// Each row uses k_1..k_8 (main) plus any prior extras.
+static constexpr std::array<std::array<double, Stages + InterpStages>, InterpStages> ExtraA = {
+    // k_9:  coefficients a91..a98 (and 0 for k_9..k_11 self/prior)
+    {a91, a92, a93, a94, a95, a96, a97, a98, 0, 0, 0},
+    // k_10: coefficients a101..a108 (for main) + a109 (for k_9)
+    {a101, a102, a103, a104, a105, a106, a107, a108, a109, 0, 0},
+    // k_11: coefficients a111..a119 (main+k9) + a1110 (for k_10)
+    {a111, a112, a113, a114, a115, a116, a117, a118, a119, a1110, 0}
+};
+static constexpr std::array<double, InterpStages> ExtraC = {c6, c7, c8};
+// ^ c6/c7/c8 come from BS5Interp function's return values (not the main c-array).
 ```
 
-Record: 7 `A` rows (28 a-values), 8 `c` values, 8 `b` weights, 8 `btilde` values. Note: BS5 has a b8=0 pattern — some weights may be zero.
+- [ ] **Step 5.3: Compute Bmid via `compute_bmid_bs5.jl`**
 
-- [ ] **Step 5.2: Add `IVPAlg::BS5` + `RKCoeffs<IVPAlg::BS5>` tableau**
+Create the helper:
 
-Stages = 8, Order = 5, ErrorOrder = 4, FSAL = false, HasEmbedded = true, BmidSize = 9.
+```julia
+# Evaluate Julia's BS5Interp polynomial at Θ=0.5 and emit Bmid = 2·b_i(0.5).
+# BS5 interp polynomial from low_order_rk_tableaus.jl BS5Interp_polyweights:
+#   b_i(Θ) = r_i2·Θ² + r_i3·Θ³ + r_i4·Θ⁴ + r_i5·Θ⁵ + r_i6·Θ⁶
+# (minimum order is Θ²; no Θ¹ term because k_1 has separate handling.)
+# Exception: b_1 has an extra Θ¹ term (it's the "linear" baseline).
+using OrdinaryDiffEqLowOrderRK: BS5Interp_polyweights
+using Printf
 
-Use **Option A** for Bmid (Hermite interpolation). Precompute via `compute_bmid.jl` with the Hermite formula.
+r = BS5Interp_polyweights(Float64)
+# r is a tuple of (r_i6, r_i5, r_i4, r_i3, r_i2) for i ∈ {1, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+# (no r_11 in BS5 — only 10 stages contribute to the interp.)
+# Indexing convention — need to match interpolants.jl @bs5pre0 macro.
 
-- [ ] **Step 5.3: Add `set_method` case, `stepper_compute` case** (dofsal = false for non-FSAL)
+# Bmid layout (11 slots):
+#   Bmid[0]  → k_1   (a.k.a. stage 1)
+#   Bmid[1]  → k_2   (unused by BS5 interp — weight = 0)
+#   Bmid[2..7] → k_3..k_8 (main stages 3..8)
+#   Bmid[8..10] → k_9..k_11 (extras)
 
-- [ ] **Step 5.4: Expose in Python bindings**
+θ = 0.5
+# ... evaluate each b_i(0.5), output 2·b_i, verify Σ = 1.0
+```
 
-- [ ] **Step 5.5: Generate Julia reference**
+Run: `julia --project=. src/compute_bmid_bs5.jl`. Paste output into rk_coeffs.h.
+
+- [ ] **Step 5.4: Wire into dispatch (set_method, stepper_compute)**
+
+Mirror Task 2. `dofsal = false` for BS5 in stepper_compute. Set `error_order_ = 4`.
+
+- [ ] **Step 5.5: Expose in Python bindings**
+
+- [ ] **Step 5.6: Generate Julia reference**
 
 ```bash
 julia --project=. src/run_method.jl BS5 two_body 1e-10 1e-11 test/reference_outputs/bs5_twobody.bin
 julia --project=. src/run_method.jl BS5 crtbp 1e-10 1e-11 test/reference_outputs/bs5_crtbp.bin
 ```
 
-- [ ] **Step 5.6: Build, run tests, commit** (expected tolerance 1e-7 for BS5 at atol=1e-10)
+- [ ] **Step 5.7: Validate against Julia — compare final state and midpoint**
+
+Create `tests/cpp/integrators/test_method_bs5.cpp`:
+- Two tests per problem: `final_state_matches_julia` and `midpoint_matches_julia_at_first_accepted_step`.
+- The midpoint test integrates 1 accepted step (by choosing h to match Julia's first dt), computes `xf_mid` via Tycho, and compares against Julia's `sol(dt/2)` queried via a helper script extension.
+
+Expected tolerance: 1e-7 for final state, 1e-9 for midpoint (5th-order local error at tight abstol).
+
+- [ ] **Step 5.8: Build, run tests, commit**
+
+```bash
+conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && ninja -j4 tycho_tests"
+conda run -n tycho bash -c "cd /home/ghecht/Projects/tycho/build && ctest -R BS5 --output-on-failure"
+git add -A && git commit -m "feat: add BS5 method with exact Julia interpolant (3 extra stages)"
+```
 
 ---
 
 ## Task 6: Add Vern7 (Verner 7(6))
 
-**Purpose:** 10-stage non-FSAL 7(6) method by Jim Verner. Good efficiency for tight tolerances.
+**Purpose:** 10-stage non-FSAL 7(6) method by Jim Verner with 6-stage lazy interpolant (Julia's `Vern7Interp`).
 
-**Julia source:** `~/.julia/packages/OrdinaryDiffEqVerner/GlLDJ/src/verner_tableaus.jl` — function `Vern7ConstantCache` / `Vern7ConstantCacheActual`.
+**Julia sources:**
+- Main tableau: `~/.julia/packages/OrdinaryDiffEqVerner/GlLDJ/src/verner_tableaus.jl` — `Vern7Tableau`
+- Extra stages: `verner_addsteps.jl` — `_ode_addsteps!(...cache::Vern7ConstantCache...)` block for `length(k) < 16` — k_11..k_16 (6 stages) using `Vern7ExtraStages` tableau
+- Interpolation polynomial: `interpolants.jl` — search for Vern7 b_i(Θ) formula; polynomial order 7.
 
-- [ ] **Step 6.1: Write machine-transcription helper**
+- [ ] **Step 6.1: Write `emit_tableau.jl` helper**
 
-Vern7 has ~50 non-zero A entries. Transcription-by-hand is error-prone. Create `bench/julia_reference/src/emit_tableau.jl`:
+Vern7 has ~50 non-zero A entries + 6 extra-stage rows. Machine-extraction preferred over hand-transcription.
 
 ```julia
-using OrdinaryDiffEq
+# bench/julia_reference/src/emit_tableau.jl
+using OrdinaryDiffEqVerner: Vern7Tableau, Vern7ExtraStages
 using Printf
 
-# For each method, extract the ConstantCache and emit coefficients as
-# C++ array literal. Iterate stage rows, printing A[i][j] with Float64 precision.
-
-function emit_method(method_name::String, cache)
-    @printf("// %s: emitted from OrdinaryDiffEq.jl ConstantCache\n", method_name)
-    # Cache introspection — varies by package.
-    # For Verner methods, cache fields are named a21, a31, a32, ..., c2, c3, ..., b1, b2, ...
-    # Use `fieldnames(typeof(cache))` and iterate.
-    for name in fieldnames(typeof(cache))
-        val = getfield(cache, name)
-        @printf("    // %s = %.17e\n", name, val)
+function emit_cache(name::String, cache)
+    @printf("// %s: fields emitted from OrdinaryDiffEqVerner\n", name)
+    for field in fieldnames(typeof(cache))
+        val = getfield(cache, field)
+        if val isa Number
+            @printf("    static constexpr double %s = %.17e;\n", field, val)
+        end
     end
 end
 
-# Example invocation (actual API depends on OrdinaryDiffEq internals):
-# cache = OrdinaryDiffEqVerner.Vern7ConstantCacheActual(Float64, Float64)
-# emit_method("Vern7", cache)
+tab = Vern7Tableau(Float64, Float64)
+emit_cache("Vern7Tableau", tab)
+extra = Vern7ExtraStages(Float64, Float64)
+emit_cache("Vern7ExtraStages", extra)
 ```
 
-Document in the helper's comment: this emits Float64 precision values suitable for direct paste into C++ std::array initializers.
+Run: `julia --project=. src/emit_tableau.jl > /tmp/vern7_coeffs.txt`.
 
-- [ ] **Step 6.2: Run helper, extract Vern7 coefficients**
+- [ ] **Step 6.2: Hand-format into `RKCoeffs<IVPAlg::Vern7>`**
 
-```bash
-cd bench/julia_reference
-julia --project=. src/emit_tableau.jl > /tmp/vern7_coeffs.txt
+```cpp
+template <> struct RKCoeffs<IVPAlg::Vern7> {
+    static constexpr int Stages = 10;
+    static constexpr int Order = 7;
+    static constexpr int ErrorOrder = 6;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
+
+    static constexpr int InterpStages = 6;
+    static constexpr bool LastStageIsFxf = true;  // k_10 is evaluated at (t+h, xf)
+    static constexpr int BmidStages = Stages + InterpStages;  // 16
+
+    // A (9 rows × 9 cols), C (9 entries), B, Bhat (10 entries) — from Vern7Tableau
+    // ...
+
+    // ExtraA: 6 rows × 16 cols (Stages + InterpStages). Row e uses columns
+    // 0..(Stages+e-1); later columns = 0.
+    static constexpr std::array<std::array<double, 16>, 6> ExtraA = { /* ... */ };
+    static constexpr std::array<double, 6> ExtraC = { /* c11..c16 from Vern7ExtraStages */ };
+
+    // Bmid[0..15] = 2·b_i(Θ=0.5) from Vern7 interpolation polynomial.
+    static constexpr std::array<double, 16> Bmid = { /* compute_bmid_vern7.jl output */ };
+};
 ```
 
-Review output; hand-format into the `RKCoeffs<IVPAlg::Vern7>` A/B/Bhat/C literals.
+- [ ] **Step 6.3: Compute Bmid via `compute_bmid_vern7.jl`**
 
-- [ ] **Step 6.3: Add `IVPAlg::Vern7` + tableau**
-
-Stages = 10, Order = 7, ErrorOrder = 6, FSAL = false, HasEmbedded = true, BmidSize = 11.
-
-Use **Option A** (Hermite midpoint) for Bmid.
+Vern7's b_i(Θ) is order-7 in Θ. Transcribe the polynomial coefficients from `interpolants.jl` (search for the Vern7 interp function or `@vern7unpack`/`@vern7pre0` macros; the polynomial is explicit in the expression `@muladd Θ*(... + Θ*(...))`). Evaluate at Θ=0.5 for each of 16 stages, output `2·b_i(0.5)`, verify Σ = 1.0.
 
 - [ ] **Step 6.4: Wire into dispatch + Python bindings**
 
-- [ ] **Step 6.5: Generate Julia reference + create test_method_vern7.cpp**
+Mirror Task 2. `dofsal = false` for Vern7.
 
-Tolerance: 1e-10 at atol=1e-12.
+- [ ] **Step 6.5: Generate Julia reference + test**
+
+```bash
+julia --project=. src/run_method.jl Vern7 two_body 1e-12 1e-13 test/reference_outputs/vern7_twobody.bin
+julia --project=. src/run_method.jl Vern7 crtbp 1e-12 1e-13 test/reference_outputs/vern7_crtbp.bin
+```
+
+Tolerance: 1e-10 for final state, 1e-11 for midpoint.
 
 - [ ] **Step 6.6: Build, test, commit**
 
@@ -861,35 +1178,54 @@ Tolerance: 1e-10 at atol=1e-12.
 
 ## Task 7: Add Vern8 (Verner 8(7))
 
-**Purpose:** 13-stage non-FSAL 8(7) method — higher-order equivalent of Vern7.
+**Purpose:** 13-stage non-FSAL 8(7) method with 8-stage lazy interpolant.
 
-- [ ] **Step 7.1: Extract coefficients via `emit_tableau.jl`**
+**Julia sources:** `verner_tableaus.jl` `Vern8Tableau`; `verner_addsteps.jl` `Vern8ConstantCache` block (`length(k) < 21`) — k_14..k_21 (8 stages); `interpolants.jl` Vern8 polynomial.
+
+- [ ] **Step 7.1: Extract coefficients via `emit_tableau.jl`** (extend helper to Vern8)
 - [ ] **Step 7.2: Add `IVPAlg::Vern8` + tableau**
 
-Stages = 13, Order = 8, ErrorOrder = 7, FSAL = false, HasEmbedded = true.
+`Stages = 13, Order = 8, ErrorOrder = 7, FSAL = false, HasEmbedded = true, HasMidpoint = true, InterpStages = 8, LastStageIsFxf = true, BmidStages = 21`.
 
-**Bmid decision: Option B** (disable midpoint). Set `static constexpr bool HasMidpoint = false;` in the tableau. Update `stepper_compute_impl` in `integrator.h` to guard the midpoint branch on `HasMidpoint`. Ensure existing methods (DOPRI54, DOPRI87, Tsit5, BS3, BS5, Vern7) get `HasMidpoint = true` defaulted.
+- [ ] **Step 7.3: Transcribe ExtraA (8 rows × 21 cols), ExtraC (8), Bmid (21)**
 
-- [ ] **Step 7.3: Wire, bindings, test, commit**
+Same pattern as Vern7. Bmid via `compute_bmid_vern8.jl`.
 
-Tolerance: 1e-11 at atol=1e-13.
+- [ ] **Step 7.4: Wire, bindings, test, commit**
 
-**Tests that require dense output / events for Vern8:** mark with `GTEST_SKIP() << "Vern8 has no midpoint interpolant; use Vern7"`.
+Tolerance: 1e-11 for final state at atol=1e-13; 1e-12 for midpoint.
 
 ---
 
 ## Task 8: Add Vern9 (Verner 9(8))
 
-**Purpose:** 16-stage non-FSAL 9(8) method — highest-order in SP2.
+**Purpose:** 16-stage non-FSAL 9(8) method — highest-order in SP2 — with 10-stage lazy interpolant. Special Julia storage convention (some internal stages unused by interp polynomial).
 
-- [ ] **Step 8.1: Extract coefficients via `emit_tableau.jl`**
-- [ ] **Step 8.2: Add `IVPAlg::Vern9` + tableau**
+**Julia sources:** `verner_tableaus.jl` `Vern9Tableau`; `verner_addsteps.jl` `Vern9ConstantCache` block (`length(k) < 20`) — k_11..k_20 (10 extras); `interpolants.jl` Vern9 polynomial.
 
-Stages = 16, Order = 9, ErrorOrder = 8. **Bmid decision: Option B** (disable midpoint).
+- [ ] **Step 8.1: Extract coefficients via `emit_tableau.jl`** (extend helper to Vern9)
 
-- [ ] **Step 8.3: Wire, bindings, test, commit**
+- [ ] **Step 8.2: Map Julia's k-indexing to Tycho's**
 
-Tolerance: 1e-12 at atol=1e-14. Monitor binding TU RAM: after Vern9, run `/usr/bin/time -v ninja -j4 _tychopy` and check max_resident. If >8 GB, defer Vern9 by commenting out its `emplace` in the binding enum.
+Julia stores only 10 of the 16 internal stages in the k array: `k[1]=k_1, k[2]=k_8, k[3]=k_9, ..., k[10]=k_16`. When transcribing ExtraA rows from `verner_addsteps.jl`, each `a_IJ * k[p]` reference maps to Tycho's `ExtraA[I-11][?]`:
+- `k[1]`  → Tycho column 0  (main stage 0 = k_1)
+- `k[2]`  → Tycho column 7  (main stage 7 = k_8)
+- `k[3..10]` → Tycho columns 8..15  (main stages 8..15 = k_9..k_16)
+- `k[11..20]` → Tycho columns 16..25  (extras)
+
+Document this mapping in a comment block above `ExtraA` in the specialization.
+
+- [ ] **Step 8.3: Add `IVPAlg::Vern9` + tableau**
+
+`Stages = 16, Order = 9, ErrorOrder = 8, FSAL = false, HasEmbedded = true, HasMidpoint = true, InterpStages = 10, LastStageIsFxf = true, BmidStages = 26`.
+
+Bmid values: set `Bmid[1..6] = 0` (weights for unused internal k_2..k_7). All other weights from Vern9 interpolation polynomial at Θ=0.5.
+
+- [ ] **Step 8.4: Wire, bindings, test, commit**
+
+Tolerance: 1e-12 for final state at atol=1e-14; 1e-13 for midpoint.
+
+Monitor binding TU RAM: after Vern9, run `/usr/bin/time -v ninja -j4 _tychopy` and check max_resident. If >8 GB, defer Vern9 by commenting out its `emplace` in the binding enum.
 
 ---
 
