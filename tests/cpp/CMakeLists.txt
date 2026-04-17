@@ -244,3 +244,25 @@ set_property(TARGET tycho_regression_transcription PROPERTY JOB_POOL_COMPILE hea
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(tycho_regression_transcription PRIVATE $<$<CONFIG:Release>:-O1>)
 endif()
+
+#-------------------------------------------------------------------------------
+# Method-comparison tests — validate each RK method against OrdinaryDiffEq.jl
+# reference outputs produced by bench/julia_reference.
+#-------------------------------------------------------------------------------
+set(_JULIA_REFERENCE_DIR "${CMAKE_SOURCE_DIR}/bench/julia_reference")
+
+set(TYCHO_METHOD_TEST_SOURCES
+    integrators/test_method_tsit5.cpp
+)
+tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
+target_include_directories(tycho_method_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_method_tests PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+    JULIA_REFERENCE_DIR="${_JULIA_REFERENCE_DIR}"
+)
+set_property(TARGET tycho_method_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_method_tests PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
