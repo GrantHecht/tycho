@@ -238,15 +238,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->error_order_ = 2;
             this->init_stepper_and_controller<IVPAlg::BS3Trans>(dode, usecontrol, ucon, varlocs_t);
             break;
+        case IVPAlg::BS5:
+            this->rk_method_ = IVPAlg::BS5;
+            this->error_order_ = 4;
+            this->init_stepper_and_controller<IVPAlg::BS5Trans>(dode, usecontrol, ucon, varlocs_t);
+            break;
         case IVPAlg::RK4Classic:
         case IVPAlg::DOPRI5:
         case IVPAlg::Tsit5Trans:
         case IVPAlg::BS3Trans:
+        case IVPAlg::BS5Trans:
             throw std::invalid_argument(
-                "IVPAlg::RK4Classic, IVPAlg::DOPRI5, IVPAlg::Tsit5Trans, and IVPAlg::BS3Trans "
-                "are internal template-dispatch tags used by adaptive steppers and rk_steppers.h "
-                "constexpr branches. They are not runtime-selectable. Use IVPAlg::DOPRI54, "
-                "IVPAlg::DOPRI87, IVPAlg::Tsit5, or IVPAlg::BS3.");
+                "IVPAlg::RK4Classic, IVPAlg::DOPRI5, IVPAlg::Tsit5Trans, IVPAlg::BS3Trans, and "
+                "IVPAlg::BS5Trans are internal template-dispatch tags used by adaptive steppers "
+                "and rk_steppers.h constexpr branches. They are not runtime-selectable. Use "
+                "IVPAlg::DOPRI54, IVPAlg::DOPRI87, IVPAlg::Tsit5, IVPAlg::BS3, or IVPAlg::BS5.");
         default:
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
@@ -618,6 +624,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } break;
         case IVPAlg::BS3: {
             this->stepper_compute_impl<IVPAlg::BS3, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
+                                                             domidpoint, xf_mid);
+        } break;
+        case IVPAlg::BS5: {
+            this->stepper_compute_impl<IVPAlg::BS5, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
                                                              domidpoint, xf_mid);
         } break;
         default:

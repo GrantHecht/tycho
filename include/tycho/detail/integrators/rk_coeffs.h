@@ -66,6 +66,7 @@ enum class IVPAlg {
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
     Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (SP2)
     BS3,     ///< Bogacki-Shampine 3(2) — 4 stages, FSAL, adaptive (SP2)
+    BS5,     ///< Bogacki-Shampine 5(4) — 8 stages + 3 interp extras (SP2)
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
@@ -78,6 +79,10 @@ enum class IVPAlg {
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// 3-stage non-FSAL transcription companion for BS3. Do not expose via bindings.
     BS3Trans,
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// 7-stage non-FSAL transcription companion for BS5 (drops k_8 which equals f(xf)).
+    /// Do not expose via bindings.
+    BS5Trans,
 };
 
 } // namespace tycho
@@ -418,6 +423,152 @@ template <> struct RKCoeffs<IVPAlg::BS3Trans> {
     // B = BS3's b-vector (without the FSAL trailing zero):
     static constexpr std::array<double, 3> B = {rat(2, 9), rat(1, 3), rat(4, 9)};
     static constexpr std::array<double, 3> Bhat = {0, 0, 0}; // unused
+};
+
+// Bogacki-Shampine 5(4) — 8-stage non-FSAL method with 3-stage lazy
+// interpolant. The last main stage (k_8) is evaluated at (t+h, xf) with
+// a_{8,*} equal to the b-vector, so k_8 = f(xf) (LastStageIsFxf=true) even
+// though b_8 = 0 (not strict-FSAL). The adaptive step uses dofsal=true to
+// reuse k_8 as k_1 of the next step — mirrors Julia's integrator.fsallast.
+//
+// Source: OrdinaryDiffEqLowOrderRK BS5ConstantCache (generic T::Type variant
+// with rational coefficients). Interpolation extras from BS5Interp, poly
+// weights from BS5Interp_polyweights (CompiledFloats variant via Julia
+// compute_bmid_bs5.jl).
+template <> struct RKCoeffs<IVPAlg::BS5> {
+    static constexpr int Stages = 8;
+    static constexpr int Order = 5;
+    static constexpr int ErrorOrder = 4;
+    static constexpr bool FSAL = false; // B_8 = 0; not strict-FSAL
+    static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
+
+    // SP2 dense-output schema fields. BS5's perform_step evaluates k_8 at
+    // (t+h, xf) so k_8 = f(xf); 3 additional stages (k_9, k_10, k_11) needed
+    // for the BS5Interp polynomial's dense output.
+    static constexpr int InterpStages = 3;
+    static constexpr bool LastStageIsFxf = true;
+    static constexpr int BmidStages = Stages + InterpStages; // 11
+
+    // A: 7 rows (stages 2..8). Row 6 equals BS5's b-vector (with a82 = 0).
+    static constexpr std::array<std::array<double, 7>, 7> A = {
+        std::array<double, 7>{rat(1, 6), 0, 0, 0, 0, 0, 0},
+        std::array<double, 7>{rat(2, 27), rat(4, 27), 0, 0, 0, 0, 0},
+        std::array<double, 7>{rat(183, 1372), rat(-162, 343), rat(1053, 1372), 0, 0, 0, 0},
+        std::array<double, 7>{rat(68, 297), rat(-4, 11), rat(42, 143), rat(1960, 3861), 0, 0, 0},
+        std::array<double, 7>{rat(597, 22528), rat(81, 352), rat(63099, 585728),
+                              rat(58653, 366080), rat(4617, 20480), 0, 0},
+        std::array<double, 7>{rat(174197, 959244), rat(-30942, 79937), rat(8152137, 19744439),
+                              rat(666106, 1039181), rat(-29421, 29068), rat(482048, 414219), 0},
+        std::array<double, 7>{rat(587, 8064), 0, rat(4440339, 15491840), rat(24353, 124800),
+                              rat(387, 44800), rat(2152, 5985), rat(7267, 94080)}};
+
+    static constexpr std::array<double, 7> C = {rat(1, 6), rat(2, 9), rat(3, 7),
+                                                 rat(2, 3), rat(3, 4), 1.0, 1.0};
+
+    // B: 8 elements. B_1..B_7 = row A[6]; B_8 = 0 (k_8 is computed for FSAL
+    // reuse and dense output but not used in the u update).
+    static constexpr std::array<double, 8> B = {rat(587, 8064),
+                                                 0.0,
+                                                 rat(4440339, 15491840),
+                                                 rat(24353, 124800),
+                                                 rat(387, 44800),
+                                                 rat(2152, 5985),
+                                                 rat(7267, 94080),
+                                                 0.0};
+
+    // Bhat = B - btilde. btilde values from BS5ConstantCache (utilde main
+    // embedded-error weights); btilde_2 = 0 implicit.
+    static constexpr std::array<double, 8> Bhat = {
+        rat(587, 8064) - rat(-3817, 1959552),
+        0.0 - 0.0,
+        rat(4440339, 15491840) - rat(140181, 15491840),
+        rat(24353, 124800) - rat(-4224731, 272937600),
+        rat(387, 44800) - rat(8557, 403200),
+        rat(2152, 5985) - rat(-57928, 4363065),
+        rat(7267, 94080) - rat(-23930231, 4366535040),
+        0.0 - rat(3293, 556956)};
+
+    // Extra interpolation stages (k_9, k_10, k_11). ExtraA rows are
+    // (Stages + InterpStages)=11 wide; unused entries zero.
+    // From BS5Interp (rational T::Type variant) in low_order_rk_tableaus.jl.
+    static constexpr std::array<std::array<double, 11>, 3> ExtraA = {
+        // k_9 uses k_1..k_8:
+        std::array<double, 11>{rat(455, 6144), 0, rat(10256301, 35409920), rat(2307361, 17971200),
+                                rat(-387, 102400), rat(73, 5130), rat(-7267, 215040), rat(1, 32),
+                                0, 0, 0},
+        // k_10 uses k_1..k_9:
+        std::array<double, 11>{rat(-837888343715LL, 13176988637184LL),
+                                rat(30409415, 52955362),
+                                rat(-48321525963LL, 759168069632LL),
+                                rat(8530738453321LL, 197654829557760LL),
+                                rat(1361640523001LL, 1626788720640LL),
+                                rat(-13143060689LL, 38604458898LL),
+                                rat(18700221969LL, 379584034816LL),
+                                rat(-5831595, 847285792),
+                                rat(-5183640, 26477681),
+                                0,
+                                0},
+        // k_11 uses k_1..k_10:
+        std::array<double, 11>{rat(98719073263LL, 1551965184000LL),
+                                rat(1307, 123552),
+                                rat(4632066559387LL, 70181753241600LL),
+                                rat(7828594302389LL, 382182512025600LL),
+                                rat(40763687, 11070259200),
+                                rat(34872732407LL, 224610586200LL),
+                                rat(-2561897, 30105600),
+                                rat(1, 10),
+                                rat(-1, 10),
+                                rat(-1403317093LL, 11371610250LL),
+                                0}};
+
+    static constexpr std::array<double, 3> ExtraC = {rat(1, 2), rat(5, 6), rat(1, 9)};
+
+    // Bmid = 2·b_i(Θ=0.5) where b_i(Θ) is the BS5Interp polynomial
+    // (CompiledFloats variant via bench/julia_reference/src/compute_bmid_bs5.jl).
+    // Layout: [0..7] main stages k_1..k_8; [8..10] extra stages k_9..k_11.
+    // Bmid[1] = 0 (BS5's b_2 contribution is zero).
+    // Sanity: Σ Bmid[i] ≈ 1.0 (FP-rounded).
+    static constexpr std::array<double, BmidStages> Bmid = {
+        3.42702600730507845e-02,  0.00000000000000000e+00,  1.71102321961401849e-01,
+        1.10413935309037481e-01,  -5.24794697971777552e-03, -4.21488869254374676e-01,
+        1.59313217474489510e-01,  -1.93847656250000000e-01, 4.27083333333333148e-01,
+        3.12151404332777549e-01,  4.06250000000000000e-01};
+};
+
+template <> struct RKCoeffs<IVPAlg::BS5Trans> {
+    static constexpr int Stages = 7;
+    static constexpr int Order = 5;
+    static constexpr int ErrorOrder = 0;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+
+    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
+
+    // A: 6 rows (stages 2..7), same as RKCoeffs<IVPAlg::BS5> rows 0..5.
+    static constexpr std::array<std::array<double, 6>, 6> A = {
+        std::array<double, 6>{rat(1, 6), 0, 0, 0, 0, 0},
+        std::array<double, 6>{rat(2, 27), rat(4, 27), 0, 0, 0, 0},
+        std::array<double, 6>{rat(183, 1372), rat(-162, 343), rat(1053, 1372), 0, 0, 0},
+        std::array<double, 6>{rat(68, 297), rat(-4, 11), rat(42, 143), rat(1960, 3861), 0, 0},
+        std::array<double, 6>{rat(597, 22528), rat(81, 352), rat(63099, 585728),
+                              rat(58653, 366080), rat(4617, 20480), 0},
+        std::array<double, 6>{rat(174197, 959244), rat(-30942, 79937), rat(8152137, 19744439),
+                              rat(666106, 1039181), rat(-29421, 29068), rat(482048, 414219)}};
+
+    static constexpr std::array<double, 6> C = {rat(1, 6), rat(2, 9), rat(3, 7),
+                                                 rat(2, 3), rat(3, 4), 1.0};
+
+    // B = BS5's a_{8,*} row (the implicit b-vector when B_8 = 0):
+    static constexpr std::array<double, 7> B = {rat(587, 8064),     0.0,
+                                                 rat(4440339, 15491840), rat(24353, 124800),
+                                                 rat(387, 44800),   rat(2152, 5985),
+                                                 rat(7267, 94080)};
+    static constexpr std::array<double, 7> Bhat = {0, 0, 0, 0, 0, 0, 0}; // unused
 };
 
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
