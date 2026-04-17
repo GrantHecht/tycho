@@ -258,6 +258,7 @@ set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_method_vern7.cpp
     integrators/test_method_vern8.cpp
     integrators/test_method_vern9.cpp
+    integrators/test_method_superscalar.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE
