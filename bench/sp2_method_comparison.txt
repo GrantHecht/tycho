@@ -1,0 +1,34 @@
+MKL init: 998.540 ms
+2026-04-17T17:23:22-04:00
+Running /home/ghecht/Projects/tycho/build/bench/cpp/bench_all
+Run on (16 X 1755.36 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x8)
+  L1 Instruction 32 KiB (x8)
+  L2 Unified 512 KiB (x8)
+  L3 Unified 98304 KiB (x1)
+Load Average: 0.44, 0.17, 0.28
+---------------------------------------------------------------------------
+Benchmark                                 Time             CPU   Iterations
+---------------------------------------------------------------------------
+BM_Kepler_Method/DOPRI54_tol1e6        3807 ns         3796 ns       185086
+BM_Kepler_Method/DOPRI87_tol1e6        4497 ns         4484 ns       156275
+BM_Kepler_Method/Tsit5_tol1e6          3382 ns         3372 ns       207358
+BM_Kepler_Method/BS3_tol1e6           11690 ns        11657 ns        59582
+BM_Kepler_Method/BS5_tol1e6            3635 ns         3625 ns       193294
+BM_Kepler_Method/Vern7_tol1e6          4131 ns         4120 ns       169839
+BM_Kepler_Method/Vern8_tol1e6          3694 ns         3683 ns       190261
+BM_Kepler_Method/Vern9_tol1e6          4553 ns         4540 ns       153822
+BM_Kepler_Method/DOPRI54_tol1e9        8593 ns         8569 ns        80086
+BM_Kepler_Method/DOPRI87_tol1e9        4474 ns         4462 ns       156793
+BM_Kepler_Method/Tsit5_tol1e9          8974 ns         8948 ns        78695
+BM_Kepler_Method/BS5_tol1e9            7684 ns         7662 ns        91638
+BM_Kepler_Method/Vern7_tol1e9          5433 ns         5418 ns       129872
+BM_Kepler_Method/Vern8_tol1e9          4103 ns         4092 ns       170755
+BM_Kepler_Method/Vern9_tol1e9          5585 ns         5571 ns       125610
+BM_Kepler_Method/DOPRI54_tol1e12      29299 ns        29219 ns        24018
+BM_Kepler_Method/DOPRI87_tol1e12       7799 ns         7778 ns        90221
+BM_Kepler_Method/Tsit5_tol1e12        30964 ns        30879 ns        22682
+BM_Kepler_Method/Vern7_tol1e12        10548 ns        10517 ns        66319
+BM_Kepler_Method/Vern8_tol1e12         7494 ns         7473 ns        93916
+BM_Kepler_Method/Vern9_tol1e12         8223 ns         8200 ns        85441
