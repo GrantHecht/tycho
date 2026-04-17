@@ -67,6 +67,7 @@ enum class IVPAlg {
     Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (SP2)
     BS3,     ///< Bogacki-Shampine 3(2) — 4 stages, FSAL, adaptive (SP2)
     BS5,     ///< Bogacki-Shampine 5(4) — 8 stages + 3 interp extras (SP2)
+    Vern7,   ///< Verner 7(6) — 10 stages + 6 interp extras (SP2)
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
@@ -83,6 +84,10 @@ enum class IVPAlg {
     /// 7-stage non-FSAL transcription companion for BS5 (drops k_8 which equals f(xf)).
     /// Do not expose via bindings.
     BS5Trans,
+    /// \internal — template-dispatch tag only, not runtime-selectable.
+    /// 9-stage non-FSAL transcription companion for Vern7 (drops k_10 which is a
+    /// helper evaluated at t+h but not equal to f(xf)). Do not expose via bindings.
+    Vern7Trans,
 };
 
 } // namespace tycho
@@ -569,6 +574,200 @@ template <> struct RKCoeffs<IVPAlg::BS5Trans> {
                                                  rat(387, 44800),   rat(2152, 5985),
                                                  rat(7267, 94080)};
     static constexpr std::array<double, 7> Bhat = {0, 0, 0, 0, 0, 0, 0}; // unused
+};
+
+// Verner 7(6) — 10-stage non-FSAL method with 6-stage lazy interpolant.
+// The last main stage (k_10) is evaluated at t+h but with a helper a-row that
+// does NOT equal the b-vector, so k_10 ≠ f(xf). The midpoint branch therefore
+// evaluates f(xf) explicitly as k_vals_extra[0] (LastStageIsFxf=false).
+// However, Julia's Vern7 interpolation polynomial does not reference f(xf);
+// its Bmid weight for the f(xf) slot is zero.
+//
+// Source: OrdinaryDiffEqVerner Vern7Tableau / Vern7ExtraStages /
+// Vern7InterpolationCoefficients (CompiledFloats Float64 literal variant,
+// because the generic T::Type variant uses BigInt rationals).
+// dofsal=false (matches Julia behavior — no FSAL reuse; k_1 computed fresh).
+template <> struct RKCoeffs<IVPAlg::Vern7> {
+    static constexpr int Stages = 10;
+    static constexpr int Order = 7;
+    static constexpr int ErrorOrder = 6;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = true;
+    static constexpr bool HasMidpoint = true;
+
+    // SP2 dense-output schema fields. The 6 extra stages (k_11..k_16) form the
+    // Vern7Interp polynomial. f(xf) is evaluated separately in the midpoint
+    // branch to correctly update xdot_prev (required by stepper_compute_impl).
+    static constexpr int InterpStages = 6;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + InterpStages + 1; // 17
+
+    // A: 9 rows (stages 2..10). Row 8 is the Vern7 helper g10 which uses only
+    // k_1, k_3..k_7 (a10_2 = a10_8 = a10_9 = 0).
+    static constexpr std::array<std::array<double, 9>, 9> A = {
+        std::array<double, 9>{0.005, 0, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 9>{-1.07679012345679, 1.185679012345679, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 9>{0.04083333333333333, 0, 0.1225, 0, 0, 0, 0, 0, 0},
+        std::array<double, 9>{0.6389139236255726, 0, -2.455672638223657, 2.272258714598084,
+                               0, 0, 0, 0, 0},
+        std::array<double, 9>{-2.6615773750187572, 0, 10.804513886456137, -8.3539146573962,
+                               0.820487594956657, 0, 0, 0, 0},
+        std::array<double, 9>{6.067741434696772, 0, -24.711273635911088, 20.427517930788895,
+                               -1.9061579788166472, 1.006172249242068, 0, 0, 0},
+        std::array<double, 9>{12.054670076253203, 0, -49.75478495046899, 41.142888638604674,
+                               -4.461760149974004, 2.042334822239175, -0.09834843665406107,
+                               0, 0},
+        std::array<double, 9>{10.138146522881808, 0, -42.6411360317175, 35.76384003992257,
+                               -4.3480228403929075, 2.0098622683770357, 0.3487490460338272,
+                               -0.27143900510483127, 0},
+        std::array<double, 9>{-45.030072034298676, 0, 187.3272437654589, -154.02882369350186,
+                               18.56465306347536, -7.141809679295079, 1.3088085781613787,
+                               0, 0}};
+
+    static constexpr std::array<double, 9> C = {0.005,
+                                                 0.10888888888888888,
+                                                 0.16333333333333333,
+                                                 0.4555,
+                                                 0.6095094489978381,
+                                                 0.884,
+                                                 0.925,
+                                                 1.0,
+                                                 1.0};
+
+    // B: 10 elements. B_1 = b1; B_4..B_9 = b4..b9; B_2 = B_3 = B_10 = 0.
+    static constexpr std::array<double, 10> B = {0.04715561848627222,
+                                                  0,
+                                                  0,
+                                                  0.25750564298434153,
+                                                  0.26216653977412624,
+                                                  0.15216092656738558,
+                                                  0.4939969170032485,
+                                                  -0.29430311714032503,
+                                                  0.08131747232495111,
+                                                  0};
+
+    // Bhat = B - btilde. Julia gives btilde for stages {1, 4..10}; btilde_{2,3} = 0.
+    static constexpr std::array<double, 10> Bhat = {
+        0.04715561848627222 - 0.002547011879931045,
+        0,
+        0,
+        0.25750564298434153 - (-0.00965839487279575),
+        0.26216653977412624 - 0.04206470975639691,
+        0.15216092656738558 - (-0.0666822437469301),
+        0.4939969170032485 - 0.2650097464621281,
+        -0.29430311714032503 - (-0.29430311714032503),
+        0.08131747232495111 - 0.08131747232495111,
+        0 - (-0.02029518466335628)};
+
+    // Extra stage tableau — 6 rows (k_11..k_16) × (Stages + InterpStages) = 16 cols.
+    // Columns 0..9 reference main k_1..k_10 (col 1, 2, 9 always 0 — Vern7's
+    // extras skip k_2, k_3, k_10). Columns 10..15 reference prior extras
+    // k_11..k_16.
+    static constexpr std::array<std::array<double, 16>, 6> ExtraA = {
+        // k_11:
+        std::array<double, 16>{0.04715561848627222, 0, 0, 0.25750564298434153,
+                                0.2621665397741262, 0.15216092656738558, 0.49399691700324844,
+                                -0.29430311714032503, 0.0813174723249511, 0,
+                                0, 0, 0, 0, 0, 0},
+        // k_12:
+        std::array<double, 16>{0.0523222769159969, 0, 0, 0.22495861826705715,
+                                0.017443709248776376, -0.007669379876829393,
+                                0.03435896044073285, -0.0410209723009395, 0.025651133005205617,
+                                0,
+                                -0.0160443457, 0, 0, 0, 0, 0},
+        // k_13:
+        std::array<double, 16>{0.053053341257859085, 0, 0, 0.12195301011401886,
+                                0.017746840737602496, -0.0005928372667681495,
+                                0.008381833970853752, -0.01293369259698612,
+                                0.009412056815253861, 0,
+                                -0.005353253107275676, -0.06666729992455811, 0, 0, 0, 0},
+        // k_14:
+        std::array<double, 16>{0.03887903257436304, 0, 0, -0.0024403203308301317,
+                                -0.0013928917214672623, -0.00047446291558680135,
+                                0.00039207932413159514, -0.00040554733285128004,
+                                0.00019897093147716726, 0,
+                                -0.00010278198793179169, 0.03385661513870267,
+                                0.1814893063199928, 0, 0, 0},
+        // k_15:
+        std::array<double, 16>{0.05723681204690013, 0, 0, 0.22265948066761182,
+                                0.12344864200186899, 0.04006332526666491,
+                                -0.05269894848581452, 0.04765971214244523,
+                                -0.02138895885042213, 0,
+                                0.015193891064036402, 0.12060546716289655,
+                                -0.022779423016187374, 0, 0, 0},
+        // k_16:
+        std::array<double, 16>{0.051372038802756814, 0, 0, 0.5414214473439406,
+                                0.350399806692184, 0.14193112269692182,
+                                0.10527377478429423, -0.031081847805874016,
+                                -0.007401883149519145, 0,
+                                -0.006377932504865363, -0.17325495908361865,
+                                -0.18228156777622026, 0, 0, 0}};
+
+    static constexpr std::array<double, 6> ExtraC = {1.0, 0.29, 0.125, 0.25, 0.53, 0.79};
+
+    // Bmid = 2·b_i(Θ=0.5) via Vern7Interp polynomial (CompiledFloats). Layout:
+    // [0..9] main k_1..k_10 (indices 1, 2, 9 = 0); [10] f(xf) slot (=0; not in
+    // poly); [11..16] extras k_11..k_16.
+    // Derived via bench/julia_reference/src/compute_bmid_vern7.jl.
+    static constexpr std::array<double, BmidStages> Bmid = {
+        1.01568172253994393e-01, 0, 0,
+        2.34071209963178983e-01, 2.38307939451734452e-01, 1.38313443456900220e-01,
+        4.49040474379289734e-01, -2.67519911123506482e-01, 7.39171340777436958e-02,
+        0, 0,
+        -5.63903701328063445e-02, -4.32115132904069832e-02, 9.59844798466543692e-02,
+        3.22065326928104412e-01, 7.82416025520005221e-03, -2.93970546066088634e-01};
+};
+
+template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
+    static constexpr int Stages = 9;
+    static constexpr int Order = 7;
+    static constexpr int ErrorOrder = 0;
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = false;
+    static constexpr bool HasMidpoint = false;
+
+    static constexpr int InterpStages = 0;
+    static constexpr bool LastStageIsFxf = false;
+    static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
+
+    // A: 8 rows (stages 2..9), same as RKCoeffs<IVPAlg::Vern7> rows 0..7
+    static constexpr std::array<std::array<double, 8>, 8> A = {
+        std::array<double, 8>{0.005, 0, 0, 0, 0, 0, 0, 0},
+        std::array<double, 8>{-1.07679012345679, 1.185679012345679, 0, 0, 0, 0, 0, 0},
+        std::array<double, 8>{0.04083333333333333, 0, 0.1225, 0, 0, 0, 0, 0},
+        std::array<double, 8>{0.6389139236255726, 0, -2.455672638223657, 2.272258714598084,
+                               0, 0, 0, 0},
+        std::array<double, 8>{-2.6615773750187572, 0, 10.804513886456137, -8.3539146573962,
+                               0.820487594956657, 0, 0, 0},
+        std::array<double, 8>{6.067741434696772, 0, -24.711273635911088, 20.427517930788895,
+                               -1.9061579788166472, 1.006172249242068, 0, 0},
+        std::array<double, 8>{12.054670076253203, 0, -49.75478495046899, 41.142888638604674,
+                               -4.461760149974004, 2.042334822239175, -0.09834843665406107,
+                               0},
+        std::array<double, 8>{10.138146522881808, 0, -42.6411360317175, 35.76384003992257,
+                               -4.3480228403929075, 2.0098622683770357, 0.3487490460338272,
+                               -0.27143900510483127}};
+
+    static constexpr std::array<double, 8> C = {0.005,
+                                                 0.10888888888888888,
+                                                 0.16333333333333333,
+                                                 0.4555,
+                                                 0.6095094489978381,
+                                                 0.884,
+                                                 0.925,
+                                                 1.0};
+
+    // B = Vern7's b-vector truncated to 9 elements (drops trailing zero).
+    static constexpr std::array<double, 9> B = {0.04715561848627222,
+                                                 0,
+                                                 0,
+                                                 0.25750564298434153,
+                                                 0.26216653977412624,
+                                                 0.15216092656738558,
+                                                 0.4939969170032485,
+                                                 -0.29430311714032503,
+                                                 0.08131747232495111};
+    static constexpr std::array<double, 9> Bhat = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // unused
 };
 
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {

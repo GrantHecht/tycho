@@ -243,16 +243,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->error_order_ = 4;
             this->init_stepper_and_controller<IVPAlg::BS5Trans>(dode, usecontrol, ucon, varlocs_t);
             break;
+        case IVPAlg::Vern7:
+            this->rk_method_ = IVPAlg::Vern7;
+            this->error_order_ = 6;
+            this->init_stepper_and_controller<IVPAlg::Vern7Trans>(dode, usecontrol, ucon, varlocs_t);
+            break;
         case IVPAlg::RK4Classic:
         case IVPAlg::DOPRI5:
         case IVPAlg::Tsit5Trans:
         case IVPAlg::BS3Trans:
         case IVPAlg::BS5Trans:
+        case IVPAlg::Vern7Trans:
             throw std::invalid_argument(
-                "IVPAlg::RK4Classic, IVPAlg::DOPRI5, IVPAlg::Tsit5Trans, IVPAlg::BS3Trans, and "
-                "IVPAlg::BS5Trans are internal template-dispatch tags used by adaptive steppers "
-                "and rk_steppers.h constexpr branches. They are not runtime-selectable. Use "
-                "IVPAlg::DOPRI54, IVPAlg::DOPRI87, IVPAlg::Tsit5, IVPAlg::BS3, or IVPAlg::BS5.");
+                "Internal template-dispatch tags (RK4Classic, DOPRI5, Tsit5Trans, BS3Trans, "
+                "BS5Trans, Vern7Trans) are not runtime-selectable. Use IVPAlg::DOPRI54, "
+                "IVPAlg::DOPRI87, IVPAlg::Tsit5, IVPAlg::BS3, IVPAlg::BS5, or IVPAlg::Vern7.");
         default:
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
@@ -629,6 +634,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         case IVPAlg::BS5: {
             this->stepper_compute_impl<IVPAlg::BS5, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
                                                              domidpoint, xf_mid);
+        } break;
+        case IVPAlg::Vern7: {
+            this->stepper_compute_impl<IVPAlg::Vern7, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
+                                                               domidpoint, xf_mid);
         } break;
         default:
             throw std::logic_error("stepper_compute: unsupported IVPAlg for adaptive stepping");

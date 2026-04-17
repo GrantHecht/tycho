@@ -40,9 +40,11 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
         return IVPAlg::BS3;
     if (str == "BS5")
         return IVPAlg::BS5;
+    if (str == "Vern7")
+        return IVPAlg::Vern7;
     throw std::invalid_argument(fmt::format(
         "Unknown IVP algorithm: '{}'; accepted values: DOPRI54, DP54, DOPRI87, DP87, Tsit5, BS3, "
-        "BS5",
+        "BS5, Vern7",
         str));
 }
 
