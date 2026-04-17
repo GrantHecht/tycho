@@ -7,6 +7,10 @@
 #include "astro/tycho_astro.h"
 #include "optimal_control/tycho_optimal_control.h"
 
+// Opt into extern template for Integrator<Kepler>; matching explicit
+// instantiation lives in src/integrators/extern_template_instantiations.cpp.
+#include "tycho/detail/integrators/extern_templates.h"
+
 namespace tycho {
 using namespace tycho::vf;
 using namespace tycho::oc;
