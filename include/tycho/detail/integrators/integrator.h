@@ -441,11 +441,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
   protected:
+    // Legacy: replaced by controller variant dispatch in scalar path (Task 6).
+    // Removed entirely in Task 7 once the vectorized path is also converted.
+    // DO NOT use for new code. Uses a transient IController with the Julia-form
+    // update() to match the old (safety, exponent_bias) formula shape — with
+    // exponent_bias == 1 the two forms are mathematically equivalent.
     double calc_hnext(double h, double err, double accerr) const {
         IController ctrl;
-        ctrl.safety = this->step_frac_;
-        ctrl.exponent_bias = this->err_pow_fac_;
-        return ctrl.propose_step(h, err / accerr, this->error_order_);
+        ctrl.gamma = this->step_frac_;
+        // naccept=1 to bypass first-step qmax override; max_step_change_ clips
+        // externally so the controller's qmin/qmax are effectively uncapped
+        // here.
+        return ctrl.update(h, err / accerr, this->error_order_, /*naccept=*/1).dt_new;
     }
 
     template <class State> void update_control(State &xtup) const {
