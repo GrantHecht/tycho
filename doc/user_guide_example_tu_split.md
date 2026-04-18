@@ -189,9 +189,18 @@ demonstrates this — a single `navigate` function handles all four wind models.
 - **Tiny single-purpose demos** — if `main.cpp` only contains a 10-line ODE
   and a 30-line driver, the split costs more readability than it saves in
   build time.
-- **ODEs that are already type-erased** — programs built through the
-  `ODEBuilder` fluent API (`examples/cpp_examples/builder/`) already live
-  behind a `GenericFunction<-1,-1>` boundary; splitting further delivers little.
+- **Programs written with the `ODEBuilder` fluent API.** We measured this on
+  `examples/cpp_examples/builder/parallel_parking` (baseline 5.71 GB peak RSS,
+  71.5 s wall). Moving all four constraint-expression factories into a
+  `parallel_parking_defs.cpp` alongside the ODE produced `main.cpp` at 4.14 GB
+  and `parallel_parking_defs.cpp` at 5.66 GB — the new file reproduces ~99 %
+  of the baseline RSS on its own, parallel wall at `-j2` only drops 5 %, and
+  serial CPU-time rises 48 % from the duplication. The reason: `ODEBuilder`
+  already erased the ODE at the library boundary, so the only thing left to
+  move was the constraint-expression trees, and lumping them into one
+  companion file reconstructs the baseline working set rather than halving
+  it. Leave builder-API `main.cpp` monolithic. Full measurement and the
+  mechanism are in `bench/build_perf/2026-04-18-phaseD0-builder-survey/README.md`.
 - **Python-bound ODEs** — when a problem crosses into Python via the Tycho
   Python bindings, the ODE is already erased. The split pattern only helps the
   C++-native programs.
