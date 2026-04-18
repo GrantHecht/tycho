@@ -487,17 +487,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
   protected:
-    // Legacy: replaced by controller variant dispatch in scalar path (Task 6).
-    // Removed entirely in Task 7 once the vectorized path is also converted.
-    // DO NOT use for new code. Matches the exact floating-point operation
-    // sequence of the pre-SP3 integrate_impl so SP1 golden binaries remain
-    // bit-identical through the wiring-only Tasks 2–5.
-    double calc_hnext(double h, double err, double accerr) const {
-        return this->step_frac_ * h *
-               std::pow(accerr / err,
-                        1.0 / (this->error_order_ + this->err_pow_fac_));
-    }
-
     static ControllerVariant default_controller_for(IVPAlg alg) {
         switch (alg) {
         case IVPAlg::DOPRI54: {
@@ -988,6 +977,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument("Must supply at least one initial state.");
         }
 
+        this->naccept_ = 0;
+        this->nreject_ = 0;
+        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
+
         int ntrajs = xs.size();
 
         Eigen::VectorXd hs(ntrajs);
@@ -1156,20 +1149,36 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                             }
 
                             if (this->adaptive_) {
-
                                 double h = hs[itmp];
+                                auto u_x_vars = this->ode_.x_vars();
+                                // xnext_est_ss is a SIMD container indexed [k][V]; extract lane
+                                // V into a scalar xnext_est so scaled_residuals can operate on
+                                // Eigen segments.
+                                ODEState<double> xnext_est(this->ode_.input_rows());
+                                for (int k = 0; k < this->ode_.input_rows(); k++)
+                                    xnext_est[k] = xnext_est_ss[k][V];
+                                auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
 
-                                err_vec = this->abs_tols_ + xnext.head(this->ode_.x_vars())
-                                                                .cwiseAbs()
-                                                                .cwiseProduct(this->rel_tols_);
+                                auto res = scaled_residuals(
+                                    utilde,
+                                    xis[itmp].head(u_x_vars), // u0 (pre-step)
+                                    xnext.head(u_x_vars),     // u1 (post-step)
+                                    this->abs_tols_, this->rel_tols_);
+                                double err_norm = error_norm(res, this->error_norm_type_);
 
-                                abs_error_max = abs_error.cwiseQuotient(err_vec);
-                                int worst = 0;
-                                abs_error_max.maxCoeff(&worst);
-
-                                double err = abs_error[worst];
-                                double acc = err_vec[worst];
-                                double hnext = calc_hnext(h, err, acc);
+                                // Note: batch controller state is shared across lanes. For
+                                // well-conditioned batches (same problem, nearby ICs) this
+                                // matches Julia's per-integrator semantics closely. Divergent
+                                // batches may see small step-count drift vs. per-lane
+                                // controllers; acceptable for SP3.
+                                auto outcome = std::visit(
+                                    [&](auto &c) {
+                                        return c.update(h, err_norm,
+                                                        this->error_order_,
+                                                        this->naccept_);
+                                    },
+                                    this->controller_variant_);
+                                double hnext = outcome.dt_new;
 
                                 if (hnext / h > this->max_step_change_)
                                     h *= this->max_step_change_;
@@ -1190,10 +1199,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                                 hs[itmp] = h;
 
-                                if ((err - acc) > 0 && !hit_minimums[itmp]) {
+                                if (!outcome.accepted && !hit_minimums[itmp]) {
+                                    this->nreject_++;
                                     continueloops[itmp] = true;
                                     continue;
                                 }
+                                this->naccept_++;
                             }
 
                             bool eventbreak = false;
