@@ -8,13 +8,12 @@
 // State  : [x, y, v]   (position x, position y, speed v)
 // Control: [theta]     (wire angle, measured from vertical)
 //
-// ODE dynamics:
-//   xdot = sin(theta) * v
-//   ydot = -cos(theta) * v
-//   vdot = g * cos(theta)
-//
-// Corresponds to the Python example in examples/Brachistochrone.py.
+// This TU compiles without seeing the concrete VectorFunction type — the ODE
+// is built in brachistochrone_ode.cpp and returned as a type-erased
+// GenericFunction<-1,-1>. See doc/user_guide_example_tu_split.md.
 ///////////////////////////////////////////////////////////////////////////////
+
+#include "brachistochrone_ode.h"
 
 #include <tycho/tycho.h>
 #include <iomanip>
@@ -22,36 +21,8 @@
 #include <vector>
 
 using namespace tycho;
-using namespace tycho::vf;
 using namespace tycho::oc;
-using namespace tycho::integrators;
 using namespace tycho::solvers;
-using namespace tycho::astro;
-using namespace tycho::utils;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definition via the VectorFunction DSL
-///////////////////////////////////////////////////////////////////////////////
-
-struct Brachistochrone_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = ODEArguments<3, 1, 0>();
-        auto v = args[XVar<2>];
-        auto theta = args[UVar<0>];
-
-        auto xdot = sin(theta) * v;
-        auto ydot = cos(theta) * v * (-1.0);
-        auto vdot = g * cos(theta);
-
-        return StackedOutputs{xdot, ydot, vdot};
-    }
-};
-
-BUILD_ODE_FROM_EXPRESSION(Brachistochrone, Brachistochrone_Impl, double);
-
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
 
 int main() {
     constexpr double g = 9.81; // gravitational acceleration (m/s^2)
@@ -80,10 +51,10 @@ int main() {
         traj.push_back(pt);
     }
 
-    // Construct ODE and phase (LGL3 collocation)
-    Brachistochrone ode(g);
-    auto phase =
-        std::make_shared<ODEPhase<Brachistochrone>>(ode, TranscriptionModes::LGL3, traj, n_defects);
+    // Construct runtime ODE from the erased factory and create the phase.
+    auto erased = tycho_examples::make_brachistochrone_ode(g);
+    ODE ode(std::move(erased), 3, 1, 0);
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
     // ---- Constraints -------------------------------------------------------
 
@@ -91,26 +62,26 @@ int main() {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     // Back boundary: x(tf)=xf, y(tf)=yf
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds: theta in [-0.1, 2.0]
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
 
     // ---- Objective ---------------------------------------------------------
-    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
+    phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // ---- Solve -------------------------------------------------------------
-    const auto status = phase->solve_optimize();
+    const auto status = phase.solve_optimize();
 
     if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        const auto result = phase->return_traj();
+        const auto result = phase.return_traj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone: optimal solution found\n";
         std::cout << "  Optimal time : " << result.back()[3] << " s\n";

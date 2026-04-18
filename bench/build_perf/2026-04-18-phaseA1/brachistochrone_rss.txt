@@ -1,0 +1,23 @@
+# Phase A.1 measurement — brachistochrone_cpp peak RSS + wall time
+# After split into main.cpp + brachistochrone_ode.cpp.
+# Measurement method: /usr/bin/time -v on single-TU compile, deleted .o first.
+# Run on 16-core / 31 GB Linux, clang 21.1.8.
+
+                             wall(s)  peak_rss(GB)
+main.cpp.o                    37.0        4.13
+brachistochrone_ode.cpp.o     40.2        4.32
+
+# Baseline (from bench/build_perf/2026-04-18-baseline/tycho_tu_profile.json):
+# brachistochrone main.cpp: 134 s wall, 7.11 GB peak RSS
+
+# Pilot gate check:
+#   Peak RSS of heavier new TU (4.32 GB) ≤ 0.70 × 7.11 GB (4.98 GB) → PASS
+#     Ratio: 4.32 / 7.11 = 60.8 %
+#   Wall-clock at -j2 (max(37.0, 40.2) + link ~1.2 s = 41.4 s)
+#     vs. baseline 134 s → 69 % reduction → PASS
+
+# Serial CPU-time breakdown (bonus, not a gate):
+#   Before: 134.0 s
+#   After:  37.0 + 40.2 = 77.2 s (42 % reduction)
+#   Reason: main.cpp now uses the dynamic-dim ODEPhase<GenericODE<GenericFunction<-1,-1>, -1,-1,-1>>
+#   path already instantiated in libtycho, rather than per-example ODEPhase<Brachistochrone>.
