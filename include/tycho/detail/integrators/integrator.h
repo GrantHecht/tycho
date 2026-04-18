@@ -387,10 +387,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     double min_step_size_ = 0.1;
     double def_step_size_ = 0.1;
     double max_step_size_ = 0.1;
-    // NOTE: bumped to 10.0 in Task 6 once goldens are regenerated under the
-    // controller-dispatch loop. Keeping 3.0 here preserves SP1 regression
-    // output during the Task 5 wiring step.
-    double max_step_change_ = 3.0;
+    double max_step_change_ = 10.0;
     bool adaptive_ = true;
     bool fast_adaptive_stm_ = true;
     double event_tol_ = 1.0e-6;
@@ -402,14 +399,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     // SP3 controller variant — selected per algorithm in set_method, overrideable
     // via set_controller(). Runtime dispatch goes through std::visit in
-    // integrate_impl / integrate_impl_vectorized.
+    // integrate_impl / integrate_impl_vectorized. Mutable because integrate_impl
+    // is declared const (it's the VectorFunction::compute entry point) but the
+    // controller's internal state evolves during an integrate call.
     using ControllerVariant = std::variant<IController, PIController, PIDController>;
-    ControllerVariant controller_variant_;
+    mutable ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
 
-    // Step statistics (reset per integrate call).
-    int naccept_ = 0;
-    int nreject_ = 0;
+    // Step statistics (reset per integrate call). Mutable for the same reason.
+    mutable int naccept_ = 0;
+    mutable int nreject_ = 0;
 
     ODEDeriv<double> abs_tols_;
     ODEDeriv<double> rel_tols_;
@@ -792,6 +791,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         int numsteps = int(abs(H / this->def_step_size_)) + 1;
         double h = .9 * (H / double(numsteps));
 
+        this->naccept_ = 0;
+        this->nreject_ = 0;
+        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
+
         ODEState<double> xi = x;
         this->update_control(xi);
 
@@ -874,19 +877,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                   storemidpoints || storederivs, xnext_mid);
 
             if (this->adaptive_) {
-                abs_error = (xnext.head(this->ode_.x_vars()) - xnext_est.head(this->ode_.x_vars()))
-                                .cwiseAbs();
+                auto u_x_vars = this->ode_.x_vars();
+                auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
+                auto res = scaled_residuals(utilde,
+                                            xi.head(u_x_vars),    // u0 (pre-step)
+                                            xnext.head(u_x_vars), // u1 (post-step)
+                                            this->abs_tols_, this->rel_tols_);
+                double err_norm = error_norm(res, this->error_norm_type_);
 
-                err_vec = this->abs_tols_ +
-                          xnext.head(this->ode_.x_vars()).cwiseAbs().cwiseProduct(this->rel_tols_);
-
-                abs_error_max = abs_error.cwiseQuotient(err_vec);
-                int worst = 0;
-                abs_error_max.maxCoeff(&worst);
-
-                double err = abs_error[worst];
-                double acc = err_vec[worst];
-                double hnext = calc_hnext(h, err, acc);
+                auto outcome = std::visit(
+                    [&](auto &c) {
+                        return c.update(h, err_norm, this->error_order_,
+                                        this->naccept_);
+                    },
+                    this->controller_variant_);
+                double hnext = outcome.dt_new;
 
                 if (hnext / h > this->max_step_change_)
                     h *= this->max_step_change_;
@@ -905,10 +910,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 } else {
                     hit_minimum = false;
                 }
-                if ((err - acc) > 0 && !hit_minimum) {
+
+                if (!outcome.accepted && !hit_minimum) {
+                    this->nreject_++;
                     continueloop = true;
                     continue;
                 }
+                this->naccept_++;
             }
 
             bool eventbreak = false;
