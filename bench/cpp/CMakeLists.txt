@@ -31,6 +31,7 @@ add_executable(bench_all
     type_erasure/bench_type_erasure.cpp
     integrators/bench_integrators.cpp
     integrators/bench_method_comparison.cpp
+    integrators/bench_controller_comparison.cpp
     optimal_control/bench_optimal_control.cpp
     solvers/bench_solvers.cpp
     utils/bench_utils.cpp

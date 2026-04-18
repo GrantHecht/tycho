@@ -1,0 +1,24 @@
+MKL init: 998.559 ms
+2026-04-18T00:25:58-04:00
+Running ./bench/cpp/bench_all
+Run on (16 X 1755.36 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x8)
+  L1 Instruction 32 KiB (x8)
+  L2 Unified 512 KiB (x8)
+  L3 Unified 98304 KiB (x1)
+Load Average: 1.06, 1.32, 1.24
+--------------------------------------------------------------------
+Benchmark                          Time             CPU   Iterations
+--------------------------------------------------------------------
+BM_Controller/DOPRI54_I        21981 ns        21914 ns        12957
+BM_Controller/DOPRI54_PI       29063 ns        28972 ns         9750
+BM_Controller/DOPRI54_PID      21273 ns        21209 ns        13279
+BM_Controller/DOPRI87_I         9150 ns         9122 ns        30854
+BM_Controller/DOPRI87_PI       10987 ns        10953 ns        25811
+BM_Controller/Tsit5_PI         27045 ns        26961 ns        10476
+BM_Controller/Tsit5_I          20298 ns        20235 ns        13811
+BM_Controller/Vern7_PI         13293 ns        13253 ns        21182
+BM_Controller/Vern7_I          10772 ns        10741 ns        25993
+BM_Controller/Vern8_PI         11419 ns        11384 ns        24681
+BM_Controller/Vern9_PI         11957 ns        11923 ns        23486
