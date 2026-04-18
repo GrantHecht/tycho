@@ -304,8 +304,6 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def_rw("enable_vectorization", &Integrator<DODE>::enable_vectorization_);
 
         obj.def_rw("def_step_size", &Integrator<DODE>::def_step_size_);
-        obj.def_rw("max_step_size", &Integrator<DODE>::max_step_size_);
-        obj.def_rw("min_step_size", &Integrator<DODE>::min_step_size_);
         obj.def_rw("max_step_change", &Integrator<DODE>::max_step_change_);
         obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
 
@@ -323,8 +321,10 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("set_rel_tols", &Integrator<DODE>::set_rel_tols);
         obj.def("get_rel_tols", &Integrator<DODE>::get_rel_tols);
 
-        obj.def("set_step_sizes", &Integrator<DODE>::set_step_sizes, nb::arg("def_step_size"),
-                nb::arg("min_step_size"), nb::arg("max_step_size"));
+        obj.def("set_initial_step_size", &Integrator<DODE>::set_initial_step_size,
+                nb::arg("h"));
+        obj.def("set_max_steps", &Integrator<DODE>::set_max_steps, nb::arg("n"));
+        obj.def("get_max_steps", &Integrator<DODE>::get_max_steps);
 
         obj.def_rw("event_tol", &Integrator<DODE>::event_tol_);
         obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);

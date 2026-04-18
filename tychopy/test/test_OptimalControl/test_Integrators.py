@@ -144,7 +144,6 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator(defstepsize)
         integ.set_abs_tol(abstol)
-        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         Traj = integ.integrate_dense(X0, tf, n)
@@ -185,7 +184,6 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator("DOPRI54", defstepsize)
         integ.set_abs_tol(abstol)
-        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         n = 100
@@ -402,7 +400,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator("DOPRI87", defstepsize)
         integ.set_abs_tol(abstol)
-        integ.set_step_sizes(defstepsize, minstepsize, 10)
+        integ.set_initial_step_size(defstepsize)
         integ.vectorize_batch_calls = True
 
         batchsizes = [1, 3, 4, 15, 100, 1003]

@@ -216,9 +216,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
-        this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
-        // set_step_sizes clears the HW-initdt flag as its opt-out signal. The
-        // internal call from set_method is not the user opting out — re-enable.
+        if (defstep < 0.0) {
+            throw ::std::invalid_argument(
+                "Initial step size must be positive (backward integration is driven by "
+                "tf < t0, not by sign of h).");
+        }
+        this->def_step_size_ = defstep;
+        // HW auto-initdt stays enabled — user can opt out via
+        // set_initial_step_size() or set_auto_initial_dt(false).
         this->use_hairer_wanner_initdt_ = true;
 
         switch (alg) {
@@ -388,10 +393,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     double error_order_ = 7.0;
-    double min_step_size_ = 0.1;
     double def_step_size_ = 0.1;
-    double max_step_size_ = 0.1;
     double max_step_change_ = 10.0;
+    // Julia-style maxiters cap — safety net against runaway rejection loops or
+    // pathological dynamics. The adaptive controller handles step-size control;
+    // there is no hard min/max on dt, only a hard cap on iterations.
+    int max_steps_ = 1'000'000;
     bool adaptive_ = true;
     bool fast_adaptive_stm_ = true;
     double event_tol_ = 1.0e-6;
@@ -415,9 +422,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     mutable int nreject_ = 0;
 
     // SP3 Hairer-Wanner initial-dt toggle. Default-on. An explicit
-    // set_step_sizes() call flips it off so a user-supplied initial step is
-    // respected (principle of least surprise). Constructors that call
-    // set_step_sizes internally re-enable HW before returning.
+    // set_initial_step_size() call flips it off so a user-supplied initial
+    // step is respected (principle of least surprise). Constructors set
+    // def_step_size_ directly and leave HW enabled.
     bool use_hairer_wanner_initdt_ = true;
 
     ODEDeriv<double> abs_tols_;
@@ -474,33 +481,32 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     void set_auto_initial_dt(bool on) { this->use_hairer_wanner_initdt_ = on; }
     bool get_auto_initial_dt() const { return this->use_hairer_wanner_initdt_; }
 
-    void set_step_sizes(double defstep, double minstep, double maxstep) {
-        if (defstep < minstep) {
+    /// Set the initial step size used when Hairer-Wanner auto-initdt is off
+    /// (and as the fixed step when adaptive_ is false). Calling this flips HW
+    /// auto-initdt off so the caller's value is respected — re-enable with
+    /// set_auto_initial_dt(true) if desired.
+    void set_initial_step_size(double h) {
+        if (h < 0.0) {
             throw ::std::invalid_argument(
-                "Default integrator stepsize must be greater than minimum stepsize.");
+                "Initial step size must be positive (backward integration is driven by "
+                "tf < t0, not by sign of h).");
         }
-        if (defstep > maxstep) {
-            throw ::std::invalid_argument(
-                "Default integrator stepsize must be less maximum stepsize.");
-        }
-        if (minstep > maxstep) {
-            throw ::std::invalid_argument(
-                "Minimum integrator stepsize must be greater than minimum stepsize.");
-        }
-        if (defstep < 0 || minstep < 0 || maxstep < 0) {
-            throw ::std::invalid_argument("Stepsizes must be positive numbers (this doesnt mean "
-                                          "you cant integrate backwards).");
-        }
-
-        this->def_step_size_ = defstep;
-        this->min_step_size_ = minstep;
-        this->max_step_size_ = maxstep;
-        // An explicit caller-supplied initial step implies "use this step" —
-        // opt out of Hairer-Wanner. Users can re-enable with
-        // set_auto_initial_dt(true). Internal constructor calls re-enable it
-        // themselves after the set_step_sizes invocation.
+        this->def_step_size_ = h;
         this->use_hairer_wanner_initdt_ = false;
     }
+
+    /// Julia-style maxiters cap. Integration throws std::runtime_error if the
+    /// adaptive loop takes more than `n` steps (accepted + rejected). Default
+    /// is 1'000'000 — large enough to be invisible in normal use, small
+    /// enough to bound a runaway rejection loop.
+    void set_max_steps(int n) {
+        if (n <= 0) {
+            throw ::std::invalid_argument("max_steps must be positive.");
+        }
+        this->max_steps_ = n;
+    }
+
+    int get_max_steps() const { return this->max_steps_; }
 
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -865,12 +871,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         ODEDeriv<double> abs_error_max;
         ODEDeriv<double> err_vec;
 
-        bool hit_minimum = false;
-        int minimum_count = 0;
         int i = 0;
         bool continueloop = true;
 
         while (continueloop) {
+            // Julia-style maxiters safety net — bail if the adaptive loop runs
+            // away rather than silently burning CPU. Counts accepted + rejected
+            // step attempts.
+            const int steps_attempted = this->naccept_ + this->nreject_;
+            if (steps_attempted >= this->max_steps_) {
+                throw ::std::runtime_error(
+                    "Integrator exceeded max_steps (" + std::to_string(this->max_steps_) +
+                    ") before reaching tf; the adaptive controller may be stuck in a "
+                    "rejection loop. Raise via set_max_steps() or loosen tolerances.");
+            }
 
             double tnext = xi[this->ode_.t_var()] + h;
 
@@ -920,18 +934,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 else
                     h = hnext;
 
-                if (abs(h) > this->max_step_size_)
-                    h = this->max_step_size_ * h / abs(h);
-
-                if (abs(h) < this->min_step_size_) {
-                    h = this->min_step_size_ * h / abs(h);
-                    hit_minimum = true;
-                    minimum_count++;
-                } else {
-                    hit_minimum = false;
-                }
-
-                if (!outcome.accepted && !hit_minimum) {
+                if (!outcome.accepted) {
                     this->nreject_++;
                     continueloop = true;
                     continue;
@@ -1112,7 +1115,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         ODEDeriv<SuperScalar> abs_error_ss(ode_.x_vars());
 
         std::vector<bool> continueloops(ntrajs, true);
-        std::vector<bool> hit_minimums(ntrajs, false);
 
         int numrunning = ntrajs;
         int lastrunning = ntrajs - 1;
@@ -1130,6 +1132,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
 
         while (numrunning > 0) {
+            // Julia-style maxiters safety net — shared counter across all
+            // active lanes, since the controller state is shared.
+            const int steps_attempted = this->naccept_ + this->nreject_;
+            if (steps_attempted >= this->max_steps_) {
+                throw ::std::runtime_error(
+                    "Integrator (SuperScalar batch) exceeded max_steps (" +
+                    std::to_string(this->max_steps_) +
+                    ") before all lanes reached their tf; the adaptive controller may be "
+                    "stuck in a rejection loop. Raise via set_max_steps() or loosen "
+                    "tolerances.");
+            }
 
             std::array<int, SuperScalar::SizeAtCompileTime> idxs;
 
@@ -1233,19 +1246,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                 else
                                     h = hnext;
 
-                                if (abs(h) > this->max_step_size_)
-                                    h = this->max_step_size_ * h / abs(h);
-
-                                if (abs(h) < this->min_step_size_) {
-                                    h = this->min_step_size_ * h / abs(h);
-                                    hit_minimums[itmp] = true;
-                                } else {
-                                    hit_minimums[itmp] = false;
-                                }
-
                                 hs[itmp] = h;
 
-                                if (!outcome.accepted && !hit_minimums[itmp]) {
+                                if (!outcome.accepted) {
                                     this->nreject_++;
                                     continueloops[itmp] = true;
                                     continue;

@@ -170,8 +170,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
         Integ.abs_tols_ = this->integrator_.abs_tols_;
         Integ.rel_tols_ = this->integrator_.rel_tols_;
-        Integ.min_step_size_ = this->integrator_.min_step_size_;
-        Integ.max_step_size_ = this->integrator_.max_step_size_;
+        Integ.set_max_steps(this->integrator_.get_max_steps());
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -191,8 +190,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
         Integ.abs_tols_ = this->integrator_.abs_tols_;
         Integ.rel_tols_ = this->integrator_.rel_tols_;
-        Integ.min_step_size_ = this->integrator_.min_step_size_;
-        Integ.max_step_size_ = this->integrator_.max_step_size_;
+        Integ.set_max_steps(this->integrator_.get_max_steps());
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -377,8 +375,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.adaptive_ = this->integrator_.adaptive_;
             Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
             Integ.abs_tols_ = this->integrator_.abs_tols_;
-            Integ.min_step_size_ = this->integrator_.min_step_size_;
-            Integ.max_step_size_ = this->integrator_.max_step_size_;
+            Integ.set_max_steps(this->integrator_.get_max_steps());
             Integ.enable_vectorization_ = this->enable_vectorization_;
             Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
@@ -399,8 +396,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             Integ.adaptive_ = this->integrator_.adaptive_;
             Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
             Integ.abs_tols_ = this->integrator_.abs_tols_;
-            Integ.min_step_size_ = this->integrator_.min_step_size_;
-            Integ.max_step_size_ = this->integrator_.max_step_size_;
+            Integ.set_max_steps(this->integrator_.get_max_steps());
             Integ.enable_vectorization_ = this->enable_vectorization_;
             Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 

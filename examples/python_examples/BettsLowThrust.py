@@ -518,7 +518,7 @@ if __name__ == "__main__":
     IG = integ.integrate_dense(X0, tfig)
 
     phase = ode.phase("LGL5", IG, 16)
-    phase.integrator.set_step_sizes(0.1, 0.001, 10)
+    phase.integrator.set_initial_step_size(0.1)
     phase.add_boundary_value("Front", range(0, 8), X0[0:8])
     phase.add_equal_con("Path", Args(3).norm() - 1, [8, 9, 10])
     # Dont use control splines when placing equality path constraints on controls

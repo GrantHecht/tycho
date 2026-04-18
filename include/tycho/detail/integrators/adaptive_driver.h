@@ -41,9 +41,8 @@ struct AdaptiveDriver {
     ODEDeriv abs_tols_;
     ODEDeriv rel_tols_;
     Scalar def_step_size_ = 0.01;
-    Scalar min_step_size_ = 1e-16;
-    Scalar max_step_size_ = 1e16;
     Scalar max_step_change_ = 10.0;
+    int max_steps_ = 1'000'000;
     bool adaptive_ = true;
     int error_order_ = RKCoeffs<Alg>::ErrorOrder;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
@@ -127,10 +126,14 @@ struct AdaptiveDriver {
                 derivs.push_back(xdoti);
         }
 
-        bool hit_minimum = false;
         bool continueloop = true;
 
         while (continueloop) {
+            if (naccept_count_ + nreject_count_ >= max_steps_) {
+                throw std::runtime_error(
+                    "AdaptiveDriver exceeded max_steps (" + std::to_string(max_steps_) +
+                    "); raise via max_steps_ or loosen tolerances.");
+            }
             Scalar tnext = xi[ode.t_var()] + h;
 
             if (H > 0.0) {
@@ -172,17 +175,7 @@ struct AdaptiveDriver {
                 else
                     h = hnext;
 
-                if (std::abs(h) > max_step_size_)
-                    h = max_step_size_ * h / std::abs(h);
-
-                if (std::abs(h) < min_step_size_) {
-                    h = min_step_size_ * h / std::abs(h);
-                    hit_minimum = true;
-                } else {
-                    hit_minimum = false;
-                }
-
-                if (!outcome.accepted && !hit_minimum) {
+                if (!outcome.accepted) {
                     nreject_count_++;
                     continueloop = true;
                     continue;
