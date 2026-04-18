@@ -18,6 +18,7 @@
 #include "tycho/detail/integrators/adaptive_driver.h"
 #include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/event_handler.h"
+#include "tycho/detail/integrators/initial_dt.h"
 #include "tycho/detail/integrators/parallel_driver.h"
 #include "tycho/detail/integrators/rk_steppers.h"
 #include "tycho/detail/integrators/step_controller.h"
@@ -216,6 +217,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
         this->set_step_sizes(defstep, defstep / 10000, defstep * 10000);
+        // set_step_sizes clears the HW-initdt flag as its opt-out signal. The
+        // internal call from set_method is not the user opting out — re-enable.
+        this->use_hairer_wanner_initdt_ = true;
 
         switch (alg) {
         case IVPAlg::DOPRI54:
@@ -410,6 +414,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     mutable int naccept_ = 0;
     mutable int nreject_ = 0;
 
+    // SP3 Hairer-Wanner initial-dt toggle. Default-on. An explicit
+    // set_step_sizes() call flips it off so a user-supplied initial step is
+    // respected (principle of least surprise). Constructors that call
+    // set_step_sizes internally re-enable HW before returning.
+    bool use_hairer_wanner_initdt_ = true;
+
     ODEDeriv<double> abs_tols_;
     ODEDeriv<double> rel_tols_;
 
@@ -461,6 +471,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     int get_naccept() const { return this->naccept_; }
     int get_nreject() const { return this->nreject_; }
 
+    void set_auto_initial_dt(bool on) { this->use_hairer_wanner_initdt_ = on; }
+    bool get_auto_initial_dt() const { return this->use_hairer_wanner_initdt_; }
+
     void set_step_sizes(double defstep, double minstep, double maxstep) {
         if (defstep < minstep) {
             throw ::std::invalid_argument(
@@ -482,6 +495,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->def_step_size_ = defstep;
         this->min_step_size_ = minstep;
         this->max_step_size_ = maxstep;
+        // An explicit caller-supplied initial step implies "use this step" —
+        // opt out of Hairer-Wanner. Users can re-enable with
+        // set_auto_initial_dt(true). Internal constructor calls re-enable it
+        // themselves after the set_step_sizes invocation.
+        this->use_hairer_wanner_initdt_ = false;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -777,8 +795,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         double t0 = x[this->ode_.t_var()];
         double H = tf - t0;
-        int numsteps = int(abs(H / this->def_step_size_)) + 1;
-        double h = .9 * (H / double(numsteps));
+        double h;
+        int numsteps;
+        if (this->use_hairer_wanner_initdt_) {
+            int order = static_cast<int>(this->error_order_);
+            h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_,
+                                    this->rel_tols_, order,
+                                    this->error_norm_type_);
+            numsteps = std::max(1, int(std::abs(H / (h == 0 ? 1.0 : h))));
+        } else {
+            numsteps = int(abs(H / this->def_step_size_)) + 1;
+            h = .9 * (H / double(numsteps));
+        }
 
         this->naccept_ = 0;
         this->nreject_ = 0;
@@ -1000,8 +1028,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
             double t0 = xis[i][this->ode_.t_var()];
             h_spans[i] = tfs[i] - t0;
-            int numsteps = int(abs(h_spans[i] / this->def_step_size_)) + 1;
-            hs[i] = .9 * (h_spans[i] / double(numsteps));
+            int numsteps;
+            if (this->use_hairer_wanner_initdt_) {
+                int order = static_cast<int>(this->error_order_);
+                double h_init = estimate_initial_dt(this->ode_, xis[i], tfs[i],
+                                                    this->abs_tols_,
+                                                    this->rel_tols_, order,
+                                                    this->error_norm_type_);
+                hs[i] = h_init;
+                numsteps = std::max(1, int(std::abs(h_spans[i] /
+                                                    (h_init == 0 ? 1.0 : h_init))));
+            } else {
+                numsteps = int(abs(h_spans[i] / this->def_step_size_)) + 1;
+                hs[i] = .9 * (h_spans[i] / double(numsteps));
+            }
 
             xdotis[i].resize(this->ode_.output_rows());
             xdotis[i].setZero();
