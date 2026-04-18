@@ -1,0 +1,7 @@
+  365.1 MB total
+  169.3 MB   46.4%   52 TUs  bindings
+  107.7 MB   29.5%   31 TUs  examples
+   32.5 MB    8.9%   29 TUs  tests
+   27.8 MB    7.6%   19 TUs  core
+   27.8 MB    7.6%   10 TUs  bench
+
