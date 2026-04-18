@@ -797,7 +797,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         double H = tf - t0;
         double h;
         int numsteps;
-        if (this->use_hairer_wanner_initdt_) {
+        if (H == 0.0) {
+            numsteps = 1;
+            h = 0.0;
+        } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
             int order = static_cast<int>(this->error_order_);
             h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_,
                                     this->rel_tols_, order,
@@ -1029,7 +1032,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             double t0 = xis[i][this->ode_.t_var()];
             h_spans[i] = tfs[i] - t0;
             int numsteps;
-            if (this->use_hairer_wanner_initdt_) {
+            if (h_spans[i] == 0.0) {
+                numsteps = 1;
+                hs[i] = 0.0;
+            } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
                 int order = static_cast<int>(this->error_order_);
                 double h_init = estimate_initial_dt(this->ode_, xis[i], tfs[i],
                                                     this->abs_tols_,
