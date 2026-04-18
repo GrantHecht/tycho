@@ -1,0 +1,39 @@
+# Phase A.2 measurements — hypersens + delta3_launch TU splits
+# Method: /usr/bin/time -v on single-TU compile, deleted .o first.
+# Host: 16-core / 31 GB Linux, clang 21.1.8.
+
+=== hypersens ===
+Baseline (from bench/build_perf/2026-04-18-baseline/tycho_tu_profile.json):
+  main.cpp:          115 s wall, 6.56 GB peak RSS
+
+After split:
+                               wall(s)  peak_rss(GB)
+  main.cpp                      40.5        4.22
+  hypersens_ode.cpp             37.6        4.18
+
+Pilot-gate check:
+  Peak RSS heavier new TU: 4.22 GB ≤ 0.70 × 6.56 GB (4.59 GB) → PASS (64.3 %)
+  Wall-clock -j2: max(40.5, 37.6) ≈ 40.5 s vs 115 s → 65 % reduction → PASS
+
+=== delta3_launch ===
+Baseline:
+  main.cpp:          143 s wall, 7.67 GB peak RSS
+
+After split:
+                               wall(s)  peak_rss(GB)
+  main.cpp                      40.2        4.16
+  delta3_launch_ode.cpp         48.1        4.72
+
+Pilot-gate check:
+  Peak RSS heavier new TU: 4.72 GB ≤ 0.70 × 7.67 GB (5.37 GB) → PASS (61.5 %)
+  Wall-clock -j2: max(40.2, 48.1) ≈ 48.1 s vs 143 s → 66 % reduction → PASS
+
+# Aggregate Phase A so far (brachistochrone + hypersens + delta3_launch):
+# Baseline sum of 3 heaviest statics:    124 + 115 + 143 = 382 s serial
+# After split sum:                        (37+40) + (41+38) + (40+48) = 244 s serial
+# Savings: 138 s serial (36 % reduction) — bonus beyond parallelism win
+#
+# Wall-clock at -j2 (pairwise):
+# Baseline:                              124 + 115 + 143 = 382 s (serialised on heavy-TU RSS)
+# After:                                 ~41 + ~41 + ~48 = ~130 s
+# Wall-clock reduction: ~66 % at -j2
