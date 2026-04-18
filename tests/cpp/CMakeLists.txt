@@ -263,6 +263,7 @@ set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_controller_pi.cpp
     integrators/test_controller_pid.cpp
     integrators/test_initial_dt.cpp
+    integrators/test_adaptive_driver_compile.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE

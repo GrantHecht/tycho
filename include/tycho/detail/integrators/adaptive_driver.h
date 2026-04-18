@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/event_handler.h"
 #include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/stepper.h"
@@ -42,9 +43,14 @@ struct AdaptiveDriver {
     Scalar def_step_size_ = 0.01;
     Scalar min_step_size_ = 1e-16;
     Scalar max_step_size_ = 1e16;
-    Scalar max_step_change_ = 4.0;
+    Scalar max_step_change_ = 10.0;
     bool adaptive_ = true;
     int error_order_ = RKCoeffs<Alg>::ErrorOrder;
+    ErrorNormType error_norm_type_ = ErrorNormType::RMS;
+
+    // Step statistics
+    int naccept_count_ = 0;
+    int nreject_count_ = 0;
 
     // Event parameters
     int max_event_iters_ = 20;
@@ -121,10 +127,6 @@ struct AdaptiveDriver {
                 derivs.push_back(xdoti);
         }
 
-        ODEDeriv abs_error;
-        ODEDeriv abs_error_max;
-        ODEDeriv err_vec;
-
         bool hit_minimum = false;
         bool continueloop = true;
 
@@ -153,20 +155,15 @@ struct AdaptiveDriver {
                           xnext_mid, update_control);
 
             if (adaptive_) {
-                abs_error =
-                    (xnext.head(ode.x_vars()) - xnext_est.head(ode.x_vars())).cwiseAbs();
-
-                err_vec = abs_tols_ + xnext.head(ode.x_vars()).cwiseAbs().cwiseProduct(rel_tols_);
-
-                abs_error_max = abs_error.cwiseQuotient(err_vec);
-                int worst = 0;
-                abs_error_max.maxCoeff(&worst);
-
-                double err = abs_error[worst];
-                double acc = err_vec[worst];
-                double hnext = controller_.safety * h *
-                               std::pow(acc / err,
-                                        1.0 / (error_order_ + controller_.exponent_bias));
+                auto u_x_vars = ode.x_vars();
+                auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
+                auto res = scaled_residuals(utilde, xi.head(u_x_vars),
+                                            xnext.head(u_x_vars), abs_tols_,
+                                            rel_tols_);
+                double err_norm = error_norm(res, error_norm_type_);
+                auto outcome = controller_.update(h, err_norm, error_order_,
+                                                  naccept_count_);
+                double hnext = outcome.dt_new;
 
                 if (hnext / h > max_step_change_)
                     h *= max_step_change_;
@@ -184,10 +181,13 @@ struct AdaptiveDriver {
                 } else {
                     hit_minimum = false;
                 }
-                if ((err - acc) > 0 && !hit_minimum) {
+
+                if (!outcome.accepted && !hit_minimum) {
+                    nreject_count_++;
                     continueloop = true;
                     continue;
                 }
+                naccept_count_++;
             }
 
             // Event detection
