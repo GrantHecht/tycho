@@ -52,6 +52,21 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
         str));
 }
 
+inline IVPController parse_ivp_controller(const std::string &str) {
+    if (str == "I") return IVPController::I;
+    if (str == "PI") return IVPController::PI;
+    if (str == "PID") return IVPController::PID;
+    throw std::invalid_argument(
+        fmt::format("Unknown IVPController: '{}'; accepted values: I, PI, PID", str));
+}
+
+inline ErrorNormType parse_error_norm(const std::string &str) {
+    if (str == "RMS") return ErrorNormType::RMS;
+    if (str == "MAX") return ErrorNormType::MAX;
+    throw std::invalid_argument(
+        fmt::format("Unknown ErrorNormType: '{}'; accepted values: RMS, MAX", str));
+}
+
 template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj) {
     obj.def("integrator", [](const DODE &od, double ds) { return Integrator<DODE>(od, ds); });
 
@@ -314,6 +329,25 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def_rw("event_tol", &Integrator<DODE>::event_tol_);
         obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_);
+
+        // SP3 controller + stats + HW-initdt API
+        obj.def("set_controller", &Integrator<DODE>::set_controller);
+        obj.def("set_controller", [](Integrator<DODE> &self, const std::string &s) {
+            self.set_controller(bind::parse_ivp_controller(s));
+        });
+        obj.def("get_controller", &Integrator<DODE>::get_controller);
+
+        obj.def("set_error_norm", &Integrator<DODE>::set_error_norm);
+        obj.def("set_error_norm", [](Integrator<DODE> &self, const std::string &s) {
+            self.set_error_norm(bind::parse_error_norm(s));
+        });
+        obj.def("get_error_norm", &Integrator<DODE>::get_error_norm);
+
+        obj.def("get_naccept", &Integrator<DODE>::get_naccept);
+        obj.def("get_nreject", &Integrator<DODE>::get_nreject);
+
+        obj.def("set_auto_initial_dt", &Integrator<DODE>::set_auto_initial_dt);
+        obj.def("get_auto_initial_dt", &Integrator<DODE>::get_auto_initial_dt);
     }
 };
 

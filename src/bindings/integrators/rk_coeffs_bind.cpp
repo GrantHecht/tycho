@@ -13,7 +13,9 @@
 //   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
+#include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/rk_coeffs.h"
+#include "tycho/detail/integrators/step_controller.h"
 
 namespace tycho {
 using namespace tycho::vf;
@@ -29,6 +31,15 @@ void RKFlagsBuild(nb::module_ &m) {
         .value("Vern7", IVPAlg::Vern7)
         .value("Vern8", IVPAlg::Vern8)
         .value("Vern9", IVPAlg::Vern9);
+
+    nb::enum_<IVPController>(m, "IVPController")
+        .value("I", IVPController::I)
+        .value("PI", IVPController::PI)
+        .value("PID", IVPController::PID);
+
+    nb::enum_<ErrorNormType>(m, "ErrorNormType")
+        .value("RMS", ErrorNormType::RMS)
+        .value("MAX", ErrorNormType::MAX);
 }
 
 } // namespace tycho
