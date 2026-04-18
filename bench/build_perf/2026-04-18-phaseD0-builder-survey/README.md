@@ -115,19 +115,26 @@ so the decision doesn't need to be re-derived by a future reader.
 
 ## If builder examples ever become the bottleneck again
 
-The paths forward, in increasing intrusiveness:
+The full design-space analysis lives in
+`doc/build_perf_phase_scaffolding.md`. Summary: the 4.14 GB floor in
+main.cpp after the D.1 split decomposes into two template families —
+the `GenericFunction<-1,-1>` erasure chain (`make_shared<GFModel<T>>` +
+`GFStorage::emplace<T>` + GF ctor; ~1100 s aggregate serial in the perf
+report), and the transcription-side `ConstraintModel<NestedFunction<…>>`
+et al. that the phase builder emits internally. Three options enumerated
+there:
 
-1. **Solver-stack `extern template`** — the 4.14 GB in main.cpp after the
-   split was the `OptimalControlProblem` / phase-registration scaffolding. An
-   `extern template` across those would lower the floor for both statics and
-   builders, and give builder-API programs somewhere to land. Same risk class
-   as the deferred Phase C (golden-test FP drift).
-2. **Per-constraint factory sub-splits** (parallel_parking_corner.cpp, etc.)
-   — fragile, multiplies file count, only worth it for the heaviest
-   astro-examples (betts_low_thrust_builder at 7.19 GB, heteroclinic_builder
-   at 82 s).
-3. **A compile-time option to drop adjoint-Hessian code from specific
-   expression trees** — requires DSL changes; pure long-term.
+1. **Option 1 — non-template `make_gf_storage_ptr` entry point** (highest
+   payoff, low runtime risk, no prerequisites). Move the `shared_ptr`
+   count-block construction out of `GFStorage::emplace<T>`'s template
+   body into a single non-template factory in a new
+   `src/vf/generic_function_storage.cpp`. Recommended next action if the
+   builder-example RSS becomes worth chasing.
+2. **Option 2 — extern-template the transcription-side types** for the
+   erased `GenericODE<GenericFunction<-1,-1>, -1, -1, -1>` phase path.
+   Medium payoff; gated on the same `tol=0` golden-policy decision that
+   blocks Phase C.
+3. **Option 3 — runtime ODE builder**. Rejected: forfeits analytical
+   Jacobians for modest build-time win.
 
-None of these is a low-cost win by itself. Flag them for a future pass only
-if the per-example peak RSS becomes a CI bottleneck again.
+A measurement-only spike of Option 1 is the low-risk first step.
