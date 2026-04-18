@@ -16,6 +16,7 @@
 #include <sstream>
 
 #include "tycho/detail/integrators/adaptive_driver.h"
+#include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/event_handler.h"
 #include "tycho/detail/integrators/parallel_driver.h"
 #include "tycho/detail/integrators/rk_steppers.h"
@@ -274,6 +275,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         default:
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
+
+        this->controller_variant_ = default_controller_for(alg);
+        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
     }
 
     template <IVPAlg RKOp>
@@ -383,6 +387,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     double min_step_size_ = 0.1;
     double def_step_size_ = 0.1;
     double max_step_size_ = 0.1;
+    // NOTE: bumped to 10.0 in Task 6 once goldens are regenerated under the
+    // controller-dispatch loop. Keeping 3.0 here preserves SP1 regression
+    // output during the Task 5 wiring step.
     double max_step_change_ = 3.0;
     bool adaptive_ = true;
     bool fast_adaptive_stm_ = true;
@@ -392,6 +399,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     double step_frac_ = .9;
     double err_pow_fac_ = 1;
+
+    // SP3 controller variant — selected per algorithm in set_method, overrideable
+    // via set_controller(). Runtime dispatch goes through std::visit in
+    // integrate_impl / integrate_impl_vectorized.
+    using ControllerVariant = std::variant<IController, PIController, PIDController>;
+    ControllerVariant controller_variant_;
+    ErrorNormType error_norm_type_ = ErrorNormType::RMS;
+
+    // Step statistics (reset per integrate call).
+    int naccept_ = 0;
+    int nreject_ = 0;
 
     ODEDeriv<double> abs_tols_;
     ODEDeriv<double> rel_tols_;
@@ -414,6 +432,35 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     ODEDeriv<double> get_abs_tols() const { return this->abs_tols_; }
     ODEDeriv<double> get_rel_tols() const { return this->rel_tols_; }
+
+    void set_controller(IVPController kind) {
+        switch (kind) {
+        case IVPController::I:
+            this->controller_variant_ = IController{};
+            break;
+        case IVPController::PI:
+            this->controller_variant_ = PIController{};
+            break;
+        case IVPController::PID:
+            this->controller_variant_ = PIDController{};
+            break;
+        }
+        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
+    }
+
+    IVPController get_controller() const {
+        if (std::holds_alternative<IController>(this->controller_variant_))
+            return IVPController::I;
+        if (std::holds_alternative<PIController>(this->controller_variant_))
+            return IVPController::PI;
+        return IVPController::PID;
+    }
+
+    void set_error_norm(ErrorNormType t) { this->error_norm_type_ = t; }
+    ErrorNormType get_error_norm() const { return this->error_norm_type_; }
+
+    int get_naccept() const { return this->naccept_; }
+    int get_nreject() const { return this->nreject_; }
 
     void set_step_sizes(double defstep, double minstep, double maxstep) {
         if (defstep < minstep) {
@@ -443,16 +490,73 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
   protected:
     // Legacy: replaced by controller variant dispatch in scalar path (Task 6).
     // Removed entirely in Task 7 once the vectorized path is also converted.
-    // DO NOT use for new code. Uses a transient IController with the Julia-form
-    // update() to match the old (safety, exponent_bias) formula shape — with
-    // exponent_bias == 1 the two forms are mathematically equivalent.
+    // DO NOT use for new code. Matches the exact floating-point operation
+    // sequence of the pre-SP3 integrate_impl so SP1 golden binaries remain
+    // bit-identical through the wiring-only Tasks 2–5.
     double calc_hnext(double h, double err, double accerr) const {
-        IController ctrl;
-        ctrl.gamma = this->step_frac_;
-        // naccept=1 to bypass first-step qmax override; max_step_change_ clips
-        // externally so the controller's qmin/qmax are effectively uncapped
-        // here.
-        return ctrl.update(h, err / accerr, this->error_order_, /*naccept=*/1).dt_new;
+        return this->step_frac_ * h *
+               std::pow(accerr / err,
+                        1.0 / (this->error_order_ + this->err_pow_fac_));
+    }
+
+    static ControllerVariant default_controller_for(IVPAlg alg) {
+        switch (alg) {
+        case IVPAlg::DOPRI54: {
+            PIController c;
+            c.beta1 = 17.0 / 100.0; // DOPRI54 override: 1/order - 3·β₂/4 = 17/100
+            c.beta2 = 4.0 / 100.0;
+            c.gamma = 0.9;
+            c.qmin = 1.0 / 5.0;
+            c.qmax = 10.0;
+            return c;
+        }
+        case IVPAlg::DOPRI87: {
+            IController c;
+            c.gamma = 0.9;
+            c.qmin = 1.0 / 3.0; // DP8 override
+            c.qmax = 6.0;
+            return c;
+        }
+        case IVPAlg::Tsit5: {
+            PIController c;
+            c.beta1 = 7.0 / 50.0; // Julia generic: 7/(10·order), order=5
+            c.beta2 = 2.0 / 25.0; // Julia generic: 2/(5·order),  order=5
+            return c;
+        }
+        case IVPAlg::BS3: {
+            PIController c;
+            c.beta1 = 7.0 / 30.0; // order=3
+            c.beta2 = 2.0 / 15.0;
+            return c;
+        }
+        case IVPAlg::BS5: {
+            PIController c;
+            c.beta1 = 7.0 / 50.0; // order=5
+            c.beta2 = 2.0 / 25.0;
+            return c;
+        }
+        case IVPAlg::Vern7: {
+            PIController c;
+            c.beta1 = 1.0 / 10.0; // 7/(10·7)
+            c.beta2 = 2.0 / 35.0; // 2/(5·7)
+            return c;
+        }
+        case IVPAlg::Vern8: {
+            PIController c;
+            c.beta1 = 7.0 / 80.0; // order=8
+            c.beta2 = 1.0 / 20.0; // 2/(5·8)
+            return c;
+        }
+        case IVPAlg::Vern9: {
+            PIController c;
+            c.beta1 = 7.0 / 90.0; // order=9
+            c.beta2 = 2.0 / 45.0; // 2/(5·9)
+            return c;
+        }
+        default:
+            throw std::logic_error(
+                "default_controller_for: algorithm not user-selectable");
+        }
     }
 
     template <class State> void update_control(State &xtup) const {
