@@ -1,3 +1,7 @@
+// =============================================================================
+// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// =============================================================================
+
 #pragma once
 
 // Extern template declarations for frequently-used Integrator<DODE>

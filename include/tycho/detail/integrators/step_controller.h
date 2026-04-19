@@ -17,10 +17,11 @@ namespace tycho::integrators {
 ///
 /// Fields:
 ///   accepted — whether the current step should be accepted.
-///   dt_new   — proposed next dt. The outer loop may further clamp to
-///              [min_step_size, max_step_size] and the max_step_change_ ratio;
-///              controllers only express their own qmin/qmax. dt_new preserves
-///              the sign of h (forward or backward integration).
+///   dt_new   — proposed next dt. The outer loop may further clamp via the
+///              max_step_change_ ratio; controllers only express their own
+///              qmin/qmax. dt_new preserves the sign of h (forward or
+///              backward integration). There is no hard min/max step size
+///              cap — the only backstop against runaway h is max_steps.
 ///   q        — reciprocal of the raw step-growth factor (Julia convention:
 ///              dt_new = dt / q). Exposed for diagnostics/tests.
 struct ControllerOutput {
@@ -126,9 +127,9 @@ struct IController {
             q_applied = 1.0;
         }
         qold_ = q;
-        // `q` field reflects the clipped, pre-deadband value so diagnostics
-        // can recover the raw growth factor; `dt_new` reflects what we
-        // actually apply (including deadband snap).
+        // `q` field reflects the clipped-but-not-deadbanded growth factor
+        // (clamped to [1/qmax, 1/qmin]); `dt_new` reflects what we actually
+        // apply, including the deadband snap to 1.0.
         return {accepted, h / q_applied, q};
     }
 
@@ -235,7 +236,11 @@ struct PIController {
 ///     dt_factor = ε₁^(β₁/k) · ε₂^(β₂/k) · ε₃^(β₃/k)
 ///     dt_factor := limiter(dt_factor)   where limiter(x) = 1 + atan(x - 1)
 ///     accept    := dt_factor >= accept_safety
-///     dt'       = dt · dt_factor (accept) or dt · qold (reject)
+///     dt'       = dt · dt_factor on both accept and reject (reject case:
+///                 dt_factor < accept_safety, so dt' < dt and the step
+///                 shrinks). Tycho's PIDController is stateless-reject
+///                 matching Julia's current convention; qold_ is retained
+///                 as the last-computed factor for diagnostics.
 ///
 /// where ε_i = 1/EEst_i and k = min(order, adaptive_order) + 1. Beta values
 /// are NOT pre-scaled — the formula divides by k internally.
