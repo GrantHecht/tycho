@@ -68,6 +68,20 @@ set(CLANG_MAX_INLINE_DEPTH 225)
 #set(BUILD_TYCHO_WHEEL TRUE)      ### CI Build for generic wheels
 #set(BUILD_SPHINX_DOCS TRUE)
 
+# ThreadSanitizer: off by default. Opt in via the linux-clang-tsan preset.
+# TSan is incompatible with MKL and drops throughput ~10x, so production
+# builds must not enable it. Used only for the dedicated parallel-test CI
+# lane that stress-loops the race-sensitive integrator paths.
+option(TYCHO_ENABLE_TSAN
+    "Instrument build with -fsanitize=thread. Production-incompatible."
+    OFF)
+
+if(TYCHO_ENABLE_TSAN)
+    message(STATUS "ThreadSanitizer: enabled (-fsanitize=thread -g -O1)")
+    add_compile_options(-fsanitize=thread -g -O1)
+    add_link_options(-fsanitize=thread)
+endif()
+
 # Floating-point optimization policy.
 # STRICT: no fast-math relaxations
 # SAFER_FAST: all fast-math optimizations except finite-math-only
