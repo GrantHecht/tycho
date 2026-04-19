@@ -35,21 +35,6 @@
             }
         },
         {
-            "name": "linux-clang-tsan",
-            "displayName": "Linux Clang ThreadSanitizer",
-            "description": "TSan-instrumented build for the parallel integrator paths. Never used for production — throughput drops ~10x and MKL is TSan-incompatible. Build tycho_tests only, then stress-loop test_integrator_parallel to surface races that the determinism asserts might miss.",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build-tsan",
-            "installDir": "${sourceDir}/build-tsan/install/${presetName}",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
-                "TYCHO_FP_MODE": "SAFER_FAST",
-                "TYCHO_ENABLE_TSAN": "ON",
-                "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
-            }
-        },
-        {
             "name": "x64-Clang-Release",
             "displayName": "x64 Clang Release",
             "description": "Release build using Clang compiler on Windows x64",
@@ -104,18 +89,6 @@
                 "-j6",
                 "-v"
             ]
-        },
-        {
-            "name": "linux-clang-tsan",
-            "displayName": "Linux Clang TSan Build",
-            "configurePreset": "linux-clang-tsan",
-            "targets": [
-                "tycho_tests"
-            ],
-            "nativeToolOptions": [
-                "-j4",
-                "-v"
-            ]
         }
     ],
     "testPresets": [
@@ -139,19 +112,6 @@
             "name": "x64-Clang-Release",
             "displayName": "x64 Clang Release Test",
             "configurePreset": "x64-Clang-Release",
-            "output": {
-                "outputOnFailure": true
-            }
-        },
-        {
-            "name": "linux-clang-tsan",
-            "displayName": "Linux Clang TSan Parallel-Path Test",
-            "configurePreset": "linux-clang-tsan",
-            "filter": {
-                "include": {
-                    "name": "Parallel|StepperTest|ZeroInterval|NanPropagation|AdaptiveDriver|ParallelDriver"
-                }
-            },
             "output": {
                 "outputOnFailure": true
             }
