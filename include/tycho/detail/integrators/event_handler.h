@@ -66,11 +66,19 @@ struct EventHandler {
     }
 
     /// Refine event locations using bisection + Newton on an interpolation table.
+    ///
+    /// `n_failed_refinements` is incremented once for each zero-crossing the
+    /// refinement loop could not resolve via either the fast bisect+Newton
+    /// path or the wider-bracket retry. Such crossings are silently absent
+    /// from the returned eventstates vector (size mismatch with eventtimes);
+    /// exposing the count via an out-parameter lets callers detect the loss
+    /// without changing the return shape. Mirrors Integrator::find_events'
+    /// n_failed_event_refinements_ counter.
     template <class ODEState>
     static std::vector<std::vector<ODEState>>
     refine_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
                   const std::vector<std::vector<Eigen::Vector2d>> &eventtimes, int input_rows,
-                  int max_iters, double tol) {
+                  int max_iters, double tol, int &n_failed_refinements) {
 
         Eigen::VectorXi vars;
         vars.setLinSpaced(input_rows, 0, input_rows - 1);
@@ -161,7 +169,13 @@ struct EventHandler {
                             ei.setZero();
                             tab->interpolate_ref(tevent, ei);
                             eventstates[i].push_back(ei);
-                        } // else give up
+                        } else {
+                            // Neither the fast nor wide-bracket bisect+Newton
+                            // retry could resolve this crossing. Record the
+                            // loss so a caller inspecting n_failed_refinements
+                            // can surface the size mismatch with eventtimes.
+                            ++n_failed_refinements;
+                        }
                     }
                 }
             }
