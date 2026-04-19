@@ -853,12 +853,46 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         double t0 = x[this->ode_.t_var()];
         double H = tf - t0;
+
+        // Zero-interval short-circuit: no step to take. Populate outputs with the
+        // endpoint state (and its derivative / midpoint copies) and return.
+        // Skipping stepper_compute avoids the FSAL / midpoint derivative
+        // reconstruction's divide-by-zero (xdot_prev = k_vals.back() * (1/h) with
+        // h == 0), which would otherwise silently poison `derivs` with NaN.
+        if (H == 0.0) {
+            ODEState<double> xi0 = x;
+            this->update_control(xi0);
+            eventtimes.resize(events.size());
+            for (size_t j = 0; j < events.size(); ++j) {
+                if (std::get<0>(events[j]).input_rows() != this->ode_.input_rows()) {
+                    throw std::invalid_argument(
+                        "Input size of event function must equal input size of ode_.");
+                }
+            }
+            if (storestates) {
+                states.resize(0);
+                derivs.resize(0);
+                ODEDeriv<double> xdoti0(this->ode_.output_rows());
+                xdoti0.setZero();
+                this->ode_.compute(xi0, xdoti0);
+                states.push_back(xi0);
+                if (storederivs)
+                    derivs.push_back(xdoti0);
+                if (storemidpoints) {
+                    states.push_back(xi0);
+                    if (storederivs)
+                        derivs.push_back(xdoti0);
+                }
+                states.push_back(xi0);
+                if (storederivs)
+                    derivs.push_back(xdoti0);
+            }
+            return xi0;
+        }
+
         double h;
         int numsteps;
-        if (H == 0.0) {
-            numsteps = 1;
-            h = 0.0;
-        } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
+        if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
             int order = static_cast<int>(this->error_order_);
             h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_, this->rel_tols_, order,
                                     this->error_norm_type_);
@@ -957,8 +991,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->stepper_compute(xi, tnext, xnext, xnext_est, xdotnext,
                                   storemidpoints || storederivs, xnext_mid);
 
-            check_state_finite_or_throw(xnext.head(this->ode_.x_vars()),
-                                        xi[this->ode_.t_var()], h, "stepper_compute (scalar)");
+            check_state_finite_or_throw(xnext.head(this->ode_.x_vars()), xi[this->ode_.t_var()], h,
+                                        "stepper_compute (scalar)");
 
             if (this->adaptive_) {
                 auto u_x_vars = this->ode_.x_vars();
@@ -1078,8 +1112,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument("integrate_impl_vectorized: controllers vector size must "
                                         "equal number of trajectories.");
         }
-        if (static_cast<int>(nacc.size()) != ntrajs ||
-            static_cast<int>(nrej.size()) != ntrajs) {
+        if (static_cast<int>(nacc.size()) != ntrajs || static_cast<int>(nrej.size()) != ntrajs) {
             throw std::invalid_argument(
                 "integrate_impl_vectorized: nacc/nrej vector size must equal number of "
                 "trajectories.");
@@ -1154,6 +1187,22 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 states_s[i].push_back(xis[i]);
                 if (storederivs)
                     derivs_s[i].push_back(xdotis[i]);
+
+                // Zero-interval lane: emulate the main-loop push pattern
+                // (midpoint if requested, then final = initial) here, since
+                // the SIMD loop is about to skip this lane entirely. Without
+                // this, h==0 would reach stepper_compute and corrupt the
+                // batched derivative output with 0 * Inf = NaN.
+                if (h_spans[i] == 0.0) {
+                    if (storemidpoints) {
+                        states_s[i].push_back(xis[i]);
+                        if (storederivs)
+                            derivs_s[i].push_back(xdotis[i]);
+                    }
+                    states_s[i].push_back(xis[i]);
+                    if (storederivs)
+                        derivs_s[i].push_back(xdotis[i]);
+                }
             }
         }
 
@@ -1181,8 +1230,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         std::vector<bool> continueloops(ntrajs, true);
 
-        int numrunning = ntrajs;
-        int lastrunning = ntrajs - 1;
+        // Mark zero-interval lanes as already complete — their outputs were
+        // populated in the per-lane init block above.
+        for (int i = 0; i < ntrajs; ++i) {
+            if (h_spans[i] == 0.0)
+                continueloops[i] = false;
+        }
+
+        int numrunning = 0;
+        int lastrunning = -1;
+        for (int i = 0; i < ntrajs; ++i) {
+            if (continueloops[i]) {
+                numrunning++;
+                lastrunning = i;
+            }
+        }
 
         if (ntrajs < SuperScalar::SizeAtCompileTime) {
 
@@ -2062,7 +2124,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                             const Eigen::VectorXd &tfs) const {
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls) std::visit([](auto &cc) { cc.reset(); }, c);
+        for (auto &c : ctrls)
+            std::visit([](auto &cc) { cc.reset(); }, c);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<ODEState<double>> result;
@@ -2080,9 +2143,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             bool storemidpoints = false;
             std::vector<std::vector<ODEState<double>>> xs;
             std::vector<std::vector<ODEDeriv<double>>> d_xs;
-            result = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
-                                               storederivs, storemidpoints, xs, d_xs, ctrls, nacc,
-                                               nrej);
+            result =
+                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                          storemidpoints, xs, d_xs, ctrls, nacc, nrej);
         }
         this->naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
         this->nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
@@ -2093,7 +2156,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                       const Eigen::VectorXd &tfs) const {
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls) std::visit([](auto &cc) { cc.reset(); }, c);
+        for (auto &c : ctrls)
+            std::visit([](auto &cc) { cc.reset(); }, c);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<STMRet> rets(n);
@@ -2110,9 +2174,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             std::vector<std::vector<ODEState<double>>> xs(n);
             std::vector<std::vector<ODEDeriv<double>>> d_xs(n);
 
-            auto x_finals = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
-                                                      storederivs, storemidpoints, xs, d_xs, ctrls,
-                                                      nacc, nrej);
+            auto x_finals =
+                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                          storemidpoints, xs, d_xs, ctrls, nacc, nrej);
 
             auto jacs = this->calculate_jacobians(xs);
             for (int i = 0; i < n; i++) {
@@ -2129,14 +2193,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                    const std::vector<ODEState<double>> &lfs) const {
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls) std::visit([](auto &cc) { cc.reset(); }, c);
+        for (auto &c : ctrls)
+            std::visit([](auto &cc) { cc.reset(); }, c);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(n);
         if (!vectorize_batch_calls_) {
             for (int i = 0; i < n; i++) {
-                auto xs =
-                    this->integrate_dense_core(x0s[i], tfs[i], ctrls[i], nacc[i], nrej[i]);
+                auto xs = this->integrate_dense_core(x0s[i], tfs[i], ctrls[i], nacc[i], nrej[i]);
                 auto [J, H] = this->calculate_jacobian_hessian(xs, lfs[i]);
                 rets[i] = std::tuple{xs.back(), J, H};
             }
@@ -2149,9 +2213,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             std::vector<std::vector<ODEState<double>>> xs(n);
             std::vector<std::vector<ODEDeriv<double>>> d_xs(n);
 
-            auto x_finals = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
-                                                      storederivs, storemidpoints, xs, d_xs, ctrls,
-                                                      nacc, nrej);
+            auto x_finals =
+                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                          storemidpoints, xs, d_xs, ctrls, nacc, nrej);
 
             auto [js, hs_out] = this->calculate_jacobians_hessians(xs, lfs);
             for (int i = 0; i < n; i++) {

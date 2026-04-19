@@ -108,6 +108,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_stepper.cpp
     integrators/test_max_steps.cpp
     integrators/test_nan_propagation.cpp
+    integrators/test_zero_interval.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp
