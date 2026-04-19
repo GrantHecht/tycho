@@ -31,8 +31,8 @@ struct STMDriver {
     template <class DODE>
     static Eigen::MatrixXd
     calculate_jacobian(const GenericFunction<-1, -1> &stepper, const DODE &ode,
-                       const std::vector<typename DODE::template Input<double>> &xs,
-                       int input_rows, int output_rows, bool enable_vectorization) {
+                       const std::vector<typename DODE::template Input<double>> &xs, int input_rows,
+                       int output_rows, bool enable_vectorization) {
 
         using Scalar = double;
         using ODEState = typename DODE::template Input<Scalar>;
@@ -54,7 +54,7 @@ struct STMDriver {
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_input_ss(input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_output_ss(ode.input_rows());
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_jacobian_ss(output_rows,
-                                                                              input_rows);
+                                                                             input_rows);
 
         auto scalar_impl = [&](int i) {
             stepper_input.head(ode.input_rows()) = xs[i];
@@ -178,7 +178,7 @@ struct STMDriver {
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_input_ss(input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_output_ss(ode.input_rows());
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_jacobian_ss(output_rows,
-                                                                              input_rows);
+                                                                             input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jxall_ss(input_rows, input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jactmp_ss(output_rows, input_rows);
 

@@ -28,13 +28,12 @@ enum class ErrorNormType { RMS, MAX };
 ///
 /// Julia reference: ~/.julia/packages/DiffEqBase/.../calculate_residuals.jl:9-14
 template <class Derived1, class Derived2, class Derived3, class Derived4, class Derived5>
-inline auto scaled_residuals(const Eigen::MatrixBase<Derived1> &utilde,
-                             const Eigen::MatrixBase<Derived2> &u0,
-                             const Eigen::MatrixBase<Derived3> &u1,
-                             const Eigen::MatrixBase<Derived4> &abs_tols,
-                             const Eigen::MatrixBase<Derived5> &rel_tols) {
-    return utilde.cwiseQuotient(
-        abs_tols + u0.cwiseAbs().cwiseMax(u1.cwiseAbs()).cwiseProduct(rel_tols));
+inline auto
+scaled_residuals(const Eigen::MatrixBase<Derived1> &utilde, const Eigen::MatrixBase<Derived2> &u0,
+                 const Eigen::MatrixBase<Derived3> &u1, const Eigen::MatrixBase<Derived4> &abs_tols,
+                 const Eigen::MatrixBase<Derived5> &rel_tols) {
+    return utilde.cwiseQuotient(abs_tols +
+                                u0.cwiseAbs().cwiseMax(u1.cwiseAbs()).cwiseProduct(rel_tols));
 }
 
 /// Reduce a residual vector to a scalar error norm (RMS or MAX).
@@ -42,7 +41,8 @@ template <class Derived>
 inline double error_norm(const Eigen::MatrixBase<Derived> &res, ErrorNormType type) {
     if (type == ErrorNormType::RMS) {
         const auto n = res.size();
-        if (n == 0) return 0.0;
+        if (n == 0)
+            return 0.0;
         return std::sqrt(res.squaredNorm() / static_cast<double>(n));
     }
     // MAX

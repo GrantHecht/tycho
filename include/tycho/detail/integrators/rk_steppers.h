@@ -147,8 +147,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 
                 xtup[this->ode_.t_var()] = ti;
 
-                xi_jac(this->ode_.t_var(), this->ode_.t_var()) =
-                    Scalar(1.0) - Scalar(RKData::C[i]);
+                xi_jac(this->ode_.t_var(), this->ode_.t_var()) = Scalar(1.0) - Scalar(RKData::C[i]);
                 xi_jac(this->ode_.t_var(), this->input_rows() - 1) = Scalar(RKData::C[i]);
 
                 const int ip1 = i + 1;
@@ -291,8 +290,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
                 Scalar ti = t0 + RKData::C[i] * h;
                 xi_jac.setIdentity();
 
-                xi_jac(this->ode_.t_var(), this->ode_.t_var()) =
-                    Scalar(1.0) - Scalar(RKData::C[i]);
+                xi_jac(this->ode_.t_var(), this->ode_.t_var()) = Scalar(1.0) - Scalar(RKData::C[i]);
                 xi_jac(this->ode_.t_var(), this->input_rows() - 1) = Scalar(RKData::C[i]);
 
                 const int ip1 = i + 1;

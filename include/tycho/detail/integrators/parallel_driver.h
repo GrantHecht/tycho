@@ -17,9 +17,9 @@
 // TODO(SP1-Task8): Complete extraction by parameterizing the SIMD batch
 // loop on Stepper<Alg, DODE, SuperScalar> and controller callbacks.
 
-#include "tycho/detail/integrators/stepper.h"
-#include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/event_handler.h"
+#include "tycho/detail/integrators/step_controller.h"
+#include "tycho/detail/integrators/stepper.h"
 #include <Eigen/Core>
 #include <vector>
 
@@ -29,8 +29,7 @@ namespace tycho::integrators {
 ///
 /// The full implementation will be wired during the Task 8 switchover.
 /// For now, integrate_impl_vectorized remains in integrator.h.
-template <IVPAlg Alg, class Controller, class DODE>
-struct ParallelDriver {
+template <IVPAlg Alg, class Controller, class DODE> struct ParallelDriver {
     // Will hold stepper, controller, and SIMD lane management state.
     // Deferred to Task 8 for incremental integration.
 };

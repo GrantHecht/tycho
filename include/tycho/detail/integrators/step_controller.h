@@ -133,7 +133,8 @@ struct PIController {
         bool accepted = (err_norm <= 1.0);
         if (accepted) {
             double q_applied = q;
-            if (qsteady_min <= q && q <= qsteady_max) q_applied = 1.0;
+            if (qsteady_min <= q && q <= qsteady_max)
+                q_applied = 1.0;
             errold_ = std::max(err_norm, qoldinit);
             return {true, h / q_applied, q};
         }
@@ -184,8 +185,7 @@ struct PIDController {
         err_[0] = 1.0 / eest;
 
         double k = static_cast<double>(order) + 1.0;
-        double dt_factor = std::pow(err_[0], beta1 / k) *
-                           std::pow(err_[1], beta2 / k) *
+        double dt_factor = std::pow(err_[0], beta1 / k) * std::pow(err_[1], beta2 / k) *
                            std::pow(err_[2], beta3 / k);
         dt_factor = default_limiter(dt_factor);
 
@@ -195,7 +195,8 @@ struct PIDController {
         if (accepted) {
             double dt_factor_applied = dt_factor;
             double inv_df = 1.0 / dt_factor;
-            if (qsteady_min <= inv_df && inv_df <= qsteady_max) dt_factor_applied = 1.0;
+            if (qsteady_min <= inv_df && inv_df <= qsteady_max)
+                dt_factor_applied = 1.0;
             // Shift history on accept
             err_[2] = err_[1];
             err_[1] = err_[0];

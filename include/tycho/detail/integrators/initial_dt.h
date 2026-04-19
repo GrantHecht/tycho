@@ -33,9 +33,8 @@ namespace tycho::integrators {
 /// OOP scalar variant — no diffusion/g term (Julia's `g==nothing` branch),
 /// matching Tycho's deterministic ODE subsystem.
 template <class DODE, class InputVec, class TolVec>
-double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf,
-                           const TolVec &abs_tols, const TolVec &rel_tols,
-                           int order, ErrorNormType norm_type) {
+double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
+                           const TolVec &rel_tols, int order, ErrorNormType norm_type) {
     const double t0 = x0[ode.t_var()];
     const double tdir = (tf >= t0) ? 1.0 : -1.0;
     const int n = ode.x_vars();

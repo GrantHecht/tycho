@@ -53,16 +53,21 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
 }
 
 inline IVPController parse_ivp_controller(const std::string &str) {
-    if (str == "I") return IVPController::I;
-    if (str == "PI") return IVPController::PI;
-    if (str == "PID") return IVPController::PID;
+    if (str == "I")
+        return IVPController::I;
+    if (str == "PI")
+        return IVPController::PI;
+    if (str == "PID")
+        return IVPController::PID;
     throw std::invalid_argument(
         fmt::format("Unknown IVPController: '{}'; accepted values: I, PI, PID", str));
 }
 
 inline ErrorNormType parse_error_norm(const std::string &str) {
-    if (str == "RMS") return ErrorNormType::RMS;
-    if (str == "MAX") return ErrorNormType::MAX;
+    if (str == "RMS")
+        return ErrorNormType::RMS;
+    if (str == "MAX")
+        return ErrorNormType::MAX;
     throw std::invalid_argument(
         fmt::format("Unknown ErrorNormType: '{}'; accepted values: RMS, MAX", str));
 }
@@ -316,8 +321,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("set_rel_tols", &Integrator<DODE>::set_rel_tols);
         obj.def("get_rel_tols", &Integrator<DODE>::get_rel_tols);
 
-        obj.def("set_initial_step_size", &Integrator<DODE>::set_initial_step_size,
-                nb::arg("h"));
+        obj.def("set_initial_step_size", &Integrator<DODE>::set_initial_step_size, nb::arg("h"));
         obj.def("set_max_steps", &Integrator<DODE>::set_max_steps, nb::arg("n"));
         obj.def("get_max_steps", &Integrator<DODE>::get_max_steps);
 
