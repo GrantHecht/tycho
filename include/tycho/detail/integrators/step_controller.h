@@ -74,9 +74,7 @@ inline std::string controller_invariant_msg(const char *controller, const char *
 /// Misconfigured tuning knobs are caught by validate() at install time
 /// rather than producing silently-bad step cadence inside the loop.
 ///
-/// Julia reference:
-///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:171-199 (legacy)
-///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:244-278 (new)
+/// Matches OrdinaryDiffEqCore.jl `IController`.
 struct IController {
     double gamma = 0.9;
     double qmin = 1.0 / 5.0;
@@ -151,9 +149,7 @@ struct IController {
 /// convention (β₁ and β₂ absorb the 1/order factor). The `order` parameter
 /// to update() is unused here (kept for uniform signature with IController).
 ///
-/// Julia reference:
-///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:317-366 (legacy)
-///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:401-467 (new)
+/// Matches OrdinaryDiffEqCore.jl `PIController`.
 struct PIController {
     double beta1 = 7.0 / 50.0;
     double beta2 = 2.0 / 25.0;
@@ -245,8 +241,7 @@ struct PIController {
 /// where ε_i = 1/EEst_i and k = min(order, adaptive_order) + 1. Beta values
 /// are NOT pre-scaled — the formula divides by k internally.
 ///
-/// Julia reference:
-///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:535-637
+/// Matches OrdinaryDiffEqCore.jl `PIDController`.
 struct PIDController {
     double beta1 = 1.0;
     double beta2 = 0.0;

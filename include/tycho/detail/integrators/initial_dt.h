@@ -97,9 +97,9 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
         // Non-finite or exactly-zero return is almost always the user setting
         // both abs_tol and rel_tol to zero on a component where x0 is zero —
         // the scaling vector sk[i] = atol + |x0|*rtol goes to zero, and the
-        // scaled residuals become 0/0 = NaN. validate_tolerances_for_adaptive
-        // normally catches this upstream; this guards the remaining pathway
-        // (atol > 0 but atol + |x0|*rtol still underflows, or similar FP edge).
+        // scaled residuals become 0/0 = NaN. The adaptive driver catches this
+        // case upstream; this guards the remaining FP edges (atol > 0 but
+        // atol + |x0|*rtol still underflows, etc.).
         throw std::runtime_error(
             "Hairer-Wanner initial-dt estimator produced a non-finite or zero step: dt=" +
             std::to_string(signed_dt) + " (d0=" + std::to_string(d0) +

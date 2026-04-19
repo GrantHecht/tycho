@@ -225,7 +225,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     Integrator(const DODE &dode, IVPAlg meth, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator() {
 
-        // Bug waiting to happen when LGL interp table is re-factored
         if (dode.input_rows() != tab->xtu_vars_ || dode.x_vars() != tab->x_vars_) {
             throw std::invalid_argument("Table data does not match expected dimension of ODE."
                                         " Please provide the indices variables in the table you "
@@ -463,9 +462,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /// Build a per-call controller for a worker (or main thread): clone the
     /// prototype and reset internal state so it starts from first-step
-    /// semantics. Every integrate / integrate_*_core / parallel path uses
-    /// this pattern; centralizing avoids the "forgot the reset()" class of
-    /// bug that surfaced during the per-lane controller work (see commit ce4709b).
+    /// semantics. Centralizing avoids the "forgot the reset()" class of
+    /// bug in per-lane controller construction.
     ControllerVariant make_worker_controller() const {
         ControllerVariant c = this->controller_variant_;
         std::visit([](auto &cc) { cc.reset(); }, c);
@@ -474,10 +472,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     // Step statistics for `get_naccept()` / `get_nreject()` inspection.
     // Written only by single-threaded public wrappers via a post-call
-    // writeback from local counters; the impl bodies (`integrate_impl`,
-    // `integrate_impl_vectorized`) and all parallel workers keep their
-    // counters entirely local and do not touch these members. `mutable`
-    // is retained so the writeback can happen from const-qualified
+    // writeback from local counters; adaptive loops and parallel workers
+    // keep counters entirely local and do not touch these members.
+    // `mutable` is retained so the writeback can happen from const-qualified
     // wrappers (required because the VectorFunction::compute contract
     // forces `compute_impl` and friends to be const).
     mutable int naccept_ = 0;
@@ -489,7 +486,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // (size mismatch with eventtimes) — exposing the count via
     // get_failed_event_count() lets callers detect that loss without
     // changing the existing return shape. Reset by find_events at the
-    // start of each call (see :1554-area).
+    // start of each call.
     mutable int n_failed_event_refinements_ = 0;
 
     // Hairer-Wanner initial-dt toggle. Default-on. An explicit
@@ -527,28 +524,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
         }
         this->rel_tols_ = tol;
-    }
-
-    /// Joint tolerance invariant for the adaptive path: every component must
-    /// satisfy abs_tols[i] + rel_tols[i] > 0. Otherwise scaled_residuals'
-    /// denominator is 0 when the state component is 0, producing NaN error
-    /// norms and infinite rejection loops. Checked at integrate entry rather
-    /// than in the setters so set_abs_tol/set_rel_tol can be called in any
-    /// order without transient validation failures.
-    void validate_tolerances_for_adaptive() const {
-        const Eigen::Index n = this->abs_tols_.size();
-        if (this->rel_tols_.size() != n) {
-            throw std::logic_error("Integrator internal error: abs_tols/rel_tols size mismatch.");
-        }
-        for (Eigen::Index i = 0; i < n; ++i) {
-            if (!(this->abs_tols_[i] + this->rel_tols_[i] > 0.0)) {
-                throw std::invalid_argument(
-                    "Tolerance component " + std::to_string(i) +
-                    " has abs_tol + rel_tol <= 0 (both vanish). Set at least one of "
-                    "abs_tol or rel_tol to a positive value; otherwise the adaptive "
-                    "error norm is undefined for zero state.");
-            }
-        }
     }
 
     ODEDeriv<double> get_abs_tols() const { return this->abs_tols_; }

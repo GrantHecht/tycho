@@ -179,6 +179,104 @@ TEST_F(IntegratorTest, ParallelIntegrateSTMMatchesSerial) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Event-carrying parallel overloads — fills the review gap where
+// `integrate_parallel(..., events, ...)` and `integrate_stm_parallel(...,
+// events, ...)` had no direct test coverage (only the no-events overloads
+// were exercised). Asserts that per-trajectory event location lists agree
+// with the serial reference for each of the N trajectories in the batch.
+///////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+// Event on SHO: v = -0.5 (zero-crossing of `v + 0.5`). Over the chosen tf
+// range each trajectory's phase produces either 0 or 1 crossings, giving
+// variance across lanes that a broken event wiring would expose.
+auto make_sho_event() {
+    auto args = Arguments<3>();
+    auto v = args.coeff<1>();
+    auto event_func = v + 0.5;
+    return GenericFunction<-1, 1>(event_func);
+}
+
+} // namespace
+
+TEST_F(IntegratorTest, ParallelIntegrateWithEventsMatchesSerial) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    tighten(integ);
+
+    auto x0s = make_batch();
+    auto tfs = make_tfs();
+
+    std::vector<Integrator<SHO>::EventPack> events;
+    events.push_back({make_sho_event(), 0, 0});
+
+    std::vector<Integrator<SHO>::IntegEventRet> serial(kBatchSize);
+    for (int i = 0; i < kBatchSize; i++) {
+        serial[i] = integ.integrate(x0s[i], tfs[i], events);
+    }
+
+    ScopedThreadCount threads(kNParts);
+    auto parallel = integ.integrate_parallel(x0s, tfs, events, kNParts);
+
+    ASSERT_EQ(parallel.size(), serial.size());
+    for (int i = 0; i < kBatchSize; i++) {
+        const auto &p_xf = std::get<0>(parallel[i]);
+        const auto &s_xf = std::get<0>(serial[i]);
+        EXPECT_NEAR(p_xf[0], s_xf[0], 1e-13) << "trajectory " << i << " xf[0]";
+        EXPECT_NEAR(p_xf[1], s_xf[1], 1e-13) << "trajectory " << i << " xf[1]";
+
+        const auto &p_evs = std::get<1>(parallel[i]);
+        const auto &s_evs = std::get<1>(serial[i]);
+        ASSERT_EQ(p_evs.size(), s_evs.size()) << "trajectory " << i << " event-group count";
+        for (size_t g = 0; g < s_evs.size(); g++) {
+            ASSERT_EQ(p_evs[g].size(), s_evs[g].size())
+                << "trajectory " << i << " event count in group " << g;
+            for (size_t e = 0; e < s_evs[g].size(); e++) {
+                EXPECT_NEAR(p_evs[g][e][0], s_evs[g][e][0], 1e-12)
+                    << "trajectory " << i << " event g=" << g << " e=" << e;
+            }
+        }
+    }
+}
+
+TEST_F(IntegratorTest, ParallelIntegrateSTMWithEventsMatchesSerial) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    tighten(integ);
+
+    auto x0s = make_batch();
+    auto tfs = make_tfs();
+
+    std::vector<Integrator<SHO>::EventPack> events;
+    events.push_back({make_sho_event(), 0, 0});
+
+    std::vector<Integrator<SHO>::STMEventRet> serial(kBatchSize);
+    for (int i = 0; i < kBatchSize; i++) {
+        serial[i] = integ.integrate_stm(x0s[i], tfs[i], events);
+    }
+
+    ScopedThreadCount threads(kNParts);
+    auto parallel = integ.integrate_stm_parallel(x0s, tfs, events, kNParts);
+
+    ASSERT_EQ(parallel.size(), serial.size());
+    for (int i = 0; i < kBatchSize; i++) {
+        const auto &p_xf = std::get<0>(parallel[i]);
+        const auto &s_xf = std::get<0>(serial[i]);
+        EXPECT_NEAR(p_xf[0], s_xf[0], 1e-12) << "trajectory " << i << " xf[0]";
+        EXPECT_NEAR(p_xf[1], s_xf[1], 1e-12) << "trajectory " << i << " xf[1]";
+
+        const auto &p_evs = std::get<2>(parallel[i]);
+        const auto &s_evs = std::get<2>(serial[i]);
+        ASSERT_EQ(p_evs.size(), s_evs.size()) << "trajectory " << i << " event-group count";
+        for (size_t g = 0; g < s_evs.size(); g++) {
+            ASSERT_EQ(p_evs[g].size(), s_evs[g].size())
+                << "trajectory " << i << " event count in group " << g;
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Per-lane controller pin (Batch E refactor) — the SuperScalar batch path
 // previously shared one controller across lanes, so any divergent-IC batch
 // would see step-cadence bleed-through (lane N's accept/reject decisions

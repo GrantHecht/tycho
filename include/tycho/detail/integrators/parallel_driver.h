@@ -300,8 +300,7 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                     // without either — Vern7/8/9 — seed-based reuse would
                     // silently use stale f(x_prev) on subsequent steps because
                     // Stepper leaves k_fsal_ unchanged when compute_midpoint
-                    // is false. Force fresh compute in that case, matching
-                    // the legacy integrate_impl_vectorized behavior.
+                    // is false. Force fresh compute in that case.
                     constexpr bool method_does_fsal =
                         RKCoeffs<Alg>::FSAL || RKCoeffs<Alg>::LastStageIsFxf;
                     if constexpr (method_does_fsal) {

@@ -51,10 +51,7 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
 /// Error norm kind applied to scaled residuals.
 ///
 ///   RMS — sqrt(sum(res_i²) / n) — Julia's ODE_DEFAULT_NORM (default).
-///   MAX — max_i |res_i| — Tycho's legacy default.
-///
-/// Julia reference: ~/.julia/packages/DiffEqBase/.../common_defaults.jl
-/// (`ODE_DEFAULT_NORM` for arrays is RMS).
+///   MAX — max_i |res_i|.
 enum class ErrorNormType { RMS, MAX };
 
 /// Compute element-wise scaled residuals per Julia's convention:
@@ -62,10 +59,7 @@ enum class ErrorNormType { RMS, MAX };
 ///   res_i = ũ_i / (α_i + max(|u₀_i|, |u₁_i|) · ρ_i)
 ///
 /// where α is abs_tols, ρ is rel_tols, u₀ is the pre-step state, u₁ the post-step
-/// state. Tycho originally used `|u₁|` alone in the denominator; aligning with Julia
-/// aligned Tycho with the Julia convention.
-///
-/// Julia reference: ~/.julia/packages/DiffEqBase/.../calculate_residuals.jl:9-14
+/// state (matches Julia DiffEqBase `calculate_residuals`).
 template <class Derived1, class Derived2, class Derived3, class Derived4, class Derived5>
 inline auto
 scaled_residuals(const Eigen::MatrixBase<Derived1> &utilde, const Eigen::MatrixBase<Derived2> &u0,

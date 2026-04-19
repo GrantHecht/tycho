@@ -8,6 +8,8 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -43,6 +45,18 @@ struct EventHandler {
 
             double vprev = prev_vals[j][0];
             double vnext = next_vals[j][0];
+            // Event VF output must be finite on finite states; otherwise
+            // the sign comparison below silently drops the crossing under
+            // IEEE 754 (NaN < 0 is false). Surface the failure immediately
+            // with t/j context so the user can fix the event function.
+            if (!std::isfinite(vnext) || !std::isfinite(vprev)) {
+                throw std::runtime_error(
+                    "Event function " + std::to_string(j) +
+                    " produced non-finite value at t=" +
+                    std::to_string(static_cast<double>(xnext[t_var])) +
+                    " (vprev=" + std::to_string(vprev) + ", vnext=" + std::to_string(vnext) +
+                    "); event functions must be finite on finite states.");
+            }
             int dir = std::get<1>(events[j]);
             double vprod = vprev * vnext;
 
@@ -72,8 +86,7 @@ struct EventHandler {
     /// path or the wider-bracket retry. Such crossings are silently absent
     /// from the returned eventstates vector (size mismatch with eventtimes);
     /// exposing the count via an out-parameter lets callers detect the loss
-    /// without changing the return shape. Mirrors Integrator::find_events'
-    /// n_failed_event_refinements_ counter.
+    /// without changing the return shape.
     template <class ODEState>
     static std::vector<std::vector<ODEState>>
     refine_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,

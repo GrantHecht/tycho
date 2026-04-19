@@ -111,6 +111,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_stepcount_baseline.cpp
     integrators/test_tolerance_validation.cpp
     integrators/test_zero_interval.cpp
+    integrators/test_event_refinement_coverage.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp

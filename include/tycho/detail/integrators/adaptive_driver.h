@@ -251,10 +251,9 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
 
                 // Single-chokepoint finite guard. A non-finite err_norm catches
                 // BOTH xnext NaN (NaN flows into the numerator) and xnext_est
-                // NaN (NaN flows into utilde), so one scalar isfinite
-                // subsumes what was previously two checks (xnext allFinite +
-                // err_norm isfinite). Fixed-step path handles xnext separately
-                // below since it doesn't compute err_norm.
+                // NaN (NaN flows into utilde), so one scalar isfinite subsumes
+                // both xnext and err_norm checks. Fixed-step path handles xnext
+                // separately below since it doesn't compute err_norm.
                 if (!std::isfinite(err_norm)) {
                     throw std::runtime_error(
                         "Non-finite error norm from AdaptiveDriver (" + std::to_string(err_norm) +
@@ -294,7 +293,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             }
 
             // Event detection — EventHandler::check_crossings returns true
-            // when a stop-count condition is hit (matches integrate_impl).
+            // when a stop-count condition is hit.
             bool eventbreak = false;
             if (!events.empty()) {
                 eventbreak = EventHandler::check_crossings(events, prev_event_vals, next_event_vals,

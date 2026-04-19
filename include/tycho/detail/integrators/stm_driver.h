@@ -61,9 +61,6 @@ struct STMDriver {
                        const std::vector<typename DODE::template Input<double>> &xs, int input_rows,
                        int output_rows, bool enable_vectorization) {
 
-        using Scalar = double;
-        using ODEState = typename DODE::template Input<Scalar>;
-
         Eigen::MatrixXd jx(output_rows, input_rows);
         jx.setZero();
         Eigen::MatrixXd jxall(input_rows, input_rows);
@@ -431,8 +428,7 @@ struct STMDriver {
                 // Tail-handling for heterogeneous trajectory lengths: when this
                 // lane has more steps than the pack's shortest, finish the
                 // remaining steps scalar-style and multiply into the packed
-                // Jacobian. Matches the production path previously in
-                // Integrator::calculate_jacobians.
+                // Jacobian.
                 if (ncalls == static_cast<int>(xs_s[idx].size()) - 1) {
                     jxs[idx] = jxall_scalar.topRows(output_rows);
                 } else {
