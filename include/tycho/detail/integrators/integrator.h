@@ -1079,32 +1079,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             }
 
             bool eventbreak = false;
-            for (int j = 0; j < events.size(); j++) {
-                next_event_vals[j].setZero();
-                std::get<0>(events[j]).compute(xnext, next_event_vals[j]);
-
-                double vprev = prev_event_vals[j][0];
-                double vnext = next_event_vals[j][0];
-
-                int dir = std::get<1>(events[j]);
-
-                double vprod = vprev * vnext;
-
-                if (vprod < 0.0) {
-                    if ((dir > 0 && vnext > 0) || (dir < 0 && vnext < 0) || dir == 0) {
-                        Eigen::Vector2d times;
-                        times[0] = xi[this->ode_.t_var()];
-                        times[1] = xnext[this->ode_.t_var()];
-                        eventtimes[j].push_back(times);
-                        int stop = std::get<2>(events[j]);
-
-                        if (stop != 0) {
-                            if (eventtimes[j].size() == stop) {
-                                eventbreak = true;
-                            }
-                        }
-                    }
-                }
+            if (!events.empty()) {
+                eventbreak = EventHandler::check_crossings(events, prev_event_vals, next_event_vals,
+                                                           xnext, this->ode_.t_var(), eventtimes,
+                                                           xi[this->ode_.t_var()]);
             }
 
             xi = xnext;
@@ -1463,33 +1441,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                             }
 
                             bool eventbreak = false;
-                            for (int j = 0; j < events.size(); j++) {
-                                next_event_vals_s[itmp][j].setZero();
-                                std::get<0>(events[j]).compute(xnext, next_event_vals_s[itmp][j]);
-
-                                double vprev = prev_event_vals_s[itmp][j][0];
-                                double vnext = next_event_vals_s[itmp][j][0];
-
-                                int dir = std::get<1>(events[j]);
-
-                                double vprod = vprev * vnext;
-
-                                if (vprod < 0.0) {
-                                    if ((dir > 0 && vnext > 0) || (dir < 0 && vnext < 0) ||
-                                        dir == 0) {
-                                        Eigen::Vector2d times;
-                                        times[0] = xis[itmp][this->ode_.t_var()];
-                                        times[1] = xnext[this->ode_.t_var()];
-                                        eventtimes_s[itmp][j].push_back(times);
-                                        int stop = std::get<2>(events[j]);
-
-                                        if (stop != 0) {
-                                            if (eventtimes_s[itmp][j].size() == stop) {
-                                                eventbreak = true;
-                                            }
-                                        }
-                                    }
-                                }
+                            if (!events.empty()) {
+                                eventbreak = EventHandler::check_crossings(
+                                    events, prev_event_vals_s[itmp], next_event_vals_s[itmp], xnext,
+                                    this->ode_.t_var(), eventtimes_s[itmp],
+                                    xis[itmp][this->ode_.t_var()]);
                             }
 
                             xis[itmp] = xnext;
