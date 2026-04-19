@@ -139,10 +139,29 @@ TEST_F(RegressionTranscriptionTest, Case10_BatchJacobians) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Cases 11-12: KNOWN-DIVERGENCE (SP4 tolerance policy follow-up).
+//
+// These two cases pin single-step Jacobian (Case 11) and Jacobian+Hessian
+// (Case 12) outputs against goldens at tol=0.0. They pass today on the
+// platform that produced the goldens (Linux / clang-release / FP SAFER_FAST),
+// but the PR description flags tol=0.0 here as provisional — the right
+// tolerance for single-step transcription cases is an SP4 open question.
+//
+// If you touched these tests or regenerated the golden files, consult the
+// SP4 tolerance-policy discussion before accepting drift. A regeneration
+// that bakes drift into the golden looks identical to a "clean" regen at
+// tol=0.0; this banner is the only signal that the strict check is
+// provisional, not a committed contract.
+//
+// Grep for "KNOWN-DIVERGENCE-SP4" to locate all affected sites.
+// -----------------------------------------------------------------------------
+
 ///////////////////////////////////////////////////////////////////////////////
 // Case 11: Two-body single-step Jacobian via integrate_stm (DOPRI54)
+// KNOWN-DIVERGENCE-SP4: tol=0.0 is provisional pending tolerance policy.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian) {
+TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergenceSP4) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-13);
@@ -166,8 +185,9 @@ TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 12: Two-body single-step Jacobian+Hessian via integrate_stm2 (DOPRI87)
+// KNOWN-DIVERGENCE-SP4: tol=0.0 is provisional pending tolerance policy.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian) {
+TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDivergenceSP4) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
