@@ -275,7 +275,21 @@ struct STMDriver {
                     }
                 }
 
-                jxs[idx] = jxall_scalar.topRows(output_rows);
+                // Tail-handling for heterogeneous trajectory lengths: when this
+                // lane has more steps than the pack's shortest, finish the
+                // remaining steps scalar-style and multiply into the packed
+                // Jacobian. Matches the production path previously in
+                // Integrator::calculate_jacobians.
+                if (ncalls == static_cast<int>(xs_s[idx].size()) - 1) {
+                    jxs[idx] = jxall_scalar.topRows(output_rows);
+                } else {
+                    std::vector<typename DODE::template Input<double>> xs_tail(
+                        xs_s[idx].begin() + ncalls, xs_s[idx].end());
+                    Eigen::MatrixXd jtail = STMDriver::calculate_jacobian(
+                        stepper, ode, xs_tail, input_rows, output_rows,
+                        /*enable_vectorization=*/false);
+                    jxs[idx] = jtail * jxall_scalar;
+                }
                 detail::check_stm_finite_or_throw(jxs[idx], "STMDriver::calculate_jacobians", idx);
             }
         }
