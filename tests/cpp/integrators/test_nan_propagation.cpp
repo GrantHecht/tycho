@@ -70,8 +70,8 @@ TEST_F(NanPropagationTest, ScalarStepperThrowsOnOriginKepler) {
         std::string msg(e.what());
         EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
             << "Diagnostic should mention 'Non-finite state'; got: " << msg;
-        EXPECT_NE(msg.find("scalar"), std::string::npos)
-            << "Should identify the scalar stepper site; got: " << msg;
+        EXPECT_NE(msg.find("AdaptiveDriver::stepper.step"), std::string::npos)
+            << "Should identify the AdaptiveDriver stepper site; got: " << msg;
         EXPECT_NE(msg.find("first non-finite component"), std::string::npos)
             << "Should report the first bad component index; got: " << msg;
     } catch (...) {
@@ -199,8 +199,8 @@ TEST_F(NanPropagationTest, BatchPathReportsOffendingTrajectoryIndex) {
         std::string msg(e.what());
         EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
             << "Diagnostic should mention 'Non-finite state'; got: " << msg;
-        EXPECT_NE(msg.find("SuperScalar"), std::string::npos)
-            << "Should identify the SuperScalar batch site; got: " << msg;
+        EXPECT_NE(msg.find("ParallelDriver::stepper.step"), std::string::npos)
+            << "Should identify the ParallelDriver stepper site; got: " << msg;
         EXPECT_NE(msg.find("trajectory=1"), std::string::npos)
             << "Should name the offending trajectory index; got: " << msg;
     } catch (...) {

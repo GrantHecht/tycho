@@ -295,25 +295,32 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                     xnext_est_ss.setZero();
                     xnext_mid_ss.setZero();
 
-                    // Seed the Stepper's FSAL cache from packed per-lane
-                    // xdotis. This replaces the per-step ode.compute(xi) for
-                    // FSAL / LastStageIsFxf methods and is harmless for
-                    // non-FSAL methods (the value matches what a fresh
-                    // compute would produce).
-                    stepper_.k_fsal_ = xdotnext_ss;
-                    stepper_.fsal_valid_ = true;
+                    // Seed FSAL only for methods where Stepper actually updates
+                    // k_fsal_ post-step (FSAL or LastStageIsFxf). For methods
+                    // without either — Vern7/8/9 — seed-based reuse would
+                    // silently use stale f(x_prev) on subsequent steps because
+                    // Stepper leaves k_fsal_ unchanged when compute_midpoint
+                    // is false. Force fresh compute in that case, matching
+                    // the legacy integrate_impl_vectorized behavior.
+                    constexpr bool method_does_fsal =
+                        RKCoeffs<Alg>::FSAL || RKCoeffs<Alg>::LastStageIsFxf;
+                    if constexpr (method_does_fsal) {
+                        stepper_.k_fsal_ = xdotnext_ss;
+                        stepper_.fsal_valid_ = true;
+                    } else {
+                        stepper_.fsal_valid_ = false;
+                    }
 
                     stepper_.step(ode, xi_ss, tnext_ss, xnext_ss, xnext_est_ss,
                                   storemidpoints || storederivs, xnext_mid_ss, update_control);
 
-                    // Extract k_fsal_ back to xdotnext_ss so accepted lanes
-                    // propagate f(xf). For Vern* without midpoint, Stepper
-                    // leaves k_fsal_ unchanged — in which case xdotnext_ss
-                    // equals its pre-step value (the seed), which still
-                    // equals f(xi) ≈ f(xf) to first order. The integrator
-                    // recomputes fresh via ode.compute in the mid/deriv
-                    // storage path below.
-                    xdotnext_ss = stepper_.k_fsal_;
+                    // Extract k_fsal_ back to xdotnext_ss for FSAL methods so
+                    // accepted lanes propagate f(xf) to the next step. For
+                    // non-FSAL methods, xdotnext_ss is unchanged — the next
+                    // step will recompute fresh regardless.
+                    if constexpr (method_does_fsal) {
+                        xdotnext_ss = stepper_.k_fsal_;
+                    }
 
                     abs_error_ss =
                         (xnext_ss.head(ode.x_vars()) - xnext_est_ss.head(ode.x_vars())).cwiseAbs();

@@ -19,6 +19,7 @@
 #include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/event_handler.h"
 #include "tycho/detail/integrators/initial_dt.h"
+#include "tycho/detail/integrators/parallel_driver.h"
 #include "tycho/detail/integrators/rk_steppers.h"
 #include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/stepper.h"
@@ -90,6 +91,37 @@ using vf::VecRef;
 using vf::VectorFunction;
 
 // CentralShootingDefect lives in tycho::oc; use the qualified friend below.
+
+/// Dispatch `fn` with a compile-time IVPAlg tag matching the runtime `alg`.
+/// Used by Integrator to turn its runtime rk_method_ selector into a
+/// compile-time Alg parameter for AdaptiveDriver<Alg,...> / ParallelDriver<Alg,...>.
+/// Throws std::logic_error for internal tags that should never reach this
+/// dispatch (RK4Classic, DOPRI5, *Trans). Public-selectable methods map
+/// to their own std::integral_constant<IVPAlg, ...> tag.
+template <class Fn> inline auto with_public_ivp_alg(IVPAlg alg, Fn &&fn) {
+    switch (alg) {
+    case IVPAlg::DOPRI54:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::DOPRI54>{});
+    case IVPAlg::DOPRI87:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::DOPRI87>{});
+    case IVPAlg::Tsit5:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::Tsit5>{});
+    case IVPAlg::BS3:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::BS3>{});
+    case IVPAlg::BS5:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::BS5>{});
+    case IVPAlg::Vern7:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::Vern7>{});
+    case IVPAlg::Vern8:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::Vern8>{});
+    case IVPAlg::Vern9:
+        return fn(std::integral_constant<IVPAlg, IVPAlg::Vern9>{});
+    default:
+        throw std::logic_error(
+            "with_public_ivp_alg: unsupported IVPAlg for adaptive stepping (internal "
+            "transcription tag passed where a public method was expected).");
+    }
+}
 
 template <class DODE>
 struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
@@ -883,231 +915,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                   std::vector<ODEDeriv<double>> &derivs,
                                   ControllerVariant &controller, int &naccept, int &nreject) const {
 
-        if (x.size() != this->ode_.input_rows()) {
-            throw std::invalid_argument("Incorrectly sized input state.");
-        }
+        integrators::AdaptiveConfig cfg{static_cast<int>(this->error_order_),
+                                        this->error_norm_type_,
+                                        this->def_step_size_,
+                                        this->max_step_change_,
+                                        this->max_steps_,
+                                        this->adaptive_,
+                                        this->use_hairer_wanner_initdt_};
 
-        if (this->adaptive_) {
-            this->validate_tolerances_for_adaptive();
-        }
+        auto update_control_fn = [this](auto &s) { this->update_control(s); };
 
-        double t0 = x[this->ode_.t_var()];
-        double H = tf - t0;
-
-        // Zero-interval short-circuit: no step to take. Populate outputs with the
-        // endpoint state (and its derivative / midpoint copies) and return.
-        // Skipping stepper_compute avoids the FSAL / midpoint derivative
-        // reconstruction's divide-by-zero (xdot_prev = k_vals.back() * (1/h) with
-        // h == 0), which would otherwise silently poison `derivs` with NaN.
-        if (H == 0.0) {
-            ODEState<double> xi0 = x;
-            this->update_control(xi0);
-            eventtimes.resize(events.size());
-            for (size_t j = 0; j < events.size(); ++j) {
-                if (std::get<0>(events[j]).input_rows() != this->ode_.input_rows()) {
-                    throw std::invalid_argument(
-                        "Input size of event function must equal input size of ode_.");
-                }
-            }
-            if (storestates) {
-                states.resize(0);
-                derivs.resize(0);
-                ODEDeriv<double> xdoti0(this->ode_.output_rows());
-                xdoti0.setZero();
-                this->ode_.compute(xi0, xdoti0);
-                states.push_back(xi0);
-                if (storederivs)
-                    derivs.push_back(xdoti0);
-                if (storemidpoints) {
-                    states.push_back(xi0);
-                    if (storederivs)
-                        derivs.push_back(xdoti0);
-                }
-                states.push_back(xi0);
-                if (storederivs)
-                    derivs.push_back(xdoti0);
-            }
-            return xi0;
-        }
-
-        double h;
-        int numsteps;
-        if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
-            int order = static_cast<int>(this->error_order_);
-            h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_, this->rel_tols_, order,
-                                    this->error_norm_type_);
-            numsteps = std::max(1, int(std::abs(H / (h == 0 ? 1.0 : h))));
-        } else {
-            numsteps = int(abs(H / this->def_step_size_)) + 1;
-            h = .9 * (H / double(numsteps));
-        }
-
-        ODEState<double> xi = x;
-        this->update_control(xi);
-
-        ODEState<double> xnext = xi;
-        ODEState<double> xnext_est = xi;
-        ODEState<double> xnext_mid = xi;
-
-        ODEDeriv<double> xdoti(this->ode_.output_rows());
-        xdoti.setZero();
-        this->ode_.compute(xi, xdoti);
-        ODEDeriv<double> xdotnext = xdoti;
-
-        std::vector<Vector1<double>> prev_event_vals(events.size());
-        std::vector<Vector1<double>> next_event_vals(events.size());
-
-        for (int j = 0; j < events.size(); j++) {
-            prev_event_vals[j].setZero();
-            next_event_vals[j].setZero();
-
-            if (std::get<0>(events[j]).input_rows() != this->ode_.input_rows()) {
-                throw std::invalid_argument(
-                    "Input size of event function must equal input size of ode_.");
-            }
-
-            std::get<0>(events[j]).compute(xi, prev_event_vals[j]);
-        }
-
-        eventtimes.resize(events.size());
-
-        if (storestates) {
-            states.resize(0);
-            derivs.resize(0);
-            if (storemidpoints) {
-                states.reserve(numsteps * 2 + 2);
-                if (storederivs)
-                    derivs.reserve(numsteps * 2 + 2);
-            } else {
-                states.reserve(numsteps + 2);
-                if (storederivs)
-                    derivs.reserve(numsteps + 2);
-            }
-            states.push_back(xi);
-            if (storederivs)
-                derivs.push_back(xdoti);
-        }
-
-        ODEDeriv<double> abs_error;
-        ODEDeriv<double> abs_error_max;
-        ODEDeriv<double> err_vec;
-
-        int i = 0;
-        bool continueloop = true;
-
-        while (continueloop) {
-            // Julia-style maxiters safety net — bail if the adaptive loop runs
-            // away rather than silently burning CPU. Counts accepted + rejected
-            // step attempts.
-            const int steps_attempted = naccept + nreject;
-            if (steps_attempted >= this->max_steps_) {
-                throw ::std::runtime_error(
-                    "Integrator exceeded max_steps (" + std::to_string(this->max_steps_) +
-                    ") before reaching tf; the adaptive controller may be stuck in a "
-                    "rejection loop. Raise via set_max_steps() or loosen tolerances.");
-            }
-
-            double tnext = xi[this->ode_.t_var()] + h;
-
-            if (H > 0.0) {
-                if ((tnext - tf) >= 0.0) {
-                    h = tf - xi[this->ode_.t_var()];
-                    tnext = tf;
-                    continueloop = false;
-                }
-            } else {
-                if ((tnext - tf) <= 0.0) {
-                    h = tf - xi[this->ode_.t_var()];
-                    tnext = tf;
-                    continueloop = false;
-                }
-            }
-
-            xnext.setZero();
-            xnext_est.setZero();
-            xnext_mid.setZero();
-            xdotnext = xdoti;
-
-            this->stepper_compute(xi, tnext, xnext, xnext_est, xdotnext,
-                                  storemidpoints || storederivs, xnext_mid);
-
-            check_state_finite_or_throw(xnext.head(this->ode_.x_vars()), xi[this->ode_.t_var()], h,
-                                        "stepper_compute (scalar)");
-
-            if (this->adaptive_) {
-                auto u_x_vars = this->ode_.x_vars();
-                auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
-                auto res = scaled_residuals(utilde,
-                                            xi.head(u_x_vars),    // u0 (pre-step)
-                                            xnext.head(u_x_vars), // u1 (post-step)
-                                            this->abs_tols_, this->rel_tols_);
-                double err_norm = error_norm(res, this->error_norm_type_);
-
-                // Guard NaN/Inf from the embedded estimate reaching the controller.
-                // xnext is checked above, but xnext_est can still go non-finite on
-                // its own (pathological tableau cancellation or an intermediate stage
-                // that evaluates into a singularity). Without this guard, pow(NaN, k)
-                // inside the controller returns NaN, accepted=(NaN<=1) is false, and
-                // the loop shrinks h by NaN forever until max_steps trips.
-                if (!std::isfinite(err_norm)) {
-                    throw std::runtime_error(
-                        "Non-finite error norm (" + std::to_string(err_norm) +
-                        ") in adaptive loop at t=" + std::to_string(xi[this->ode_.t_var()]) +
-                        " (h=" + std::to_string(h) +
-                        "); embedded estimate produced NaN/Inf. Check the ODE for "
-                        "intermediate-stage singularities.");
-                }
-
-                auto outcome = std::visit(
-                    [&](auto &c) { return c.update(h, err_norm, this->error_order_, naccept); },
-                    controller);
-                double hnext = outcome.dt_new;
-
-                if (hnext / h > this->max_step_change_)
-                    h *= this->max_step_change_;
-                else if (hnext / h < 1. / this->max_step_change_)
-                    h /= this->max_step_change_;
-                else
-                    h = hnext;
-
-                if (!outcome.accepted) {
-                    nreject++;
-                    continueloop = true;
-                    continue;
-                }
-                naccept++;
-            }
-
-            bool eventbreak = false;
-            if (!events.empty()) {
-                eventbreak = EventHandler::check_crossings(events, prev_event_vals, next_event_vals,
-                                                           xnext, this->ode_.t_var(), eventtimes,
-                                                           xi[this->ode_.t_var()]);
-            }
-
-            xi = xnext;
-            xdoti = xdotnext;
-            prev_event_vals = next_event_vals;
-
-            if (storestates) {
-                if (storemidpoints) {
-                    states.push_back(xnext_mid);
-                    if (storederivs) {
-                        xdotnext.setZero();
-                        this->ode_.compute(xnext_mid, xdotnext);
-                        derivs.push_back(xdotnext);
-                    }
-                }
-                states.push_back(xi);
-                if (storederivs)
-                    derivs.push_back(xdoti);
-            }
-
-            if (eventbreak)
-                break;
-            i++;
-        }
-        return xi;
+        return with_public_ivp_alg(this->rk_method_, [&](auto alg_tag) -> Output<double> {
+            constexpr IVPAlg Alg = alg_tag.value;
+            integrators::AdaptiveDriver<Alg, DODE, double> driver;
+            return driver.integrate(this->ode_, x, tf, cfg, this->abs_tols_, this->rel_tols_,
+                                    controller, naccept, nreject, events, eventtimes, storestates,
+                                    storederivs, storemidpoints, states, derivs, update_control_fn);
+        });
     }
 
     /// Vectorized integrate core — same per-call-state contract as
@@ -1130,359 +954,25 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                               std::vector<ControllerVariant> &controllers, std::vector<int> &nacc,
                               std::vector<int> &nrej) const {
 
-        if (xs.size() != tfs.size()) {
-            throw std::invalid_argument("Number of initial states and final times must match.");
-        }
-        if (xs.size() == 0) {
-            throw std::invalid_argument("Must supply at least one initial state.");
-        }
+        integrators::AdaptiveConfig cfg{static_cast<int>(this->error_order_),
+                                        this->error_norm_type_,
+                                        this->def_step_size_,
+                                        this->max_step_change_,
+                                        this->max_steps_,
+                                        this->adaptive_,
+                                        this->use_hairer_wanner_initdt_};
 
-        if (this->adaptive_) {
-            this->validate_tolerances_for_adaptive();
-        }
+        auto update_control_fn = [this](auto &s) { this->update_control(s); };
 
-        int ntrajs = xs.size();
-
-        // Per-lane plumbing assertions — these are caller-bug indicators,
-        // surfaced loudly rather than producing silently-wrong results.
-        if (static_cast<int>(controllers.size()) != ntrajs) {
-            throw std::invalid_argument("integrate_impl_vectorized: controllers vector size must "
-                                        "equal number of trajectories.");
-        }
-        if (static_cast<int>(nacc.size()) != ntrajs || static_cast<int>(nrej.size()) != ntrajs) {
-            throw std::invalid_argument(
-                "integrate_impl_vectorized: nacc/nrej vector size must equal number of "
-                "trajectories.");
-        }
-
-        Eigen::VectorXd hs(ntrajs);
-        Eigen::VectorXd h_spans(ntrajs);
-        std::vector<ODEState<double>> xis = xs;
-        std::vector<ODEDeriv<double>> xdotis(ntrajs);
-        Eigen::VectorXd tnexts(ntrajs);
-
-        std::vector<std::vector<Vector1<double>>> prev_event_vals_s(ntrajs);
-        std::vector<std::vector<Vector1<double>>> next_event_vals_s(ntrajs);
-
-        for (int i = 0; i < ntrajs; i++) {
-            if (xis[i].size() != this->ode_.input_rows()) {
-                throw std::invalid_argument("Incorrectly sized input state.");
-            }
-            this->update_control(xis[i]);
-
-            double t0 = xis[i][this->ode_.t_var()];
-            h_spans[i] = tfs[i] - t0;
-            int numsteps;
-            if (h_spans[i] == 0.0) {
-                numsteps = 1;
-                hs[i] = 0.0;
-            } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
-                int order = static_cast<int>(this->error_order_);
-                double h_init = estimate_initial_dt(this->ode_, xis[i], tfs[i], this->abs_tols_,
-                                                    this->rel_tols_, order, this->error_norm_type_);
-                hs[i] = h_init;
-                numsteps = std::max(1, int(std::abs(h_spans[i] / (h_init == 0 ? 1.0 : h_init))));
-            } else {
-                numsteps = int(abs(h_spans[i] / this->def_step_size_)) + 1;
-                hs[i] = .9 * (h_spans[i] / double(numsteps));
-            }
-
-            xdotis[i].resize(this->ode_.output_rows());
-            xdotis[i].setZero();
-            this->ode_.compute(xis[i], xdotis[i]);
-
-            prev_event_vals_s[i].resize(events.size());
-            next_event_vals_s[i].resize(events.size());
-
-            for (int j = 0; j < events.size(); j++) {
-                prev_event_vals_s[i][j].setZero();
-                next_event_vals_s[i][j].setZero();
-
-                if (std::get<0>(events[j]).input_rows() != this->ode_.input_rows()) {
-                    throw std::invalid_argument(
-                        "Input size of event function must equal input size of ode_.");
-                }
-
-                std::get<0>(events[j]).compute(xis[i], prev_event_vals_s[i][j]);
-            }
-            if (events.size() > 0) {
-                eventtimes_s[i].resize(events.size());
-            }
-
-            if (storestates) {
-                states_s[i].resize(0);
-                derivs_s[i].resize(0);
-                if (storemidpoints) {
-                    states_s[i].reserve(numsteps * 2 + 2);
-                    if (storederivs)
-                        derivs_s[i].reserve(numsteps * 2 + 2);
-                } else {
-                    states_s[i].reserve(numsteps + 2);
-                    if (storederivs)
-                        derivs_s[i].reserve(numsteps + 2);
-                }
-                states_s[i].push_back(xis[i]);
-                if (storederivs)
-                    derivs_s[i].push_back(xdotis[i]);
-
-                // Zero-interval lane: emulate the main-loop push pattern
-                // (midpoint if requested, then final = initial) here, since
-                // the SIMD loop is about to skip this lane entirely. Without
-                // this, h==0 would reach stepper_compute and corrupt the
-                // batched derivative output with 0 * Inf = NaN.
-                if (h_spans[i] == 0.0) {
-                    if (storemidpoints) {
-                        states_s[i].push_back(xis[i]);
-                        if (storederivs)
-                            derivs_s[i].push_back(xdotis[i]);
-                    }
-                    states_s[i].push_back(xis[i]);
-                    if (storederivs)
-                        derivs_s[i].push_back(xdotis[i]);
-                }
-            }
-        }
-
-        using SuperScalar = tycho::DefaultSuperScalar;
-
-        ODEState<double> xnext(this->ode_.input_rows());
-        ODEState<double> xnext_est(this->ode_.input_rows());
-        ODEState<double> xnext_mid(this->ode_.input_rows());
-        ODEDeriv<double> xdotnext(this->ode_.output_rows());
-
-        ODEState<double> xi(this->ode_.input_rows());
-
-        ODEState<SuperScalar> xi_ss(this->ode_.input_rows());
-
-        ODEState<SuperScalar> xnext_ss(this->ode_.input_rows());
-        ODEState<SuperScalar> xnext_est_ss(this->ode_.input_rows());
-        ODEState<SuperScalar> xnext_mid_ss(this->ode_.input_rows());
-        ODEDeriv<SuperScalar> xdotnext_ss(this->ode_.output_rows());
-        SuperScalar tnext_ss;
-
-        ODEDeriv<double> abs_error(ode_.x_vars());
-        ODEDeriv<double> abs_error_max(ode_.x_vars());
-        ODEDeriv<double> err_vec(ode_.x_vars());
-        ODEDeriv<SuperScalar> abs_error_ss(ode_.x_vars());
-
-        std::vector<bool> continueloops(ntrajs, true);
-
-        // Mark zero-interval lanes as already complete — their outputs were
-        // populated in the per-lane init block above.
-        for (int i = 0; i < ntrajs; ++i) {
-            if (h_spans[i] == 0.0)
-                continueloops[i] = false;
-        }
-
-        int numrunning = 0;
-        int lastrunning = -1;
-        for (int i = 0; i < ntrajs; ++i) {
-            if (continueloops[i]) {
-                numrunning++;
-                lastrunning = i;
-            }
-        }
-
-        if (ntrajs < SuperScalar::SizeAtCompileTime) {
-
-            for (int V = 0; V < SuperScalar::SizeAtCompileTime; V++) {
-                for (int k = 0; k < this->ode_.input_rows(); k++) {
-                    xi_ss[k][V] = xis[0][k];
-                }
-                for (int k = 0; k < this->ode_.output_rows(); k++) {
-                    xdotnext_ss[k][V] = xdotis[0][k];
-                }
-            }
-        }
-
-        while (numrunning > 0) {
-            // Julia-style maxiters safety net — checked per-lane now that
-            // each trajectory carries its own controller and counters.
-            // The first lane to exceed throws with its trajectory index so
-            // a single misbehaving lane does not silently consume the
-            // global cap budget belonging to well-behaved lanes.
-            for (int i = 0; i < ntrajs; ++i) {
-                if (continueloops[i] && nacc[i] + nrej[i] >= this->max_steps_) {
-                    throw ::std::runtime_error(
-                        "Integrator (SuperScalar batch) trajectory " + std::to_string(i) +
-                        " exceeded max_steps (" + std::to_string(this->max_steps_) +
-                        ") before reaching tf; the adaptive controller for this lane may "
-                        "be stuck in a rejection loop. Raise via set_max_steps() or "
-                        "loosen tolerances.");
-                }
-            }
-
-            std::array<int, SuperScalar::SizeAtCompileTime> idxs;
-
-            int V = 0;
-
-            for (int i = 0; i < ntrajs; i++) {
-                if (continueloops[i]) {
-                    double tnext = xis[i][this->ode_.t_var()] + hs[i];
-
-                    if (h_spans[i] > 0.0) {
-                        if ((tnext - tfs[i]) >= 0.0) {
-                            hs[i] = tfs[i] - xis[i][this->ode_.t_var()];
-                            tnext = tfs[i];
-                            continueloops[i] = false;
-                        }
-                    } else {
-                        if ((tnext - tfs[i]) <= 0.0) {
-                            hs[i] = tfs[i] - xis[i][this->ode_.t_var()];
-                            tnext = tfs[i];
-                            continueloops[i] = false;
-                        }
-                    }
-
-                    for (int k = 0; k < this->ode_.input_rows(); k++) {
-                        xi_ss[k][V] = xis[i][k];
-                    }
-                    for (int k = 0; k < this->ode_.output_rows(); k++) {
-                        xdotnext_ss[k][V] = xdotis[i][k];
-                    }
-
-                    idxs[V] = i;
-                    tnext_ss[V] = tnext;
-                    V++;
-
-                    int Vmax = (i == lastrunning) && V != SuperScalar::SizeAtCompileTime
-                                   ? V
-                                   : SuperScalar::SizeAtCompileTime;
-
-                    if (V == Vmax) {
-                        V = 0;
-                        xnext_ss.setZero();
-                        xnext_est_ss.setZero();
-                        xnext_mid_ss.setZero();
-
-                        this->stepper_compute(xi_ss, tnext_ss, xnext_ss, xnext_est_ss, xdotnext_ss,
-                                              storemidpoints || storederivs, xnext_mid_ss);
-
-                        abs_error_ss = (xnext_ss.head(this->ode_.x_vars()) -
-                                        xnext_est_ss.head(this->ode_.x_vars()))
-                                           .cwiseAbs();
-
-                        for (int V = 0; V < Vmax; V++) {
-
-                            int itmp = idxs[V];
-
-                            for (int k = 0; k < this->ode_.input_rows(); k++) {
-                                xnext[k] = xnext_ss[k][V];
-                                xnext_mid[k] = xnext_mid_ss[k][V];
-                            }
-                            for (int k = 0; k < this->ode_.output_rows(); k++) {
-                                xdotnext[k] = xdotnext_ss[k][V];
-                                abs_error[k] = abs_error_ss[k][V];
-                            }
-
-                            check_state_finite_or_throw(
-                                xnext.head(this->ode_.x_vars()), xis[itmp][this->ode_.t_var()],
-                                hs[itmp], "stepper_compute (SuperScalar batch)", itmp);
-
-                            if (this->adaptive_) {
-                                double h = hs[itmp];
-                                auto u_x_vars = this->ode_.x_vars();
-                                // xnext_est_ss is a SIMD container indexed [k][V]; extract lane
-                                // V into a scalar xnext_est so scaled_residuals can operate on
-                                // Eigen segments.
-                                ODEState<double> xnext_est(this->ode_.input_rows());
-                                for (int k = 0; k < this->ode_.input_rows(); k++)
-                                    xnext_est[k] = xnext_est_ss[k][V];
-                                auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
-
-                                auto res =
-                                    scaled_residuals(utilde,
-                                                     xis[itmp].head(u_x_vars), // u0 (pre-step)
-                                                     xnext.head(u_x_vars),     // u1 (post-step)
-                                                     this->abs_tols_, this->rel_tols_);
-                                double err_norm = error_norm(res, this->error_norm_type_);
-
-                                // Per-lane NaN/Inf guard on the error norm (same
-                                // rationale as the scalar path). Names the offending
-                                // trajectory so callers can identify the bad lane.
-                                if (!std::isfinite(err_norm)) {
-                                    throw std::runtime_error(
-                                        "Non-finite error norm (" + std::to_string(err_norm) +
-                                        ") in SuperScalar batch adaptive loop at t=" +
-                                        std::to_string(xis[itmp][this->ode_.t_var()]) +
-                                        " (h=" + std::to_string(hs[itmp]) +
-                                        ") trajectory=" + std::to_string(itmp) +
-                                        "; embedded estimate produced NaN/Inf.");
-                                }
-
-                                // Per-lane controller: each trajectory drives its own
-                                // controller copy and accept/reject counters. Divergent
-                                // batches no longer leak step-cadence state across lanes;
-                                // each lane's behavior matches the equivalent scalar
-                                // integrate() bit-for-bit.
-                                auto outcome = std::visit(
-                                    [&](auto &c) {
-                                        return c.update(h, err_norm, this->error_order_,
-                                                        nacc[itmp]);
-                                    },
-                                    controllers[itmp]);
-                                double hnext = outcome.dt_new;
-
-                                if (hnext / h > this->max_step_change_)
-                                    h *= this->max_step_change_;
-                                else if (hnext / h < 1. / this->max_step_change_)
-                                    h /= this->max_step_change_;
-                                else
-                                    h = hnext;
-
-                                hs[itmp] = h;
-
-                                if (!outcome.accepted) {
-                                    nrej[itmp]++;
-                                    continueloops[itmp] = true;
-                                    continue;
-                                }
-                                nacc[itmp]++;
-                            }
-
-                            bool eventbreak = false;
-                            if (!events.empty()) {
-                                eventbreak = EventHandler::check_crossings(
-                                    events, prev_event_vals_s[itmp], next_event_vals_s[itmp], xnext,
-                                    this->ode_.t_var(), eventtimes_s[itmp],
-                                    xis[itmp][this->ode_.t_var()]);
-                            }
-
-                            xis[itmp] = xnext;
-                            xdotis[itmp] = xdotnext;
-                            prev_event_vals_s[itmp] = next_event_vals_s[itmp];
-
-                            if (storestates) {
-                                if (storemidpoints) {
-                                    states_s[itmp].push_back(xnext_mid);
-                                    if (storederivs) {
-                                        xdotnext.setZero();
-                                        this->ode_.compute(xnext_mid, xdotnext);
-                                        derivs_s[itmp].push_back(xdotnext);
-                                    }
-                                }
-                                states_s[itmp].push_back(xis[itmp]);
-                                if (storederivs)
-                                    derivs_s[itmp].push_back(xdotis[itmp]);
-                            }
-
-                            if (eventbreak)
-                                continueloops[itmp] = false;
-                        }
-                    }
-                }
-            }
-
-            numrunning = 0;
-
-            for (int i = 0; i < ntrajs; i++) {
-                if (continueloops[i]) {
-                    lastrunning = i;
-                    numrunning++;
-                }
-            }
-        }
-        return xis;
+        return with_public_ivp_alg(
+            this->rk_method_, [&](auto alg_tag) -> std::vector<Output<double>> {
+                constexpr IVPAlg Alg = alg_tag.value;
+                integrators::ParallelDriver<Alg, DODE> driver;
+                return driver.integrate(this->ode_, xs, tfs, cfg, this->abs_tols_, this->rel_tols_,
+                                        controllers, nacc, nrej, events, eventtimes_s, storestates,
+                                        storederivs, storemidpoints, states_s, derivs_s,
+                                        update_control_fn);
+            });
     }
 
     /// \name Thread-safe `_core` helpers
@@ -1707,13 +1197,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     std::vector<Jacobian<double>>
     calculate_jacobians(const std::vector<std::vector<ODEState<double>>> &xs_s) const {
-        return STMDriver::calculate_jacobians(this->stepper_, this->ode_, xs_s, this->input_rows(),
-                                              this->output_rows());
+        auto tmp = STMDriver::calculate_jacobians(this->stepper_, this->ode_, xs_s,
+                                                  this->input_rows(), this->output_rows());
+        std::vector<Jacobian<double>> out(tmp.size());
+        for (std::size_t i = 0; i < tmp.size(); ++i)
+            out[i] = tmp[i];
+        return out;
     }
 
     Jacobian<double> calculate_jacobian(const std::vector<ODEState<double>> &xs) const {
-        return STMDriver::calculate_jacobian(this->stepper_, this->ode_, xs, this->input_rows(),
-                                             this->output_rows(), this->enable_vectorization_);
+        Jacobian<double> out;
+        out = STMDriver::calculate_jacobian(this->stepper_, this->ode_, xs, this->input_rows(),
+                                            this->output_rows(), this->enable_vectorization_);
+        return out;
     }
 
     std::tuple<Jacobian<double>, Hessian<double>>
@@ -1725,15 +1221,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 "integrator step); got xs.size() == " +
                 std::to_string(xs.size()) + ".");
         }
-        return STMDriver::calculate_jacobian_hessian(this->stepper_, this->ode_, xs, lf,
-                                                     this->input_rows(), this->output_rows());
+        auto [jx_dyn, hx_dyn] = STMDriver::calculate_jacobian_hessian(
+            this->stepper_, this->ode_, xs, lf, this->input_rows(), this->output_rows());
+        Jacobian<double> jx;
+        Hessian<double> hx;
+        jx = jx_dyn;
+        hx = hx_dyn;
+        return {jx, hx};
     }
 
     std::tuple<std::vector<Jacobian<double>>, std::vector<Hessian<double>>>
     calculate_jacobians_hessians(const std::vector<std::vector<ODEState<double>>> &xs_s,
                                  const std::vector<ODEState<double>> &lf_s) const {
-        return STMDriver::calculate_jacobians_hessians(this->stepper_, this->ode_, xs_s, lf_s,
-                                                       this->input_rows(), this->output_rows());
+        auto [jxs_dyn, hxs_dyn] = STMDriver::calculate_jacobians_hessians(
+            this->stepper_, this->ode_, xs_s, lf_s, this->input_rows(), this->output_rows());
+        std::vector<Jacobian<double>> jxs(jxs_dyn.size());
+        std::vector<Hessian<double>> hxs(hxs_dyn.size());
+        for (std::size_t i = 0; i < jxs_dyn.size(); ++i) {
+            jxs[i] = jxs_dyn[i];
+            hxs[i] = hxs_dyn[i];
+        }
+        return {jxs, hxs};
     }
 
   public:

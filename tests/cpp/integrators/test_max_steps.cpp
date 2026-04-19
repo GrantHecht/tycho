@@ -130,8 +130,8 @@ TEST_F(MaxStepsTest, BatchPathEnforcesCap) {
         std::string msg(e.what());
         EXPECT_NE(msg.find("max_steps"), std::string::npos)
             << "Batch error should mention max_steps; got: " << msg;
-        EXPECT_NE(msg.find("SuperScalar"), std::string::npos)
-            << "Batch error should identify SuperScalar/batch source; got: " << msg;
+        EXPECT_NE(msg.find("ParallelDriver"), std::string::npos)
+            << "Batch error should identify ParallelDriver source; got: " << msg;
     } catch (...) {
         FAIL() << "Expected std::runtime_error from batch path.";
     }
