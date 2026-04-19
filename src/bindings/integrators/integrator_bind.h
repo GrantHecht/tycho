@@ -329,7 +329,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_);
 
-        // SP3 controller + stats + HW-initdt API
+        // Controller + stats + HW-initdt API
         obj.def("set_controller", &Integrator<DODE>::set_controller);
         obj.def("set_controller", [](Integrator<DODE> &self, const std::string &s) {
             self.set_controller(bind::parse_ivp_controller(s));

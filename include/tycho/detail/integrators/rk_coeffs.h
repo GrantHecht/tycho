@@ -18,7 +18,7 @@
 
 namespace tycho {
 
-// RKCoeffs dense-output schema (SP2):
+// RKCoeffs dense-output schema:
 //
 //   Main integration tableau:
 //     Stages         — main integration f-evals per step
@@ -27,7 +27,7 @@ namespace tycho {
 //     FSAL           — last main stage equals next step's first stage
 //     HasMidpoint    — does this method support midpoint dense output?
 //
-//   Dense-output extras (SP2):
+//   Dense-output extras:
 //     InterpStages   — # of *additional* f-evals needed for the method's
 //                      interpolation polynomial, beyond the main Stages.
 //                      0 means "no extras" (Tsit5, BS3, DOPRI54, DOPRI87).
@@ -64,12 +64,12 @@ namespace tycho {
 enum class IVPAlg {
     DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
-    Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive (SP2)
-    BS3,     ///< Bogacki-Shampine 3(2) — 4 stages, FSAL, adaptive (SP2)
-    BS5,     ///< Bogacki-Shampine 5(4) — 8 stages + 3 interp extras (SP2)
-    Vern7,   ///< Verner 7(6) — 10 stages + 6 interp extras (SP2)
-    Vern8,   ///< Verner 8(7) — 13 stages + 8 interp extras (SP2)
-    Vern9,   ///< Verner 9(8) — 16 stages + 10 interp extras (SP2)
+    Tsit5,   ///< Tsitouras 5(4) — 7 stages, FSAL, adaptive
+    BS3,     ///< Bogacki-Shampine 3(2) — 4 stages, FSAL, adaptive
+    BS5,     ///< Bogacki-Shampine 5(4) — 8 stages + 3 interp extras
+    Vern7,   ///< Verner 7(6) — 10 stages + 6 interp extras
+    Vern8,   ///< Verner 8(7) — 13 stages + 8 interp extras
+    Vern9,   ///< Verner 9(8) — 16 stages + 10 interp extras
     /// \internal — template-dispatch tag only, not runtime-selectable.
     /// set_method() throws on this value. Do not expose via bindings.
     RK4Classic,
@@ -134,7 +134,7 @@ template <> struct RKCoeffs<IVPAlg::RK4Classic> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // fixed-step, no dense output
 
-    // SP2 dense-output schema fields — all zero because HasMidpoint=false.
+    // Dense-output schema fields — all zero because HasMidpoint=false.
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
@@ -156,7 +156,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields (no extra interpolation stages — DOPRI54
+    // Dense-output schema fields (no extra interpolation stages — DOPRI54
     // uses its own 5th-order interpolation polynomial over existing main stages).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = FSAL;
@@ -196,7 +196,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
-    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    // Dense-output schema fields — unused (HasMidpoint=false).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
@@ -228,7 +228,7 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields — DOPRI87's last main stage is not f(xf),
+    // Dense-output schema fields — DOPRI87's last main stage is not f(xf),
     // so the midpoint branch must evaluate f(xf) as an extra k-value. No other
     // interpolation stages are needed.
     static constexpr int InterpStages = 0;
@@ -320,7 +320,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields (Tsit5's own 4th-order interpolation
+    // Dense-output schema fields (Tsit5's own 4th-order interpolation
     // polynomial uses only the 7 main stages; no extras needed).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = FSAL;
@@ -377,7 +377,7 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields (BS3 falls back to Hermite cubic in Julia;
+    // Dense-output schema fields (BS3 falls back to Hermite cubic in Julia;
     // no extras needed).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = FSAL;
@@ -422,7 +422,7 @@ template <> struct RKCoeffs<IVPAlg::BS3Trans> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
-    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    // Dense-output schema fields — unused (HasMidpoint=false).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
@@ -456,7 +456,7 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields. BS5's perform_step evaluates k_8 at
+    // Dense-output schema fields. BS5's perform_step evaluates k_8 at
     // (t+h, xf) so k_8 = f(xf); 3 additional stages (k_9, k_10, k_11) needed
     // for the BS5Interp polynomial's dense output.
     static constexpr int InterpStages = 3;
@@ -541,7 +541,7 @@ template <> struct RKCoeffs<IVPAlg::BS5Trans> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
-    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    // Dense-output schema fields — unused (HasMidpoint=false).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
@@ -587,7 +587,7 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
     static constexpr bool HasEmbedded = true;
     static constexpr bool HasMidpoint = true;
 
-    // SP2 dense-output schema fields. The 6 extra stages (k_11..k_16) form the
+    // Dense-output schema fields. The 6 extra stages (k_11..k_16) form the
     // Vern7Interp polynomial. f(xf) is evaluated separately in the midpoint
     // branch to correctly update xdot_prev (required by stepper_compute_impl).
     static constexpr int InterpStages = 6;
@@ -1622,7 +1622,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
     static constexpr bool HasEmbedded = false;
     static constexpr bool HasMidpoint = false; // transcription-only, no dense output
 
-    // SP2 dense-output schema fields — unused (HasMidpoint=false).
+    // Dense-output schema fields — unused (HasMidpoint=false).
     static constexpr int InterpStages = 0;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
@@ -1647,7 +1647,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
 };
 
 // =============================================================================
-// Compile-time tableau invariants (SP3 review hardening)
+// Compile-time tableau invariants (Review hardening)
 //
 // These checks catch authoring typos in any RKCoeffs specialization at
 // compile time, without any runtime cost. Each user-selectable method
@@ -1668,10 +1668,10 @@ namespace detail {
 
 constexpr double rk_constexpr_abs(double x) { return x < 0 ? -x : x; }
 
-template <std::size_t N>
-constexpr double rk_array_sum(const std::array<double, N> &arr) {
+template <std::size_t N> constexpr double rk_array_sum(const std::array<double, N> &arr) {
     double s = 0.0;
-    for (std::size_t i = 0; i < N; ++i) s += arr[i];
+    for (std::size_t i = 0; i < N; ++i)
+        s += arr[i];
     return s;
 }
 
@@ -1687,7 +1687,7 @@ constexpr double kRKWeightTol = 1e-9;
 
 #define TYCHO_VALIDATE_RK_TABLEAU(ALG, NAME)                                                       \
     static_assert(RKCoeffs<IVPAlg::ALG>::BmidStages ==                                             \
-                      RKCoeffs<IVPAlg::ALG>::Stages + RKCoeffs<IVPAlg::ALG>::InterpStages +       \
+                      RKCoeffs<IVPAlg::ALG>::Stages + RKCoeffs<IVPAlg::ALG>::InterpStages +        \
                           (RKCoeffs<IVPAlg::ALG>::LastStageIsFxf ? 0 : 1),                         \
                   NAME ": BmidStages must equal Stages + InterpStages + "                          \
                        "(LastStageIsFxf ? 0 : 1).");                                               \

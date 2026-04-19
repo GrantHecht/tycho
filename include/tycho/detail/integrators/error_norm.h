@@ -27,7 +27,8 @@ namespace tycho::integrators {
 template <class Derived>
 inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, double t, double h,
                                         const char *site, int trajectory_idx = -1) {
-    if (v.allFinite()) return;
+    if (v.allFinite())
+        return;
     Eigen::Index bad = -1;
     for (Eigen::Index i = 0; i < v.size(); ++i) {
         if (!std::isfinite(static_cast<double>(v[i]))) {
@@ -38,7 +39,8 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
     std::string msg = "Non-finite state produced by ";
     msg += site;
     msg += " at t=" + std::to_string(t) + " (h=" + std::to_string(h) + ")";
-    if (trajectory_idx >= 0) msg += " trajectory=" + std::to_string(trajectory_idx);
+    if (trajectory_idx >= 0)
+        msg += " trajectory=" + std::to_string(trajectory_idx);
     msg += "; first non-finite component index = " + std::to_string(bad);
     msg += ". This usually indicates the ODE produced NaN/Inf in its derivative; "
            "check the dynamics at this state for divisions by zero, sqrt of negatives, "
@@ -49,7 +51,7 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
 /// Error norm kind applied to scaled residuals.
 ///
 ///   RMS — sqrt(sum(res_i²) / n) — Julia's ODE_DEFAULT_NORM (default).
-///   MAX — max_i |res_i| — Tycho's pre-SP3 default.
+///   MAX — max_i |res_i| — Tycho's legacy default.
 ///
 /// Julia reference: ~/.julia/packages/DiffEqBase/.../common_defaults.jl
 /// (`ODE_DEFAULT_NORM` for arrays is RMS).
@@ -60,8 +62,8 @@ enum class ErrorNormType { RMS, MAX };
 ///   res_i = ũ_i / (α_i + max(|u₀_i|, |u₁_i|) · ρ_i)
 ///
 /// where α is abs_tols, ρ is rel_tols, u₀ is the pre-step state, u₁ the post-step
-/// state. Pre-SP3 Tycho used `|u₁|` alone in the denominator; aligning with Julia
-/// is the SP3 change.
+/// state. Tycho originally used `|u₁|` alone in the denominator; aligning with Julia
+/// aligned Tycho with the Julia convention.
 ///
 /// Julia reference: ~/.julia/packages/DiffEqBase/.../calculate_residuals.jl:9-14
 template <class Derived1, class Derived2, class Derived3, class Derived4, class Derived5>

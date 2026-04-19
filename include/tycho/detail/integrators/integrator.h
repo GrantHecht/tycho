@@ -449,7 +449,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     double step_frac_ = .9;
     double err_pow_fac_ = 1;
 
-    // SP3 controller variant — selected per algorithm in set_method, overrideable
+    // Controller variant — selected per algorithm in set_method, overrideable
     // via set_controller(). Read-only during integrate calls: public wrappers
     // and parallel workers clone from this prototype into a local
     // `ControllerVariant` per call and operate on the local. Only
@@ -465,7 +465,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// prototype and reset internal state so it starts from first-step
     /// semantics. Every integrate / integrate_*_core / parallel path uses
     /// this pattern; centralizing avoids the "forgot the reset()" class of
-    /// bug that surfaced during the SP3 per-lane work (see commit ce4709b).
+    /// bug that surfaced during the per-lane controller work (see commit ce4709b).
     ControllerVariant make_worker_controller() const {
         ControllerVariant c = this->controller_variant_;
         std::visit([](auto &cc) { cc.reset(); }, c);
@@ -492,7 +492,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // start of each call (see :1554-area).
     mutable int n_failed_event_refinements_ = 0;
 
-    // SP3 Hairer-Wanner initial-dt toggle. Default-on. An explicit
+    // Hairer-Wanner initial-dt toggle. Default-on. An explicit
     // set_initial_step_size() call flips it off so a user-supplied initial
     // step is respected (principle of least surprise). Constructors set
     // def_step_size_ directly and leave HW enabled.
