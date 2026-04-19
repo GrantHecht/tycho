@@ -48,6 +48,8 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     typename DODE::template Output<double> f0(ode.output_rows());
     f0.setZero();
     ode.compute(x0, f0);
+    check_state_finite_or_throw(f0.head(n), t0, 0.0,
+                                "ode.compute (Hairer-Wanner initial-dt: f(x0))");
 
     Eigen::VectorXd scaled0(n), scaled1(n);
     for (int i = 0; i < n; ++i) {
@@ -73,6 +75,8 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     typename DODE::template Output<double> f1(ode.output_rows());
     f1.setZero();
     ode.compute(x1, f1);
+    check_state_finite_or_throw(f1.head(n), t0 + tdir * dt0, dt0,
+                                "ode.compute (Hairer-Wanner initial-dt: f(x1))");
 
     for (int i = 0; i < n; ++i) {
         scaled1[i] = (f1[i] - f0[i]) / sk[i];

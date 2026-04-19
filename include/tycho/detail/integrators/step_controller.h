@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 namespace tycho::integrators {
 
@@ -33,6 +35,23 @@ enum class IVPController {
     PID, // Proportional-integral-derivative controller (Julia: PIDController)
 };
 
+namespace detail {
+
+/// Build a "field must satisfy CONDITION; got VALUE" message.
+inline std::string controller_invariant_msg(const char *controller, const char *field,
+                                            const char *condition, double value) {
+    std::string msg = controller;
+    msg += ": ";
+    msg += field;
+    msg += " must ";
+    msg += condition;
+    msg += "; got ";
+    msg += std::to_string(value);
+    return msg;
+}
+
+} // namespace detail
+
 // -----------------------------------------------------------------------------
 // I controller — Julia form
 // -----------------------------------------------------------------------------
@@ -45,6 +64,13 @@ enum class IVPController {
 /// algorithm). On the first step, `qmax_first_step` replaces `qmax` to allow
 /// a very large dt increase after initial-dt estimation. On reject, the
 /// same formula runs but the step is not committed; the outer loop retries.
+///
+/// Tuning knobs and internal state both follow the project's
+/// `snake_case_` trailing-underscore convention for publicly mutable
+/// member fields. Accidental mid-integration mutation of `qold_` will
+/// tear the controller's tracking — call reset() to clear cleanly.
+/// Misconfigured tuning knobs are caught by validate() at install time
+/// rather than producing silently-bad step cadence inside the loop.
 ///
 /// Julia reference:
 ///   ~/.julia/packages/OrdinaryDiffEqCore/.../controllers.jl:171-199 (legacy)
@@ -59,6 +85,29 @@ struct IController {
 
     // Internal state
     double qold_ = 1.0;
+
+    /// Throws std::invalid_argument if any tuning knob violates its
+    /// invariant. Called by Integrator::set_controller at install time so
+    /// misconfiguration is surfaced before the integration loop starts
+    /// (rather than producing silently-wrong step cadence). Cheap one-shot
+    /// check — not on the hot path.
+    void validate() const {
+        if (!(gamma > 0.0 && gamma <= 1.0))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "IController", "gamma", "lie in (0, 1]", gamma));
+        if (!(qmin > 0.0 && qmin < 1.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("IController", "qmin", "lie in (0, 1)", qmin));
+        if (!(qmax > 1.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("IController", "qmax", "be > 1", qmax));
+        if (!(qmax_first_step >= qmax))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "IController", "qmax_first_step", "be >= qmax", qmax_first_step));
+        if (!(qsteady_min <= qsteady_max))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "IController", "qsteady_min", "be <= qsteady_max", qsteady_min));
+    }
 
     ControllerOutput update(double h, double err_norm, int order, int naccept) {
         double eff_qmax = (naccept == 0) ? qmax_first_step : qmax;
@@ -118,6 +167,33 @@ struct PIController {
     double errold_ = 1.0e-4;
     double q11_ = 1.0;
 
+    void validate() const {
+        if (!(beta1 >= 0.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "beta1", "be >= 0", beta1));
+        if (!(beta2 >= 0.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "beta2", "be >= 0", beta2));
+        if (!(gamma > 0.0 && gamma <= 1.0))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIController", "gamma", "lie in (0, 1]", gamma));
+        if (!(qmin > 0.0 && qmin < 1.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "qmin", "lie in (0, 1)", qmin));
+        if (!(qmax > 1.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "qmax", "be > 1", qmax));
+        if (!(qmax_first_step >= qmax))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIController", "qmax_first_step", "be >= qmax", qmax_first_step));
+        if (!(qsteady_min <= qsteady_max))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIController", "qsteady_min", "be <= qsteady_max", qsteady_min));
+        if (!(qoldinit > 0.0))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIController", "qoldinit", "be > 0", qoldinit));
+    }
+
     ControllerOutput update(double h, double err_norm, int /*order*/, int naccept) {
         double eff_qmax = (naccept == 0) ? qmax_first_step : qmax;
         double q;
@@ -176,6 +252,24 @@ struct PIDController {
     // Internal state: error history ε₁..ε₃ (= 1/EEst), and previous dt_factor
     std::array<double, 3> err_ = {1.0, 1.0, 1.0};
     double qold_ = 1.0;
+
+    void validate() const {
+        if (!(beta1 >= 0.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIDController", "beta1", "be >= 0", beta1));
+        if (!(beta2 >= 0.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIDController", "beta2", "be >= 0", beta2));
+        if (!(beta3 >= 0.0))
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIDController", "beta3", "be >= 0", beta3));
+        if (!(accept_safety > 0.0 && accept_safety <= 1.0))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIDController", "accept_safety", "lie in (0, 1]", accept_safety));
+        if (!(qsteady_min <= qsteady_max))
+            throw std::invalid_argument(detail::controller_invariant_msg(
+                "PIDController", "qsteady_min", "be <= qsteady_max", qsteady_min));
+    }
 
     static double default_limiter(double x) { return 1.0 + std::atan(x - 1.0); }
 

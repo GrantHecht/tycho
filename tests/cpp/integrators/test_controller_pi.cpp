@@ -113,3 +113,35 @@ TEST(PIControllerTest, QsteadyDeadbandSnapsToOne) {
     // q = 0.9^0.17 / 1.0^0.04 / 0.9 ≈ 0.982 / 0.9 ≈ 1.091 → in [0.5, 2.0] → snaps to 1
     EXPECT_NEAR(out.dt_new, 0.1, 1e-12);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Clamp paths — exercise the qmax growth ceiling and the qmin shrink floor
+// on the accept branch. The common path does not hit either clamp; previous
+// coverage only exercised them via err_norm == 0 (degenerate). These tests
+// pin both clamps with realistic err_norm values.
+///////////////////////////////////////////////////////////////////////////////
+TEST(PIControllerTest, QmaxGrowthClampHitsOnTinyError) {
+    PIController c = dopri54_defaults();
+    c.errold_ = 1.0; // neutralize the proportional history term
+    // Tiny err_norm → q_raw very small → clamped to 1/qmax → dt_new = h * qmax
+    auto out = c.update(/*h=*/0.1, /*err_norm=*/1.0e-12, /*order=*/4, /*naccept=*/5);
+    EXPECT_TRUE(out.accepted);
+    EXPECT_NEAR(out.dt_new, 0.1 * c.qmax, 1e-12)
+        << "Expected dt_new clamped to h * qmax via the lower 1/qmax clip on q.";
+    EXPECT_NEAR(out.q, 1.0 / c.qmax, 1e-12) << "Output q should reflect the clamp value.";
+}
+
+TEST(PIControllerTest, QminShrinkClampHitsOnAccept) {
+    PIController c = dopri54_defaults();
+    // Set errold microscopic so q11/errold^beta2 blows past 1/qmin even after
+    // gamma scaling. With beta2=0.04 the dependence is weak, so we need an
+    // extreme errold to clear the clamp threshold.
+    //   q_pre = (err_norm^beta1 / errold^beta2) / gamma must exceed 1/qmin = 5.
+    c.errold_ = 1.0e-50;
+    auto out = c.update(/*h=*/0.1, /*err_norm=*/0.95, /*order=*/4, /*naccept=*/5);
+    ASSERT_TRUE(out.accepted) << "err_norm < 1 should accept";
+    // q is clamped to 1/qmin → dt_new = h * qmin (the maximum permitted shrink).
+    EXPECT_NEAR(out.dt_new, 0.1 * c.qmin, 1e-12)
+        << "Expected dt_new floored at h * qmin via the upper 1/qmin clip on q.";
+    EXPECT_NEAR(out.q, 1.0 / c.qmin, 1e-12);
+}

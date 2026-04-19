@@ -87,9 +87,15 @@ template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struc
         ode.compute(xi, xdoti);
         ODEDeriv xdotnext = xdoti;
 
-        // Initialize FSAL with the derivative at x0
-        stepper_.k_fsal_ = xdoti;
-        stepper_.fsal_valid_ = true;
+        // Do NOT pre-init stepper_.fsal_valid_ = true. For FSAL methods, the
+        // first stepper.step() call will compute f(x0) into k[0] (no-FSAL
+        // branch) and write k_fsal_ = f(xf) at end-of-step (FSAL branch in
+        // stepper.h:82-85). Subsequent steps then use FSAL automatically.
+        // Pre-init was a latent foot-gun for non-FSAL methods because
+        // stepper.h:109 (non-FSAL + midpoint) writes k_fsal_ but did not
+        // set fsal_valid_=true; that omission is fixed in stepper.h
+        // alongside this change. Cost: one extra ode.compute on the first
+        // step of any integration — amortized over the full run.
 
         // Event state
         std::vector<Vector1<double>> prev_event_vals(events.size());

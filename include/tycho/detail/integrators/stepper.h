@@ -107,6 +107,14 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
                     xtup.template segment<DODE::XV>(0, ode.x_vars()) +=
                         Scalar(RKData::Bmid.back() / 2.0) * k_vals.back() * h;
                     k_fsal_ = k_vals.back();
+                    // Intentionally do NOT set fsal_valid_=true here. Although
+                    // k_fsal_ now holds f(xf), promoting it to a FSAL seed
+                    // would silently corrupt direct Stepper callers that issue
+                    // the next step() call against a different x0 (the stale
+                    // f(xf_prev) would be used as k[0]). Coordinated callers
+                    // such as Integrator/AdaptiveDriver — which always pass
+                    // xi == prev xf — can opt in by setting stepper.fsal_valid_
+                    // themselves after the call.
                 }
                 update_control(xtup);
                 xf_mid = xtup;

@@ -106,6 +106,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_parallel_stm_errors.cpp
     integrators/test_integrator_parallel.cpp
     integrators/test_stepper.cpp
+    integrators/test_max_steps.cpp
+    integrators/test_nan_propagation.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp
@@ -266,6 +268,7 @@ set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_initial_dt.cpp
     integrators/test_adaptive_driver_compile.cpp
     integrators/test_julia_parity.cpp
+    integrators/test_method_interpolation.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE

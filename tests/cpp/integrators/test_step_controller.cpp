@@ -74,3 +74,104 @@ TEST(StepControllerTest, JuliaForm_ResetClearsState) {
     EXPECT_TRUE(out.accepted);
     EXPECT_NEAR(out.dt_new, 0.1 * ctrl.qmax_first_step, 1e-6);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// validate() rejects misconfiguration before it can produce silently-bad
+// step cadence. Each branch covers one invariant per controller kind.
+///////////////////////////////////////////////////////////////////////////////
+TEST(StepControllerTest, IControllerValidateRejectsBadConfig) {
+    using tycho::integrators::IController;
+    {
+        IController c;
+        c.gamma = 0.0; // gamma must be > 0
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.gamma = 1.5; // gamma must be <= 1
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.qmin = 0.0; // qmin must be > 0
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.qmin = 1.5; // qmin must be < 1
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.qmax = 0.5; // qmax must be > 1
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.qmax = 100.0;
+        c.qmax_first_step = 50.0; // must be >= qmax
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c;
+        c.qsteady_min = 2.0;
+        c.qsteady_max = 1.0; // must be >= qsteady_min
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        IController c; // defaults must be valid
+        EXPECT_NO_THROW(c.validate());
+    }
+}
+
+TEST(StepControllerTest, PIControllerValidateRejectsBadConfig) {
+    using tycho::integrators::PIController;
+    {
+        PIController c;
+        c.beta1 = -1.0;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIController c;
+        c.beta2 = -0.5;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIController c;
+        c.qoldinit = 0.0; // used as denominator, must be > 0
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIController c; // defaults must be valid
+        EXPECT_NO_THROW(c.validate());
+    }
+}
+
+TEST(StepControllerTest, PIDControllerValidateRejectsBadConfig) {
+    using tycho::integrators::PIDController;
+    {
+        PIDController c;
+        c.beta3 = -0.1;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIDController c;
+        c.accept_safety = 0.0;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIDController c;
+        c.accept_safety = 1.5;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIDController c;
+        c.qsteady_min = 2.0;
+        c.qsteady_max = 1.0;
+        EXPECT_THROW(c.validate(), std::invalid_argument);
+    }
+    {
+        PIDController c; // defaults must be valid
+        EXPECT_NO_THROW(c.validate());
+    }
+}

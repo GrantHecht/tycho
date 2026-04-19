@@ -425,6 +425,32 @@ class test_Integrators(unittest.TestCase):
                     maxerr, errtol, "Integration Error exceeds expected maximum"
                 )
 
+    def test_StopFuncExceptionPropagates(self):
+        """Pin the contract that a Python `stop_func` raising an exception
+        propagates to the caller as a Python exception (NOT a silent
+        truthy stop). The PR review flagged this as a possible silent-
+        failure in the integrator_bind.h `pyfunc(x).ptr()` path; this
+        test confirms nanobind's nb::python_error propagation makes the
+        concern moot. If a future binding rewrite breaks propagation,
+        this test will catch it.
+        """
+        ode = ast.Astro.Kepler.ode(1.0)
+        integ = ode.integrator(0.01)
+        integ.set_abs_tol(1.0e-10)
+
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.0
+
+        sentinel = "user-injected stop_func failure"
+
+        def bad_stop(_x):
+            raise ValueError(sentinel)
+
+        with self.assertRaises(ValueError) as ctx:
+            integ.integrate_dense(X0, 5.0, 100, bad_stop)
+        self.assertIn(sentinel, str(ctx.exception))
+
     def test_BatchCalls2(self):
 
         kprop = ast.Astro.Kepler.KeplerPropagator(1.0)  # Ground Truth

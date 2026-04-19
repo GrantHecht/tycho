@@ -6,8 +6,45 @@
 
 #include <Eigen/Core>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 namespace tycho::integrators {
+
+/// Throw a descriptive runtime_error if any element of `v` is non-finite.
+///
+/// `site` names the production site (e.g. "stepper_compute"); `t` is the
+/// current independent-variable value; `h` is the step size in flight.
+/// `trajectory_idx` should be set to the lane/trajectory index in batch
+/// paths, or left at -1 for the scalar path.
+///
+/// The check is unconditional: there is no opt-out. Cost is one fused
+/// vectorized scan (~size * 1ns); for typical state sizes this is
+/// well below 0.1% of step time. The check exists to convert silent
+/// NaN-driven step rejection (which would otherwise march to the
+/// max_steps cap with a generic "stuck" error) into an immediate,
+/// localized diagnostic naming the offending state component.
+template <class Derived>
+inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, double t, double h,
+                                        const char *site, int trajectory_idx = -1) {
+    if (v.allFinite()) return;
+    Eigen::Index bad = -1;
+    for (Eigen::Index i = 0; i < v.size(); ++i) {
+        if (!std::isfinite(static_cast<double>(v[i]))) {
+            bad = i;
+            break;
+        }
+    }
+    std::string msg = "Non-finite state produced by ";
+    msg += site;
+    msg += " at t=" + std::to_string(t) + " (h=" + std::to_string(h) + ")";
+    if (trajectory_idx >= 0) msg += " trajectory=" + std::to_string(trajectory_idx);
+    msg += "; first non-finite component index = " + std::to_string(bad);
+    msg += ". This usually indicates the ODE produced NaN/Inf in its derivative; "
+           "check the dynamics at this state for divisions by zero, sqrt of negatives, "
+           "or other ill-defined operations.";
+    throw std::runtime_error(msg);
+}
 
 /// Error norm kind applied to scaled residuals.
 ///

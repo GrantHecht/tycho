@@ -92,3 +92,47 @@ TEST(PIDControllerTest, ResetRestoresInitialState) {
     EXPECT_NEAR(c.err_[2], 1.0, 1e-15);
     EXPECT_NEAR(c.qold_, 1.0, 1e-15);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// β₃ ≠ 0 path — H312PID variant. Covers the third-derivative term that
+// H211PI defaults zero out. Pre-coverage relied on β₃=0 making err_[2]^0=1
+// implicitly, so a sign error in the β₃ exponent or in err_[2]'s update
+// would have gone unnoticed.
+//
+// Scenario: H312PID-like (β₁=1/18, β₂=1/9, β₃=1/18). Drive three accepts
+// with controlled err_norm history, then validate that step 3's factor
+// matches the closed-form ε₁^(β₁/k) · ε₂^(β₂/k) · ε₃^(β₃/k) (post-limiter).
+///////////////////////////////////////////////////////////////////////////////
+TEST(PIDControllerTest, Beta3NonZero_H312PID_FactorMatchesClosedForm) {
+    PIDController c;
+    c.beta1 = 1.0 / 18.0;
+    c.beta2 = 1.0 / 9.0;
+    c.beta3 = 1.0 / 18.0; // exercises the third-derivative term
+    c.accept_safety = 0.81;
+
+    int order = 5;
+    double k = order + 1.0;
+
+    // Step 1: err_norm = 0.5 → err_[0] := 2.0; history shifted (err_[2]:=1, err_[1]:=2)
+    c.update(0.1, 0.5, order, 0);
+    // Step 2: err_norm = 0.4 → err_[0] := 2.5; history shifted (err_[2]:=2, err_[1]:=2.5)
+    c.update(0.1, 0.4, order, 1);
+
+    // Capture the history we expect to feed step 3.
+    double err1_pre = c.err_[1]; // 2.5  (from step 2's err_[0])
+    double err2_pre = c.err_[2]; // 2.0  (from step 1's err_[0])
+
+    // Step 3: err_norm = 0.6 → err_[0] := 1/0.6
+    double h = 0.05;
+    double en3 = 0.6;
+    auto out = c.update(h, en3, order, 2);
+    double err0_post = 1.0 / en3;
+
+    double factor = std::pow(err0_post, c.beta1 / k) * std::pow(err1_pre, c.beta2 / k) *
+                    std::pow(err2_pre, c.beta3 / k);
+    factor = PIDController::default_limiter(factor);
+
+    EXPECT_TRUE(out.accepted) << "factor " << factor << " should clear accept_safety";
+    EXPECT_NEAR(out.dt_new, h * factor, 1e-13)
+        << "Step 3 factor must include the β₃ contribution from err_[2].";
+}

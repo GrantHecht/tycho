@@ -65,3 +65,27 @@ TEST(InitialDtTest, SmallProblemReturnsSmallDt) {
     EXPECT_GT(dt0, 0.0);
     EXPECT_LT(dt0, 2.0);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Step-size guard regressions — pin the <= 0.0 tightening that closed the
+// fixed-step divide-by-zero hole (def_step_size_ == 0 with HW-initdt
+// disabled would otherwise crash deep in integrate_impl).
+///////////////////////////////////////////////////////////////////////////////
+TEST(InitialDtTest, ConstructorRejectsZeroStep) {
+    tycho::astro::Kepler kep(1.0);
+    EXPECT_THROW(tycho::integrators::Integrator<tycho::astro::Kepler>(kep, tycho::integrators::IVPAlg::DOPRI87, 0.0),
+                 std::invalid_argument);
+    EXPECT_THROW(tycho::integrators::Integrator<tycho::astro::Kepler>(kep, tycho::integrators::IVPAlg::DOPRI87, -1.0),
+                 std::invalid_argument);
+}
+
+TEST(InitialDtTest, SetInitialStepSizeRejectsZero) {
+    tycho::astro::Kepler kep(1.0);
+    tycho::integrators::Integrator<tycho::astro::Kepler> integ(kep, tycho::integrators::IVPAlg::DOPRI87, 0.01);
+    EXPECT_THROW(integ.set_initial_step_size(0.0), std::invalid_argument);
+    EXPECT_THROW(integ.set_initial_step_size(-0.5), std::invalid_argument);
+
+    // A positive value succeeds and disables the HW auto-initdt.
+    integ.set_initial_step_size(0.25);
+    EXPECT_FALSE(integ.get_auto_initial_dt());
+}

@@ -344,6 +344,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         obj.def("get_naccept", &Integrator<DODE>::get_naccept);
         obj.def("get_nreject", &Integrator<DODE>::get_nreject);
+        obj.def("get_failed_event_count", &Integrator<DODE>::get_failed_event_count);
 
         obj.def("set_auto_initial_dt", &Integrator<DODE>::set_auto_initial_dt);
         obj.def("get_auto_initial_dt", &Integrator<DODE>::get_auto_initial_dt);

@@ -1,0 +1,170 @@
+///////////////////////////////////////////////////////////////////////////////
+// max_steps cap unit tests
+//
+// Pins the Julia-style maxiters safety net introduced in commit 3ea0c35
+// (which removed the legacy min/max-dt clamps in favor of this cap). The
+// cap is the only runaway guard left after the clamp removal; without
+// these tests an off-by-one or accidental disable would silently regress.
+//
+// Covers:
+//   1. Runaway adaptive loop trips the cap with a useful error message.
+//   2. set_max_steps rejects n <= 0 with std::invalid_argument.
+//   3. SuperScalar batch path also enforces the cap (separate code path
+//      with its own throw site at integrate_impl_vectorized).
+//   4. Boundary check: a `max_steps` slightly above the natural step count
+//      lets integration succeed (no off-by-one false positive).
+///////////////////////////////////////////////////////////////////////////////
+
+#include "integrator_test_utils.h"
+#include <gtest/gtest.h>
+
+#include <Eigen/Core>
+#include <cmath>
+#include <numbers>
+#include <vector>
+
+using namespace tycho;
+using namespace TychoTest;
+
+namespace {
+
+// Inlined Kepler helpers so this file does not depend on the
+// regression_utils.h include path (which is not on the heavy test target's
+// include search list).
+constexpr double kMuEarth = 398600.4418;
+
+inline Eigen::VectorXd leo_x0() {
+    constexpr double r0 = 7000.0;
+    const double v0 = std::sqrt(kMuEarth / r0);
+    Eigen::VectorXd x0(7);
+    x0 << r0, 0.0, 0.0, 0.0, v0, 0.0, 0.0;
+    return x0;
+}
+
+inline double leo_period() {
+    constexpr double r0 = 7000.0;
+    return 2.0 * std::numbers::pi * std::sqrt(r0 * r0 * r0 / kMuEarth);
+}
+
+} // namespace
+
+class MaxStepsTest : public VectorFunctionFixture {};
+
+///////////////////////////////////////////////////////////////////////////////
+// Forces a runaway by demanding an impossible tolerance — every step rejects,
+// the controller shrinks dt, and the loop runs to the cap. Asserts the throw
+// type, message content, and that it fires at the cap rather than silently
+// timing out.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, ThrowsOnRunawayWithDiagnosticMessage) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-30); // Unattainable in double precision.
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+
+    auto x0 = leo_x0();
+    double tf = leo_period();
+
+    try {
+        integ.integrate(x0, tf);
+        FAIL() << "Expected runtime_error from max_steps cap, but integration succeeded.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("max_steps"), std::string::npos)
+            << "Error message should mention max_steps; got: " << msg;
+        EXPECT_NE(msg.find("50"), std::string::npos)
+            << "Error message should include the cap value; got: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error, got a different exception type.";
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// set_max_steps must reject zero and negative values at API entry, before
+// any integration runs (cheaper to surface misconfiguration here than at
+// the throw site inside the loop).
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, SetMaxStepsRejectsNonPositive) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+
+    EXPECT_THROW(integ.set_max_steps(0), std::invalid_argument);
+    EXPECT_THROW(integ.set_max_steps(-1), std::invalid_argument);
+    EXPECT_THROW(integ.set_max_steps(-100000), std::invalid_argument);
+
+    // Sanity: a positive value succeeds and is round-trippable.
+    integ.set_max_steps(123);
+    EXPECT_EQ(integ.get_max_steps(), 123);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// The SIMD batch path (integrate_impl_vectorized) has its own cap-check
+// site and emits a batch-specific error message. A regression that disabled
+// only the scalar check would slip through without this case.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, BatchPathEnforcesCap) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-30);
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+    integ.vectorize_batch_calls_ = true;
+
+    using KeplerState = Integrator<astro::Kepler>::IntegRet;
+    auto x0_dyn = leo_x0();
+    KeplerState x0;
+    for (int i = 0; i < x0.size(); ++i)
+        x0[i] = x0_dyn[i];
+
+    constexpr int N = 4;
+    std::vector<KeplerState> x0s(N, x0);
+    Eigen::VectorXd tfs(N);
+    for (int i = 0; i < N; ++i)
+        tfs[i] = leo_period();
+
+    try {
+        integ.integrate(x0s, tfs);
+        FAIL() << "Expected runtime_error from batch max_steps cap.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("max_steps"), std::string::npos)
+            << "Batch error should mention max_steps; got: " << msg;
+        EXPECT_NE(msg.find("SuperScalar"), std::string::npos)
+            << "Batch error should identify SuperScalar/batch source; got: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error from batch path.";
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Off-by-one regression: pick a problem whose adaptive run completes in
+// well under the cap, set max_steps to the natural count plus a safety
+// margin, and confirm integration succeeds. A future change that throws
+// when steps_attempted == max_steps_ rather than > would fail this case.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-12);
+    integ.set_rel_tol(1.0e-13);
+
+    auto x0 = leo_x0();
+    double tf = leo_period() / 4.0;
+
+    // First, learn the natural step count for this configuration.
+    auto xf_unbounded = integ.integrate(x0, tf);
+    int natural = integ.get_naccept() + integ.get_nreject();
+    ASSERT_GT(natural, 0);
+
+    // Now cap at exactly the natural count — must still succeed. The cap
+    // check runs at the top of each iteration and the final step exits
+    // via continueloop=false before re-entering the check.
+    integ.set_max_steps(natural);
+    auto xf_capped = integ.integrate(x0, tf);
+
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(xf_unbounded[i], xf_capped[i])
+            << "Bounded run must be bit-identical to unbounded for component " << i;
+    }
+}

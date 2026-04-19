@@ -1646,4 +1646,78 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
     static constexpr std::array<double, 6> Bhat = {0, 0, 0, 0, 0, 0}; // unused
 };
 
+// =============================================================================
+// Compile-time tableau invariants (SP3 review hardening)
+//
+// These checks catch authoring typos in any RKCoeffs specialization at
+// compile time, without any runtime cost. Each user-selectable method
+// must satisfy:
+//   1. BmidStages == Stages + InterpStages + (LastStageIsFxf ? 0 : 1)
+//      (the documented schema invariant — see header comment at top of
+//      file)
+//   2. |Σ B[i] - 1| < 1e-13 — main weight vector consistency.
+//   3. |Σ Bmid[i] - 1| < 1e-13 — midpoint weights consistency
+//      (only checked when HasMidpoint is true).
+//
+// The constexpr helpers below allow the static_asserts to read directly
+// from each RKCoeffs<Alg> specialization. A failed assert names the
+// offending method.
+// =============================================================================
+
+namespace detail {
+
+constexpr double rk_constexpr_abs(double x) { return x < 0 ? -x : x; }
+
+template <std::size_t N>
+constexpr double rk_array_sum(const std::array<double, N> &arr) {
+    double s = 0.0;
+    for (std::size_t i = 0; i < N; ++i) s += arr[i];
+    return s;
+}
+
+// Tolerance is loose enough to absorb the FP drift accumulated by the
+// large alternating-sign Vern* dense-output coefficients (Vern8's Bmid
+// sums to 1 + ~1.7e-11 due to round-trip through Julia's symbolic
+// computation), but tight enough that any human-introduced typo (sign
+// flip, missing term, off-by-an-order-of-magnitude) produces deviations
+// >> 1e-9 and triggers the assert.
+constexpr double kRKWeightTol = 1e-9;
+
+} // namespace detail
+
+#define TYCHO_VALIDATE_RK_TABLEAU(ALG, NAME)                                                       \
+    static_assert(RKCoeffs<IVPAlg::ALG>::BmidStages ==                                             \
+                      RKCoeffs<IVPAlg::ALG>::Stages + RKCoeffs<IVPAlg::ALG>::InterpStages +       \
+                          (RKCoeffs<IVPAlg::ALG>::LastStageIsFxf ? 0 : 1),                         \
+                  NAME ": BmidStages must equal Stages + InterpStages + "                          \
+                       "(LastStageIsFxf ? 0 : 1).");                                               \
+    static_assert(detail::rk_constexpr_abs(detail::rk_array_sum(RKCoeffs<IVPAlg::ALG>::B) - 1.0) < \
+                      detail::kRKWeightTol,                                                        \
+                  NAME ": main B weights must sum to 1.")
+
+#define TYCHO_VALIDATE_RK_BMID(ALG, NAME)                                                          \
+    static_assert(detail::rk_constexpr_abs(detail::rk_array_sum(RKCoeffs<IVPAlg::ALG>::Bmid) -     \
+                                           1.0) < detail::kRKWeightTol,                            \
+                  NAME ": midpoint Bmid weights must sum to 1.")
+
+TYCHO_VALIDATE_RK_TABLEAU(DOPRI54, "DOPRI54");
+TYCHO_VALIDATE_RK_BMID(DOPRI54, "DOPRI54");
+TYCHO_VALIDATE_RK_TABLEAU(DOPRI87, "DOPRI87");
+TYCHO_VALIDATE_RK_BMID(DOPRI87, "DOPRI87");
+TYCHO_VALIDATE_RK_TABLEAU(Tsit5, "Tsit5");
+TYCHO_VALIDATE_RK_BMID(Tsit5, "Tsit5");
+TYCHO_VALIDATE_RK_TABLEAU(BS3, "BS3");
+TYCHO_VALIDATE_RK_BMID(BS3, "BS3");
+TYCHO_VALIDATE_RK_TABLEAU(BS5, "BS5");
+TYCHO_VALIDATE_RK_BMID(BS5, "BS5");
+TYCHO_VALIDATE_RK_TABLEAU(Vern7, "Vern7");
+TYCHO_VALIDATE_RK_BMID(Vern7, "Vern7");
+TYCHO_VALIDATE_RK_TABLEAU(Vern8, "Vern8");
+TYCHO_VALIDATE_RK_BMID(Vern8, "Vern8");
+TYCHO_VALIDATE_RK_TABLEAU(Vern9, "Vern9");
+TYCHO_VALIDATE_RK_BMID(Vern9, "Vern9");
+
+#undef TYCHO_VALIDATE_RK_TABLEAU
+#undef TYCHO_VALIDATE_RK_BMID
+
 } // namespace tycho::integrators
