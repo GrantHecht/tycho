@@ -92,7 +92,21 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     }
 
     double dt = std::min(100.0 * dt0, dt1);
-    return tdir * dt;
+    double signed_dt = tdir * dt;
+    if (!std::isfinite(signed_dt) || signed_dt == 0.0) {
+        // Non-finite or exactly-zero return is almost always the user setting
+        // both abs_tol and rel_tol to zero on a component where x0 is zero —
+        // the scaling vector sk[i] = atol + |x0|*rtol goes to zero, and the
+        // scaled residuals become 0/0 = NaN. validate_tolerances_for_adaptive
+        // normally catches this upstream; this guards the remaining pathway
+        // (atol > 0 but atol + |x0|*rtol still underflows, or similar FP edge).
+        throw std::runtime_error(
+            "Hairer-Wanner initial-dt estimator produced a non-finite or zero step: dt=" +
+            std::to_string(signed_dt) + " (d0=" + std::to_string(d0) +
+            ", d1=" + std::to_string(d1) + ", d2=" + std::to_string(d2) +
+            "). Check per-component abs_tol / rel_tol and the initial state.");
+    }
+    return signed_dt;
 }
 
 } // namespace tycho::integrators

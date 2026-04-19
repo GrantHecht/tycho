@@ -463,13 +463,47 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (tol.size() != this->ode_.x_vars()) {
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
+        for (Eigen::Index i = 0; i < tol.size(); ++i) {
+            if (!(tol[i] >= 0.0)) {
+                throw std::invalid_argument("abs_tols[" + std::to_string(i) +
+                                            "] must be >= 0; got " + std::to_string(tol[i]));
+            }
+        }
         this->abs_tols_ = tol;
     }
     void set_rel_tols(ODEDeriv<double> tol) {
         if (tol.size() != this->ode_.x_vars()) {
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
+        for (Eigen::Index i = 0; i < tol.size(); ++i) {
+            if (!(tol[i] >= 0.0)) {
+                throw std::invalid_argument("rel_tols[" + std::to_string(i) +
+                                            "] must be >= 0; got " + std::to_string(tol[i]));
+            }
+        }
         this->rel_tols_ = tol;
+    }
+
+    /// Joint tolerance invariant for the adaptive path: every component must
+    /// satisfy abs_tols[i] + rel_tols[i] > 0. Otherwise scaled_residuals'
+    /// denominator is 0 when the state component is 0, producing NaN error
+    /// norms and infinite rejection loops. Checked at integrate entry rather
+    /// than in the setters so set_abs_tol/set_rel_tol can be called in any
+    /// order without transient validation failures.
+    void validate_tolerances_for_adaptive() const {
+        const Eigen::Index n = this->abs_tols_.size();
+        if (this->rel_tols_.size() != n) {
+            throw std::logic_error("Integrator internal error: abs_tols/rel_tols size mismatch.");
+        }
+        for (Eigen::Index i = 0; i < n; ++i) {
+            if (!(this->abs_tols_[i] + this->rel_tols_[i] > 0.0)) {
+                throw std::invalid_argument(
+                    "Tolerance component " + std::to_string(i) +
+                    " has abs_tol + rel_tol <= 0 (both vanish). Set at least one of "
+                    "abs_tol or rel_tol to a positive value; otherwise the adaptive "
+                    "error norm is undefined for zero state.");
+            }
+        }
     }
 
     ODEDeriv<double> get_abs_tols() const { return this->abs_tols_; }
@@ -851,6 +885,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument("Incorrectly sized input state.");
         }
 
+        if (this->adaptive_) {
+            this->validate_tolerances_for_adaptive();
+        }
+
         double t0 = x[this->ode_.t_var()];
         double H = tf - t0;
 
@@ -1102,6 +1140,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
         if (xs.size() == 0) {
             throw std::invalid_argument("Must supply at least one initial state.");
+        }
+
+        if (this->adaptive_) {
+            this->validate_tolerances_for_adaptive();
         }
 
         int ntrajs = xs.size();
