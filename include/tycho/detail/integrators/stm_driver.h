@@ -9,12 +9,39 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 #include <tuple>
 #include <vector>
 
 namespace tycho::integrators {
 
 using vf::GenericFunction;
+
+namespace detail {
+
+/// STM-specific finite-check. Placed outside the hot inner loops (called
+/// once per STM output, not per-step), so the overhead is a single
+/// Eigen::allFinite sweep per trajectory — negligible against Jacobian
+/// multiplication cost.
+template <class Derived>
+inline void check_stm_finite_or_throw(const Eigen::MatrixBase<Derived> &m, const char *site,
+                                      int trajectory_idx = -1) {
+    if (m.allFinite())
+        return;
+    std::string msg = "Non-finite STM output from ";
+    msg += site;
+    if (trajectory_idx >= 0)
+        msg += " (trajectory=" + std::to_string(trajectory_idx) + ")";
+    msg += ". The single-step Jacobian (or adjoint Hessian) diverged at some "
+           "point in the trajectory — this usually indicates the ODE dynamics "
+           "passed through a singularity (division by near-zero, sqrt of "
+           "negative, pole in gravity model, etc.). Check the transcription "
+           "dense-output states for the offending step.";
+    throw std::runtime_error(msg);
+}
+
+} // namespace detail
 
 /// STM (State Transition Matrix) computation driver.
 ///
@@ -101,6 +128,7 @@ struct STMDriver {
         }
 
         jx = jxall.topRows(output_rows);
+        detail::check_stm_finite_or_throw(jx, "STMDriver::calculate_jacobian");
         return jx;
     }
 
@@ -163,6 +191,8 @@ struct STMDriver {
         }
 
         jx = jxall.topRows(output_rows);
+        detail::check_stm_finite_or_throw(jx, "STMDriver::calculate_jacobian_hessian (jacobian)");
+        detail::check_stm_finite_or_throw(hxall, "STMDriver::calculate_jacobian_hessian (hessian)");
         return {jx, hxall};
     }
 
@@ -246,6 +276,7 @@ struct STMDriver {
                 }
 
                 jxs[idx] = jxall_scalar.topRows(output_rows);
+                detail::check_stm_finite_or_throw(jxs[idx], "STMDriver::calculate_jacobians", idx);
             }
         }
 

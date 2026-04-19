@@ -1946,6 +1946,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
                     jxs[idx] = jtmp * jxalls[idx];
                 }
+                detail::check_stm_finite_or_throw(jxs[idx], "Integrator::calculate_jacobians", idx);
             }
         }
 
@@ -2019,6 +2020,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
 
         jx = jxall.template topRows<Base::ORC>(this->output_rows());
+
+        detail::check_stm_finite_or_throw(jx, "Integrator::calculate_jacobian_hessian (jacobian)");
+        detail::check_stm_finite_or_throw(hxall,
+                                          "Integrator::calculate_jacobian_hessian (hessian)");
 
         return std::tuple<Jacobian<double>, Hessian<double>>{jx, hxall};
     }
@@ -2170,6 +2175,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     hxs[idx] = jtwist.transpose() * hxs[idx] * jtwist;
                     hxs[idx] += htmp;
                 }
+                detail::check_stm_finite_or_throw(
+                    jxs[idx], "Integrator::calculate_jacobians_hessians (jacobian)", idx);
+                detail::check_stm_finite_or_throw(
+                    hxs[idx], "Integrator::calculate_jacobians_hessians (hessian)", idx);
             }
         }
 
