@@ -179,13 +179,8 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                     Integrator<DODE>::integrate_stm,
                 nb::arg("xt0_ups"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
 
-        obj.def("integrate_stm2",
-                (std::vector<std::tuple<ODEStateD, Eigen::MatrixXd, Eigen::MatrixXd>> (
-                    Integrator<DODE>::*)(const std::vector<ODEStateD> &, const Eigen::VectorXd &,
-                                         const std::vector<ODEStateD> &) const) &
-                    Integrator<DODE>::integrate_stm2,
-                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("lfs"),
-                nb::call_guard<nb::gil_scoped_release>());
+        obj.def("integrate_stm2", &Integrator<DODE>::integrate_stm2, nb::arg("xt0_ups"),
+                nb::arg("tfs"), nb::arg("lfs"), nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_parallel",
                 (std::vector<IntegRet> (Integrator<DODE>::*)(
