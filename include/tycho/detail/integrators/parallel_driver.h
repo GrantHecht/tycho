@@ -338,10 +338,6 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                             abs_error[k] = abs_error_ss[k][V2];
                         }
 
-                        check_state_finite_or_throw(xnext.head(ode.x_vars()),
-                                                    xis[itmp][ode.t_var()], hs[itmp],
-                                                    "ParallelDriver::stepper.step", itmp);
-
                         if (cfg.adaptive) {
                             double h_lane = hs[itmp];
                             auto u_x_vars = ode.x_vars();
@@ -350,13 +346,21 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                                                         xnext.head(u_x_vars), abs_tols, rel_tols);
                             double err_norm = error_norm(res, cfg.error_norm_type);
 
+                            // Single-chokepoint per-lane finite guard.
+                            // Non-finite err_norm subsumes both xnext and
+                            // xnext_est NaN checks (NaN in either flows into
+                            // utilde/res/norm). One scalar isfinite per lane
+                            // replaces the previous full allFinite scan on
+                            // xnext. Fixed-step path checks xnext separately
+                            // since err_norm isn't computed there.
                             if (!std::isfinite(err_norm)) {
                                 throw std::runtime_error(
-                                    "ParallelDriver: non-finite error norm (" +
+                                    "Non-finite error norm from ParallelDriver (" +
                                     std::to_string(err_norm) + ") on trajectory " +
                                     std::to_string(itmp) +
                                     " at t=" + std::to_string(xis[itmp][ode.t_var()]) +
-                                    " (h=" + std::to_string(h_lane) + ").");
+                                    " (h=" + std::to_string(h_lane) +
+                                    "); state or embedded estimate produced NaN/Inf.");
                             }
 
                             auto outcome = std::visit(
@@ -380,6 +384,12 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                                 continue;
                             }
                             nacc[itmp]++;
+                        } else {
+                            // Fixed-step path: no err_norm, so check xnext
+                            // directly for this lane.
+                            check_state_finite_or_throw(xnext.head(ode.x_vars()),
+                                                        xis[itmp][ode.t_var()], hs[itmp],
+                                                        "ParallelDriver::stepper.step", itmp);
                         }
 
                         // Event detection (per lane).

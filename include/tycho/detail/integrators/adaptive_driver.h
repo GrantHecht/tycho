@@ -242,11 +242,6 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             stepper_.step(ode, xi, tnext, xnext, xnext_est, storemidpoints || storederivs,
                           xnext_mid, update_control);
 
-            // Non-finite xnext guard: catch NaN/Inf immediately with a
-            // localized diagnostic rather than marching to max_steps.
-            check_state_finite_or_throw(xnext.head(ode.x_vars()), xi[ode.t_var()], h,
-                                        "AdaptiveDriver::stepper.step");
-
             if (cfg.adaptive) {
                 auto u_x_vars = ode.x_vars();
                 auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
@@ -254,16 +249,19 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
                                             abs_tols, rel_tols);
                 double err_norm = error_norm(res, cfg.error_norm_type);
 
-                // Non-finite err_norm guard: pathological tableau cancellation
-                // or an intermediate-stage singularity can leave xnext finite
-                // while utilde carries NaN/Inf. Controller pow(NaN,k) would
-                // return NaN, rejecting the step to max_steps.
+                // Single-chokepoint finite guard. A non-finite err_norm catches
+                // BOTH xnext NaN (NaN flows into the numerator) and xnext_est
+                // NaN (NaN flows into utilde), so one scalar isfinite
+                // subsumes what was previously two checks (xnext allFinite +
+                // err_norm isfinite). Fixed-step path handles xnext separately
+                // below since it doesn't compute err_norm.
                 if (!std::isfinite(err_norm)) {
                     throw std::runtime_error(
-                        "AdaptiveDriver: non-finite error norm (" + std::to_string(err_norm) +
+                        "Non-finite error norm from AdaptiveDriver (" + std::to_string(err_norm) +
                         ") at t=" + std::to_string(static_cast<double>(xi[ode.t_var()])) +
                         " (h=" + std::to_string(static_cast<double>(h)) +
-                        "); embedded estimate produced NaN/Inf.");
+                        "); state or embedded estimate produced NaN/Inf. Check ODE dynamics "
+                        "and intermediate-stage evaluations.");
                 }
 
                 auto outcome = std::visit(
@@ -288,6 +286,11 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
                     continue;
                 }
                 naccept++;
+            } else {
+                // Fixed-step path: err_norm is not computed, so the adaptive
+                // chokepoint above doesn't fire. Check xnext directly.
+                check_state_finite_or_throw(xnext.head(ode.x_vars()), xi[ode.t_var()], h,
+                                            "AdaptiveDriver::stepper.step");
             }
 
             // Event detection — EventHandler::check_crossings returns true
