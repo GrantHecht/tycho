@@ -423,7 +423,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // `ControllerVariant` per call and operate on the local. Only
     // `set_method` / `set_controller` mutate this member, and neither is
     // concurrent-safe with an in-flight integrate.
-    using ControllerVariant = std::variant<IController, PIController, PIDController>;
+    // Use the free `tycho::integrators::ControllerVariant` from step_controller.h
+    // directly so extracted drivers (AdaptiveDriver, ParallelDriver) can share
+    // the same variant type without going through the Integrator scope.
     ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
 

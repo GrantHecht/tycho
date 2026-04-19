@@ -6,74 +6,157 @@
 
 #include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/event_handler.h"
+#include "tycho/detail/integrators/initial_dt.h"
 #include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/stepper.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 
 #include <Eigen/Core>
 #include <cmath>
+#include <cstddef>
 #include <stdexcept>
+#include <string>
+#include <variant>
 #include <vector>
 
 namespace tycho::integrators {
 
+/// Run-time configuration passed to AdaptiveDriver::integrate — carries the
+/// Integrator-level settings that control the adaptive loop's behavior.
+/// Ownership stays with the caller; the driver reads only.
+struct AdaptiveConfig {
+    int error_order = 4;
+    ErrorNormType error_norm_type = ErrorNormType::RMS;
+    double def_step_size = 0.01;
+    double max_step_change = 10.0;
+    int max_steps = 1'000'000;
+    bool adaptive = true;
+    bool use_hairer_wanner_initdt = true;
+};
+
 /// Adaptive step-size integration driver.
 ///
-/// Composes Stepper + IController + EventHandler to perform a full
-/// adaptive integration from x(t0) to x(tf). Extracted from the scalar
-/// path of Integrator::integrate_impl.
+/// Composes Stepper<Alg,DODE,Scalar> + a runtime-dispatched controller
+/// (via ControllerVariant) + EventHandler::check_crossings to perform a
+/// full adaptive integration from x(t0) to x(tf).
 ///
 /// Template parameters:
-///   Alg        — IVPAlg enum (DOPRI54, DOPRI87)
-///   Controller — step-size controller (IController or compatible)
-///   DODE       — ODE type
-///   Scalar     — numeric type (typically double)
-template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struct AdaptiveDriver {
+///   Alg    — IVPAlg enum selecting the Butcher tableau (compile-time)
+///   DODE   — ODE type
+///   Scalar — numeric type (double by default; SuperScalar for batched use)
+///
+/// State held by the driver is minimal: just the Stepper<Alg> which maintains
+/// the FSAL cache across consecutive integrate() calls. All other inputs
+/// (tolerances, controller, counters, events, storage flags) are passed per
+/// call so the driver can be reused without copying Integrator-level config.
+template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
 
     using ODEState = typename DODE::template Input<Scalar>;
     using ODEDeriv = typename DODE::template Output<Scalar>;
     using EventPack = typename EventHandler::EventPack;
 
     Stepper<Alg, DODE, Scalar> stepper_;
-    Controller controller_;
 
-    // Tolerances and step bounds
-    ODEDeriv abs_tols_;
-    ODEDeriv rel_tols_;
-    Scalar def_step_size_ = 0.01;
-    Scalar max_step_change_ = 10.0;
-    int max_steps_ = 1'000'000;
-    bool adaptive_ = true;
-    int error_order_ = RKCoeffs<Alg>::ErrorOrder;
-    ErrorNormType error_norm_type_ = ErrorNormType::RMS;
-
-    // Step statistics
-    int naccept_count_ = 0;
-    int nreject_count_ = 0;
-
-    // Event parameters
-    int max_event_iters_ = 20;
-    Scalar event_tol_ = 1e-12;
+    /// Reset the stepper's FSAL cache. Callers must invoke this before the
+    /// first integrate() call following a state change that invalidates the
+    /// cached f(x_prev) (e.g., a fresh starting state unrelated to the last
+    /// step's output).
+    void reset_fsal() { stepper_.reset_fsal(); }
 
     /// Perform adaptive integration from x(t0) to x(tf).
     ///
-    /// ControlFn must be callable with (ODEState&).
-    /// Results are stored in `states` and `derivs` vectors if requested.
+    /// Contract:
+    ///   - `controller` is mutated across the run; caller must pass a
+    ///     ControllerVariant that has already been reset() or is
+    ///     freshly constructed.
+    ///   - `naccept`, `nreject` are zeroed by the caller and incremented
+    ///     by the driver; the driver never reads this->member counters.
+    ///   - `abs_tols` and `rel_tols` must satisfy abs[i] + rel[i] > 0 per
+    ///     component in adaptive mode; violation throws.
+    ///   - On H == 0 (zero interval), returns the input state after
+    ///     populating outputs with a single (x, ode.compute(x)) triple.
+    ///   - On NaN/Inf in either the state or the error norm, throws with a
+    ///     diagnostic message — never runs to max_steps on such inputs.
+    ///   - `ControlFn` is callable with (ODEState&) and invoked exactly
+    ///     where Integrator's update_control was: at each stage tuple
+    ///     construction in the stepper plus at final / midpoint assembly.
     template <class ControlFn>
-    ODEState integrate(const DODE &ode, const ODEState &x, Scalar tf,
+    ODEState integrate(const DODE &ode, const ODEState &x, Scalar tf, const AdaptiveConfig &cfg,
+                       const ODEDeriv &abs_tols, const ODEDeriv &rel_tols,
+                       ControllerVariant &controller, int &naccept, int &nreject,
                        const std::vector<EventPack> &events,
                        std::vector<std::vector<Eigen::Vector2d>> &eventtimes, bool storestates,
                        bool storederivs, bool storemidpoints, std::vector<ODEState> &states,
                        std::vector<ODEDeriv> &derivs, ControlFn &&update_control) {
 
         if (x.size() != ode.input_rows()) {
-            throw std::invalid_argument("Incorrectly sized input state.");
+            throw std::invalid_argument("AdaptiveDriver: incorrectly sized input state.");
+        }
+
+        // Joint tolerance invariant in adaptive mode: abs[i] + rel[i] > 0.
+        if (cfg.adaptive) {
+            if (rel_tols.size() != abs_tols.size()) {
+                throw std::logic_error("AdaptiveDriver: abs_tols/rel_tols size mismatch.");
+            }
+            for (Eigen::Index i = 0; i < abs_tols.size(); ++i) {
+                if (!(abs_tols[i] + rel_tols[i] > 0.0)) {
+                    throw std::invalid_argument(
+                        "AdaptiveDriver: tolerance component " + std::to_string(i) +
+                        " has abs_tol + rel_tol <= 0. Set at least one positive; otherwise "
+                        "the adaptive error norm is undefined for zero state.");
+                }
+            }
         }
 
         Scalar t0 = x[ode.t_var()];
         Scalar H = tf - t0;
-        int numsteps = int(std::abs(H / def_step_size_)) + 1;
-        Scalar h = Scalar(0.9) * (H / Scalar(numsteps));
+
+        // Zero-interval short-circuit: no step to take. Populate outputs with
+        // the endpoint state + derivative and return. Skipping stepper.step
+        // avoids divide-by-zero in the FSAL / midpoint derivative
+        // reconstruction that would otherwise poison `derivs` with NaN.
+        if (H == Scalar(0.0)) {
+            ODEState xi0 = x;
+            update_control(xi0);
+            eventtimes.resize(events.size());
+            for (std::size_t j = 0; j < events.size(); ++j) {
+                if (std::get<0>(events[j]).input_rows() != ode.input_rows()) {
+                    throw std::invalid_argument(
+                        "AdaptiveDriver: event function input size mismatch.");
+                }
+            }
+            if (storestates) {
+                states.resize(0);
+                derivs.resize(0);
+                ODEDeriv xdoti0(ode.output_rows());
+                xdoti0.setZero();
+                ode.compute(xi0, xdoti0);
+                states.push_back(xi0);
+                if (storederivs)
+                    derivs.push_back(xdoti0);
+                if (storemidpoints) {
+                    states.push_back(xi0);
+                    if (storederivs)
+                        derivs.push_back(xdoti0);
+                }
+                states.push_back(xi0);
+                if (storederivs)
+                    derivs.push_back(xdoti0);
+            }
+            return xi0;
+        }
+
+        // Initial step size.
+        Scalar h;
+        int numsteps;
+        if (cfg.adaptive && cfg.use_hairer_wanner_initdt) {
+            h = estimate_initial_dt(ode, x, tf, abs_tols, rel_tols, cfg.error_order,
+                                    cfg.error_norm_type);
+            numsteps = std::max(1, int(std::abs(H / (h == Scalar(0.0) ? Scalar(1.0) : h))));
+        } else {
+            numsteps = int(std::abs(H / cfg.def_step_size)) + 1;
+            h = Scalar(0.9) * (H / Scalar(numsteps));
+        }
 
         ODEState xi = x;
         update_control(xi);
@@ -85,33 +168,18 @@ template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struc
         ODEDeriv xdoti(ode.output_rows());
         xdoti.setZero();
         ode.compute(xi, xdoti);
-        ODEDeriv xdotnext = xdoti;
 
-        // Do NOT pre-init stepper_.fsal_valid_ = true. For FSAL methods, the
-        // first stepper.step() call will compute f(x0) into k[0] (no-FSAL
-        // branch) and write k_fsal_ = f(xf) at end-of-step (FSAL branch in
-        // stepper.h:82-85). Subsequent steps then use FSAL automatically.
-        // Pre-init was a latent foot-gun for non-FSAL methods because
-        // stepper.h:109 (non-FSAL + midpoint) writes k_fsal_ but did not
-        // set fsal_valid_=true; that omission is fixed in stepper.h
-        // alongside this change. Cost: one extra ode.compute on the first
-        // step of any integration — amortized over the full run.
-
-        // Event state
+        // Event state.
         std::vector<Vector1<double>> prev_event_vals(events.size());
         std::vector<Vector1<double>> next_event_vals(events.size());
-
-        for (int j = 0; j < static_cast<int>(events.size()); j++) {
+        for (std::size_t j = 0; j < events.size(); ++j) {
             prev_event_vals[j].setZero();
             next_event_vals[j].setZero();
-
             if (std::get<0>(events[j]).input_rows() != ode.input_rows()) {
-                throw std::invalid_argument(
-                    "Input size of event function must equal input size of ode_.");
+                throw std::invalid_argument("AdaptiveDriver: event function input size mismatch.");
             }
             std::get<0>(events[j]).compute(xi, prev_event_vals[j]);
         }
-
         eventtimes.resize(events.size());
 
         if (storestates) {
@@ -131,24 +199,29 @@ template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struc
                 derivs.push_back(xdoti);
         }
 
-        bool continueloop = true;
+        // The stepper's FSAL cache must reflect f(xi). If the caller has a
+        // fresh stepper (fsal_valid_=false), the first step() call computes
+        // f(x) fresh. If the caller reuses a stepper from a prior run whose
+        // final xf equals our xi, FSAL reuse is correct. Callers that mix
+        // these cases should call reset_fsal() before integrate().
 
+        bool continueloop = true;
         while (continueloop) {
-            if (naccept_count_ + nreject_count_ >= max_steps_) {
-                throw std::runtime_error("AdaptiveDriver exceeded max_steps (" +
-                                         std::to_string(max_steps_) +
-                                         "); raise via max_steps_ or loosen tolerances.");
+            if (naccept + nreject >= cfg.max_steps) {
+                throw std::runtime_error(
+                    "AdaptiveDriver exceeded max_steps (" + std::to_string(cfg.max_steps) +
+                    ") before reaching tf; the adaptive controller may be stuck in a "
+                    "rejection loop. Raise via max_steps or loosen tolerances.");
             }
             Scalar tnext = xi[ode.t_var()] + h;
-
-            if (H > 0.0) {
-                if ((tnext - tf) >= 0.0) {
+            if (H > Scalar(0.0)) {
+                if ((tnext - tf) >= Scalar(0.0)) {
                     h = tf - xi[ode.t_var()];
                     tnext = tf;
                     continueloop = false;
                 }
             } else {
-                if ((tnext - tf) <= 0.0) {
+                if ((tnext - tf) <= Scalar(0.0)) {
                     h = tf - xi[ode.t_var()];
                     tnext = tf;
                     continueloop = false;
@@ -159,61 +232,85 @@ template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struc
             xnext_est.setZero();
             xnext_mid.setZero();
 
-            // Stepper::step() writes k_fsal_ at end-of-step before accept/reject
-            // is known (stepper.h:83 for FSAL, stepper.h:109 for non-FSAL + midpoint).
-            // Snapshot here so we can restore on reject — otherwise the retry
-            // would read f(xnext_rejected) as its first RK stage at xi.
+            // Snapshot FSAL cache so we can restore on reject — stepper.step()
+            // unconditionally writes k_fsal_ at end-of-step, but the retry
+            // must read f(xi) (not the stale f(xnext_rejected)) as its first
+            // stage.
             ODEDeriv k_fsal_saved = stepper_.k_fsal_;
             bool fsal_valid_saved = stepper_.fsal_valid_;
 
             stepper_.step(ode, xi, tnext, xnext, xnext_est, storemidpoints || storederivs,
                           xnext_mid, update_control);
 
-            if (adaptive_) {
+            // Non-finite xnext guard: catch NaN/Inf immediately with a
+            // localized diagnostic rather than marching to max_steps.
+            check_state_finite_or_throw(xnext.head(ode.x_vars()), xi[ode.t_var()], h,
+                                        "AdaptiveDriver::stepper.step");
+
+            if (cfg.adaptive) {
                 auto u_x_vars = ode.x_vars();
                 auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
                 auto res = scaled_residuals(utilde, xi.head(u_x_vars), xnext.head(u_x_vars),
-                                            abs_tols_, rel_tols_);
-                double err_norm = error_norm(res, error_norm_type_);
-                auto outcome = controller_.update(h, err_norm, error_order_, naccept_count_);
+                                            abs_tols, rel_tols);
+                double err_norm = error_norm(res, cfg.error_norm_type);
+
+                // Non-finite err_norm guard: pathological tableau cancellation
+                // or an intermediate-stage singularity can leave xnext finite
+                // while utilde carries NaN/Inf. Controller pow(NaN,k) would
+                // return NaN, rejecting the step to max_steps.
+                if (!std::isfinite(err_norm)) {
+                    throw std::runtime_error(
+                        "AdaptiveDriver: non-finite error norm (" + std::to_string(err_norm) +
+                        ") at t=" + std::to_string(static_cast<double>(xi[ode.t_var()])) +
+                        " (h=" + std::to_string(static_cast<double>(h)) +
+                        "); embedded estimate produced NaN/Inf.");
+                }
+
+                auto outcome = std::visit(
+                    [&](auto &c) {
+                        return c.update(static_cast<double>(h), err_norm, cfg.error_order, naccept);
+                    },
+                    controller);
                 double hnext = outcome.dt_new;
 
-                if (hnext / h > max_step_change_)
-                    h *= max_step_change_;
-                else if (hnext / h < 1.0 / max_step_change_)
-                    h /= max_step_change_;
+                if (hnext / static_cast<double>(h) > cfg.max_step_change)
+                    h *= Scalar(cfg.max_step_change);
+                else if (hnext / static_cast<double>(h) < 1.0 / cfg.max_step_change)
+                    h /= Scalar(cfg.max_step_change);
                 else
-                    h = hnext;
+                    h = Scalar(hnext);
 
                 if (!outcome.accepted) {
                     stepper_.k_fsal_ = k_fsal_saved;
                     stepper_.fsal_valid_ = fsal_valid_saved;
-                    nreject_count_++;
+                    nreject++;
                     continueloop = true;
                     continue;
                 }
-                naccept_count_++;
+                naccept++;
             }
 
-            // Event detection
+            // Event detection — EventHandler::check_crossings returns true
+            // when a stop-count condition is hit (matches integrate_impl).
             bool eventbreak = false;
             if (!events.empty()) {
-                eventbreak =
-                    EventHandler::check_crossings(events, prev_event_vals, next_event_vals, xnext,
-                                                  ode.t_var(), eventtimes, xi[ode.t_var()]);
+                eventbreak = EventHandler::check_crossings(events, prev_event_vals, next_event_vals,
+                                                           xnext, ode.t_var(), eventtimes,
+                                                           static_cast<double>(xi[ode.t_var()]));
             }
 
             xi = xnext;
-            xdoti = stepper_.k_fsal_; // derivative at xnext (from FSAL or midpoint)
+            xdoti = stepper_.k_fsal_; // derivative at xnext (from FSAL or midpoint path)
             prev_event_vals = next_event_vals;
 
             if (storestates) {
                 if (storemidpoints) {
                     states.push_back(xnext_mid);
                     if (storederivs) {
-                        xdotnext.setZero();
-                        ode.compute(xnext_mid, xdotnext);
-                        derivs.push_back(xdotnext);
+                        ODEDeriv xdot_mid(ode.output_rows());
+                        xdot_mid.setZero();
+                        ode.compute(xnext_mid, xdot_mid);
+                        derivs.push_back(xdot_mid);
                     }
                 }
                 states.push_back(xi);

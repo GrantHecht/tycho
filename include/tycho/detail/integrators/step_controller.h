@@ -9,6 +9,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 namespace tycho::integrators {
 
@@ -93,8 +94,8 @@ struct IController {
     /// check — not on the hot path.
     void validate() const {
         if (!(gamma > 0.0 && gamma <= 1.0))
-            throw std::invalid_argument(detail::controller_invariant_msg(
-                "IController", "gamma", "lie in (0, 1]", gamma));
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("IController", "gamma", "lie in (0, 1]", gamma));
         if (!(qmin > 0.0 && qmin < 1.0))
             throw std::invalid_argument(
                 detail::controller_invariant_msg("IController", "qmin", "lie in (0, 1)", qmin));
@@ -175,8 +176,8 @@ struct PIController {
             throw std::invalid_argument(
                 detail::controller_invariant_msg("PIController", "beta2", "be >= 0", beta2));
         if (!(gamma > 0.0 && gamma <= 1.0))
-            throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIController", "gamma", "lie in (0, 1]", gamma));
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "gamma", "lie in (0, 1]", gamma));
         if (!(qmin > 0.0 && qmin < 1.0))
             throw std::invalid_argument(
                 detail::controller_invariant_msg("PIController", "qmin", "lie in (0, 1)", qmin));
@@ -190,8 +191,8 @@ struct PIController {
             throw std::invalid_argument(detail::controller_invariant_msg(
                 "PIController", "qsteady_min", "be <= qsteady_max", qsteady_min));
         if (!(qoldinit > 0.0))
-            throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIController", "qoldinit", "be > 0", qoldinit));
+            throw std::invalid_argument(
+                detail::controller_invariant_msg("PIController", "qoldinit", "be > 0", qoldinit));
     }
 
     ControllerOutput update(double h, double err_norm, int /*order*/, int naccept) {
@@ -305,5 +306,10 @@ struct PIDController {
         qold_ = 1.0;
     }
 };
+
+/// Runtime-dispatched controller state. Integrators and extracted drivers
+/// hold this as the concrete storage for "the current controller", then use
+/// std::visit to invoke update()/reset() on whichever kind is active.
+using ControllerVariant = std::variant<IController, PIController, PIDController>;
 
 } // namespace tycho::integrators
