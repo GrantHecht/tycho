@@ -1041,6 +1041,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                             this->abs_tols_, this->rel_tols_);
                 double err_norm = error_norm(res, this->error_norm_type_);
 
+                // Guard NaN/Inf from the embedded estimate reaching the controller.
+                // xnext is checked above, but xnext_est can still go non-finite on
+                // its own (pathological tableau cancellation or an intermediate stage
+                // that evaluates into a singularity). Without this guard, pow(NaN, k)
+                // inside the controller returns NaN, accepted=(NaN<=1) is false, and
+                // the loop shrinks h by NaN forever until max_steps trips.
+                if (!std::isfinite(err_norm)) {
+                    throw std::runtime_error(
+                        "Non-finite error norm (" + std::to_string(err_norm) +
+                        ") in adaptive loop at t=" + std::to_string(xi[this->ode_.t_var()]) +
+                        " (h=" + std::to_string(h) +
+                        "); embedded estimate produced NaN/Inf. Check the ODE for "
+                        "intermediate-stage singularities.");
+                }
+
                 auto outcome = std::visit(
                     [&](auto &c) { return c.update(h, err_norm, this->error_order_, naccept); },
                     controller);
@@ -1401,6 +1416,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                      xnext.head(u_x_vars),     // u1 (post-step)
                                                      this->abs_tols_, this->rel_tols_);
                                 double err_norm = error_norm(res, this->error_norm_type_);
+
+                                // Per-lane NaN/Inf guard on the error norm (same
+                                // rationale as the scalar path). Names the offending
+                                // trajectory so callers can identify the bad lane.
+                                if (!std::isfinite(err_norm)) {
+                                    throw std::runtime_error(
+                                        "Non-finite error norm (" + std::to_string(err_norm) +
+                                        ") in SuperScalar batch adaptive loop at t=" +
+                                        std::to_string(xis[itmp][this->ode_.t_var()]) +
+                                        " (h=" + std::to_string(hs[itmp]) +
+                                        ") trajectory=" + std::to_string(itmp) +
+                                        "; embedded estimate produced NaN/Inf.");
+                                }
 
                                 // Per-lane controller: each trajectory drives its own
                                 // controller copy and accept/reject counters. Divergent

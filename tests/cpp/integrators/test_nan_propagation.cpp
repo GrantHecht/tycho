@@ -42,6 +42,14 @@ inline Eigen::VectorXd leo_state() {
 
 class NanPropagationTest : public VectorFunctionFixture {};
 
+// Parametrized variant — exercises the same NaN sites under each of the three
+// controllers. Proves controller switching does not regress the NaN guards
+// (P0.3: inline std::isfinite(err_norm) guard) and that the diagnostic still
+// fires even when PI/PID history-state machinery is active.
+class NanPropagationControllerTest
+    : public VectorFunctionFixture,
+      public ::testing::WithParamInterface<IVPController> {};
+
 ///////////////////////////////////////////////////////////////////////////////
 // Scalar stepper path: with HW initial-dt disabled and a fixed step, the
 // stepper's first call sees NaN-derivatives at the origin and produces a
@@ -98,6 +106,64 @@ TEST_F(NanPropagationTest, HairerWannerThrowsOnOriginKepler) {
         FAIL() << "Expected std::runtime_error, got a different exception type.";
     }
 }
+
+// Parametrized HW path — swap the controller before integrate and confirm the
+// HW-initdt guard still fires first. If my err_norm guard were to misorder
+// against HW or against the per-stepper finite-state check, this would catch
+// it (the error message would shift) under at least one controller.
+TEST_P(NanPropagationControllerTest, HairerWannerThrowsOnOriginKepler) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
+    integ.set_controller(GetParam());
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    auto x0 = origin_state();
+    try {
+        integ.integrate(x0, 100.0);
+        FAIL() << "Expected runtime_error from HW-initdt finite check.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("Hairer-Wanner"), std::string::npos) << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error.";
+    }
+}
+
+// Parametrized scalar-adaptive path: HW off + adaptive on + pathological
+// dynamics. Exercises the err_norm / xnext finite checks under each controller
+// and proves PI/PID history state (errold_, err_[], qold_) does not cause the
+// guard to fail silently.
+TEST_P(NanPropagationControllerTest, ScalarAdaptiveThrowsOnOriginKepler) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
+    integ.set_controller(GetParam());
+    integ.set_auto_initial_dt(false);
+    integ.set_abs_tol(1e-6);
+    integ.set_rel_tol(1e-9);
+
+    auto x0 = origin_state();
+    try {
+        integ.integrate(x0, 100.0);
+        FAIL() << "Expected runtime_error under controller " << static_cast<int>(GetParam());
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        // Either xnext-finite check fires first, or err_norm guard. Both are
+        // acceptable exit points — neither should leak past to a max_steps bail.
+        const bool hit_xnext = msg.find("Non-finite state") != std::string::npos;
+        const bool hit_errnorm = msg.find("Non-finite error norm") != std::string::npos;
+        EXPECT_TRUE(hit_xnext || hit_errnorm)
+            << "Expected xnext or err_norm guard; got: " << msg;
+        EXPECT_EQ(msg.find("max_steps"), std::string::npos)
+            << "Must not fall through to max_steps diagnostic: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error.";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AllControllers, NanPropagationControllerTest,
+                         ::testing::Values(IVPController::I, IVPController::PI,
+                                           IVPController::PID));
 
 ///////////////////////////////////////////////////////////////////////////////
 // SIMD batch path: a divergent batch with one bad lane should throw with
