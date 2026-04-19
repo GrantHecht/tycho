@@ -241,7 +241,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         case IVPAlg::Tsit5:
             this->rk_method_ = IVPAlg::Tsit5;
             this->error_order_ = 4;
-            this->init_stepper_and_controller<IVPAlg::Tsit5Trans>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<IVPAlg::Tsit5Trans>(dode, usecontrol, ucon,
+                                                                  varlocs_t);
             break;
         case IVPAlg::BS3:
             this->rk_method_ = IVPAlg::BS3;
@@ -256,17 +257,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         case IVPAlg::Vern7:
             this->rk_method_ = IVPAlg::Vern7;
             this->error_order_ = 6;
-            this->init_stepper_and_controller<IVPAlg::Vern7Trans>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<IVPAlg::Vern7Trans>(dode, usecontrol, ucon,
+                                                                  varlocs_t);
             break;
         case IVPAlg::Vern8:
             this->rk_method_ = IVPAlg::Vern8;
             this->error_order_ = 7;
-            this->init_stepper_and_controller<IVPAlg::Vern8Trans>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<IVPAlg::Vern8Trans>(dode, usecontrol, ucon,
+                                                                  varlocs_t);
             break;
         case IVPAlg::Vern9:
             this->rk_method_ = IVPAlg::Vern9;
             this->error_order_ = 8;
-            this->init_stepper_and_controller<IVPAlg::Vern9Trans>(dode, usecontrol, ucon, varlocs_t);
+            this->init_stepper_and_controller<IVPAlg::Vern9Trans>(dode, usecontrol, ucon,
+                                                                  varlocs_t);
             break;
         case IVPAlg::RK4Classic:
         case IVPAlg::DOPRI5:
@@ -409,15 +413,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     double err_pow_fac_ = 1;
 
     // SP3 controller variant — selected per algorithm in set_method, overrideable
-    // via set_controller(). Runtime dispatch goes through std::visit in
-    // integrate_impl / integrate_impl_vectorized. Mutable because integrate_impl
-    // is declared const (it's the VectorFunction::compute entry point) but the
-    // controller's internal state evolves during an integrate call.
+    // via set_controller(). Read-only during integrate calls: public wrappers
+    // and parallel workers clone from this prototype into a local
+    // `ControllerVariant` per call and operate on the local. Only
+    // `set_method` / `set_controller` mutate this member, and neither is
+    // concurrent-safe with an in-flight integrate.
     using ControllerVariant = std::variant<IController, PIController, PIDController>;
-    mutable ControllerVariant controller_variant_;
+    ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
 
-    // Step statistics (reset per integrate call). Mutable for the same reason.
+    // Step statistics for `get_naccept()` / `get_nreject()` inspection.
+    // Written only by single-threaded public wrappers via a post-call
+    // writeback from local counters; the impl bodies (`integrate_impl`,
+    // `integrate_impl_vectorized`) and all parallel workers keep their
+    // counters entirely local and do not touch these members. `mutable`
+    // is retained so the writeback can happen from const-qualified
+    // wrappers (required because the VectorFunction::compute contract
+    // forces `compute_impl` and friends to be const).
     mutable int naccept_ = 0;
     mutable int nreject_ = 0;
 
@@ -566,8 +578,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return c;
         }
         default:
-            throw std::logic_error(
-                "default_controller_for: algorithm not user-selectable");
+            throw std::logic_error("default_controller_for: algorithm not user-selectable");
         }
     }
 
@@ -761,39 +772,51 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } break;
         case IVPAlg::Tsit5: {
             this->stepper_compute_impl<IVPAlg::Tsit5, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
-                                                               domidpoint, xf_mid);
+                                                              domidpoint, xf_mid);
         } break;
         case IVPAlg::BS3: {
             this->stepper_compute_impl<IVPAlg::BS3, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
-                                                             domidpoint, xf_mid);
+                                                            domidpoint, xf_mid);
         } break;
         case IVPAlg::BS5: {
             this->stepper_compute_impl<IVPAlg::BS5, Scalar>(x, tf, xf, xf_est, true, xdot_prev,
-                                                             domidpoint, xf_mid);
+                                                            domidpoint, xf_mid);
         } break;
         case IVPAlg::Vern7: {
             this->stepper_compute_impl<IVPAlg::Vern7, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
-                                                               domidpoint, xf_mid);
+                                                              domidpoint, xf_mid);
         } break;
         case IVPAlg::Vern8: {
             this->stepper_compute_impl<IVPAlg::Vern8, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
-                                                               domidpoint, xf_mid);
+                                                              domidpoint, xf_mid);
         } break;
         case IVPAlg::Vern9: {
             this->stepper_compute_impl<IVPAlg::Vern9, Scalar>(x, tf, xf, xf_est, false, xdot_prev,
-                                                               domidpoint, xf_mid);
+                                                              domidpoint, xf_mid);
         } break;
         default:
             throw std::logic_error("stepper_compute: unsupported IVPAlg for adaptive stepping");
         }
     }
 
+    /// Scalar integrate core.
+    ///
+    /// Per-call state lives in three caller-owned references:
+    ///   - `controller`: seeded (and pre-reset) by the caller from
+    ///     `this->controller_variant_`; mutated during the run.
+    ///   - `naccept`, `nreject`: caller-owned counters; incremented by
+    ///     this function. Caller zero-initializes before the call.
+    /// The function never reads or writes the member-side
+    /// `naccept_`, `nreject_`, or `controller_variant_` fields. This
+    /// makes concurrent calls on the same `Integrator` instance safe
+    /// from member-state races.
     Output<double> integrate_impl(const ODEState<double> &x, double tf,
                                   const std::vector<EventPack> &events,
                                   std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
                                   bool storestates, bool storederivs, bool storemidpoints,
                                   std::vector<ODEState<double>> &states,
-                                  std::vector<ODEDeriv<double>> &derivs) const {
+                                  std::vector<ODEDeriv<double>> &derivs,
+                                  ControllerVariant &controller, int &naccept, int &nreject) const {
 
         if (x.size() != this->ode_.input_rows()) {
             throw std::invalid_argument("Incorrectly sized input state.");
@@ -808,18 +831,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             h = 0.0;
         } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
             int order = static_cast<int>(this->error_order_);
-            h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_,
-                                    this->rel_tols_, order,
+            h = estimate_initial_dt(this->ode_, x, tf, this->abs_tols_, this->rel_tols_, order,
                                     this->error_norm_type_);
             numsteps = std::max(1, int(std::abs(H / (h == 0 ? 1.0 : h))));
         } else {
             numsteps = int(abs(H / this->def_step_size_)) + 1;
             h = .9 * (H / double(numsteps));
         }
-
-        this->naccept_ = 0;
-        this->nreject_ = 0;
-        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
 
         ODEState<double> xi = x;
         this->update_control(xi);
@@ -878,7 +896,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             // Julia-style maxiters safety net — bail if the adaptive loop runs
             // away rather than silently burning CPU. Counts accepted + rejected
             // step attempts.
-            const int steps_attempted = this->naccept_ + this->nreject_;
+            const int steps_attempted = naccept + nreject;
             if (steps_attempted >= this->max_steps_) {
                 throw ::std::runtime_error(
                     "Integrator exceeded max_steps (" + std::to_string(this->max_steps_) +
@@ -920,11 +938,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 double err_norm = error_norm(res, this->error_norm_type_);
 
                 auto outcome = std::visit(
-                    [&](auto &c) {
-                        return c.update(h, err_norm, this->error_order_,
-                                        this->naccept_);
-                    },
-                    this->controller_variant_);
+                    [&](auto &c) { return c.update(h, err_norm, this->error_order_, naccept); },
+                    controller);
                 double hnext = outcome.dt_new;
 
                 if (hnext / h > this->max_step_change_)
@@ -935,11 +950,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     h = hnext;
 
                 if (!outcome.accepted) {
-                    this->nreject_++;
+                    nreject++;
                     continueloop = true;
                     continue;
                 }
-                this->naccept_++;
+                naccept++;
             }
 
             bool eventbreak = false;
@@ -996,13 +1011,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return xi;
     }
 
+    /// Vectorized integrate core — same per-call-state contract as
+    /// `integrate_impl` (three caller-owned refs, no member writes).
     std::vector<Output<double>>
     integrate_impl_vectorized(const std::vector<ODEState<double>> &xs, const Eigen::VectorXd &tfs,
                               const std::vector<EventPack> &events,
                               std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s,
                               bool storestates, bool storederivs, bool storemidpoints,
                               std::vector<std::vector<ODEState<double>>> &states_s,
-                              std::vector<std::vector<ODEDeriv<double>>> &derivs_s) const {
+                              std::vector<std::vector<ODEDeriv<double>>> &derivs_s,
+                              ControllerVariant &controller, int &naccept, int &nreject) const {
 
         if (xs.size() != tfs.size()) {
             throw std::invalid_argument("Number of initial states and final times must match.");
@@ -1010,10 +1028,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (xs.size() == 0) {
             throw std::invalid_argument("Must supply at least one initial state.");
         }
-
-        this->naccept_ = 0;
-        this->nreject_ = 0;
-        std::visit([](auto &c) { c.reset(); }, this->controller_variant_);
 
         int ntrajs = xs.size();
 
@@ -1040,13 +1054,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 hs[i] = 0.0;
             } else if (this->adaptive_ && this->use_hairer_wanner_initdt_) {
                 int order = static_cast<int>(this->error_order_);
-                double h_init = estimate_initial_dt(this->ode_, xis[i], tfs[i],
-                                                    this->abs_tols_,
-                                                    this->rel_tols_, order,
-                                                    this->error_norm_type_);
+                double h_init = estimate_initial_dt(this->ode_, xis[i], tfs[i], this->abs_tols_,
+                                                    this->rel_tols_, order, this->error_norm_type_);
                 hs[i] = h_init;
-                numsteps = std::max(1, int(std::abs(h_spans[i] /
-                                                    (h_init == 0 ? 1.0 : h_init))));
+                numsteps = std::max(1, int(std::abs(h_spans[i] / (h_init == 0 ? 1.0 : h_init))));
             } else {
                 numsteps = int(abs(h_spans[i] / this->def_step_size_)) + 1;
                 hs[i] = .9 * (h_spans[i] / double(numsteps));
@@ -1134,7 +1145,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         while (numrunning > 0) {
             // Julia-style maxiters safety net — shared counter across all
             // active lanes, since the controller state is shared.
-            const int steps_attempted = this->naccept_ + this->nreject_;
+            const int steps_attempted = naccept + nreject;
             if (steps_attempted >= this->max_steps_) {
                 throw ::std::runtime_error(
                     "Integrator (SuperScalar batch) exceeded max_steps (" +
@@ -1218,11 +1229,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                     xnext_est[k] = xnext_est_ss[k][V];
                                 auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
 
-                                auto res = scaled_residuals(
-                                    utilde,
-                                    xis[itmp].head(u_x_vars), // u0 (pre-step)
-                                    xnext.head(u_x_vars),     // u1 (post-step)
-                                    this->abs_tols_, this->rel_tols_);
+                                auto res =
+                                    scaled_residuals(utilde,
+                                                     xis[itmp].head(u_x_vars), // u0 (pre-step)
+                                                     xnext.head(u_x_vars),     // u1 (post-step)
+                                                     this->abs_tols_, this->rel_tols_);
                                 double err_norm = error_norm(res, this->error_norm_type_);
 
                                 // Note: batch controller state is shared across lanes. For
@@ -1232,11 +1243,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                 // controllers; acceptable for SP3.
                                 auto outcome = std::visit(
                                     [&](auto &c) {
-                                        return c.update(h, err_norm,
-                                                        this->error_order_,
-                                                        this->naccept_);
+                                        return c.update(h, err_norm, this->error_order_, naccept);
                                     },
-                                    this->controller_variant_);
+                                    controller);
                                 double hnext = outcome.dt_new;
 
                                 if (hnext / h > this->max_step_change_)
@@ -1249,11 +1258,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                 hs[itmp] = h;
 
                                 if (!outcome.accepted) {
-                                    this->nreject_++;
+                                    nreject++;
                                     continueloops[itmp] = true;
                                     continue;
                                 }
-                                this->naccept_++;
+                                naccept++;
                             }
 
                             bool eventbreak = false;
@@ -1322,6 +1331,165 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
         return xis;
     }
+
+    /// \name Thread-safe `_core` helpers
+    ///
+    /// These mirror the public `integrate*` overloads that are reachable
+    /// from parallel dispatchers but take controller + counter state by
+    /// reference and never read or write `this->controller_variant_`,
+    /// `this->naccept_`, or `this->nreject_`. Public wrappers create
+    /// per-call locals, invoke the `_core`, and (single-threaded only)
+    /// write counters back to the mutable members for `get_naccept()` /
+    /// `get_nreject()` inspection. Parallel workers invoke `_core`
+    /// directly and skip the writeback, so the members are never
+    /// written from multiple threads.
+    /// @{
+    IntegRet integrate_core(const ODEState<double> &x0, double tf, ControllerVariant &controller,
+                            int &naccept, int &nreject) const {
+        ODEState<double> xf;
+        std::vector<EventPack> events;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = false;
+        bool storederivs = false;
+        bool storemidpoints = false;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        return xf;
+    }
+
+    IntegEventRet integrate_core(const ODEState<double> &x0, double tf,
+                                 const std::vector<EventPack> &events,
+                                 ControllerVariant &controller, int &naccept, int &nreject) const {
+        ODEState<double> xf;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = true;
+        bool storederivs = true;
+        bool storemidpoints = true;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
+        for (auto etimes : eventtimes) {
+            if (etimes.size() > 0) {
+                auto tab = this->make_table(xs, d_xs, false);
+                eventlocs = this->find_events(tab, events, eventtimes);
+                break;
+            }
+        }
+        return std::tuple{xf, eventlocs};
+    }
+
+    DenseRet integrate_dense_core(const ODEState<double> &x0, double tf,
+                                  ControllerVariant &controller, int &naccept, int &nreject) const {
+        ODEState<double> xf;
+        std::vector<EventPack> events;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = true;
+        bool storederivs = false;
+        bool storemidpoints = false;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        return xs;
+    }
+
+    DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf,
+                                       const std::vector<EventPack> &events, bool alloutput,
+                                       ControllerVariant &controller, int &naccept,
+                                       int &nreject) const {
+        ODEState<double> xf;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = true;
+        bool storederivs = true;
+        bool storemidpoints = true;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
+        for (auto etimes : eventtimes) {
+            if (etimes.size() > 0) {
+                auto tab = this->make_table(xs, d_xs, false);
+                eventlocs = this->find_events(tab, events, eventtimes);
+                break;
+            }
+        }
+        if (alloutput)
+            return std::tuple{xs, eventlocs};
+        else
+            return std::tuple{midpoints_removed(xs), eventlocs};
+    }
+
+    DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
+                                       const std::vector<EventPack> &events,
+                                       ControllerVariant &controller, int &naccept,
+                                       int &nreject) const {
+        ODEState<double> xf;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = true;
+        bool storederivs = true;
+        bool storemidpoints = true;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        auto tab = this->make_table(xs, d_xs, true);
+        std::vector<std::vector<ODEState<double>>> eventlocs =
+            this->find_events(tab, events, eventtimes);
+        Eigen::VectorXd ts;
+        ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
+        std::vector<ODEState<double>> x_interp(n);
+        for (int i = 0; i < n; i++) {
+            x_interp[i].resize(this->ode_.input_rows());
+            tab->interpolate_ref(ts[i], x_interp[i]);
+        }
+        return std::tuple{x_interp, eventlocs};
+    }
+
+    DenseRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
+                                  ControllerVariant &controller, int &naccept, int &nreject) const {
+        ODEState<double> xf;
+        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+        bool storestates = true;
+        bool storederivs = true;
+        bool storemidpoints = true;
+        std::vector<ODEState<double>> xs;
+        std::vector<ODEDeriv<double>> d_xs;
+        std::vector<EventPack> events;
+        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
+                                  storemidpoints, xs, d_xs, controller, naccept, nreject);
+        auto tab = this->make_table(xs, d_xs, true);
+        Eigen::VectorXd ts;
+        ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
+        std::vector<ODEState<double>> x_interp(n);
+        for (int i = 0; i < n; i++) {
+            x_interp[i].resize(this->ode_.input_rows());
+            tab->interpolate_ref(ts[i], x_interp[i]);
+        }
+        return x_interp;
+    }
+
+    STMRet integrate_stm_core(const ODEState<double> &x0, double tf, ControllerVariant &controller,
+                              int &naccept, int &nreject) const {
+        auto xs = this->integrate_dense_core(x0, tf, controller, naccept, nreject);
+        Jacobian<double> jx = this->calculate_jacobian(xs);
+        return std::tuple{xs.back(), jx};
+    }
+
+    STMEventRet integrate_stm_core(const ODEState<double> &x0, double tf,
+                                   const std::vector<EventPack> &events,
+                                   ControllerVariant &controller, int &naccept,
+                                   int &nreject) const {
+        auto [xs, eventlocs] =
+            this->integrate_dense_core(x0, tf, events, false, controller, naccept, nreject);
+        Jacobian<double> jx = this->calculate_jacobian(xs);
+        return std::tuple{xs.back(), jx, eventlocs};
+    }
+    /// @}
 
     std::vector<std::vector<ODEState<double>>>
     find_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
@@ -1804,158 +1972,125 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     ///////////////////////////////////////////////////////////////////////////////////
     IntegRet integrate(const ODEState<double> &x0, double tf) const {
-
-        ODEState<double> xf;
-        std::vector<EventPack> events;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = false;
-        bool storederivs = false;
-        bool storemidpoints = false;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto xf = this->integrate_core(x0, tf, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
         return xf;
     }
 
     std::vector<ODEState<double>> integrate(const std::vector<ODEState<double>> &x0s,
                                             const Eigen::VectorXd &tfs) const {
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
 
+        std::vector<ODEState<double>> result;
         if (!vectorize_batch_calls_) {
-
             std::vector<ODEState<double>> xfs(x0s.size());
-            std::vector<EventPack> events;
-            std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-            bool storestates = false;
-            bool storederivs = false;
-            bool storemidpoints = false;
-            std::vector<ODEState<double>> xs;
-            std::vector<ODEDeriv<double>> d_xs;
-
             for (int i = 0; i < x0s.size(); i++) {
-
-                xfs[i] = this->integrate_impl(x0s[i], tfs[i], events, eventtimes, storestates,
-                                              storederivs, storemidpoints, xs, d_xs);
+                xfs[i] = this->integrate_core(x0s[i], tfs[i], ctrl, na, nr);
             }
-
-            return xfs;
-
+            result = std::move(xfs);
         } else {
-
             std::vector<EventPack> events;
             std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes;
-
             bool storestates = false;
             bool storederivs = false;
             bool storemidpoints = false;
             std::vector<std::vector<ODEState<double>>> xs;
             std::vector<std::vector<ODEDeriv<double>>> d_xs;
-
-            return integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
-                                             storemidpoints, xs, d_xs);
+            result = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
+                                               storederivs, storemidpoints, xs, d_xs, ctrl, na, nr);
         }
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return result;
     }
 
     std::vector<STMRet> integrate_stm(const std::vector<ODEState<double>> &x0s,
                                       const Eigen::VectorXd &tfs) const {
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
 
+        std::vector<STMRet> rets(x0s.size());
         if (!vectorize_batch_calls_) {
-            std::vector<STMRet> rets(x0s.size());
             for (int i = 0; i < x0s.size(); i++) {
-                rets[i] = this->integrate_stm(x0s[i], tfs[i]);
+                rets[i] = this->integrate_stm_core(x0s[i], tfs[i], ctrl, na, nr);
             }
-            return rets;
         } else {
-
             std::vector<EventPack> events;
             std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes;
-
             bool storestates = true;
             bool storederivs = false;
             bool storemidpoints = false;
             std::vector<std::vector<ODEState<double>>> xs(x0s.size());
             std::vector<std::vector<ODEDeriv<double>>> d_xs(x0s.size());
 
-            auto x_finals = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
-                                                      storederivs, storemidpoints, xs, d_xs);
+            auto x_finals =
+                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                          storemidpoints, xs, d_xs, ctrl, na, nr);
 
             auto jacs = this->calculate_jacobians(xs);
-            std::vector<STMRet> rets(x0s.size());
-
             for (int i = 0; i < x0s.size(); i++) {
-
                 rets[i] = std::tuple{x_finals[i], jacs[i]};
             }
-            return rets;
         }
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return rets;
     }
 
     std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>>
     integrate_stm2(const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs,
                    const std::vector<ODEState<double>> &lfs) const {
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
 
+        std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(
+            x0s.size());
         if (!vectorize_batch_calls_) {
-            std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(
-                x0s.size());
             for (int i = 0; i < x0s.size(); i++) {
-                auto xs = this->integrate_dense(x0s[i], tfs[i]);
+                auto xs = this->integrate_dense_core(x0s[i], tfs[i], ctrl, na, nr);
                 auto [J, H] = this->calculate_jacobian_hessian(xs, lfs[i]);
                 rets[i] = std::tuple{xs.back(), J, H};
             }
-            return rets;
         } else {
-
             std::vector<EventPack> events;
             std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes;
-
             bool storestates = true;
             bool storederivs = false;
             bool storemidpoints = false;
             std::vector<std::vector<ODEState<double>>> xs(x0s.size());
             std::vector<std::vector<ODEDeriv<double>>> d_xs(x0s.size());
 
-            auto x_finals = integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates,
-                                                      storederivs, storemidpoints, xs, d_xs);
+            auto x_finals =
+                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                          storemidpoints, xs, d_xs, ctrl, na, nr);
 
             auto [js, hs_out] = this->calculate_jacobians_hessians(xs, lfs);
-            std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(
-                x0s.size());
-
             for (int i = 0; i < x0s.size(); i++) {
                 rets[i] = std::tuple{x_finals[i], js[i], hs_out[i]};
             }
-            return rets;
         }
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return rets;
     }
 
     IntegEventRet integrate(const ODEState<double> &x0, double tf,
                             const std::vector<EventPack> &events) const {
-
-        ODEState<double> xf;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = true;
-        bool storederivs = true;
-        bool storemidpoints = true;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
-
-        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
-        for (auto etimes : eventtimes) {
-            if (etimes.size() > 0) {
-                auto tab = this->make_table(xs, d_xs, false);
-                eventlocs = this->find_events(tab, events, eventtimes);
-                break;
-            }
-        }
-
-        return std::tuple{xf, eventlocs};
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_core(x0, tf, events, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
 
     template <class... Args>
@@ -1975,8 +2110,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
 
         auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                results[i] = this->integrate(x0s[i], tfs[i], args...);
+                ctrl = this->controller_variant_;
+                std::visit([](auto &c) { c.reset(); }, ctrl);
+                na = 0;
+                nr = 0;
+                results[i] = this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr);
             }
         };
 
@@ -1984,10 +2125,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
+    /// Parallel batch integrate.
+    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
+    /// parallel path (workers use per-iteration local counters to avoid
+    /// cross-thread writes to member state). Values reflect whatever
+    /// state the members held before this call.
     std::vector<IntegRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                              const Eigen::VectorXd &tfs, int n_parts) {
         return this->integrate_parallel_impl(x0s, tfs, n_parts);
     }
+    /// Parallel batch integrate with events. Same `get_naccept()` /
+    /// `get_nreject()` contract as the no-events overload.
     std::vector<IntegEventRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                                   const Eigen::VectorXd &tfs,
                                                   const std::vector<EventPack> &events,
@@ -1997,125 +2145,64 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf) const {
-
-        ODEState<double> xf;
-        std::vector<EventPack> events;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = true;
-        bool storederivs = false;
-        bool storemidpoints = false;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
         return xs;
     }
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf,
                                   const std::vector<EventPack> &events, bool alloutput) const {
-
-        ODEState<double> xf;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = true;
-        bool storederivs = true;
-        bool storemidpoints = true;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
-
-        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
-        for (auto etimes : eventtimes) {
-            if (etimes.size() > 0) {
-                auto tab = this->make_table(xs, d_xs, false);
-                eventlocs = this->find_events(tab, events, eventtimes);
-                break;
-            }
-        }
-        if (alloutput)
-            return std::tuple{xs, eventlocs};
-        else
-            return std::tuple{midpoints_removed(xs), eventlocs};
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf, int n,
                                   const std::vector<EventPack> &events) const {
-
-        ODEState<double> xf;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = true;
-        bool storederivs = true;
-        bool storemidpoints = true;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
-
-        auto tab = this->make_table(xs, d_xs, true);
-        std::vector<std::vector<ODEState<double>>> eventlocs =
-            this->find_events(tab, events, eventtimes);
-
-        Eigen::VectorXd ts;
-        ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
-
-        std::vector<ODEState<double>> x_interp(n);
-
-        for (int i = 0; i < n; i++) {
-            x_interp[i].resize(this->ode_.input_rows());
-            tab->interpolate_ref(ts[i], x_interp[i]);
-        }
-
-        return std::tuple{x_interp, eventlocs};
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int n) const {
-
-        ODEState<double> xf;
-        std::vector<std::vector<Eigen::Vector2d>> eventtimes;
-
-        bool storestates = true;
-        bool storederivs = true;
-        bool storemidpoints = true;
-        std::vector<ODEState<double>> xs;
-        std::vector<ODEDeriv<double>> d_xs;
-        std::vector<EventPack> events;
-
-        xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
-                                  storemidpoints, xs, d_xs);
-
-        auto tab = this->make_table(xs, d_xs, true);
-
-        Eigen::VectorXd ts;
-        ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
-
-        std::vector<ODEState<double>> x_interp(n);
-
-        for (int i = 0; i < n; i++) {
-            x_interp[i].resize(this->ode_.input_rows());
-            tab->interpolate_ref(ts[i], x_interp[i]);
-        }
-
-        return x_interp;
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_dense_core(x0, tf, n, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int num_states,
                              std::function<bool(ConstEigenRef<Eigen::VectorXd>)> exitfun) const {
-        VectorX<double> ts = VectorX<double>::LinSpaced(num_states, x0[this->ode_.t_var()], tf);
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
 
+        VectorX<double> ts = VectorX<double>::LinSpaced(num_states, x0[this->ode_.t_var()], tf);
         std::vector<ODEState<double>> xout;
         xout.reserve(num_states);
         xout.push_back(x0);
         for (int i = 1; i < num_states; i++) {
-            xout.push_back(this->integrate(xout[i - 1], ts[i]));
+            xout.push_back(this->integrate_core(xout[i - 1], ts[i], ctrl, na, nr));
             if (exitfun(xout.back()))
                 break;
         }
+        this->naccept_ = na;
+        this->nreject_ = nr;
         return xout;
     }
 
@@ -2136,8 +2223,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
 
         auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                results[i] = this->integrate_dense(x0s[i], tfs[i], args...);
+                ctrl = this->controller_variant_;
+                std::visit([](auto &c) { c.reset(); }, ctrl);
+                na = 0;
+                nr = 0;
+                results[i] = this->integrate_dense_core(x0s[i], tfs[i], args..., ctrl, na, nr);
             }
         };
 
@@ -2145,10 +2238,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
+    /// Parallel batch dense integrate.
+    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
+    /// parallel path. See `integrate_parallel` for the rationale.
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs, int n_parts) {
         return this->integrate_dense_parallel_impl(x0s, tfs, n_parts);
     }
+    /// Parallel batch dense integrate with events. Same `get_naccept()` /
+    /// `get_nreject()` contract as the no-events overload.
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<EventPack> &events,
@@ -2179,8 +2277,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
 
         auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                results[i] = this->integrate_dense(x0s[i], tfs[i], ns[i], args...);
+                ctrl = this->controller_variant_;
+                std::visit([](auto &c) { c.reset(); }, ctrl);
+                na = 0;
+                nr = 0;
+                results[i] =
+                    this->integrate_dense_core(x0s[i], tfs[i], ns[i], args..., ctrl, na, nr);
             }
         };
 
@@ -2188,6 +2293,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
+    /// Parallel batch dense integrate with per-trajectory state counts.
+    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
+    /// parallel path.
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<int> &ns,
@@ -2195,6 +2303,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                         int n_parts) {
         return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, events);
     }
+    /// Parallel batch dense integrate with per-trajectory state counts (no events).
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs,
                                                    const std::vector<int> &ns, int n_parts) {
@@ -2203,15 +2312,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
     STMRet integrate_stm(const ODEState<double> &x0, double tf) const {
-        auto xs = this->integrate_dense(x0, tf);
-        Jacobian<double> jx = this->calculate_jacobian(xs);
-        return std::tuple{xs.back(), jx};
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_stm_core(x0, tf, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
     STMEventRet integrate_stm(const ODEState<double> &x0, double tf,
                               const std::vector<EventPack> &events) const {
-        auto [xs, eventlocs] = this->integrate_dense(x0, tf, events, false);
-        Jacobian<double> jx = this->calculate_jacobian(xs);
-        return std::tuple{xs.back(), jx, eventlocs};
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto r = this->integrate_stm_core(x0, tf, events, ctrl, na, nr);
+        this->naccept_ = na;
+        this->nreject_ = nr;
+        return r;
     }
 
     template <class... Args>
@@ -2231,8 +2348,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         RetType results(n);
 
         auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                results[i] = this->integrate_stm(x0s[i], tfs[i], args...);
+                ctrl = this->controller_variant_;
+                std::visit([](auto &c) { c.reset(); }, ctrl);
+                na = 0;
+                nr = 0;
+                results[i] = this->integrate_stm_core(x0s[i], tfs[i], args..., ctrl, na, nr);
             }
         };
 
@@ -2240,10 +2363,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
+    /// Parallel batch STM integrate.
+    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
+    /// parallel path.
     std::vector<STMRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
                                                const Eigen::VectorXd &tfs, int n_parts) {
         return this->integrate_stm_parallel_impl(x0s, tfs, n_parts);
     }
+    /// Parallel batch STM integrate with events. Same `get_naccept()` /
+    /// `get_nreject()` contract as the no-events overload.
     std::vector<STMEventRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
                                                     const Eigen::VectorXd &tfs,
                                                     const std::vector<EventPack> &events,
@@ -2251,6 +2379,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->integrate_stm_parallel_impl(x0s, tfs, n_parts, events);
     }
 
+    /// Segmented parallel STM over a single trajectory.
+    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by this
+    /// path. Workers and the interleaved main-thread propagation each
+    /// own private per-segment counters to avoid cross-thread writes
+    /// to member state.
     STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
         VectorX<double> ts = VectorX<double>::LinSpaced(n_parts + 1, x0[this->ode_.t_var()], tf);
         std::vector<ODEState<double>> xs(n_parts + 1);
@@ -2261,21 +2394,36 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         Eigen::MatrixXd jxall(this->input_rows(), this->input_rows());
         jxall.setIdentity();
 
+        // Each stm_op invocation creates its own controller + counter
+        // locals, so concurrent worker invocations are race-free.
         auto stm_op = [&](int i) {
+            ControllerVariant ctrl = this->controller_variant_;
+            std::visit([](auto &c) { c.reset(); }, ctrl);
+            int na = 0, nr = 0;
             auto xi = xs[i];
             auto tf1 = ts[i + 1];
-            return this->integrate_stm(xi, tf1);
+            return this->integrate_stm_core(xi, tf1, ctrl, na, nr);
         };
 
         if (n_parts > 1 && tycho::utils::use_thread_pool()) {
+            // Main-thread propagation runs concurrently with workers;
+            // keep its state strictly local (no member writes).
+            ControllerVariant main_ctrl;
+            int main_na = 0, main_nr = 0;
             int submitted = 0;
             try {
                 for (int i = 0; i < n_parts; i++) {
                     results[i] =
                         tycho::utils::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
                     submitted = i + 1;
-                    if (i < (n_parts - 1))
-                        xs[i + 1] = this->integrate(xs[i], ts[i + 1]);
+                    if (i < (n_parts - 1)) {
+                        main_ctrl = this->controller_variant_;
+                        std::visit([](auto &c) { c.reset(); }, main_ctrl);
+                        main_na = 0;
+                        main_nr = 0;
+                        xs[i + 1] =
+                            this->integrate_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
+                    }
                 }
             } catch (...) {
                 // If integrate() throws mid-loop, drain submitted futures to
@@ -2358,10 +2506,24 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 throw std::runtime_error(joined);
             }
         } else {
+            // Non-threadpool fallback is single-threaded, but stay on
+            // `_core` entries + local state for consistency — members
+            // are never written by this path.
+            ControllerVariant fallback_ctrl;
+            int fallback_na = 0, fallback_nr = 0;
             for (int i = 0; i < n_parts; i++) {
                 auto [xf, jx] = stm_op(i);
                 jxall.topRows(this->output_rows()) = (jx * jxall).eval();
-                xs[i + 1] = (i < n_parts - 1) ? this->integrate(xs[i], ts[i + 1]) : xf;
+                if (i < n_parts - 1) {
+                    fallback_ctrl = this->controller_variant_;
+                    std::visit([](auto &c) { c.reset(); }, fallback_ctrl);
+                    fallback_na = 0;
+                    fallback_nr = 0;
+                    xs[i + 1] = this->integrate_core(xs[i], ts[i + 1], fallback_ctrl, fallback_na,
+                                                     fallback_nr);
+                } else {
+                    xs[i + 1] = xf;
+                }
             }
         }
 
@@ -2380,7 +2542,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         ODEState<Scalar> x0 = x.head(this->ode_.input_rows());
         Scalar tf = x[this->ode_.input_rows()];
-        fx = this->integrate(x0, tf);
+        // compute_impl must stay const (VectorFunction::compute contract)
+        // and is called from differentiation paths; avoid the member
+        // writeback by going directly to the thread-safe core with
+        // local state.
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        fx = this->integrate_core(x0, tf, ctrl, na, nr);
     }
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
@@ -2391,7 +2560,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         ODEState<Scalar> x0 = x.head(this->ode_.input_rows());
         Scalar tf = x[this->ode_.input_rows()];
-        auto xs = this->integrate_dense(x0, tf);
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
         fx = xs.back();
         jx = this->calculate_jacobian(xs);
     }
@@ -2411,7 +2583,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         ODEState<Scalar> lf = adjvars;
         Scalar tf = x[this->ode_.input_rows()];
 
-        auto xs = this->integrate_dense(x0, tf);
+        ControllerVariant ctrl = this->controller_variant_;
+        std::visit([](auto &c) { c.reset(); }, ctrl);
+        int na = 0, nr = 0;
+        auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
         fx = xs.back();
 
         std::tuple<Jacobian<double>, Hessian<double>> res =

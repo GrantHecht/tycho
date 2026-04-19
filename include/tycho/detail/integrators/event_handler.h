@@ -15,6 +15,7 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
+#include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
 namespace tycho::integrators {
@@ -29,11 +30,11 @@ struct EventHandler {
 
     /// Check for zero crossings between prev_vals and next_vals.
     /// Returns true if an event triggered a stop condition.
+    template <class XState>
     static bool check_crossings(const std::vector<EventPack> &events,
-                                const std::vector<Eigen::VectorXd> &prev_vals,
-                                std::vector<Eigen::VectorXd> &next_vals,
-                                const Eigen::VectorXd &xnext, int t_var,
-                                std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
+                                const std::vector<Vector1<double>> &prev_vals,
+                                std::vector<Vector1<double>> &next_vals, const XState &xnext,
+                                int t_var, std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
                                 double t_prev) {
         bool eventbreak = false;
         for (int j = 0; j < static_cast<int>(events.size()); j++) {
@@ -110,7 +111,7 @@ struct EventHandler {
                     fx = func.compute(x);
                     int sgnfx = (fx[0] >= 0) - (fx[0] <= 0);
 
-                    for (int bi = 0; bi < 5; bi++) {
+                    for (int bi = 0; bi < iters; bi++) {
                         if (sgnfx == sgnfl) {
                             tlow = tm;
                             sgnfl = sgnfx;

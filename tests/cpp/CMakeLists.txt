@@ -104,6 +104,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_integration_dense.cpp
     integrators/test_runtime_ode_integrator.cpp
     integrators/test_parallel_stm_errors.cpp
+    integrators/test_integrator_parallel.cpp
     integrators/test_stepper.cpp
 
     # OptimalControl

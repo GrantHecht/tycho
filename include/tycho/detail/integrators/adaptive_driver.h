@@ -8,6 +8,7 @@
 #include "tycho/detail/integrators/event_handler.h"
 #include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/stepper.h"
+#include "tycho/detail/typedefs/eigen_types.h"
 
 #include <Eigen/Core>
 #include <cmath>
@@ -27,8 +28,7 @@ namespace tycho::integrators {
 ///   Controller — step-size controller (IController or compatible)
 ///   DODE       — ODE type
 ///   Scalar     — numeric type (typically double)
-template <IVPAlg Alg, class Controller, class DODE, class Scalar = double>
-struct AdaptiveDriver {
+template <IVPAlg Alg, class Controller, class DODE, class Scalar = double> struct AdaptiveDriver {
 
     using ODEState = typename DODE::template Input<Scalar>;
     using ODEDeriv = typename DODE::template Output<Scalar>;
@@ -92,9 +92,8 @@ struct AdaptiveDriver {
         stepper_.fsal_valid_ = true;
 
         // Event state
-        using Vector1 = Eigen::Matrix<double, 1, 1>;
-        std::vector<Vector1> prev_event_vals(events.size());
-        std::vector<Vector1> next_event_vals(events.size());
+        std::vector<Vector1<double>> prev_event_vals(events.size());
+        std::vector<Vector1<double>> next_event_vals(events.size());
 
         for (int j = 0; j < static_cast<int>(events.size()); j++) {
             prev_event_vals[j].setZero();
@@ -130,9 +129,9 @@ struct AdaptiveDriver {
 
         while (continueloop) {
             if (naccept_count_ + nreject_count_ >= max_steps_) {
-                throw std::runtime_error(
-                    "AdaptiveDriver exceeded max_steps (" + std::to_string(max_steps_) +
-                    "); raise via max_steps_ or loosen tolerances.");
+                throw std::runtime_error("AdaptiveDriver exceeded max_steps (" +
+                                         std::to_string(max_steps_) +
+                                         "); raise via max_steps_ or loosen tolerances.");
             }
             Scalar tnext = xi[ode.t_var()] + h;
 
@@ -154,18 +153,23 @@ struct AdaptiveDriver {
             xnext_est.setZero();
             xnext_mid.setZero();
 
+            // Stepper::step() writes k_fsal_ at end-of-step before accept/reject
+            // is known (stepper.h:83 for FSAL, stepper.h:109 for non-FSAL + midpoint).
+            // Snapshot here so we can restore on reject — otherwise the retry
+            // would read f(xnext_rejected) as its first RK stage at xi.
+            ODEDeriv k_fsal_saved = stepper_.k_fsal_;
+            bool fsal_valid_saved = stepper_.fsal_valid_;
+
             stepper_.step(ode, xi, tnext, xnext, xnext_est, storemidpoints || storederivs,
                           xnext_mid, update_control);
 
             if (adaptive_) {
                 auto u_x_vars = ode.x_vars();
                 auto utilde = xnext.head(u_x_vars) - xnext_est.head(u_x_vars);
-                auto res = scaled_residuals(utilde, xi.head(u_x_vars),
-                                            xnext.head(u_x_vars), abs_tols_,
-                                            rel_tols_);
+                auto res = scaled_residuals(utilde, xi.head(u_x_vars), xnext.head(u_x_vars),
+                                            abs_tols_, rel_tols_);
                 double err_norm = error_norm(res, error_norm_type_);
-                auto outcome = controller_.update(h, err_norm, error_order_,
-                                                  naccept_count_);
+                auto outcome = controller_.update(h, err_norm, error_order_, naccept_count_);
                 double hnext = outcome.dt_new;
 
                 if (hnext / h > max_step_change_)
@@ -176,6 +180,8 @@ struct AdaptiveDriver {
                     h = hnext;
 
                 if (!outcome.accepted) {
+                    stepper_.k_fsal_ = k_fsal_saved;
+                    stepper_.fsal_valid_ = fsal_valid_saved;
                     nreject_count_++;
                     continueloop = true;
                     continue;
@@ -186,9 +192,9 @@ struct AdaptiveDriver {
             // Event detection
             bool eventbreak = false;
             if (!events.empty()) {
-                eventbreak = EventHandler::check_crossings(
-                    events, prev_event_vals, next_event_vals, xnext, ode.t_var(), eventtimes,
-                    xi[ode.t_var()]);
+                eventbreak =
+                    EventHandler::check_crossings(events, prev_event_vals, next_event_vals, xnext,
+                                                  ode.t_var(), eventtimes, xi[ode.t_var()]);
             }
 
             xi = xnext;
