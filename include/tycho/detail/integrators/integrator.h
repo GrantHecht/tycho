@@ -461,6 +461,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
 
+    /// Build a per-call controller for a worker (or main thread): clone the
+    /// prototype and reset internal state so it starts from first-step
+    /// semantics. Every integrate / integrate_*_core / parallel path uses
+    /// this pattern; centralizing avoids the "forgot the reset()" class of
+    /// bug that surfaced during the SP3 per-lane work (see commit ce4709b).
+    ControllerVariant make_worker_controller() const {
+        ControllerVariant c = this->controller_variant_;
+        std::visit([](auto &cc) { cc.reset(); }, c);
+        return c;
+    }
+
     // Step statistics for `get_naccept()` / `get_nreject()` inspection.
     // Written only by single-threaded public wrappers via a post-call
     // writeback from local counters; the impl bodies (`integrate_impl`,
@@ -1041,8 +1052,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     ///////////////////////////////////////////////////////////////////////////////////
     IntegRet integrate(const ODEState<double> &x0, double tf) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto xf = this->integrate_core(x0, tf, ctrl, na, nr);
         this->naccept_ = na;
@@ -1159,8 +1169,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     IntegEventRet integrate(const ODEState<double> &x0, double tf,
                             const std::vector<EventPack> &events) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_core(x0, tf, events, ctrl, na, nr);
         this->naccept_ = na;
@@ -1188,8 +1197,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             ControllerVariant ctrl;
             int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                ctrl = this->controller_variant_;
-                std::visit([](auto &c) { c.reset(); }, ctrl);
+                ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
                 results[i] = this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr);
@@ -1220,8 +1228,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
         this->naccept_ = na;
@@ -1231,8 +1238,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf,
                                   const std::vector<EventPack> &events, bool alloutput) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr);
         this->naccept_ = na;
@@ -1242,8 +1248,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf, int n,
                                   const std::vector<EventPack> &events) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr);
         this->naccept_ = na;
@@ -1252,8 +1257,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int n) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_dense_core(x0, tf, n, ctrl, na, nr);
         this->naccept_ = na;
@@ -1263,8 +1267,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int num_states,
                              std::function<bool(ConstEigenRef<Eigen::VectorXd>)> exitfun) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
 
         VectorX<double> ts = VectorX<double>::LinSpaced(num_states, x0[this->ode_.t_var()], tf);
@@ -1301,8 +1304,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             ControllerVariant ctrl;
             int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                ctrl = this->controller_variant_;
-                std::visit([](auto &c) { c.reset(); }, ctrl);
+                ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
                 results[i] = this->integrate_dense_core(x0s[i], tfs[i], args..., ctrl, na, nr);
@@ -1355,8 +1357,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             ControllerVariant ctrl;
             int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                ctrl = this->controller_variant_;
-                std::visit([](auto &c) { c.reset(); }, ctrl);
+                ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
                 results[i] =
@@ -1387,8 +1388,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
     STMRet integrate_stm(const ODEState<double> &x0, double tf) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_stm_core(x0, tf, ctrl, na, nr);
         this->naccept_ = na;
@@ -1397,8 +1397,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     STMEventRet integrate_stm(const ODEState<double> &x0, double tf,
                               const std::vector<EventPack> &events) const {
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto r = this->integrate_stm_core(x0, tf, events, ctrl, na, nr);
         this->naccept_ = na;
@@ -1426,8 +1425,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             ControllerVariant ctrl;
             int na = 0, nr = 0;
             for (int i = start; i < stop; i++) {
-                ctrl = this->controller_variant_;
-                std::visit([](auto &c) { c.reset(); }, ctrl);
+                ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
                 results[i] = this->integrate_stm_core(x0s[i], tfs[i], args..., ctrl, na, nr);
@@ -1472,8 +1470,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // Each stm_op invocation creates its own controller + counter
         // locals, so concurrent worker invocations are race-free.
         auto stm_op = [&](int i) {
-            ControllerVariant ctrl = this->controller_variant_;
-            std::visit([](auto &c) { c.reset(); }, ctrl);
+            ControllerVariant ctrl = this->make_worker_controller();
             int na = 0, nr = 0;
             auto xi = xs[i];
             auto tf1 = ts[i + 1];
@@ -1492,8 +1489,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         tycho::utils::thread_pool().submit_task([&stm_op, i] { return stm_op(i); });
                     submitted = i + 1;
                     if (i < (n_parts - 1)) {
-                        main_ctrl = this->controller_variant_;
-                        std::visit([](auto &c) { c.reset(); }, main_ctrl);
+                        main_ctrl = this->make_worker_controller();
                         main_na = 0;
                         main_nr = 0;
                         xs[i + 1] =
@@ -1623,8 +1619,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 auto [xf, jx] = stm_op(i);
                 jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                 if (i < n_parts - 1) {
-                    fallback_ctrl = this->controller_variant_;
-                    std::visit([](auto &c) { c.reset(); }, fallback_ctrl);
+                    fallback_ctrl = this->make_worker_controller();
                     fallback_na = 0;
                     fallback_nr = 0;
                     xs[i + 1] = this->integrate_core(xs[i], ts[i + 1], fallback_ctrl, fallback_na,
@@ -1654,8 +1649,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // and is called from differentiation paths; avoid the member
         // writeback by going directly to the thread-safe core with
         // local state.
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         fx = this->integrate_core(x0, tf, ctrl, na, nr);
     }
@@ -1668,8 +1662,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         ODEState<Scalar> x0 = x.head(this->ode_.input_rows());
         Scalar tf = x[this->ode_.input_rows()];
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
         fx = xs.back();
@@ -1691,8 +1684,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         ODEState<Scalar> lf = adjvars;
         Scalar tf = x[this->ode_.input_rows()];
 
-        ControllerVariant ctrl = this->controller_variant_;
-        std::visit([](auto &c) { c.reset(); }, ctrl);
+        ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
         auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
         fx = xs.back();
