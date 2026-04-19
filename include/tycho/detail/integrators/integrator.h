@@ -2643,14 +2643,47 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             } catch (...) {
                 // If integrate() throws mid-loop, drain submitted futures to
                 // prevent use-after-free of stack-captured references (&stm_op).
-                auto ex = std::current_exception();
+                // Mirror the good-path drain below: aggregate worker failures as
+                // secondary context rather than silently dropping them. The
+                // main-thread exception is the primary trigger, but a worker may
+                // have faulted first with the real root cause (e.g., NaN on a
+                // specific lane).
+                std::string primary_msg;
+                try {
+                    throw; // rethrow in-flight to extract what()
+                } catch (const std::exception &e) {
+                    primary_msg = e.what();
+                } catch (...) {
+                    primary_msg = "<non-std::exception>";
+                }
+                std::vector<std::string> extra_msgs;
                 for (int j = 0; j < submitted; j++) {
                     try {
                         results[j].get();
+                    } catch (const std::exception &je) {
+                        extra_msgs.emplace_back(je.what());
                     } catch (...) {
+                        extra_msgs.emplace_back("<non-std::exception>");
                     }
                 }
-                std::rethrow_exception(ex);
+                if (extra_msgs.empty()) {
+                    throw;
+                }
+                constexpr size_t kMaxExtras = 5;
+                std::string joined =
+                    "integrate_stm_parallel: main-thread segment failure: " + primary_msg +
+                    "; worker failures (" + std::to_string(extra_msgs.size()) + "): ";
+                size_t shown = std::min(extra_msgs.size(), kMaxExtras);
+                for (size_t k = 0; k < shown; ++k) {
+                    if (k)
+                        joined += " | ";
+                    joined += extra_msgs[k];
+                }
+                if (extra_msgs.size() > kMaxExtras) {
+                    joined +=
+                        " | ... and " + std::to_string(extra_msgs.size() - kMaxExtras) + " more";
+                }
+                throw std::runtime_error(joined);
             }
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&stm_op, etc.).

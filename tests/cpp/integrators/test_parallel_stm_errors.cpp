@@ -46,6 +46,43 @@ struct WorkerThreadThrowingSHO
     }
 };
 
+// Main-AND-worker throwing variant — main throws once t exceeds a threshold,
+// so the synchronous inter-segment integrate_core inside the dispatch loop
+// raises while worker tasks are still submitted. Exercises the unwind-drain
+// path (P0.5), which previously swallowed worker diagnostics with an empty
+// catch(...) and rethrew only the main-thread exception.
+struct MainLateThrowingSHO
+    : oc::StaticODE<MainLateThrowingSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                    vf::DenseDerivativeMode::FDiffFwd> {
+    using Base = oc::StaticODE<MainLateThrowingSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                               vf::DenseDerivativeMode::FDiffFwd>;
+
+    std::thread::id main_thread_id_;
+    double main_throw_after_t_ = 1.5;
+
+    MainLateThrowingSHO() : main_thread_id_(std::this_thread::get_id()) {
+        this->set_ode_size(2, 0, 0);
+    }
+
+    template <class InType, class OutType>
+    inline void compute_impl(vf::CVecRef<InType> x_, vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        auto fx = fx_.const_cast_derived();
+        const bool is_main = std::this_thread::get_id() == main_thread_id_;
+        const double t = double(x_[2]);
+        if (!is_main) {
+            throw std::runtime_error("MainLateThrowingSHO: worker failure at t=" +
+                                     std::to_string(t));
+        }
+        if (is_main && t > main_throw_after_t_) {
+            throw std::runtime_error("MainLateThrowingSHO: main-thread failure at t=" +
+                                     std::to_string(t));
+        }
+        fx[0] = Scalar(x_[1]);
+        fx[1] = Scalar(-x_[0]);
+    }
+};
+
 } // namespace
 
 TEST_F(IntegratorTest, STMParallelMultipleSegmentFailuresYieldComposite) {
@@ -101,5 +138,39 @@ TEST_F(IntegratorTest, STMParallelExtraFailuresCapWithAndNMore) {
         EXPECT_NE(msg.find("additional failures (7)"), std::string::npos) << msg;
         EXPECT_NE(msg.find("... and 2 more"), std::string::npos)
             << "Expected 'and 2 more' cap suffix: " << msg;
+    }
+}
+
+// P0.5: when the synchronous main-thread integrate_core inside the dispatch
+// loop throws, the unwind handler must aggregate any worker failures rather
+// than silently dropping them. This is distinct from the post-loop drain path
+// covered by STMParallelMultipleSegmentFailuresYieldComposite.
+TEST_F(IntegratorTest, STMParallelMainUnwindAggregatesWorkerFailures) {
+    MainLateThrowingSHO ode;
+    Integrator<MainLateThrowingSHO> integ(ode, IVPAlg::DOPRI87, 0.05);
+    integ.set_abs_tol(1e-8);
+    integ.set_rel_tol(1e-8);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    const double tf = 4.0;
+
+    // Main-thread fails after t > 1.5, while workers fail unconditionally.
+    // With n_parts = 4 and segments of length 1.0, main succeeds on seg 0
+    // (t: 0 -> 1) but throws during seg 1 (t crosses 1.5). At that point
+    // tasks 0 and 1 are submitted; both are pending worker failures.
+    try {
+        (void)integ.integrate_stm_parallel(x0, tf, 4);
+        FAIL() << "integrate_stm_parallel should have thrown";
+    } catch (const std::runtime_error &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("main-thread segment failure"), std::string::npos)
+            << "Unwind composite should name the main-thread source: " << msg;
+        EXPECT_NE(msg.find("main-thread failure"), std::string::npos)
+            << "Main-thread exception text must be preserved: " << msg;
+        EXPECT_NE(msg.find("worker failures"), std::string::npos)
+            << "Worker failure count header must appear: " << msg;
+        EXPECT_NE(msg.find("worker failure at t="), std::string::npos)
+            << "At least one worker what() must be included: " << msg;
     }
 }
