@@ -1647,116 +1647,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<std::vector<ODEState<double>>>
     find_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
                 const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
-
         // Reset per-call so get_failed_event_count() reflects only the
         // most recent integrate-with-events invocation.
         this->n_failed_event_refinements_ = 0;
-
-        Eigen::VectorXi vars;
-        vars.setLinSpaced(this->ode_.input_rows(), 0, this->ode_.input_rows() - 1);
-
-        InterpFunction<-1> tabfunc(tab, vars);
-
-        Vector1<double> x;
-        Vector1<double> fx;
-        Vector1<double> fl;
-
-        Vector1<double> jx;
-
-        std::vector<std::vector<ODEState<double>>> eventstates(events.size());
-
-        for (int i = 0; i < events.size(); i++) {
-            if (eventtimes[i].size() > 0) {
-
-                auto func = std::get<0>(events[i]).eval(tabfunc);
-
-                auto newton = [&](auto x0) {
-                    x[0] = x0;
-                    for (int k = 0; k < max_event_iters_; k++) {
-                        fx.setZero();
-                        jx.setZero();
-                        func.compute_jacobian(x, fx, jx);
-                        if (abs(fx[0]) < abs(event_tol_)) {
-                            break;
-                        }
-                        x[0] = x[0] - fx[0] / jx[0];
-                    }
-                    return x[0];
-                };
-
-                auto bisect = [&](auto tlow, auto thigh, int iters) {
-                    double tm = (tlow + thigh) / 2.0;
-                    x[0] = tlow;
-                    fl = func.compute(x);
-                    int sgnfl = (fl[0] >= 0) - (fl[0] <= 0);
-
-                    x[0] = tm;
-                    fx = func.compute(x);
-                    int sgnfx = (fx[0] >= 0) - (fx[0] <= 0);
-
-                    for (int i = 0; i < 5; i++) {
-                        if (sgnfx == sgnfl) {
-                            tlow = tm;
-                            sgnfl = sgnfx;
-                        } else {
-                            thigh = tm;
-                        }
-
-                        tm = (tlow + thigh) / 2.0;
-                        if ((thigh - tlow) / 2.0 < abs(event_tol_))
-                            break;
-
-                        x[0] = tm;
-                        fx = func.compute(x);
-                        sgnfx = (fx[0] >= 0) - (fx[0] <= 0);
-                    }
-
-                    return std::array<double, 3>{tm, tlow, thigh};
-                };
-
-                for (auto &eventtime : eventtimes[i]) {
-
-                    double tlow = eventtime[0];
-                    double thigh = eventtime[1];
-
-                    if (thigh < tlow) {
-                        std::swap(tlow, thigh);
-                    }
-
-                    auto res = bisect(tlow, thigh, 2);
-                    double tig = res[0];
-                    double tlow2 = res[1];
-                    double thigh2 = res[2];
-
-                    double tevent = newton(tig);
-
-                    if (tevent > tlow && tevent < thigh) {
-                        ODEState<double> ei(this->ode_.input_rows());
-                        ei.setZero();
-                        tab->interpolate_ref(tevent, ei);
-                        eventstates[i].push_back(ei);
-                    } else {
-
-                        res = bisect(tlow2, thigh2, max_event_iters_);
-                        tig = res[0];
-                        tevent = newton(tig);
-
-                        if (tevent > tlow && tevent < thigh) {
-                            ODEState<double> ei(this->ode_.input_rows());
-                            ei.setZero();
-                            tab->interpolate_ref(tevent, ei);
-                            eventstates[i].push_back(ei);
-                        } else {
-                            // Refinement failed both passes — record so the
-                            // caller can detect via get_failed_event_count().
-                            ++this->n_failed_event_refinements_;
-                        }
-                    }
-                }
-            }
-        }
-
-        return eventstates;
+        return EventHandler::refine_events<ODEState<double>>(
+            tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
+            this->event_tol_, this->n_failed_event_refinements_);
     }
 
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
