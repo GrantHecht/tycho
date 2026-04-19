@@ -196,6 +196,159 @@ struct STMDriver {
         return {jx, hxall};
     }
 
+    /// Batch Jacobian + Hessian via SuperScalar packing.
+    ///
+    /// For each trajectory in `xs_s` with adjoint in `lf_s`, compute the STM
+    /// Jacobian and adjoint Hessian. Handles heterogeneous trajectory lengths
+    /// via tail-step scalar fallback.
+    template <class DODE>
+    static std::tuple<std::vector<Eigen::MatrixXd>, std::vector<Eigen::MatrixXd>>
+    calculate_jacobians_hessians(
+        const GenericFunction<-1, -1> &stepper, const DODE &ode,
+        const std::vector<std::vector<typename DODE::template Input<double>>> &xs_s,
+        const std::vector<typename DODE::template Input<double>> &lf_s, int input_rows,
+        int output_rows) {
+
+        constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
+
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_input_ss(input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_output_ss(ode.input_rows());
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_grad_ss(input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_jacobian_ss(output_rows,
+                                                                             input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> stepper_hessian_ss(input_rows, input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, 1> stepper_adjvars_ss(ode.input_rows());
+
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jxall_ss(output_rows, input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jtwist_ss(input_rows, input_rows);
+        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> hxall_ss(input_rows, input_rows);
+
+        Eigen::MatrixXd jtwist(input_rows, input_rows);
+        jtwist.setZero();
+
+        int ntrajs = static_cast<int>(xs_s.size());
+
+        std::vector<int> idxs(ntrajs);
+        std::iota(idxs.begin(), idxs.end(), 0);
+        std::sort(idxs.begin(), idxs.end(),
+                  [&](auto a, auto b) { return xs_s[a].size() < xs_s[b].size(); });
+
+        int npacks = ntrajs / vsize;
+        int nrem = ntrajs % vsize;
+        if (nrem > 0)
+            npacks++;
+
+        std::vector<Eigen::MatrixXd> jxs(ntrajs);
+        std::vector<Eigen::MatrixXd> hxs(ntrajs);
+
+        if (ntrajs < vsize) {
+            for (int v = 0; v < vsize; ++v) {
+                for (int j = 0; j < ode.input_rows(); ++j) {
+                    stepper_input_ss[j][v] = xs_s[0][0][j];
+                }
+            }
+        }
+
+        for (int n = 0; n < npacks; ++n) {
+            int vmax = std::min(vsize, ntrajs - n * vsize);
+            stepper_adjvars_ss.setZero();
+
+            for (int v = 0; v < vmax; ++v) {
+                int idx = idxs[n * vsize + v];
+                for (int j = 0; j < ode.output_rows(); ++j) {
+                    stepper_adjvars_ss[j][v] = lf_s[idx][j];
+                }
+            }
+
+            int ncalls = static_cast<int>(xs_s[idxs[n * vsize]].size()) - 1;
+
+            jxall_ss.setZero();
+            jxall_ss.leftCols(output_rows).setIdentity();
+            hxall_ss.setZero();
+
+            jtwist_ss.setZero();
+            jtwist_ss(input_rows - 1, input_rows - 1) = tycho::DefaultSuperScalar(1.0);
+
+            for (int i = 0; i < ncalls; ++i) {
+                for (int v = 0; v < vmax; ++v) {
+                    int idx = idxs[n * vsize + v];
+                    for (int j = 0; j < ode.input_rows(); ++j) {
+                        stepper_input_ss[j][v] = (*(xs_s[idx].end() - i - 2))[j];
+                    }
+                    stepper_input_ss[ode.input_rows()][v] =
+                        (*(xs_s[idx].end() - i - 1))[ode.t_var()];
+                }
+
+                stepper_output_ss.setZero();
+                stepper_jacobian_ss.setZero();
+                stepper_grad_ss.setZero();
+                stepper_hessian_ss.setZero();
+
+                stepper.compute_jacobian_adjointgradient_adjointhessian(
+                    stepper_input_ss, stepper_output_ss, stepper_jacobian_ss, stepper_grad_ss,
+                    stepper_hessian_ss, stepper_adjvars_ss);
+
+                jtwist_ss.topRows(output_rows) = stepper_jacobian_ss;
+                jxall_ss = jxall_ss * jtwist_ss;
+                if (i == 0) {
+                    jxall_ss.rightCols(1) = stepper_jacobian_ss.rightCols(1);
+                }
+
+                hxall_ss = jtwist_ss.transpose() * hxall_ss * jtwist_ss;
+                hxall_ss += stepper_hessian_ss;
+                stepper_adjvars_ss = stepper_grad_ss.head(output_rows);
+            }
+
+            for (int v = 0; v < vmax; ++v) {
+                int idx = idxs[n * vsize + v];
+                jxs[idx].resize(output_rows, input_rows);
+                hxs[idx].resize(input_rows, input_rows);
+
+                for (int k = 0; k < input_rows; ++k) {
+                    for (int l = 0; l < output_rows; ++l) {
+                        jxs[idx](l, k) = jxall_ss(l, k)[v];
+                    }
+                }
+                for (int k = 0; k < input_rows; ++k) {
+                    for (int l = 0; l < input_rows; ++l) {
+                        hxs[idx](l, k) = hxall_ss(l, k)[v];
+                    }
+                }
+
+                // Tail-handling for heterogeneous lengths: if this lane has
+                // more steps than the pack, compute the remainder (the
+                // earliest segment of the trajectory) scalar-style and fuse.
+                if (ncalls != static_cast<int>(xs_s[idx].size()) - 1) {
+                    std::vector<typename DODE::template Input<double>> xs_tail(
+                        xs_s[idx].begin(), xs_s[idx].end() - ncalls);
+
+                    typename DODE::template Input<double> lf_tail(ode.input_rows());
+                    lf_tail.setZero();
+                    for (int l = 0; l < output_rows; ++l) {
+                        lf_tail[l] = stepper_adjvars_ss[l][v];
+                    }
+
+                    auto [jtmp, htmp] = STMDriver::calculate_jacobian_hessian(
+                        stepper, ode, xs_tail, lf_tail, input_rows, output_rows);
+
+                    jtwist.topRows(output_rows) = jtmp;
+                    jtwist(input_rows - 1, input_rows - 1) = 1.0;
+
+                    jxs[idx] = jxs[idx] * jtwist;
+                    hxs[idx] = jtwist.transpose() * hxs[idx] * jtwist;
+                    hxs[idx] += htmp;
+                }
+
+                detail::check_stm_finite_or_throw(
+                    jxs[idx], "STMDriver::calculate_jacobians_hessians (jacobian)", idx);
+                detail::check_stm_finite_or_throw(
+                    hxs[idx], "STMDriver::calculate_jacobians_hessians (hessian)", idx);
+            }
+        }
+
+        return {jxs, hxs};
+    }
+
     /// Batch Jacobians via SuperScalar packing.
     template <class DODE>
     static std::vector<Eigen::MatrixXd>
