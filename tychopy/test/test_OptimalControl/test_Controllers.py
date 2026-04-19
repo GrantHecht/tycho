@@ -1,4 +1,4 @@
-"""SP3: Controller selection + step stats + HW-initdt API tests."""
+"""Controller selection + step stats + HW-initdt API tests."""
 
 import unittest
 
@@ -21,6 +21,21 @@ class SHO_Ode(oc.ode_x.ode):
         v = args.x_var(1)
         xdot = v
         vdot = (-1.0) * x
+        ode = vf.stack([xdot, vdot])
+        super().__init__(ode, 2)
+
+
+class VanDerPol_Ode(oc.ode_x.ode):
+    """Van der Pol oscillator x'' = μ(1-x²)x' - x with μ=1.
+    Mildly stiff over many periods → controllers produce differing step counts.
+    """
+
+    def __init__(self, mu=1.0):
+        args = oc.ODEArguments(2)
+        x = args.x_var(0)
+        v = args.x_var(1)
+        xdot = v
+        vdot = mu * (1.0 - x * x) * v - x
         ode = vf.stack([xdot, vdot])
         super().__init__(ode, 2)
 
@@ -69,10 +84,40 @@ class TestControllers(unittest.TestCase):
         self.assertGreater(integ_pi.get_naccept(), 0)
         self.assertGreater(integ_i.get_naccept(), 0)
 
+    def test_pi_diverges_from_i_on_stiff_van_der_pol(self):
+        """P2.6: PI and I controllers must actually drive the step cadence
+        differently on a problem where their characteristic responses diverge.
+        Van der Pol with μ=1 over many periods cycles between fast and slow
+        motion; PI's derivative-free smoothing gives a different accept/reject
+        pattern than I's integral-only action.
+        """
+
+        def run(controller):
+            ode = VanDerPol_Ode(mu=1.0)
+            integ = ode.integrator(IVPAlg.DOPRI54, 0.01)
+            integ.set_controller(controller)
+            integ.set_abs_tol(1e-7)
+            integ.set_rel_tol(1e-7)
+            x0 = np.array([2.0, 0.0, 0.0])
+            tf = 30.0  # Several periods — enough for step counts to diverge.
+            integ.integrate(x0, tf)
+            return integ.get_naccept() + integ.get_nreject()
+
+        n_pi = run(IVPController.PI)
+        n_i = run(IVPController.I)
+        # Proves wire-up actually reaches the controller (not just accepts
+        # everything via a default path). Threshold is intentionally loose:
+        # on most platforms the delta is double-digit steps.
+        self.assertGreater(
+            abs(n_pi - n_i),
+            2,
+            f"PI and I should produce distinct step counts on Van der Pol; got {n_pi} vs {n_i}",
+        )
+
     def test_error_norm_toggle(self):
         ode = SHO_Ode()
         integ = ode.integrator(IVPAlg.DOPRI54, 0.1)
-        self.assertEqual(integ.get_error_norm(), ErrorNormType.RMS)  # SP3 default
+        self.assertEqual(integ.get_error_norm(), ErrorNormType.RMS)  # RMS default
         integ.set_error_norm(ErrorNormType.MAX)
         self.assertEqual(integ.get_error_norm(), ErrorNormType.MAX)
         integ.set_error_norm("RMS")
