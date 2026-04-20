@@ -544,8 +544,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // Tolerance setters size themselves from `ode_.x_vars()`, which is
     // populated by `set_method`. Constructors call `set_method` before any
     // tolerance setter for that reason.
-    void set_abs_tol(double tol) { this->abs_tols_.setConstant(this->ode_.x_vars(), abs(tol)); }
-    void set_rel_tol(double tol) { this->rel_tols_.setConstant(this->ode_.x_vars(), abs(tol)); }
+    void set_abs_tol(double tol) {
+        if (!std::isfinite(tol) || tol < 0.0) {
+            throw std::invalid_argument("abs_tol must be finite and >= 0; got " +
+                                        std::to_string(tol));
+        }
+        this->abs_tols_.setConstant(this->ode_.x_vars(), tol);
+    }
+    void set_rel_tol(double tol) {
+        if (!std::isfinite(tol) || tol < 0.0) {
+            throw std::invalid_argument("rel_tol must be finite and >= 0; got " +
+                                        std::to_string(tol));
+        }
+        this->rel_tols_.setConstant(this->ode_.x_vars(), tol);
+    }
 
     void set_abs_tols(ODEDeriv<double> tol) {
         if (tol.size() != this->ode_.x_vars()) {
@@ -638,6 +650,42 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     int get_max_steps() const { return this->max_steps_; }
+
+    /// Upper bound on per-step growth (dt_next / dt_current). Must be
+    /// strictly greater than 1 — at or below 1 degenerates the clamp into
+    /// a divide-or-shrink that drives dt to zero.
+    void set_max_step_change(double v) {
+        if (!(v > 1.0) || !std::isfinite(v)) {
+            throw std::invalid_argument("max_step_change must be finite and > 1; got " +
+                                        std::to_string(v));
+        }
+        this->max_step_change_ = v;
+    }
+    double get_max_step_change() const { return this->max_step_change_; }
+
+    /// Bisect/Newton tolerance for event-crossing refinement. Must be
+    /// strictly positive — zero or negative would make the refinement
+    /// loop either never terminate or exit on the first iteration.
+    void set_event_tol(double v) {
+        if (!(v > 0.0) || !std::isfinite(v)) {
+            throw std::invalid_argument("event_tol must be finite and > 0; got " +
+                                        std::to_string(v));
+        }
+        this->event_tol_ = v;
+    }
+    double get_event_tol() const { return this->event_tol_; }
+
+    /// Max Newton iterations for event refinement. Must be >= 1 — zero
+    /// silently skips the Newton polish, leaving only the two-iter
+    /// bisect bracket and degrading refinement quality without any
+    /// surface signal.
+    void set_max_event_iters(int n) {
+        if (n < 1) {
+            throw std::invalid_argument("max_event_iters must be >= 1; got " + std::to_string(n));
+        }
+        this->max_event_iters_ = n;
+    }
+    int get_max_event_iters() const { return this->max_event_iters_; }
 
     /////////////////////////////////////////////////////////////////////////////////////
 

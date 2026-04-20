@@ -300,12 +300,26 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         obj.def_rw("enable_vectorization", &Integrator<DODE>::enable_vectorization_);
 
-        obj.def_rw("def_step_size", &Integrator<DODE>::def_step_size_);
-        obj.def_rw("max_step_change", &Integrator<DODE>::max_step_change_);
+        // def_step_size routes through set_initial_step_size so Python writes
+        // respect the documented contract (flips HW auto-initdt off, rejects
+        // non-positive values).
+        obj.def_prop_rw(
+            "def_step_size", [](const Integrator<DODE> &self) { return self.def_step_size_; },
+            [](Integrator<DODE> &self, double h) { self.set_initial_step_size(h); });
+        obj.def_prop_rw(
+            "max_step_change",
+            [](const Integrator<DODE> &self) { return self.get_max_step_change(); },
+            [](Integrator<DODE> &self, double v) { self.set_max_step_change(v); });
         obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
 
         obj.def_rw("adaptive", &Integrator<DODE>::adaptive_);
-        obj.def_rw("abs_tols", &Integrator<DODE>::abs_tols_);
+        // abs_tols routes through set_abs_tols so Python writes validate size
+        // and non-negativity.
+        obj.def_prop_rw(
+            "abs_tols", [](const Integrator<DODE> &self) { return self.get_abs_tols(); },
+            [](Integrator<DODE> &self, typename Integrator<DODE>::template ODEDeriv<double> tol) {
+                self.set_abs_tols(tol);
+            });
 
         obj.def("set_abs_tol", &Integrator<DODE>::set_abs_tol);
         obj.def("set_abs_tols", &Integrator<DODE>::set_abs_tols);
@@ -319,8 +333,13 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("set_max_steps", &Integrator<DODE>::set_max_steps, nb::arg("n"));
         obj.def("get_max_steps", &Integrator<DODE>::get_max_steps);
 
-        obj.def_rw("event_tol", &Integrator<DODE>::event_tol_);
-        obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);
+        obj.def_prop_rw(
+            "event_tol", [](const Integrator<DODE> &self) { return self.get_event_tol(); },
+            [](Integrator<DODE> &self, double v) { self.set_event_tol(v); });
+        obj.def_prop_rw(
+            "max_event_iters",
+            [](const Integrator<DODE> &self) { return self.get_max_event_iters(); },
+            [](Integrator<DODE> &self, int n) { self.set_max_event_iters(n); });
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_);
 
         // Controller + stats + HW-initdt API
