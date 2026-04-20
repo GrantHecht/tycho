@@ -59,74 +59,61 @@ inline std::string controller_invariant_msg(const char *controller, const char *
 // -----------------------------------------------------------------------------
 /// Standard integral step-size controller, Julia formulation.
 ///
-///     q   = EEst^(1/k) / γ,   clipped to [1/qmax, 1/qmin]
+///     q   = EEst^(1/k) / γ,   clipped to [1/qmax_, 1/qmin_]
 ///     dt' = dt / q
 ///
 /// where k = order + 1 (the order passed in is the adaptive_order of the
-/// algorithm). On the first step, `qmax_first_step` replaces `qmax` to allow
-/// a very large dt increase after initial-dt estimation. On reject, the
-/// same formula runs but the step is not committed; the outer loop retries.
-///
-/// Tuning knobs and internal state both follow the project's
-/// `snake_case_` trailing-underscore convention for publicly mutable
-/// member fields. Accidental mid-integration mutation of `qold_` will
-/// tear the controller's tracking — call reset() to clear cleanly.
-/// Misconfigured tuning knobs are caught by validate() at install time
-/// rather than producing silently-bad step cadence inside the loop.
+/// algorithm). On the first step, `qmax_first_step_` replaces `qmax_` to
+/// allow a very large dt increase after initial-dt estimation.
 ///
 /// Matches OrdinaryDiffEqCore.jl `IController`.
 struct IController {
-    double gamma = 0.9;
-    double qmin = 1.0 / 5.0;
-    double qmax = 10.0;
-    double qmax_first_step = 10000.0;
-    double qsteady_min = 1.0;
-    double qsteady_max = 1.0;
+    double gamma_ = 0.9;
+    double qmin_ = 1.0 / 5.0;
+    double qmax_ = 10.0;
+    double qmax_first_step_ = 10000.0;
+    double qsteady_min_ = 1.0;
+    double qsteady_max_ = 1.0;
 
     // Internal state
     double qold_ = 1.0;
 
-    /// Throws std::invalid_argument if any tuning knob violates its
-    /// invariant. Called by Integrator::set_controller at install time so
-    /// misconfiguration is surfaced before the integration loop starts
-    /// (rather than producing silently-wrong step cadence). Cheap one-shot
-    /// check — not on the hot path.
     void validate() const {
-        if (!(gamma > 0.0 && gamma <= 1.0))
+        if (!(gamma_ > 0.0 && gamma_ <= 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("IController", "gamma", "lie in (0, 1]", gamma));
-        if (!(qmin > 0.0 && qmin < 1.0))
+                detail::controller_invariant_msg("IController", "gamma_", "lie in (0, 1]", gamma_));
+        if (!(qmin_ > 0.0 && qmin_ < 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("IController", "qmin", "lie in (0, 1)", qmin));
-        if (!(qmax > 1.0))
+                detail::controller_invariant_msg("IController", "qmin_", "lie in (0, 1)", qmin_));
+        if (!(qmax_ > 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("IController", "qmax", "be > 1", qmax));
-        if (!(qmax_first_step >= qmax))
+                detail::controller_invariant_msg("IController", "qmax_", "be > 1", qmax_));
+        if (!(qmax_first_step_ >= qmax_))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "IController", "qmax_first_step", "be >= qmax", qmax_first_step));
-        if (!(qsteady_min <= qsteady_max))
+                "IController", "qmax_first_step_", "be >= qmax_", qmax_first_step_));
+        if (!(qsteady_min_ <= qsteady_max_))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "IController", "qsteady_min", "be <= qsteady_max", qsteady_min));
+                "IController", "qsteady_min_", "be <= qsteady_max_", qsteady_min_));
     }
 
     ControllerOutput update(double h, double err_norm, int order, int naccept) {
-        double eff_qmax = (naccept == 0) ? qmax_first_step : qmax;
+        double eff_qmax = (naccept == 0) ? qmax_first_step_ : qmax_;
         double q;
         if (err_norm == 0.0) {
             q = 1.0 / eff_qmax;
         } else {
             double expo = 1.0 / (static_cast<double>(order) + 1.0);
-            double qtmp = std::pow(err_norm, expo) / gamma;
-            q = std::max(1.0 / eff_qmax, std::min(1.0 / qmin, qtmp));
+            double qtmp = std::pow(err_norm, expo) / gamma_;
+            q = std::max(1.0 / eff_qmax, std::min(1.0 / qmin_, qtmp));
         }
         bool accepted = (err_norm <= 1.0);
         double q_applied = q;
-        if (accepted && qsteady_min <= q && q <= qsteady_max) {
+        if (accepted && qsteady_min_ <= q && q <= qsteady_max_) {
             q_applied = 1.0;
         }
         qold_ = q;
         // `q` field reflects the clipped-but-not-deadbanded growth factor
-        // (clamped to [1/qmax, 1/qmin]); `dt_new` reflects what we actually
+        // (clamped to [1/qmax_, 1/qmin_]); `dt_new` reflects what we actually
         // apply, including the deadband snap to 1.0.
         return {accepted, h / q_applied, q};
     }
@@ -140,10 +127,10 @@ struct IController {
 /// Proportional-integral step-size controller, Julia legacy form.
 ///
 ///     q₁₁ = EEst^β₁
-///     q   = q₁₁ / errold^β₂,   with q/γ clipped to [1/qmax, 1/qmin]
-///     dt' = dt / q (accept) or dt' = dt / min(1/qmin, q₁₁/γ) (reject)
+///     q   = q₁₁ / errold^β₂,   with q/γ clipped to [1/qmax_, 1/qmin_]
+///     dt' = dt / q (accept) or dt' = dt / min(1/qmin_, q₁₁/γ) (reject)
 ///
-/// After accept: errold := max(EEst, qoldinit).
+/// After accept: errold := max(EEst, qoldinit_).
 ///
 /// Beta values are pre-scaled by method order per Julia's PIController
 /// convention (β₁ and β₂ absorb the 1/order factor). The `order` parameter
@@ -151,75 +138,74 @@ struct IController {
 ///
 /// Matches OrdinaryDiffEqCore.jl `PIController`.
 struct PIController {
-    double beta1 = 7.0 / 50.0;
-    double beta2 = 2.0 / 25.0;
-    double gamma = 0.9;
-    double qmin = 1.0 / 5.0;
-    double qmax = 10.0;
-    double qmax_first_step = 10000.0;
-    double qsteady_min = 1.0;
-    double qsteady_max = 1.0;
-    double qoldinit = 1.0e-4;
+    double beta1_ = 7.0 / 50.0;
+    double beta2_ = 2.0 / 25.0;
+    double gamma_ = 0.9;
+    double qmin_ = 1.0 / 5.0;
+    double qmax_ = 10.0;
+    double qmax_first_step_ = 10000.0;
+    double qsteady_min_ = 1.0;
+    double qsteady_max_ = 1.0;
+    double qoldinit_ = 1.0e-4;
 
     // Internal state
     double errold_ = 1.0e-4;
     double q11_ = 1.0;
 
     void validate() const {
-        if (!(beta1 >= 0.0))
+        if (!(beta1_ >= 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "beta1", "be >= 0", beta1));
-        if (!(beta2 >= 0.0))
+                detail::controller_invariant_msg("PIController", "beta1_", "be >= 0", beta1_));
+        if (!(beta2_ >= 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "beta2", "be >= 0", beta2));
-        if (!(gamma > 0.0 && gamma <= 1.0))
+                detail::controller_invariant_msg("PIController", "beta2_", "be >= 0", beta2_));
+        if (!(gamma_ > 0.0 && gamma_ <= 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "gamma", "lie in (0, 1]", gamma));
-        if (!(qmin > 0.0 && qmin < 1.0))
+                detail::controller_invariant_msg("PIController", "gamma_", "lie in (0, 1]", gamma_));
+        if (!(qmin_ > 0.0 && qmin_ < 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "qmin", "lie in (0, 1)", qmin));
-        if (!(qmax > 1.0))
+                detail::controller_invariant_msg("PIController", "qmin_", "lie in (0, 1)", qmin_));
+        if (!(qmax_ > 1.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "qmax", "be > 1", qmax));
-        if (!(qmax_first_step >= qmax))
+                detail::controller_invariant_msg("PIController", "qmax_", "be > 1", qmax_));
+        if (!(qmax_first_step_ >= qmax_))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIController", "qmax_first_step", "be >= qmax", qmax_first_step));
-        if (!(qsteady_min <= qsteady_max))
+                "PIController", "qmax_first_step_", "be >= qmax_", qmax_first_step_));
+        if (!(qsteady_min_ <= qsteady_max_))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIController", "qsteady_min", "be <= qsteady_max", qsteady_min));
-        if (!(qoldinit > 0.0))
+                "PIController", "qsteady_min_", "be <= qsteady_max_", qsteady_min_));
+        if (!(qoldinit_ > 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "qoldinit", "be > 0", qoldinit));
+                detail::controller_invariant_msg("PIController", "qoldinit_", "be > 0", qoldinit_));
     }
 
     ControllerOutput update(double h, double err_norm, int /*order*/, int naccept) {
-        double eff_qmax = (naccept == 0) ? qmax_first_step : qmax;
+        double eff_qmax = (naccept == 0) ? qmax_first_step_ : qmax_;
         double q;
         if (err_norm == 0.0) {
             q = 1.0 / eff_qmax;
             q11_ = 0.0;
         } else {
-            q11_ = std::pow(err_norm, beta1);
-            double qtmp = q11_ / std::pow(errold_, beta2);
-            q = std::max(1.0 / eff_qmax, std::min(1.0 / qmin, qtmp / gamma));
+            q11_ = std::pow(err_norm, beta1_);
+            double qtmp = q11_ / std::pow(errold_, beta2_);
+            q = std::max(1.0 / eff_qmax, std::min(1.0 / qmin_, qtmp / gamma_));
         }
 
         bool accepted = (err_norm <= 1.0);
         if (accepted) {
             double q_applied = q;
-            if (qsteady_min <= q && q <= qsteady_max)
+            if (qsteady_min_ <= q && q <= qsteady_max_)
                 q_applied = 1.0;
-            errold_ = std::max(err_norm, qoldinit);
+            errold_ = std::max(err_norm, qoldinit_);
             return {true, h / q_applied, q};
         }
         // Reject: dt shrink uses q11 (cached EEst^beta1), not q.
-        double q_reject = std::min(1.0 / qmin, q11_ / gamma);
-        // Report the q we actually used for dt_new so diagnostics stay truthful.
+        double q_reject = std::min(1.0 / qmin_, q11_ / gamma_);
         return {false, h / q_reject, q_reject};
     }
 
     void reset() {
-        errold_ = qoldinit;
+        errold_ = qoldinit_;
         q11_ = 1.0;
     }
 };
@@ -231,45 +217,44 @@ struct PIController {
 ///
 ///     dt_factor = ε₁^(β₁/k) · ε₂^(β₂/k) · ε₃^(β₃/k)
 ///     dt_factor := limiter(dt_factor)   where limiter(x) = 1 + atan(x - 1)
-///     accept    := dt_factor >= accept_safety
-///     dt'       = dt · dt_factor on both accept and reject (reject case:
-///                 dt_factor < accept_safety, so dt' < dt and the step
-///                 shrinks). Tycho's PIDController is stateless-reject
-///                 matching Julia's current convention; qold_ is retained
-///                 as the last-computed factor for diagnostics.
+///     accept    := dt_factor >= accept_safety_
+///     dt'       = dt · dt_factor on both accept and reject.
 ///
 /// where ε_i = 1/EEst_i and k = min(order, adaptive_order) + 1. Beta values
 /// are NOT pre-scaled — the formula divides by k internally.
 ///
+/// `qold_` is diagnostic-only (last-computed dt_factor, readable by tests);
+/// it is not consumed by the control law itself.
+///
 /// Matches OrdinaryDiffEqCore.jl `PIDController`.
 struct PIDController {
-    double beta1 = 1.0;
-    double beta2 = 0.0;
-    double beta3 = 0.0;
-    double accept_safety = 0.81;
-    double qsteady_min = 1.0;
-    double qsteady_max = 1.0;
+    double beta1_ = 1.0;
+    double beta2_ = 0.0;
+    double beta3_ = 0.0;
+    double accept_safety_ = 0.81;
+    double qsteady_min_ = 1.0;
+    double qsteady_max_ = 1.0;
 
     // Internal state: error history ε₁..ε₃ (= 1/EEst), and previous dt_factor
     std::array<double, 3> err_ = {1.0, 1.0, 1.0};
     double qold_ = 1.0;
 
     void validate() const {
-        if (!(beta1 >= 0.0))
+        if (!(beta1_ >= 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIDController", "beta1", "be >= 0", beta1));
-        if (!(beta2 >= 0.0))
+                detail::controller_invariant_msg("PIDController", "beta1_", "be >= 0", beta1_));
+        if (!(beta2_ >= 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIDController", "beta2", "be >= 0", beta2));
-        if (!(beta3 >= 0.0))
+                detail::controller_invariant_msg("PIDController", "beta2_", "be >= 0", beta2_));
+        if (!(beta3_ >= 0.0))
             throw std::invalid_argument(
-                detail::controller_invariant_msg("PIDController", "beta3", "be >= 0", beta3));
-        if (!(accept_safety > 0.0 && accept_safety <= 1.0))
+                detail::controller_invariant_msg("PIDController", "beta3_", "be >= 0", beta3_));
+        if (!(accept_safety_ > 0.0 && accept_safety_ <= 1.0))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIDController", "accept_safety", "lie in (0, 1]", accept_safety));
-        if (!(qsteady_min <= qsteady_max))
+                "PIDController", "accept_safety_", "lie in (0, 1]", accept_safety_));
+        if (!(qsteady_min_ <= qsteady_max_))
             throw std::invalid_argument(detail::controller_invariant_msg(
-                "PIDController", "qsteady_min", "be <= qsteady_max", qsteady_min));
+                "PIDController", "qsteady_min_", "be <= qsteady_max_", qsteady_min_));
     }
 
     static double default_limiter(double x) { return 1.0 + std::atan(x - 1.0); }
@@ -280,24 +265,24 @@ struct PIDController {
         err_[0] = 1.0 / eest;
 
         double k = static_cast<double>(order) + 1.0;
-        double dt_factor = std::pow(err_[0], beta1 / k) * std::pow(err_[1], beta2 / k) *
-                           std::pow(err_[2], beta3 / k);
+        double dt_factor = std::pow(err_[0], beta1_ / k) * std::pow(err_[1], beta2_ / k) *
+                           std::pow(err_[2], beta3_ / k);
         dt_factor = default_limiter(dt_factor);
 
-        bool accepted = (dt_factor >= accept_safety);
+        bool accepted = (dt_factor >= accept_safety_);
         qold_ = dt_factor;
 
         if (accepted) {
             double dt_factor_applied = dt_factor;
             double inv_df = 1.0 / dt_factor;
-            if (qsteady_min <= inv_df && inv_df <= qsteady_max)
+            if (qsteady_min_ <= inv_df && inv_df <= qsteady_max_)
                 dt_factor_applied = 1.0;
             // Shift history on accept
             err_[2] = err_[1];
             err_[1] = err_[0];
             return {true, h * dt_factor_applied, 1.0 / dt_factor};
         }
-        // Reject: use the same (rejected, < accept_safety) factor to shrink dt.
+        // Reject: use the same (rejected, < accept_safety_) factor to shrink dt.
         return {false, h * dt_factor, 1.0 / dt_factor};
     }
 

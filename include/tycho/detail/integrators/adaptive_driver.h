@@ -120,7 +120,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             update_control(xi0);
             eventtimes.resize(events.size());
             for (std::size_t j = 0; j < events.size(); ++j) {
-                if (std::get<0>(events[j]).input_rows() != ode.input_rows()) {
+                if (events[j].vf.input_rows() != ode.input_rows()) {
                     throw std::invalid_argument(
                         "AdaptiveDriver: event function input size mismatch.");
                 }
@@ -175,10 +175,10 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
         for (std::size_t j = 0; j < events.size(); ++j) {
             prev_event_vals[j].setZero();
             next_event_vals[j].setZero();
-            if (std::get<0>(events[j]).input_rows() != ode.input_rows()) {
+            if (events[j].vf.input_rows() != ode.input_rows()) {
                 throw std::invalid_argument("AdaptiveDriver: event function input size mismatch.");
             }
-            std::get<0>(events[j]).compute(xi, prev_event_vals[j]);
+            events[j].vf.compute(xi, prev_event_vals[j]);
         }
         eventtimes.resize(events.size());
 
@@ -200,7 +200,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
         }
 
         // The stepper's FSAL cache must reflect f(xi). If the caller has a
-        // fresh stepper (fsal_valid_=false), the first step() call computes
+        // fresh stepper (fsal_valid()==false), the first step() call computes
         // f(x) fresh. If the caller reuses a stepper from a prior run whose
         // final xf equals our xi, FSAL reuse is correct. Callers that mix
         // these cases should call reset_fsal() before integrate().
@@ -236,8 +236,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             // unconditionally writes k_fsal_ at end-of-step, but the retry
             // must read f(xi) (not the stale f(xnext_rejected)) as its first
             // stage.
-            ODEDeriv k_fsal_saved = stepper_.k_fsal_;
-            bool fsal_valid_saved = stepper_.fsal_valid_;
+            auto fsal_saved = stepper_.snapshot_fsal();
 
             stepper_.step(ode, xi, tnext, xnext, xnext_est, storemidpoints || storederivs,
                           xnext_mid, update_control);
@@ -278,8 +277,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
                     h = Scalar(hnext);
 
                 if (!outcome.accepted) {
-                    stepper_.k_fsal_ = k_fsal_saved;
-                    stepper_.fsal_valid_ = fsal_valid_saved;
+                    stepper_.restore_fsal(fsal_saved);
                     nreject++;
                     continueloop = true;
                     continue;
@@ -302,7 +300,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             }
 
             xi = xnext;
-            xdoti = stepper_.k_fsal_; // derivative at xnext (from FSAL or midpoint path)
+            xdoti = stepper_.peek_fsal(); // derivative at xnext (from FSAL or midpoint path)
             prev_event_vals = next_event_vals;
 
             if (storestates) {

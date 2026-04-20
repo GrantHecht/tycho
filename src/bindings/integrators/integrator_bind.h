@@ -7,10 +7,7 @@
 // Original Developer: James B. Pezent
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
-//   - Migrated pybind11 -> nanobind (PR 3)
-//   - Migrated to tycho:: sub-namespaces (PR #35)
+//   Apache 2.0 — see LICENSE.txt).
 // =============================================================================
 
 #pragma once

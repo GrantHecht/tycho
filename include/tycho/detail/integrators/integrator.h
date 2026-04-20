@@ -90,8 +90,6 @@ using vf::StackedOutputs;
 using vf::VecRef;
 using vf::VectorFunction;
 
-// CentralShootingDefect lives in tycho::oc; use the qualified friend below.
-
 /// Dispatch `fn` with a compile-time IVPAlg tag matching the runtime `alg`.
 /// Used by Integrator to turn its runtime rk_method_ selector into a
 /// compile-time Alg parameter for AdaptiveDriver<Alg,...> / ParallelDriver<Alg,...>.
@@ -132,7 +130,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
 
-    using EventPack = std::tuple<GenericFunction<-1, 1>, int, int>;
+    using EventPack = tycho::integrators::EventPack;
     using EventLocsType = std::vector<std::vector<ODEState<double>>>;
 
     /// Differentiable stepper type: RK stepper over (ODE ∘ control) composed function.
@@ -432,7 +430,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return varlocs;
     }
 
-    double error_order_ = 7.0;
+    int error_order_ = 7;
     double def_step_size_ = 0.1;
     double max_step_change_ = 10.0;
     // Julia-style maxiters cap — safety net against runaway rejection loops or
@@ -448,15 +446,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     double step_frac_ = .9;
     double err_pow_fac_ = 1;
 
-    // Controller variant — selected per algorithm in set_method, overrideable
-    // via set_controller(). Read-only during integrate calls: public wrappers
-    // and parallel workers clone from this prototype into a local
-    // `ControllerVariant` per call and operate on the local. Only
-    // `set_method` / `set_controller` mutate this member, and neither is
-    // concurrent-safe with an in-flight integrate.
-    // Use the free `tycho::integrators::ControllerVariant` from step_controller.h
-    // directly so extracted drivers (AdaptiveDriver, ParallelDriver) can share
-    // the same variant type without going through the Integrator scope.
+    // Prototype controller. Read-only during integrate — workers clone via
+    // make_worker_controller(). Mutated only by set_method / set_controller,
+    // neither of which is concurrent-safe with an in-flight integrate.
     ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS;
 
@@ -470,29 +462,56 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return c;
     }
 
-    // Step statistics for `get_naccept()` / `get_nreject()` inspection.
-    // Written only by single-threaded public wrappers via a post-call
-    // writeback from local counters; adaptive loops and parallel workers
-    // keep counters entirely local and do not touch these members.
-    // `mutable` is retained so the writeback can happen from const-qualified
-    // wrappers (required because the VectorFunction::compute contract
-    // forces `compute_impl` and friends to be const).
+    /// Batch variant of make_worker_controller for SIMD/vectorized-batch paths
+    /// that need one reset controller per trajectory.
+    std::vector<ControllerVariant> make_worker_controllers(int n) const {
+        std::vector<ControllerVariant> ctrls;
+        ctrls.reserve(n);
+        for (int i = 0; i < n; ++i)
+            ctrls.push_back(this->make_worker_controller());
+        return ctrls;
+    }
+
+    /// Compose and throw the aggregated segment-failure diagnostic used by
+    /// both integrate_stm_parallel unwind paths. `primary_tag` identifies which
+    /// side raised the primary failure (main-thread vs. worker segment);
+    /// `extras` holds the drained-future what() strings. Caps at kMaxExtras
+    /// to keep the composite message bounded under large n_parts.
+    [[noreturn]] static void throw_aggregated_segment_failure(
+        const char *primary_tag, const char *extras_tag, const std::string &primary_msg,
+        const std::vector<std::string> &extras) {
+        constexpr std::size_t kMaxExtras = 5;
+        std::string joined = std::string("integrate_stm_parallel: ") + primary_tag + ": " +
+                             primary_msg + "; " + extras_tag + " (" +
+                             std::to_string(extras.size()) + "): ";
+        std::size_t shown = std::min(extras.size(), kMaxExtras);
+        for (std::size_t k = 0; k < shown; ++k) {
+            if (k)
+                joined += " | ";
+            joined += extras[k];
+        }
+        if (extras.size() > kMaxExtras) {
+            joined +=
+                " | ... and " + std::to_string(extras.size() - kMaxExtras) + " more";
+        }
+        throw std::runtime_error(joined);
+    }
+
+    // `mutable` so const-qualified public wrappers can write back post-call
+    // (VectorFunction::compute contract forces compute_impl to be const).
+    // Parallel paths that can't safely write back document that via
+    // get_naccept/get_nreject docstrings.
     mutable int naccept_ = 0;
     mutable int nreject_ = 0;
 
-    // Count of event refinements that fell off the bisect+Newton fast path
-    // and ALSO failed the wider-bracket retry inside find_events. Such
-    // crossings are silently absent from the returned eventstates vector
-    // (size mismatch with eventtimes) — exposing the count via
-    // get_failed_event_count() lets callers detect that loss without
-    // changing the existing return shape. Reset by find_events at the
-    // start of each call.
+    // Count of event refinements that failed both bisect+Newton passes.
+    // Such crossings are absent from the returned eventstates vector;
+    // exposing the count via get_failed_event_count() lets callers detect
+    // the loss without changing the return shape. Reset per find_events call.
     mutable int n_failed_event_refinements_ = 0;
 
-    // Hairer-Wanner initial-dt toggle. Default-on. An explicit
-    // set_initial_step_size() call flips it off so a user-supplied initial
-    // step is respected (principle of least surprise). Constructors set
-    // def_step_size_ directly and leave HW enabled.
+    // Flipped off by set_initial_step_size() so a caller-supplied initial
+    // step is respected (principle of least surprise).
     bool use_hairer_wanner_initdt_ = true;
 
     ODEDeriv<double> abs_tols_;
@@ -530,17 +549,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ODEDeriv<double> get_rel_tols() const { return this->rel_tols_; }
 
     void set_controller(IVPController kind) {
-        switch (kind) {
-        case IVPController::I:
-            this->controller_variant_ = IController{};
-            break;
-        case IVPController::PI:
-            this->controller_variant_ = PIController{};
-            break;
-        case IVPController::PID:
-            this->controller_variant_ = PIDController{};
-            break;
-        }
+        this->controller_variant_ = controller_defaults_for(this->rk_method_, kind);
         std::visit(
             [](auto &c) {
                 c.validate();
@@ -610,59 +619,83 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         switch (alg) {
         case IVPAlg::DOPRI54: {
             PIController c;
-            c.beta1 = 17.0 / 100.0; // DOPRI54 override: 1/order - 3·β₂/4 = 17/100
-            c.beta2 = 4.0 / 100.0;
-            c.gamma = 0.9;
-            c.qmin = 1.0 / 5.0;
-            c.qmax = 10.0;
+            c.beta1_ = 17.0 / 100.0; // DOPRI54 override: 1/order - 3·β₂/4 = 17/100
+            c.beta2_ = 4.0 / 100.0;
+            c.gamma_ = 0.9;
+            c.qmin_ = 1.0 / 5.0;
+            c.qmax_ = 10.0;
             return c;
         }
         case IVPAlg::DOPRI87: {
             IController c;
-            c.gamma = 0.9;
-            c.qmin = 1.0 / 3.0; // DP8 override
-            c.qmax = 6.0;
+            c.gamma_ = 0.9;
+            c.qmin_ = 1.0 / 3.0; // DP8 override
+            c.qmax_ = 6.0;
             return c;
         }
         case IVPAlg::Tsit5: {
             PIController c;
-            c.beta1 = 7.0 / 50.0; // Julia generic: 7/(10·order), order=5
-            c.beta2 = 2.0 / 25.0; // Julia generic: 2/(5·order),  order=5
+            c.beta1_ = 7.0 / 50.0; // Julia generic: 7/(10·order), order=5
+            c.beta2_ = 2.0 / 25.0; // Julia generic: 2/(5·order),  order=5
             return c;
         }
         case IVPAlg::BS3: {
             PIController c;
-            c.beta1 = 7.0 / 30.0; // order=3
-            c.beta2 = 2.0 / 15.0;
+            c.beta1_ = 7.0 / 30.0; // order=3
+            c.beta2_ = 2.0 / 15.0;
             return c;
         }
         case IVPAlg::BS5: {
             PIController c;
-            c.beta1 = 7.0 / 50.0; // order=5
-            c.beta2 = 2.0 / 25.0;
+            c.beta1_ = 7.0 / 50.0; // order=5
+            c.beta2_ = 2.0 / 25.0;
             return c;
         }
         case IVPAlg::Vern7: {
             PIController c;
-            c.beta1 = 1.0 / 10.0; // 7/(10·7)
-            c.beta2 = 2.0 / 35.0; // 2/(5·7)
+            c.beta1_ = 1.0 / 10.0; // 7/(10·7)
+            c.beta2_ = 2.0 / 35.0; // 2/(5·7)
             return c;
         }
         case IVPAlg::Vern8: {
             PIController c;
-            c.beta1 = 7.0 / 80.0; // order=8
-            c.beta2 = 1.0 / 20.0; // 2/(5·8)
+            c.beta1_ = 7.0 / 80.0; // order=8
+            c.beta2_ = 1.0 / 20.0; // 2/(5·8)
             return c;
         }
         case IVPAlg::Vern9: {
             PIController c;
-            c.beta1 = 7.0 / 90.0; // order=9
-            c.beta2 = 2.0 / 45.0; // 2/(5·9)
+            c.beta1_ = 7.0 / 90.0; // order=9
+            c.beta2_ = 2.0 / 45.0; // 2/(5·9)
             return c;
         }
         default:
             throw std::logic_error("default_controller_for: algorithm not user-selectable");
         }
+    }
+
+    /// Build a controller of the requested `kind` with per-method tuned
+    /// knobs when the method has them. When the method's preferred default
+    /// kind differs from `kind` (e.g. user picks PI on DOPRI87, whose default
+    /// is I), fall back to the struct's generic defaults for that kind —
+    /// there is no Julia-documented method-tuning for the off-preference
+    /// combinations. PID is never method-tuned and always returns generic.
+    static ControllerVariant controller_defaults_for(IVPAlg alg, IVPController kind) {
+        auto preferred = default_controller_for(alg);
+        switch (kind) {
+        case IVPController::I:
+            if (std::holds_alternative<IController>(preferred))
+                return preferred;
+            return IController{};
+        case IVPController::PI:
+            if (std::holds_alternative<PIController>(preferred))
+                return preferred;
+            return PIController{};
+        case IVPController::PID:
+            return PIDController{};
+        }
+        // Unreachable — switch is exhaustive over IVPController.
+        throw std::logic_error("controller_defaults_for: unknown IVPController kind");
     }
 
     template <class State> void update_control(State &xtup) const {
@@ -693,7 +726,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                   std::vector<ODEDeriv<double>> &derivs,
                                   ControllerVariant &controller, int &naccept, int &nreject) const {
 
-        integrators::AdaptiveConfig cfg{static_cast<int>(this->error_order_),
+        integrators::AdaptiveConfig cfg{this->error_order_,
                                         this->error_norm_type_,
                                         this->def_step_size_,
                                         this->max_step_change_,
@@ -732,7 +765,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                               std::vector<ControllerVariant> &controllers, std::vector<int> &nacc,
                               std::vector<int> &nrej) const {
 
-        integrators::AdaptiveConfig cfg{static_cast<int>(this->error_order_),
+        integrators::AdaptiveConfig cfg{this->error_order_,
                                         this->error_norm_type_,
                                         this->def_step_size_,
                                         this->max_step_change_,
@@ -754,16 +787,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /// \name Thread-safe `_core` helpers
-    ///
-    /// These mirror the public `integrate*` overloads that are reachable
-    /// from parallel dispatchers but take controller + counter state by
-    /// reference and never read or write `this->controller_variant_`,
-    /// `this->naccept_`, or `this->nreject_`. Public wrappers create
-    /// per-call locals, invoke the `_core`, and (single-threaded only)
-    /// write counters back to the mutable members for `get_naccept()` /
-    /// `get_nreject()` inspection. Parallel workers invoke `_core`
-    /// directly and skip the writeback, so the members are never
-    /// written from multiple threads.
+    /// Caller owns controller + counters by reference; function never
+    /// touches `this->controller_variant_` / `naccept_` / `nreject_` —
+    /// this is what makes concurrent worker invocations race-free.
     /// @{
     IntegRet integrate_core(const ODEState<double> &x0, double tf, ControllerVariant &controller,
                             int &naccept, int &nreject) const {
@@ -915,8 +941,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<std::vector<ODEState<double>>>
     find_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
                 const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
-        // Reset per-call so get_failed_event_count() reflects only the
-        // most recent integrate-with-events invocation.
         this->n_failed_event_refinements_ = 0;
         return EventHandler::refine_events<ODEState<double>>(
             tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
@@ -1038,9 +1062,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<ODEState<double>> integrate(const std::vector<ODEState<double>> &x0s,
                                             const Eigen::VectorXd &tfs) const {
         const int n = static_cast<int>(x0s.size());
-        std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls)
-            std::visit([](auto &cc) { cc.reset(); }, c);
+        std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<ODEState<double>> result;
@@ -1070,9 +1092,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<STMRet> integrate_stm(const std::vector<ODEState<double>> &x0s,
                                       const Eigen::VectorXd &tfs) const {
         const int n = static_cast<int>(x0s.size());
-        std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls)
-            std::visit([](auto &cc) { cc.reset(); }, c);
+        std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<STMRet> rets(n);
@@ -1107,9 +1127,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     integrate_stm2(const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs,
                    const std::vector<ODEState<double>> &lfs) const {
         const int n = static_cast<int>(x0s.size());
-        std::vector<ControllerVariant> ctrls(n, this->controller_variant_);
-        for (auto &c : ctrls)
-            std::visit([](auto &cc) { cc.reset(); }, c);
+        std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
 
         std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(n);
@@ -1428,10 +1446,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /// Segmented parallel STM over a single trajectory.
-    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by this
-    /// path. Workers and the interleaved main-thread propagation each
-    /// own private per-segment counters to avoid cross-thread writes
-    /// to member state.
+    /// Threadpool branch: `get_naccept()` / `get_nreject()` are NOT updated
+    /// (workers own private per-segment counters to avoid cross-thread
+    /// writes to member state). Non-threadpool fallback IS safe to write
+    /// back — runs single-threaded and accumulates into the members.
     STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
         VectorX<double> ts = VectorX<double>::LinSpaced(n_parts + 1, x0[this->ode_.t_var()], tf);
         std::vector<ODEState<double>> xs(n_parts + 1);
@@ -1500,21 +1518,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 if (extra_msgs.empty()) {
                     throw;
                 }
-                constexpr size_t kMaxExtras = 5;
-                std::string joined =
-                    "integrate_stm_parallel: main-thread segment failure: " + primary_msg +
-                    "; worker failures (" + std::to_string(extra_msgs.size()) + "): ";
-                size_t shown = std::min(extra_msgs.size(), kMaxExtras);
-                for (size_t k = 0; k < shown; ++k) {
-                    if (k)
-                        joined += " | ";
-                    joined += extra_msgs[k];
-                }
-                if (extra_msgs.size() > kMaxExtras) {
-                    joined +=
-                        " | ... and " + std::to_string(extra_msgs.size() - kMaxExtras) + " more";
-                }
-                throw std::runtime_error(joined);
+                throw_aggregated_segment_failure("main-thread segment failure", "worker failures",
+                                                 primary_msg, extra_msgs);
             }
             // If .get() throws, drain remaining futures before rethrowing to
             // prevent use-after-free of stack-captured references (&stm_op, etc.).
@@ -1566,43 +1571,36 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 if (extra_msgs.empty()) {
                     std::rethrow_exception(ex);
                 }
-                // Cap secondary-failure detail at kMaxExtras to keep the
-                // composite message bounded under large n_parts.
-                constexpr size_t kMaxExtras = 5;
-                std::string joined =
-                    "integrate_stm_parallel: primary segment failure: " + primary_msg +
-                    "; additional failures (" + std::to_string(extra_msgs.size()) + "): ";
-                size_t shown = std::min(extra_msgs.size(), kMaxExtras);
-                for (size_t k = 0; k < shown; ++k) {
-                    if (k)
-                        joined += " | ";
-                    joined += extra_msgs[k];
-                }
-                if (extra_msgs.size() > kMaxExtras) {
-                    joined +=
-                        " | ... and " + std::to_string(extra_msgs.size() - kMaxExtras) + " more";
-                }
-                throw std::runtime_error(joined);
+                throw_aggregated_segment_failure("primary segment failure", "additional failures",
+                                                 primary_msg, extra_msgs);
             }
         } else {
-            // Non-threadpool fallback is single-threaded, but stay on
-            // `_core` entries + local state for consistency — members
-            // are never written by this path.
-            ControllerVariant fallback_ctrl;
-            int fallback_na = 0, fallback_nr = 0;
+            // Non-threadpool fallback is single-threaded, so it can safely
+            // accumulate counters into the members (no cross-thread writes).
+            int total_na = 0, total_nr = 0;
             for (int i = 0; i < n_parts; i++) {
-                auto [xf, jx] = stm_op(i);
+                // Inline the stm_op work here so the per-segment counters
+                // are visible for writeback — stm_op's locals would be
+                // discarded otherwise.
+                ControllerVariant seg_ctrl = this->make_worker_controller();
+                int seg_na = 0, seg_nr = 0;
+                auto [xf, jx] = this->integrate_stm_core(xs[i], ts[i + 1], seg_ctrl, seg_na, seg_nr);
+                total_na += seg_na;
+                total_nr += seg_nr;
+
                 jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                 if (i < n_parts - 1) {
-                    fallback_ctrl = this->make_worker_controller();
-                    fallback_na = 0;
-                    fallback_nr = 0;
-                    xs[i + 1] = this->integrate_core(xs[i], ts[i + 1], fallback_ctrl, fallback_na,
-                                                     fallback_nr);
+                    ControllerVariant prop_ctrl = this->make_worker_controller();
+                    int prop_na = 0, prop_nr = 0;
+                    xs[i + 1] = this->integrate_core(xs[i], ts[i + 1], prop_ctrl, prop_na, prop_nr);
+                    total_na += prop_na;
+                    total_nr += prop_nr;
                 } else {
                     xs[i + 1] = xf;
                 }
             }
+            this->naccept_ = total_na;
+            this->nreject_ = total_nr;
         }
 
         STMRet tup_final;

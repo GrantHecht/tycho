@@ -49,11 +49,19 @@ constexpr BaselineEntry kBaseline[] = {
     {"DOPRI54", IVPAlg::DOPRI54, "SHO_2pi", 1e-08, 1e-08, 64, 0},
     {"DOPRI87", IVPAlg::DOPRI87, "SHO_2pi", 1e-08, 1e-08, 11, 0},
     {"Tsit5", IVPAlg::Tsit5, "SHO_2pi", 1e-08, 1e-08, 71, 0},
+    {"BS3", IVPAlg::BS3, "SHO_2pi", 1e-08, 1e-08, 918, 0},
+    {"BS5", IVPAlg::BS5, "SHO_2pi", 1e-08, 1e-08, 49, 0},
     {"Vern7", IVPAlg::Vern7, "SHO_2pi", 1e-08, 1e-08, 28, 0},
+    {"Vern8", IVPAlg::Vern8, "SHO_2pi", 1e-08, 1e-08, 17, 0},
+    {"Vern9", IVPAlg::Vern9, "SHO_2pi", 1e-08, 1e-08, 16, 0},
     {"DOPRI54", IVPAlg::DOPRI54, "SHO_2pi", 1e-10, 1e-10, 158, 0},
     {"DOPRI87", IVPAlg::DOPRI87, "SHO_2pi", 1e-10, 1e-10, 18, 0},
     {"Tsit5", IVPAlg::Tsit5, "SHO_2pi", 1e-10, 1e-10, 171, 0},
+    {"BS3", IVPAlg::BS3, "SHO_2pi", 1e-10, 1e-10, 4236, 0},
+    {"BS5", IVPAlg::BS5, "SHO_2pi", 1e-10, 1e-10, 114, 0},
     {"Vern7", IVPAlg::Vern7, "SHO_2pi", 1e-10, 1e-10, 50, 0},
+    {"Vern8", IVPAlg::Vern8, "SHO_2pi", 1e-10, 1e-10, 27, 0},
+    {"Vern9", IVPAlg::Vern9, "SHO_2pi", 1e-10, 1e-10, 24, 0},
 };
 
 struct RunResult {
@@ -101,7 +109,6 @@ TEST_F(StepCountBaselineTest, LocalStepCountsWithinTolerance) {
                   << "tests/cpp/integrators/test_stepcount_baseline.cpp:\n\n";
     }
 
-    bool any_mismatch = false;
     for (const auto &e : kBaseline) {
         auto got = run_entry(e);
 
@@ -120,13 +127,8 @@ TEST_F(StepCountBaselineTest, LocalStepCountsWithinTolerance) {
             << e.method << " / " << e.problem << " / tol=" << e.abs_tol
             << ": nreject drift (expected " << e.expected_nreject << ", got " << got.nreject
             << ", >10%)";
-        if (got.naccept != e.expected_naccept || got.nreject != e.expected_nreject) {
-            any_mismatch = true;
-        }
     }
     if (regenerating) {
         GTEST_SKIP() << "Regeneration mode — update kBaseline with the printed values.";
     }
-    // any_mismatch is advisory; the EXPECT_TRUE calls above are the hard gates.
-    (void)any_mismatch;
 }

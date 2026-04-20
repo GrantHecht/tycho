@@ -35,12 +35,50 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     using ODEState = typename DODE::template Input<Scalar>;
     using ODEDeriv = typename DODE::template Output<Scalar>;
 
+    /// Snapshot of the FSAL cache for reject-rollback in adaptive drivers.
+    /// AdaptiveDriver takes this before each step and restores on reject so
+    /// the retry reads f(xi), not the unconditionally-overwritten f(xnext).
+    struct FsalSnapshot {
+        ODEDeriv k;
+        bool valid;
+    };
+
+    /// Seed f(xi) into the FSAL cache and mark it valid. Used by batch/SIMD
+    /// callers (ParallelDriver) that compute the per-lane derivative outside
+    /// the stepper and want the next step() to reuse it as stage 0.
+    void seed_fsal(const ODEDeriv &k) {
+        k_fsal_ = k;
+        fsal_valid_ = true;
+    }
+
+    /// Snapshot k_fsal_ + fsal_valid_ for later restore_fsal().
+    FsalSnapshot snapshot_fsal() const { return {k_fsal_, fsal_valid_}; }
+
+    /// Restore a previously-snapshotted FSAL state. Used by AdaptiveDriver on
+    /// reject so the retry's stage 0 reads the pre-step f(xi).
+    void restore_fsal(const FsalSnapshot &s) {
+        k_fsal_ = s.k;
+        fsal_valid_ = s.valid;
+    }
+
+    /// Invalidate the FSAL cache without touching k_fsal_'s contents.
+    void reset_fsal() { fsal_valid_ = false; }
+
+    /// Read-only access to the FSAL cache. Callers that read this post-step
+    /// to recover f(xnext) must gate on fsal_valid() — the Vern* midpoint
+    /// branch populates k_fsal_ but intentionally leaves fsal_valid_=false.
+    const ODEDeriv &peek_fsal() const { return k_fsal_; }
+    bool fsal_valid() const { return fsal_valid_; }
+
+  private:
     // FSAL cache. Holds f(xf) at Scalar units (no h factor) after a step,
     // for any method where k_vals.back() contains f(xf)·h (FSAL or
     // LastStageIsFxf=true), or where the interpolant path's extra f(xf)
     // evaluation has been performed (LastStageIsFxf=false + compute_midpoint).
     ODEDeriv k_fsal_;
     bool fsal_valid_ = false;
+
+  public:
 
     /// Perform one RK step from state x to time tf.
     ///
@@ -184,8 +222,6 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             utils::TempSpec<ODEState>(ode.input_rows(), 1),
             utils::ArrayOfTempSpecs<ODEDeriv, ExtraCount>(ode.output_rows(), 1));
     }
-
-    void reset_fsal() { fsal_valid_ = false; }
 
     static constexpr int error_order() { return RKData::ErrorOrder; }
 };

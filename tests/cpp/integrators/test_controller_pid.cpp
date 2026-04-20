@@ -14,10 +14,10 @@ constexpr double ACCEPT_SAFETY = 0.81;
 
 PIDController h211pi() {
     PIDController c;
-    c.beta1 = 1.0 / 6.0;
-    c.beta2 = 1.0 / 6.0;
-    c.beta3 = 0.0;
-    c.accept_safety = ACCEPT_SAFETY;
+    c.beta1_ = 1.0 / 6.0;
+    c.beta2_ = 1.0 / 6.0;
+    c.beta3_ = 0.0;
+    c.accept_safety_ = ACCEPT_SAFETY;
     return c;
 }
 } // namespace
@@ -39,8 +39,8 @@ TEST(PIDControllerTest, FirstStepMatchesJuliaFormula) {
     double eps_min = 2.220446049250313e-16;
     double eest = std::max(err_norm, eps_min);
     double err1 = 1.0 / eest;
-    double factor = std::pow(err1, c.beta1 / k) * std::pow(1.0, c.beta2 / k) *
-                    std::pow(1.0, c.beta3 / k);
+    double factor = std::pow(err1, c.beta1_ / k) * std::pow(1.0, c.beta2_ / k) *
+                    std::pow(1.0, c.beta3_ / k);
     factor = PIDController::default_limiter(factor);
     EXPECT_NEAR(out.dt_new, h * factor, 1e-14);
     EXPECT_TRUE(out.accepted); // factor > accept_safety
@@ -105,10 +105,10 @@ TEST(PIDControllerTest, ResetRestoresInitialState) {
 ///////////////////////////////////////////////////////////////////////////////
 TEST(PIDControllerTest, Beta3NonZero_H312PID_FactorMatchesClosedForm) {
     PIDController c;
-    c.beta1 = 1.0 / 18.0;
-    c.beta2 = 1.0 / 9.0;
-    c.beta3 = 1.0 / 18.0; // exercises the third-derivative term
-    c.accept_safety = 0.81;
+    c.beta1_ = 1.0 / 18.0;
+    c.beta2_ = 1.0 / 9.0;
+    c.beta3_ = 1.0 / 18.0; // exercises the third-derivative term
+    c.accept_safety_ = 0.81;
 
     int order = 5;
     double k = order + 1.0;
@@ -128,8 +128,8 @@ TEST(PIDControllerTest, Beta3NonZero_H312PID_FactorMatchesClosedForm) {
     auto out = c.update(h, en3, order, 2);
     double err0_post = 1.0 / en3;
 
-    double factor = std::pow(err0_post, c.beta1 / k) * std::pow(err1_pre, c.beta2 / k) *
-                    std::pow(err2_pre, c.beta3 / k);
+    double factor = std::pow(err0_post, c.beta1_ / k) * std::pow(err1_pre, c.beta2_ / k) *
+                    std::pow(err2_pre, c.beta3_ / k);
     factor = PIDController::default_limiter(factor);
 
     EXPECT_TRUE(out.accepted) << "factor " << factor << " should clear accept_safety";

@@ -10,7 +10,6 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include <Eigen/Core>
@@ -26,9 +25,38 @@ using oc::InterpFunction;
 using oc::LGLInterpTable;
 using vf::GenericFunction;
 
+/// Named direction constants for EventPack::direction. Left as plain int to
+/// preserve brace-init call-site syntax (`{gf, 0, 1}`) across C++ callers and
+/// to let the nanobind tuple-based Python API pass through unchanged.
+namespace event_direction {
+inline constexpr int Falling = -1;
+inline constexpr int Any = 0;
+inline constexpr int Rising = 1;
+} // namespace event_direction
+
+/// Event spec: an event function, a direction filter, and a stop count.
+///
+/// `direction`: -1 (falling only), 0 (any crossing), +1 (rising only). See
+///    `event_direction::Falling/Any/Rising`.
+/// `stop_count`: 0 means "record crossings, never stop"; N > 0 means "stop
+///    integration after the Nth recorded crossing".
+///
+/// Replaces the prior `std::tuple<GenericFunction<-1,1>, int, int>`. Same
+/// memory layout — binding layer converts Python tuples `(gf, dir, stop)`
+/// via an implicit tuple→struct conversion so Python callers are unchanged.
+struct EventPack {
+    GenericFunction<-1, 1> vf;
+    int direction = 0;
+    int stop_count = 0;
+
+    EventPack() = default;
+    EventPack(GenericFunction<-1, 1> vf_, int direction_, int stop_count_)
+        : vf(std::move(vf_)), direction(direction_), stop_count(stop_count_) {}
+};
+
 struct EventHandler {
 
-    using EventPack = std::tuple<GenericFunction<-1, 1>, int, int>;
+    using EventPack = tycho::integrators::EventPack;
 
     /// Check for zero crossings between prev_vals and next_vals.
     /// Returns true if an event triggered a stop condition.
@@ -41,7 +69,7 @@ struct EventHandler {
         bool eventbreak = false;
         for (int j = 0; j < static_cast<int>(events.size()); j++) {
             next_vals[j].setZero();
-            std::get<0>(events[j]).compute(xnext, next_vals[j]);
+            events[j].vf.compute(xnext, next_vals[j]);
 
             double vprev = prev_vals[j][0];
             double vnext = next_vals[j][0];
@@ -57,7 +85,7 @@ struct EventHandler {
                     " (vprev=" + std::to_string(vprev) + ", vnext=" + std::to_string(vnext) +
                     "); event functions must be finite on finite states.");
             }
-            int dir = std::get<1>(events[j]);
+            int dir = events[j].direction;
             double vprod = vprev * vnext;
 
             if (vprod < 0.0) {
@@ -66,7 +94,7 @@ struct EventHandler {
                     times[0] = t_prev;
                     times[1] = xnext[t_var];
                     eventtimes[j].push_back(times);
-                    int stop = std::get<2>(events[j]);
+                    int stop = events[j].stop_count;
 
                     if (stop != 0) {
                         if (static_cast<int>(eventtimes[j].size()) == stop) {
@@ -106,7 +134,7 @@ struct EventHandler {
 
         for (int i = 0; i < static_cast<int>(events.size()); i++) {
             if (eventtimes[i].size() > 0) {
-                auto func = std::get<0>(events[i]).eval(tabfunc);
+                auto func = events[i].vf.eval(tabfunc);
 
                 auto newton = [&](auto x0) {
                     x[0] = x0;
@@ -115,6 +143,16 @@ struct EventHandler {
                         jx.setZero();
                         func.compute_jacobian(x, fx, jx);
                         if (std::abs(fx[0]) < std::abs(tol)) {
+                            break;
+                        }
+                        // Guard against singular / non-finite Jacobian — without
+                        // this, `fx/jx` produces NaN/Inf which the bracket check
+                        // at the call site silently rejects (NaN comparisons are
+                        // false under IEEE 754), falling through to the wider-
+                        // bracket retry without distinguishing "Newton diverged"
+                        // from "no bracket found". Break cleanly and let the
+                        // wider-bracket retry run with the current (pre-NaN) x.
+                        if (!std::isfinite(jx[0]) || jx[0] == 0.0) {
                             break;
                         }
                         x[0] = x[0] - fx[0] / jx[0];

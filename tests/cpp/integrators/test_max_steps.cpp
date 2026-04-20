@@ -143,6 +143,56 @@ TEST_F(MaxStepsTest, BatchPathEnforcesCap) {
 // margin, and confirm integration succeeds. A future change that throws
 // when steps_attempted == max_steps_ rather than > would fail this case.
 ///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// Parametric coverage: every user-selectable RK method honors the cap.
+// The throw site is inside AdaptiveDriver::integrate (templated on Alg);
+// a regression that disabled the check for one method would pass the
+// single-method test above. This parametric case pins the cap for all 8.
+///////////////////////////////////////////////////////////////////////////////
+
+struct MaxStepsMethodExpect {
+    IVPAlg method;
+    const char *name;
+};
+
+class MaxStepsAllMethodsTest : public VectorFunctionFixture,
+                               public ::testing::WithParamInterface<MaxStepsMethodExpect> {};
+
+TEST_P(MaxStepsAllMethodsTest, EachMethodHonorsMaxSteps) {
+    const auto &p = GetParam();
+
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, p.method, 10.0);
+    integ.set_abs_tol(1.0e-30); // Unattainable in double precision.
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+
+    auto x0 = leo_x0();
+    double tf = leo_period();
+
+    try {
+        integ.integrate(x0, tf);
+        FAIL() << p.name << ": expected runtime_error from max_steps cap, but integration succeeded.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("max_steps"), std::string::npos)
+            << p.name << ": error message should mention max_steps; got: " << msg;
+    } catch (...) {
+        FAIL() << p.name << ": expected std::runtime_error, got a different exception type.";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AllUserSelectableMethods, MaxStepsAllMethodsTest,
+                         ::testing::Values(MaxStepsMethodExpect{IVPAlg::DOPRI54, "DOPRI54"},
+                                           MaxStepsMethodExpect{IVPAlg::DOPRI87, "DOPRI87"},
+                                           MaxStepsMethodExpect{IVPAlg::Tsit5, "Tsit5"},
+                                           MaxStepsMethodExpect{IVPAlg::BS3, "BS3"},
+                                           MaxStepsMethodExpect{IVPAlg::BS5, "BS5"},
+                                           MaxStepsMethodExpect{IVPAlg::Vern7, "Vern7"},
+                                           MaxStepsMethodExpect{IVPAlg::Vern8, "Vern8"},
+                                           MaxStepsMethodExpect{IVPAlg::Vern9, "Vern9"}),
+                         [](const auto &info) { return info.param.name; });
+
 TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
     astro::Kepler kep(kMuEarth);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);

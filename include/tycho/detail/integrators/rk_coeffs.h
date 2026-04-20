@@ -54,13 +54,13 @@ namespace tycho {
 //                        !LastStageIsFxf) Bmid[Stages + offset .. BmidStages-1] — extra stages
 //                        (offset = LastStageIsFxf ? 0 : 1)
 //
-// User-selectable IVP algorithms: DOPRI54, DOPRI87, Tsit5. Only these are
-// exposed via the Python binding and the string parser. RK4Classic, DOPRI5,
-// and Tsit5Trans remain in the enum because they serve as internal
-// template-dispatch tags (DOPRI54's adaptive stepper is instantiated against
-// IVPAlg::DOPRI5 coefficients; Tsit5's transcription path uses Tsit5Trans; see
-// integrator.h set_method), and rk_steppers.h uses them in constexpr branches.
-// They are not runtime-selectable — passing them to set_method throws.
+// The doxygen list below marks which enum values are user-selectable via
+// the Python binding + string parser. The remaining values (RK4Classic,
+// DOPRI5, *Trans tags) serve as internal template-dispatch tags — some
+// adaptive steppers instantiate against the non-public tableau (e.g.
+// DOPRI54's adaptive stepper uses IVPAlg::DOPRI5 coefficients), and the
+// transcription paths use the *Trans variants; rk_steppers.h branches on
+// them. Passing a non-user-selectable value to set_method throws.
 enum class IVPAlg {
     DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)

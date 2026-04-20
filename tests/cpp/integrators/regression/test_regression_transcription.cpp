@@ -95,9 +95,13 @@ TEST_F(RegressionTranscriptionTest, Case09_JacobianHessian) {
     auto golden_hx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match(xf_dyn, golden_xf, 0.0, "Case09_xf");
-    expect_matrix_match(jx, golden_jx, 0.0, "Case09_Jacobian");
-    expect_matrix_match(hx, golden_hx, 0.0, "Case09_Hessian");
+    // Loose numerical tolerance — Hessian values reach magnitudes ~70, where
+    // ULP ≈ 1.4e-14; FP reassociation under benign refactors perturbs at
+    // that scale. tol=1e-10 is comfortably above ULP at this magnitude
+    // without hiding real regressions.
+    expect_vector_match(xf_dyn, golden_xf, 1e-13, "Case09_xf");
+    expect_matrix_match(jx, golden_jx, 1e-13, "Case09_Jacobian");
+    expect_matrix_match(hx, golden_hx, 1e-10, "Case09_Hessian");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

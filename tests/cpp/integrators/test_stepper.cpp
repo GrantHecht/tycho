@@ -62,7 +62,7 @@ TEST_F(StepperTest, DOPRI54_TwoStepsConsistent) {
 
     // Step 1: compute with midpoint to populate FSAL
     stepper.step(ode, x0, 0.1, xf1, xf_est1, true, xf_mid1, noop);
-    EXPECT_TRUE(stepper.fsal_valid_) << "FSAL should be valid after DOPRI54 step";
+    EXPECT_TRUE(stepper.fsal_valid()) << "FSAL should be valid after DOPRI54 step";
 
     // Step 2: use FSAL
     stepper.step(ode, xf1, 0.2, xf2, xf_est2, false, xf_mid2, noop);
@@ -166,7 +166,7 @@ TEST_F(StepperTest, DOPRI87_NoFSAL) {
 
     NoControl noop;
     stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
-    EXPECT_FALSE(stepper.fsal_valid_) << "DOPRI87 should not set fsal_valid";
+    EXPECT_FALSE(stepper.fsal_valid()) << "DOPRI87 should not set fsal_valid";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ TEST_F(StepperTest, DOPRI87_MidpointWithExtraDerivative) {
     deriv_at_xf.setZero();
     ode.compute(xf, deriv_at_xf);
     for (int i = 0; i < 2; i++) {
-        EXPECT_NEAR(stepper.k_fsal_[i], deriv_at_xf[i], 1e-14)
+        EXPECT_NEAR(stepper.peek_fsal()[i], deriv_at_xf[i], 1e-14)
             << "DOPRI87 k_fsal should contain derivative at xf, index " << i;
     }
 }
@@ -310,11 +310,11 @@ TEST_F(StepperTest, BS5_FSALValidAfterStep) {
     NoControl noop;
 
     stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
-    EXPECT_TRUE(stepper.fsal_valid_) << "BS5 LastStageIsFxf=true must populate fsal_valid_";
+    EXPECT_TRUE(stepper.fsal_valid()) << "BS5 LastStageIsFxf=true must populate fsal_valid_";
 
     // k_fsal_ should hold f(xf) = [xf[1], -xf[0]] (SHO derivatives)
-    EXPECT_NEAR(stepper.k_fsal_[0], xf[1], 1e-13) << "BS5 k_fsal_ x-component";
-    EXPECT_NEAR(stepper.k_fsal_[1], -xf[0], 1e-13) << "BS5 k_fsal_ v-component";
+    EXPECT_NEAR(stepper.peek_fsal()[0], xf[1], 1e-13) << "BS5 k_fsal_ x-component";
+    EXPECT_NEAR(stepper.peek_fsal()[1], -xf[0], 1e-13) << "BS5 k_fsal_ v-component";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -336,5 +336,5 @@ TEST_F(StepperTest, Vern7_NoFSALWithoutMidpoint) {
     NoControl noop;
 
     stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
-    EXPECT_FALSE(stepper.fsal_valid_) << "Vern7 LastStageIsFxf=false must NOT set fsal_valid_";
+    EXPECT_FALSE(stepper.fsal_valid()) << "Vern7 LastStageIsFxf=false must NOT set fsal_valid_";
 }

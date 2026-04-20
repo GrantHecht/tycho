@@ -38,11 +38,11 @@ namespace tycho::integrators {
 /// results at the scalar-double level for event detection, controller
 /// evaluation, and storage. The internal stepper operates on SuperScalar.
 ///
-/// Per-lane FSAL is threaded through the stepper's k_fsal_ cache: before each
-/// step the cached k_fsal_ is seeded from xdotis[i] packed into SuperScalar;
-/// after the step, k_fsal_ is extracted per-lane back to xdotis[i] for
-/// accepted lanes only (rejected lanes keep their pre-step xdotis, so the
-/// retry sees the correct f(xi)).
+/// Per-lane FSAL is threaded through the stepper's FSAL cache: before each
+/// step the cache is seeded from xdotis[i] packed into SuperScalar via
+/// seed_fsal(); after the step, f(xf) is extracted per-lane via peek_fsal()
+/// back to xdotis[i] for accepted lanes only (rejected lanes keep their
+/// pre-step xdotis, so the retry sees the correct f(xi)).
 template <IVPAlg Alg, class DODE> struct ParallelDriver {
 
     using SuperScalar = tycho::DefaultSuperScalar;
@@ -97,6 +97,17 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
         if (static_cast<int>(nacc.size()) != ntrajs || static_cast<int>(nrej.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: nacc/nrej vector size must equal number of trajectories.");
+        if (!events.empty() && static_cast<int>(eventtimes_s.size()) != ntrajs)
+            throw std::invalid_argument(
+                "ParallelDriver: eventtimes_s vector size must equal number of trajectories.");
+        if (storestates) {
+            if (static_cast<int>(states_s.size()) != ntrajs)
+                throw std::invalid_argument(
+                    "ParallelDriver: states_s vector size must equal number of trajectories.");
+            if (storederivs && static_cast<int>(derivs_s.size()) != ntrajs)
+                throw std::invalid_argument(
+                    "ParallelDriver: derivs_s vector size must equal number of trajectories.");
+        }
 
         // Joint tolerance invariant.
         if (cfg.adaptive) {
@@ -153,11 +164,11 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
             for (std::size_t j = 0; j < events.size(); ++j) {
                 prev_event_vals_s[i][j].setZero();
                 next_event_vals_s[i][j].setZero();
-                if (std::get<0>(events[j]).input_rows() != ode.input_rows()) {
+                if (events[j].vf.input_rows() != ode.input_rows()) {
                     throw std::invalid_argument(
                         "ParallelDriver: event function input size mismatch.");
                 }
-                std::get<0>(events[j]).compute(xis[i], prev_event_vals_s[i][j]);
+                events[j].vf.compute(xis[i], prev_event_vals_s[i][j]);
             }
             if (!events.empty()) {
                 eventtimes_s[i].resize(events.size());
@@ -227,7 +238,7 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
         }
 
         // Pad unused SIMD slots with lane-0 data (harmless — only V<Vmax is
-        // read out). Matches the production path's padding convention.
+        // read out).
         if (ntrajs < SuperScalar::SizeAtCompileTime) {
             for (int V = 0; V < SuperScalar::SizeAtCompileTime; ++V) {
                 for (int k = 0; k < ode.input_rows(); ++k) {
@@ -304,21 +315,20 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                     constexpr bool method_does_fsal =
                         RKCoeffs<Alg>::FSAL || RKCoeffs<Alg>::LastStageIsFxf;
                     if constexpr (method_does_fsal) {
-                        stepper_.k_fsal_ = xdotnext_ss;
-                        stepper_.fsal_valid_ = true;
+                        stepper_.seed_fsal(xdotnext_ss);
                     } else {
-                        stepper_.fsal_valid_ = false;
+                        stepper_.reset_fsal();
                     }
 
                     stepper_.step(ode, xi_ss, tnext_ss, xnext_ss, xnext_est_ss,
                                   storemidpoints || storederivs, xnext_mid_ss, update_control);
 
-                    // Extract k_fsal_ back to xdotnext_ss for FSAL methods so
+                    // Extract f(xf) back to xdotnext_ss for FSAL methods so
                     // accepted lanes propagate f(xf) to the next step. For
                     // non-FSAL methods, xdotnext_ss is unchanged — the next
                     // step will recompute fresh regardless.
                     if constexpr (method_does_fsal) {
-                        xdotnext_ss = stepper_.k_fsal_;
+                        xdotnext_ss = stepper_.peek_fsal();
                     }
 
                     abs_error_ss =
