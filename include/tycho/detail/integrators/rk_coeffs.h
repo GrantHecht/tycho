@@ -47,7 +47,7 @@ namespace tycho {
 //     Bmid           — weights for the midpoint sum, stored as 2·b_i(Θ=0.5)
 //                      where b_i(Θ) is Julia's interpolation polynomial.
 //                      Factor of 2 cancels the /2 applied inside
-//                      stepper_compute_impl. Σ Bmid[i] = 1.0 sanity-check.
+//                      Stepper::step. Σ Bmid[i] = 1.0 sanity-check.
 //                      Layout:
 //                        Bmid[0..Stages-1]                     — main stages
 //                        Bmid[Stages]                          — f(xf) term (only if
@@ -360,7 +360,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
 
     // Bmid: stored in Tycho convention as 2·b_i(Θ=0.5), where b_i is Julia's
     // Tsit5Interp polynomial. The factor of 2 cancels the 1/2 applied in
-    // stepper_compute_impl's midpoint sum, yielding sol(Θ=0.5) exactly.
+    // Stepper::step's midpoint sum, yielding sol(Θ=0.5) exactly.
     // Derived via bench/julia_reference/src/compute_bmid.jl.
     // Sanity: Σ Bmid[i] = 1.0 (matches existing DOPRI54 Bmid convention).
     static constexpr std::array<double, BmidStages> Bmid = {
@@ -409,7 +409,7 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
     //     b_2(0.5) = B_2/2       = 1/6
     //     b_3(0.5) = B_3/2       = 2/9
     //     b_4(0.5) = B_4/2 - 1/8 = -1/8
-    //   Σ b_i(0.5) = 1/2 ✓. Tycho stores 2·b_i(0.5): Σ = 1.0 ✓.
+    //   Σ b_i(0.5) = 1/2 (OK). Tycho stores 2·b_i(0.5): Σ = 1.0 (OK).
     static constexpr std::array<double, BmidStages> Bmid = {rat(17, 36), rat(1, 3), rat(4, 9),
                                                             rat(-1, 4)};
 };
@@ -589,7 +589,7 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
 
     // Dense-output schema fields. The 6 extra stages (k_11..k_16) form the
     // Vern7Interp polynomial. f(xf) is evaluated separately in the midpoint
-    // branch to correctly update xdot_prev (required by stepper_compute_impl).
+    // branch to correctly update the FSAL cache in Stepper::step.
     static constexpr int InterpStages = 6;
     static constexpr bool LastStageIsFxf = false;
     static constexpr int BmidStages = Stages + InterpStages + 1; // 17

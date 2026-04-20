@@ -2,11 +2,9 @@
 // specializations. Matches the extern template declarations in
 // include/tycho/detail/integrators/extern_templates.h.
 //
-// This TU compiles all the template method bodies that are suppressed in
-// consuming TUs by extern template (notably the Python binding TU
-// kepler_integrator.cpp, which has exploded in RAM footprint since SP2
-// added 6 new RK methods multiplying the Integrator::stepper_compute_impl
-// instantiations).
+// This TU compiles the template method bodies that are suppressed in
+// consuming TUs by extern template, keeping per-TU RAM footprint bounded
+// for heavy consumers such as the Python binding kepler_integrator.cpp.
 
 #include "tycho/detail/integrators/extern_templates.h"
 

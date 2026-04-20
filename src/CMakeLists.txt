@@ -39,8 +39,7 @@ target_precompile_headers(vf_instantiations REUSE_FROM pch)
 set_property(TARGET vf_instantiations PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 # Explicit template instantiations for common Integrator<DODE> types — reduces
-# binding TU RAM pressure (SP2 multiplied Integrator::stepper_compute_impl
-# instantiations 4× by adding Tsit5, BS3, BS5, Vern7, Vern8, Vern9). See
+# binding TU RAM pressure. See
 # include/tycho/detail/integrators/extern_templates.h.
 add_library(integrators_instantiations STATIC
     integrators/extern_template_instantiations.cpp)

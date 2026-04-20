@@ -168,8 +168,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // ambiguity between the int and Eigen::VectorXi alternatives.
         ControlIndexType empty_ci{std::in_place_type<Eigen::VectorXi>};
         this->set_method(meth, dode, defstep, false, ControllerType{}, empty_ci);
-        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
-        this->set_rel_tol(0);       // Must Be called after set_method!!!
+        this->set_abs_tol(1.0e-12);
+        this->set_rel_tol(0);
     }
     Integrator(const DODE &dode, double defstep) : Integrator(dode, IVPAlg::DOPRI87, defstep) {}
     Integrator(const DODE &dode, IVPAlg meth, double defstep, const ControllerType &ucon,
@@ -177,8 +177,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         : Integrator() {
 
         this->set_method(meth, dode, defstep, true, ucon, varlocs_t);
-        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
-        this->set_rel_tol(0);       // Must Be called after set_method!!!
+        this->set_abs_tol(1.0e-12);
+        this->set_rel_tol(0);
     }
     // VectorXi overloads: explicitly wrap into ControlIndexType to avoid MSVC
     // variant implicit-conversion ambiguity (int vs VectorXi alternatives).
@@ -200,8 +200,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         tloc[0] = dode.t_var();
         GenericFunction<-1, -1> ucon = Constant<-1, -1>(1, v);
         this->set_method(meth, dode, defstep, true, ucon, tloc);
-        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
-        this->set_rel_tol(0);       // Must Be called after set_method!!!
+        this->set_abs_tol(1.0e-12);
+        this->set_rel_tol(0);
     }
     Integrator(const DODE &dode, double defstep, const Eigen::VectorXd &v)
         : Integrator(dode, IVPAlg::DOPRI87, defstep, v) {}
@@ -213,8 +213,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         varlocs[0] = dode.t_var();
         ControllerType ucon = InterpFunction<-1>(tab, ulocs);
         this->set_method(meth, dode, defstep, true, ucon, varlocs);
-        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
-        this->set_rel_tol(0);       // Must Be called after set_method!!!
+        this->set_abs_tol(1.0e-12);
+        this->set_rel_tol(0);
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab,
                const Eigen::VectorXi &ulocs)
@@ -235,8 +235,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         varlocs[0] = dode.t_var();
         ControllerType ucon = InterpFunction<-1>(tab, ulocs);
         this->set_method(meth, dode, defstep, true, ucon, varlocs);
-        this->set_abs_tol(1.0e-12); // Must Be called after set_method!!!
-        this->set_rel_tol(0);       // Must Be called after set_method!!!
+        this->set_abs_tol(1.0e-12);
+        this->set_rel_tol(0);
     }
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator(dode, IVPAlg::DOPRI87, defstep, tab) {}
@@ -443,9 +443,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     int max_event_iters_ = 10;
     bool vectorize_batch_calls_ = true;
 
-    double step_frac_ = .9;
-    double err_pow_fac_ = 1;
-
     // Prototype controller. Read-only during integrate — workers clone via
     // make_worker_controller(). Mutated only by set_method / set_controller,
     // neither of which is concurrent-safe with an in-flight integrate.
@@ -477,9 +474,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// side raised the primary failure (main-thread vs. worker segment);
     /// `extras` holds the drained-future what() strings. Caps at kMaxExtras
     /// to keep the composite message bounded under large n_parts.
-    [[noreturn]] static void throw_aggregated_segment_failure(
-        const char *primary_tag, const char *extras_tag, const std::string &primary_msg,
-        const std::vector<std::string> &extras) {
+    [[noreturn]] static void
+    throw_aggregated_segment_failure(const char *primary_tag, const char *extras_tag,
+                                     const std::string &primary_msg,
+                                     const std::vector<std::string> &extras) {
         constexpr std::size_t kMaxExtras = 5;
         std::string joined = std::string("integrate_stm_parallel: ") + primary_tag + ": " +
                              primary_msg + "; " + extras_tag + " (" +
@@ -491,8 +489,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             joined += extras[k];
         }
         if (extras.size() > kMaxExtras) {
-            joined +=
-                " | ... and " + std::to_string(extras.size() - kMaxExtras) + " more";
+            joined += " | ... and " + std::to_string(extras.size() - kMaxExtras) + " more";
         }
         throw std::runtime_error(joined);
     }
@@ -517,6 +514,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ODEDeriv<double> abs_tols_;
     ODEDeriv<double> rel_tols_;
 
+    // Tolerance setters size themselves from `ode_.x_vars()`, which is
+    // populated by `set_method`. Constructors call `set_method` before any
+    // tolerance setter for that reason.
     void set_abs_tol(double tol) { this->abs_tols_.setConstant(this->ode_.x_vars(), abs(tol)); }
     void set_rel_tol(double tol) { this->rel_tols_.setConstant(this->ode_.x_vars(), abs(tol)); }
 
@@ -1308,9 +1308,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// Parallel batch dense integrate.
-    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
-    /// parallel path. See `integrate_parallel` for the rationale.
+    /// Parallel batch dense integrate. @see integrate_parallel for the
+    /// `get_naccept()` / `get_nreject()` contract.
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs, int n_parts) {
         return this->integrate_dense_parallel_impl(x0s, tfs, n_parts);
@@ -1363,8 +1362,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /// Parallel batch dense integrate with per-trajectory state counts.
-    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
-    /// parallel path.
+    /// @see integrate_parallel for the `get_naccept()` / `get_nreject()` contract.
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<int> &ns,
@@ -1429,9 +1427,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// Parallel batch STM integrate.
-    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
-    /// parallel path.
+    /// Parallel batch STM integrate. @see integrate_parallel for the
+    /// `get_naccept()` / `get_nreject()` contract.
     std::vector<STMRet> integrate_stm_parallel(const std::vector<ODEState<double>> &x0s,
                                                const Eigen::VectorXd &tfs, int n_parts) {
         return this->integrate_stm_parallel_impl(x0s, tfs, n_parts);
@@ -1584,7 +1581,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 // discarded otherwise.
                 ControllerVariant seg_ctrl = this->make_worker_controller();
                 int seg_na = 0, seg_nr = 0;
-                auto [xf, jx] = this->integrate_stm_core(xs[i], ts[i + 1], seg_ctrl, seg_na, seg_nr);
+                auto [xf, jx] =
+                    this->integrate_stm_core(xs[i], ts[i + 1], seg_ctrl, seg_na, seg_nr);
                 total_na += seg_na;
                 total_nr += seg_nr;
 

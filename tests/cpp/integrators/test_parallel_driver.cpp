@@ -41,16 +41,22 @@ TEST(ParallelDriverCompileTest, InstantiatesAllMethods) {
     ParallelDriver<IVPAlg::Vern7, Kep> f;
     ParallelDriver<IVPAlg::Vern8, Kep> g;
     ParallelDriver<IVPAlg::Vern9, Kep> h;
-    (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h;
+    (void)a;
+    (void)b;
+    (void)c;
+    (void)d;
+    (void)e;
+    (void)f;
+    (void)g;
+    (void)h;
     SUCCEED();
 }
 
 // -----------------------------------------------------------------------------
 // Integrates a batch of SHO trajectories through ParallelDriver and compares
 // against production Integrator's batch integrate. Numerical match, not bit-
-// exact: the Integrator uses stepper_compute_impl which has slightly
-// different FSAL handling than ParallelDriver's Stepper<> path for non-FSAL
-// methods.
+// exact: the Integrator's scalar step path has slightly different FSAL
+// handling than ParallelDriver's Stepper<> path for non-FSAL methods.
 // -----------------------------------------------------------------------------
 class ParallelDriverRunTest : public VectorFunctionFixture {};
 
@@ -64,7 +70,8 @@ TEST_F(ParallelDriverRunTest, BatchSHO_MatchesIntegrator) {
     reference.set_abs_tol(1e-10);
     reference.set_rel_tol(1e-10);
     std::vector<Eigen::Vector3d> xs_ref;
-    for (int i = 0; i < N; ++i) xs_ref.push_back(sho_x0(0.1 * i));
+    for (int i = 0; i < N; ++i)
+        xs_ref.push_back(sho_x0(0.1 * i));
     Eigen::VectorXd tfs(N);
     tfs.setConstant(tf_all);
     auto ref_out = reference.integrate(xs_ref, tfs);
@@ -83,7 +90,8 @@ TEST_F(ParallelDriverRunTest, BatchSHO_MatchesIntegrator) {
     rel_tols.setConstant(1e-10);
 
     std::vector<ControllerVariant> controllers(N, ControllerVariant{PIController{}});
-    for (auto &c : controllers) std::visit([](auto &cc) { cc.reset(); }, c);
+    for (auto &c : controllers)
+        std::visit([](auto &cc) { cc.reset(); }, c);
     std::vector<int> nacc(N, 0), nrej(N, 0);
 
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
@@ -96,8 +104,7 @@ TEST_F(ParallelDriverRunTest, BatchSHO_MatchesIntegrator) {
     std::vector<Eigen::Vector3d> xs_test = xs_ref;
     auto out = driver.integrate(ode, xs_test, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej,
                                 events, eventtimes_s, /*storestates=*/false, /*storederivs=*/false,
-                                /*storemidpoints=*/false, states_s, derivs_s,
-                                noop_update_control);
+                                /*storemidpoints=*/false, states_s, derivs_s, noop_update_control);
 
     ASSERT_EQ(out.size(), static_cast<std::size_t>(N));
     for (int i = 0; i < N; ++i) {
@@ -131,16 +138,17 @@ TEST_F(ParallelDriverRunTest, MixedZeroInterval_BatchCorrect) {
     tfs << 0.0, 1.0, 0.0;
 
     std::vector<ControllerVariant> controllers(3, ControllerVariant{PIController{}});
-    for (auto &c : controllers) std::visit([](auto &cc) { cc.reset(); }, c);
+    for (auto &c : controllers)
+        std::visit([](auto &cc) { cc.reset(); }, c);
     std::vector<int> nacc(3, 0), nrej(3, 0);
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
     std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(3);
     std::vector<std::vector<Eigen::Vector3d>> states_s(3);
     std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(3);
 
-    auto out = driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej,
-                                events, eventtimes_s, false, false, false, states_s, derivs_s,
-                                [](auto &) {});
+    auto out =
+        driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej, events,
+                         eventtimes_s, false, false, false, states_s, derivs_s, [](auto &) {});
 
     // Zero-interval lanes return input state, no steps.
     EXPECT_DOUBLE_EQ(out[0][0], xs[0][0]);
@@ -178,17 +186,18 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
     tfs.setConstant(5.0);
 
     std::vector<ControllerVariant> controllers = {ControllerVariant{IController{}},
-                                                   ControllerVariant{PIDController{}}};
-    for (auto &c : controllers) std::visit([](auto &cc) { cc.reset(); }, c);
+                                                  ControllerVariant{PIDController{}}};
+    for (auto &c : controllers)
+        std::visit([](auto &cc) { cc.reset(); }, c);
     std::vector<int> nacc(2, 0), nrej(2, 0);
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
     std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(2);
     std::vector<std::vector<Eigen::Vector3d>> states_s(2);
     std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(2);
 
-    auto out = driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej,
-                                events, eventtimes_s, false, false, false, states_s, derivs_s,
-                                [](auto &) {});
+    auto out =
+        driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej, events,
+                         eventtimes_s, false, false, false, states_s, derivs_s, [](auto &) {});
 
     // Both lanes finish at tf=5.0 with SHO solution regardless of controller.
     for (int i = 0; i < 2; ++i) {

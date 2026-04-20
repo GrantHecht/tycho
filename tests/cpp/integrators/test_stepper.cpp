@@ -55,8 +55,12 @@ TEST_F(StepperTest, DOPRI54_TwoStepsConsistent) {
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper;
     Eigen::Vector3d xf1, xf_est1, xf_mid1;
     Eigen::Vector3d xf2, xf_est2, xf_mid2;
-    xf1.setZero(); xf_est1.setZero(); xf_mid1.setZero();
-    xf2.setZero(); xf_est2.setZero(); xf_mid2.setZero();
+    xf1.setZero();
+    xf_est1.setZero();
+    xf_mid1.setZero();
+    xf2.setZero();
+    xf_est2.setZero();
+    xf_mid2.setZero();
 
     NoControl noop;
 
@@ -87,8 +91,12 @@ TEST_F(StepperTest, DOPRI54_FSALConsistency) {
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper_a;
     Eigen::Vector3d xf1a, xf_est1a, xf_mid1a;
     Eigen::Vector3d xf2a, xf_est2a, xf_mid2a;
-    xf1a.setZero(); xf_est1a.setZero(); xf_mid1a.setZero();
-    xf2a.setZero(); xf_est2a.setZero(); xf_mid2a.setZero();
+    xf1a.setZero();
+    xf_est1a.setZero();
+    xf_mid1a.setZero();
+    xf2a.setZero();
+    xf_est2a.setZero();
+    xf_mid2a.setZero();
     stepper_a.step(ode, x0, 0.1, xf1a, xf_est1a, true, xf_mid1a, noop);
     stepper_a.step(ode, xf1a, 0.2, xf2a, xf_est2a, false, xf_mid2a, noop);
 
@@ -96,16 +104,19 @@ TEST_F(StepperTest, DOPRI54_FSALConsistency) {
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper_b;
     Eigen::Vector3d xf1b, xf_est1b, xf_mid1b;
     Eigen::Vector3d xf2b, xf_est2b, xf_mid2b;
-    xf1b.setZero(); xf_est1b.setZero(); xf_mid1b.setZero();
-    xf2b.setZero(); xf_est2b.setZero(); xf_mid2b.setZero();
+    xf1b.setZero();
+    xf_est1b.setZero();
+    xf_mid1b.setZero();
+    xf2b.setZero();
+    xf_est2b.setZero();
+    xf_mid2b.setZero();
     stepper_b.step(ode, x0, 0.1, xf1b, xf_est1b, true, xf_mid1b, noop);
     stepper_b.reset_fsal();
     stepper_b.step(ode, xf1b, 0.2, xf2b, xf_est2b, false, xf_mid2b, noop);
 
     // FSAL and non-FSAL should give identical xf (FSAL saves one evaluation)
     for (int i = 0; i < 3; i++) {
-        EXPECT_DOUBLE_EQ(xf2a[i], xf2b[i])
-            << "FSAL vs non-FSAL xf mismatch at " << i;
+        EXPECT_DOUBLE_EQ(xf2a[i], xf2b[i]) << "FSAL vs non-FSAL xf mismatch at " << i;
     }
 }
 
@@ -119,7 +130,9 @@ TEST_F(StepperTest, DOPRI54_EmbeddedEstimate) {
 
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper;
     Eigen::Vector3d xf, xf_est, xf_mid;
-    xf.setZero(); xf_est.setZero(); xf_mid.setZero();
+    xf.setZero();
+    xf_est.setZero();
+    xf_mid.setZero();
 
     NoControl noop;
     stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
@@ -142,7 +155,9 @@ TEST_F(StepperTest, DOPRI87_SingleStep) {
 
     Stepper<IVPAlg::DOPRI87, SHO, double> stepper;
     Eigen::Vector3d xf, xf_est, xf_mid;
-    xf.setZero(); xf_est.setZero(); xf_mid.setZero();
+    xf.setZero();
+    xf_est.setZero();
+    xf_mid.setZero();
 
     NoControl noop;
     stepper.step(ode, x0, tf, xf, xf_est, false, xf_mid, noop);
@@ -162,7 +177,9 @@ TEST_F(StepperTest, DOPRI87_NoFSAL) {
 
     Stepper<IVPAlg::DOPRI87, SHO, double> stepper;
     Eigen::Vector3d xf, xf_est, xf_mid;
-    xf.setZero(); xf_est.setZero(); xf_mid.setZero();
+    xf.setZero();
+    xf_est.setZero();
+    xf_mid.setZero();
 
     NoControl noop;
     stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
@@ -179,7 +196,9 @@ TEST_F(StepperTest, DOPRI54_MidpointComputed) {
 
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper;
     Eigen::Vector3d xf, xf_est, xf_mid;
-    xf.setZero(); xf_est.setZero(); xf_mid.setZero();
+    xf.setZero();
+    xf_est.setZero();
+    xf_mid.setZero();
 
     NoControl noop;
     stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
@@ -201,7 +220,9 @@ TEST_F(StepperTest, DOPRI87_MidpointWithExtraDerivative) {
 
     Stepper<IVPAlg::DOPRI87, SHO, double> stepper;
     Eigen::Vector3d xf, xf_est, xf_mid;
-    xf.setZero(); xf_est.setZero(); xf_mid.setZero();
+    xf.setZero();
+    xf_est.setZero();
+    xf_mid.setZero();
 
     NoControl noop;
     stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
@@ -233,8 +254,8 @@ TEST_F(StepperTest, ErrorOrder) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Per-method parity: Stepper<Alg>::step must produce xf bit-identical to
-// Integrator<>::integrate for a single fixed step. Proves Stepper is a valid
-// drop-in for stepper_compute_impl across all 8 user-selectable methods.
+// Integrator<>::integrate for a single fixed step across all 8
+// user-selectable methods.
 // Also exercises the interpolant extra-stage path for BS5/Tsit5/Vern7/8/9
 // (those methods have InterpStages > 0 and/or LastStageIsFxf variations).
 ///////////////////////////////////////////////////////////////////////////////

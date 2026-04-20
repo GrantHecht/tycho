@@ -304,9 +304,6 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def_rw("max_step_change", &Integrator<DODE>::max_step_change_);
         obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
 
-        obj.def_rw("step_frac", &Integrator<DODE>::step_frac_);
-        obj.def_rw("err_pow_fac", &Integrator<DODE>::err_pow_fac_);
-
         obj.def_rw("adaptive", &Integrator<DODE>::adaptive_);
         obj.def_rw("abs_tols", &Integrator<DODE>::abs_tols_);
 

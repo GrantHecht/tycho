@@ -14,8 +14,8 @@ r = [
 ]
 
 θ = 0.5
-# Tycho convention: Bmid[i] = 2·b_i(Θ=0.5), because stepper_compute_impl applies
-# a factor of (1/2) when summing (x_mid = x + Σ (Bmid[i]/2) · k_i, with k_i = h·f_i).
+# Tycho convention: Bmid[i] = 2·b_i(Θ=0.5), because Stepper::step applies a
+# factor of (1/2) when summing (x_mid = x + Σ (Bmid[i]/2) · k_i, with k_i = h·f_i).
 # Julia convention: sol(Θ) = x + h · Σ b_i(Θ) · f_i.
 # Match: Σ Bmid[i] = 2 · Σ b_i(0.5) = 2 · 0.5 = 1.0 (sanity).
 let totalsum = 0.0

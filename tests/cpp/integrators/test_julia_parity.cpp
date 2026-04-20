@@ -38,7 +38,8 @@ struct JuliaStatsRef {
 
 JuliaStatsRef read_julia_stats(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
-    if (!f.good()) throw std::runtime_error("Cannot open Julia stats ref: " + path);
+    if (!f.good())
+        throw std::runtime_error("Cannot open Julia stats ref: " + path);
     int32_t n;
     f.read(reinterpret_cast<char *>(&n), sizeof(n));
     Eigen::VectorXd uf(n);
@@ -53,8 +54,8 @@ JuliaStatsRef read_julia_stats(const std::string &path) {
 
 std::string stats_path(const std::string &alg_lc, const std::string &problem,
                        const std::string &tol_tag) {
-    return std::string(JULIA_REFERENCE_DIR) + "/test/reference_outputs/" + alg_lc + "_" +
-           problem + "_" + tol_tag + ".stats.bin";
+    return std::string(JULIA_REFERENCE_DIR) + "/test/reference_outputs/" + alg_lc + "_" + problem +
+           "_" + tol_tag + ".stats.bin";
 }
 
 struct ToleranceTier {
@@ -71,7 +72,7 @@ struct ToleranceTier {
 // naccept/nreject bands are widened from the plan's 10%/50% to 50%/100% —
 // a few algorithms (notably Vern7/8/9 at tight tolerances) show ~40-50%
 // naccept drift vs. Julia, most likely stemming from convention differences
-// in the adaptive_order passed to β-pre-scaled PI-controller defaults. SP4
+// in the error_order passed to β-pre-scaled PI-controller defaults. SP4
 // will tighten.
 const ToleranceTier kTol1e6{"tol1e6", 1e-6, 1e-7, 1e-4};
 const ToleranceTier kTol1e9{"tol1e9", 1e-9, 1e-10, 1e-7};
@@ -81,9 +82,7 @@ inline int naccept_band(int naccept_julia) {
     return std::max(5, static_cast<int>(0.50 * naccept_julia));
 }
 
-inline int nreject_band(int nreject_julia) {
-    return std::max(10, nreject_julia);
-}
+inline int nreject_band(int nreject_julia) { return std::max(10, nreject_julia); }
 
 inline double state_band_abs(const Eigen::VectorXd &ref, const ToleranceTier &tier) {
     return std::max(ref.norm() * tier.state_band, tier.abs_tol * 1000.0);
@@ -154,52 +153,72 @@ void assert_parity_crtbp(tycho::integrators::IVPAlg alg, const char *alg_name_lc
 using tycho::integrators::IVPAlg;
 
 // Tol 1e-6 — all 8 algorithms on both problems.
-TEST(JuliaParity, dopri54_twobody_tol1e6) { assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e6); }
-TEST(JuliaParity, dopri87_twobody_tol1e6) { assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e6); }
-TEST(JuliaParity, tsit5_twobody_tol1e6)   { assert_parity_twobody(IVPAlg::Tsit5,   "tsit5", kTol1e6); }
-TEST(JuliaParity, bs3_twobody_tol1e6)     { assert_parity_twobody(IVPAlg::BS3,     "bs3",   kTol1e6); }
-TEST(JuliaParity, bs5_twobody_tol1e6)     { assert_parity_twobody(IVPAlg::BS5,     "bs5",   kTol1e6); }
-TEST(JuliaParity, vern7_twobody_tol1e6)   { assert_parity_twobody(IVPAlg::Vern7,   "vern7", kTol1e6); }
-TEST(JuliaParity, vern8_twobody_tol1e6)   { assert_parity_twobody(IVPAlg::Vern8,   "vern8", kTol1e6); }
-TEST(JuliaParity, vern9_twobody_tol1e6)   { assert_parity_twobody(IVPAlg::Vern9,   "vern9", kTol1e6); }
+TEST(JuliaParity, dopri54_twobody_tol1e6) {
+    assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e6);
+}
+TEST(JuliaParity, dopri87_twobody_tol1e6) {
+    assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e6);
+}
+TEST(JuliaParity, tsit5_twobody_tol1e6) { assert_parity_twobody(IVPAlg::Tsit5, "tsit5", kTol1e6); }
+TEST(JuliaParity, bs3_twobody_tol1e6) { assert_parity_twobody(IVPAlg::BS3, "bs3", kTol1e6); }
+TEST(JuliaParity, bs5_twobody_tol1e6) { assert_parity_twobody(IVPAlg::BS5, "bs5", kTol1e6); }
+TEST(JuliaParity, vern7_twobody_tol1e6) { assert_parity_twobody(IVPAlg::Vern7, "vern7", kTol1e6); }
+TEST(JuliaParity, vern8_twobody_tol1e6) { assert_parity_twobody(IVPAlg::Vern8, "vern8", kTol1e6); }
+TEST(JuliaParity, vern9_twobody_tol1e6) { assert_parity_twobody(IVPAlg::Vern9, "vern9", kTol1e6); }
 
 TEST(JuliaParity, dopri54_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::DOPRI54, "dp5", kTol1e6); }
 TEST(JuliaParity, dopri87_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::DOPRI87, "dp8", kTol1e6); }
-TEST(JuliaParity, tsit5_crtbp_tol1e6)   { assert_parity_crtbp(IVPAlg::Tsit5,   "tsit5", kTol1e6); }
-TEST(JuliaParity, bs3_crtbp_tol1e6)     { assert_parity_crtbp(IVPAlg::BS3,     "bs3",   kTol1e6); }
-TEST(JuliaParity, bs5_crtbp_tol1e6)     { assert_parity_crtbp(IVPAlg::BS5,     "bs5",   kTol1e6); }
-TEST(JuliaParity, vern7_crtbp_tol1e6)   { assert_parity_crtbp(IVPAlg::Vern7,   "vern7", kTol1e6); }
-TEST(JuliaParity, vern8_crtbp_tol1e6)   { assert_parity_crtbp(IVPAlg::Vern8,   "vern8", kTol1e6); }
-TEST(JuliaParity, vern9_crtbp_tol1e6)   { assert_parity_crtbp(IVPAlg::Vern9,   "vern9", kTol1e6); }
+TEST(JuliaParity, tsit5_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::Tsit5, "tsit5", kTol1e6); }
+TEST(JuliaParity, bs3_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::BS3, "bs3", kTol1e6); }
+TEST(JuliaParity, bs5_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::BS5, "bs5", kTol1e6); }
+TEST(JuliaParity, vern7_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::Vern7, "vern7", kTol1e6); }
+TEST(JuliaParity, vern8_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::Vern8, "vern8", kTol1e6); }
+TEST(JuliaParity, vern9_crtbp_tol1e6) { assert_parity_crtbp(IVPAlg::Vern9, "vern9", kTol1e6); }
 
 // Tol 1e-9 — skip BS3 (order 3 saturates at ~1e-6).
-TEST(JuliaParity, dopri54_twobody_tol1e9) { assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e9); }
-TEST(JuliaParity, dopri87_twobody_tol1e9) { assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e9); }
-TEST(JuliaParity, tsit5_twobody_tol1e9)   { assert_parity_twobody(IVPAlg::Tsit5,   "tsit5", kTol1e9); }
-TEST(JuliaParity, bs5_twobody_tol1e9)     { assert_parity_twobody(IVPAlg::BS5,     "bs5",   kTol1e9); }
-TEST(JuliaParity, vern7_twobody_tol1e9)   { assert_parity_twobody(IVPAlg::Vern7,   "vern7", kTol1e9); }
-TEST(JuliaParity, vern8_twobody_tol1e9)   { assert_parity_twobody(IVPAlg::Vern8,   "vern8", kTol1e9); }
-TEST(JuliaParity, vern9_twobody_tol1e9)   { assert_parity_twobody(IVPAlg::Vern9,   "vern9", kTol1e9); }
+TEST(JuliaParity, dopri54_twobody_tol1e9) {
+    assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e9);
+}
+TEST(JuliaParity, dopri87_twobody_tol1e9) {
+    assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e9);
+}
+TEST(JuliaParity, tsit5_twobody_tol1e9) { assert_parity_twobody(IVPAlg::Tsit5, "tsit5", kTol1e9); }
+TEST(JuliaParity, bs5_twobody_tol1e9) { assert_parity_twobody(IVPAlg::BS5, "bs5", kTol1e9); }
+TEST(JuliaParity, vern7_twobody_tol1e9) { assert_parity_twobody(IVPAlg::Vern7, "vern7", kTol1e9); }
+TEST(JuliaParity, vern8_twobody_tol1e9) { assert_parity_twobody(IVPAlg::Vern8, "vern8", kTol1e9); }
+TEST(JuliaParity, vern9_twobody_tol1e9) { assert_parity_twobody(IVPAlg::Vern9, "vern9", kTol1e9); }
 
 TEST(JuliaParity, dopri54_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::DOPRI54, "dp5", kTol1e9); }
 TEST(JuliaParity, dopri87_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::DOPRI87, "dp8", kTol1e9); }
-TEST(JuliaParity, tsit5_crtbp_tol1e9)   { assert_parity_crtbp(IVPAlg::Tsit5,   "tsit5", kTol1e9); }
-TEST(JuliaParity, bs5_crtbp_tol1e9)     { assert_parity_crtbp(IVPAlg::BS5,     "bs5",   kTol1e9); }
-TEST(JuliaParity, vern7_crtbp_tol1e9)   { assert_parity_crtbp(IVPAlg::Vern7,   "vern7", kTol1e9); }
-TEST(JuliaParity, vern8_crtbp_tol1e9)   { assert_parity_crtbp(IVPAlg::Vern8,   "vern8", kTol1e9); }
-TEST(JuliaParity, vern9_crtbp_tol1e9)   { assert_parity_crtbp(IVPAlg::Vern9,   "vern9", kTol1e9); }
+TEST(JuliaParity, tsit5_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::Tsit5, "tsit5", kTol1e9); }
+TEST(JuliaParity, bs5_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::BS5, "bs5", kTol1e9); }
+TEST(JuliaParity, vern7_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::Vern7, "vern7", kTol1e9); }
+TEST(JuliaParity, vern8_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::Vern8, "vern8", kTol1e9); }
+TEST(JuliaParity, vern9_crtbp_tol1e9) { assert_parity_crtbp(IVPAlg::Vern9, "vern9", kTol1e9); }
 
 // Tol 1e-12 — skip BS3 and BS5.
-TEST(JuliaParity, dopri54_twobody_tol1e12) { assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e12); }
-TEST(JuliaParity, dopri87_twobody_tol1e12) { assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e12); }
-TEST(JuliaParity, tsit5_twobody_tol1e12)   { assert_parity_twobody(IVPAlg::Tsit5,   "tsit5", kTol1e12); }
-TEST(JuliaParity, vern7_twobody_tol1e12)   { assert_parity_twobody(IVPAlg::Vern7,   "vern7", kTol1e12); }
-TEST(JuliaParity, vern8_twobody_tol1e12)   { assert_parity_twobody(IVPAlg::Vern8,   "vern8", kTol1e12); }
-TEST(JuliaParity, vern9_twobody_tol1e12)   { assert_parity_twobody(IVPAlg::Vern9,   "vern9", kTol1e12); }
+TEST(JuliaParity, dopri54_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::DOPRI54, "dp5", kTol1e12);
+}
+TEST(JuliaParity, dopri87_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::DOPRI87, "dp8", kTol1e12);
+}
+TEST(JuliaParity, tsit5_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::Tsit5, "tsit5", kTol1e12);
+}
+TEST(JuliaParity, vern7_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::Vern7, "vern7", kTol1e12);
+}
+TEST(JuliaParity, vern8_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::Vern8, "vern8", kTol1e12);
+}
+TEST(JuliaParity, vern9_twobody_tol1e12) {
+    assert_parity_twobody(IVPAlg::Vern9, "vern9", kTol1e12);
+}
 
 TEST(JuliaParity, dopri54_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::DOPRI54, "dp5", kTol1e12); }
 TEST(JuliaParity, dopri87_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::DOPRI87, "dp8", kTol1e12); }
-TEST(JuliaParity, tsit5_crtbp_tol1e12)   { assert_parity_crtbp(IVPAlg::Tsit5,   "tsit5", kTol1e12); }
-TEST(JuliaParity, vern7_crtbp_tol1e12)   { assert_parity_crtbp(IVPAlg::Vern7,   "vern7", kTol1e12); }
-TEST(JuliaParity, vern8_crtbp_tol1e12)   { assert_parity_crtbp(IVPAlg::Vern8,   "vern8", kTol1e12); }
-TEST(JuliaParity, vern9_crtbp_tol1e12)   { assert_parity_crtbp(IVPAlg::Vern9,   "vern9", kTol1e12); }
+TEST(JuliaParity, tsit5_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::Tsit5, "tsit5", kTol1e12); }
+TEST(JuliaParity, vern7_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::Vern7, "vern7", kTol1e12); }
+TEST(JuliaParity, vern8_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::Vern8, "vern8", kTol1e12); }
+TEST(JuliaParity, vern9_crtbp_tol1e12) { assert_parity_crtbp(IVPAlg::Vern9, "vern9", kTol1e12); }

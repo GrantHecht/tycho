@@ -62,9 +62,10 @@ inline std::string controller_invariant_msg(const char *controller, const char *
 ///     q   = EEst^(1/k) / γ,   clipped to [1/qmax_, 1/qmin_]
 ///     dt' = dt / q
 ///
-/// where k = order + 1 (the order passed in is the adaptive_order of the
-/// algorithm). On the first step, `qmax_first_step_` replaces `qmax_` to
-/// allow a very large dt increase after initial-dt estimation.
+/// where k = order + 1 (the `order` parameter passed to update() is the
+/// algorithm's `ErrorOrder` — the order of the embedded error estimator).
+/// On the first step, `qmax_first_step_` replaces `qmax_` to allow a very
+/// large dt increase after initial-dt estimation.
 ///
 /// Matches OrdinaryDiffEqCore.jl `IController`.
 struct IController {
@@ -160,8 +161,8 @@ struct PIController {
             throw std::invalid_argument(
                 detail::controller_invariant_msg("PIController", "beta2_", "be >= 0", beta2_));
         if (!(gamma_ > 0.0 && gamma_ <= 1.0))
-            throw std::invalid_argument(
-                detail::controller_invariant_msg("PIController", "gamma_", "lie in (0, 1]", gamma_));
+            throw std::invalid_argument(detail::controller_invariant_msg("PIController", "gamma_",
+                                                                         "lie in (0, 1]", gamma_));
         if (!(qmin_ > 0.0 && qmin_ < 1.0))
             throw std::invalid_argument(
                 detail::controller_invariant_msg("PIController", "qmin_", "lie in (0, 1)", qmin_));
@@ -220,8 +221,9 @@ struct PIController {
 ///     accept    := dt_factor >= accept_safety_
 ///     dt'       = dt · dt_factor on both accept and reject.
 ///
-/// where ε_i = 1/EEst_i and k = min(order, adaptive_order) + 1. Beta values
-/// are NOT pre-scaled — the formula divides by k internally.
+/// where ε_i = 1/EEst_i and k = order + 1 (the `order` parameter is the
+/// algorithm's `ErrorOrder` — order of the embedded error estimator).
+/// Beta values are NOT pre-scaled — the formula divides by k internally.
 ///
 /// `qold_` is diagnostic-only (last-computed dt_factor, readable by tests);
 /// it is not consumed by the control law itself.
