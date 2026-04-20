@@ -501,6 +501,33 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     mutable int naccept_ = 0;
     mutable int nreject_ = 0;
 
+    // Writes local na/nr into the member counters on scope exit (success
+    // OR exception unwind). Without this, a failed integrate() would leave
+    // `get_naccept()` returning the previous call's value — misleading when
+    // debugging where a long run blew up. Mutable members allow a
+    // const-Integrator reference to write through.
+    struct CounterWriteback {
+        const Integrator &integ;
+        int &na;
+        int &nr;
+        ~CounterWriteback() noexcept {
+            integ.naccept_ = na;
+            integ.nreject_ = nr;
+        }
+    };
+
+    // Vector analogue of CounterWriteback: sums per-trajectory per-lane
+    // counters into the member counters on scope exit.
+    struct BatchCounterWriteback {
+        const Integrator &integ;
+        const std::vector<int> &nacc;
+        const std::vector<int> &nrej;
+        ~BatchCounterWriteback() noexcept {
+            integ.naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
+            integ.nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
+        }
+    };
+
     // Count of event refinements that failed both bisect+Newton passes.
     // Such crossings are absent from the returned eventstates vector;
     // exposing the count via get_failed_event_count() lets callers detect
@@ -1053,10 +1080,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     IntegRet integrate(const ODEState<double> &x0, double tf) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto xf = this->integrate_core(x0, tf, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return xf;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_core(x0, tf, ctrl, na, nr);
     }
 
     std::vector<ODEState<double>> integrate(const std::vector<ODEState<double>> &x0s,
@@ -1064,29 +1089,24 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
 
-        std::vector<ODEState<double>> result;
         if (!vectorize_batch_calls_) {
             std::vector<ODEState<double>> xfs(n);
             for (int i = 0; i < n; i++) {
                 xfs[i] = this->integrate_core(x0s[i], tfs[i], ctrls[i], nacc[i], nrej[i]);
             }
-            result = std::move(xfs);
-        } else {
-            std::vector<EventPack> events;
-            std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes;
-            bool storestates = false;
-            bool storederivs = false;
-            bool storemidpoints = false;
-            std::vector<std::vector<ODEState<double>>> xs;
-            std::vector<std::vector<ODEDeriv<double>>> d_xs;
-            result =
-                integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
-                                          storemidpoints, xs, d_xs, ctrls, nacc, nrej);
+            return xfs;
         }
-        this->naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
-        this->nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
-        return result;
+        std::vector<EventPack> events;
+        std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes;
+        bool storestates = false;
+        bool storederivs = false;
+        bool storemidpoints = false;
+        std::vector<std::vector<ODEState<double>>> xs;
+        std::vector<std::vector<ODEDeriv<double>>> d_xs;
+        return integrate_impl_vectorized(x0s, tfs, events, eventtimes, storestates, storederivs,
+                                         storemidpoints, xs, d_xs, ctrls, nacc, nrej);
     }
 
     std::vector<STMRet> integrate_stm(const std::vector<ODEState<double>> &x0s,
@@ -1094,6 +1114,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
 
         std::vector<STMRet> rets(n);
         if (!vectorize_batch_calls_) {
@@ -1118,8 +1139,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 rets[i] = std::tuple{x_finals[i], jacs[i]};
             }
         }
-        this->naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
-        this->nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
         return rets;
     }
 
@@ -1129,6 +1148,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
 
         std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>> rets(n);
         if (!vectorize_batch_calls_) {
@@ -1155,8 +1175,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 rets[i] = std::tuple{x_finals[i], js[i], hs_out[i]};
             }
         }
-        this->naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
-        this->nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
         return rets;
     }
 
@@ -1164,10 +1182,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                             const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_core(x0, tf, events, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_core(x0, tf, events, ctrl, na, nr);
     }
 
     template <class... Args>
@@ -1223,45 +1239,38 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     DenseRet integrate_dense(const ODEState<double> &x0, double tf) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto xs = this->integrate_dense_core(x0, tf, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return xs;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_dense_core(x0, tf, ctrl, na, nr);
     }
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf,
                                   const std::vector<EventPack> &events, bool alloutput) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr);
     }
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf, int n,
                                   const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr);
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int n) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_dense_core(x0, tf, n, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_dense_core(x0, tf, n, ctrl, na, nr);
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int num_states,
                              std::function<bool(ConstEigenRef<Eigen::VectorXd>)> exitfun) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
+        CounterWriteback _writeback{*this, na, nr};
 
         VectorX<double> ts = VectorX<double>::LinSpaced(num_states, x0[this->ode_.t_var()], tf);
         std::vector<ODEState<double>> xout;
@@ -1272,8 +1281,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             if (exitfun(xout.back()))
                 break;
         }
-        this->naccept_ = na;
-        this->nreject_ = nr;
         return xout;
     }
 
@@ -1381,19 +1388,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     STMRet integrate_stm(const ODEState<double> &x0, double tf) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_stm_core(x0, tf, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_stm_core(x0, tf, ctrl, na, nr);
     }
     STMEventRet integrate_stm(const ODEState<double> &x0, double tf,
                               const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
-        auto r = this->integrate_stm_core(x0, tf, events, ctrl, na, nr);
-        this->naccept_ = na;
-        this->nreject_ = nr;
-        return r;
+        CounterWriteback _writeback{*this, na, nr};
+        return this->integrate_stm_core(x0, tf, events, ctrl, na, nr);
     }
 
     template <class... Args>
@@ -1575,6 +1578,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             // Non-threadpool fallback is single-threaded, so it can safely
             // accumulate counters into the members (no cross-thread writes).
             int total_na = 0, total_nr = 0;
+            CounterWriteback _writeback{*this, total_na, total_nr};
             for (int i = 0; i < n_parts; i++) {
                 // Inline the stm_op work here so the per-segment counters
                 // are visible for writeback — stm_op's locals would be
@@ -1597,8 +1601,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     xs[i + 1] = xf;
                 }
             }
-            this->naccept_ = total_na;
-            this->nreject_ = total_nr;
         }
 
         STMRet tup_final;
