@@ -316,22 +316,27 @@ static_assert(Controller<PIDController>);
 
 /// Forward an update call to whichever controller is active in the variant.
 /// Centralizes the boilerplate `std::visit([&](auto& c) { return c.update(…); }, v)`
-/// at every step-loop site. Benefits: single point of dispatch, concept
-/// constrains what alternatives may carry.
-inline ControllerOutput update_controller(ControllerVariant &v, double h, double err_norm,
-                                          int order, int naccept) {
+/// at every step-loop site. `[[gnu::always_inline]]` because this is on the
+/// adaptive hot path once per accepted step — without it, Clang LTO can
+/// leave a real call frame here and cost double-digit-% on high-order
+/// methods where per-step overhead dominates (e.g. Vern7/8/9 PI). Benefits:
+/// single point of dispatch, concept constrains what alternatives may carry.
+[[gnu::always_inline]] inline ControllerOutput update_controller(ControllerVariant &v, double h,
+                                                                 double err_norm, int order,
+                                                                 int naccept) {
     return std::visit([&](auto &c) { return c.update(h, err_norm, order, naccept); }, v);
 }
 
 /// Reset whichever controller is active in the variant to its first-step
 /// state. Used by `make_worker_controller()` when cloning the prototype
 /// for a lane/segment, and at every `set_method`/`set_controller` site.
-inline void reset_controller(ControllerVariant &v) {
+[[gnu::always_inline]] inline void reset_controller(ControllerVariant &v) {
     std::visit([](auto &c) { c.reset(); }, v);
 }
 
 /// Validate whichever controller is active in the variant — checks the
 /// per-controller invariants described by `IController::validate()` etc.
+/// Not hot path; `inline` only.
 inline void validate_controller(const ControllerVariant &v) {
     std::visit([](const auto &c) { c.validate(); }, v);
 }

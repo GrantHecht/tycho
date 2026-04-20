@@ -326,8 +326,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::logic_error("Integrator::set_method: unhandled IVPAlg enum value");
         }
 
+        // default_controller_for returns a default-constructed controller —
+        // its Params are known-valid by construction, so skip the redundant
+        // validate_controller std::visit. If a future overload admits a
+        // user-supplied controller, validate it at that call site instead.
         this->controller_variant_ = default_controller_for(alg);
-        validate_controller(this->controller_variant_);
         reset_controller(this->controller_variant_);
     }
 
@@ -593,8 +596,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     ODEDeriv<double> get_rel_tols() const { return this->rel_tols_; }
 
     void set_controller(IVPController kind) {
+        // Same reasoning as set_method: controller_defaults_for returns a
+        // default-constructed controller whose Params are valid by design.
+        // Skip validate_controller to avoid the extra std::visit per call.
         this->controller_variant_ = controller_defaults_for(this->rk_method_, kind);
-        validate_controller(this->controller_variant_);
         reset_controller(this->controller_variant_);
     }
 
