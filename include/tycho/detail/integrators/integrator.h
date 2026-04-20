@@ -1577,12 +1577,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } else {
             // Non-threadpool fallback is single-threaded, so it can safely
             // accumulate counters into the members (no cross-thread writes).
+            // `xf` from integrate_stm_core is already the propagated segment
+            // endpoint, so a second integrate_core call per segment would
+            // duplicate the work. The threadpool branch re-propagates only
+            // because its segment futures can't be joined before the next
+            // submit — that constraint doesn't apply here.
             int total_na = 0, total_nr = 0;
             CounterWriteback _writeback{*this, total_na, total_nr};
             for (int i = 0; i < n_parts; i++) {
-                // Inline the stm_op work here so the per-segment counters
-                // are visible for writeback — stm_op's locals would be
-                // discarded otherwise.
                 ControllerVariant seg_ctrl = this->make_worker_controller();
                 int seg_na = 0, seg_nr = 0;
                 auto [xf, jx] =
@@ -1591,15 +1593,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 total_nr += seg_nr;
 
                 jxall.topRows(this->output_rows()) = (jx * jxall).eval();
-                if (i < n_parts - 1) {
-                    ControllerVariant prop_ctrl = this->make_worker_controller();
-                    int prop_na = 0, prop_nr = 0;
-                    xs[i + 1] = this->integrate_core(xs[i], ts[i + 1], prop_ctrl, prop_na, prop_nr);
-                    total_na += prop_na;
-                    total_nr += prop_nr;
-                } else {
-                    xs[i + 1] = xf;
-                }
+                xs[i + 1] = xf;
             }
         }
 
