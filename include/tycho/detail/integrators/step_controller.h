@@ -295,8 +295,45 @@ struct PIDController {
 };
 
 /// Runtime-dispatched controller state. Integrators and extracted drivers
-/// hold this as the concrete storage for "the current controller", then use
-/// std::visit to invoke update()/reset() on whichever kind is active.
+/// hold this as the concrete storage for "the current controller", then
+/// dispatch through `update_controller` / `reset_controller` below.
 using ControllerVariant = std::variant<IController, PIController, PIDController>;
+
+/// Minimum surface every ControllerVariant alternative must provide. A
+/// future controller kind that forgets `update()` or typos its signature
+/// fails here at compile time with a single readable message, instead of
+/// producing cryptic `std::visit` lambda errors at every call site.
+template <class C>
+concept Controller = requires(C &c, double h, double err_norm, int order, int naccept) {
+    { c.update(h, err_norm, order, naccept) } -> std::same_as<ControllerOutput>;
+    { c.reset() } -> std::same_as<void>;
+    { c.validate() } -> std::same_as<void>;
+};
+
+static_assert(Controller<IController>);
+static_assert(Controller<PIController>);
+static_assert(Controller<PIDController>);
+
+/// Forward an update call to whichever controller is active in the variant.
+/// Centralizes the boilerplate `std::visit([&](auto& c) { return c.update(…); }, v)`
+/// at every step-loop site. Benefits: single point of dispatch, concept
+/// constrains what alternatives may carry.
+inline ControllerOutput update_controller(ControllerVariant &v, double h, double err_norm,
+                                          int order, int naccept) {
+    return std::visit([&](auto &c) { return c.update(h, err_norm, order, naccept); }, v);
+}
+
+/// Reset whichever controller is active in the variant to its first-step
+/// state. Used by `make_worker_controller()` when cloning the prototype
+/// for a lane/segment, and at every `set_method`/`set_controller` site.
+inline void reset_controller(ControllerVariant &v) {
+    std::visit([](auto &c) { c.reset(); }, v);
+}
+
+/// Validate whichever controller is active in the variant — checks the
+/// per-controller invariants described by `IController::validate()` etc.
+inline void validate_controller(const ControllerVariant &v) {
+    std::visit([](const auto &c) { c.validate(); }, v);
+}
 
 } // namespace tycho::integrators

@@ -262,11 +262,8 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
                         "and intermediate-stage evaluations.");
                 }
 
-                auto outcome = std::visit(
-                    [&](auto &c) {
-                        return c.update(static_cast<double>(h), err_norm, cfg.error_order, naccept);
-                    },
-                    controller);
+                auto outcome = update_controller(controller, static_cast<double>(h), err_norm,
+                                                 cfg.error_order, naccept);
                 double hnext = outcome.dt_new;
 
                 if (hnext / static_cast<double>(h) > cfg.max_step_change)

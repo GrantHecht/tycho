@@ -319,12 +319,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
 
         this->controller_variant_ = default_controller_for(alg);
-        std::visit(
-            [](auto &c) {
-                c.validate();
-                c.reset();
-            },
-            this->controller_variant_);
+        validate_controller(this->controller_variant_);
+        reset_controller(this->controller_variant_);
     }
 
     template <IVPAlg RKOp>
@@ -455,7 +451,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// bug in per-lane controller construction.
     ControllerVariant make_worker_controller() const {
         ControllerVariant c = this->controller_variant_;
-        std::visit([](auto &cc) { cc.reset(); }, c);
+        reset_controller(c);
         return c;
     }
 
@@ -589,12 +585,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     void set_controller(IVPController kind) {
         this->controller_variant_ = controller_defaults_for(this->rk_method_, kind);
-        std::visit(
-            [](auto &c) {
-                c.validate();
-                c.reset();
-            },
-            this->controller_variant_);
+        validate_controller(this->controller_variant_);
+        reset_controller(this->controller_variant_);
     }
 
     IVPController get_controller() const {

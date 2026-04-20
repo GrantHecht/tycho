@@ -372,11 +372,8 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
                                     "); state or embedded estimate produced NaN/Inf.");
                             }
 
-                            auto outcome = std::visit(
-                                [&](auto &c) {
-                                    return c.update(h_lane, err_norm, cfg.error_order, nacc[itmp]);
-                                },
-                                controllers[itmp]);
+                            auto outcome = update_controller(controllers[itmp], h_lane, err_norm,
+                                                             cfg.error_order, nacc[itmp]);
                             double hnext = outcome.dt_new;
 
                             if (hnext / h_lane > cfg.max_step_change)

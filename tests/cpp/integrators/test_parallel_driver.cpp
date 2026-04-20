@@ -91,7 +91,7 @@ TEST_F(ParallelDriverRunTest, BatchSHO_MatchesIntegrator) {
 
     std::vector<ControllerVariant> controllers(N, ControllerVariant{PIController{}});
     for (auto &c : controllers)
-        std::visit([](auto &cc) { cc.reset(); }, c);
+        reset_controller(c);
     std::vector<int> nacc(N, 0), nrej(N, 0);
 
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
@@ -139,7 +139,7 @@ TEST_F(ParallelDriverRunTest, MixedZeroInterval_BatchCorrect) {
 
     std::vector<ControllerVariant> controllers(3, ControllerVariant{PIController{}});
     for (auto &c : controllers)
-        std::visit([](auto &cc) { cc.reset(); }, c);
+        reset_controller(c);
     std::vector<int> nacc(3, 0), nrej(3, 0);
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
     std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(3);
@@ -188,7 +188,7 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
     std::vector<ControllerVariant> controllers = {ControllerVariant{IController{}},
                                                   ControllerVariant{PIDController{}}};
     for (auto &c : controllers)
-        std::visit([](auto &cc) { cc.reset(); }, c);
+        reset_controller(c);
     std::vector<int> nacc(2, 0), nrej(2, 0);
     std::vector<ParallelDriver<IVPAlg::DOPRI54, SHO>::EventPack> events;
     std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(2);

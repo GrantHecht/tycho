@@ -92,7 +92,7 @@ TEST_P(AdaptiveDriverRunTest, IntegrateSHOMatchesIntegrator) {
         controller = PIDController{};
         break;
     }
-    std::visit([](auto &c) { c.reset(); }, controller);
+    reset_controller(controller);
     int naccept = 0, nreject = 0;
 
     std::vector<AD::EventPack> events;
