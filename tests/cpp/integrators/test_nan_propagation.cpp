@@ -46,9 +46,8 @@ class NanPropagationTest : public VectorFunctionFixture {};
 // controllers. Proves controller switching does not regress the NaN guards
 // (P0.3: inline std::isfinite(err_norm) guard) and that the diagnostic still
 // fires even when PI/PID history-state machinery is active.
-class NanPropagationControllerTest
-    : public VectorFunctionFixture,
-      public ::testing::WithParamInterface<IVPController> {};
+class NanPropagationControllerTest : public VectorFunctionFixture,
+                                     public ::testing::WithParamInterface<IVPController> {};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Scalar stepper path: with HW initial-dt disabled and a fixed step, the
@@ -152,8 +151,7 @@ TEST_P(NanPropagationControllerTest, ScalarAdaptiveThrowsOnOriginKepler) {
         // acceptable exit points — neither should leak past to a max_steps bail.
         const bool hit_xnext = msg.find("Non-finite state") != std::string::npos;
         const bool hit_errnorm = msg.find("Non-finite error norm") != std::string::npos;
-        EXPECT_TRUE(hit_xnext || hit_errnorm)
-            << "Expected xnext or err_norm guard; got: " << msg;
+        EXPECT_TRUE(hit_xnext || hit_errnorm) << "Expected xnext or err_norm guard; got: " << msg;
         EXPECT_EQ(msg.find("max_steps"), std::string::npos)
             << "Must not fall through to max_steps diagnostic: " << msg;
     } catch (...) {
@@ -203,6 +201,50 @@ TEST_F(NanPropagationTest, BatchPathReportsOffendingTrajectoryIndex) {
             << "Should identify the ParallelDriver stepper site; got: " << msg;
         EXPECT_NE(msg.find("trajectory=1"), std::string::npos)
             << "Should name the offending trajectory index; got: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error, got a different exception type.";
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Event VF NaN guard (event_handler.h:80-87).
+// An event function that returns a non-finite value on a finite state
+// must surface immediately with t + event-index context. Without the
+// guard, `vprev * vnext < 0` silently evaluates to false under IEEE
+// 754 when either operand is NaN, dropping the crossing with no signal.
+// -----------------------------------------------------------------------------
+TEST_F(NanPropagationTest, EventVFReturningNaNThrowsWithContext) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1e-10);
+    integ.set_rel_tol(1e-10);
+
+    // Build a constant event VF that always returns NaN. Passes through the
+    // VectorFunction call site, produces non-finite output on a finite state,
+    // must trip the guard on the first post-step crossing check.
+    Eigen::VectorXd nan_out(1);
+    nan_out[0] = std::numeric_limits<double>::quiet_NaN();
+    GenericFunction<-1, 1> nan_event = Constant<-1, 1>(7, nan_out);
+    std::vector<Integrator<astro::Kepler>::EventPack> events;
+    events.push_back({nan_event, 0, 0});
+
+    // Use a nominal LEO state — dynamics stay finite, so only the event VF
+    // can trip the finite check.
+    auto x0_vec = leo_state();
+    Integrator<astro::Kepler>::IntegRet x0;
+    for (int i = 0; i < 7; ++i)
+        x0[i] = x0_vec[i];
+    double tf = 100.0;
+
+    try {
+        integ.integrate(x0, tf, events);
+        FAIL() << "Expected runtime_error from event VF NaN guard.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("non-finite"), std::string::npos)
+            << "Diagnostic should mention 'non-finite'; got: " << msg;
+        EXPECT_NE(msg.find("Event function"), std::string::npos)
+            << "Should name the event site; got: " << msg;
     } catch (...) {
         FAIL() << "Expected std::runtime_error, got a different exception type.";
     }

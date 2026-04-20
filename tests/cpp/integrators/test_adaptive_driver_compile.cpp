@@ -32,7 +32,14 @@ TEST(AdaptiveDriverCompileTest, InstantiatesAllMethods) {
     AdaptiveDriver<IVPAlg::Vern7, Kep, double> f;
     AdaptiveDriver<IVPAlg::Vern8, Kep, double> g;
     AdaptiveDriver<IVPAlg::Vern9, Kep, double> h;
-    (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h;
+    (void)a;
+    (void)b;
+    (void)c;
+    (void)d;
+    (void)e;
+    (void)f;
+    (void)g;
+    (void)h;
     SUCCEED();
 }
 
@@ -75,9 +82,15 @@ TEST_P(AdaptiveDriverRunTest, IntegrateSHOMatchesIntegrator) {
 
     tycho::integrators::ControllerVariant controller;
     switch (GetParam()) {
-    case IVPController::I:   controller = IController{}; break;
-    case IVPController::PI:  controller = PIController{}; break;
-    case IVPController::PID: controller = PIDController{}; break;
+    case IVPController::I:
+        controller = IController{};
+        break;
+    case IVPController::PI:
+        controller = PIController{};
+        break;
+    case IVPController::PID:
+        controller = PIDController{};
+        break;
     }
     std::visit([](auto &c) { c.reset(); }, controller);
     int naccept = 0, nreject = 0;
@@ -91,12 +104,17 @@ TEST_P(AdaptiveDriverRunTest, IntegrateSHOMatchesIntegrator) {
     State drv_xf = driver.integrate(ode, x0, tf, cfg, abs_tols, rel_tols, controller, naccept,
                                     nreject, events, eventtimes,
                                     /*storestates=*/false, /*storederivs=*/false,
-                                    /*storemidpoints=*/false, states, derivs,
-                                    noop_update_control);
+                                    /*storemidpoints=*/false, states, derivs, noop_update_control);
 
     EXPECT_GT(naccept, 0) << "driver must actually take steps";
-    EXPECT_NEAR(drv_xf[0], ref_xf[0], 1e-6);
-    EXPECT_NEAR(drv_xf[1], ref_xf[1], 1e-6);
+    // Both sides integrate SHO at tol=1e-10 with the same controller kind
+    // through the same underlying step math. 1e-9 gives a tight floor
+    // consistent with tolerance accumulation over ~tens of steps, and
+    // would catch any real drift introduced by future driver edits.
+    // Pre-tighten: the loose 1e-6 band could hide step-sizing regressions
+    // well above what tol=1e-10 would permit.
+    EXPECT_NEAR(drv_xf[0], ref_xf[0], 1e-9);
+    EXPECT_NEAR(drv_xf[1], ref_xf[1], 1e-9);
     EXPECT_NEAR(drv_xf[2], ref_xf[2], 1e-12);
 }
 
@@ -132,8 +150,8 @@ TEST_F(VectorFunctionFixture, AdaptiveDriver_ZeroIntervalReturnsInput) {
     std::vector<typename AD::ODEDeriv> derivs;
     auto noop_update_control = [](State &) {};
 
-    State xf = driver.integrate(ode, x0, 0.0, cfg, abs_tols, rel_tols, controller, naccept,
-                                nreject, events, eventtimes, /*storestates=*/true,
+    State xf = driver.integrate(ode, x0, 0.0, cfg, abs_tols, rel_tols, controller, naccept, nreject,
+                                events, eventtimes, /*storestates=*/true,
                                 /*storederivs=*/true, /*storemidpoints=*/false, states, derivs,
                                 noop_update_control);
     for (int i = 0; i < 3; ++i) {
@@ -176,9 +194,8 @@ TEST_F(VectorFunctionFixture, AdaptiveDriver_BothZeroTolsThrows) {
     std::vector<typename AD::ODEDeriv> derivs;
     auto noop_update_control = [](State &) {};
 
-    EXPECT_THROW(
-        driver.integrate(ode, x0, 1.0, cfg, abs_tols, rel_tols, controller, naccept, nreject,
-                         events, eventtimes, false, false, false, states, derivs,
-                         noop_update_control),
-        std::invalid_argument);
+    EXPECT_THROW(driver.integrate(ode, x0, 1.0, cfg, abs_tols, rel_tols, controller, naccept,
+                                  nreject, events, eventtimes, false, false, false, states, derivs,
+                                  noop_update_control),
+                 std::invalid_argument);
 }
