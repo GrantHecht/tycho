@@ -85,6 +85,23 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
     using ODEDeriv = typename DODE::template Output<Scalar>;
     using EventPack = typename EventHandler::EventPack;
 
+    /// Output-side references and per-call storage flags. Groups the 9
+    /// borrow-by-reference parameters that `integrate()` needs to write
+    /// into caller-owned storage, reducing the public signature from 17
+    /// positional args to 9. The caller owns every referent; the driver
+    /// only reads flags and writes through the references.
+    struct IO {
+        int &naccept;
+        int &nreject;
+        const std::vector<EventPack> &events;
+        std::vector<std::vector<Eigen::Vector2d>> &eventtimes;
+        bool storestates;
+        bool storederivs;
+        bool storemidpoints;
+        std::vector<ODEState> &states;
+        std::vector<ODEDeriv> &derivs;
+    };
+
     /// Reset the stepper's FSAL cache. Callers must invoke this before the
     /// first integrate() call following a state change that invalidates the
     /// cached f(x_prev) (e.g., a fresh starting state unrelated to the last
@@ -111,11 +128,19 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
     template <class ControlFn>
     ODEState integrate(const DODE &ode, const ODEState &x, Scalar tf, const AdaptiveConfig &cfg,
                        const ODEDeriv &abs_tols, const ODEDeriv &rel_tols,
-                       ControllerVariant &controller, int &naccept, int &nreject,
-                       const std::vector<EventPack> &events,
-                       std::vector<std::vector<Eigen::Vector2d>> &eventtimes, bool storestates,
-                       bool storederivs, bool storemidpoints, std::vector<ODEState> &states,
-                       std::vector<ODEDeriv> &derivs, ControlFn &&update_control) {
+                       ControllerVariant &controller, IO io, ControlFn &&update_control) {
+
+        // Unpack IO into local references so the loop body below reads
+        // the same identifiers it always has.
+        int &naccept = io.naccept;
+        int &nreject = io.nreject;
+        const std::vector<EventPack> &events = io.events;
+        std::vector<std::vector<Eigen::Vector2d>> &eventtimes = io.eventtimes;
+        const bool storestates = io.storestates;
+        const bool storederivs = io.storederivs;
+        const bool storemidpoints = io.storemidpoints;
+        std::vector<ODEState> &states = io.states;
+        std::vector<ODEDeriv> &derivs = io.derivs;
 
         cfg.validate();
 

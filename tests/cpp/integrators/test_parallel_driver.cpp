@@ -102,9 +102,12 @@ TEST_F(ParallelDriverRunTest, BatchSHO_MatchesIntegrator) {
     auto noop_update_control = [](auto &) {};
 
     std::vector<Eigen::Vector3d> xs_test = xs_ref;
-    auto out = driver.integrate(ode, xs_test, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej,
-                                events, eventtimes_s, /*storestates=*/false, /*storederivs=*/false,
-                                /*storemidpoints=*/false, states_s, derivs_s, noop_update_control);
+    using PD = ParallelDriver<IVPAlg::DOPRI54, SHO>;
+    typename PD::IO io{nacc, nrej, events, eventtimes_s,
+                       /*storestates=*/false, /*storederivs=*/false, /*storemidpoints=*/false,
+                       states_s, derivs_s};
+    auto out = driver.integrate(ode, xs_test, tfs, cfg, abs_tols, rel_tols, controllers, io,
+                                noop_update_control);
 
     ASSERT_EQ(out.size(), static_cast<std::size_t>(N));
     for (int i = 0; i < N; ++i) {
@@ -146,9 +149,11 @@ TEST_F(ParallelDriverRunTest, MixedZeroInterval_BatchCorrect) {
     std::vector<std::vector<Eigen::Vector3d>> states_s(3);
     std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(3);
 
-    auto out =
-        driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej, events,
-                         eventtimes_s, false, false, false, states_s, derivs_s, [](auto &) {});
+    using PD = ParallelDriver<IVPAlg::DOPRI54, SHO>;
+    typename PD::IO io{nacc,  nrej,  events, eventtimes_s, false, false,
+                       false, states_s, derivs_s};
+    auto out = driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, io,
+                                [](auto &) {});
 
     // Zero-interval lanes return input state, no steps.
     EXPECT_DOUBLE_EQ(out[0][0], xs[0][0]);
@@ -195,9 +200,11 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
     std::vector<std::vector<Eigen::Vector3d>> states_s(2);
     std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(2);
 
-    auto out =
-        driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, nacc, nrej, events,
-                         eventtimes_s, false, false, false, states_s, derivs_s, [](auto &) {});
+    using PD = ParallelDriver<IVPAlg::DOPRI54, SHO>;
+    typename PD::IO io{nacc,  nrej,  events, eventtimes_s, false, false,
+                       false, states_s, derivs_s};
+    auto out = driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, io,
+                                [](auto &) {});
 
     // Both lanes finish at tf=5.0 with SHO solution regardless of controller.
     for (int i = 0; i < 2; ++i) {

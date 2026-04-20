@@ -813,10 +813,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         return with_public_ivp_alg(this->rk_method_, [&](auto alg_tag) -> Output<double> {
             constexpr IVPAlg Alg = alg_tag.value;
-            integrators::AdaptiveDriver<Alg, DODE, double> driver;
+            using Driver = integrators::AdaptiveDriver<Alg, DODE, double>;
+            Driver driver;
+            typename Driver::IO io{naccept, nreject, events, eventtimes,     storestates,
+                                   storederivs, storemidpoints, states, derivs};
             return driver.integrate(this->ode_, x, tf, cfg, this->abs_tols_, this->rel_tols_,
-                                    controller, naccept, nreject, events, eventtimes, storestates,
-                                    storederivs, storemidpoints, states, derivs, update_control_fn);
+                                    controller, io, update_control_fn);
         });
     }
 
@@ -853,11 +855,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return with_public_ivp_alg(
             this->rk_method_, [&](auto alg_tag) -> std::vector<Output<double>> {
                 constexpr IVPAlg Alg = alg_tag.value;
-                integrators::ParallelDriver<Alg, DODE> driver;
+                using Driver = integrators::ParallelDriver<Alg, DODE>;
+                Driver driver;
+                typename Driver::IO io{nacc,        nrej,           events, eventtimes_s,
+                                       storestates, storederivs,    storemidpoints,
+                                       states_s,    derivs_s};
                 return driver.integrate(this->ode_, xs, tfs, cfg, this->abs_tols_, this->rel_tols_,
-                                        controllers, nacc, nrej, events, eventtimes_s, storestates,
-                                        storederivs, storemidpoints, states_s, derivs_s,
-                                        update_control_fn);
+                                        controllers, io, update_control_fn);
             });
     }
 

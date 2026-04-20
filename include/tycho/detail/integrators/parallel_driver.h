@@ -52,6 +52,23 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
     using SSDeriv = typename DODE::template Output<SuperScalar>;
     using EventPack = typename EventHandler::EventPack;
 
+    /// Per-lane output-side references and per-call storage flags. Groups
+    /// the batch analogue of AdaptiveDriver::IO: per-trajectory counters,
+    /// per-trajectory event times, and per-trajectory state/deriv
+    /// trajectories. Reduces the public batch signature from 17 positional
+    /// args to 9. The caller owns every referent.
+    struct IO {
+        std::vector<int> &nacc;
+        std::vector<int> &nrej;
+        const std::vector<EventPack> &events;
+        std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s;
+        bool storestates;
+        bool storederivs;
+        bool storemidpoints;
+        std::vector<std::vector<ScalarState>> &states_s;
+        std::vector<std::vector<ScalarDeriv>> &derivs_s;
+    };
+
     /// Reset the SIMD stepper's FSAL cache. Call before the first integrate()
     /// following a state change that invalidates the cached f(x_prev).
     void reset_fsal() { stepper_.reset_fsal(); }
@@ -72,12 +89,17 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
     std::vector<ScalarState>
     integrate(const DODE &ode, const std::vector<ScalarState> &xs, const Eigen::VectorXd &tfs,
               const AdaptiveConfig &cfg, const ScalarDeriv &abs_tols, const ScalarDeriv &rel_tols,
-              std::vector<ControllerVariant> &controllers, std::vector<int> &nacc,
-              std::vector<int> &nrej, const std::vector<EventPack> &events,
-              std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s,
-              bool storestates, bool storederivs, bool storemidpoints,
-              std::vector<std::vector<ScalarState>> &states_s,
-              std::vector<std::vector<ScalarDeriv>> &derivs_s, ControlFn &&update_control) {
+              std::vector<ControllerVariant> &controllers, IO io, ControlFn &&update_control) {
+
+        std::vector<int> &nacc = io.nacc;
+        std::vector<int> &nrej = io.nrej;
+        const std::vector<EventPack> &events = io.events;
+        std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s = io.eventtimes_s;
+        const bool storestates = io.storestates;
+        const bool storederivs = io.storederivs;
+        const bool storemidpoints = io.storemidpoints;
+        std::vector<std::vector<ScalarState>> &states_s = io.states_s;
+        std::vector<std::vector<ScalarDeriv>> &derivs_s = io.derivs_s;
 
         cfg.validate();
 

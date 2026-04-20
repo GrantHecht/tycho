@@ -101,10 +101,11 @@ TEST_P(AdaptiveDriverRunTest, IntegrateSHOMatchesIntegrator) {
     std::vector<typename AD::ODEDeriv> derivs;
     auto noop_update_control = [](State &) {};
 
-    State drv_xf = driver.integrate(ode, x0, tf, cfg, abs_tols, rel_tols, controller, naccept,
-                                    nreject, events, eventtimes,
-                                    /*storestates=*/false, /*storederivs=*/false,
-                                    /*storemidpoints=*/false, states, derivs, noop_update_control);
+    typename AD::IO io{naccept, nreject, events, eventtimes,
+                       /*storestates=*/false, /*storederivs=*/false, /*storemidpoints=*/false,
+                       states, derivs};
+    State drv_xf =
+        driver.integrate(ode, x0, tf, cfg, abs_tols, rel_tols, controller, io, noop_update_control);
 
     EXPECT_GT(naccept, 0) << "driver must actually take steps";
     // Both sides integrate SHO at tol=1e-10 with the same controller kind
@@ -150,10 +151,11 @@ TEST_F(VectorFunctionFixture, AdaptiveDriver_ZeroIntervalReturnsInput) {
     std::vector<typename AD::ODEDeriv> derivs;
     auto noop_update_control = [](State &) {};
 
-    State xf = driver.integrate(ode, x0, 0.0, cfg, abs_tols, rel_tols, controller, naccept, nreject,
-                                events, eventtimes, /*storestates=*/true,
-                                /*storederivs=*/true, /*storemidpoints=*/false, states, derivs,
-                                noop_update_control);
+    typename AD::IO io{naccept, nreject, events, eventtimes,
+                       /*storestates=*/true, /*storederivs=*/true, /*storemidpoints=*/false,
+                       states, derivs};
+    State xf =
+        driver.integrate(ode, x0, 0.0, cfg, abs_tols, rel_tols, controller, io, noop_update_control);
     for (int i = 0; i < 3; ++i) {
         EXPECT_DOUBLE_EQ(xf[i], x0[i]);
         EXPECT_TRUE(std::isfinite(xf[i]));
@@ -194,8 +196,8 @@ TEST_F(VectorFunctionFixture, AdaptiveDriver_BothZeroTolsThrows) {
     std::vector<typename AD::ODEDeriv> derivs;
     auto noop_update_control = [](State &) {};
 
-    EXPECT_THROW(driver.integrate(ode, x0, 1.0, cfg, abs_tols, rel_tols, controller, naccept,
-                                  nreject, events, eventtimes, false, false, false, states, derivs,
-                                  noop_update_control),
-                 std::invalid_argument);
+    typename AD::IO io{naccept, nreject, events, eventtimes, false, false, false, states, derivs};
+    EXPECT_THROW(
+        driver.integrate(ode, x0, 1.0, cfg, abs_tols, rel_tols, controller, io, noop_update_control),
+        std::invalid_argument);
 }
