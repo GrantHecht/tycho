@@ -32,6 +32,36 @@ struct AdaptiveConfig {
     int max_steps = 1'000'000;
     bool adaptive = true;
     bool use_hairer_wanner_initdt = true;
+
+    /// Cheap sanity check — throws `std::invalid_argument` on any value
+    /// that would lead to a divide-by-zero, infinite loop, or otherwise
+    /// undefined behavior inside the step loop. Called by drivers at the
+    /// top of `integrate()` so a bad config fails fast with a descriptive
+    /// message rather than producing NaNs or hanging.
+    void validate() const {
+        if (max_steps < 1) {
+            throw std::invalid_argument("AdaptiveConfig::max_steps must be >= 1; got " +
+                                        std::to_string(max_steps));
+        }
+        if (!(max_step_change > 1.0)) {
+            throw std::invalid_argument(
+                "AdaptiveConfig::max_step_change must be strictly > 1.0 (clamp on |dt_new/dt_old|); "
+                "got " +
+                std::to_string(max_step_change));
+        }
+        if (error_order <= 0) {
+            throw std::invalid_argument(
+                "AdaptiveConfig::error_order must be positive (enters the q=err^(1/p) exponent); "
+                "got " +
+                std::to_string(error_order));
+        }
+        if (!std::isfinite(def_step_size) || def_step_size == 0.0) {
+            throw std::invalid_argument(
+                "AdaptiveConfig::def_step_size must be finite and non-zero (sign encodes direction "
+                "only when adaptive=false is paired with the fixed-step path); got " +
+                std::to_string(def_step_size));
+        }
+    }
 };
 
 /// Adaptive step-size integration driver.
@@ -49,13 +79,11 @@ struct AdaptiveConfig {
 /// the FSAL cache across consecutive integrate() calls. All other inputs
 /// (tolerances, controller, counters, events, storage flags) are passed per
 /// call so the driver can be reused without copying Integrator-level config.
-template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
-
+template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
+  public:
     using ODEState = typename DODE::template Input<Scalar>;
     using ODEDeriv = typename DODE::template Output<Scalar>;
     using EventPack = typename EventHandler::EventPack;
-
-    Stepper<Alg, DODE, Scalar> stepper_;
 
     /// Reset the stepper's FSAL cache. Callers must invoke this before the
     /// first integrate() call following a state change that invalidates the
@@ -88,6 +116,8 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
                        std::vector<std::vector<Eigen::Vector2d>> &eventtimes, bool storestates,
                        bool storederivs, bool storemidpoints, std::vector<ODEState> &states,
                        std::vector<ODEDeriv> &derivs, ControlFn &&update_control) {
+
+        cfg.validate();
 
         if (x.size() != ode.input_rows()) {
             throw std::invalid_argument("AdaptiveDriver: incorrectly sized input state.");
@@ -297,7 +327,14 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
             }
 
             xi = xnext;
-            xdoti = stepper_.peek_fsal(); // derivative at xnext (from FSAL or midpoint path)
+            // Only copy the FSAL cache out when a caller actually wants
+            // per-step derivatives stored — otherwise it's a wasted copy
+            // of a buffer whose lifetime is the next step(). The reference
+            // is invalidated by the next step() call (see Stepper::peek_fsal
+            // docstring).
+            if (storederivs) {
+                xdoti = stepper_.peek_fsal();
+            }
             prev_event_vals = next_event_vals;
 
             if (storestates) {
@@ -320,6 +357,9 @@ template <IVPAlg Alg, class DODE, class Scalar = double> struct AdaptiveDriver {
         }
         return xi;
     }
+
+  private:
+    Stepper<Alg, DODE, Scalar> stepper_;
 };
 
 } // namespace tycho::integrators

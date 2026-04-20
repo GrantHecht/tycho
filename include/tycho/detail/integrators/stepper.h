@@ -67,6 +67,11 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// Read-only access to the FSAL cache. Callers that read this post-step
     /// to recover f(xnext) must gate on fsal_valid() — the Vern* midpoint
     /// branch populates k_fsal_ but intentionally leaves fsal_valid_=false.
+    ///
+    /// Aliasing contract: the returned reference aliases the internal buffer
+    /// and is invalidated by any subsequent call to step(), seed_fsal(), or
+    /// reset_fsal(). Do not hold the reference across those calls — copy
+    /// the value out first.
     const ODEDeriv &peek_fsal() const { return k_fsal_; }
     bool fsal_valid() const { return fsal_valid_; }
 

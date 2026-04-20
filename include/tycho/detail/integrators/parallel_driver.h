@@ -43,16 +43,14 @@ namespace tycho::integrators {
 /// seed_fsal(); after the step, f(xf) is extracted per-lane via peek_fsal()
 /// back to xdotis[i] for accepted lanes only (rejected lanes keep their
 /// pre-step xdotis, so the retry sees the correct f(xi)).
-template <IVPAlg Alg, class DODE> struct ParallelDriver {
-
+template <IVPAlg Alg, class DODE> class ParallelDriver {
+  public:
     using SuperScalar = tycho::DefaultSuperScalar;
     using ScalarState = typename DODE::template Input<double>;
     using ScalarDeriv = typename DODE::template Output<double>;
     using SSState = typename DODE::template Input<SuperScalar>;
     using SSDeriv = typename DODE::template Output<SuperScalar>;
     using EventPack = typename EventHandler::EventPack;
-
-    Stepper<Alg, DODE, SuperScalar> stepper_;
 
     /// Reset the SIMD stepper's FSAL cache. Call before the first integrate()
     /// following a state change that invalidates the cached f(x_prev).
@@ -80,6 +78,8 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
               bool storestates, bool storederivs, bool storemidpoints,
               std::vector<std::vector<ScalarState>> &states_s,
               std::vector<std::vector<ScalarDeriv>> &derivs_s, ControlFn &&update_control) {
+
+        cfg.validate();
 
         if (xs.size() != static_cast<std::size_t>(tfs.size())) {
             throw std::invalid_argument(
@@ -443,6 +443,9 @@ template <IVPAlg Alg, class DODE> struct ParallelDriver {
 
         return xis;
     }
+
+  private:
+    Stepper<Alg, DODE, SuperScalar> stepper_;
 };
 
 } // namespace tycho::integrators

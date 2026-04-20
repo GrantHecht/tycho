@@ -46,6 +46,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_var_registry.cpp
     optimal_control/test_ode_sizes.cpp
     integrators/test_step_controller.cpp
+    integrators/test_rk_tableau_consistency.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES

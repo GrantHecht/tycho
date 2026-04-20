@@ -242,6 +242,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     Integrator(const DODE &dode, double defstep, std::shared_ptr<LGLInterpTable> tab)
         : Integrator(dode, IVPAlg::DOPRI87, defstep, tab) {}
 
+    /// Reconfigures the stepper for a new RK method.
+    ///
+    /// Note: selecting a new method unconditionally resets the controller to
+    /// that method's default kind (see `default_controller_for`). If you
+    /// want a non-default controller, call `set_controller()` *after*
+    /// `set_method()`. `get_controller_kind()` can be used to inspect the
+    /// current choice.
     void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
@@ -1249,7 +1256,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
-                results[i] = this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                try {
+                    results[i] =
+                        this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                } catch (const std::exception &e) {
+                    // Decorate with the trajectory index so a batch of
+                    // thousands points the caller at exactly the offending
+                    // lane (mirrors ParallelDriver's per-lane decoration).
+                    throw std::runtime_error("trajectory " + std::to_string(i) + ": " +
+                                             e.what());
+                }
             }
         };
 
