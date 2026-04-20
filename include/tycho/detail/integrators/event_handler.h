@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -109,14 +110,18 @@ struct EventHandler {
 
     /// Refine event locations using bisection + Newton on an interpolation table.
     ///
-    /// `n_failed_refinements` is incremented once for each zero-crossing the
-    /// refinement loop could not resolve via either the fast bisect+Newton
-    /// path or the wider-bracket retry. Such crossings are silently absent
-    /// from the returned eventstates vector (size mismatch with eventtimes);
-    /// exposing the count via an out-parameter lets callers detect the loss
-    /// without changing the return shape.
+    /// Returns a vector whose shape matches `eventtimes` exactly: for every
+    /// crossing in `eventtimes[i]` there is a corresponding entry in
+    /// `eventstates[i]`, either `std::optional<ODEState>` holding the refined
+    /// state or `std::nullopt` if neither the fast bisect+Newton pass nor the
+    /// wider-bracket retry could resolve the crossing. 1:1 alignment makes
+    /// zip-iterating `eventtimes` against `eventstates` safe.
+    ///
+    /// `n_failed_refinements` is incremented once per unresolved crossing
+    /// (i.e., per `std::nullopt` produced) so callers that already rely on
+    /// the counter continue to work unchanged.
     template <class ODEState>
-    static std::vector<std::vector<ODEState>>
+    static std::vector<std::vector<std::optional<ODEState>>>
     refine_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
                   const std::vector<std::vector<Eigen::Vector2d>> &eventtimes, int input_rows,
                   int max_iters, double tol, int &n_failed_refinements) {
@@ -130,7 +135,7 @@ struct EventHandler {
         Eigen::Matrix<double, 1, 1> fl;
         Eigen::Matrix<double, 1, 1> jx;
 
-        std::vector<std::vector<ODEState>> eventstates(events.size());
+        std::vector<std::vector<std::optional<ODEState>>> eventstates(events.size());
 
         for (int i = 0; i < static_cast<int>(events.size()); i++) {
             if (eventtimes[i].size() > 0) {
@@ -209,7 +214,7 @@ struct EventHandler {
                         ODEState ei(input_rows);
                         ei.setZero();
                         tab->interpolate_ref(tevent, ei);
-                        eventstates[i].push_back(ei);
+                        eventstates[i].emplace_back(std::move(ei));
                     } else {
                         res = bisect(tlow2, thigh2, max_iters);
                         tig = res[0];
@@ -219,12 +224,14 @@ struct EventHandler {
                             ODEState ei(input_rows);
                             ei.setZero();
                             tab->interpolate_ref(tevent, ei);
-                            eventstates[i].push_back(ei);
+                            eventstates[i].emplace_back(std::move(ei));
                         } else {
                             // Neither the fast nor wide-bracket bisect+Newton
-                            // retry could resolve this crossing. Record the
-                            // loss so a caller inspecting n_failed_refinements
-                            // can surface the size mismatch with eventtimes.
+                            // retry could resolve this crossing. The slot is
+                            // filled with std::nullopt to preserve 1:1
+                            // alignment with eventtimes; the counter also
+                            // increments for callers that summarise loss.
+                            eventstates[i].emplace_back(std::nullopt);
                             ++n_failed_refinements;
                         }
                     }

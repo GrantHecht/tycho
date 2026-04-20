@@ -114,14 +114,20 @@ void generate_ivp_05() {
     std::ofstream f(golden_path("ivp_05_event_crossing.bin"), std::ios::binary);
     write_vector(f, xf);
 
-    // Write number of event groups then each group
+    // Write number of event groups then each group. The golden file format
+    // predates the std::optional API — only resolved crossings round-trip,
+    // and an assert fires if refinement failed (the golden would be
+    // non-reproducible otherwise).
     int32_t ngroups = static_cast<int32_t>(eventlocs.size());
     write_int32(f, ngroups);
     for (const auto &group : eventlocs) {
-        // Convert fixed-size to dynamic for serialization
         std::vector<Eigen::VectorXd> dyn_group(group.size());
         for (size_t e = 0; e < group.size(); ++e) {
-            dyn_group[e] = group[e];
+            if (!group[e].has_value()) {
+                throw std::runtime_error(
+                    "generate_golden: event refinement failed — cannot serialise a reproducible golden file.");
+            }
+            dyn_group[e] = *group[e];
         }
         write_vectors(f, dyn_group);
     }
@@ -131,8 +137,12 @@ void generate_ivp_05() {
     for (int g = 0; g < ngroups; ++g) {
         std::cout << "          group " << g << ": " << eventlocs[g].size() << " events\n";
         for (const auto &ev : eventlocs[g]) {
-            double r_ev = ev.head(3).norm();
-            std::cout << "            t=" << ev[6] << " r=" << r_ev << "\n";
+            if (!ev.has_value()) {
+                std::cout << "            (refinement failed)\n";
+                continue;
+            }
+            double r_ev = ev->head(3).norm();
+            std::cout << "            t=" << (*ev)[6] << " r=" << r_ev << "\n";
         }
     }
 }

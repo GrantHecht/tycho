@@ -20,6 +20,7 @@
 
 #include <cmath>
 #include <numbers>
+#include <optional>
 
 using namespace tycho;
 using namespace tycho::integrators;
@@ -28,7 +29,7 @@ using namespace TychoTest;
 namespace {
 
 // Integrator over one full SHO period at tight tol.
-std::tuple<Eigen::Vector3d, std::vector<std::vector<Eigen::Vector3d>>>
+std::tuple<Eigen::Vector3d, std::vector<std::vector<std::optional<Eigen::Vector3d>>>>
 sho_integrate_with_events(const std::vector<EventPack> &events) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
@@ -68,7 +69,8 @@ TEST_F(EventDirectionTest, RisingOnlyDetectsRisingCrossingOnly) {
     ASSERT_EQ(eventlocs.size(), 1u);
     EXPECT_EQ(eventlocs[0].size(), 1u) << "Expected exactly one rising crossing of x=cos(t) over 2π.";
     if (eventlocs[0].size() == 1) {
-        double t_event = eventlocs[0][0][2];
+        ASSERT_TRUE(eventlocs[0][0].has_value());
+        double t_event = (*eventlocs[0][0])[2];
         EXPECT_NEAR(t_event, 1.5 * std::numbers::pi, 1e-6) << "Rising crossing should be at 3π/2.";
     }
 }
@@ -87,7 +89,8 @@ TEST_F(EventDirectionTest, FallingOnlyDetectsFallingCrossingOnly) {
     ASSERT_EQ(eventlocs.size(), 1u);
     EXPECT_EQ(eventlocs[0].size(), 1u) << "Expected exactly one falling crossing of x=cos(t) over 2π.";
     if (eventlocs[0].size() == 1) {
-        double t_event = eventlocs[0][0][2];
+        ASSERT_TRUE(eventlocs[0][0].has_value());
+        double t_event = (*eventlocs[0][0])[2];
         EXPECT_NEAR(t_event, 0.5 * std::numbers::pi, 1e-6) << "Falling crossing should be at π/2.";
     }
 }

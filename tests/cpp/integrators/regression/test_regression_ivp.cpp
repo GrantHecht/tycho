@@ -144,11 +144,16 @@ TEST_F(RegressionIVPTest, Case05_EventCrossing) {
         ASSERT_EQ(eventlocs[g].size(), golden_group.size())
             << "Event count mismatch in group " << g;
         for (size_t e = 0; e < eventlocs[g].size(); ++e) {
+            // Refined crossings are 1:1 with eventtimes; a golden-test
+            // regression would never run against nullopt entries (they
+            // mean refinement failed). Assert presence before comparing.
+            ASSERT_TRUE(eventlocs[g][e].has_value())
+                << "Case05_event_g" << g << "_e" << e << " refinement failed unexpectedly";
             // Event locations are resolved by Newton to event_tol_=1e-6 by
             // default; pinning tighter than that is a platform-brittle FP
             // drift test, not a correctness gate. Use 1e-6 to catch real
             // drift without flagging ULP-level shifts.
-            expect_vector_match(eventlocs[g][e], golden_group[e], 1e-6,
+            expect_vector_match(*eventlocs[g][e], golden_group[e], 1e-6,
                                 "Case05_event_g" + std::to_string(g) + "_e" + std::to_string(e));
         }
     }

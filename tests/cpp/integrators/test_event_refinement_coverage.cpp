@@ -4,7 +4,7 @@
 // Fills the review gap where get_failed_event_count() was not exercised by
 // any test. Validates:
 //   1. Happy-path integration with events leaves the counter at 0 and
-//      eventstates size matches eventtimes size (no silent losses).
+//      every eventstates entry holds a value (no nullopts = no losses).
 //   2. Integration without events also reports 0.
 //   3. The counter is reset at the start of each find_events invocation
 //      (so a second call does not accumulate prior state).
@@ -80,6 +80,44 @@ TEST_F(EventRefinementCoverageTest, HappyPath_CounterZeroAndCrossingsFound) {
 
     ASSERT_EQ(static_cast<int>(eventlocs.size()), 1);
     EXPECT_GT(eventlocs[0].size(), 0u) << "Expected at least one altitude crossing per period";
+}
+
+// 1:1 shape invariant: the refined eventstates vector must match eventtimes
+// slot-for-slot. Every happy-path crossing is an engaged optional; none are
+// nullopt because this orbit is smooth. The counter must equal the total
+// nullopt count (0 here) — that equality is what the API break guarantees.
+TEST_F(EventRefinementCoverageTest, ShapeMatchesEventtimes_AllEngaged) {
+    astro::Kepler kep(kErcMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-13);
+
+    auto x0 = erc_eccentric_x0();
+    double tf = erc_eccentric_period();
+
+    auto args = Arguments<7>();
+    auto event_func = args.head<3>().norm() + (-7000.0);
+    GenericFunction<-1, 1> gf(event_func);
+    std::vector<Integrator<astro::Kepler>::EventPack> events;
+    events.push_back({gf, 0, 0});
+
+    auto [xf, eventlocs] = integ.integrate(x0, tf, events);
+    (void)xf;
+
+    int engaged = 0;
+    int nullopt_count = 0;
+    ASSERT_EQ(eventlocs.size(), 1u);
+    for (const auto &slot : eventlocs[0]) {
+        if (slot.has_value())
+            ++engaged;
+        else
+            ++nullopt_count;
+    }
+
+    EXPECT_GT(engaged, 0) << "Happy-path orbit must produce at least one engaged crossing";
+    EXPECT_EQ(nullopt_count, integ.get_failed_event_count())
+        << "Counter must equal the number of nullopt slots";
+    EXPECT_EQ(nullopt_count, 0) << "Smooth Kepler orbit should not drop any refinements";
 }
 
 // Integration with no events should leave the counter at its initial 0.

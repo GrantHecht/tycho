@@ -233,7 +233,10 @@ TEST_F(IntegratorTest, ParallelIntegrateWithEventsMatchesSerial) {
             ASSERT_EQ(p_evs[g].size(), s_evs[g].size())
                 << "trajectory " << i << " event count in group " << g;
             for (size_t e = 0; e < s_evs[g].size(); e++) {
-                EXPECT_NEAR(p_evs[g][e][0], s_evs[g][e][0], 1e-12)
+                ASSERT_TRUE(s_evs[g][e].has_value()) << "serial event refinement failed unexpectedly";
+                ASSERT_TRUE(p_evs[g][e].has_value())
+                    << "parallel event refinement failed unexpectedly";
+                EXPECT_NEAR((*p_evs[g][e])[0], (*s_evs[g][e])[0], 1e-12)
                     << "trajectory " << i << " event g=" << g << " e=" << e;
             }
         }

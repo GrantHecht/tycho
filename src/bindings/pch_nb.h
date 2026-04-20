@@ -16,6 +16,7 @@ namespace nb = nanobind;
 #include "type_casters.h"
 
 #include <nanobind/stl/function.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>

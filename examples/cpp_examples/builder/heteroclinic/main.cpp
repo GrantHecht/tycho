@@ -244,9 +244,9 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
 
     std::vector<Trajectory> manifolds;
     for (auto &[traj, eventlocs] : results) {
-        if (eventlocs[0].size() == 1 && eventlocs[1].empty()) {
+        if (eventlocs[0].size() == 1 && eventlocs[1].empty() && eventlocs[0][0].has_value()) {
             traj.pop_back();
-            traj.push_back(eventlocs[0][0]);
+            traj.push_back(*eventlocs[0][0]);
             manifolds.push_back(std::move(traj));
         }
     }

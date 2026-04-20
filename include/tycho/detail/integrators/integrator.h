@@ -33,6 +33,7 @@
 #include <functional>
 #include <iostream>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -131,7 +132,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
 
     using EventPack = tycho::integrators::EventPack;
-    using EventLocsType = std::vector<std::vector<ODEState<double>>>;
+    using EventLocsType = std::vector<std::vector<std::optional<ODEState<double>>>>;
 
     /// Differentiable stepper type: RK stepper over (ODE ∘ control) composed function.
     template <class PseudoODE, IVPAlg RKOp> using StepperType = RKStepper<PseudoODE, RKOp>;
@@ -525,9 +526,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     };
 
     // Count of event refinements that failed both bisect+Newton passes.
-    // Such crossings are absent from the returned eventstates vector;
-    // exposing the count via get_failed_event_count() lets callers detect
-    // the loss without changing the return shape. Reset per find_events call.
+    // Such crossings occupy std::nullopt slots in the returned eventstates
+    // vector (1:1 with eventtimes); the counter is a cheap aggregate for
+    // callers that only want to know "did anything drop?". Reset per
+    // find_events call.
     mutable int n_failed_event_refinements_ = 0;
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
@@ -605,10 +607,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /// Number of event crossings whose bisect+Newton refinement failed
     /// (both passes) during the most recent `integrate*` call that took
-    /// events. The corresponding crossings ARE present in `eventtimes`
-    /// (the bracketed pre-step values) but absent from the refined
-    /// `eventstates` returned from `find_events`. Callers that care
-    /// about full coverage should inspect this after each call. Reset
+    /// events. `eventstates` from `find_events` keeps 1:1 alignment with
+    /// `eventtimes` and marks each such crossing with `std::nullopt`; this
+    /// counter is a cheap summary of how many nullopts are present. Reset
     /// to 0 at the start of every `find_events` invocation.
     int get_failed_event_count() const { return this->n_failed_event_refinements_; }
 
@@ -885,7 +886,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<ODEDeriv<double>> d_xs;
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
-        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
+        EventLocsType eventlocs(events.size());
         for (auto etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
@@ -924,7 +925,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::vector<ODEDeriv<double>> d_xs;
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
-        std::vector<std::vector<ODEState<double>>> eventlocs(events.size());
+        EventLocsType eventlocs(events.size());
         for (auto etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
@@ -952,8 +953,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
         auto tab = this->make_table(xs, d_xs, true);
-        std::vector<std::vector<ODEState<double>>> eventlocs =
-            this->find_events(tab, events, eventtimes);
+        EventLocsType eventlocs = this->find_events(tab, events, eventtimes);
         Eigen::VectorXd ts;
         ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
         std::vector<ODEState<double>> x_interp(n);
@@ -1005,9 +1005,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     /// @}
 
-    std::vector<std::vector<ODEState<double>>>
-    find_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
-                const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
+    EventLocsType find_events(std::shared_ptr<LGLInterpTable> tab,
+                              const std::vector<EventPack> &events,
+                              const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
         this->n_failed_event_refinements_ = 0;
         return EventHandler::refine_events<ODEState<double>>(
             tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,

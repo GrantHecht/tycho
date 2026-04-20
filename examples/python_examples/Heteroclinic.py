@@ -128,8 +128,9 @@ def GetManifold(ode, OrbitIn, dx, dt, nman=50, Stable=True):
     Manifolds = []
     for Result in Results:
         Traj, eventlocs = Result
-        # Accept those that crossed moon and werent culled
-        if len(eventlocs[0]) == 1 and len(eventlocs[1]) == 0:
+        # Accept those that crossed moon and werent culled. refine_events
+        # returns None for any crossing it could not resolve — skip those.
+        if len(eventlocs[0]) == 1 and len(eventlocs[1]) == 0 and eventlocs[0][0] is not None:
             Traj.pop()
             Traj.append(eventlocs[0][0])
             Manifolds.append(Traj)
