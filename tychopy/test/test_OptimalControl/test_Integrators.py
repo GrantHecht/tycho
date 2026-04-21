@@ -525,6 +525,80 @@ class test_Integrators(unittest.TestCase):
                     )
 
 
+class TestBindingValidators(unittest.TestCase):
+    """Pins the Phase 2 Python-side validator contract: setters that route
+    through C++ set_* now raise ValueError on invalid input instead of
+    silently storing NaN / non-physical values that would later blow up
+    inside the adaptive loop. A regression bypassing the bind-side wrapper
+    would accept the bad value and this class would catch it."""
+
+    def _make(self):
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        return ode.integrator(0.01)
+
+    def test_event_tol_rejects_nonpositive(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.event_tol = -1.0
+        with self.assertRaises(ValueError):
+            integ.event_tol = 0.0
+        with self.assertRaises(ValueError):
+            integ.event_tol = float("nan")
+        with self.assertRaises(ValueError):
+            integ.event_tol = float("inf")
+        # Positive round-trips cleanly.
+        integ.event_tol = 1e-9
+        self.assertEqual(integ.event_tol, 1e-9)
+
+    def test_max_event_iters_rejects_below_one(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.max_event_iters = 0
+        with self.assertRaises(ValueError):
+            integ.max_event_iters = -5
+        integ.max_event_iters = 7
+        self.assertEqual(integ.max_event_iters, 7)
+
+    def test_set_abs_tol_rejects_negative_and_nonfinite(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(-1e-8)
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(float("nan"))
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(float("inf"))
+        integ.set_abs_tol(1e-10)  # sanity: zero allowed, positive works
+
+    def test_set_rel_tol_rejects_negative_and_nonfinite(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(-1e-8)
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(float("nan"))
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(float("inf"))
+        integ.set_rel_tol(1e-10)
+
+    def test_def_step_size_rejects_nonpositive(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.def_step_size = -0.01
+        with self.assertRaises(ValueError):
+            integ.def_step_size = 0.0
+        integ.def_step_size = 0.05
+        self.assertEqual(integ.def_step_size, 0.05)
+
+    def test_max_step_change_rejects_invalid(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.max_step_change = 0.9  # must be > 1
+        with self.assertRaises(ValueError):
+            integ.max_step_change = 1.0
+        with self.assertRaises(ValueError):
+            integ.max_step_change = float("inf")
+        integ.max_step_change = 5.0
+
+
 from mpl_toolkits.mplot3d import Axes3D
 
 if __name__ == "__main__":

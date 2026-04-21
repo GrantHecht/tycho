@@ -218,3 +218,31 @@ TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
             << "Bounded run must be bit-identical to unbounded for component " << i;
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Phase 3 CounterWriteback contract: after any integrate call that threw,
+// get_naccept()/get_nreject() must reflect the work actually done rather
+// than the previous call's values. A regression that reverted the RAII
+// guards to the prior success-only writeback path would leave the counters
+// at zero (initial state) after this forced throw.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, CountersReflectPartialProgressAfterThrow) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-30);
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+
+    auto x0 = leo_x0();
+    double tf = leo_period();
+
+    try {
+        integ.integrate(x0, tf);
+        FAIL() << "Expected runtime_error from max_steps cap, but integration succeeded.";
+    } catch (const std::runtime_error &) {
+        // expected
+    }
+    EXPECT_GT(integ.get_naccept() + integ.get_nreject(), 0)
+        << "CounterWriteback RAII must flush local counters into member state "
+           "even when integrate() exits via exception unwind.";
+}

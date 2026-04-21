@@ -62,10 +62,9 @@ struct STMDriver {
                        int output_rows, bool enable_vectorization) {
 
         if (xs.size() < 2)
-            throw std::invalid_argument(
-                "STMDriver::calculate_jacobian: requires at least 2 states "
-                "(start + end of one integrator step); got xs.size() == " +
-                std::to_string(xs.size()));
+            throw std::invalid_argument("STMDriver::calculate_jacobian: requires at least 2 states "
+                                        "(start + end of one integrator step); got xs.size() == " +
+                                        std::to_string(xs.size()));
 
         Eigen::MatrixXd jx(output_rows, input_rows);
         jx.setZero();
@@ -222,15 +221,16 @@ struct STMDriver {
             throw std::invalid_argument(
                 "STMDriver::calculate_jacobians_hessians: xs_s must not be empty.");
         if (xs_s.size() != lf_s.size())
-            throw std::invalid_argument(
-                "STMDriver::calculate_jacobians_hessians: xs_s and lf_s must have equal size (got " +
-                std::to_string(xs_s.size()) + " and " + std::to_string(lf_s.size()) + ").");
+            throw std::invalid_argument("STMDriver::calculate_jacobians_hessians: xs_s and lf_s "
+                                        "must have equal size (got " +
+                                        std::to_string(xs_s.size()) + " and " +
+                                        std::to_string(lf_s.size()) + ").");
         for (std::size_t i = 0; i < xs_s.size(); ++i) {
             if (xs_s[i].size() < 2)
-                throw std::invalid_argument(
-                    "STMDriver::calculate_jacobians_hessians: xs_s[" + std::to_string(i) +
-                    "] requires at least 2 states (start + end); got " +
-                    std::to_string(xs_s[i].size()));
+                throw std::invalid_argument("STMDriver::calculate_jacobians_hessians: xs_s[" +
+                                            std::to_string(i) +
+                                            "] requires at least 2 states (start + end); got " +
+                                            std::to_string(xs_s[i].size()));
         }
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;
@@ -381,14 +381,13 @@ struct STMDriver {
                         int input_rows, int output_rows) {
 
         if (xs_s.empty())
-            throw std::invalid_argument(
-                "STMDriver::calculate_jacobians: xs_s must not be empty.");
+            throw std::invalid_argument("STMDriver::calculate_jacobians: xs_s must not be empty.");
         for (std::size_t i = 0; i < xs_s.size(); ++i) {
             if (xs_s[i].size() < 2)
-                throw std::invalid_argument(
-                    "STMDriver::calculate_jacobians: xs_s[" + std::to_string(i) +
-                    "] requires at least 2 states (start + end); got " +
-                    std::to_string(xs_s[i].size()));
+                throw std::invalid_argument("STMDriver::calculate_jacobians: xs_s[" +
+                                            std::to_string(i) +
+                                            "] requires at least 2 states (start + end); got " +
+                                            std::to_string(xs_s[i].size()));
         }
 
         constexpr int vsize = tycho::DefaultSuperScalar::SizeAtCompileTime;

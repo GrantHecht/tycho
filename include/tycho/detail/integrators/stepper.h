@@ -84,7 +84,6 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     bool fsal_valid_ = false;
 
   public:
-
     /// Perform one RK step from state x to time tf.
     ///
     /// On output: xf = next state, xf_est = embedded estimate,

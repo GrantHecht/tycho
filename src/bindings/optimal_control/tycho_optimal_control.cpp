@@ -120,9 +120,9 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
                 if (t.size() != 3)
                     throw nb::type_error(
                         "EventPack(tuple) expects exactly 3 elements: (vf, direction, stop_count)");
-                new (self) tycho::integrators::EventPack(
-                    nb::cast<tycho::vf::GenericFunction<-1, 1>>(t[0]), nb::cast<int>(t[1]),
-                    nb::cast<int>(t[2]));
+                new (self)
+                    tycho::integrators::EventPack(nb::cast<tycho::vf::GenericFunction<-1, 1>>(t[0]),
+                                                  nb::cast<int>(t[1]), nb::cast<int>(t[2]));
             },
             nb::arg("t"))
         .def_rw("vf", &tycho::integrators::EventPack::vf)

@@ -44,10 +44,10 @@ struct AdaptiveConfig {
                                         std::to_string(max_steps));
         }
         if (!(max_step_change > 1.0)) {
-            throw std::invalid_argument(
-                "AdaptiveConfig::max_step_change must be strictly > 1.0 (clamp on |dt_new/dt_old|); "
-                "got " +
-                std::to_string(max_step_change));
+            throw std::invalid_argument("AdaptiveConfig::max_step_change must be strictly > 1.0 "
+                                        "(clamp on |dt_new/dt_old|); "
+                                        "got " +
+                                        std::to_string(max_step_change));
         }
         if (error_order <= 0) {
             throw std::invalid_argument(
@@ -55,10 +55,9 @@ struct AdaptiveConfig {
                 "got " +
                 std::to_string(error_order));
         }
-        if (!std::isfinite(def_step_size) || def_step_size == 0.0) {
+        if (!std::isfinite(def_step_size) || def_step_size <= 0.0) {
             throw std::invalid_argument(
-                "AdaptiveConfig::def_step_size must be finite and non-zero (sign encodes direction "
-                "only when adaptive=false is paired with the fixed-step path); got " +
+                "AdaptiveConfig::def_step_size must be finite and > 0; got " +
                 std::to_string(def_step_size));
         }
     }
@@ -130,8 +129,6 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                        const ODEDeriv &abs_tols, const ODEDeriv &rel_tols,
                        ControllerVariant &controller, IO io, ControlFn &&update_control) {
 
-        // Unpack IO into local references so the loop body below reads
-        // the same identifiers it always has.
         int &naccept = io.naccept;
         int &nreject = io.nreject;
         const std::vector<EventPack> &events = io.events;

@@ -212,4 +212,9 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
         EXPECT_NEAR(out[i][1], -std::sin(5.0), 1e-5) << "lane " << i;
         EXPECT_GT(nacc[i], 0);
     }
+    // I and PID must produce measurably different step counts on this
+    // smooth problem — equal counts would indicate the two lanes shared
+    // controller state rather than stepping independently.
+    EXPECT_NE(nacc[0], nacc[1])
+        << "Per-lane controllers stepped in lockstep: suspect cross-lane contamination.";
 }

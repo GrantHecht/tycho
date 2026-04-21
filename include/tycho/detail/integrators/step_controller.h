@@ -321,9 +321,8 @@ static_assert(Controller<PIDController>);
 /// leave a real call frame here and cost double-digit-% on high-order
 /// methods where per-step overhead dominates (e.g. Vern7/8/9 PI). Benefits:
 /// single point of dispatch, concept constrains what alternatives may carry.
-[[gnu::always_inline]] inline ControllerOutput update_controller(ControllerVariant &v, double h,
-                                                                 double err_norm, int order,
-                                                                 int naccept) {
+[[gnu::always_inline]] inline ControllerOutput
+update_controller(ControllerVariant &v, double h, double err_norm, int order, int naccept) {
     return std::visit([&](auto &c) { return c.update(h, err_norm, order, naccept); }, v);
 }
 

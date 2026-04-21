@@ -253,10 +253,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
         if (defstep <= 0.0) {
-            throw ::std::invalid_argument(
-                "Initial step size must be strictly positive (backward integration is driven "
-                "by tf < t0, not by sign of h; zero would divide-by-zero in the fixed-step "
-                "path).");
+            throw ::std::invalid_argument(kInitialStepPositiveMsg);
         }
         this->def_step_size_ = defstep;
         // HW auto-initdt stays enabled — user can opt out via
@@ -501,6 +498,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         throw std::runtime_error(joined);
     }
 
+    /// Shared message for the two setter paths that reject a non-positive
+    /// initial step (constructor path via set_method and the explicit
+    /// set_initial_step_size). Kept in one place so they can't drift.
+    static constexpr const char *kInitialStepPositiveMsg =
+        "Initial step size must be strictly positive (backward integration is driven by tf < t0, "
+        "not by sign of h; zero would divide-by-zero in the fixed-step path).";
+
+    /// Invoke `f()` and, if it throws `std::exception`, rethrow as a
+    /// std::runtime_error prefixed with `"trajectory i: "`. A single lane's
+    /// failure in a thousand-lane batch then identifies itself in the error
+    /// message without the caller having to correlate order of arrival with
+    /// trajectory index.
+    template <class F> static auto decorate_trajectory(int i, F &&f) {
+        try {
+            return std::forward<F>(f)();
+        } catch (const std::exception &e) {
+            throw std::runtime_error("trajectory " + std::to_string(i) + ": " + e.what());
+        }
+    }
+
     // `mutable` so const-qualified public wrappers can write back post-call
     // (VectorFunction::compute contract forces compute_impl to be const).
     // Parallel paths that can't safely write back document that via
@@ -539,7 +556,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // Such crossings occupy std::nullopt slots in the returned eventstates
     // vector (1:1 with eventtimes); the counter is a cheap aggregate for
     // callers that only want to know "did anything drop?". Reset per
-    // find_events call.
+    // find_events call. On exception mid-refinement the counter reflects
+    // partial progress — monotonic within a single find_events call and
+    // overwritten on the next; we do not RAII-writeback this one because
+    // the reset-on-entry contract already bounds its staleness.
     mutable int n_failed_event_refinements_ = 0;
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
@@ -634,10 +654,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// set_auto_initial_dt(true) if desired.
     void set_initial_step_size(double h) {
         if (h <= 0.0) {
-            throw ::std::invalid_argument(
-                "Initial step size must be strictly positive (backward integration is driven "
-                "by tf < t0, not by sign of h; zero would divide-by-zero in the fixed-step "
-                "path).");
+            throw ::std::invalid_argument(kInitialStepPositiveMsg);
         }
         this->def_step_size_ = h;
         this->use_hairer_wanner_initdt_ = false;
@@ -820,7 +837,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             constexpr IVPAlg Alg = alg_tag.value;
             using Driver = integrators::AdaptiveDriver<Alg, DODE, double>;
             Driver driver;
-            typename Driver::IO io{naccept, nreject, events, eventtimes,     storestates,
+            typename Driver::IO io{naccept,     nreject,        events, eventtimes, storestates,
                                    storederivs, storemidpoints, states, derivs};
             return driver.integrate(this->ode_, x, tf, cfg, this->abs_tols_, this->rel_tols_,
                                     controller, io, update_control_fn);
@@ -862,9 +879,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 constexpr IVPAlg Alg = alg_tag.value;
                 using Driver = integrators::ParallelDriver<Alg, DODE>;
                 Driver driver;
-                typename Driver::IO io{nacc,        nrej,           events, eventtimes_s,
-                                       storestates, storederivs,    storemidpoints,
-                                       states_s,    derivs_s};
+                typename Driver::IO io{nacc,           nrej,        events,
+                                       eventtimes_s,   storestates, storederivs,
+                                       storemidpoints, states_s,    derivs_s};
                 return driver.integrate(this->ode_, xs, tfs, cfg, this->abs_tols_, this->rel_tols_,
                                         controllers, io, update_control_fn);
             });
@@ -1265,16 +1282,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
-                try {
-                    results[i] =
-                        this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr);
-                } catch (const std::exception &e) {
-                    // Decorate with the trajectory index so a batch of
-                    // thousands points the caller at exactly the offending
-                    // lane (mirrors ParallelDriver's per-lane decoration).
-                    throw std::runtime_error("trajectory " + std::to_string(i) + ": " +
-                                             e.what());
-                }
+                results[i] = decorate_trajectory(
+                    i, [&] { return this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr); });
             }
         };
 
@@ -1372,7 +1381,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
-                results[i] = this->integrate_dense_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_dense_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                });
             }
         };
 
@@ -1424,8 +1435,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
-                results[i] =
-                    this->integrate_dense_core(x0s[i], tfs[i], ns[i], args..., ctrl, na, nr);
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_dense_core(x0s[i], tfs[i], ns[i], args..., ctrl, na, nr);
+                });
             }
         };
 
@@ -1487,7 +1499,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 ctrl = this->make_worker_controller();
                 na = 0;
                 nr = 0;
-                results[i] = this->integrate_stm_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_stm_core(x0s[i], tfs[i], args..., ctrl, na, nr);
+                });
             }
         };
 

@@ -227,7 +227,6 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
             }
         }
 
-        // Continueloops: true until lane finishes (or H==0 up front).
         std::vector<bool> continueloops(ntrajs, true);
         for (int i = 0; i < ntrajs; ++i) {
             if (h_spans[i] == 0.0)

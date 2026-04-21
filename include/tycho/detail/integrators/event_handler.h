@@ -80,8 +80,7 @@ struct EventHandler {
             // with t/j context so the user can fix the event function.
             if (!std::isfinite(vnext) || !std::isfinite(vprev)) {
                 throw std::runtime_error(
-                    "Event function " + std::to_string(j) +
-                    " produced non-finite value at t=" +
+                    "Event function " + std::to_string(j) + " produced non-finite value at t=" +
                     std::to_string(static_cast<double>(xnext[t_var])) +
                     " (vprev=" + std::to_string(vprev) + ", vnext=" + std::to_string(vnext) +
                     "); event functions must be finite on finite states.");
@@ -156,7 +155,10 @@ struct EventHandler {
                         // false under IEEE 754), falling through to the wider-
                         // bracket retry without distinguishing "Newton diverged"
                         // from "no bracket found". Break cleanly and let the
-                        // wider-bracket retry run with the current (pre-NaN) x.
+                        // wider-bracket retry run with the current (pre-NaN) x;
+                        // the fall-through is observable via
+                        // Integrator::get_failed_event_count() if the retry
+                        // also gives up.
                         if (!std::isfinite(jx[0]) || jx[0] == 0.0) {
                             break;
                         }
