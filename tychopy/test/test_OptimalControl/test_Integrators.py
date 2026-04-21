@@ -596,6 +596,30 @@ class TestBindingValidators(unittest.TestCase):
             integ.max_step_change = float("inf")
         integ.max_step_change = 5.0
 
+    def test_max_steps_round_trip(self):
+        integ = self._make()
+        integ.set_max_steps(123)
+        self.assertEqual(integ.get_max_steps(), 123)
+
+    def test_max_steps_rejects_non_positive(self):
+        integ = self._make()
+        with self.assertRaises((ValueError, RuntimeError)):
+            integ.set_max_steps(0)
+        with self.assertRaises((ValueError, RuntimeError)):
+            integ.set_max_steps(-1)
+
+    def test_max_steps_enforces_cap(self):
+        # Force a runaway by demanding an impossible tolerance, then cap at
+        # a tiny value. The loop must trip the cap rather than spin forever.
+        integ = self._make()
+        integ.set_abs_tol(1.0e-30)
+        integ.set_rel_tol(1.0e-30)
+        integ.set_max_steps(5)
+        # LorenzODE has 3 state vars + 1 t_var.
+        X0 = np.array([1.0, 1.0, 1.0, 0.0])
+        with self.assertRaises(RuntimeError):
+            integ.integrate(X0, 10.0)
+
 
 from mpl_toolkits.mplot3d import Axes3D
 
