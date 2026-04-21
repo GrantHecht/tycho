@@ -246,3 +246,78 @@ TEST_F(MaxStepsTest, CountersReflectPartialProgressAfterThrow) {
         << "CounterWriteback RAII must flush local counters into member state "
            "even when integrate() exits via exception unwind.";
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Parameterized CounterWriteback coverage across entrypoints that share
+// the same RAII guard but use different code paths (scalar integrate vs.
+// dense vs. STM vs. batch). A regression that dropped the guard from one
+// entrypoint would leave the counters at zero for that lane only —
+// invisible to a single-entrypoint test.
+///////////////////////////////////////////////////////////////////////////////
+enum class Entrypoint {
+    Integrate,
+    IntegrateDense,
+    IntegrateStm,
+    IntegrateBatch,
+};
+
+struct EntrypointInfo {
+    Entrypoint kind;
+    const char *name;
+};
+
+class CounterWritebackEntrypointTest : public VectorFunctionFixture,
+                                       public ::testing::WithParamInterface<EntrypointInfo> {};
+
+TEST_P(CounterWritebackEntrypointTest, PartialProgressFlushedAfterThrow) {
+    const auto &p = GetParam();
+
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-30);
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+
+    using K = Integrator<astro::Kepler>::IntegRet;
+    auto x0_dyn = leo_x0();
+    K x0;
+    for (int i = 0; i < x0.size(); ++i)
+        x0[i] = x0_dyn[i];
+    const double tf = leo_period();
+
+    bool threw = false;
+    try {
+        switch (p.kind) {
+        case Entrypoint::Integrate:
+            (void)integ.integrate(x0, tf);
+            break;
+        case Entrypoint::IntegrateDense:
+            (void)integ.integrate_dense(x0, tf);
+            break;
+        case Entrypoint::IntegrateStm:
+            (void)integ.integrate_stm(x0, tf);
+            break;
+        case Entrypoint::IntegrateBatch: {
+            std::vector<K> x0s = {x0, x0};
+            Eigen::VectorXd tfs(2);
+            tfs << tf, tf;
+            (void)integ.integrate(x0s, tfs);
+            break;
+        }
+        }
+        FAIL() << p.name << ": expected runtime_error from max_steps cap.";
+    } catch (const std::runtime_error &) {
+        threw = true;
+    }
+    ASSERT_TRUE(threw) << p.name;
+    EXPECT_GT(integ.get_naccept() + integ.get_nreject(), 0)
+        << p.name << ": CounterWriteback must flush local counters on exception unwind.";
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AllEntrypoints, CounterWritebackEntrypointTest,
+    ::testing::Values(EntrypointInfo{Entrypoint::Integrate, "integrate"},
+                      EntrypointInfo{Entrypoint::IntegrateDense, "integrate_dense"},
+                      EntrypointInfo{Entrypoint::IntegrateStm, "integrate_stm"},
+                      EntrypointInfo{Entrypoint::IntegrateBatch, "integrate_batch"}),
+    [](const auto &info) { return info.param.name; });
