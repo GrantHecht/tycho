@@ -83,3 +83,49 @@ TEST_F(IntegratorTest, TolValidation_FixedStepBypassesCheck) {
     x0 << 1.0, 0.0, 0.0;
     EXPECT_NO_THROW(integ.integrate(x0, 0.1));
 }
+
+// +inf in a component is a silent correctness hazard: it zeros that
+// component's scaled residual. Reject at the setter boundary, matching the
+// scalar set_abs_tol / set_rel_tol counterparts.
+TEST_F(IntegratorTest, TolValidation_VectorSetterRejectsInfinite) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+
+    Eigen::VectorXd prior_abs = integ.get_abs_tols();
+    Eigen::VectorXd prior_rel = integ.get_rel_tols();
+
+    Eigen::VectorXd bad(2);
+    bad << 1e-6, std::numeric_limits<double>::infinity();
+    EXPECT_THROW(integ.set_abs_tols(bad), std::invalid_argument);
+    EXPECT_THROW(integ.set_rel_tols(bad), std::invalid_argument);
+
+    // State must be unchanged after the throw — validation is atomic.
+    EXPECT_EQ(integ.get_abs_tols(), prior_abs);
+    EXPECT_EQ(integ.get_rel_tols(), prior_rel);
+}
+
+// Non-finite initial step sizes (NaN or +inf) must fail at the API boundary,
+// not be stored and surface later as a generic divide-by-zero.
+TEST_F(IntegratorTest, TolValidation_InitialStepSizeRejectsNonFinite) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+
+    EXPECT_THROW(integ.set_initial_step_size(std::numeric_limits<double>::quiet_NaN()),
+                 std::invalid_argument);
+    EXPECT_THROW(integ.set_initial_step_size(std::numeric_limits<double>::infinity()),
+                 std::invalid_argument);
+    EXPECT_THROW(integ.set_initial_step_size(0.0), std::invalid_argument);
+    EXPECT_THROW(integ.set_initial_step_size(-1.0), std::invalid_argument);
+}
+
+// Constructor-path defstep shares the same validator via set_method; same
+// guarantees expected.
+TEST_F(IntegratorTest, TolValidation_ConstructorRejectsNonFiniteDefstep) {
+    SHO ode(0.0);
+    EXPECT_THROW((Integrator<SHO>{ode, IVPAlg::DOPRI87,
+                                  std::numeric_limits<double>::quiet_NaN()}),
+                 std::invalid_argument);
+    EXPECT_THROW((Integrator<SHO>{ode, IVPAlg::DOPRI87,
+                                  std::numeric_limits<double>::infinity()}),
+                 std::invalid_argument);
+}

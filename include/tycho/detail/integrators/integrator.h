@@ -252,7 +252,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {
 
-        if (defstep <= 0.0) {
+        if (!std::isfinite(defstep) || defstep <= 0.0) {
             throw ::std::invalid_argument(kInitialStepPositiveMsg);
         }
         this->def_step_size_ = defstep;
@@ -591,9 +591,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
         for (Eigen::Index i = 0; i < tol.size(); ++i) {
-            if (!(tol[i] >= 0.0)) {
+            if (!std::isfinite(tol[i]) || tol[i] < 0.0) {
                 throw std::invalid_argument("abs_tols[" + std::to_string(i) +
-                                            "] must be >= 0; got " + std::to_string(tol[i]));
+                                            "] must be finite and >= 0; got " +
+                                            std::to_string(tol[i]));
             }
         }
         this->abs_tols_ = tol;
@@ -603,9 +604,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument("Incorrectly sized tolerance vector.");
         }
         for (Eigen::Index i = 0; i < tol.size(); ++i) {
-            if (!(tol[i] >= 0.0)) {
+            if (!std::isfinite(tol[i]) || tol[i] < 0.0) {
                 throw std::invalid_argument("rel_tols[" + std::to_string(i) +
-                                            "] must be >= 0; got " + std::to_string(tol[i]));
+                                            "] must be finite and >= 0; got " +
+                                            std::to_string(tol[i]));
             }
         }
         this->rel_tols_ = tol;
@@ -652,7 +654,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// auto-initdt off so the caller's value is respected — re-enable with
     /// set_auto_initial_dt(true) if desired.
     void set_initial_step_size(double h) {
-        if (h <= 0.0) {
+        if (!std::isfinite(h) || h <= 0.0) {
             throw ::std::invalid_argument(kInitialStepPositiveMsg);
         }
         this->def_step_size_ = h;
