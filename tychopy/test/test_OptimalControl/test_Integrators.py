@@ -266,7 +266,6 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.fast_adaptive_stm = False
 
         Xtol = 1.0e-10
         Jtol = 1.0e-9
@@ -347,7 +346,6 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.fast_adaptive_stm = False
 
         integ.event_tol = 1.0e-10
         integ.max_event_iters = 12

@@ -310,7 +310,6 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             "max_step_change",
             [](const Integrator<DODE> &self) { return self.get_max_step_change(); },
             [](Integrator<DODE> &self, double v) { self.set_max_step_change(v); });
-        obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
 
         obj.def_rw("adaptive", &Integrator<DODE>::adaptive_);
         // abs_tols routes through set_abs_tols so Python writes validate size

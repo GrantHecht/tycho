@@ -442,7 +442,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // there is no hard min/max on dt, only a hard cap on iterations.
     int max_steps_ = 1'000'000;
     bool adaptive_ = true;
-    bool fast_adaptive_stm_ = true;
     double event_tol_ = 1.0e-6;
     int max_event_iters_ = 10;
     bool vectorize_batch_calls_ = true;

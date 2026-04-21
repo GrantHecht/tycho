@@ -167,7 +167,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
 
         Integ.adaptive_ = this->integrator_.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
         Integ.abs_tols_ = this->integrator_.abs_tols_;
         Integ.rel_tols_ = this->integrator_.rel_tols_;
         Integ.set_max_steps(this->integrator_.get_max_steps());
@@ -187,7 +186,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
 
         Integ.adaptive_ = this->integrator_.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
         Integ.abs_tols_ = this->integrator_.abs_tols_;
         Integ.rel_tols_ = this->integrator_.rel_tols_;
         Integ.set_max_steps(this->integrator_.get_max_steps());
@@ -373,7 +371,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         if (this->auto_scaling_) {
             auto Integ = Integrator<ScaledODE>{this->ode_scaled_, this->integrator_.def_step_size_};
             Integ.adaptive_ = this->integrator_.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
             Integ.abs_tols_ = this->integrator_.abs_tols_;
             Integ.rel_tols_ = this->integrator_.rel_tols_;
             Integ.set_max_steps(this->integrator_.get_max_steps());
@@ -395,7 +392,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
             auto Integ = Integrator<DODE>{this->ode_, this->integrator_.def_step_size_};
             Integ.adaptive_ = this->integrator_.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
             Integ.abs_tols_ = this->integrator_.abs_tols_;
             Integ.rel_tols_ = this->integrator_.rel_tols_;
             Integ.set_max_steps(this->integrator_.get_max_steps());
