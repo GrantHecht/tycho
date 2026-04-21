@@ -106,11 +106,9 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     TychoBind<MeshIterateInfo>::Build(oc);
 
-    // Register EventPack once at module scope. The 3-arg constructor plus
-    // the tuple-accepting init below let Python callers keep passing
-    // `(gf, direction, stop_count)` tuples exactly as before (via
-    // `implicitly_convertible<tuple, EventPack>`) while also exposing the
-    // named struct for explicit construction.
+    // EventPack: 3-arg ctor for explicit C++ construction, tuple-accepting
+    // init so Python callers can pass (vf, direction, stop_count) tuples
+    // directly.
     nb::class_<tycho::integrators::EventPack>(oc, "EventPack")
         .def(nb::init<tycho::vf::GenericFunction<-1, 1>, int, int>(), nb::arg("vf"),
              nb::arg("direction") = 0, nb::arg("stop_count") = 0)

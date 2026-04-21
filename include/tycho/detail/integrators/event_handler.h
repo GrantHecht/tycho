@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -41,10 +42,6 @@ inline constexpr int Rising = 1;
 ///    `event_direction::Falling/Any/Rising`.
 /// `stop_count`: 0 means "record crossings, never stop"; N > 0 means "stop
 ///    integration after the Nth recorded crossing".
-///
-/// Replaces the prior `std::tuple<GenericFunction<-1,1>, int, int>`. Same
-/// memory layout — binding layer converts Python tuples `(gf, dir, stop)`
-/// via an implicit tuple→struct conversion so Python callers are unchanged.
 struct EventPack {
     GenericFunction<-1, 1> vf;
     int direction = 0;
@@ -117,8 +114,7 @@ struct EventHandler {
     /// zip-iterating `eventtimes` against `eventstates` safe.
     ///
     /// `n_failed_refinements` is incremented once per unresolved crossing
-    /// (i.e., per `std::nullopt` produced) so callers that already rely on
-    /// the counter continue to work unchanged.
+    /// (i.e., per `std::nullopt` produced).
     template <class ODEState>
     static std::vector<std::vector<std::optional<ODEState>>>
     refine_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
@@ -149,17 +145,16 @@ struct EventHandler {
                         if (std::abs(fx[0]) < std::abs(tol)) {
                             break;
                         }
-                        // Guard against singular / non-finite Jacobian — without
-                        // this, `fx/jx` produces NaN/Inf which the bracket check
-                        // at the call site silently rejects (NaN comparisons are
-                        // false under IEEE 754), falling through to the wider-
-                        // bracket retry without distinguishing "Newton diverged"
-                        // from "no bracket found". Break cleanly and let the
-                        // wider-bracket retry run with the current (pre-NaN) x;
-                        // the fall-through is observable via
-                        // Integrator::get_failed_event_count() if the retry
-                        // also gives up.
+                        // Guard against singular / non-finite Jacobian. Without
+                        // NaN-ing x[0] here, break leaves x[0] at its pre-singular
+                        // value — which can land inside the bracket and be
+                        // indistinguishable from convergence at the bracket check
+                        // below. Setting x[0] = NaN forces the bracket comparison
+                        // (NaN > tlow, NaN < thigh both false under IEEE 754) into
+                        // the wider-bracket retry deterministically, preserving
+                        // the failure-counter contract.
                         if (!std::isfinite(jx[0]) || jx[0] == 0.0) {
+                            x[0] = std::numeric_limits<double>::quiet_NaN();
                             break;
                         }
                         x[0] = x[0] - fx[0] / jx[0];

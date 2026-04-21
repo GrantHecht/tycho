@@ -13,7 +13,7 @@ namespace tycho::integrators {
 
 /// Throw a descriptive runtime_error if any element of `v` is non-finite.
 ///
-/// `site` names the production site (e.g. "stepper_compute"); `t` is the
+/// `site` names the production site (e.g. "AdaptiveDriver::stepper.step"); `t` is the
 /// current independent-variable value; `h` is the step size in flight.
 /// `trajectory_idx` should be set to the lane/trajectory index in batch
 /// paths, or left at -1 for the scalar path.

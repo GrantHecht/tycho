@@ -247,7 +247,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// Note: selecting a new method unconditionally resets the controller to
     /// that method's default kind (see `default_controller_for`). If you
     /// want a non-default controller, call `set_controller()` *after*
-    /// `set_method()`. `get_controller_kind()` can be used to inspect the
+    /// `set_method()`. `get_controller()` can be used to inspect the
     /// current choice.
     void set_method(IVPAlg alg, const DODE &dode, double defstep, bool usecontrol,
                     const GenericFunction<-1, -1> &ucon, const ControlIndexType &varlocs_t) {

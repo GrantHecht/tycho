@@ -5,7 +5,7 @@
 // Zero-interval integration tests: pin the contract for integrate(x0, t0),
 // integrate_dense, integrate_stm, and batch integrate when tf == t0.
 // Without the scalar/SIMD short-circuit in integrate_impl / integrate_impl_vectorized,
-// h==0 reaches stepper_compute and divides by zero in the FSAL / midpoint
+// h==0 reaches the stepper and divides by zero in the FSAL / midpoint
 // derivative reconstruction, producing NaN in `derivs`.
 
 #include "integrator_test_utils.h"
