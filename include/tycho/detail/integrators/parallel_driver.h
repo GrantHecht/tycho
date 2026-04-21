@@ -346,9 +346,15 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
 
                     // Extract f(xf) back to xdotnext_ss for FSAL methods so
                     // accepted lanes propagate f(xf) to the next step. For
-                    // non-FSAL methods, xdotnext_ss is unchanged — the next
-                    // step will recompute fresh regardless.
+                    // non-FSAL methods (Vern*) the next step recomputes
+                    // fresh — but if the caller asked us to store derivs,
+                    // we still need f(xf) for this step's record. Stepper
+                    // populates k_fsal_ = f(xf) whenever compute_midpoint
+                    // was set (stepper.h:166); peek_fsal is safe here
+                    // regardless of fsal_valid_.
                     if constexpr (method_does_fsal) {
+                        xdotnext_ss = stepper_.peek_fsal();
+                    } else if (storederivs) {
                         xdotnext_ss = stepper_.peek_fsal();
                     }
 
