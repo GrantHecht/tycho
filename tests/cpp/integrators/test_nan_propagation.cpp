@@ -249,3 +249,48 @@ TEST_F(NanPropagationTest, EventVFReturningNaNThrowsWithContext) {
         FAIL() << "Expected std::runtime_error, got a different exception type.";
     }
 }
+
+// -----------------------------------------------------------------------------
+// STM API NaN contract. `integrate_stm` wraps `integrate_impl` + STM chain
+// (stm_driver.h). On an ill-defined state (Kepler origin), the upstream
+// finite-state check fires before the STM chain runs; this pins the
+// end-to-end contract that the STM API does not silently return a
+// NaN-laced Jacobian. If a future change removes the upstream check, the
+// `check_stm_finite_or_throw` guard at stm_driver.h:133 is the last line
+// of defense — and these tests still expect a throw.
+// -----------------------------------------------------------------------------
+TEST_F(NanPropagationTest, IntegrateStmThrowsAtOriginSingularity) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    auto x0 = origin_state();
+    EXPECT_THROW({ auto r = integ.integrate_stm(x0, 100.0); }, std::runtime_error);
+}
+
+// Batch STM + Hessian API. Same contract as above for the batch path: the
+// single-element batch must throw rather than silently return a tuple
+// containing NaN.
+TEST_F(NanPropagationTest, IntegrateStm2ThrowsAtOriginSingularity) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    using K = Integrator<astro::Kepler>::IntegRet;
+    K x0;
+    auto x0_vec = origin_state();
+    for (int i = 0; i < 7; ++i)
+        x0[i] = x0_vec[i];
+    K lf;
+    for (int i = 0; i < 7; ++i)
+        lf[i] = 1.0;
+
+    std::vector<K> x0s = {x0};
+    Eigen::VectorXd tfs(1);
+    tfs[0] = 100.0;
+    std::vector<K> lfs = {lf};
+
+    EXPECT_THROW({ auto r = integ.integrate_stm2(x0s, tfs, lfs); }, std::runtime_error);
+}
