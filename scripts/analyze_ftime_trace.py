@@ -141,31 +141,43 @@ def analyze_traces(trace_dir):
     print("COMPILATION PHASE BREAKDOWN (aggregate across all TUs)")
     print("=" * 90)
     for phase, us in sorted(phase_time.items(), key=lambda x: -x[1]):
-        print(f"  {phase:<25} {us/1e6:>8.1f}s  {us/total_all*100:>5.1f}%")
+        print(f"  {phase:<25} {us / 1e6:>8.1f}s  {us / total_all * 100:>5.1f}%")
     print()
 
     print("=" * 90)
     print("PER-TU BREAKDOWN")
     print("=" * 90)
-    print(f"{'TU':<40} {'Total':>7} {'Front':>7} {'Back':>7} {'InstCls':>7} {'InstFn':>7} {'CdGen':>7} {'#Cls':>6} {'#Fn':>6}")
+    print(
+        f"{'TU':<40} {'Total':>7} {'Front':>7} {'Back':>7} {'InstCls':>7} {'InstFn':>7} {'CdGen':>7} {'#Cls':>6} {'#Fn':>6}"
+    )
     for tu, d in sorted(per_tu.items(), key=lambda x: -x[1]["total_us"]):
-        print(f"{tu[:39]:<40} {d['total_us']/1e6:>6.1f}s {d['frontend_us']/1e6:>6.1f}s {d['backend_us']/1e6:>6.1f}s "
-              f"{d['instantiate_class_us']/1e6:>6.1f}s {d['instantiate_func_us']/1e6:>6.1f}s {d['codegen_us']/1e6:>6.1f}s "
-              f"{d['class_count']:>6} {d['func_count']:>6}")
+        print(
+            f"{tu[:39]:<40} {d['total_us'] / 1e6:>6.1f}s {d['frontend_us'] / 1e6:>6.1f}s {d['backend_us'] / 1e6:>6.1f}s "
+            f"{d['instantiate_class_us'] / 1e6:>6.1f}s {d['instantiate_func_us'] / 1e6:>6.1f}s {d['codegen_us'] / 1e6:>6.1f}s "
+            f"{d['class_count']:>6} {d['func_count']:>6}"
+        )
     print()
 
     print("=" * 90)
     print("TOP 30 CLASS TEMPLATE INSTANTIATIONS (by total time)")
     print("=" * 90)
-    for base, data in sorted(instantiate_class.items(), key=lambda x: -x[1]["total_us"])[:30]:
-        print(f"  {data['total_us']/1e6:>7.2f}s  {data['count']:>5}x  {len(data['tus']):>2} TUs  {base[:80]}")
+    for base, data in sorted(
+        instantiate_class.items(), key=lambda x: -x[1]["total_us"]
+    )[:30]:
+        print(
+            f"  {data['total_us'] / 1e6:>7.2f}s  {data['count']:>5}x  {len(data['tus']):>2} TUs  {base[:80]}"
+        )
     print()
 
     print("=" * 90)
     print("TOP 30 FUNCTION TEMPLATE INSTANTIATIONS (by total time)")
     print("=" * 90)
-    for base, data in sorted(instantiate_func.items(), key=lambda x: -x[1]["total_us"])[:30]:
-        print(f"  {data['total_us']/1e6:>7.2f}s  {data['count']:>5}x  {len(data['tus']):>2} TUs  {base[:80]}")
+    for base, data in sorted(instantiate_func.items(), key=lambda x: -x[1]["total_us"])[
+        :30
+    ]:
+        print(
+            f"  {data['total_us'] / 1e6:>7.2f}s  {data['count']:>5}x  {len(data['tus']):>2} TUs  {base[:80]}"
+        )
     print()
 
     print("=" * 90)
@@ -174,14 +186,18 @@ def analyze_traces(trace_dir):
     for src, data in sorted(source_time.items(), key=lambda x: -x[1]["total_us"])[:20]:
         # Shorten paths
         src_short = src.replace("/home/ghecht/Projects/tycho/", "")
-        print(f"  {data['total_us']/1e6:>7.2f}s  {data['count']:>3}x  {src_short[:75]}")
+        print(
+            f"  {data['total_us'] / 1e6:>7.2f}s  {data['count']:>3}x  {src_short[:75]}"
+        )
     print()
 
     print("=" * 90)
     print("TOP 20 CODE GENERATION COSTS (by total time)")
     print("=" * 90)
-    for base, data in sorted(codegen_time.items(), key=lambda x: -x[1]["total_us"])[:20]:
-        print(f"  {data['total_us']/1e6:>7.2f}s  {data['count']:>5}x  {base[:80]}")
+    for base, data in sorted(codegen_time.items(), key=lambda x: -x[1]["total_us"])[
+        :20
+    ]:
+        print(f"  {data['total_us'] / 1e6:>7.2f}s  {data['count']:>5}x  {base[:80]}")
     print()
 
     # ============ DERIVATIVE MODE ANALYSIS ============
@@ -191,7 +207,11 @@ def analyze_traces(trace_dir):
 
     deriv_modes = defaultdict(int)
     for name in list(instantiate_class.keys()) + list(instantiate_func.keys()):
-        if "DenseDerivativeMode" in name or "DenseFirstDerivatives" in name or "DenseSecondDerivatives" in name:
+        if (
+            "DenseDerivativeMode" in name
+            or "DenseFirstDerivatives" in name
+            or "DenseSecondDerivatives" in name
+        ):
             # Extract mode
             for mode in ["Analytic", "FDiffFwd", "FDiffCentArray", "AutodiffFwd"]:
                 if mode in name:
@@ -201,8 +221,12 @@ def analyze_traces(trace_dir):
         print(f"  {mode:<20} {count:>5} instantiations")
 
     # Count DenseFirstDerivatives and DenseSecondDerivatives instantiations
-    first_deriv_count = sum(1 for k in instantiate_class if "DenseFirstDerivatives" in k)
-    second_deriv_count = sum(1 for k in instantiate_class if "DenseSecondDerivatives" in k)
+    first_deriv_count = sum(
+        1 for k in instantiate_class if "DenseFirstDerivatives" in k
+    )
+    second_deriv_count = sum(
+        1 for k in instantiate_class if "DenseSecondDerivatives" in k
+    )
     print(f"\n  DenseFirstDerivatives distinct types:  {first_deriv_count}")
     print(f"  DenseSecondDerivatives distinct types: {second_deriv_count}")
 
@@ -221,7 +245,7 @@ def analyze_traces(trace_dir):
             family_count[cls] += data["count"]
 
     for cls, us in sorted(family_time.items(), key=lambda x: -x[1])[:25]:
-        print(f"  {us/1e6:>7.2f}s  {family_count[cls]:>6}x  {cls}")
+        print(f"  {us / 1e6:>7.2f}s  {family_count[cls]:>6}x  {cls}")
 
 
 if __name__ == "__main__":

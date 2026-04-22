@@ -5,7 +5,9 @@ If this diverges to tf ~ 0 in tycho but works in asset, the bug is in
 per-phase evaluation (objective/constraint Jacobian). If it works, the
 bug is in link-constraint machinery.
 """
+
 import sys
+
 import numpy as np
 
 import tychopy as typy
@@ -85,8 +87,10 @@ def main():
     tf_periods = tf_nd / (2 * np.pi)
     back_pos = np.array(traj[-1][0:3])
     back_err = float(np.linalg.norm(back_pos - X1[0:3]))
-    print(f"flag={int(flag)} tf={tf_periods:.6f}p tf_nd={tf_nd:.4f} "
-          f"back_err={back_err:.6f}")
+    print(
+        f"flag={int(flag)} tf={tf_periods:.6f}p tf_nd={tf_nd:.4f} "
+        f"back_err={back_err:.6f}"
+    )
     if tf_nd > 0.5 and back_err < 1e-3:
         print("PASS")
         sys.exit(0)

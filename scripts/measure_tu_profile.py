@@ -26,7 +26,9 @@ def get_current_targets():
     """Get list of current .o targets from ninja."""
     result = subprocess.run(
         ["ninja", "-t", "targets", "all"],
-        capture_output=True, text=True, cwd=BUILD,
+        capture_output=True,
+        text=True,
+        cwd=BUILD,
     )
     targets = []
     for line in result.stdout.splitlines():
@@ -74,7 +76,9 @@ def get_compile_command(target):
 
     # Match by output field
     for entry in commands:
-        if entry.get("output", "").endswith(target) or target.endswith(entry.get("output", "")):
+        if entry.get("output", "").endswith(target) or target.endswith(
+            entry.get("output", "")
+        ):
             return entry["command"], entry["directory"]
 
     # Fallback: match by source file
@@ -84,7 +88,9 @@ def get_compile_command(target):
     # Better: use ninja -t commands
     result = subprocess.run(
         ["ninja", "-t", "commands", target],
-        capture_output=True, text=True, cwd=BUILD,
+        capture_output=True,
+        text=True,
+        cwd=BUILD,
     )
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip(), str(ROOT)
@@ -122,7 +128,10 @@ def measure_tu(target, trace_dir=None, collect_stats=False):
     full_cmd = f"/usr/bin/time -v {cmd}"
 
     result = subprocess.run(
-        full_cmd, shell=True, capture_output=True, text=True,
+        full_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
         cwd=directory,
     )
 
@@ -169,7 +178,9 @@ def measure_tu(target, trace_dir=None, collect_stats=False):
         stats_lines = []
         in_stats = False
         for line in time_output.splitlines():
-            if "===" in line and ("Clang" in line or "LLVM" in line or "Stats" in line.title()):
+            if "===" in line and (
+                "Clang" in line or "LLVM" in line or "Stats" in line.title()
+            ):
                 in_stats = True
             if in_stats:
                 stats_lines.append(line)
@@ -220,9 +231,15 @@ def categorize(target):
 
 def main():
     parser = argparse.ArgumentParser(description="Profile heavy TUs")
-    parser.add_argument("--top", type=int, default=20, help="Number of heaviest TUs to profile")
-    parser.add_argument("--trace-dir", type=str, default=None, help="Dir to collect -ftime-trace JSONs")
-    parser.add_argument("--stats", action="store_true", help="Also collect -Xclang -print-stats")
+    parser.add_argument(
+        "--top", type=int, default=20, help="Number of heaviest TUs to profile"
+    )
+    parser.add_argument(
+        "--trace-dir", type=str, default=None, help="Dir to collect -ftime-trace JSONs"
+    )
+    parser.add_argument(
+        "--stats", action="store_true", help="Also collect -Xclang -print-stats"
+    )
     parser.add_argument("--output", type=str, default=None, help="Output JSON file")
     args = parser.parse_args()
 
@@ -241,13 +258,13 @@ def main():
 
     top_n = ranked[: args.top]
     print(f"Profiling top {len(top_n)} heaviest TUs (of {len(ranked)} current targets)")
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
 
     results = []
     for i, (target, ninja_time) in enumerate(top_n):
         name = short_name(target)
         cat = categorize(target)
-        print(f"\n[{i+1}/{len(top_n)}] {name} ({cat}, ninja log: {ninja_time:.0f}s)")
+        print(f"\n[{i + 1}/{len(top_n)}] {name} ({cat}, ninja log: {ninja_time:.0f}s)")
         print(f"  Target: {target}")
 
         result = measure_tu(target, args.trace_dir, args.stats)
@@ -263,9 +280,9 @@ def main():
             print(f"  ERROR: {result['error']}")
 
     # Print summary table
-    print(f"\n{'='*90}")
+    print(f"\n{'=' * 90}")
     print(f"{'TU':<45} {'Cat':<8} {'RSS (GB)':>8} {'Wall (s)':>8} {'Ninja (s)':>9}")
-    print(f"{'-'*45} {'-'*8} {'-'*8} {'-'*8} {'-'*9}")
+    print(f"{'-' * 45} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 9}")
     for r in sorted(results, key=lambda x: -(x.get("peak_rss_kb") or 0)):
         name = r["short_name"][:44]
         cat = r["category"]
