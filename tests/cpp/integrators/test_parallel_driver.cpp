@@ -218,3 +218,77 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
     EXPECT_NE(nacc[0], nacc[1])
         << "Per-lane controllers stepped in lockstep: suspect cross-lane contamination.";
 }
+
+// -----------------------------------------------------------------------------
+// Non-FSAL storederivs regression (c77b6b9). Vern7/8/9 do not carry f(xf) in
+// k_vals.back(); Stepper::step writes k_fsal_ only when compute_midpoint was
+// passed (the !LastStageIsFxf midpoint branch). ParallelDriver's `else if
+// (storederivs)` arm reads that write via peek_fsal; a regression that
+// skipped the arm (pre-c77b6b9 state) would leave the final derivs slot
+// un-updated. This test pins the symmetry with AdaptiveDriver.
+//
+// No public API currently routes storederivs=true to ParallelDriver — the
+// batch overloads hardcode storederivs=false — but the test protects the
+// branch against future enablement and symmetric refactors.
+// -----------------------------------------------------------------------------
+TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern7) {
+    SHO ode(0.0);
+    ParallelDriver<IVPAlg::Vern7, SHO> driver;
+    AdaptiveConfig cfg;
+    cfg.error_order = 7;
+    cfg.def_step_size = 0.01;
+    cfg.adaptive = true;
+    cfg.use_hairer_wanner_initdt = true;
+
+    Eigen::VectorXd abs_tols(2);
+    abs_tols.setConstant(1e-10);
+    Eigen::VectorXd rel_tols(2);
+    rel_tols.setConstant(1e-10);
+
+    const double tf_all = 1.0;
+    const int N = 2;
+    std::vector<Eigen::Vector3d> xs{sho_x0(0.0), sho_x0(0.3)};
+    Eigen::VectorXd tfs(N);
+    tfs.setConstant(tf_all);
+
+    std::vector<ControllerVariant> controllers(N, ControllerVariant{PIController{}});
+    for (auto &c : controllers)
+        reset_controller(c);
+    std::vector<int> nacc(N, 0), nrej(N, 0);
+    std::vector<ParallelDriver<IVPAlg::Vern7, SHO>::EventPack> events;
+    std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(N);
+    std::vector<std::vector<Eigen::Vector3d>> states_s(N);
+    std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(N);
+
+    using PD = ParallelDriver<IVPAlg::Vern7, SHO>;
+    // storestates=true is required to populate derivs_s — ParallelDriver
+    // gates the derivs push on the state stream. The storederivs branch
+    // we are testing lives inside `if (storestates)` blocks.
+    typename PD::IO io{nacc,  nrej,       events, eventtimes_s, /*storestates=*/true,
+                       /*storederivs=*/true, /*storemidpoints=*/false, states_s, derivs_s};
+    auto out = driver.integrate(ode, xs, tfs, cfg, abs_tols, rel_tols, controllers, io,
+                                [](auto &) {});
+
+    for (int lane = 0; lane < N; ++lane) {
+        ASSERT_GT(nacc[lane], 0) << "lane " << lane << " must have taken steps";
+        ASSERT_FALSE(derivs_s[lane].empty()) << "lane " << lane << " derivs slot empty";
+
+        // Last stored derivative must equal f(xf) for SHO. The ODE's Output
+        // is 2-wide (x_vars=2): dx/dt = v, dv/dt = -x. Using the lane's
+        // computed final state — not the exact solution — so this is a
+        // stepper/ParallelDriver self-consistency check, not a convergence
+        // check. Pre-c77b6b9 the slot would be stale or zeroed.
+        const auto &fxf = derivs_s[lane].back();
+        ASSERT_EQ(fxf.size(), 2)
+            << "lane " << lane << ": SHO Output has 2 components (dx/dt, dv/dt)";
+        EXPECT_NEAR(fxf[0], out[lane][1], 1e-10)
+            << "lane " << lane << ": dx/dt should equal v_final";
+        EXPECT_NEAR(fxf[1], -out[lane][0], 1e-10)
+            << "lane " << lane << ": dv/dt should equal -x_final";
+
+        for (Eigen::Index k = 0; k < fxf.size(); ++k) {
+            EXPECT_TRUE(std::isfinite(fxf[k]))
+                << "lane " << lane << " derivs component " << k << " must be finite";
+        }
+    }
+}
