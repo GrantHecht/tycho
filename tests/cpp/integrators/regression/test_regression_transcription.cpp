@@ -37,6 +37,32 @@ static void expect_vector_match(const Eigen::VectorXd &actual, const Eigen::Vect
     }
 }
 
+// Relative-tolerance matchers for cases where the golden magnitude spans
+// several orders (e.g. single-step transcription Jacobians / Hessians where
+// absolute-tolerance comparisons collapse to either bit-exact or useless).
+// tol is per-element: |actual - golden| <= tol * max(|golden|, 1.0).
+static void expect_matrix_match_rel(const Eigen::MatrixXd &actual, const Eigen::MatrixXd &golden,
+                                    double tol, const std::string &label) {
+    ASSERT_EQ(actual.rows(), golden.rows()) << label << ": row count mismatch";
+    ASSERT_EQ(actual.cols(), golden.cols()) << label << ": col count mismatch";
+    for (int i = 0; i < actual.rows(); ++i) {
+        for (int j = 0; j < actual.cols(); ++j) {
+            double scale = std::max(std::abs(golden(i, j)), 1.0);
+            EXPECT_NEAR(actual(i, j), golden(i, j), tol * scale)
+                << label << ": mismatch at (" << i << "," << j << ")";
+        }
+    }
+}
+
+static void expect_vector_match_rel(const Eigen::VectorXd &actual, const Eigen::VectorXd &golden,
+                                    double tol, const std::string &label) {
+    ASSERT_EQ(actual.size(), golden.size()) << label << ": size mismatch";
+    for (int i = 0; i < actual.size(); ++i) {
+        double scale = std::max(std::abs(golden[i]), 1.0);
+        EXPECT_NEAR(actual[i], golden[i], tol * scale) << label << ": element " << i;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Case 8: Two-body Jacobian via integrate_stm
 ///////////////////////////////////////////////////////////////////////////////
@@ -143,31 +169,29 @@ TEST_F(RegressionTranscriptionTest, Case10_BatchJacobians) {
 }
 
 // -----------------------------------------------------------------------------
-// Cases 11-12: KNOWN-DIVERGENCE (SP4 tolerance policy follow-up).
+// Cases 11-12: single-step transcription regression — SP4-provisional tol.
 //
-// These two cases pin single-step Jacobian (Case 11) and Jacobian+Hessian
-// (Case 12) outputs against goldens at tol=0.0. They pass today on the
-// platform that produced the goldens (Linux / clang-release / FP SAFER_FAST),
-// but the PR description flags tol=0.0 here as provisional — the right
-// tolerance for single-step transcription cases is an SP4 open question.
-//
-// If you touched these tests or regenerated the golden files, consult the
-// SP4 tolerance-policy discussion before accepting drift. A regeneration
-// that bakes drift into the golden looks identical to a "clean" regen at
-// tol=0.0; this banner is the only signal that the strict check is
-// provisional, not a committed contract.
+// Single-step Jacobian (Case 11) and Jacobian+Hessian (Case 12) pins exercise
+// the non-adaptive integrate_stm / integrate_stm2 paths that aren't covered
+// by the adaptive-path regression suite. Tolerance is intentionally looser
+// than Cases 8-10 (which pin bit-exact) because the controller-variant
+// reorganization introduced drift at the level of the last few mantissa
+// bits; SP4 will either tighten the tol or regenerate the goldens under a
+// finalized tolerance policy.
 //
 // Grep for "KNOWN-DIVERGENCE-SP4" to locate all affected sites.
 // -----------------------------------------------------------------------------
 
+// SP4-provisional relative tolerance: catches refactor regressions that
+// shift results by more than ~1e-10 × scale without imposing a bit-exact
+// contract. Tighten in SP4 alongside tolerance-policy finalization.
+static constexpr double kSp4ProvisionalRelTol = 1e-10;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Case 11: Two-body single-step Jacobian via integrate_stm (DOPRI54)
-// KNOWN-DIVERGENCE-SP4: tol=0.0 is provisional pending tolerance policy.
+// KNOWN-DIVERGENCE-SP4: tolerance is provisional pending SP4 policy.
 ///////////////////////////////////////////////////////////////////////////////
 TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergenceSP4) {
-    GTEST_SKIP() << "KNOWN-DIVERGENCE-SP4: tol=0 golden drifts under controller-variant "
-                    "reorganization. Pending policy decision on tolerance relax vs. golden "
-                    "regeneration — see bench/build_perf/2026-04-18-phaseC-deferred/README.md";
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-13);
@@ -185,18 +209,15 @@ TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergenceSP4
     auto golden_jx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match(xf_dyn, golden_xf, 0.0, "Case11_xf");
-    expect_matrix_match(jx, golden_jx, 0.0, "Case11_Jacobian");
+    expect_vector_match_rel(xf_dyn, golden_xf, kSp4ProvisionalRelTol, "Case11_xf");
+    expect_matrix_match_rel(jx, golden_jx, kSp4ProvisionalRelTol, "Case11_Jacobian");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 12: Two-body single-step Jacobian+Hessian via integrate_stm2 (DOPRI87)
-// KNOWN-DIVERGENCE-SP4: tol=0.0 is provisional pending tolerance policy.
+// KNOWN-DIVERGENCE-SP4: tolerance is provisional pending SP4 policy.
 ///////////////////////////////////////////////////////////////////////////////
 TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDivergenceSP4) {
-    GTEST_SKIP() << "KNOWN-DIVERGENCE-SP4: tol=0 golden drifts under controller-variant "
-                    "reorganization. Pending policy decision on tolerance relax vs. golden "
-                    "regeneration — see bench/build_perf/2026-04-18-phaseC-deferred/README.md";
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
@@ -228,7 +249,7 @@ TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDiverg
     auto golden_hx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match(xf_dyn, golden_xf, 0.0, "Case12_xf");
-    expect_matrix_match(jx, golden_jx, 0.0, "Case12_Jacobian");
-    expect_matrix_match(hx, golden_hx, 0.0, "Case12_Hessian");
+    expect_vector_match_rel(xf_dyn, golden_xf, kSp4ProvisionalRelTol, "Case12_xf");
+    expect_matrix_match_rel(jx, golden_jx, kSp4ProvisionalRelTol, "Case12_Jacobian");
+    expect_matrix_match_rel(hx, golden_hx, kSp4ProvisionalRelTol, "Case12_Hessian");
 }

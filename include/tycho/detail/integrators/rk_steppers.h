@@ -284,8 +284,6 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 
             ht_par = (xi_jac.transpose() * k_grads[0]) * (1.0 / h);
 
-            //
-
             for (int i = 0; i < Stgsm1; i++) {
                 Scalar ti = t0 + RKData::C[i] * h;
                 xi_jac.setIdentity();
@@ -355,9 +353,8 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
 
-    /// These Methods are being nulled because it is not
-    /// possible for them to be called
-
+    /// Required by SolverBase but unreachable — RKStepper is never added
+    /// as a constraint. Defined as empty to satisfy the interface.
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {};
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
@@ -406,7 +403,6 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         auto args = Arguments<DODE::IRC + 1 + (Stg + 1) * DODE::XV>();
         auto empty = std::tuple{};
 
-        // auto xi = kth_stage_sum<Stg, 0, decltype(args)>(ode, args);
         auto xi = kth_stage_sum2<Stg, 0, decltype(args), decltype(empty)>(ode, args, empty);
 
         auto t0 = args.template coeff<XV>();

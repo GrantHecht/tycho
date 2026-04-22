@@ -356,15 +356,11 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // is invalidated by the next step() call (see Stepper::peek_fsal
             // docstring).
             if (storederivs) {
-                // peek_fsal requires fresh k_fsal_. In this branch storederivs
-                // is true, which guarantees the preceding step() call passed
-                // compute_midpoint=(storemidpoints || storederivs)=true — the
-                // precondition that makes k_fsal_ valid even for non-FSAL
-                // methods. Assert documents the contract; a future refactor
-                // that decouples compute_midpoint from storederivs would trip
-                // this in debug builds.
-                assert((storemidpoints || storederivs) &&
-                       "peek_fsal requires compute_midpoint=true in preceding step");
+                // peek_fsal requires fresh k_fsal_. The preceding step()
+                // call passed compute_midpoint=(storemidpoints||storederivs),
+                // so storederivs=true here implies compute_midpoint was
+                // true — the precondition that makes k_fsal_ valid even for
+                // non-FSAL methods. See stepper.h peek_fsal docstring.
                 xdoti = stepper_.peek_fsal();
             }
             prev_event_vals = next_event_vals;

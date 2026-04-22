@@ -360,12 +360,9 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                     } else if (storederivs) {
                         // Precondition: compute_midpoint was true in the
                         // preceding step() call. The expression passed at
-                        // step-call site is (storemidpoints || storederivs);
-                        // in this branch storederivs is true so the
-                        // expression is true. A future refactor that
-                        // decouples the two would trip this in debug.
-                        assert((storemidpoints || storederivs) &&
-                               "peek_fsal requires compute_midpoint=true in preceding step");
+                        // the step-call site is (storemidpoints || storederivs);
+                        // storederivs=true in this branch guarantees it.
+                        // See stepper.h peek_fsal docstring.
                         xdotnext_ss = stepper_.peek_fsal();
                     }
 

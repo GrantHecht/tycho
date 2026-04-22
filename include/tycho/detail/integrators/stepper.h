@@ -12,8 +12,8 @@ namespace tycho::integrators {
 
 /// Stateful IVP stepper that performs one RK step using the BumpAllocator
 /// for stage buffers. Maintains FSAL cache between consecutive steps and
-/// supports the interpolant extra-stage path used by BS5/Tsit5/Vern7/8/9
-/// for dense-output midpoint reconstruction.
+/// supports the interpolant extra-stage path for dense-output midpoint
+/// reconstruction (BS5, Tsit5, Vern7/8/9).
 ///
 /// Template parameters:
 ///   Alg   — IVPAlg enum selecting the Butcher tableau
@@ -43,9 +43,9 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
         bool valid;
     };
 
-    /// Seed f(xi) into the FSAL cache and mark it valid. Used by batch/SIMD
-    /// callers (ParallelDriver) that compute the per-lane derivative outside
-    /// the stepper and want the next step() to reuse it as stage 0.
+    /// Seed f(xi) into the FSAL cache and mark it valid. Callers that
+    /// compute the per-lane derivative outside the stepper can use this to
+    /// have the next step() reuse it as stage 0.
     void seed_fsal(const ODEDeriv &k) {
         k_fsal_ = k;
         fsal_valid_ = true;
@@ -54,8 +54,9 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// Snapshot k_fsal_ + fsal_valid_ for later restore_fsal().
     FsalSnapshot snapshot_fsal() const { return {k_fsal_, fsal_valid_}; }
 
-    /// Restore a previously-snapshotted FSAL state. Used by AdaptiveDriver on
-    /// reject so the retry's stage 0 reads the pre-step f(xi).
+    /// Restore a previously-snapshotted FSAL state. Pairs with
+    /// snapshot_fsal() for reject-rollback so the retry's stage 0 reads
+    /// the pre-step f(xi).
     void restore_fsal(const FsalSnapshot &s) {
         k_fsal_ = s.k;
         fsal_valid_ = s.valid;
@@ -68,10 +69,11 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// to recover f(xnext) must gate on fsal_valid() — the Vern* midpoint
     /// branch populates k_fsal_ but intentionally leaves fsal_valid_=false.
     ///
-    /// Aliasing contract: the returned reference aliases the internal buffer
-    /// and is invalidated by any subsequent call to step(), seed_fsal(), or
-    /// reset_fsal(). Do not hold the reference across those calls — copy
-    /// the value out first.
+    /// Aliasing contract: the returned reference aliases the internal
+    /// buffer. Its contents become stale after any subsequent step() or
+    /// seed_fsal() call (both overwrite k_fsal_); reset_fsal() flips
+    /// fsal_valid_ to false but leaves the buffer untouched. Copy the
+    /// value out first if you need to hold it across any of these calls.
     const ODEDeriv &peek_fsal() const { return k_fsal_; }
     bool fsal_valid() const { return fsal_valid_; }
 

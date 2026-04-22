@@ -91,9 +91,9 @@ using vf::StackedOutputs;
 using vf::VecRef;
 using vf::VectorFunction;
 
-/// Dispatch `fn` with a compile-time IVPAlg tag matching the runtime `alg`.
-/// Used by Integrator to turn its runtime rk_method_ selector into a
-/// compile-time Alg parameter for AdaptiveDriver<Alg,...> / ParallelDriver<Alg,...>.
+/// Dispatch `fn` with a compile-time IVPAlg tag matching the runtime `alg`,
+/// so a runtime rk_method_ selector can drive templated code that needs a
+/// compile-time Alg parameter (AdaptiveDriver<Alg,...>, ParallelDriver<Alg,...>).
 /// Throws std::logic_error for internal tags that should never reach this
 /// dispatch (RK4Classic, DOPRI5, *Trans). Public-selectable methods map
 /// to their own std::integral_constant<IVPAlg, ...> tag.
@@ -264,7 +264,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         case IVPAlg::DOPRI54:
             this->rk_method_ = IVPAlg::DOPRI54;
             this->error_order_ = 4;
-            // Using DOPRI5 rather than DOPRI54 here is not a mistake
+            // DOPRI5 is the transcription-side tableau tag; DOPRI54 is the
+            // runtime user-facing name (see rk_coeffs.h enum documentation).
             this->init_stepper_and_controller<IVPAlg::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
             break;
         case IVPAlg::DOPRI87:
@@ -472,11 +473,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return ctrls;
     }
 
-    /// Compose and throw the aggregated segment-failure diagnostic used by
-    /// both integrate_stm_parallel unwind paths. `primary_tag` identifies which
-    /// side raised the primary failure (main-thread vs. worker segment);
-    /// `extras` holds the drained-future what() strings. Caps at kMaxExtras
-    /// to keep the composite message bounded under large n_parts.
+    /// Compose and throw the aggregated segment-failure diagnostic.
+    /// `primary_tag` identifies which side raised the primary failure
+    /// (main-thread vs. worker segment); `extras` holds the drained-future
+    /// what() strings. Caps at kMaxExtras to keep the composite message
+    /// bounded under large n_parts.
     [[noreturn]] static void
     throw_aggregated_segment_failure(const char *primary_tag, const char *extras_tag,
                                      const std::string &primary_msg,
@@ -504,16 +505,30 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         "Initial step size must be strictly positive (backward integration is driven by tf < t0, "
         "not by sign of h; zero would divide-by-zero in the fixed-step path).";
 
-    /// Invoke `f()` and, if it throws `std::exception`, rethrow as a
-    /// std::runtime_error prefixed with `"trajectory i: "`. A single lane's
-    /// failure in a thousand-lane batch then identifies itself in the error
-    /// message without the caller having to correlate order of arrival with
-    /// trajectory index.
+    /// Invoke `f()` and, if it throws, rethrow with `"trajectory i: "`
+    /// prefix on the message. A single lane's failure in a thousand-lane
+    /// batch then identifies itself in the error message without the
+    /// caller having to correlate order of arrival with trajectory index.
+    ///
+    /// Preserves the thrown type across common std::exception subclasses
+    /// so nanobind can map a bad-config std::invalid_argument to Python's
+    /// ValueError rather than collapsing every worker fault to RuntimeError.
     template <class F> static auto decorate_trajectory(int i, F &&f) {
+        auto decorate = [i](const char *w) {
+            return "trajectory " + std::to_string(i) + ": " + w;
+        };
         try {
             return std::forward<F>(f)();
+        } catch (const std::invalid_argument &e) {
+            throw std::invalid_argument(decorate(e.what()));
+        } catch (const std::out_of_range &e) {
+            throw std::out_of_range(decorate(e.what()));
+        } catch (const std::domain_error &e) {
+            throw std::domain_error(decorate(e.what()));
+        } catch (const std::logic_error &e) {
+            throw std::logic_error(decorate(e.what()));
         } catch (const std::exception &e) {
-            throw std::runtime_error("trajectory " + std::to_string(i) + ": " + e.what());
+            throw std::runtime_error(decorate(e.what()));
         }
     }
 
@@ -539,8 +554,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     };
 
-    // Vector analogue of CounterWriteback: sums per-trajectory per-lane
-    // counters into the member counters on scope exit.
+    // Vector analogue of CounterWriteback: sums per-trajectory counters
+    // into the member counters on scope exit.
     struct BatchCounterWriteback {
         const Integrator &integ;
         const std::vector<int> &nacc;
@@ -709,6 +724,44 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->max_event_iters_ = n;
     }
     int get_max_event_iters() const { return this->max_event_iters_; }
+
+    /// Active RK method. Exposed so other Integrator instantiations can copy
+    /// settings across different DODE template parameters without needing to
+    /// be declared a friend.
+    IVPAlg get_method() const { return this->rk_method_; }
+
+    /// Copy all user-settable configuration from another Integrator —
+    /// potentially over a different DODE type, as in the shooter/
+    /// reintegrator construction path in ode_phase.h.
+    ///
+    /// Copies: adaptive flag, tolerance vectors, max-steps cap,
+    /// vectorization flags, RK method selection, controller variant
+    /// (including any tuning), error-norm type, max-step-change clamp,
+    /// event-tolerance and max-event-iters, Hairer-Wanner auto-initdt
+    /// policy, and the default step size.
+    ///
+    /// Does NOT copy ODE-structure state (ode_, stepper_, controller_,
+    /// use_controller_) — those are owned by the target Integrator's
+    /// construction and must remain tied to the target's ODE type. Also
+    /// does NOT copy per-call output counters (naccept_, nreject_,
+    /// n_failed_event_refinements_).
+    template <class OtherDODE>
+    void copy_settings_from(const Integrator<OtherDODE> &src) {
+        this->adaptive_ = src.adaptive_;
+        this->abs_tols_ = src.abs_tols_;
+        this->rel_tols_ = src.rel_tols_;
+        this->max_steps_ = src.get_max_steps();
+        this->enable_vectorization_ = src.enable_vectorization_;
+        this->vectorize_batch_calls_ = src.vectorize_batch_calls_;
+        this->rk_method_ = src.get_method();
+        this->controller_variant_ = src.controller_variant_;
+        this->error_norm_type_ = src.error_norm_type_;
+        this->max_step_change_ = src.max_step_change_;
+        this->event_tol_ = src.event_tol_;
+        this->max_event_iters_ = src.max_event_iters_;
+        this->use_hairer_wanner_initdt_ = src.use_hairer_wanner_initdt_;
+        this->def_step_size_ = src.def_step_size_;
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1039,6 +1092,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     /// @}
 
+  public:
+    /// Refine the bracketed event crossings in `eventtimes` against an
+    /// interpolation table. Public to enable direct coverage of the
+    /// std::nullopt / n_failed_event_refinements_ contract without routing
+    /// through an integrate() call that constructs the bracket itself;
+    /// documented in event_handler.h:107-117.
     EventLocsType find_events(std::shared_ptr<LGLInterpTable> tab,
                               const std::vector<EventPack> &events,
                               const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
@@ -1048,6 +1107,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->event_tol_, this->n_failed_event_refinements_);
     }
 
+    /// Build an LGLInterpTable from a dense state sequence. Public so that
+    /// tests (and future callers) can construct a table for find_events
+    /// without re-running a dense integrate.
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
                                                bool fifthorder) const {
         std::vector<Eigen::VectorXd> xs_in;
@@ -1089,6 +1151,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return tab;
     }
 
+  protected:
     std::vector<ODEState<double>> midpoints_removed(const std::vector<ODEState<double>> &xs) const {
         std::vector<ODEState<double>> x_new;
         x_new.reserve((xs.size() - 1) / 2.0);
@@ -1262,7 +1325,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                 const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
+                                 const Eigen::VectorXd &tfs, int n_parts,
+                                 std::vector<int> &nacc_out, std::vector<int> &nrej_out,
+                                 Args &&...args)
         -> std::vector<decltype(Integrator::integrate(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1285,6 +1350,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 nr = 0;
                 results[i] = decorate_trajectory(
                     i, [&] { return this->integrate_core(x0s[i], tfs[i], args..., ctrl, na, nr); });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
             }
         };
 
@@ -1292,22 +1359,25 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// Parallel batch integrate.
-    /// Note: `get_naccept()` / `get_nreject()` are NOT updated by the
-    /// parallel path (workers use per-iteration local counters to avoid
-    /// cross-thread writes to member state). Values reflect whatever
-    /// state the members held before this call.
+    /// Parallel batch integrate. Accept/reject counters are summed across
+    /// lanes into `get_naccept()` / `get_nreject()` on scope exit via
+    /// BatchCounterWriteback (RAII-safe on unwind).
     std::vector<IntegRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                              const Eigen::VectorXd &tfs, int n_parts) {
-        return this->integrate_parallel_impl(x0s, tfs, n_parts);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_parallel_impl(x0s, tfs, n_parts, nacc, nrej);
     }
-    /// Parallel batch integrate with events. Same `get_naccept()` /
-    /// `get_nreject()` contract as the no-events overload.
+    /// Parallel batch integrate with events. @see integrate_parallel.
     std::vector<IntegEventRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                                   const Eigen::VectorXd &tfs,
                                                   const std::vector<EventPack> &events,
                                                   int n_parts) {
-        return this->integrate_parallel_impl(x0s, tfs, n_parts, events);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_parallel_impl(x0s, tfs, n_parts, nacc, nrej, events);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1361,7 +1431,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     template <class... Args>
     auto integrate_dense_parallel_impl(const std::vector<ODEState<double>> &x0s,
-                                       const Eigen::VectorXd &tfs, int n_parts, Args &&...args)
+                                       const Eigen::VectorXd &tfs, int n_parts,
+                                       std::vector<int> &nacc_out, std::vector<int> &nrej_out,
+                                       Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1385,6 +1457,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 results[i] = decorate_trajectory(i, [&] {
                     return this->integrate_dense_core(x0s[i], tfs[i], args..., ctrl, na, nr);
                 });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
             }
         };
 
@@ -1392,26 +1466,31 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// Parallel batch dense integrate. @see integrate_parallel for the
-    /// `get_naccept()` / `get_nreject()` contract.
+    /// Parallel batch dense integrate. @see integrate_parallel for counters.
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs, int n_parts) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, nacc, nrej);
     }
-    /// Parallel batch dense integrate with events. Same `get_naccept()` /
-    /// `get_nreject()` contract as the no-events overload.
+    /// Parallel batch dense integrate with events. @see integrate_parallel.
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<EventPack> &events,
                                                         int n_parts) {
-        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, events, false);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, nacc, nrej, events, false);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
     template <class... Args>
     auto integrate_dense_parallel_impl_n(const std::vector<ODEState<double>> &x0s,
                                          const Eigen::VectorXd &tfs, const std::vector<int> &ns,
-                                         int n_parts, Args &&...args)
+                                         int n_parts, std::vector<int> &nacc_out,
+                                         std::vector<int> &nrej_out, Args &&...args)
         -> std::vector<decltype(Integrator::integrate_dense(x0s[0], tfs[0], ns[0], args...))> {
 
         if (x0s.size() != tfs.size()) {
@@ -1439,6 +1518,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 results[i] = decorate_trajectory(i, [&] {
                     return this->integrate_dense_core(x0s[i], tfs[i], ns[i], args..., ctrl, na, nr);
                 });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
             }
         };
 
@@ -1447,19 +1528,25 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /// Parallel batch dense integrate with per-trajectory state counts.
-    /// @see integrate_parallel for the `get_naccept()` / `get_nreject()` contract.
+    /// @see integrate_parallel for counters.
     std::vector<DenseEventRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                         const Eigen::VectorXd &tfs,
                                                         const std::vector<int> &ns,
                                                         const std::vector<EventPack> &events,
                                                         int n_parts) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, events);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, nacc, nrej, events);
     }
     /// Parallel batch dense integrate with per-trajectory state counts (no events).
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
                                                    const Eigen::VectorXd &tfs,
                                                    const std::vector<int> &ns, int n_parts) {
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nacc(n, 0), nrej(n, 0);
+        BatchCounterWriteback _writeback{*this, nacc, nrej};
+        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, nacc, nrej);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1742,6 +1829,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         jx = std::get<0>(res);
         adjhess = std::get<1>(res);
         adjgrad = jx.transpose() * adjvars;
+        // jx and adjhess are guarded inside STMDriver via check_stm_finite_or_throw,
+        // but adjgrad = jx^T · adjvars can still produce NaN if the caller
+        // supplied non-finite adjvars. Localize that failure here rather than
+        // letting it propagate into the solver as a silent bad gradient.
+        if (!adjgrad.allFinite()) {
+            throw std::runtime_error(
+                "Non-finite adjoint gradient in "
+                "compute_jacobian_adjointgradient_adjointhessian_impl; "
+                "adjvars contained NaN/Inf.");
+        }
     }
 
     /////////////////////////////////////////////////////////////////////////////////////

@@ -13,9 +13,8 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// TychoBind<Integrator<DODE>> specialization and IntegratorBuildConstructors free function.
-// Replaces the out-of-class Integrator<DODE>::Build() and BuildConstructors() definitions
-// that were previously included from Integrator.h.
+// TychoBind<Integrator<DODE>> specialization + IntegratorBuildConstructors
+// free function (nanobind binding for the Integrator template).
 
 #include "dense_function_base_bind.h"
 

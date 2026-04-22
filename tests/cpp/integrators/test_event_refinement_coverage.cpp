@@ -134,6 +134,68 @@ TEST_F(EventRefinementCoverageTest, NoEvents_CounterRemainsZero) {
     EXPECT_EQ(integ.get_failed_event_count(), 0);
 }
 
+// Force the nullopt-and-counter-increment path by calling find_events
+// with a hand-crafted bracket that the event VF cannot satisfy. `event_func
+// = x[0] - 10000` is strictly negative across the Kepler orbit (position
+// magnitude stays under 10000 km for the setup below), so Newton — starting
+// from the 2-iter bisect midpoint where fx ≈ -constant and jx ≈ vx — lands
+// far outside the original [tlow, thigh] bracket on both the fast and the
+// wide passes. That's precisely the condition at event_handler.h:254 where
+// `eventstates[i].emplace_back(std::nullopt)` fires and
+// `++n_failed_refinements` runs.
+TEST_F(EventRefinementCoverageTest, Nullopt_WhenRefinementOvershootsBracket) {
+    astro::Kepler kep(kErcMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-13);
+
+    auto x0 = erc_eccentric_x0();
+    double tf = erc_eccentric_period();
+
+    // Build a dense trajectory including midpoints so make_table can
+    // populate an LGL3 interpolation table. The with-events overload at
+    // alloutput=true is the public way to get state + midpoint + state
+    // interleaving without events shaping the output.
+    std::vector<Integrator<astro::Kepler>::EventPack> no_events;
+    auto [xs, _ignored_eventlocs] =
+        integ.integrate_dense(x0, tf, no_events, /*alloutput=*/true);
+    ASSERT_GT(static_cast<int>(xs.size()), 2) << "Need at least two dense points";
+
+    // Event VF: x_position - 10000 km — never zero on this orbit, so any
+    // bracket handed to find_events is a fake. The Newton step fx/jx ≈
+    // (-10000)/vx is tens of km/s large; from a tig in a few-second bracket
+    // this lands well outside.
+    auto args = Arguments<7>();
+    auto event_expr = args.coeff<0>() + (-10000.0);
+    GenericFunction<-1, 1> gf(event_expr);
+    std::vector<Integrator<astro::Kepler>::EventPack> events;
+    events.push_back({gf, 0, 0});
+
+    // Fabricate a crossing bracket between xs[0] and xs[1] — the table
+    // supports interpolation over that window, and the bracket width is
+    // small enough that Newton's fx/jx overshoot deterministically exits
+    // the [tlow, thigh] range. Kepler state layout: [r(0..2), v(3..5), t].
+    constexpr int kKeplerTVar = 6;
+    double tlow = xs[0][kKeplerTVar];
+    double thigh = xs[1][kKeplerTVar];
+    if (thigh < tlow)
+        std::swap(tlow, thigh);
+    std::vector<std::vector<Eigen::Vector2d>> eventtimes(1);
+    eventtimes[0].emplace_back(tlow, thigh);
+
+    // fifthorder=false (LGL3) — we only need a bracket that interpolates
+    // cleanly; the precise interp order doesn't change the overshoot.
+    auto tab = integ.make_table(xs, /*fifthorder=*/false);
+    auto eventlocs = integ.find_events(tab, events, eventtimes);
+
+    ASSERT_EQ(eventlocs.size(), 1u);
+    ASSERT_EQ(eventlocs[0].size(), 1u);
+    EXPECT_FALSE(eventlocs[0][0].has_value())
+        << "Bracket with no real crossing and overshooting Newton must emit std::nullopt";
+    EXPECT_EQ(integ.get_failed_event_count(), 1)
+        << "Counter must increment once per emitted nullopt";
+}
+
 // The counter is reset at the start of each find_events call — a second
 // event-bearing integration must not accumulate state from the first.
 TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {

@@ -327,8 +327,7 @@ update_controller(ControllerVariant &v, double h, double err_norm, int order, in
 }
 
 /// Reset whichever controller is active in the variant to its first-step
-/// state. Used by `make_worker_controller()` when cloning the prototype
-/// for a lane/segment, and at every `set_method`/`set_controller` site.
+/// state (err history, qold_, etc.) so a cloned prototype starts clean.
 [[gnu::always_inline]] inline void reset_controller(ControllerVariant &v) {
     std::visit([](auto &c) { c.reset(); }, v);
 }

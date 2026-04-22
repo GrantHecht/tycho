@@ -102,7 +102,7 @@ TEST_F(IntegratorTest, ParallelIntegrateDeterministicAcrossRepeats) {
     }
 }
 
-TEST_F(IntegratorTest, ParallelIntegrateLeavesCountersUntouched) {
+TEST_F(IntegratorTest, ParallelIntegrateReflectsSummedBatchCounts) {
     SHO ode(0.0);
     Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
     tighten(integ);
@@ -110,21 +110,28 @@ TEST_F(IntegratorTest, ParallelIntegrateLeavesCountersUntouched) {
     auto x0s = make_batch();
     auto tfs = make_tfs();
 
-    // Seed the counters with a known serial-run value.
-    auto _ignore = integ.integrate(x0s[0], tfs[0]);
-    (void)_ignore;
-    const int seed_naccept = integ.get_naccept();
-    const int seed_nreject = integ.get_nreject();
+    // Baseline: accumulate the serial batch by calling integrate() on each
+    // trajectory; the member counters hold the last call's counts after
+    // each invocation (CounterWriteback overwrites per call). Sum by
+    // re-querying after every integrate to get the batch total.
+    int serial_total_naccept = 0;
+    int serial_total_nreject = 0;
+    for (int i = 0; i < kBatchSize; ++i) {
+        (void)integ.integrate(x0s[i], tfs[i]);
+        serial_total_naccept += integ.get_naccept();
+        serial_total_nreject += integ.get_nreject();
+    }
 
     ScopedThreadCount threads(kNParts);
     auto _p = integ.integrate_parallel(x0s, tfs, kNParts);
     (void)_p;
 
-    // Contract: parallel workers use private local counters and never
-    // write to the `Integrator` members, so the values from the prior
-    // serial call survive.
-    EXPECT_EQ(integ.get_naccept(), seed_naccept);
-    EXPECT_EQ(integ.get_nreject(), seed_nreject);
+    // Contract (P1.1): parallel paths write the summed per-trajectory
+    // counts into the member counters on scope exit via
+    // BatchCounterWriteback. The sum must match the serial-path total
+    // because both paths integrate the same trajectories deterministically.
+    EXPECT_EQ(integ.get_naccept(), serial_total_naccept);
+    EXPECT_EQ(integ.get_nreject(), serial_total_nreject);
 }
 
 TEST_F(IntegratorTest, ParallelIntegrateDenseMatchesSerial) {

@@ -312,18 +312,24 @@ class ThreadPool {
                         if (!m_queues[i].pop(f))
                             break; // shutdown
                     }
-                    // Execute and signal completion
+                    // Execute and signal completion. enqueue_work is the
+                    // private fire-and-forget path — all public callers go
+                    // through submit_task() / DispatchContext which own
+                    // exception propagation. A throw here means a wrapper
+                    // was bypassed; swallowing would let the main thread
+                    // report success while a worker died. Fatal-terminate
+                    // instead so the failure is unmissable.
                     try {
                         f();
                     } catch (const std::exception &e) {
-                        // Safety net: enqueue_work is private, so this only fires if
-                        // a DispatchContext or packaged_task wrapper is bypassed.
                         std::fprintf(stderr,
-                                     "[Tycho] Unhandled exception in enqueue_work task: %s\n",
+                                     "[Tycho] FATAL: unhandled exception in enqueue_work task: %s\n",
                                      e.what());
+                        std::terminate();
                     } catch (...) {
                         std::fprintf(stderr,
-                                     "[Tycho] Unhandled non-std::exception in enqueue_work task\n");
+                                     "[Tycho] FATAL: unhandled non-std::exception in enqueue_work task\n");
+                        std::terminate();
                     }
                     if (m_tasks_pending.fetch_sub(1, std::memory_order_release) == 1)
                         m_tasks_pending.notify_all();

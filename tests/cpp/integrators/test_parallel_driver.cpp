@@ -220,22 +220,24 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
 }
 
 // -----------------------------------------------------------------------------
-// Non-FSAL storederivs regression (c77b6b9). Vern7/8/9 do not carry f(xf) in
-// k_vals.back(); Stepper::step writes k_fsal_ only when compute_midpoint was
-// passed (the !LastStageIsFxf midpoint branch). ParallelDriver's `else if
-// (storederivs)` arm reads that write via peek_fsal; a regression that
-// skipped the arm (pre-c77b6b9 state) would leave the final derivs slot
-// un-updated. This test pins the symmetry with AdaptiveDriver.
+// Non-FSAL storederivs regression (c77b6b9). DOPRI87/Vern7/Vern8/Vern9 do not
+// carry f(xf) in k_vals.back(); Stepper::step writes k_fsal_ only when
+// compute_midpoint was passed (the !LastStageIsFxf midpoint branch).
+// ParallelDriver's `else if (storederivs)` arm reads that write via
+// peek_fsal; a regression that skipped the arm (pre-c77b6b9 state) would
+// leave the final derivs slot un-updated. The helper is templated over
+// IVPAlg so every non-FSAL method is exercised, not just Vern7.
 //
 // No public API currently routes storederivs=true to ParallelDriver — the
 // batch overloads hardcode storederivs=false — but the test protects the
 // branch against future enablement and symmetric refactors.
 // -----------------------------------------------------------------------------
-TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern7) {
+template <IVPAlg Alg>
+static void run_non_fsal_storederivs_check(int error_order) {
     SHO ode(0.0);
-    ParallelDriver<IVPAlg::Vern7, SHO> driver;
+    ParallelDriver<Alg, SHO> driver;
     AdaptiveConfig cfg;
-    cfg.error_order = 7;
+    cfg.error_order = error_order;
     cfg.def_step_size = 0.01;
     cfg.adaptive = true;
     cfg.use_hairer_wanner_initdt = true;
@@ -255,12 +257,12 @@ TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern7) {
     for (auto &c : controllers)
         reset_controller(c);
     std::vector<int> nacc(N, 0), nrej(N, 0);
-    std::vector<ParallelDriver<IVPAlg::Vern7, SHO>::EventPack> events;
+    std::vector<typename ParallelDriver<Alg, SHO>::EventPack> events;
     std::vector<std::vector<std::vector<Eigen::Vector2d>>> eventtimes_s(N);
     std::vector<std::vector<Eigen::Vector3d>> states_s(N);
     std::vector<std::vector<typename SHO::template Output<double>>> derivs_s(N);
 
-    using PD = ParallelDriver<IVPAlg::Vern7, SHO>;
+    using PD = ParallelDriver<Alg, SHO>;
     // storestates=true is required to populate derivs_s — ParallelDriver
     // gates the derivs push on the state stream. The storederivs branch
     // we are testing lives inside `if (storestates)` blocks.
@@ -291,4 +293,17 @@ TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern7) {
                 << "lane " << lane << " derivs component " << k << " must be finite";
         }
     }
+}
+
+TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern7) {
+    run_non_fsal_storederivs_check<IVPAlg::Vern7>(7);
+}
+TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern8) {
+    run_non_fsal_storederivs_check<IVPAlg::Vern8>(8);
+}
+TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_Vern9) {
+    run_non_fsal_storederivs_check<IVPAlg::Vern9>(9);
+}
+TEST_F(ParallelDriverRunTest, NonFsalStoredDerivsMatchesFxfAtTf_DOPRI87) {
+    run_non_fsal_storederivs_check<IVPAlg::DOPRI87>(7);
 }
