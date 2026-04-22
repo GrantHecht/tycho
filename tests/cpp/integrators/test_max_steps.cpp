@@ -138,12 +138,6 @@ TEST_F(MaxStepsTest, BatchPathEnforcesCap) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Off-by-one regression: pick a problem whose adaptive run completes in
-// well under the cap, set max_steps to the natural count plus a safety
-// margin, and confirm integration succeeds. A future change that throws
-// when steps_attempted == max_steps_ rather than > would fail this case.
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
 // Parametric coverage: every user-selectable RK method honors the cap.
 // The throw site is inside AdaptiveDriver::integrate (templated on Alg);
 // a regression that disabled the check for one method would pass the
@@ -193,6 +187,12 @@ INSTANTIATE_TEST_SUITE_P(AllUserSelectableMethods, MaxStepsAllMethodsTest,
                                            MaxStepsMethodExpect{IVPAlg::Vern9, "Vern9"}),
                          [](const auto &info) { return info.param.name; });
 
+///////////////////////////////////////////////////////////////////////////////
+// Off-by-one regression: pick a problem whose adaptive run completes in
+// well under the cap, set max_steps to the natural count plus a safety
+// margin, and confirm integration succeeds. A future change that throws
+// when steps_attempted == max_steps_ rather than > would fail this case.
+///////////////////////////////////////////////////////////////////////////////
 TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
     astro::Kepler kep(kMuEarth);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
@@ -321,3 +321,51 @@ INSTANTIATE_TEST_SUITE_P(
                       EntrypointInfo{Entrypoint::IntegrateStm, "integrate_stm"},
                       EntrypointInfo{Entrypoint::IntegrateBatch, "integrate_batch"}),
     [](const auto &info) { return info.param.name; });
+
+///////////////////////////////////////////////////////////////////////////////
+// Symmetric guard for the reverse regression: a clean run after a failed run
+// must reflect only the clean run's counters, not accumulate stale state
+// from the prior failure. A fix that wrote counters only on exception
+// unwind (the inverse of the original bug) would pass the failure-path
+// test above but fail here.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(MaxStepsTest, CountersRepresentOnlyCleanRunAfterFailure) {
+    astro::Kepler kep(kMuEarth);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
+    integ.set_abs_tol(1.0e-30);
+    integ.set_rel_tol(1.0e-30);
+    integ.set_max_steps(50);
+
+    auto x0 = leo_x0();
+    double tf = leo_period();
+
+    // First: force a throw and capture the failure-path counter.
+    try {
+        integ.integrate(x0, tf);
+        FAIL() << "Expected runtime_error from first max_steps cap.";
+    } catch (const std::runtime_error &) {
+        // expected
+    }
+    const int failed_count = integ.get_naccept() + integ.get_nreject();
+    ASSERT_GT(failed_count, 0)
+        << "Precondition: failed run must have written a non-zero counter.";
+
+    // Now: reconfigure for a clean run on the same integrator and verify
+    // the counter reflects only the clean run, not the sum of both.
+    integ.set_abs_tol(1.0e-12);
+    integ.set_rel_tol(1.0e-13);
+    integ.set_max_steps(1000);
+
+    const double short_tf = leo_period() / 8.0; // distinct from the failed run
+    (void)integ.integrate(x0, short_tf);
+    const int clean_count = integ.get_naccept() + integ.get_nreject();
+
+    EXPECT_GT(clean_count, 0) << "Clean run must record a non-zero counter.";
+    // The clean run is over a much shorter interval with reasonable tolerances
+    // — its step count will be << the failed run's cap of 50. If the clean
+    // counter equals failed_count + clean_count (summing) we caught a
+    // regression that forgot to reset the member state on entry.
+    EXPECT_LT(clean_count, failed_count)
+        << "Clean-run counter must not accumulate stale state from the prior throw "
+           "(clean=" << clean_count << ", failed=" << failed_count << ").";
+}

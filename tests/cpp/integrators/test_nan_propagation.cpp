@@ -256,8 +256,8 @@ TEST_F(NanPropagationTest, EventVFReturningNaNThrowsWithContext) {
 // finite-state check fires before the STM chain runs; this pins the
 // end-to-end contract that the STM API does not silently return a
 // NaN-laced Jacobian. If a future change removes the upstream check, the
-// `check_stm_finite_or_throw` guard at stm_driver.h:133 is the last line
-// of defense — and these tests still expect a throw.
+// `check_stm_finite_or_throw` guard in STMDriver is the last line of
+// defense — and these tests still expect a throw.
 // -----------------------------------------------------------------------------
 TEST_F(NanPropagationTest, IntegrateStmThrowsAtOriginSingularity) {
     astro::Kepler kep(kMu);
