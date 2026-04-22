@@ -611,14 +611,47 @@ class TestBindingValidators(unittest.TestCase):
     def test_max_steps_enforces_cap(self):
         # Force a runaway by demanding an impossible tolerance, then cap at
         # a tiny value. The loop must trip the cap rather than spin forever.
+        # Assert the message names "max_steps" so a different RuntimeError
+        # (e.g., the non-finite-state guard) would not silently pass.
         integ = self._make()
         integ.set_abs_tol(1.0e-30)
         integ.set_rel_tol(1.0e-30)
         integ.set_max_steps(5)
         # LorenzODE has 3 state vars + 1 t_var.
         X0 = np.array([1.0, 1.0, 1.0, 0.0])
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "max_steps"):
             integ.integrate(X0, 10.0)
+
+    def test_max_steps_default_value(self):
+        # Default cap is 1_000_000 (integrator.h:443). A regression that
+        # changed the default would surface here as an unexpected value
+        # without breaking any integration in the examples.
+        integ = self._make()
+        self.assertEqual(integ.get_max_steps(), 1_000_000)
+
+    def test_integrate_stm2_exception_path(self):
+        # Pins e121ed2 (integrate_stm2 binding-layout fix) under an exception
+        # path. The fix removed a nanobind function-pointer cast that mismatched
+        # the return-slot layout for statically-sized DODEs (Kepler's
+        # 7-state/8-input Jacobian/Hessian). A regression would surface as a
+        # segfault or aligned_free on garbage pointers during unwind — not as
+        # a Python-visible RuntimeError. By forcing a throw mid-call on the
+        # Kepler static-sized path, we exercise the exception-propagation
+        # pathway of the binding return slot.
+        kepler_ode = ast.Astro.Kepler.ode(1)  # mu=1 (dimensionless units)
+        integ = kepler_ode.integrator(0.001)
+        integ.set_abs_tol(1.0e-30)
+        integ.set_rel_tol(1.0e-30)
+        integ.set_max_steps(5)
+
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.35
+        LF = np.ones(7)
+        LF[6] = 0.0
+
+        with self.assertRaises(RuntimeError):
+            integ.integrate_stm2([X0], np.array([10.0]), [LF])
 
 
 from mpl_toolkits.mplot3d import Axes3D
