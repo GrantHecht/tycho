@@ -163,13 +163,33 @@ struct EventHandler {
                 };
 
                 auto bisect = [&](auto tlow, auto thigh, int iters) {
+                    // Mirror the Newton sentinel (see above): a non-finite
+                    // event-function value at any sampled point poisons the
+                    // sign check (NaN >= 0 and NaN <= 0 both false under IEEE
+                    // 754, giving sgn == 0 for both endpoints; the loop then
+                    // walks `tlow` up without narrowing and returns an
+                    // in-bracket midpoint that can land near a spurious root).
+                    // Return a NaN midpoint so the caller's bracket comparison
+                    // falls into the wider-retry / std::nullopt path and the
+                    // failure-counter contract is preserved.
+                    auto nan_result = [&]() {
+                        return std::array<double, 3>{std::numeric_limits<double>::quiet_NaN(), tlow,
+                                                     thigh};
+                    };
+
                     double tm = (tlow + thigh) / 2.0;
                     x[0] = tlow;
                     fl = func.compute(x);
+                    if (!std::isfinite(fl[0])) {
+                        return nan_result();
+                    }
                     int sgnfl = (fl[0] >= 0) - (fl[0] <= 0);
 
                     x[0] = tm;
                     fx = func.compute(x);
+                    if (!std::isfinite(fx[0])) {
+                        return nan_result();
+                    }
                     int sgnfx = (fx[0] >= 0) - (fx[0] <= 0);
 
                     for (int bi = 0; bi < iters; bi++) {
@@ -186,6 +206,9 @@ struct EventHandler {
 
                         x[0] = tm;
                         fx = func.compute(x);
+                        if (!std::isfinite(fx[0])) {
+                            return nan_result();
+                        }
                         sgnfx = (fx[0] >= 0) - (fx[0] <= 0);
                     }
 
