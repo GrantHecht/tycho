@@ -14,6 +14,7 @@
 
 #include <Eigen/Core>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
@@ -350,11 +351,21 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                     // fresh — but if the caller asked us to store derivs,
                     // we still need f(xf) for this step's record. Stepper
                     // populates k_fsal_ = f(xf) whenever compute_midpoint
-                    // was set (stepper.h:166); peek_fsal is safe here
-                    // regardless of fsal_valid_.
+                    // was set in the preceding step() call (see the
+                    // !LastStageIsFxf branch of Stepper::step, which is the
+                    // Vern7/8/9 path); peek_fsal is safe here regardless of
+                    // fsal_valid_.
                     if constexpr (method_does_fsal) {
                         xdotnext_ss = stepper_.peek_fsal();
                     } else if (storederivs) {
+                        // Precondition: compute_midpoint was true in the
+                        // preceding step() call. The expression passed at
+                        // step-call site is (storemidpoints || storederivs);
+                        // in this branch storederivs is true so the
+                        // expression is true. A future refactor that
+                        // decouples the two would trip this in debug.
+                        assert((storemidpoints || storederivs) &&
+                               "peek_fsal requires compute_midpoint=true in preceding step");
                         xdotnext_ss = stepper_.peek_fsal();
                     }
 
