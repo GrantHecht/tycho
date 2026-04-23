@@ -30,8 +30,10 @@
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -265,7 +267,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->rk_method_ = IVPAlg::DOPRI54;
             this->error_order_ = 4;
             // DOPRI5 is the transcription-side tableau tag; DOPRI54 is the
-            // runtime user-facing name (see rk_coeffs.h enum documentation).
+            // runtime user-facing name.
             this->init_stepper_and_controller<IVPAlg::DOPRI5>(dode, usecontrol, ucon, varlocs_t);
             break;
         case IVPAlg::DOPRI87:
@@ -505,18 +507,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         "Initial step size must be strictly positive (backward integration is driven by tf < t0, "
         "not by sign of h; zero would divide-by-zero in the fixed-step path).";
 
-    /// Invoke `f()` and, if it throws, rethrow with `"trajectory i: "`
-    /// prefix on the message. A single lane's failure in a thousand-lane
-    /// batch then identifies itself in the error message without the
-    /// caller having to correlate order of arrival with trajectory index.
-    ///
-    /// Preserves the thrown type across common std::exception subclasses
-    /// so nanobind can map a bad-config std::invalid_argument to Python's
-    /// ValueError rather than collapsing every worker fault to RuntimeError.
+    /// Wrap `f()` so any std::exception it raises is rethrown with a
+    /// `"trajectory i: "` prefix; preserves the thrown type across the
+    /// four std::exception subclasses nanobind maps specifically
+    /// (invalid_argument, out_of_range, domain_error, logic_error);
+    /// anything else collapses to std::runtime_error.
     template <class F> static auto decorate_trajectory(int i, F &&f) {
-        auto decorate = [i](const char *w) {
-            return "trajectory " + std::to_string(i) + ": " + w;
-        };
+        auto decorate = [i](const char *w) { return "trajectory " + std::to_string(i) + ": " + w; };
         try {
             return std::forward<F>(f)();
         } catch (const std::invalid_argument &e) {
@@ -555,14 +552,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     };
 
     // Vector analogue of CounterWriteback: sums per-trajectory counters
-    // into the member counters on scope exit.
+    // into the member counters on scope exit. On exception the members
+    // reflect only trajectories that completed before the first failure;
+    // unstarted lanes contribute zero. Accumulate in int64 so extreme
+    // batches (millions of steps × thousands of trajectories) don't
+    // silently overflow the int sum before narrowing to the int counters.
     struct BatchCounterWriteback {
         const Integrator &integ;
         const std::vector<int> &nacc;
         const std::vector<int> &nrej;
         ~BatchCounterWriteback() noexcept {
-            integ.naccept_ = std::accumulate(nacc.begin(), nacc.end(), 0);
-            integ.nreject_ = std::accumulate(nrej.begin(), nrej.end(), 0);
+            long long nacc_sum = std::accumulate(nacc.begin(), nacc.end(), 0LL);
+            long long nrej_sum = std::accumulate(nrej.begin(), nrej.end(), 0LL);
+            assert(nacc_sum <= std::numeric_limits<int>::max() &&
+                   nrej_sum <= std::numeric_limits<int>::max() &&
+                   "Batch counter sum overflows int — consider widening Integrator counters.");
+            integ.naccept_ = static_cast<int>(nacc_sum);
+            integ.nreject_ = static_cast<int>(nrej_sum);
         }
     };
 
@@ -730,23 +736,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// be declared a friend.
     IVPAlg get_method() const { return this->rk_method_; }
 
-    /// Copy all user-settable configuration from another Integrator —
-    /// potentially over a different DODE type, as in the shooter/
-    /// reintegrator construction path in ode_phase.h.
-    ///
-    /// Copies: adaptive flag, tolerance vectors, max-steps cap,
-    /// vectorization flags, RK method selection, controller variant
-    /// (including any tuning), error-norm type, max-step-change clamp,
-    /// event-tolerance and max-event-iters, Hairer-Wanner auto-initdt
-    /// policy, and the default step size.
-    ///
-    /// Does NOT copy ODE-structure state (ode_, stepper_, controller_,
-    /// use_controller_) — those are owned by the target Integrator's
-    /// construction and must remain tied to the target's ODE type. Also
-    /// does NOT copy per-call output counters (naccept_, nreject_,
-    /// n_failed_event_refinements_).
-    template <class OtherDODE>
-    void copy_settings_from(const Integrator<OtherDODE> &src) {
+    /// Shallow-copy user-settable config from a source Integrator (possibly
+    /// over a different DODE template parameter); ODE-structure state and
+    /// per-call output counters are not copied.
+    template <class OtherDODE> void copy_settings_from(const Integrator<OtherDODE> &src) {
         this->adaptive_ = src.adaptive_;
         this->abs_tols_ = src.abs_tols_;
         this->rel_tols_ = src.rel_tols_;
@@ -1093,11 +1086,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @}
 
   public:
-    /// Refine the bracketed event crossings in `eventtimes` against an
-    /// interpolation table. Public to enable direct coverage of the
-    /// std::nullopt / n_failed_event_refinements_ contract without routing
-    /// through an integrate() call that constructs the bracket itself;
-    /// documented in event_handler.h:107-117.
+    /// Refine bracketed event crossings in `eventtimes` against an
+    /// interpolation table. Returns a vector aligned 1:1 with `eventtimes`:
+    /// each entry holds the refined ODEState, or std::nullopt when neither
+    /// the fast bisect+Newton pass nor the wider-bracket retry resolves the
+    /// crossing. n_failed_event_refinements_ increments once per nullopt.
     EventLocsType find_events(std::shared_ptr<LGLInterpTable> tab,
                               const std::vector<EventPack> &events,
                               const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
@@ -1107,9 +1100,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->event_tol_, this->n_failed_event_refinements_);
     }
 
-    /// Build an LGLInterpTable from a dense state sequence. Public so that
-    /// tests (and future callers) can construct a table for find_events
-    /// without re-running a dense integrate.
+    /// Build an LGLInterpTable from a dense state sequence for use with
+    /// find_events without re-running a dense integrate.
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
                                                bool fifthorder) const {
         std::vector<Eigen::VectorXd> xs_in;
@@ -1834,10 +1826,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // supplied non-finite adjvars. Localize that failure here rather than
         // letting it propagate into the solver as a silent bad gradient.
         if (!adjgrad.allFinite()) {
-            throw std::runtime_error(
-                "Non-finite adjoint gradient in "
-                "compute_jacobian_adjointgradient_adjointhessian_impl; "
-                "adjvars contained NaN/Inf.");
+            throw std::runtime_error("Non-finite adjoint gradient in "
+                                     "compute_jacobian_adjointgradient_adjointhessian_impl; "
+                                     "adjvars contained NaN/Inf.");
         }
     }
 

@@ -322,13 +322,14 @@ class ThreadPool {
                     try {
                         f();
                     } catch (const std::exception &e) {
-                        std::fprintf(stderr,
-                                     "[Tycho] FATAL: unhandled exception in enqueue_work task: %s\n",
-                                     e.what());
+                        std::fprintf(
+                            stderr, "[Tycho] FATAL: unhandled exception in enqueue_work task: %s\n",
+                            e.what());
                         std::terminate();
                     } catch (...) {
-                        std::fprintf(stderr,
-                                     "[Tycho] FATAL: unhandled non-std::exception in enqueue_work task\n");
+                        std::fprintf(
+                            stderr,
+                            "[Tycho] FATAL: unhandled non-std::exception in enqueue_work task\n");
                         std::terminate();
                     }
                     if (m_tasks_pending.fetch_sub(1, std::memory_order_release) == 1)

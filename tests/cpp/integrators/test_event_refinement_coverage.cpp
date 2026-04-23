@@ -140,10 +140,12 @@ TEST_F(EventRefinementCoverageTest, NoEvents_CounterRemainsZero) {
 // magnitude stays under 10000 km for the setup below), so Newton — starting
 // from the 2-iter bisect midpoint where fx ≈ -constant and jx ≈ vx — lands
 // far outside the original [tlow, thigh] bracket on both the fast and the
-// wide passes. That's precisely the condition at event_handler.h:254 where
-// `eventstates[i].emplace_back(std::nullopt)` fires and
-// `++n_failed_refinements` runs.
-TEST_F(EventRefinementCoverageTest, Nullopt_WhenRefinementOvershootsBracket) {
+// wide passes. That's precisely the condition under which find_events
+// emits std::nullopt and increments n_failed_refinements_. This exercises
+// only the Newton-overshoot branch; a change in refinement policy could
+// turn this test into a no-op rather than a failure — find_events has
+// other nullopt paths not covered here.
+TEST_F(EventRefinementCoverageTest, Nullopt_WhenNewtonOvershootsBracket_EmitsStdNullopt) {
     astro::Kepler kep(kErcMu);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-12);

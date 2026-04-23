@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <Eigen/Core>
+#include <limits>
 #include <vector>
 
 using namespace tycho;
@@ -126,12 +127,50 @@ TEST_F(IntegratorTest, ParallelIntegrateReflectsSummedBatchCounts) {
     auto _p = integ.integrate_parallel(x0s, tfs, kNParts);
     (void)_p;
 
-    // Contract (P1.1): parallel paths write the summed per-trajectory
-    // counts into the member counters on scope exit via
-    // BatchCounterWriteback. The sum must match the serial-path total
-    // because both paths integrate the same trajectories deterministically.
+    // Contract: parallel paths write the summed per-trajectory counts
+    // into the member counters on scope exit via BatchCounterWriteback.
+    // The sum must match the serial-path total because both paths
+    // integrate the same trajectories deterministically.
     EXPECT_EQ(integ.get_naccept(), serial_total_naccept);
     EXPECT_EQ(integ.get_nreject(), serial_total_nreject);
+}
+
+TEST_F(IntegratorTest, ParallelIntegrateCountersMatchCompletedLanesOnThrow) {
+    // Contract: when a lane throws mid-batch, BatchCounterWriteback records
+    // only the counts of trajectories that completed before the first
+    // failure. Unstarted lanes contribute zero. With kNParts=1 the work
+    // serializes within a single worker, so lanes after the poisoned lane
+    // never run and their per-trajectory counts stay at 0.
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    tighten(integ);
+
+    auto x0s = make_batch();
+    auto tfs = make_tfs();
+
+    // Poison lane K: a NaN x0 trips the non-finite guard inside integrate.
+    constexpr int kPoisonLane = 4;
+    x0s[kPoisonLane][0] = std::numeric_limits<double>::quiet_NaN();
+
+    // Baseline: serial counts for lanes [0, kPoisonLane) — these are the
+    // only lanes that should contribute to the parallel counter sum
+    // before the exception propagates out of the single worker.
+    int expected_naccept = 0;
+    int expected_nreject = 0;
+    for (int i = 0; i < kPoisonLane; ++i) {
+        (void)integ.integrate(x0s[i], tfs[i]);
+        expected_naccept += integ.get_naccept();
+        expected_nreject += integ.get_nreject();
+    }
+
+    ScopedThreadCount threads(1);
+    EXPECT_THROW((void)integ.integrate_parallel(x0s, tfs, /*n_parts=*/1), std::exception);
+
+    // After the throw, member counters reflect only the completed lanes.
+    // With n_parts=1, the single worker processes lanes in order and stops
+    // at kPoisonLane, so the sum is exactly the serial sum over [0, K).
+    EXPECT_EQ(integ.get_naccept(), expected_naccept);
+    EXPECT_EQ(integ.get_nreject(), expected_nreject);
 }
 
 TEST_F(IntegratorTest, ParallelIntegrateDenseMatchesSerial) {

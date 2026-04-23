@@ -220,17 +220,17 @@ TEST_F(ParallelDriverRunTest, PerLaneControllerIndependence) {
 }
 
 // -----------------------------------------------------------------------------
-// Non-FSAL storederivs regression (c77b6b9). DOPRI87/Vern7/Vern8/Vern9 do not
-// carry f(xf) in k_vals.back(); Stepper::step writes k_fsal_ only when
+// Non-FSAL storederivs invariant. DOPRI87/Vern7/Vern8/Vern9 do not carry
+// f(xf) in k_vals.back(); Stepper::step writes k_fsal_ only when
 // compute_midpoint was passed (the !LastStageIsFxf midpoint branch).
-// ParallelDriver's `else if (storederivs)` arm reads that write via
-// peek_fsal; a regression that skipped the arm (pre-c77b6b9 state) would
-// leave the final derivs slot un-updated. The helper is templated over
-// IVPAlg so every non-FSAL method is exercised, not just Vern7.
+// ParallelDriver's `else if (storederivs)` arm must read that write via
+// peek_fsal — skipping it would leave the final derivs slot un-updated.
+// The helper is templated over IVPAlg so every non-FSAL method is
+// exercised, not just Vern7.
 //
-// No public API currently routes storederivs=true to ParallelDriver — the
-// batch overloads hardcode storederivs=false — but the test protects the
-// branch against future enablement and symmetric refactors.
+// The batch overloads hardcode storederivs=false, so this test drives
+// ParallelDriver directly to protect the branch against symmetric
+// refactors and future enablement.
 // -----------------------------------------------------------------------------
 template <IVPAlg Alg>
 static void run_non_fsal_storederivs_check(int error_order) {
@@ -248,8 +248,13 @@ static void run_non_fsal_storederivs_check(int error_order) {
     rel_tols.setConstant(1e-10);
 
     const double tf_all = 1.0;
-    const int N = 2;
-    std::vector<Eigen::Vector3d> xs{sho_x0(0.0), sho_x0(0.3)};
+    // Three lanes with distinctly different initial amplitudes so a
+    // cross-lane peek_fsal contamination would produce divergent f(xf)
+    // signatures that the per-lane assertions below would catch. Two
+    // near-identical lanes both converge to the same trajectory family
+    // and could mask contamination via coincidence.
+    const int N = 3;
+    std::vector<Eigen::Vector3d> xs{sho_x0(0.0), sho_x0(0.3), sho_x0(2.5)};
     Eigen::VectorXd tfs(N);
     tfs.setConstant(tf_all);
 
@@ -279,7 +284,8 @@ static void run_non_fsal_storederivs_check(int error_order) {
         // is 2-wide (x_vars=2): dx/dt = v, dv/dt = -x. Using the lane's
         // computed final state — not the exact solution — so this is a
         // stepper/ParallelDriver self-consistency check, not a convergence
-        // check. Pre-c77b6b9 the slot would be stale or zeroed.
+        // check. A regression that skipped the peek_fsal arm would leave
+        // the slot stale or zeroed.
         const auto &fxf = derivs_s[lane].back();
         ASSERT_EQ(fxf.size(), 2)
             << "lane " << lane << ": SHO Output has 2 components (dx/dt, dv/dt)";

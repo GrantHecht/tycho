@@ -169,29 +169,29 @@ TEST_F(RegressionTranscriptionTest, Case10_BatchJacobians) {
 }
 
 // -----------------------------------------------------------------------------
-// Cases 11-12: single-step transcription regression — SP4-provisional tol.
+// Cases 11-12: single-step transcription regression — provisional tol.
 //
 // Single-step Jacobian (Case 11) and Jacobian+Hessian (Case 12) pins exercise
 // the non-adaptive integrate_stm / integrate_stm2 paths that aren't covered
 // by the adaptive-path regression suite. Tolerance is intentionally looser
 // than Cases 8-10 (which pin bit-exact) because the controller-variant
 // reorganization introduced drift at the level of the last few mantissa
-// bits; SP4 will either tighten the tol or regenerate the goldens under a
-// finalized tolerance policy.
+// bits; a policy decision on tol=0 golden regeneration vs. relaxed-tol
+// re-validation is still pending.
 //
-// Grep for "KNOWN-DIVERGENCE-SP4" to locate all affected sites.
+// Grep for "KNOWN-DIVERGENCE-TRANSCRIPTION-TOL" to locate all affected sites.
 // -----------------------------------------------------------------------------
 
-// SP4-provisional relative tolerance: catches refactor regressions that
-// shift results by more than ~1e-10 × scale without imposing a bit-exact
-// contract. Tighten in SP4 alongside tolerance-policy finalization.
-static constexpr double kSp4ProvisionalRelTol = 1e-10;
+// Provisional relative tolerance: catches refactor regressions that shift
+// results by more than ~1e-10 × scale without imposing a bit-exact contract.
+static constexpr double kProvisionalTranscriptionRelTol = 1e-10;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 11: Two-body single-step Jacobian via integrate_stm (DOPRI54)
-// KNOWN-DIVERGENCE-SP4: tolerance is provisional pending SP4 policy.
+// KNOWN-DIVERGENCE-TRANSCRIPTION-TOL: tolerance is provisional pending a
+// policy decision on tol=0 golden regeneration vs. relaxed-tol re-validation.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergenceSP4) {
+TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergence) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-13);
@@ -209,15 +209,16 @@ TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergenceSP4
     auto golden_jx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match_rel(xf_dyn, golden_xf, kSp4ProvisionalRelTol, "Case11_xf");
-    expect_matrix_match_rel(jx, golden_jx, kSp4ProvisionalRelTol, "Case11_Jacobian");
+    expect_vector_match_rel(xf_dyn, golden_xf, kProvisionalTranscriptionRelTol, "Case11_xf");
+    expect_matrix_match_rel(jx, golden_jx, kProvisionalTranscriptionRelTol, "Case11_Jacobian");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 12: Two-body single-step Jacobian+Hessian via integrate_stm2 (DOPRI87)
-// KNOWN-DIVERGENCE-SP4: tolerance is provisional pending SP4 policy.
+// KNOWN-DIVERGENCE-TRANSCRIPTION-TOL: tolerance is provisional pending a
+// policy decision on tol=0 golden regeneration vs. relaxed-tol re-validation.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDivergenceSP4) {
+TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDivergence) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
@@ -249,7 +250,7 @@ TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDiverg
     auto golden_hx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match_rel(xf_dyn, golden_xf, kSp4ProvisionalRelTol, "Case12_xf");
-    expect_matrix_match_rel(jx, golden_jx, kSp4ProvisionalRelTol, "Case12_Jacobian");
-    expect_matrix_match_rel(hx, golden_hx, kSp4ProvisionalRelTol, "Case12_Hessian");
+    expect_vector_match_rel(xf_dyn, golden_xf, kProvisionalTranscriptionRelTol, "Case12_xf");
+    expect_matrix_match_rel(jx, golden_jx, kProvisionalTranscriptionRelTol, "Case12_Jacobian");
+    expect_matrix_match_rel(hx, golden_hx, kProvisionalTranscriptionRelTol, "Case12_Hessian");
 }

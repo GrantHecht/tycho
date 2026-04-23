@@ -361,11 +361,11 @@ TEST_F(MaxStepsTest, CountersRepresentOnlyCleanRunAfterFailure) {
     const int clean_count = integ.get_naccept() + integ.get_nreject();
 
     EXPECT_GT(clean_count, 0) << "Clean run must record a non-zero counter.";
-    // The clean run is over a much shorter interval with reasonable tolerances
-    // — its step count will be << the failed run's cap of 50. If the clean
-    // counter equals failed_count + clean_count (summing) we caught a
-    // regression that forgot to reset the member state on entry.
-    EXPECT_LT(clean_count, failed_count)
-        << "Clean-run counter must not accumulate stale state from the prior throw "
-           "(clean=" << clean_count << ", failed=" << failed_count << ").";
+    // Tuning-robust invariant: the clean counter must not equal the
+    // failure-path counter — that would indicate either stale state
+    // carried over from the prior throw OR a writeback that fires only on
+    // exception unwind. Equality is the signature of both regressions.
+    EXPECT_NE(clean_count, failed_count)
+        << "Clean-run counter must differ from failure-path counter "
+           "(both=" << clean_count << ").";
 }

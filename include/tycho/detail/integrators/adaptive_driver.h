@@ -361,6 +361,11 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 // so storederivs=true here implies compute_midpoint was
                 // true — the precondition that makes k_fsal_ valid even for
                 // non-FSAL methods. See stepper.h peek_fsal docstring.
+                assert((storemidpoints || storederivs) &&
+                       "peek_fsal requires compute_midpoint=true at the preceding "
+                       "step() call; storederivs=true already ensures this via "
+                       "(storemidpoints||storederivs). A refactor that decouples "
+                       "them must revisit this.");
                 xdoti = stepper_.peek_fsal();
             }
             prev_event_vals = next_event_vals;

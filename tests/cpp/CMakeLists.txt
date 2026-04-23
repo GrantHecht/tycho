@@ -109,6 +109,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_integrator_parallel.cpp
     integrators/test_stepper.cpp
     integrators/test_max_steps.cpp
+    integrators/test_copy_settings.cpp
     integrators/test_max_step_change.cpp
     integrators/test_nan_propagation.cpp
     integrators/test_stepcount_baseline.cpp

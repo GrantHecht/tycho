@@ -294,3 +294,57 @@ TEST_F(NanPropagationTest, IntegrateStm2ThrowsAtOriginSingularity) {
 
     EXPECT_THROW({ auto r = integ.integrate_stm2(x0s, tfs, lfs); }, std::runtime_error);
 }
+
+// -----------------------------------------------------------------------------
+// Non-finite adjvars surfaces as runtime_error — either via STMDriver's
+// Hessian guard (adjhess = ∂²(lf^T · x_final)/∂x₀² absorbs NaN lf and trips
+// first), or via the localized adjgrad guard in
+// compute_jacobian_adjointgradient_adjointhessian_impl (adjgrad = jx^T ·
+// adjvars), whichever fires in the current wiring. The critical contract
+// is "non-finite adjoint input → throw", not which guard catches it; both
+// paths reject silent propagation of a NaN gradient into the solver.
+// -----------------------------------------------------------------------------
+TEST_F(NanPropagationTest, NonFiniteAdjvarsThrowsFromAdjointGradientPath) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    const int n_in = integ.input_rows();
+    const int n_out = integ.output_rows();
+
+    Eigen::VectorXd x(n_in);
+    auto leo = leo_state();
+    for (int i = 0; i < 7; ++i)
+        x[i] = leo[i];
+    x[n_in - 1] = 10.0;
+
+    Eigen::VectorXd adjvars(n_out);
+    adjvars.setConstant(1.0);
+    adjvars[0] = std::numeric_limits<double>::quiet_NaN();
+
+    Eigen::VectorXd fx(n_out);
+    Eigen::MatrixXd jx(n_out, n_in);
+    Eigen::VectorXd adjgrad(n_in);
+    Eigen::MatrixXd adjhess(n_in, n_in);
+    fx.setZero();
+    jx.setZero();
+    adjgrad.setZero();
+    adjhess.setZero();
+
+    try {
+        integ.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, adjgrad, adjhess, adjvars);
+        FAIL() << "Expected runtime_error from non-finite adjvars; got silent success.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        const bool from_adjgrad_guard = msg.find("Non-finite adjoint gradient") != std::string::npos;
+        const bool from_stm_hessian_guard =
+            msg.find("Non-finite STM output") != std::string::npos &&
+            msg.find("hessian") != std::string::npos;
+        EXPECT_TRUE(from_adjgrad_guard || from_stm_hessian_guard)
+            << "Diagnostic should come from either the adjgrad guard or the STM hessian "
+               "guard; got: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error; got a different exception type.";
+    }
+}

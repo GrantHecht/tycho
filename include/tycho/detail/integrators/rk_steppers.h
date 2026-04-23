@@ -354,7 +354,7 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
     }
 
     /// Required by SolverBase but unreachable — RKStepper is never added
-    /// as a constraint. Defined as empty to satisfy the interface.
+    /// as a constraint.
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {};
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,

@@ -72,8 +72,8 @@ struct ToleranceTier {
 // naccept/nreject bands are widened from the plan's 10%/50% to 50%/100% —
 // a few algorithms (notably Vern7/8/9 at tight tolerances) show ~40-50%
 // naccept drift vs. Julia, most likely stemming from convention differences
-// in the error_order passed to β-pre-scaled PI-controller defaults. SP4
-// will tighten.
+// in the error_order passed to β-pre-scaled PI-controller defaults. The
+// bands may tighten once the error-order convention is reconciled with Julia.
 const ToleranceTier kTol1e6{"tol1e6", 1e-6, 1e-7, 1e-4};
 const ToleranceTier kTol1e9{"tol1e9", 1e-9, 1e-10, 1e-7};
 const ToleranceTier kTol1e12{"tol1e12", 1e-12, 1e-13, 1e-10};

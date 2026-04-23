@@ -72,8 +72,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// Aliasing contract: the returned reference aliases the internal
     /// buffer. Its contents become stale after any subsequent step() or
     /// seed_fsal() call (both overwrite k_fsal_); reset_fsal() flips
-    /// fsal_valid_ to false but leaves the buffer untouched. Copy the
-    /// value out first if you need to hold it across any of these calls.
+    /// fsal_valid_ to false but leaves the buffer untouched.
     const ODEDeriv &peek_fsal() const { return k_fsal_; }
     bool fsal_valid() const { return fsal_valid_; }
 

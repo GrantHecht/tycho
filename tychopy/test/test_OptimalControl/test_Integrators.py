@@ -623,21 +623,28 @@ class TestBindingValidators(unittest.TestCase):
             integ.integrate(X0, 10.0)
 
     def test_max_steps_default_value(self):
-        # Default cap is 1_000_000 (integrator.h:443). A regression that
-        # changed the default would surface here as an unexpected value
-        # without breaking any integration in the examples.
+        # Default cap is 1_000_000 (see Integrator::max_steps_ default). A
+        # regression that changed the default would surface here as an
+        # unexpected value without breaking any integration in the examples.
+        # A distinctive round-trip covers the binding layout in the other
+        # direction — set/get against a non-default value.
         integ = self._make()
         self.assertEqual(integ.get_max_steps(), 1_000_000)
+        integ.set_max_steps(12345)
+        self.assertEqual(integ.get_max_steps(), 12345)
+        integ.set_max_steps(1_000_000)
 
     def test_integrate_stm2_exception_path(self):
-        # Pins e121ed2 (integrate_stm2 binding-layout fix) under an exception
-        # path. The fix removed a nanobind function-pointer cast that mismatched
-        # the return-slot layout for statically-sized DODEs (Kepler's
-        # 7-state/8-input Jacobian/Hessian). A regression would surface as a
-        # segfault or aligned_free on garbage pointers during unwind — not as
-        # a Python-visible RuntimeError. By forcing a throw mid-call on the
-        # Kepler static-sized path, we exercise the exception-propagation
-        # pathway of the binding return slot.
+        # Regression: the nanobind function-pointer cast for integrate_stm2
+        # previously hard-coded Eigen::MatrixXd for Jacobian/Hessian. For
+        # statically-sized DODEs (Kepler's 7-state/8-input) those resolve
+        # to fixed-size inline-storage matrices, so the cast overruns the
+        # return slot and aligned_free runs on garbage pointers during
+        # unwind. A regression would surface as a segfault or aligned_free
+        # crash — not as a Python-visible RuntimeError. By forcing a throw
+        # mid-call on the Kepler static-sized path, we exercise the
+        # exception-propagation pathway of the binding return slot;
+        # surviving this call without SIGSEGV is the pass condition.
         kepler_ode = ast.Astro.Kepler.ode(1)  # mu=1 (dimensionless units)
         integ = kepler_ode.integrator(0.001)
         integ.set_abs_tol(1.0e-30)
