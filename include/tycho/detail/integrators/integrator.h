@@ -160,6 +160,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     DODE ode_;
     bool use_controller_ = false;
     ControllerType controller_;
+    ControllerType controller_source_;
+    Eigen::VectorXi controller_varlocs_;
     StepperWrapperType stepper_;
     IVPAlg rk_method_ = IVPAlg::DOPRI87;
 
@@ -344,6 +346,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_io_rows(this->ode_.input_rows() + 1, this->ode_.input_rows());
 
         this->use_controller_ = usecontrol;
+        if (this->use_controller_) {
+            this->controller_source_ = ucon;
+            this->controller_varlocs_ = varlocs;
+        } else {
+            this->controller_varlocs_.resize(0);
+        }
 
         auto Stepper = StepperType<DODE, RKOp>(ode_);
         constexpr int IRC = decltype(Stepper)::IRC;
@@ -572,6 +580,23 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     };
 
+    struct EventCounterWriteback {
+        const Integrator &integ;
+        int &nfailed;
+        ~EventCounterWriteback() noexcept { integ.n_failed_event_refinements_ = nfailed; }
+    };
+
+    struct BatchEventCounterWriteback {
+        const Integrator &integ;
+        const std::vector<int> &nfailed;
+        ~BatchEventCounterWriteback() noexcept {
+            long long nfailed_sum = std::accumulate(nfailed.begin(), nfailed.end(), 0LL);
+            assert(nfailed_sum <= std::numeric_limits<int>::max() &&
+                   "Batch event-refinement failure sum overflows int.");
+            integ.n_failed_event_refinements_ = static_cast<int>(nfailed_sum);
+        }
+    };
+
     // Count of event refinements that failed both bisect+Newton passes.
     // Such crossings occupy std::nullopt slots in the returned eventstates
     // vector (1:1 with eventtimes); the counter is a cheap aggregate for
@@ -740,13 +765,22 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// over a different DODE template parameter); ODE-structure state and
     /// per-call output counters are not copied.
     template <class OtherDODE> void copy_settings_from(const Integrator<OtherDODE> &src) {
+        const bool target_uses_controller = this->use_controller_;
+        ControllerType target_controller_source;
+        if (target_uses_controller) {
+            target_controller_source = this->controller_source_;
+        }
+        Eigen::VectorXi target_controller_varlocs = this->controller_varlocs_;
+
+        this->set_method(src.get_method(), this->ode_, src.def_step_size_, target_uses_controller,
+                         target_controller_source, target_controller_varlocs);
+
         this->adaptive_ = src.adaptive_;
         this->abs_tols_ = src.abs_tols_;
         this->rel_tols_ = src.rel_tols_;
         this->max_steps_ = src.get_max_steps();
         this->enable_vectorization_ = src.enable_vectorization_;
         this->vectorize_batch_calls_ = src.vectorize_batch_calls_;
-        this->rk_method_ = src.get_method();
         this->controller_variant_ = src.controller_variant_;
         this->error_norm_type_ = src.error_norm_type_;
         this->max_step_change_ = src.max_step_change_;
@@ -957,6 +991,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     IntegEventRet integrate_core(const ODEState<double> &x0, double tf,
                                  const std::vector<EventPack> &events,
                                  ControllerVariant &controller, int &naccept, int &nreject) const {
+        int nfailed = 0;
+        return this->integrate_core(x0, tf, events, controller, naccept, nreject, nfailed);
+    }
+
+    IntegEventRet integrate_core(const ODEState<double> &x0, double tf,
+                                 const std::vector<EventPack> &events,
+                                 ControllerVariant &controller, int &naccept, int &nreject,
+                                 int &nfailed_event_refinements) const {
+        nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
         bool storestates = true;
@@ -970,7 +1013,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (auto etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
-                eventlocs = this->find_events(tab, events, eventtimes);
+                eventlocs =
+                    this->find_events_counted(tab, events, eventtimes, nfailed_event_refinements);
                 break;
             }
         }
@@ -996,6 +1040,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events, bool alloutput,
                                        ControllerVariant &controller, int &naccept,
                                        int &nreject) const {
+        int nfailed = 0;
+        return this->integrate_dense_core(x0, tf, events, alloutput, controller, naccept, nreject,
+                                          nfailed);
+    }
+
+    DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf,
+                                       const std::vector<EventPack> &events, bool alloutput,
+                                       ControllerVariant &controller, int &naccept, int &nreject,
+                                       int &nfailed_event_refinements) const {
+        nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
         bool storestates = true;
@@ -1009,7 +1063,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         for (auto etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
-                eventlocs = this->find_events(tab, events, eventtimes);
+                eventlocs =
+                    this->find_events_counted(tab, events, eventtimes, nfailed_event_refinements);
                 break;
             }
         }
@@ -1023,6 +1078,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events,
                                        ControllerVariant &controller, int &naccept,
                                        int &nreject) const {
+        int nfailed = 0;
+        return this->integrate_dense_core(x0, tf, n, events, controller, naccept, nreject,
+                                          nfailed);
+    }
+
+    DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
+                                       const std::vector<EventPack> &events,
+                                       ControllerVariant &controller, int &naccept, int &nreject,
+                                       int &nfailed_event_refinements) const {
+        nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
         bool storestates = true;
@@ -1033,7 +1098,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
         auto tab = this->make_table(xs, d_xs, true);
-        EventLocsType eventlocs = this->find_events(tab, events, eventtimes);
+        EventLocsType eventlocs =
+            this->find_events_counted(tab, events, eventtimes, nfailed_event_refinements);
         Eigen::VectorXd ts;
         ts.setLinSpaced(n, xs[0][this->ode_.t_var()], xs.back()[this->ode_.t_var()]);
         std::vector<ODEState<double>> x_interp(n);
@@ -1078,8 +1144,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                    const std::vector<EventPack> &events,
                                    ControllerVariant &controller, int &naccept,
                                    int &nreject) const {
+        int nfailed = 0;
+        return this->integrate_stm_core(x0, tf, events, controller, naccept, nreject, nfailed);
+    }
+
+    STMEventRet integrate_stm_core(const ODEState<double> &x0, double tf,
+                                   const std::vector<EventPack> &events,
+                                   ControllerVariant &controller, int &naccept, int &nreject,
+                                   int &nfailed_event_refinements) const {
         auto [xs, eventlocs] =
-            this->integrate_dense_core(x0, tf, events, false, controller, naccept, nreject);
+            this->integrate_dense_core(x0, tf, events, false, controller, naccept, nreject,
+                                       nfailed_event_refinements);
         Jacobian<double> jx = this->calculate_jacobian(xs);
         return std::tuple{xs.back(), jx, eventlocs};
     }
@@ -1090,14 +1165,26 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// interpolation table. Returns a vector aligned 1:1 with `eventtimes`:
     /// each entry holds the refined ODEState, or std::nullopt when neither
     /// the fast bisect+Newton pass nor the wider-bracket retry resolves the
-    /// crossing. n_failed_event_refinements_ increments once per nullopt.
+    /// crossing. `n_failed_event_refinements` increments once per nullopt.
+    EventLocsType
+    find_events_counted(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
+                        const std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
+                        int &n_failed_event_refinements) const {
+        n_failed_event_refinements = 0;
+        return EventHandler::refine_events<ODEState<double>>(
+            tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
+            this->event_tol_, n_failed_event_refinements);
+    }
+
+    /// Refine bracketed event crossings and publish the failure count to
+    /// get_failed_event_count(). Parallel event paths use find_events_counted()
+    /// with per-worker counters instead of this shared-member wrapper.
     EventLocsType find_events(std::shared_ptr<LGLInterpTable> tab,
                               const std::vector<EventPack> &events,
                               const std::vector<std::vector<Eigen::Vector2d>> &eventtimes) const {
-        this->n_failed_event_refinements_ = 0;
-        return EventHandler::refine_events<ODEState<double>>(
-            tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
-            this->event_tol_, this->n_failed_event_refinements_);
+        int nfailed = 0;
+        EventCounterWriteback _writeback{*this, nfailed};
+        return this->find_events_counted(tab, events, eventtimes, nfailed);
     }
 
     /// Build an LGLInterpTable from a dense state sequence for use with
@@ -1311,8 +1398,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                             const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
+        int nf = 0;
         CounterWriteback _writeback{*this, na, nr};
-        return this->integrate_core(x0, tf, events, ctrl, na, nr);
+        EventCounterWriteback _event_writeback{*this, nf};
+        return this->integrate_core(x0, tf, events, ctrl, na, nr, nf);
     }
 
     template <class... Args>
@@ -1351,6 +1440,151 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
+    std::vector<STMEventRet>
+    integrate_stm_parallel_events_impl(const std::vector<ODEState<double>> &x0s,
+                                       const Eigen::VectorXd &tfs, int n_parts,
+                                       std::vector<int> &nfailed_out,
+                                       const std::vector<EventPack> &events) {
+        if (x0s.size() != tfs.size()) {
+            throw std::invalid_argument(
+                "List of initial states and final times must be the same size");
+        }
+
+        int n = x0s.size();
+        std::vector<STMEventRet> results(n);
+
+        auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0, nf = 0;
+            for (int i = start; i < stop; i++) {
+                ctrl = this->make_worker_controller();
+                na = 0;
+                nr = 0;
+                nf = 0;
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_stm_core(x0s[i], tfs[i], events, ctrl, na, nr, nf);
+                });
+                nfailed_out[i] = nf;
+            }
+        };
+
+        tycho::utils::parallel_blocks(n, job, n_parts);
+        return results;
+    }
+
+    std::vector<DenseEventRet>
+    integrate_dense_parallel_events_impl_n(const std::vector<ODEState<double>> &x0s,
+                                           const Eigen::VectorXd &tfs, const std::vector<int> &ns,
+                                           int n_parts, std::vector<int> &nacc_out,
+                                           std::vector<int> &nrej_out,
+                                           std::vector<int> &nfailed_out,
+                                           const std::vector<EventPack> &events) {
+        if (x0s.size() != tfs.size()) {
+            throw std::invalid_argument(
+                "List of initial states and final times must be the same size");
+        }
+        if (x0s.size() != ns.size()) {
+            throw std::invalid_argument(
+                "List of initial states and state numbers must be the same size");
+        }
+
+        int n = x0s.size();
+        std::vector<DenseEventRet> results(n);
+
+        auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0, nf = 0;
+            for (int i = start; i < stop; i++) {
+                ctrl = this->make_worker_controller();
+                na = 0;
+                nr = 0;
+                nf = 0;
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_dense_core(x0s[i], tfs[i], ns[i], events, ctrl, na, nr,
+                                                      nf);
+                });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
+                nfailed_out[i] = nf;
+            }
+        };
+
+        tycho::utils::parallel_blocks(n, job, n_parts);
+        return results;
+    }
+
+    std::vector<DenseEventRet>
+    integrate_dense_parallel_events_impl(const std::vector<ODEState<double>> &x0s,
+                                         const Eigen::VectorXd &tfs, int n_parts,
+                                         std::vector<int> &nacc_out,
+                                         std::vector<int> &nrej_out,
+                                         std::vector<int> &nfailed_out,
+                                         const std::vector<EventPack> &events, bool alloutput) {
+        if (x0s.size() != tfs.size()) {
+            throw std::invalid_argument(
+                "List of initial states and final times must be the same size");
+        }
+
+        int n = x0s.size();
+        std::vector<DenseEventRet> results(n);
+
+        auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0, nf = 0;
+            for (int i = start; i < stop; i++) {
+                ctrl = this->make_worker_controller();
+                na = 0;
+                nr = 0;
+                nf = 0;
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_dense_core(x0s[i], tfs[i], events, alloutput, ctrl, na,
+                                                      nr, nf);
+                });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
+                nfailed_out[i] = nf;
+            }
+        };
+
+        tycho::utils::parallel_blocks(n, job, n_parts);
+        return results;
+    }
+
+    std::vector<IntegEventRet>
+    integrate_parallel_events_impl(const std::vector<ODEState<double>> &x0s,
+                                   const Eigen::VectorXd &tfs, int n_parts,
+                                   std::vector<int> &nacc_out, std::vector<int> &nrej_out,
+                                   std::vector<int> &nfailed_out,
+                                   const std::vector<EventPack> &events) {
+        if (x0s.size() != tfs.size()) {
+            throw std::invalid_argument(
+                "List of initial states and final times must be the same size");
+        }
+
+        int n = x0s.size();
+        std::vector<IntegEventRet> results(n);
+
+        auto job = [&](int start, int stop) {
+            ControllerVariant ctrl;
+            int na = 0, nr = 0, nf = 0;
+            for (int i = start; i < stop; i++) {
+                ctrl = this->make_worker_controller();
+                na = 0;
+                nr = 0;
+                nf = 0;
+                results[i] = decorate_trajectory(i, [&] {
+                    return this->integrate_core(x0s[i], tfs[i], events, ctrl, na, nr, nf);
+                });
+                nacc_out[i] = na;
+                nrej_out[i] = nr;
+                nfailed_out[i] = nf;
+            }
+        };
+
+        tycho::utils::parallel_blocks(n, job, n_parts);
+        return results;
+    }
+
     /// Parallel batch integrate. Accept/reject counters are summed across
     /// lanes into `get_naccept()` / `get_nreject()` on scope exit via
     /// BatchCounterWriteback (RAII-safe on unwind).
@@ -1368,8 +1602,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                   int n_parts) {
         const int n = static_cast<int>(x0s.size());
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        std::vector<int> nfailed(n, 0);
         BatchCounterWriteback _writeback{*this, nacc, nrej};
-        return this->integrate_parallel_impl(x0s, tfs, n_parts, nacc, nrej, events);
+        BatchEventCounterWriteback _event_writeback{*this, nfailed};
+        return this->integrate_parallel_events_impl(x0s, tfs, n_parts, nacc, nrej, nfailed,
+                                                    events);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1384,16 +1621,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                   const std::vector<EventPack> &events, bool alloutput) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
+        int nf = 0;
         CounterWriteback _writeback{*this, na, nr};
-        return this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr);
+        EventCounterWriteback _event_writeback{*this, nf};
+        return this->integrate_dense_core(x0, tf, events, alloutput, ctrl, na, nr, nf);
     }
 
     DenseEventRet integrate_dense(const ODEState<double> &x0, double tf, int n,
                                   const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
+        int nf = 0;
         CounterWriteback _writeback{*this, na, nr};
-        return this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr);
+        EventCounterWriteback _event_writeback{*this, nf};
+        return this->integrate_dense_core(x0, tf, n, events, ctrl, na, nr, nf);
     }
 
     DenseRet integrate_dense(const ODEState<double> &x0, double tf, int n) const {
@@ -1473,8 +1714,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                         int n_parts) {
         const int n = static_cast<int>(x0s.size());
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        std::vector<int> nfailed(n, 0);
         BatchCounterWriteback _writeback{*this, nacc, nrej};
-        return this->integrate_dense_parallel_impl(x0s, tfs, n_parts, nacc, nrej, events, false);
+        BatchEventCounterWriteback _event_writeback{*this, nfailed};
+        return this->integrate_dense_parallel_events_impl(x0s, tfs, n_parts, nacc, nrej, nfailed,
+                                                          events, false);
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
@@ -1528,8 +1772,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                         int n_parts) {
         const int n = static_cast<int>(x0s.size());
         std::vector<int> nacc(n, 0), nrej(n, 0);
+        std::vector<int> nfailed(n, 0);
         BatchCounterWriteback _writeback{*this, nacc, nrej};
-        return this->integrate_dense_parallel_impl_n(x0s, tfs, ns, n_parts, nacc, nrej, events);
+        BatchEventCounterWriteback _event_writeback{*this, nfailed};
+        return this->integrate_dense_parallel_events_impl_n(x0s, tfs, ns, n_parts, nacc, nrej,
+                                                            nfailed, events);
     }
     /// Parallel batch dense integrate with per-trajectory state counts (no events).
     std::vector<DenseRet> integrate_dense_parallel(const std::vector<ODEState<double>> &x0s,
@@ -1552,8 +1799,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                               const std::vector<EventPack> &events) const {
         ControllerVariant ctrl = this->make_worker_controller();
         int na = 0, nr = 0;
+        int nf = 0;
         CounterWriteback _writeback{*this, na, nr};
-        return this->integrate_stm_core(x0, tf, events, ctrl, na, nr);
+        EventCounterWriteback _event_writeback{*this, nf};
+        return this->integrate_stm_core(x0, tf, events, ctrl, na, nr, nf);
     }
 
     template <class... Args>
@@ -1601,7 +1850,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                                     const Eigen::VectorXd &tfs,
                                                     const std::vector<EventPack> &events,
                                                     int n_parts) {
-        return this->integrate_stm_parallel_impl(x0s, tfs, n_parts, events);
+        const int n = static_cast<int>(x0s.size());
+        std::vector<int> nfailed(n, 0);
+        BatchEventCounterWriteback _event_writeback{*this, nfailed};
+        return this->integrate_stm_parallel_events_impl(x0s, tfs, n_parts, nfailed, events);
     }
 
     /// Segmented parallel STM over a single trajectory.

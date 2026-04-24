@@ -244,6 +244,32 @@ auto make_sho_event() {
     return GenericFunction<-1, 1>(event_func);
 }
 
+// Event function engineered to fail refinement: tanh(k·(t - 0.5)) with a
+// very sharp slope saturates to ±1 away from t=0.5, so its analytic
+// jacobian 1 - tanh² rounds to 0 exactly in double arithmetic at any
+// bracket midpoint outside a tiny neighbourhood of the root. That trips
+// Newton's singular-Jacobian guard → the refinement emits std::nullopt
+// and n_failed_event_refinements_ is incremented. A real sign change at
+// t=0.5 ensures check_crossings registers the bracket in the first place.
+auto make_overshoot_time_event() {
+    auto args = Arguments<3>();
+    auto t = args.coeff<2>();
+    constexpr double kSlope = 1.0e6;
+    auto event_func = tanh(kSlope * (t + (-0.5)));
+    return GenericFunction<-1, 1>(event_func);
+}
+
+int count_null_event_locs(const Integrator<SHO>::EventLocsType &eventlocs) {
+    int n = 0;
+    for (const auto &group : eventlocs) {
+        for (const auto &loc : group) {
+            if (!loc.has_value())
+                ++n;
+        }
+    }
+    return n;
+}
+
 } // namespace
 
 TEST_F(IntegratorTest, ParallelIntegrateWithEventsMatchesSerial) {
@@ -323,6 +349,72 @@ TEST_F(IntegratorTest, ParallelIntegrateSTMWithEventsMatchesSerial) {
                 << "trajectory " << i << " event count in group " << g;
         }
     }
+}
+
+TEST_F(IntegratorTest, ParallelEventFailuresAggregatePerTrajectoryCounts) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 1.0);
+    integ.adaptive_ = false;
+    integ.set_auto_initial_dt(false);
+
+    auto x0s = make_batch();
+    Eigen::VectorXd tfs(kBatchSize);
+    tfs.setConstant(1.0);
+
+    std::vector<Integrator<SHO>::EventPack> events;
+    events.push_back({make_overshoot_time_event(), 0, 0});
+
+    ScopedThreadCount threads(kNParts);
+    auto results = integ.integrate_parallel(x0s, tfs, events, kNParts);
+
+    int expected_failed = 0;
+    for (const auto &ret : results) {
+        expected_failed += count_null_event_locs(std::get<1>(ret));
+    }
+
+    EXPECT_GT(expected_failed, 0);
+    EXPECT_EQ(integ.get_failed_event_count(), expected_failed);
+}
+
+TEST_F(IntegratorTest, ParallelDenseAndSTMEventCountersResetPerCall) {
+    SHO ode(0.0);
+    auto x0s = make_batch();
+    Eigen::VectorXd tfs(kBatchSize);
+    tfs.setConstant(1.0);
+    ScopedThreadCount threads(kNParts);
+
+    std::vector<Integrator<SHO>::EventPack> overshoot_events;
+    overshoot_events.push_back({make_overshoot_time_event(), 0, 0});
+    std::vector<Integrator<SHO>::EventPack> happy_events;
+    happy_events.push_back({make_sho_event(), 0, 0});
+
+    Integrator<SHO> dense_integ(ode, IVPAlg::DOPRI54, 1.0);
+    dense_integ.adaptive_ = false;
+    dense_integ.set_auto_initial_dt(false);
+    (void)dense_integ.integrate_parallel(x0s, tfs, overshoot_events, kNParts);
+    EXPECT_GT(dense_integ.get_failed_event_count(), 0);
+
+    auto dense_results = dense_integ.integrate_dense_parallel(x0s, tfs, happy_events, kNParts);
+    int dense_expected_failed = 0;
+    for (const auto &ret : dense_results) {
+        dense_expected_failed += count_null_event_locs(std::get<1>(ret));
+    }
+    EXPECT_EQ(dense_integ.get_failed_event_count(), dense_expected_failed);
+    EXPECT_EQ(dense_expected_failed, 0);
+
+    Integrator<SHO> stm_integ(ode, IVPAlg::DOPRI54, 1.0);
+    stm_integ.adaptive_ = false;
+    stm_integ.set_auto_initial_dt(false);
+    (void)stm_integ.integrate_parallel(x0s, tfs, overshoot_events, kNParts);
+    EXPECT_GT(stm_integ.get_failed_event_count(), 0);
+
+    auto stm_results = stm_integ.integrate_stm_parallel(x0s, tfs, happy_events, kNParts);
+    int stm_expected_failed = 0;
+    for (const auto &ret : stm_results) {
+        stm_expected_failed += count_null_event_locs(std::get<2>(ret));
+    }
+    EXPECT_EQ(stm_integ.get_failed_event_count(), stm_expected_failed);
+    EXPECT_EQ(stm_expected_failed, 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

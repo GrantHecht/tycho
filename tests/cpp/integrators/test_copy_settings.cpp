@@ -128,3 +128,26 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
     EXPECT_EQ(tgt.get_nreject(), pre_nreject);
     EXPECT_EQ(tgt.get_failed_event_count(), pre_failed_event);
 }
+
+TEST(CopySettingsFromTest, CopyingMethodRebuildsSTMStepper) {
+    DampedSHO ode(0.0);
+    Integrator<DampedSHO> src(ode, IVPAlg::DOPRI54, 0.2);
+    src.adaptive_ = false;
+    src.use_hairer_wanner_initdt_ = false;
+
+    Integrator<DampedSHO> tgt(ode, IVPAlg::DOPRI87, 0.05);
+    tgt.copy_settings_from(src);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, -0.25, 0.0;
+    constexpr double tf = 1.3;
+
+    auto [ref_xf, ref_stm] = src.integrate_stm(x0, tf);
+    auto [copied_xf, copied_stm] = tgt.integrate_stm(x0, tf);
+
+    EXPECT_TRUE(copied_xf.isApprox(ref_xf, 1e-13));
+    ASSERT_EQ(copied_stm.rows(), ref_stm.rows());
+    ASSERT_EQ(copied_stm.cols(), ref_stm.cols());
+    EXPECT_TRUE(copied_stm.isApprox(ref_stm, 1e-12))
+        << "copy_settings_from must rebuild the method-coupled STM stepper";
+}
