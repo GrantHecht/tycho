@@ -116,6 +116,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_tolerance_validation.cpp
     integrators/test_zero_interval.cpp
     integrators/test_event_refinement_coverage.cpp
+    integrators/test_fsal_reset_after_throw.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp

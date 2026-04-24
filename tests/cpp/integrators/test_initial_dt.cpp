@@ -14,6 +14,7 @@
 
 #include <tycho/tycho.h>
 
+#include "integrator_test_utils.h"
 #include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/initial_dt.h"
 #include <Eigen/Core>
@@ -22,6 +23,25 @@
 
 using tycho::integrators::ErrorNormType;
 using tycho::integrators::estimate_initial_dt;
+
+///////////////////////////////////////////////////////////////////////////////
+// Tiny-derivative branch: when both d₁ and d₂ are ≤ 1e-15, the algorithm
+// must fall back to dt₁ = max(smalldt, dt₀·1e-3) instead of
+// (0.01/max(d₁,d₂))^(1/(order+1)) — dividing by ~0 would otherwise produce
+// infinity. Trigger via the SHO ODE started at the fixed point x=0, v=0,
+// where f(x) ≡ 0 identically. Expected dt₀ = smalldt = 1e-6.
+///////////////////////////////////////////////////////////////////////////////
+TEST(InitialDtTest, TinyDerivativeBranchFallsBackToSmallDt) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 0.0, 0.0, 0.0; // at fixed point — f(x0) = (v=0, -x=0) = 0
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-12);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-13);
+    double tf = 1.0;
+    double dt0 = estimate_initial_dt(sho, x0, tf, atol, rtol, /*order=*/5, ErrorNormType::RMS);
+    EXPECT_NEAR(dt0, 1e-6, 1e-9) << "tiny-derivative branch should return smalldt = 1e-6";
+    EXPECT_GT(dt0, 0.0) << "dt must remain finite and positive for forward integration";
+}
 
 TEST(InitialDtTest, KeplerLEOYieldsReasonableFirstStep) {
     tycho::astro::Kepler kep(398600.4418);

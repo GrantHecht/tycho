@@ -423,6 +423,54 @@ class test_Integrators(unittest.TestCase):
                     maxerr, errtol, "Integration Error exceeds expected maximum"
                 )
 
+    def test_EventRefinementFailureReturnsNone(self):
+        """Pin the nanobind translation of std::optional<ODEState> to
+        Optional[np.ndarray] on the Python surface. Force an event
+        refinement to fail via an impossibly tight event_tol, then assert
+        the corresponding EventLocs slot is literally `None` (not a
+        zero-array, not a silent drop) — the P0-1 residual check produces
+        std::nullopt, which the binding must relay as None.
+        """
+        r = 1.0
+        v = 1.1
+        t0 = 0.0
+        tf = 20.0
+
+        X0 = np.zeros(7)
+        X0[0] = r
+        X0[4] = v
+        X0[6] = t0
+
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        # direction=0 (any), stop_count=0 (no stop) — record every crossing.
+        AllApseEvent = (ApseFunc(), 0, 0)
+        Events = [AllApseEvent]
+
+        ode = ast.Astro.Kepler.ode(1)
+        integ = ode.integrator(0.01)
+        integ.set_abs_tol(1.0e-13)
+        integ.adaptive = True
+
+        # Impossibly tight tolerance — no Newton iterate can satisfy
+        # |f(tevent)| <= 1e-300 since FP residuals bottom out at ~1e-16.
+        # With P0-1's residual check, every refinement emits std::nullopt.
+        integ.event_tol = 1.0e-300
+        integ.max_event_iters = 4
+
+        Xf, EventLocs = integ.integrate(X0, tf, Events)
+
+        self.assertEqual(len(EventLocs), 1, "One event group")
+        self.assertGreater(len(EventLocs[0]), 0, "Event brackets were detected")
+        for k, loc in enumerate(EventLocs[0]):
+            self.assertIsNone(
+                loc,
+                f"Unresolvable refinement at index {k} must map to Python None, "
+                f"got {type(loc).__name__}",
+            )
+
     def test_StopFuncExceptionPropagates(self):
         """Pin the contract that a Python `stop_func` raising an exception
         propagates to the caller as a Python exception (NOT a silent

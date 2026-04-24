@@ -275,13 +275,22 @@ TEST(DispatchHelpers, NestedDispatch_MainThread_Succeeds) {
 }
 
 TEST(DispatchHelpers, NestedDispatch_PoolWorker_Throws) {
-    // Dispatch from a pool worker must throw logic_error.
-    // parallel_sequence runs i=0..2 on pool workers and i=3 inline.
-    // The pool workers attempting nested dispatch should throw.
+    // Dispatch from a pool worker must be rejected. parallel_sequence runs
+    // i=0..2 on pool workers and i=3 inline; each attempts nested dispatch
+    // and throws. DispatchContext's aggregation wraps the 3 concurrent
+    // worker exceptions into a runtime_error whose message includes every
+    // "nested dispatch from pool worker" string — callers can no longer
+    // lose N-1 of the failures to stderr.
     ScopedThreadCount guard(4);
-    EXPECT_THROW(
-        tycho::utils::parallel_sequence(4, [](int) { tycho::utils::parallel_blocks(4, [](int, int) {}, 2); }),
-        std::logic_error);
+    try {
+        tycho::utils::parallel_sequence(
+            4, [](int) { tycho::utils::parallel_blocks(4, [](int, int) {}, 2); });
+        FAIL() << "Expected exception";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("nested dispatch from pool worker"), std::string::npos)
+            << "Aggregated message must include the underlying logic_error: " << msg;
+    }
 }
 
 TEST(DispatchHelpers, DualException_ParallelTask) {

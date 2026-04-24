@@ -150,3 +150,23 @@ TEST_F(EventDirectionTest, StopCountHaltsIntegrationEarly) {
     ASSERT_EQ(eventlocs.size(), 1u);
     EXPECT_EQ(eventlocs[0].size(), 1u);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// EventPack constructor validation: the domain of `direction` is {-1, 0, 1}
+// and `stop_count` must be >= 0. Any out-of-domain int must throw at
+// construction time — a silent coerce (e.g. a Python `bool`→int mistake or
+// an off-by-one `direction=2`) would otherwise slip into the sign-product
+// check and produce undefined behaviour.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(EventDirectionTest, InvalidDirectionRejected) {
+    auto gf_x = make_component_zero_event(0);
+    EXPECT_THROW((EventPack{gf_x, /*direction=*/2, /*stop_count=*/0}), std::invalid_argument);
+    EXPECT_THROW((EventPack{gf_x, /*direction=*/-2, /*stop_count=*/0}), std::invalid_argument);
+    EXPECT_THROW((EventPack{gf_x, /*direction=*/42, /*stop_count=*/0}), std::invalid_argument);
+}
+
+TEST_F(EventDirectionTest, NegativeStopCountRejected) {
+    auto gf_x = make_component_zero_event(0);
+    EXPECT_THROW((EventPack{gf_x, /*direction=*/0, /*stop_count=*/-1}), std::invalid_argument);
+    EXPECT_THROW((EventPack{gf_x, /*direction=*/0, /*stop_count=*/-42}), std::invalid_argument);
+}

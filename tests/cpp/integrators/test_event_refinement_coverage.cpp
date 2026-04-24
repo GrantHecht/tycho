@@ -198,6 +198,84 @@ TEST_F(EventRefinementCoverageTest, Nullopt_WhenNewtonOvershootsBracket_EmitsStd
         << "Counter must increment once per emitted nullopt";
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Mixed-nullopt shape contract. The std::optional<ODEState> API break
+// claims 1:1 alignment between eventtimes and eventstates, independent of
+// which crossings resolve. A bracket that resolves fills an engaged
+// optional; a bracket that fails to refine fills std::nullopt, keeping the
+// index stable. Existing tests cover all-engaged and all-nullopt; this
+// pins the mixed case, which is the real failure mode for consumers that
+// zip eventtimes with eventstates by index.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
+    astro::Kepler kep(kErcMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-13);
+
+    auto x0 = erc_eccentric_x0();
+    double tf = erc_eccentric_period();
+
+    // Real event: altitude crossing at 7200 km on eccentric orbit (rp=6800,
+    // ra~8310). Crosses twice per period — once rising, once falling.
+    auto args = Arguments<7>();
+    auto event_expr = args.head<3>().norm() + (-7200.0);
+    GenericFunction<-1, 1> gf(event_expr);
+    std::vector<Integrator<astro::Kepler>::EventPack> events;
+    events.push_back({gf, 0, 0});
+
+    // First call resolves the real crossings cleanly — this is the "engaged"
+    // reference that we graft fake brackets onto.
+    auto [xf_real, real_eventlocs] = integ.integrate(x0, tf, events);
+    ASSERT_EQ(real_eventlocs.size(), 1u);
+    ASSERT_GE(real_eventlocs[0].size(), 2u)
+        << "Eccentric orbit must cross altitude=7200 at least twice per period.";
+
+    // Now build a dense trajectory + table so we can drive find_events with a
+    // caller-constructed eventtimes that MIXES real brackets (from the
+    // integrate above) with fabricated no-crossing brackets — the latter
+    // resolve to std::nullopt after the residual check (P0-1).
+    std::vector<Integrator<astro::Kepler>::EventPack> no_events;
+    auto [xs, _] = integ.integrate_dense(x0, tf, no_events, /*alloutput=*/true);
+    auto tab = integ.make_table(xs, /*fifthorder=*/false);
+
+    // Collect brackets around the known crossings. We use the refined event
+    // times from the first call and widen each by a small window — the
+    // refinement must land inside.
+    ASSERT_TRUE(real_eventlocs[0][0].has_value());
+    ASSERT_TRUE(real_eventlocs[0][1].has_value());
+    const double te0 = real_eventlocs[0][0]->operator[](6); // Kepler t_var = 6
+    const double te1 = real_eventlocs[0][1]->operator[](6);
+
+    constexpr int kKeplerTVar = 6;
+    const double t_start = xs[0][kKeplerTVar];
+    const double t_end = xs.back()[kKeplerTVar];
+    const double half_window = (t_end - t_start) * 0.01;
+
+    std::vector<std::vector<Eigen::Vector2d>> eventtimes(1);
+    // Index 0: real crossing A — must resolve.
+    eventtimes[0].emplace_back(te0 - half_window, te0 + half_window);
+    // Index 1: fake bracket near t_start, far from any crossing — must
+    // produce std::nullopt (the residual check at P0-1 rejects the Newton
+    // iterate since |altitude - 7200| stays well above tol over this span).
+    eventtimes[0].emplace_back(t_start + half_window * 0.1, t_start + half_window * 0.2);
+    // Index 2: real crossing B — must resolve.
+    eventtimes[0].emplace_back(te1 - half_window, te1 + half_window);
+    // Index 3: another fake bracket near t_end.
+    eventtimes[0].emplace_back(t_end - half_window * 0.2, t_end - half_window * 0.1);
+
+    auto eventlocs = integ.find_events(tab, events, eventtimes);
+
+    ASSERT_EQ(eventlocs.size(), 1u);
+    ASSERT_EQ(eventlocs[0].size(), 4u) << "1:1 alignment: one entry per eventtimes bracket.";
+    EXPECT_TRUE(eventlocs[0][0].has_value()) << "real crossing A must resolve";
+    EXPECT_FALSE(eventlocs[0][1].has_value()) << "no-crossing bracket must be std::nullopt";
+    EXPECT_TRUE(eventlocs[0][2].has_value()) << "real crossing B must resolve";
+    EXPECT_FALSE(eventlocs[0][3].has_value()) << "no-crossing bracket must be std::nullopt";
+    EXPECT_EQ(integ.get_failed_event_count(), 2)
+        << "Counter must increment once per emitted nullopt.";
+}
+
 // The counter is reset at the start of each find_events call — a second
 // event-bearing integration must not accumulate state from the first.
 TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
