@@ -350,6 +350,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             this->controller_source_ = ucon;
             this->controller_varlocs_ = varlocs;
         } else {
+            // Placeholder that is never read — copy_settings_from reads
+            // controller_source_ only when target_uses_controller. Must not
+            // be left default-constructed: GenericFunction's copy-ctor throws
+            // "Attempting to copy null function" on empty, so returning the
+            // Integrator by value (e.g., from ODE::integrator() into Python)
+            // would fail after any non-controller construction. Mirrors the
+            // placeholder pattern used for `controller_` below.
+            this->controller_source_ = Arguments<-1>(0);
             this->controller_varlocs_.resize(0);
         }
 
