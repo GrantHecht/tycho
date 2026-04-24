@@ -1,5 +1,5 @@
 """
-SP2 method selection and basic correctness via Python bindings.
+Method selection and basic correctness via Python bindings.
 
 Verifies Tsit5, BS3, BS5, Vern7, Vern8, Vern9 are selectable (both by
 enum and by string) and produce accurate results on a LEO circular orbit
@@ -30,7 +30,7 @@ class SHO_Ode(oc.ode_x.ode):
 
 
 class TestNewMethods(unittest.TestCase):
-    """Verify each SP2 method integrates a SHO over tf=1 to matching accuracy."""
+    """Verify each method integrates a SHO over tf=1 to matching accuracy."""
 
     def _integrate_sho(self, method, atol=1e-10, rtol=1e-10):
         ode = SHO_Ode()

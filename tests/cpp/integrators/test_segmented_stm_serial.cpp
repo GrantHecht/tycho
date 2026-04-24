@@ -4,10 +4,9 @@
 // false or `n_parts == 1`. Two invariants:
 //   1. Serial endpoints xs[i] match the single-call `integrate_stm(x0, tf)`
 //      endpoint and Jacobian product.
-//   2. After Phase 4's redundancy fix, get_naccept()/get_nreject() reflect
-//      exactly one propagation per segment (the STM integrate). Pre-fix,
-//      each non-final segment also ran a plain `integrate_core`, roughly
-//      doubling the step count.
+//   2. get_naccept()/get_nreject() reflect exactly one propagation per
+//      segment (the STM integrate); non-final segments must not also run
+//      a plain integrate_core, which would roughly double the step count.
 
 #include "integrator_test_utils.h"
 #include "tycho/detail/utils/thread_pool.h"
@@ -77,9 +76,9 @@ TEST_F(IntegratorTest, SegmentedSTMSerial_EndpointMatchesSingleShot) {
 
 // -----------------------------------------------------------------------------
 // Serial branch step count matches the single-shot integrate_stm to first
-// order. Pre-fix, the serial branch double-counted (one STM integrate + one
-// plain re-propagation per non-final segment). This test would have failed
-// with `total_segmented >= 1.5 * single` before Phase 4.
+// order. A regression that reintroduced per-segment plain re-propagation
+// would ~double the step count; this test would fail with
+// total_segmented >= 1.5 * single.
 // -----------------------------------------------------------------------------
 TEST_F(IntegratorTest, SegmentedSTMSerial_StepCountNotDoubled) {
     SHO ode(0.0);

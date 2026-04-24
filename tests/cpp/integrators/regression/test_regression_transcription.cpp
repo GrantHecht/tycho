@@ -134,14 +134,14 @@ TEST_F(RegressionTranscriptionTest, Case09_JacobianHessian) {
 // Case 10: Batch Jacobians via batch integrate_stm
 ///////////////////////////////////////////////////////////////////////////////
 TEST_F(RegressionTranscriptionTest, Case10_BatchJacobians) {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::DOPRI87, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
     integ.vectorize_batch_calls_ = true;
 
     constexpr int N = 4;
-    using State = Integrator<CR3BP_Substitute>::IntegRet;
+    using State = Integrator<CR3BP_ODE>::IntegRet;
     std::vector<State> x0s(N);
     Eigen::VectorXd tfs(N);
 
@@ -169,29 +169,25 @@ TEST_F(RegressionTranscriptionTest, Case10_BatchJacobians) {
 }
 
 // -----------------------------------------------------------------------------
-// Cases 11-12: single-step transcription regression — provisional tol.
+// Cases 11-12: single-step transcription regression.
 //
 // Single-step Jacobian (Case 11) and Jacobian+Hessian (Case 12) pins exercise
 // the non-adaptive integrate_stm / integrate_stm2 paths that aren't covered
-// by the adaptive-path regression suite. Tolerance is intentionally looser
-// than Cases 8-10 (which pin bit-exact) because the controller-variant
-// reorganization introduced drift at the level of the last few mantissa
-// bits; a policy decision on tol=0 golden regeneration vs. relaxed-tol
-// re-validation is still pending.
-//
-// Grep for "KNOWN-DIVERGENCE-TRANSCRIPTION-TOL" to locate all affected sites.
+// by the adaptive-path regression suite. Goldens are regenerated against the
+// current head of branch at abs_tol=rel_tol=1e-13, adaptive_=false — the same
+// integrator configuration the tests use — so the golden and live values
+// should agree within a few ULPs of double precision.
 // -----------------------------------------------------------------------------
 
-// Provisional relative tolerance: catches refactor regressions that shift
-// results by more than ~1e-10 × scale without imposing a bit-exact contract.
-static constexpr double kProvisionalTranscriptionRelTol = 1e-10;
+// Absolute tolerance for non-adaptive single-step Jacobians/Hessians.
+// Single-step integrate at atol=rtol=1e-13 produces values agreeing with
+// their goldens to a few ULPs; 1e-13 is comfortably above that noise floor.
+static constexpr double kTranscriptionAbsTol = 1e-13;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 11: Two-body single-step Jacobian via integrate_stm (DOPRI54)
-// KNOWN-DIVERGENCE-TRANSCRIPTION-TOL: tolerance is provisional pending a
-// policy decision on tol=0 golden regeneration vs. relaxed-tol re-validation.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergence) {
+TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-13);
@@ -209,16 +205,14 @@ TEST_F(RegressionTranscriptionTest, Case11_SingleStepJacobian_KnownDivergence) {
     auto golden_jx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match_rel(xf_dyn, golden_xf, kProvisionalTranscriptionRelTol, "Case11_xf");
-    expect_matrix_match_rel(jx, golden_jx, kProvisionalTranscriptionRelTol, "Case11_Jacobian");
+    expect_vector_match(xf_dyn, golden_xf, kTranscriptionAbsTol, "Case11_xf");
+    expect_matrix_match(jx, golden_jx, kTranscriptionAbsTol, "Case11_Jacobian");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Case 12: Two-body single-step Jacobian+Hessian via integrate_stm2 (DOPRI87)
-// KNOWN-DIVERGENCE-TRANSCRIPTION-TOL: tolerance is provisional pending a
-// policy decision on tol=0 golden regeneration vs. relaxed-tol re-validation.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDivergence) {
+TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian) {
     Kepler kep(MU_EARTH);
     Integrator<Kepler> integ(kep, IVPAlg::DOPRI87, 10.0);
     integ.set_abs_tol(1e-13);
@@ -250,7 +244,7 @@ TEST_F(RegressionTranscriptionTest, Case12_SingleStepJacobianHessian_KnownDiverg
     auto golden_hx = read_matrix(f);
 
     Eigen::VectorXd xf_dyn = xf;
-    expect_vector_match_rel(xf_dyn, golden_xf, kProvisionalTranscriptionRelTol, "Case12_xf");
-    expect_matrix_match_rel(jx, golden_jx, kProvisionalTranscriptionRelTol, "Case12_Jacobian");
-    expect_matrix_match_rel(hx, golden_hx, kProvisionalTranscriptionRelTol, "Case12_Hessian");
+    expect_vector_match(xf_dyn, golden_xf, kTranscriptionAbsTol, "Case12_xf");
+    expect_matrix_match(jx, golden_jx, kTranscriptionAbsTol, "Case12_Jacobian");
+    expect_matrix_match(hx, golden_hx, kTranscriptionAbsTol, "Case12_Hessian");
 }

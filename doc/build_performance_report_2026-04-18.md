@@ -1,6 +1,6 @@
 # Build Performance Report — 2026-04-18
 
-**Branch:** `ivp-solver-modernization` (post-SP3 completion)
+**Branch:** `ivp-solver-modernization`
 **Commit:** `a3a8133`
 **System:** Linux, 16 cores, 31 GB RAM, clang preset `linux-clang-release`
 **Procedure:** `doc/build_performance_analysis.md`

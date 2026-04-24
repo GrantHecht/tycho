@@ -12,12 +12,12 @@ Tycho's VectorFunction DSL builds very expressive expression trees at compile
 time. That expressiveness cashes out in **runtime** speed (all specialisation is
 inlined and optimised), but the same templates are **expensive to instantiate**:
 
-- In Tycho's post-SP3 baseline build, ~88 % of total compile time is template
-  instantiation. A single example `main.cpp` that constructs an `ODEPhase<T>`
-  over a custom ODE routinely takes **120–180 seconds** to compile on a modern
-  workstation and holds **6–8 GB resident memory** at peak, because every
-  `compute_jacobian_adjointgradient_adjointhessian` specialisation the DSL
-  synthesises is fully processed inside that one TU.
+- As of the 2026-04-18 baseline measurement, ~88 % of Tycho's total compile
+  time is template instantiation. A single example `main.cpp` that constructs
+  an `ODEPhase<T>` over a custom ODE routinely takes **120–180 seconds** to
+  compile on a modern workstation and holds **6–8 GB resident memory** at
+  peak, because every `compute_jacobian_adjointgradient_adjointhessian`
+  specialisation the DSL synthesises is fully processed inside that one TU.
 - On a 31 GB / 16-core Linux host those 8 GB peaks cap safe parallelism at
   roughly `-j2`. Two example TUs in flight is already enough to edge toward
   swap.

@@ -524,11 +524,11 @@ class test_Integrators(unittest.TestCase):
 
 
 class TestBindingValidators(unittest.TestCase):
-    """Pins the Phase 2 Python-side validator contract: setters that route
-    through C++ set_* now raise ValueError on invalid input instead of
-    silently storing NaN / non-physical values that would later blow up
-    inside the adaptive loop. A regression bypassing the bind-side wrapper
-    would accept the bad value and this class would catch it."""
+    """Pins the Python-side validator contract: setters that route through
+    C++ set_* raise ValueError on invalid input instead of silently storing
+    NaN / non-physical values that would later blow up inside the adaptive
+    loop. A regression bypassing the bind-side wrapper would accept the bad
+    value and this class would catch it."""
 
     def _make(self):
         ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)

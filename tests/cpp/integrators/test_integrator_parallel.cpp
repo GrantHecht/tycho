@@ -16,6 +16,9 @@
 
 #include <Eigen/Core>
 #include <limits>
+#include <stdexcept>
+#include <string>
+#include <thread>
 #include <vector>
 
 using namespace tycho;
@@ -557,3 +560,67 @@ INSTANTIATE_TEST_SUITE_P(VariousPartitionCounts, SegmentedSTMParallelTest,
                          [](const ::testing::TestParamInfo<int> &info) {
                              return "nparts" + std::to_string(info.param);
                          });
+
+///////////////////////////////////////////////////////////////////////////////
+// Concurrent worker-throw coverage for the non-STM parallel path.
+//
+// test_parallel_stm_errors.cpp exercises the composite-exception aggregation
+// path for integrate_stm_parallel with n_parts>=2. The plain integrate_parallel
+// path shares the same parallel_blocks dispatch and BatchCounterWriteback
+// contract but was not covered under concurrent worker failure — only the
+// n_parts=1 serial determinism test above. This test pins that path.
+///////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct WorkerThreadThrowingSHO
+    : oc::StaticODE<WorkerThreadThrowingSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                    vf::DenseDerivativeMode::FDiffFwd> {
+    using Base = oc::StaticODE<WorkerThreadThrowingSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                               vf::DenseDerivativeMode::FDiffFwd>;
+
+    std::thread::id main_thread_id_;
+
+    WorkerThreadThrowingSHO() : main_thread_id_(std::this_thread::get_id()) {
+        this->set_ode_size(2, 0, 0);
+    }
+
+    template <class InType, class OutType>
+    inline void compute_impl(vf::CVecRef<InType> x_, vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        auto fx = fx_.const_cast_derived();
+        if (std::this_thread::get_id() != main_thread_id_) {
+            throw std::runtime_error("WorkerThreadThrowingSHO: worker thread at t=" +
+                                     std::to_string(double(x_[2])));
+        }
+        fx[0] = Scalar(x_[1]);
+        fx[1] = Scalar(-x_[0]);
+    }
+};
+
+} // namespace
+
+TEST_F(IntegratorTest, ParallelIntegrateThrowsUnderConcurrency) {
+    // Contract: when worker threads throw mid-batch with n_parts>=2, the
+    // public API raises a std::exception subclass (propagated via
+    // parallel_blocks/DispatchContext). Lanes inlined on the main thread
+    // complete and contribute to get_naccept()/get_nreject() via
+    // BatchCounterWriteback, so the post-catch counters are strictly > 0.
+    WorkerThreadThrowingSHO ode;
+    integrators::Integrator<WorkerThreadThrowingSHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    integ.set_abs_tol(kTol);
+    integ.set_rel_tol(kTol);
+
+    std::vector<Eigen::Vector3d> x0s(kBatchSize, Eigen::Vector3d(1.0, 0.0, 0.0));
+    Eigen::VectorXd tfs = Eigen::VectorXd::Constant(kBatchSize, 1.0);
+
+    ScopedThreadCount threads(kNParts);
+    EXPECT_THROW((void)integ.integrate_parallel(x0s, tfs, kNParts), std::exception);
+
+    // At least one main-thread-inlined lane must have completed before the
+    // worker-thread throw propagated; otherwise the BatchCounterWriteback
+    // contract for partial completion is broken.
+    EXPECT_GT(integ.get_naccept(), 0)
+        << "Expected BatchCounterWriteback to publish main-thread-inlined "
+           "lane counts on unwind.";
+}

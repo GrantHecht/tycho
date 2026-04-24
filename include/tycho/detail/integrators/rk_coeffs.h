@@ -1647,7 +1647,7 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
 };
 
 // =============================================================================
-// Compile-time tableau invariants (Review hardening)
+// Compile-time tableau invariants
 //
 // These checks catch authoring typos in any RKCoeffs specialization at
 // compile time, without any runtime cost. Each user-selectable method

@@ -5,11 +5,10 @@
 // produces, then comparing each interpolated state against the closed-form
 // SHO solution.
 //
-// Why this matters: per-method tests previously only checked the end-state
-// at tf, which uses only the *main* RK stages. The interpolation tables
-// — newly added in SP2 for BS5, Vern7, Vern8, Vern9 — never participated
-// in those checks. A typo in any extra-stage row or in a Bmid weight
-// would silently ship until a downstream user noticed wrong dense output.
+// Why this matters: end-state tests use only the *main* RK stages, so the
+// interpolation tables for BS5 and Vern7/8/9 (Bmid + ExtraA + ExtraC) are
+// not checked there. A typo in any extra-stage row or Bmid weight would
+// silently ship until a downstream user noticed wrong dense output.
 //
 // Reference: SHO has the exact solution
 //     x(t) = x0 * cos(t) + v0 * sin(t)

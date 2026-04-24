@@ -1,11 +1,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 // STM coverage for every user-selectable RK method.
 //
-// Previously, integrate_stm was only exercised on DOPRI87 (via
-// test_integration_stm.cpp). A tableau / augmented-state typo in any of the
-// 6 new SP2 methods (Tsit5, BS3, BS5, Vern7, Vern8, Vern9) would not have
-// surfaced. This suite pins the SHO rotation-block STM against the analytic
-// matrix [[cos(t), sin(t)], [-sin(t), cos(t)]] for every method.
+// Pins the SHO rotation-block STM against the analytic matrix
+// [[cos(t), sin(t)], [-sin(t), cos(t)]] for every method (Tsit5, BS3, BS5,
+// Vern7, Vern8, Vern9, DOPRI87). A tableau or augmented-state typo in any
+// one method would otherwise slip through since end-state coverage doesn't
+// exercise the STM integrator.
 //
 // Tolerances: SHO at atol/rtol=1e-12 admits near-machine-epsilon accuracy
 // for higher-order methods; relaxed for BS3 (order 3).

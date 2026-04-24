@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Step controller unit tests — Julia-form IController (SP3).
+// Step controller unit tests — Julia-form IController.
 //
 // Validates IController::update() against Julia's OrdinaryDiffEqCore form:
 //   q   = EEst^(1/k) / γ,   clipped to [1/qmax_, 1/qmin_]

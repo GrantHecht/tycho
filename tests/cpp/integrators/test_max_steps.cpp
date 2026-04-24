@@ -220,11 +220,11 @@ TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Phase 3 CounterWriteback contract: after any integrate call that threw,
+// CounterWriteback contract: after any integrate call that threw,
 // get_naccept()/get_nreject() must reflect the work actually done rather
-// than the previous call's values. A regression that reverted the RAII
-// guards to the prior success-only writeback path would leave the counters
-// at zero (initial state) after this forced throw.
+// than the previous call's values. Reverting the RAII guards to a
+// success-only writeback path would leave the counters at zero (initial
+// state) after this forced throw.
 ///////////////////////////////////////////////////////////////////////////////
 TEST_F(MaxStepsTest, CountersReflectPartialProgressAfterThrow) {
     astro::Kepler kep(kMuEarth);

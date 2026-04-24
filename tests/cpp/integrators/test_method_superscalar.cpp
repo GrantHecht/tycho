@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// SuperScalar (SIMD batch) path coverage for SP2 methods
+// SuperScalar (SIMD batch) path coverage per method.
 //
 // Verifies Tsit5, BS3, BS5, Vern7, Vern8, Vern9 all pass through the
 // integrate_impl_vectorized path with matching results vs the scalar path.
