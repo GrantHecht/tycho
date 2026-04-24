@@ -140,7 +140,13 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
         std::vector<ODEState> &states = io.states;
         std::vector<ODEDeriv> &derivs = io.derivs;
 
+        // Make this call self-contained: invalidate any FSAL state left over
+        // from a prior integrate() (including one that threw mid-step). Stale
+        // k_fsal_ would otherwise be reused as stage 0 on the first step.
+        stepper_.reset_fsal();
+
         cfg.validate();
+        validate_controller(controller);
 
         if (x.size() != ode.input_rows()) {
             throw std::invalid_argument("AdaptiveDriver: incorrectly sized input state.");
@@ -172,6 +178,8 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             ODEState xi0 = x;
             update_control(xi0);
             eventtimes.resize(events.size());
+            for (auto &v : eventtimes)
+                v.clear();
             for (std::size_t j = 0; j < events.size(); ++j) {
                 if (events[j].vf.input_rows() != ode.input_rows()) {
                     throw std::invalid_argument(
@@ -234,6 +242,11 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             events[j].vf.compute(xi, prev_event_vals[j]);
         }
         eventtimes.resize(events.size());
+        // Clear any stale crossings from a reused buffer — the driver contract
+        // treats `eventtimes` as caller-owned, so a reuse without this clear
+        // would poison find_events_counted with old data.
+        for (auto &v : eventtimes)
+            v.clear();
 
         if (storestates) {
             states.resize(0);
@@ -251,12 +264,6 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             if (storederivs)
                 derivs.push_back(xdoti);
         }
-
-        // The stepper's FSAL cache must reflect f(xi). If the caller has a
-        // fresh stepper (fsal_valid()==false), the first step() call computes
-        // f(x) fresh. If the caller reuses a stepper from a prior run whose
-        // final xf equals our xi, FSAL reuse is correct. Callers that mix
-        // these cases should call reset_fsal() before integrate().
 
         bool continueloop = true;
         while (continueloop) {
@@ -345,8 +352,6 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                                             "AdaptiveDriver::stepper.step");
             }
 
-            // Event detection — EventHandler::check_crossings returns true
-            // when a stop-count condition is hit.
             bool eventbreak = false;
             if (!events.empty()) {
                 eventbreak = EventHandler::check_crossings(events, prev_event_vals, next_event_vals,
@@ -361,16 +366,12 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // is invalidated by the next step() call (see Stepper::peek_fsal
             // docstring).
             if (storederivs) {
-                // peek_fsal requires fresh k_fsal_. The preceding step()
-                // call passed compute_midpoint=(storemidpoints||storederivs),
-                // so storederivs=true here implies compute_midpoint was
-                // true — the precondition that makes k_fsal_ valid even for
-                // non-FSAL methods. See stepper.h peek_fsal docstring.
-                assert((storemidpoints || storederivs) &&
-                       "peek_fsal requires compute_midpoint=true at the preceding "
-                       "step() call; storederivs=true already ensures this via "
-                       "(storemidpoints||storederivs). A refactor that decouples "
-                       "them must revisit this.");
+                // NOTE: peek_fsal requires that the preceding step() call
+                // set compute_midpoint=true — which is driven by the same
+                // (storemidpoints||storederivs) disjunction at the step()
+                // call site below, so this branch is always reached with a
+                // fresh k_fsal_. A future refactor that decouples
+                // compute_midpoint from storederivs must revisit this.
                 xdoti = stepper_.peek_fsal();
             }
             prev_event_vals = next_event_vals;

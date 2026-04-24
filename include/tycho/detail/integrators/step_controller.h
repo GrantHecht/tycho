@@ -11,6 +11,8 @@
 #include <string>
 #include <variant>
 
+#include "tycho/detail/utils/compiler_macros.h"
+
 namespace tycho::integrators {
 
 /// Result of one controller step decision.
@@ -316,19 +318,19 @@ static_assert(Controller<PIDController>);
 
 /// Forward an update call to whichever controller is active in the variant.
 /// Centralizes the boilerplate `std::visit([&](auto& c) { return c.update(…); }, v)`
-/// at every step-loop site. `[[gnu::always_inline]]` because this is on the
+/// at every step-loop site. TYCHO_ALWAYS_INLINE because this is on the
 /// adaptive hot path once per accepted step — without it, Clang LTO can
 /// leave a real call frame here and cost double-digit-% on high-order
 /// methods where per-step overhead dominates (e.g. Vern7/8/9 PI). Benefits:
 /// single point of dispatch, concept constrains what alternatives may carry.
-[[gnu::always_inline]] inline ControllerOutput
-update_controller(ControllerVariant &v, double h, double err_norm, int order, int naccept) {
+TYCHO_ALWAYS_INLINE ControllerOutput update_controller(ControllerVariant &v, double h,
+                                                       double err_norm, int order, int naccept) {
     return std::visit([&](auto &c) { return c.update(h, err_norm, order, naccept); }, v);
 }
 
 /// Reset whichever controller is active in the variant to its first-step
 /// state (err history, qold_, etc.) so a cloned prototype starts clean.
-[[gnu::always_inline]] inline void reset_controller(ControllerVariant &v) {
+TYCHO_ALWAYS_INLINE void reset_controller(ControllerVariant &v) {
     std::visit([](auto &c) { c.reset(); }, v);
 }
 

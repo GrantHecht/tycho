@@ -102,6 +102,12 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
         std::vector<std::vector<ScalarState>> &states_s = io.states_s;
         std::vector<std::vector<ScalarDeriv>> &derivs_s = io.derivs_s;
 
+        // Make this call self-contained: invalidate any FSAL state left over
+        // from a prior integrate() (including one that threw mid-step). The
+        // per-pack seed/reset below handles intra-run FSAL correctness, but
+        // the very first pack can still observe stale cross-call state.
+        stepper_.reset_fsal();
+
         cfg.validate();
 
         if (xs.size() != static_cast<std::size_t>(tfs.size())) {
@@ -117,6 +123,8 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
         if (static_cast<int>(controllers.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: controllers vector size must equal number of trajectories.");
+        for (const auto &c : controllers)
+            validate_controller(c);
         if (static_cast<int>(nacc.size()) != ntrajs || static_cast<int>(nrej.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: nacc/nrej vector size must equal number of trajectories.");
@@ -195,6 +203,10 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
             }
             if (!events.empty()) {
                 eventtimes_s[i].resize(events.size());
+                // Clear any stale crossings from a reused buffer; the IO
+                // contract treats eventtimes_s as caller-owned storage.
+                for (auto &v : eventtimes_s[i])
+                    v.clear();
             }
 
             if (storestates) {
@@ -234,7 +246,6 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                 continueloops[i] = false;
         }
 
-        // SIMD working buffers.
         SSState xi_ss(ode.input_rows());
         SSState xnext_ss(ode.input_rows());
         SSState xnext_est_ss(ode.input_rows());
@@ -246,9 +257,6 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
         ScalarState xnext_mid(ode.input_rows());
         ScalarDeriv xdotnext(ode.output_rows());
         ScalarState xnext_est_lane(ode.input_rows());
-
-        ScalarDeriv abs_error(ode.x_vars());
-        SSDeriv abs_error_ss(ode.x_vars());
 
         int numrunning = 0;
         int lastrunning = -1;
@@ -364,18 +372,13 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                     if constexpr (method_does_fsal) {
                         xdotnext_ss = stepper_.peek_fsal();
                     } else if (storederivs) {
-                        // See adaptive_driver.h storederivs branch for
-                        // peek_fsal precondition rationale.
-                        assert((storemidpoints || storederivs) &&
-                               "peek_fsal requires compute_midpoint=true at the "
-                               "preceding step() call; storederivs=true already "
-                               "ensures this via (storemidpoints||storederivs). "
-                               "A refactor that decouples them must revisit this.");
+                        // NOTE: peek_fsal's freshness precondition (see the
+                        // storederivs branch in adaptive_driver.h for the
+                        // rationale) is satisfied because the step<true>()
+                        // dispatch below is driven by the same
+                        // (storemidpoints||storederivs) disjunction.
                         xdotnext_ss = stepper_.peek_fsal();
                     }
-
-                    abs_error_ss =
-                        (xnext_ss.head(ode.x_vars()) - xnext_est_ss.head(ode.x_vars())).cwiseAbs();
 
                     for (int V2 = 0; V2 < Vmax; ++V2) {
                         int itmp = idxs[V2];
@@ -387,7 +390,6 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         }
                         for (int k = 0; k < ode.output_rows(); ++k) {
                             xdotnext[k] = xdotnext_ss[k][V2];
-                            abs_error[k] = abs_error_ss[k][V2];
                         }
 
                         if (cfg.adaptive) {
@@ -441,7 +443,6 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                                         "ParallelDriver::stepper.step", itmp);
                         }
 
-                        // Event detection (per lane).
                         bool eventbreak = false;
                         if (!events.empty()) {
                             eventbreak = EventHandler::check_crossings(

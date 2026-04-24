@@ -51,8 +51,6 @@ inline void check_stm_finite_or_throw(const Eigen::MatrixBase<Derived> &m, const
 /// scalar and batch STM paths.
 struct STMDriver {
 
-    /// Compute the full Jacobian (STM) from a sequence of dense states.
-    ///
     /// Chains single-step Jacobians from the transcription stepper through
     /// the entire trajectory, optionally using SuperScalar batching.
     template <class DODE>

@@ -1149,14 +1149,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     STMEventRet integrate_stm_core(const ODEState<double> &x0, double tf,
                                    const std::vector<EventPack> &events,
-                                   ControllerVariant &controller, int &naccept,
-                                   int &nreject) const {
-        int nfailed = 0;
-        return this->integrate_stm_core(x0, tf, events, controller, naccept, nreject, nfailed);
-    }
-
-    STMEventRet integrate_stm_core(const ODEState<double> &x0, double tf,
-                                   const std::vector<EventPack> &events,
                                    ControllerVariant &controller, int &naccept, int &nreject,
                                    int &nfailed_event_refinements) const {
         auto [xs, eventlocs] = this->integrate_dense_core(
@@ -1902,8 +1894,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         main_ctrl = this->make_worker_controller();
                         main_na = 0;
                         main_nr = 0;
-                        xs[i + 1] =
-                            this->integrate_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
+                        // Use integrate_stm_core (discarding the STM) so the
+                        // main thread exercises the same FP arithmetic as the
+                        // workers. xs[i+1] becomes worker (i+1)'s starting
+                        // state; if it diverged from worker i's xf in FP, the
+                        // chain-rule product in jxall would reflect sensitivity
+                        // at a mismatched linearization point. Identical
+                        // codepaths ⇒ bit-identical xs ⇒ exact chaining.
+                        auto stm_result =
+                            this->integrate_stm_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
+                        xs[i + 1] = std::get<0>(stm_result);
                     }
                 }
             } catch (...) {
@@ -1994,11 +1994,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         } else {
             // Non-threadpool fallback is single-threaded, so it can safely
             // accumulate counters into the members (no cross-thread writes).
-            // `xf` from integrate_stm_core is already the propagated segment
-            // endpoint, so a second integrate_core call per segment would
-            // duplicate the work. The threadpool branch re-propagates only
-            // because its segment futures can't be joined before the next
-            // submit — that constraint doesn't apply here.
+            // No second propagation is needed — each segment's `xf` feeds
+            // directly into the next segment's start state.
             int total_na = 0, total_nr = 0;
             CounterWriteback _writeback{*this, total_na, total_nr};
             for (int i = 0; i < n_parts; i++) {

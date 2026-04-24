@@ -30,8 +30,8 @@ namespace tycho::integrators {
 ///
 /// Direction: sign(tf - t0). Atol/Rtol are per-component.
 ///
-/// OOP scalar variant — no diffusion/g term (Julia's `g==nothing` branch),
-/// matching Tycho's deterministic ODE subsystem.
+/// Scalar (non-batched) variant for deterministic ODEs: no stochastic
+/// diffusion term, so Julia's `g==nothing` branch is the correct analogue.
 template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {

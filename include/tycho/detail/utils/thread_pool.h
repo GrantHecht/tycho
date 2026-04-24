@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
@@ -11,6 +12,7 @@
 #include <mutex>
 #include <new>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -35,35 +37,72 @@ inline thread_local bool g_is_pool_worker{false};
 /// Per-dispatch synchronization context.
 /// Lives on the caller's stack. Workers hold &ctx — caller MUST wait()
 /// on the latch before ctx goes out of scope.
+///
+/// Exception aggregation: captures up to kMaxCaptured distinct worker
+/// exceptions. If a single worker throws, rethrow_if_exception() rethrows
+/// that exception unchanged (preserves type). If multiple workers throw
+/// concurrently, rethrow_if_exception() composes a std::runtime_error whose
+/// message concatenates every captured .what() — callers cannot distinguish
+/// "one lane diverged" from "all lanes diverged" without this.
 struct DispatchContext {
+    static constexpr int kMaxCaptured = 5;
+
     std::latch done;
-    std::atomic<bool> has_exception{false};
+    std::atomic<int> captured{0};
     std::atomic<int> suppressed{0};
-    std::exception_ptr first_exception;
+    std::array<std::exception_ptr, kMaxCaptured> exceptions{};
 
     explicit DispatchContext(std::ptrdiff_t count) : done(count) {}
 
-    /// Store the first exception. Only called from catch blocks (cold path).
-    /// The seq_cst exchange on has_exception serializes concurrent callers:
-    /// only the thread whose exchange returns false writes first_exception.
-    /// Cost: ~0 (never executed on happy path).
+    /// Store an exception. Only called from catch blocks (cold path).
+    /// fetch_add serializes slot assignment; excess beyond kMaxCaptured
+    /// increments the suppressed counter (surfaced in the aggregated
+    /// message).
     void store_exception() noexcept {
-        if (!has_exception.exchange(true))
-            first_exception = std::current_exception();
-        else
+        int idx = captured.fetch_add(1, std::memory_order_acq_rel);
+        if (idx < kMaxCaptured) {
+            exceptions[idx] = std::current_exception();
+        } else {
             suppressed.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
-    /// Rethrow stored exception. MUST be called after done.wait()
-    /// (the latch provides the happens-before for the relaxed counter).
+    /// Rethrow stored exception(s). MUST be called after done.wait()
+    /// (the latch provides the happens-before for the slot writes).
     void rethrow_if_exception() {
-        if (has_exception.load()) {
-            int n = suppressed.load(std::memory_order_relaxed);
-            if (n > 0)
-                std::fprintf(stderr, "[Tycho] dispatch: %d additional exception(s) suppressed\n",
-                             n);
-            std::rethrow_exception(first_exception);
+        int total = captured.load(std::memory_order_acquire);
+        if (total == 0)
+            return;
+
+        int n = total < kMaxCaptured ? total : kMaxCaptured;
+        // Preserve the original exception type when only one worker failed;
+        // aggregation is only useful when distinct root causes coexist.
+        if (n == 1) {
+            std::rethrow_exception(exceptions[0]);
         }
+
+        std::string msg = "[Tycho] dispatch: ";
+        msg += std::to_string(total);
+        msg += " concurrent worker exception(s):";
+        for (int i = 0; i < n; ++i) {
+            msg += "\n--- [";
+            msg += std::to_string(i);
+            msg += "] ---\n";
+            try {
+                std::rethrow_exception(exceptions[i]);
+            } catch (const std::exception &e) {
+                msg += e.what();
+            } catch (...) {
+                msg += "<non-std::exception>";
+            }
+        }
+        int extra = suppressed.load(std::memory_order_relaxed);
+        if (extra > 0) {
+            msg += "\n... and ";
+            msg += std::to_string(extra);
+            msg += " more suppressed";
+        }
+        throw std::runtime_error(msg);
     }
 };
 

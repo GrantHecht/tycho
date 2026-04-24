@@ -107,7 +107,7 @@ struct EventHandler {
                     int stop = events[j].stop_count;
 
                     if (stop != 0) {
-                        if (static_cast<int>(eventtimes[j].size()) == stop) {
+                        if (static_cast<int>(eventtimes[j].size()) >= stop) {
                             eventbreak = true;
                         }
                     }
@@ -228,6 +228,27 @@ struct EventHandler {
                     return std::array<double, 3>{tm, tlow, thigh};
                 };
 
+                // Run Newton from `tig` and accept only if the result is
+                // both in-bracket AND satisfies the residual contract
+                // |f(tevent)| <= tol. The internal `newton` lambda returns
+                // its last iterate on max_iters exhaustion without checking
+                // |fx| <= tol, so a slow-converging iterate that happens to
+                // land in-bracket would otherwise be silently accepted as
+                // the root and evade the n_failed_refinements counter.
+                auto refine_one = [&](double tig_candidate, double lo,
+                                      double hi) -> std::optional<double> {
+                    double tevent = newton(tig_candidate);
+                    if (!(tevent > lo && tevent < hi)) {
+                        return std::nullopt;
+                    }
+                    x[0] = tevent;
+                    auto fv = func.compute(x);
+                    if (!std::isfinite(fv[0]) || std::abs(fv[0]) > std::abs(tol)) {
+                        return std::nullopt;
+                    }
+                    return tevent;
+                };
+
                 for (auto &eventtime : eventtimes[i]) {
                     double tlow = eventtime[0];
                     double thigh = eventtime[1];
@@ -237,36 +258,28 @@ struct EventHandler {
                     }
 
                     auto res = bisect(tlow, thigh, 2);
-                    double tig = res[0];
                     double tlow2 = res[1];
                     double thigh2 = res[2];
 
-                    double tevent = newton(tig);
+                    auto refined = refine_one(res[0], tlow, thigh);
+                    if (!refined) {
+                        res = bisect(tlow2, thigh2, max_iters);
+                        refined = refine_one(res[0], tlow, thigh);
+                    }
 
-                    if (tevent > tlow && tevent < thigh) {
+                    if (refined) {
                         ODEState ei(input_rows);
                         ei.setZero();
-                        tab->interpolate_ref(tevent, ei);
+                        tab->interpolate_ref(*refined, ei);
                         eventstates[i].emplace_back(std::move(ei));
                     } else {
-                        res = bisect(tlow2, thigh2, max_iters);
-                        tig = res[0];
-                        tevent = newton(tig);
-
-                        if (tevent > tlow && tevent < thigh) {
-                            ODEState ei(input_rows);
-                            ei.setZero();
-                            tab->interpolate_ref(tevent, ei);
-                            eventstates[i].emplace_back(std::move(ei));
-                        } else {
-                            // Neither the fast nor wide-bracket bisect+Newton
-                            // retry could resolve this crossing. The slot is
-                            // filled with std::nullopt to preserve 1:1
-                            // alignment with eventtimes; the counter also
-                            // increments for callers that summarise loss.
-                            eventstates[i].emplace_back(std::nullopt);
-                            ++n_failed_refinements;
-                        }
+                        // Neither the fast nor wide-bracket bisect+Newton
+                        // retry could resolve this crossing. The slot is
+                        // filled with std::nullopt to preserve 1:1
+                        // alignment with eventtimes; the counter also
+                        // increments for callers that summarise loss.
+                        eventstates[i].emplace_back(std::nullopt);
+                        ++n_failed_refinements;
                     }
                 }
             }

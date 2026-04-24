@@ -215,7 +215,21 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                nb::object pyfunc) {
                 return integ.integrate_dense(x0, tf, n,
                                              [pyfunc](ConstEigenRef<Eigen::VectorXd> x) -> bool {
-                                                 return PyObject_IsTrue(pyfunc(x).ptr()) != 0;
+                                                 // pyfunc(x) raises nb::python_error if the Python
+                                                 // callable itself raises (nanobind converts the
+                                                 // Python exception). PyObject_IsTrue accepts any
+                                                 // truthy object — including numpy scalar bools
+                                                 // that users commonly return (e.g. `x[1] < 0`). An
+                                                 // error return (-1) from PyObject_IsTrue leaves
+                                                 // the Python error indicator set; propagate as
+                                                 // nb::python_error so the caller sees a clean
+                                                 // exception instead of a silent truncation (the
+                                                 // coerce -1→true trap).
+                                                 nb::object result = pyfunc(x);
+                                                 int truth = PyObject_IsTrue(result.ptr());
+                                                 if (truth == -1)
+                                                     throw nb::python_error();
+                                                 return truth != 0;
                                              });
             },
             nb::arg("xt0_up"), nb::arg("tf"), nb::arg("n"), nb::arg("stop_func"));
