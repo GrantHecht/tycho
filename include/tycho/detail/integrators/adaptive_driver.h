@@ -260,7 +260,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
 
         bool continueloop = true;
         while (continueloop) {
-            if (naccept + nreject >= cfg.max_steps) {
+            if (static_cast<long long>(naccept) + nreject >= cfg.max_steps) {
                 throw std::runtime_error(
                     "AdaptiveDriver exceeded max_steps (" + std::to_string(cfg.max_steps) +
                     ") before reaching tf; the adaptive controller may be stuck in a "
@@ -291,8 +291,13 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // stage.
             auto fsal_saved = stepper_.snapshot_fsal();
 
-            stepper_.step(ode, xi, tnext, xnext, xnext_est, storemidpoints || storederivs,
-                          xnext_mid, update_control);
+            if (storemidpoints || storederivs) {
+                stepper_.template step<true>(ode, xi, tnext, xnext, xnext_est, xnext_mid,
+                                             update_control);
+            } else {
+                stepper_.template step<false>(ode, xi, tnext, xnext, xnext_est, xnext_mid,
+                                              update_control);
+            }
 
             if (cfg.adaptive) {
                 auto u_x_vars = ode.x_vars();

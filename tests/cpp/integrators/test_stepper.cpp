@@ -36,7 +36,7 @@ TEST_F(StepperTest, DOPRI54_SingleStep) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, tf, xf, xf_est, false, xf_mid, noop);
+    stepper.template step<false>(ode, x0, tf, xf, xf_est, xf_mid, noop);
 
     // DOPRI5(4): 5th-order solution should be accurate to ~h^6 ~ 1e-6
     EXPECT_NEAR(xf[0], std::cos(0.1), 1e-6) << "DOPRI54 xf[0] ~ cos(0.1)";
@@ -65,11 +65,11 @@ TEST_F(StepperTest, DOPRI54_TwoStepsConsistent) {
     NoControl noop;
 
     // Step 1: compute with midpoint to populate FSAL
-    stepper.step(ode, x0, 0.1, xf1, xf_est1, true, xf_mid1, noop);
+    stepper.step<true>(ode, x0, 0.1, xf1, xf_est1, xf_mid1, noop);
     EXPECT_TRUE(stepper.fsal_valid()) << "FSAL should be valid after DOPRI54 step";
 
     // Step 2: use FSAL
-    stepper.step(ode, xf1, 0.2, xf2, xf_est2, false, xf_mid2, noop);
+    stepper.step<false>(ode, xf1, 0.2, xf2, xf_est2, xf_mid2, noop);
 
     // Two steps of h=0.1 should give cos(0.2), -sin(0.2)
     EXPECT_NEAR(xf2[0], std::cos(0.2), 1e-6);
@@ -97,8 +97,8 @@ TEST_F(StepperTest, DOPRI54_FSALConsistency) {
     xf2a.setZero();
     xf_est2a.setZero();
     xf_mid2a.setZero();
-    stepper_a.step(ode, x0, 0.1, xf1a, xf_est1a, true, xf_mid1a, noop);
-    stepper_a.step(ode, xf1a, 0.2, xf2a, xf_est2a, false, xf_mid2a, noop);
+    stepper_a.step<true>(ode, x0, 0.1, xf1a, xf_est1a, xf_mid1a, noop);
+    stepper_a.step<false>(ode, xf1a, 0.2, xf2a, xf_est2a, xf_mid2a, noop);
 
     // Path B: step1 → reset → step2 (no FSAL)
     Stepper<IVPAlg::DOPRI54, SHO, double> stepper_b;
@@ -110,9 +110,9 @@ TEST_F(StepperTest, DOPRI54_FSALConsistency) {
     xf2b.setZero();
     xf_est2b.setZero();
     xf_mid2b.setZero();
-    stepper_b.step(ode, x0, 0.1, xf1b, xf_est1b, true, xf_mid1b, noop);
+    stepper_b.step<true>(ode, x0, 0.1, xf1b, xf_est1b, xf_mid1b, noop);
     stepper_b.reset_fsal();
-    stepper_b.step(ode, xf1b, 0.2, xf2b, xf_est2b, false, xf_mid2b, noop);
+    stepper_b.step<false>(ode, xf1b, 0.2, xf2b, xf_est2b, xf_mid2b, noop);
 
     // FSAL and non-FSAL should give identical xf (FSAL saves one evaluation)
     for (int i = 0; i < 3; i++) {
@@ -135,7 +135,7 @@ TEST_F(StepperTest, DOPRI54_EmbeddedEstimate) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
+    stepper.step<false>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
 
     // xf_est should differ from xf (they use different weights)
     double diff = (xf - xf_est).head<2>().norm();
@@ -160,7 +160,7 @@ TEST_F(StepperTest, DOPRI87_SingleStep) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, tf, xf, xf_est, false, xf_mid, noop);
+    stepper.step<false>(ode, x0, tf, xf, xf_est, xf_mid, noop);
 
     // DOPRI8(7): 8th-order solution should be accurate to ~h^9 ~ 1e-9
     EXPECT_NEAR(xf[0], std::cos(0.1), 1e-9) << "DOPRI87 xf[0] ~ cos(0.1)";
@@ -182,7 +182,7 @@ TEST_F(StepperTest, DOPRI87_NoFSAL) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
+    stepper.step<true>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
     EXPECT_FALSE(stepper.fsal_valid()) << "DOPRI87 should not set fsal_valid";
 }
 
@@ -201,7 +201,7 @@ TEST_F(StepperTest, DOPRI54_MidpointComputed) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
+    stepper.step<true>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
 
     // Midpoint time should be t0 + h/2
     EXPECT_NEAR(xf_mid[2], 0.05, 1e-15) << "Midpoint time should be h/2";
@@ -225,7 +225,7 @@ TEST_F(StepperTest, DOPRI87_MidpointWithExtraDerivative) {
     xf_mid.setZero();
 
     NoControl noop;
-    stepper.step(ode, x0, 0.1, xf, xf_est, true, xf_mid, noop);
+    stepper.step<true>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
 
     // DOPRI87 is non-FSAL, so midpoint computation does an extra derivative eval
     // The k_fsal_ should be populated with the derivative at xf
@@ -282,7 +282,7 @@ template <IVPAlg Alg> void stepper_single_step_matches_analytical() {
     xf_est.setZero();
     xf_mid.setZero();
     NoControl noop;
-    stepper.step(ode, x0, h, xf, xf_est, true, xf_mid, noop);
+    stepper.template step<true>(ode, x0, h, xf, xf_est, xf_mid, noop);
 
     // End-state accuracy: primary order P gives O(h^(P+1)) per-step error.
     constexpr int P = method_order<Alg>();
@@ -330,7 +330,7 @@ TEST_F(StepperTest, BS5_FSALValidAfterStep) {
     xf_mid.setZero();
     NoControl noop;
 
-    stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
+    stepper.step<false>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
     EXPECT_TRUE(stepper.fsal_valid()) << "BS5 LastStageIsFxf=true must populate fsal_valid_";
 
     // k_fsal_ should hold f(xf) = [xf[1], -xf[0]] (SHO derivatives)
@@ -356,6 +356,6 @@ TEST_F(StepperTest, Vern7_NoFSALWithoutMidpoint) {
     xf_mid.setZero();
     NoControl noop;
 
-    stepper.step(ode, x0, 0.1, xf, xf_est, false, xf_mid, noop);
+    stepper.step<false>(ode, x0, 0.1, xf, xf_est, xf_mid, noop);
     EXPECT_FALSE(stepper.fsal_valid()) << "Vern7 LastStageIsFxf=false must NOT set fsal_valid_";
 }

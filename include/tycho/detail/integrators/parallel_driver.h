@@ -277,7 +277,8 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
             // users can localize a runaway lane without waiting for the whole
             // batch to exhaust its budget.
             for (int i = 0; i < ntrajs; ++i) {
-                if (continueloops[i] && nacc[i] + nrej[i] >= cfg.max_steps) {
+                if (continueloops[i] &&
+                    static_cast<long long>(nacc[i]) + nrej[i] >= cfg.max_steps) {
                     throw std::runtime_error(
                         "ParallelDriver: trajectory " + std::to_string(i) +
                         " exceeded max_steps (" + std::to_string(cfg.max_steps) +
@@ -342,8 +343,13 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         stepper_.reset_fsal();
                     }
 
-                    stepper_.step(ode, xi_ss, tnext_ss, xnext_ss, xnext_est_ss,
-                                  storemidpoints || storederivs, xnext_mid_ss, update_control);
+                    if (storemidpoints || storederivs) {
+                        stepper_.template step<true>(ode, xi_ss, tnext_ss, xnext_ss, xnext_est_ss,
+                                                     xnext_mid_ss, update_control);
+                    } else {
+                        stepper_.template step<false>(ode, xi_ss, tnext_ss, xnext_ss, xnext_est_ss,
+                                                      xnext_mid_ss, update_control);
+                    }
 
                     // Extract f(xf) back to xdotnext_ss for FSAL methods so
                     // accepted lanes propagate f(xf) to the next step. For

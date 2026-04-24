@@ -49,7 +49,20 @@ struct EventPack {
 
     EventPack() = default;
     EventPack(GenericFunction<-1, 1> vf_, int direction_, int stop_count_)
-        : vf(std::move(vf_)), direction(direction_), stop_count(stop_count_) {}
+        : vf(std::move(vf_)), direction(direction_), stop_count(stop_count_) {
+        // Validate at construction — direction outside {-1, 0, 1} silently
+        // coerces to rising/falling in the sign-product check below, and a
+        // negative stop_count never triggers the == comparison at stop time.
+        // Both failure modes are silent; reject up front.
+        if (!(direction_ == -1 || direction_ == 0 || direction_ == 1)) {
+            throw std::invalid_argument("EventPack: direction must be -1, 0, or +1; got " +
+                                        std::to_string(direction_));
+        }
+        if (stop_count_ < 0) {
+            throw std::invalid_argument("EventPack: stop_count must be >= 0; got " +
+                                        std::to_string(stop_count_));
+        }
+    }
 };
 
 struct EventHandler {

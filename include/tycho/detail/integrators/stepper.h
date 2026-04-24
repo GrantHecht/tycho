@@ -88,14 +88,25 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// Perform one RK step from state x to time tf.
     ///
     /// On output: xf = next state, xf_est = embedded estimate,
-    /// xf_mid = midpoint state (only written if compute_midpoint=true).
-    /// k_fsal_ is updated to f(xf) when the method/compute_midpoint combination
+    /// xf_mid = midpoint state (only written if ComputeMidpoint=true).
+    /// k_fsal_ is updated to f(xf) when the method / ComputeMidpoint combination
     /// makes it available.
     ///
+    /// `ComputeMidpoint` is a compile-time flag. Instantiating with `true`
+    /// against an algorithm whose `RKCoeffs::HasMidpoint==false` is a hard
+    /// compile error — the midpoint assembly reads `RKData::Bmid[]`, which
+    /// is undefined for methods without midpoint support (RK4Classic, DOPRI5,
+    /// Trans variants). Driver callers that have a runtime `storemidpoints`
+    /// flag dispatch between `step<true>()` and `step<false>()` at the call
+    /// site — one branch per step, cost dwarfed by the step body.
+    ///
     /// ControlFn must be callable with (ODEState&).
-    template <class ControlFn>
+    template <bool ComputeMidpoint, class ControlFn>
     void step(const DODE &ode, const ODEState &x, Scalar tf, ODEState &xf, ODEState &xf_est,
-              bool compute_midpoint, ODEState &xf_mid, ControlFn &&update_control) {
+              ODEState &xf_mid, ControlFn &&update_control) {
+        static_assert(!ComputeMidpoint || RKData::HasMidpoint,
+                      "Stepper::step<true>() requires RKCoeffs<Alg>::HasMidpoint. The midpoint "
+                      "assembly indexes RKData::Bmid[], which is undefined for this algorithm.");
 
         auto Impl = [&](auto &k_vals, auto &xtup, auto &k_vals_extra) {
             xtup = x;
@@ -157,7 +168,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             xf_est = xtup;
 
             // Midpoint with interpolant extra stages (BS5/Tsit5/Vern7/8/9).
-            if (compute_midpoint) {
+            if constexpr (ComputeMidpoint) {
                 // For LastStageIsFxf=false methods (Vern7/8/9), f(xf) is not
                 // in k_vals.back(); evaluate it into k_vals_extra[0] so the
                 // Bmid sum can pick it up, and seed k_fsal_ with f(xf).
