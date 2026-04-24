@@ -64,8 +64,8 @@ TEST_F(Vern7Test, TwoBodyMatchesJulia) {
 }
 
 TEST_F(Vern7Test, CR3BPMatchesJulia) {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::Vern7, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::Vern7, 0.01);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
 

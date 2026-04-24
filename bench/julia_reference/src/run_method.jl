@@ -29,7 +29,7 @@ function problem_from_string(s::AbstractString)
         return (twobody, u0, tf, p)
     elseif s == "crtbp"
         u0, tf, p = cr3bp_initial()
-        return (crtbp_substitute, u0, tf, p)
+        return (crtbp, u0, tf, p)
     else
         error("Unknown problem: $s")
     end

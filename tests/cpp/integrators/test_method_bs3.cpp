@@ -65,8 +65,8 @@ TEST_F(BS3Test, TwoBodyMatchesJulia) {
 }
 
 TEST_F(BS3Test, CR3BPMatchesJulia) {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::BS3, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::BS3, 0.01);
     integ.set_abs_tol(1e-8);
     integ.set_rel_tol(1e-9);
 

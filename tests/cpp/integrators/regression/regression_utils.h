@@ -2,7 +2,9 @@
 // Golden regression test utilities
 //
 // Shared definitions for the golden regression corpus:
-// - CR3BP ODE definition (via BUILD_ODE_FROM_EXPRESSION_FD)
+// - Kepler ODE (re-exported from tycho::astro)
+// - CR3BP ODE wrapper (classical rotating-frame dynamics via CRTBPDynamics,
+//   with extra-accel channel pinned to zero)
 // - Binary I/O helpers for golden data
 // - Common initial conditions and parameters
 ///////////////////////////////////////////////////////////////////////////////
@@ -10,6 +12,11 @@
 #pragma once
 
 #include "integrator_test_utils.h"
+#include "tycho/detail/astro/crtbp_dynamics.h"
+#include "tycho/detail/astro/kepler_model.h"
+#include "tycho/detail/optimal_control/core/ode_sizes.h"
+#include "tycho/detail/optimal_control/phase/ode.h"
+#include "tycho/vector_functions.h"
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdint>
@@ -23,16 +30,34 @@
 namespace TychoTest {
 
 ///////////////////////////////////////////////////////////////////////////////
-// CR3BP test stand-in
+// CR3BP ODE (classical rotating-frame circular restricted three-body problem).
 //
-// Uses tycho::astro::Kepler with a different mu value as a substitute
-// for a full CR3BP ODE. The VF expression tree for CR3BP requires
-// Constant<3> which has incomplete CRTP propagation when defined outside
-// the tycho namespace. Using Kepler with mu=1.0 (normalized units)
-// exercises identical integrator code paths (ODESize<6,0,0>, same state
-// vector layout, same stepper template instantiation).
+// Wraps tycho::astro::CRTBPDynamics (a 9-input, 6-output VectorFunction with
+// x = [r(3), v(3), ax_ext(3)]) into a 7-input, 6-output `StaticODE_Expression`
+// suitable for Integrator<>. The extra-acceleration channel is pinned to
+// zero inside the Definition() expression, so the state that the integrator
+// advances is the standard 6-dim (r, v) plus the implicit time channel.
+//
+// Follows the pattern of tycho::astro::Kepler (kepler_model.h): ODESize<6,0,0>
+// + Definition() returning a VF expression tree.
 ///////////////////////////////////////////////////////////////////////////////
-using CR3BP_Substitute = tycho::astro::Kepler;
+struct CR3BP_ODE_Impl : tycho::oc::ODESize<6, 0, 0> {
+    static auto Definition(double mu) {
+        auto args = tycho::vf::Arguments<7>();
+        auto state = args.template head<6>();
+        Eigen::Vector3d zero3 = Eigen::Vector3d::Zero();
+        auto zero_accel = tycho::vf::Constant<7, 3>(7, zero3);
+        tycho::astro::CRTBPDynamics dyn(mu);
+        return dyn.eval(tycho::vf::StackedOutputs{state, zero_accel});
+    }
+};
+
+struct CR3BP_ODE : tycho::oc::StaticODE_Expression<CR3BP_ODE, CR3BP_ODE_Impl, double> {
+    using Base = tycho::oc::StaticODE_Expression<CR3BP_ODE, CR3BP_ODE_Impl, double>;
+    using Base::Base;
+    double mu_ = 0.012150585609624;
+    CR3BP_ODE(double mu) : Base(mu) { this->mu_ = mu; }
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Common physical parameters
@@ -40,6 +65,9 @@ using CR3BP_Substitute = tycho::astro::Kepler;
 
 // Earth gravitational parameter (km^3/s^2)
 constexpr double MU_EARTH = 398600.4418;
+
+// Earth-Moon CR3BP mass ratio (dimensionless). mu = M_moon / (M_earth + M_moon).
+constexpr double MU_CR3BP = 0.012150585609624;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -60,21 +88,18 @@ inline double leo_period() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// "CR3BP" substitute initial state (Kepler with mu=1.0, normalized units)
+// CR3BP planar-halo seed near L1 (Earth-Moon, normalized units).
 //
-// Exercises the same Integrator<Kepler> template instantiation as the real
-// CR3BP tests would, but with two-body dynamics. Circular orbit at r=1.0
-// in normalized units (mu=1.0).
+// Layout: [x, y, z, vx, vy, vz, t] in rotating-frame normalized units where
+// the primary-secondary separation is 1 and the rotation rate is 1. The seed
+// puts the third body slightly inside L1 with a small out-of-plane offset
+// and a small tangential velocity — enough to exercise non-trivial rotating-
+// frame dynamics (Coriolis coupling + non-axisymmetric potential) over a
+// short integration interval.
 ///////////////////////////////////////////////////////////////////////////////
-
-constexpr double MU_CR3BP_SUBSTITUTE = 1.0;
-
 inline Eigen::VectorXd cr3bp_l1_x0() {
-    // Circular orbit at r=1.0 in normalized units (mu=1.0)
-    double r0 = 1.0;
-    double v0 = std::sqrt(MU_CR3BP_SUBSTITUTE / r0);
     Eigen::VectorXd x0(7);
-    x0 << r0, 0.0, 0.05, 0.0, v0, 0.0, 0.0;
+    x0 << 0.84, 0.0, 0.05, 0.0, 0.15, 0.0, 0.0;
     return x0;
 }
 

@@ -52,8 +52,8 @@ void generate_ivp_02() {
 // Case 3: CR3BP substitute DOPRI87 — Kepler with mu=1.0 (normalized)
 ///////////////////////////////////////////////////////////////////////////////
 void generate_ivp_03() {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::DOPRI87, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
 
@@ -276,14 +276,14 @@ void generate_trans_09() {
 // Case 10: Batch Jacobians via batch integrate_stm
 ///////////////////////////////////////////////////////////////////////////////
 void generate_trans_10() {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::DOPRI87, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
     integ.vectorize_batch_calls_ = true;
 
     constexpr int N = 4;
-    using State = Integrator<CR3BP_Substitute>::IntegRet;
+    using State = Integrator<CR3BP_ODE>::IntegRet;
     std::vector<State> x0s(N);
     Eigen::VectorXd tfs(N);
 

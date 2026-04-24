@@ -69,8 +69,8 @@ TEST_F(RegressionIVPTest, Case02_TwoBody_DOPRI87) {
 // Case 3: CR3BP L1 halo DOPRI87 — Earth-Moon system near L1 region
 ///////////////////////////////////////////////////////////////////////////////
 TEST_F(RegressionIVPTest, Case03_CR3BP_DOPRI87) {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    Integrator<CR3BP_Substitute> integ(ode, IVPAlg::DOPRI87, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    Integrator<CR3BP_ODE> integ(ode, IVPAlg::DOPRI87, 0.01);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
 

@@ -68,21 +68,43 @@ struct ToleranceTier {
 // First-pass parity bounds. `state_band` is applied as a whole-state scale:
 // band[i] = max(||ref|| · state_band, abs_tol · 1000). The abs_tol floor
 // accounts for accumulated absolute error on near-zero components (e.g., a
-// quarter-orbit LEO ends with x ≈ 0 at ~1e-4 km error for tol=1e-6). The
-// naccept/nreject bands are widened from the plan's 10%/50% to 50%/100% —
-// a few algorithms (notably Vern7/8/9 at tight tolerances) show ~40-50%
-// naccept drift vs. Julia, most likely stemming from convention differences
-// in the error_order passed to β-pre-scaled PI-controller defaults. The
-// bands may tighten once the error-order convention is reconciled with Julia.
+// quarter-orbit LEO ends with x ≈ 0 at ~1e-4 km error for tol=1e-6).
+//
+// Per-method count bands. DOPRI54 / DOPRI87 / Tsit5 / BS3 / BS5 must agree
+// with Julia's step counts to within 10% / 50% (accept / reject) — the
+// original plan's bound. Vern7/8/9 currently show ~40-50% naccept drift at
+// tight tolerances, most likely because their β-pre-scaled PI-controller
+// defaults use a different error_order convention than OrdinaryDiffEq.jl;
+// they remain on the looser 50% / 100% bar until the convention is
+// reconciled. Relaxing for Vern alone means a step-count regression in the
+// DOPRI / Tsit5 / BS families is caught immediately.
 const ToleranceTier kTol1e6{"tol1e6", 1e-6, 1e-7, 1e-4};
 const ToleranceTier kTol1e9{"tol1e9", 1e-9, 1e-10, 1e-7};
 const ToleranceTier kTol1e12{"tol1e12", 1e-12, 1e-13, 1e-10};
 
-inline int naccept_band(int naccept_julia) {
-    return std::max(5, static_cast<int>(0.50 * naccept_julia));
+struct CountBand {
+    double naccept_frac;
+    double nreject_frac;
+};
+
+inline CountBand band_for(tycho::integrators::IVPAlg alg) {
+    switch (alg) {
+    case tycho::integrators::IVPAlg::Vern7:
+    case tycho::integrators::IVPAlg::Vern8:
+    case tycho::integrators::IVPAlg::Vern9:
+        return {0.50, 1.00};
+    default:
+        return {0.10, 0.50};
+    }
 }
 
-inline int nreject_band(int nreject_julia) { return std::max(10, nreject_julia); }
+inline int naccept_band(tycho::integrators::IVPAlg alg, int naccept_julia) {
+    return std::max(5, static_cast<int>(band_for(alg).naccept_frac * naccept_julia));
+}
+
+inline int nreject_band(tycho::integrators::IVPAlg alg, int nreject_julia) {
+    return std::max(10, static_cast<int>(band_for(alg).nreject_frac * nreject_julia));
+}
 
 inline double state_band_abs(const Eigen::VectorXd &ref, const ToleranceTier &tier) {
     return std::max(ref.norm() * tier.state_band, tier.abs_tol * 1000.0);
@@ -110,18 +132,18 @@ void assert_parity_twobody(tycho::integrators::IVPAlg alg, const char *alg_name_
 
     int naccept = integ.get_naccept();
     int nreject = integ.get_nreject();
-    EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(ref.naccept))
+    EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(alg, ref.naccept))
         << alg_name_lc << " two_body " << tier.tag << " naccept Tycho=" << naccept
         << " Julia=" << ref.naccept;
-    EXPECT_LE(std::abs(nreject - ref.nreject), nreject_band(ref.nreject))
+    EXPECT_LE(std::abs(nreject - ref.nreject), nreject_band(alg, ref.nreject))
         << alg_name_lc << " two_body " << tier.tag << " nreject Tycho=" << nreject
         << " Julia=" << ref.nreject;
 }
 
 void assert_parity_crtbp(tycho::integrators::IVPAlg alg, const char *alg_name_lc,
                          const ToleranceTier &tier) {
-    CR3BP_Substitute ode(MU_CR3BP_SUBSTITUTE);
-    tycho::integrators::Integrator<CR3BP_Substitute> integ(ode, alg, 0.01);
+    CR3BP_ODE ode(MU_CR3BP);
+    tycho::integrators::Integrator<CR3BP_ODE> integ(ode, alg, 0.01);
     integ.set_abs_tol(tier.abs_tol);
     integ.set_rel_tol(tier.rel_tol);
 
@@ -140,10 +162,10 @@ void assert_parity_crtbp(tycho::integrators::IVPAlg alg, const char *alg_name_lc
 
     int naccept = integ.get_naccept();
     int nreject = integ.get_nreject();
-    EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(ref.naccept))
+    EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(alg, ref.naccept))
         << alg_name_lc << " crtbp " << tier.tag << " naccept Tycho=" << naccept
         << " Julia=" << ref.naccept;
-    EXPECT_LE(std::abs(nreject - ref.nreject), nreject_band(ref.nreject))
+    EXPECT_LE(std::abs(nreject - ref.nreject), nreject_band(alg, ref.nreject))
         << alg_name_lc << " crtbp " << tier.tag << " nreject Tycho=" << nreject
         << " Julia=" << ref.nreject;
 }
