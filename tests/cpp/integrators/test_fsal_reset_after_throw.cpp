@@ -1,18 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
-// FSAL-cache-reset-after-throw regression test
+// FSAL-cache-reset-after-throw regression test.
 //
-// Pins the invariant: when integrate() throws mid-step (e.g., a NaN guard
-// fires), the stepper's FSAL cache must not leak into the NEXT integrate()
-// call on the same driver. Before the P1-2 fix, an FSAL method
-// (DOPRI54/87/Tsit5/BS3/BS5) that took a good step then detected NaN on a
-// later step would leave stale f(x_prev) in k_fsal_ with fsal_valid_=true;
-// the next integrate() would reuse it as stage 0 for a state that has no
-// relation to x_prev — a silent wrong-number bug.
+// Pins the invariant enforced by the reset_fsal call at the top of
+// AdaptiveDriver::integrate(): when integrate() throws mid-step (e.g., a NaN
+// guard fires), stale f(x_prev) in k_fsal_ must not be reused as stage 0 of
+// the NEXT integrate() call on the same driver.
 //
-// Strategy: integrate Kepler from a valid state first to prime the FSAL
-// cache with real f(xf). Then integrate from origin_state() which triggers
-// the NaN finite-state guard → std::runtime_error. Catch, then integrate a
-// valid problem on the same integrator. Compare to a fresh-integrator run:
+// Strategy: integrate Kepler from a valid state to prime the FSAL cache with
+// real f(xf). Then integrate from origin_state() which triggers the NaN
+// finite-state guard → std::runtime_error. Catch, then integrate a valid
+// problem on the same integrator and compare to a fresh-integrator run —
 // endpoints must match bit-exactly.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -72,9 +69,9 @@ TEST_P(FsalResetAfterThrowParam, PoisonedFsalCacheClearedAtNextIntegrate) {
     EXPECT_THROW(integ_reused.integrate(origin_state(), tf), std::runtime_error);
 
     // The post-throw FSAL state is indeterminate (may or may not have been
-    // updated before NaN detection). Without the P1-2 reset_fsal at
-    // integrate() entry, the next call would reuse this stale state as
-    // stage 0, diverging bit-for-bit from a fresh run.
+    // updated before NaN detection). Without the reset_fsal at
+    // AdaptiveDriver::integrate() entry, the next call would reuse this
+    // stale state as stage 0, diverging bit-for-bit from a fresh run.
     auto xf_reused = integrate_leo(integ_reused, tf);
     auto xf_fresh = integrate_leo(integ_fresh, tf);
 

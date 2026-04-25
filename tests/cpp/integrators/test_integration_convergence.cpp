@@ -35,24 +35,12 @@ TEST_F(IntegratorTest, DOPRI87ConvergenceOrder) {
     EXPECT_LT(slope, 11.0) << "DOPRI87 convergence order unexpectedly high: " << slope;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Convergence order checks for the Julia-parity method additions. Each
-// method's expected order is the FIRST number in its name: Tsit5=5, BS3=3,
-// BS5=5, Vern7=7, Vern8=8, Vern9=9.
-//
-// A wrong-by-one tableau coefficient that still produces correct-looking
-// end-states on SHO via error cancellation would collapse this slope.
-//
-// The existing sho_error() helper integrates over tf=1.0 and sets
-// def_step_size = h; the fixed-step path then uses numsteps = ceil(H/h)+1
-// and h_actual = 0.9·H/numsteps. For high-order methods over a short
-// interval, the nominal h ratio diverges from the actual step ratio
-// enough that slope ≈ p·log(Δnumsteps)/log(Δh_nominal) < p. We therefore
-// bound only the lower side (catching true order degradation, e.g. a
-// bad tableau dropping Vern7 to order ~3) and give a generous upper
-// bound. For high-order methods (Vern*) the lower bound is deliberately
-// loose because the rescale artifact grows with order.
-///////////////////////////////////////////////////////////////////////////////
+// Slope bounds are deliberately loose: sho_error() sets def_step_size=h but
+// the fixed-step path quantizes via numsteps=ceil(H/h)+1 and h_actual=0.9·H/
+// numsteps, so the nominal h ratio drifts from the actual step ratio and
+// observed slope < p. We bound the lower side (catching order degradation,
+// e.g. a bad tableau dropping Vern7 to order ~3) and leave the upper side
+// generous.
 namespace {
 void check_convergence(IVPAlg alg, double h1, double h2, double slope_lower,
                        double slope_upper) {
