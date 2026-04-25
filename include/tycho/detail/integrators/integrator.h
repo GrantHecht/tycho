@@ -31,7 +31,6 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cstdio>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -163,15 +162,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     bool use_controller_ = false;
     ControllerType controller_;
     // User-provided controller specification: the GenericFunction for the
-    // control law plus the input-variable locations it reads. Empty when
-    // the integrator was constructed without a user controller — replaces
-    // the previous (controller_source_, controller_varlocs_) pair plus a
-    // dummy-GenericFunction placeholder that existed only because
-    // GenericFunction's copy-ctor throws on a default-constructed value
-    // and would otherwise make an uncontrolled Integrator non-copyable.
-    // optional<pair<>> makes "no controller" structurally representable
-    // and lets the copy-ctor route through std::optional's conditional
-    // copy without touching a null function.
+    // control law and the input-variable locations it reads. Empty when
+    // the integrator has no user controller. std::optional encodes the
+    // "no controller" branch structurally, so the copy-ctor only touches
+    // a populated GenericFunction (its default-state copy throws).
     std::optional<std::pair<ControllerType, Eigen::VectorXi>> controller_spec_;
     StepperWrapperType stepper_;
     IVPAlg rk_method_ = IVPAlg::DOPRI87;
@@ -593,44 +587,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     struct EventCounterWriteback {
         const Integrator &integ;
         int &nfailed;
-        ~EventCounterWriteback() noexcept {
-            // Surface refinement failures unconditionally — users see
-            // std::nullopt slots in eventstates without this signal,
-            // which makes the "did anything fail?" question silent.
-            // fprintf is noexcept (C function); destructor stays noexcept.
-            if (nfailed > 0) {
-                std::fprintf(stderr,
-                             "tycho: %d event-refinement failure(s); see "
-                             "Integrator::get_failed_event_count() for diagnostics\n",
-                             nfailed);
-            }
-            integ.n_failed_event_refinements_ = nfailed;
-        }
+        // Counter is exposed via get_failed_event_count(); callers that
+        // care about silent nullopt slots should poll that instead.
+        ~EventCounterWriteback() noexcept { integ.n_failed_event_refinements_ = nfailed; }
     };
 
     struct BatchEventCounterWriteback {
         const Integrator &integ;
         const std::vector<int> &nfailed;
         ~BatchEventCounterWriteback() noexcept {
-            int64_t nfailed_sum = std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0});
-            if (nfailed_sum > 0) {
-                std::fprintf(stderr,
-                             "tycho: %lld event-refinement failure(s) across batch; see "
-                             "Integrator::get_failed_event_count() for diagnostics\n",
-                             static_cast<long long>(nfailed_sum));
-            }
-            integ.n_failed_event_refinements_ = nfailed_sum;
+            integ.n_failed_event_refinements_ =
+                std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0});
         }
     };
 
     // Count of event refinements that failed both bisect+Newton passes.
     // Such crossings occupy std::nullopt slots in the returned eventstates
     // vector (1:1 with eventtimes); the counter is a cheap aggregate for
-    // callers that only want to know "did anything drop?". Reset per
-    // find_events call. On exception mid-refinement the counter reflects
-    // partial progress — monotonic within a single find_events call and
-    // overwritten on the next; we do not RAII-writeback this one because
-    // the reset-on-entry contract already bounds its staleness.
+    // callers that only want to know "did anything drop?". Published by
+    // EventCounterWriteback / BatchEventCounterWriteback on scope exit
+    // (success or unwind), so the value is always current after any
+    // public find_events / integrate call.
     mutable int64_t n_failed_event_refinements_ = 0;
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
@@ -1035,7 +1012,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                  const std::vector<EventPack> &events,
                                  ControllerVariant &controller, int &naccept, int &nreject,
                                  int &nfailed_event_refinements) const {
-        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1086,7 +1062,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events, bool alloutput,
                                        ControllerVariant &controller, int &naccept, int &nreject,
                                        int &nfailed_event_refinements) const {
-        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1124,7 +1099,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events,
                                        ControllerVariant &controller, int &naccept, int &nreject,
                                        int &nfailed_event_refinements) const {
-        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1203,7 +1177,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                       const std::vector<EventPack> &events,
                                       const std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
                                       int &n_failed_event_refinements) const {
-        validate_events(events);
         n_failed_event_refinements = 0;
         return EventHandler::refine_events<ODEState<double>>(
             tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
@@ -1600,7 +1573,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument(
                 "List of initial states and final times must be the same size");
         }
-        validate_events(events);
 
         int n = x0s.size();
         std::vector<IntegEventRet> results(n);

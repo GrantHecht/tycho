@@ -48,9 +48,7 @@ inline constexpr int Rising = 1;
 /// constructor. Out-of-range values would silently coerce inside
 /// `check_crossings` (direction sign-product check) and `find_events`
 /// (size==stop comparator) — encapsulation closes that misuse path
-/// structurally. `validate()` is retained as a no-op for defense-in-depth
-/// at the integrate-entry boundary; the only way to enter a non-validated
-/// state is to bypass the setters, which the language now blocks.
+/// structurally, so no integrate-entry re-validation is needed.
 class EventPack {
   public:
     GenericFunction<-1, 1> vf;
@@ -83,28 +81,10 @@ class EventPack {
         stop_count_ = s;
     }
 
-    /// No-op now that the only mutation paths validate at the setter.
-    /// Kept so existing integrate-entry `validate_events` call sites
-    /// retain their defense-in-depth wrapper signature without churn.
-    void validate() const {}
-
   private:
     int direction_ = 0;
     int stop_count_ = 0;
 };
-
-/// Validate every EventPack in a vector. Called at the entry of each public
-/// integrate/find_events path so that direction/stop_count invariants hold
-/// for the lifetime of the call regardless of post-construction mutation.
-inline void validate_events(const std::vector<EventPack> &events) {
-    for (std::size_t i = 0; i < events.size(); ++i) {
-        try {
-            events[i].validate();
-        } catch (const std::exception &e) {
-            throw std::invalid_argument("events[" + std::to_string(i) + "]: " + e.what());
-        }
-    }
-}
 
 struct EventHandler {
 

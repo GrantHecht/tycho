@@ -369,7 +369,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             if (storederivs) {
                 // peek_fsal requires the preceding step() to have set
                 // compute_midpoint=true. The (storemidpoints||storederivs)
-                // disjunction at the step() call site below guarantees that
+                // disjunction at the step() call site above guarantees that
                 // today; decoupling compute_midpoint from storederivs would
                 // break this branch.
                 xdoti = stepper_.peek_fsal();

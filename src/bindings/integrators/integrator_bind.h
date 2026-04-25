@@ -252,7 +252,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -260,14 +260,14 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
+            nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("events"), nb::arg("threads"),
             nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_dense_parallel",
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<int> &, int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("ns"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -275,8 +275,8 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &, const std::vector<int> &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("events"), nb::arg("threads"),
-            nb::call_guard<nb::gil_scoped_release>());
+            nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("ns"), nb::arg("events"),
+            nb::arg("threads"), nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////
 
@@ -298,13 +298,13 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                 (std::vector<STMRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
         obj.def("integrate_stm_parallel",
                 (std::vector<STMEventRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("events"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////

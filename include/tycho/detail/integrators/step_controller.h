@@ -125,9 +125,9 @@ struct IController {
 };
 
 // -----------------------------------------------------------------------------
-// PI controller — Julia legacy form
+// PI controller — Julia form
 // -----------------------------------------------------------------------------
-/// Proportional-integral step-size controller, Julia legacy form.
+/// Proportional-integral step-size controller, Julia form.
 ///
 ///     q₁₁ = EEst^β₁
 ///     q   = q₁₁ / errold^β₂,   with q/γ clipped to [1/qmax_, 1/qmin_]
@@ -214,7 +214,7 @@ struct PIController {
 };
 
 // -----------------------------------------------------------------------------
-// PID controller — Julia legacy form
+// PID controller — Julia form
 // -----------------------------------------------------------------------------
 /// Proportional-integral-derivative step-size controller with Söderlind limiter.
 ///

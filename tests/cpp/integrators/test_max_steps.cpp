@@ -1,10 +1,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 // max_steps cap unit tests
 //
-// Pins the Julia-style maxiters safety net introduced in commit 3ea0c35
-// (which removed the legacy min/max-dt clamps in favor of this cap). The
-// cap is the only runaway guard left after the clamp removal; without
-// these tests an off-by-one or accidental disable would silently regress.
+// Pins the Julia-style maxiters safety net. The cap is the only runaway
+// guard once the min/max-dt clamps are absent; without these tests an
+// off-by-one or accidental disable would silently regress.
 //
 // Covers:
 //   1. Runaway adaptive loop trips the cap with a useful error message.

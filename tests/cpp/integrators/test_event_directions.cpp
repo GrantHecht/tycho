@@ -167,28 +167,21 @@ TEST_F(EventDirectionTest, NegativeStopCountRejected) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Post-construction mutation can take EventPack out of its invariant
-// envelope (public fields, direct assignment). The integrate-entry
-// validate_events call must catch that, with the failing index in the error
-// message.
+// direction_ and stop_count_ are private; the only mutation paths are
+// through validating setters, which throw on out-of-range inputs before
+// EventPack ever holds a non-canonical value. The happy path integrate
+// continues to work after a failed mutation attempt.
 ///////////////////////////////////////////////////////////////////////////////
-TEST_F(EventDirectionTest, PostConstructionMutationCaughtAtIntegrate) {
+TEST_F(EventDirectionTest, PostConstructionMutationCaughtAtSetter) {
     auto gf_x = make_component_zero_event(0);
     std::vector<EventPack> events;
     events.push_back({gf_x, event_direction::Any, 0});
     events.push_back({gf_x, event_direction::Any, 0});
-    // direction/stop_count are now private; the only mutation paths are
-    // through validating setters. The post-construction-mutation hole that
-    // this test was named for is closed structurally — set_direction(2)
-    // throws before EventPack ever holds a non-canonical value.
     EXPECT_THROW(events[1].set_direction(2), std::invalid_argument);
-    // Defense-in-depth: the integrate-entry validate_events call still
-    // runs (and remains a no-op when invariants hold), so the existing
-    // happy-path integrate succeeds.
     EXPECT_NO_THROW((void)sho_integrate_with_events(events));
 }
 
-TEST_F(EventDirectionTest, PostConstructionNegativeStopCountCaughtAtIntegrate) {
+TEST_F(EventDirectionTest, PostConstructionNegativeStopCountCaughtAtSetter) {
     auto gf_x = make_component_zero_event(0);
     std::vector<EventPack> events;
     events.push_back({gf_x, event_direction::Any, 0});
