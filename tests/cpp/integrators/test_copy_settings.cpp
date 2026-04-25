@@ -129,6 +129,45 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
     EXPECT_EQ(tgt.get_failed_event_count(), pre_failed_event);
 }
 
+TEST(CopySettingsFromTest, UncontrolledIntegratorIsCopyConstructibleAfterCopySettingsFrom) {
+    // Pins commit 7451c83: a no-controller Integrator must remain
+    // copy-constructible after copy_settings_from. Before the placeholder
+    // (Arguments<-1>(0) at integrator.h:351-360), `controller_source_` was
+    // left default-constructed in the no-controller branch, and
+    // GenericFunction's copy-ctor throws "Attempting to copy null function"
+    // on empty — making `auto copy = ODE::integrator();` (Python's
+    // by-value return path) fault after any uncontrolled construction.
+    // Both SHO and DampedSHO have UV=0, so the 3-arg ctor flows through
+    // the no-controller branch; this test exercises the placeholder by
+    // copy-constructing AFTER copy_settings_from has rewritten the field.
+    SHO sho_ode(0.0);
+    Integrator<SHO> src(sho_ode, IVPAlg::DOPRI54, 0.01);
+    src.set_max_steps(123);
+
+    DampedSHO damped_ode(0.0);
+    Integrator<DampedSHO> tgt(damped_ode, IVPAlg::DOPRI87, 0.05);
+    tgt.copy_settings_from(src);
+
+    // Copy-construct the rewritten target — must not throw "Attempting to
+    // copy null function" out of GenericFunction's copy-ctor.
+    EXPECT_NO_THROW({
+        Integrator<DampedSHO> copy = tgt;
+        EXPECT_EQ(copy.get_max_steps(), 123);
+    });
+}
+
+TEST(CopySettingsFromTest, FreshlyConstructedUncontrolledIntegratorIsCopyConstructible) {
+    // Symmetric to the above but BEFORE any copy_settings_from — the
+    // placeholder must be in place from construction so the by-value return
+    // path is safe even for newly-built integrators.
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.02);
+    EXPECT_NO_THROW({
+        Integrator<SHO> copy = integ;
+        EXPECT_EQ(copy.get_method(), IVPAlg::DOPRI87);
+    });
+}
+
 TEST(CopySettingsFromTest, CopyingMethodRebuildsSTMStepper) {
     DampedSHO ode(0.0);
     Integrator<DampedSHO> src(ode, IVPAlg::DOPRI54, 0.2);

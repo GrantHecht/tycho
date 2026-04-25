@@ -201,3 +201,82 @@ TEST_F(VectorFunctionFixture, AdaptiveDriver_BothZeroTolsThrows) {
         driver.integrate(ode, x0, 1.0, cfg, abs_tols, rel_tols, controller, io, noop_update_control),
         std::invalid_argument);
 }
+
+// -----------------------------------------------------------------------------
+// eventtimes clear-on-reuse contract: AdaptiveDriver::integrate treats the
+// caller-owned `eventtimes` buffer as may-contain-stale-data on entry. The
+// `eventtimes[i].clear()` lines added at adaptive_driver.h:249-250 defend
+// against a caller that reuses an IO struct across calls (e.g., a future
+// driver-level orchestrator). Without the clear, the second call's
+// eventtimes would alias the first call's crossings — silently corrupting
+// downstream find_events output.
+// -----------------------------------------------------------------------------
+TEST_F(VectorFunctionFixture, AdaptiveDriver_EventTimesClearedOnReuse) {
+    using AD = AdaptiveDriver<IVPAlg::DOPRI54, SHO, double>;
+    using State = typename AD::ODEState;
+
+    SHO ode(0.0);
+    AD driver;
+    AdaptiveConfig cfg;
+    cfg.error_order = 4;
+    cfg.def_step_size = 0.01;
+    cfg.adaptive = true;
+    cfg.use_hairer_wanner_initdt = true;
+
+    Eigen::VectorXd abs_tols(2);
+    abs_tols.setConstant(1e-10);
+    Eigen::VectorXd rel_tols(2);
+    rel_tols.setConstant(1e-10);
+
+    auto noop_update_control = [](State &) {};
+
+    // Event: v + 0.5 — SHO with x(0)=1 produces v(t) = -sin(t), which crosses
+    // -0.5 at t = pi/6 ≈ 0.5236. Each integrate call should record exactly
+    // one crossing per event.
+    auto args = Arguments<3>();
+    auto v = args.coeff<1>();
+    auto event_vf = GenericFunction<-1, 1>(v + 0.5);
+    std::vector<AD::EventPack> events;
+    events.push_back({event_vf, 0, 0});
+
+    State x0(3);
+    x0 << 1.0, 0.0, 0.0;
+    const double tf = 1.0;
+
+    std::vector<std::vector<Eigen::Vector2d>> eventtimes;
+    std::vector<State> states;
+    std::vector<typename AD::ODEDeriv> derivs;
+    int naccept = 0, nreject = 0;
+    tycho::integrators::ControllerVariant controller = PIController{};
+
+    typename AD::IO io{naccept, nreject, events, eventtimes,
+                       /*storestates=*/false, /*storederivs=*/false, /*storemidpoints=*/false,
+                       states, derivs};
+
+    // First call: populates eventtimes with the [pi/6, pi/6] bracket.
+    (void)driver.integrate(ode, x0, tf, cfg, abs_tols, rel_tols, controller, io,
+                           noop_update_control);
+    ASSERT_EQ(eventtimes.size(), 1u);
+    const std::size_t first_call_crossings = eventtimes[0].size();
+    ASSERT_GT(first_call_crossings, 0u) << "Precondition: SHO must cross v = -0.5 within [0, 1]";
+
+    // Reset per-call counters (driver doesn't reset these — the IO contract
+    // gives them as caller-owned). Reset the controller too for a clean
+    // second call. Critically, we do NOT clear eventtimes here — the clean
+    // is the driver's responsibility and is what this test pins.
+    naccept = 0;
+    nreject = 0;
+    reset_controller(controller);
+
+    // Second call with same event and same trajectory: the crossing count
+    // must equal first_call_crossings, NOT 2× that count. A regression that
+    // dropped the eventtimes[i].clear() at adaptive_driver.h:249-250 would
+    // double the count by appending to the stale buffer.
+    (void)driver.integrate(ode, x0, tf, cfg, abs_tols, rel_tols, controller, io,
+                           noop_update_control);
+    ASSERT_EQ(eventtimes.size(), 1u);
+    EXPECT_EQ(eventtimes[0].size(), first_call_crossings)
+        << "Reused eventtimes must be cleared on entry; second call appended "
+           "instead of replacing — got " << eventtimes[0].size()
+        << " crossings vs " << first_call_crossings << " expected.";
+}

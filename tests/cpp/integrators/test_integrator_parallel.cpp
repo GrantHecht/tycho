@@ -740,3 +740,129 @@ TEST(IntegrateEntryRevalidation, VectorizedBatchDriverRejectsPostMutationWithCon
             << "error message must identify the offending controller index; got: " << e.what();
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// decorate_trajectory typed-rethrow ladder — pins the four std::exception
+// subclasses that nanobind maps to distinct Python exception types
+// (invalid_argument → ValueError, out_of_range → IndexError, domain_error
+// and logic_error → ValueError, runtime_error → RuntimeError). A regression
+// that drops a rung silently collapses the type to runtime_error and breaks
+// the Python-side type contract. invalid_argument is already covered above
+// via the controller-revalidation tests; this exercises the remaining three
+// plus the runtime_error fallback for non-laddered exceptions.
+///////////////////////////////////////////////////////////////////////////////
+TEST(DecorateTrajectoryLadder, OutOfRangeRoundTripsWithPrefix) {
+    EXPECT_THROW(
+        try {
+            integrators::Integrator<SHO>::decorate_trajectory(
+                7, []() -> int { throw std::out_of_range("idx 99"); });
+        } catch (const std::out_of_range &e) {
+            EXPECT_EQ(std::string(e.what()), "trajectory 7: idx 99");
+            throw;
+        },
+        std::out_of_range);
+}
+
+TEST(DecorateTrajectoryLadder, DomainErrorRoundTripsWithPrefix) {
+    EXPECT_THROW(
+        try {
+            integrators::Integrator<SHO>::decorate_trajectory(
+                3, []() -> int { throw std::domain_error("log of -1"); });
+        } catch (const std::domain_error &e) {
+            EXPECT_EQ(std::string(e.what()), "trajectory 3: log of -1");
+            throw;
+        },
+        std::domain_error);
+}
+
+TEST(DecorateTrajectoryLadder, LogicErrorRoundTripsWithPrefix) {
+    EXPECT_THROW(
+        try {
+            integrators::Integrator<SHO>::decorate_trajectory(
+                12, []() -> int { throw std::logic_error("invariant violated"); });
+        } catch (const std::logic_error &e) {
+            // Must NOT be caught by an earlier rung — std::logic_error has
+            // 4 std subclasses laddered above it, but a *direct* logic_error
+            // throw lands on this rung.
+            EXPECT_EQ(std::string(e.what()), "trajectory 12: invariant violated");
+            throw;
+        },
+        std::logic_error);
+}
+
+TEST(DecorateTrajectoryLadder, RangeErrorCollapsesToRuntimeErrorWithPrefix) {
+    // std::range_error is a runtime_error subclass not on the ladder — it
+    // must collapse to runtime_error (not the unrelated logic_error rung).
+    EXPECT_THROW(
+        try {
+            integrators::Integrator<SHO>::decorate_trajectory(
+                0, []() -> int { throw std::range_error("overflow"); });
+        } catch (const std::runtime_error &e) {
+            EXPECT_EQ(std::string(e.what()), "trajectory 0: overflow");
+            throw;
+        },
+        std::runtime_error);
+}
+
+TEST(DecorateTrajectoryLadder, NoThrowReturnsValueUnchanged) {
+    int got = integrators::Integrator<SHO>::decorate_trajectory(5, []() -> int { return 42; });
+    EXPECT_EQ(got, 42);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// integrate_dense_parallel with heterogeneous per-lane state counts (`ns[i]`).
+// The dedicated `_n` overload at integrator.h:1792-1804 routes through
+// integrate_dense_parallel_events_impl_n, which is otherwise dead under the
+// existing tests (the homogeneous-`n` and no-`n` paths take separate impls).
+// A regression that mis-indexed `ns[i]` or dropped per-lane writeback would
+// only surface with non-uniform state counts across lanes.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(IntegratorTest, ParallelIntegrateDenseWithEvents_HeterogeneousNs_MatchesSerial) {
+    SHO ode(0.0);
+    integrators::Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    tighten(integ);
+
+    auto x0s = make_batch();
+    auto tfs = make_tfs();
+
+    std::vector<integrators::Integrator<SHO>::EventPack> events;
+    events.push_back({make_sho_event(), 0, 0});
+
+    // Heterogeneous per-lane state counts. Spread them across 4-32 to make
+    // sure no two adjacent lanes have the same count — mis-indexing ns[i]
+    // would surface as a size mismatch.
+    std::vector<int> ns(kBatchSize);
+    for (int i = 0; i < kBatchSize; i++) {
+        ns[i] = 4 + (i % 8) * 4; // 4, 8, 12, ..., 32, 4, 8, ...
+    }
+
+    // Serial reference via per-lane integrate_dense(x0, tf, n, events).
+    std::vector<integrators::Integrator<SHO>::DenseEventRet> serial(kBatchSize);
+    for (int i = 0; i < kBatchSize; i++) {
+        serial[i] = integ.integrate_dense(x0s[i], tfs[i], ns[i], events);
+    }
+
+    ScopedThreadCount threads(kNParts);
+    auto parallel = integ.integrate_dense_parallel(x0s, tfs, ns, events, kNParts);
+
+    ASSERT_EQ(parallel.size(), serial.size());
+    for (int i = 0; i < kBatchSize; i++) {
+        const auto &p_xs = std::get<0>(parallel[i]);
+        const auto &s_xs = std::get<0>(serial[i]);
+        ASSERT_EQ(p_xs.size(), s_xs.size())
+            << "trajectory " << i << " state count diverged from serial — ns[" << i
+            << "]=" << ns[i] << " expected, got " << p_xs.size();
+        EXPECT_EQ(static_cast<int>(p_xs.size()), ns[i])
+            << "trajectory " << i << " state count must equal ns[i]";
+        for (std::size_t k = 0; k < s_xs.size(); k++) {
+            for (int c = 0; c < s_xs[k].size(); c++) {
+                EXPECT_NEAR(p_xs[k][c], s_xs[k][c], 1e-13)
+                    << "trajectory " << i << " state " << k << " component " << c;
+            }
+        }
+
+        const auto &p_evs = std::get<1>(parallel[i]);
+        const auto &s_evs = std::get<1>(serial[i]);
+        ASSERT_EQ(p_evs.size(), s_evs.size()) << "trajectory " << i << " event-group count";
+    }
+}
