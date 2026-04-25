@@ -6,7 +6,7 @@
 
 **Goal:** Eliminate redundant Jacobian computation on the main thread of `integrate_stm_parallel(x0, tf, n_parts)` (the segmented single-trajectory overload) without perturbing the chain-rule product, the FP-determinism guarantee, or the latency-hiding pattern that motivates main-thread propagation.
 
-**Tech stack:** C++17, Eigen, nanobind, Google Test, Google Benchmark.
+**Tech stack:** C++20, Eigen, nanobind, Google Test, Google Benchmark.
 
 ---
 
