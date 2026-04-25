@@ -86,6 +86,17 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
     ///     and marked complete before the SIMD loop starts.
     ///   - NaN/Inf state or err_norm on any lane throws with the
     ///     trajectory index embedded in the diagnostic.
+    ///
+    /// Exception contract: on throw (NaN/Inf state, ODE callback exception,
+    /// max_steps exceeded, etc.) the output containers (`nacc`, `nrej`,
+    /// `eventtimes_s`, `states_s`, `derivs_s`) are in an indeterminate
+    /// state — partial writes may be present on lanes that were mid-step
+    /// when the throw occurred, while other lanes hold whatever the
+    /// caller pre-reset them to. Callers must discard these containers on
+    /// exception and not rely on lane-level partial output. Counters
+    /// aggregated by Integrator::Batch*Writeback reflect the contents of
+    /// the lane-counter vectors at unwind time and inherit the same
+    /// "indeterminate" status.
     template <class ControlFn>
     std::vector<ScalarState>
     integrate(const DODE &ode, const std::vector<ScalarState> &xs, const Eigen::VectorXd &tfs,
