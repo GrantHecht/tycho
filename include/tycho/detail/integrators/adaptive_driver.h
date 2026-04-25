@@ -140,17 +140,18 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
         std::vector<ODEState> &states = io.states;
         std::vector<ODEDeriv> &derivs = io.derivs;
 
-        // Make this call self-contained: invalidate any FSAL state left over
-        // from a prior integrate() (including one that threw mid-step). Stale
-        // k_fsal_ would otherwise be reused as stage 0 on the first step.
-        stepper_.reset_fsal();
-
+        // Validate inputs first so failure paths leave the stepper unchanged.
         cfg.validate();
         validate_controller(controller);
 
         if (x.size() != ode.input_rows()) {
             throw std::invalid_argument("AdaptiveDriver: incorrectly sized input state.");
         }
+
+        // After validation succeeds, invalidate any FSAL state left over from
+        // a prior integrate() (including one that threw mid-step). Stale
+        // k_fsal_ would otherwise be reused as stage 0 on the first step.
+        stepper_.reset_fsal();
 
         // Joint tolerance invariant in adaptive mode: abs[i] + rel[i] > 0.
         if (cfg.adaptive) {
@@ -366,12 +367,11 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // is invalidated by the next step() call (see Stepper::peek_fsal
             // docstring).
             if (storederivs) {
-                // NOTE: peek_fsal requires that the preceding step() call
-                // set compute_midpoint=true — which is driven by the same
-                // (storemidpoints||storederivs) disjunction at the step()
-                // call site below, so this branch is always reached with a
-                // fresh k_fsal_. A future refactor that decouples
-                // compute_midpoint from storederivs must revisit this.
+                // peek_fsal requires the preceding step() to have set
+                // compute_midpoint=true. The (storemidpoints||storederivs)
+                // disjunction at the step() call site below guarantees that
+                // today; decoupling compute_midpoint from storederivs would
+                // break this branch.
                 xdoti = stepper_.peek_fsal();
             }
             prev_event_vals = next_event_vals;

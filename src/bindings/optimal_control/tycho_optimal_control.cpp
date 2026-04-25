@@ -124,8 +124,26 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
             },
             nb::arg("t"))
         .def_rw("vf", &tycho::integrators::EventPack::vf)
-        .def_rw("direction", &tycho::integrators::EventPack::direction)
-        .def_rw("stop_count", &tycho::integrators::EventPack::stop_count);
+        .def_prop_rw(
+            "direction",
+            [](const tycho::integrators::EventPack &p) { return p.direction; },
+            [](tycho::integrators::EventPack &p, int v) {
+                if (!(v == -1 || v == 0 || v == 1)) {
+                    throw std::invalid_argument("EventPack.direction must be -1, 0, or +1; got " +
+                                                std::to_string(v));
+                }
+                p.direction = v;
+            })
+        .def_prop_rw(
+            "stop_count",
+            [](const tycho::integrators::EventPack &p) { return p.stop_count; },
+            [](tycho::integrators::EventPack &p, int v) {
+                if (v < 0) {
+                    throw std::invalid_argument("EventPack.stop_count must be >= 0; got " +
+                                                std::to_string(v));
+                }
+                p.stop_count = v;
+            });
     nb::implicitly_convertible<nb::tuple, tycho::integrators::EventPack>();
 
     TychoBind<ODEPhaseBase>::Build(oc);

@@ -50,20 +50,38 @@ struct EventPack {
     EventPack() = default;
     EventPack(GenericFunction<-1, 1> vf_, int direction_, int stop_count_)
         : vf(std::move(vf_)), direction(direction_), stop_count(stop_count_) {
-        // Validate at construction — direction outside {-1, 0, 1} silently
-        // coerces to rising/falling in the sign-product check below, and a
-        // negative stop_count never triggers the == comparison at stop time.
-        // Both failure modes are silent; reject up front.
-        if (!(direction_ == -1 || direction_ == 0 || direction_ == 1)) {
+        this->validate();
+    }
+
+    /// Throws std::invalid_argument if `direction` or `stop_count` are out of
+    /// range. Out-of-range values silently coerce inside `check_crossings`
+    /// (direction sign-product check) and `find_events` (size==stop comparator),
+    /// so re-validate at every consume site to defend against post-construction
+    /// mutation through public fields or the Python `def_prop_rw` setters.
+    void validate() const {
+        if (!(direction == -1 || direction == 0 || direction == 1)) {
             throw std::invalid_argument("EventPack: direction must be -1, 0, or +1; got " +
-                                        std::to_string(direction_));
+                                        std::to_string(direction));
         }
-        if (stop_count_ < 0) {
+        if (stop_count < 0) {
             throw std::invalid_argument("EventPack: stop_count must be >= 0; got " +
-                                        std::to_string(stop_count_));
+                                        std::to_string(stop_count));
         }
     }
 };
+
+/// Validate every EventPack in a vector. Called at the entry of each public
+/// integrate/find_events path so that direction/stop_count invariants hold
+/// for the lifetime of the call regardless of post-construction mutation.
+inline void validate_events(const std::vector<EventPack> &events) {
+    for (std::size_t i = 0; i < events.size(); ++i) {
+        try {
+            events[i].validate();
+        } catch (const std::exception &e) {
+            throw std::invalid_argument("events[" + std::to_string(i) + "]: " + e.what());
+        }
+    }
+}
 
 struct EventHandler {
 
@@ -243,7 +261,7 @@ struct EventHandler {
                     }
                     x[0] = tevent;
                     auto fv = func.compute(x);
-                    if (!std::isfinite(fv[0]) || std::abs(fv[0]) > std::abs(tol)) {
+                    if (!std::isfinite(fv[0]) || std::abs(fv[0]) > tol) {
                         return std::nullopt;
                     }
                     return tevent;

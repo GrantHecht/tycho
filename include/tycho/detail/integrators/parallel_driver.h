@@ -102,12 +102,7 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
         std::vector<std::vector<ScalarState>> &states_s = io.states_s;
         std::vector<std::vector<ScalarDeriv>> &derivs_s = io.derivs_s;
 
-        // Make this call self-contained: invalidate any FSAL state left over
-        // from a prior integrate() (including one that threw mid-step). The
-        // per-pack seed/reset below handles intra-run FSAL correctness, but
-        // the very first pack can still observe stale cross-call state.
-        stepper_.reset_fsal();
-
+        // Validate inputs first so failure paths leave the stepper unchanged.
         cfg.validate();
 
         if (xs.size() != static_cast<std::size_t>(tfs.size())) {
@@ -123,14 +118,26 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
         if (static_cast<int>(controllers.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: controllers vector size must equal number of trajectories.");
-        for (const auto &c : controllers)
-            validate_controller(c);
+        for (std::size_t i = 0; i < controllers.size(); ++i) {
+            try {
+                validate_controller(controllers[i]);
+            } catch (const std::exception &e) {
+                throw std::invalid_argument("ParallelDriver: controllers[" + std::to_string(i) +
+                                            "]: " + e.what());
+            }
+        }
         if (static_cast<int>(nacc.size()) != ntrajs || static_cast<int>(nrej.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: nacc/nrej vector size must equal number of trajectories.");
         if (!events.empty() && static_cast<int>(eventtimes_s.size()) != ntrajs)
             throw std::invalid_argument(
                 "ParallelDriver: eventtimes_s vector size must equal number of trajectories.");
+
+        // After validation succeeds, invalidate any FSAL state left over from
+        // a prior integrate() (including one that threw mid-step). The
+        // per-pack seed/reset below handles intra-run FSAL correctness, but
+        // the very first pack can still observe stale cross-call state.
+        stepper_.reset_fsal();
         if (storestates) {
             if (static_cast<int>(states_s.size()) != ntrajs)
                 throw std::invalid_argument(

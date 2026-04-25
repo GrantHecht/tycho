@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -48,6 +49,7 @@
 #include <Eigen/Sparse>
 
 #include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/exception_what.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -355,8 +357,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             // be left default-constructed: GenericFunction's copy-ctor throws
             // "Attempting to copy null function" on empty, so returning the
             // Integrator by value (e.g., from ODE::integrator() into Python)
-            // would fail after any non-controller construction. Mirrors the
-            // placeholder pattern used for `controller_` below.
+            // would fail after any non-controller construction.
             this->controller_source_ = Arguments<-1>(0);
             this->controller_varlocs_.resize(0);
         }
@@ -591,7 +592,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     struct EventCounterWriteback {
         const Integrator &integ;
         int &nfailed;
-        ~EventCounterWriteback() noexcept { integ.n_failed_event_refinements_ = nfailed; }
+        ~EventCounterWriteback() noexcept {
+            // Surface refinement failures unconditionally — users see
+            // std::nullopt slots in eventstates without this signal,
+            // which makes the "did anything fail?" question silent.
+            // fprintf is noexcept (C function); destructor stays noexcept.
+            if (nfailed > 0) {
+                std::fprintf(stderr,
+                             "tycho: %d event-refinement failure(s); see "
+                             "Integrator::get_failed_event_count() for diagnostics\n",
+                             nfailed);
+            }
+            integ.n_failed_event_refinements_ = nfailed;
+        }
     };
 
     struct BatchEventCounterWriteback {
@@ -601,6 +614,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             long long nfailed_sum = std::accumulate(nfailed.begin(), nfailed.end(), 0LL);
             assert(nfailed_sum <= std::numeric_limits<int>::max() &&
                    "Batch event-refinement failure sum overflows int.");
+            if (nfailed_sum > 0) {
+                std::fprintf(stderr,
+                             "tycho: %lld event-refinement failure(s) across batch; see "
+                             "Integrator::get_failed_event_count() for diagnostics\n",
+                             nfailed_sum);
+            }
             integ.n_failed_event_refinements_ = static_cast<int>(nfailed_sum);
         }
     };
@@ -698,7 +717,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// `eventtimes` and marks each such crossing with `std::nullopt`; this
     /// counter is a cheap summary of how many nullopts are present. Reset
     /// to 0 at the start of every `find_events` invocation.
-    int get_failed_event_count() const { return this->n_failed_event_refinements_; }
+    [[nodiscard]] int get_failed_event_count() const {
+        return this->n_failed_event_refinements_;
+    }
 
     void set_auto_initial_dt(bool on) { this->use_hairer_wanner_initdt_ = on; }
     bool get_auto_initial_dt() const { return this->use_hairer_wanner_initdt_; }
@@ -1007,6 +1028,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                  const std::vector<EventPack> &events,
                                  ControllerVariant &controller, int &naccept, int &nreject,
                                  int &nfailed_event_refinements) const {
+        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1057,6 +1079,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events, bool alloutput,
                                        ControllerVariant &controller, int &naccept, int &nreject,
                                        int &nfailed_event_refinements) const {
+        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1094,6 +1117,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                        const std::vector<EventPack> &events,
                                        ControllerVariant &controller, int &naccept, int &nreject,
                                        int &nfailed_event_refinements) const {
+        validate_events(events);
         nfailed_event_refinements = 0;
         ODEState<double> xf;
         std::vector<std::vector<Eigen::Vector2d>> eventtimes;
@@ -1168,6 +1192,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                       const std::vector<EventPack> &events,
                                       const std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
                                       int &n_failed_event_refinements) const {
+        validate_events(events);
         n_failed_event_refinements = 0;
         return EventHandler::refine_events<ODEState<double>>(
             tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
@@ -1300,6 +1325,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     std::vector<ODEState<double>> integrate(const std::vector<ODEState<double>> &x0s,
                                             const Eigen::VectorXd &tfs) const {
+        // Empty-batch input is a no-op. Without this short-circuit the
+        // vectorized branch routes to ParallelDriver, which rejects empty
+        // input — making the API behavior depend on vectorize_batch_calls_.
+        if (x0s.empty()) {
+            return {};
+        }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
@@ -1325,6 +1356,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     std::vector<STMRet> integrate_stm(const std::vector<ODEState<double>> &x0s,
                                       const Eigen::VectorXd &tfs) const {
+        if (x0s.empty()) {
+            return {};
+        }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
@@ -1359,6 +1393,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>>
     integrate_stm2(const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs,
                    const std::vector<ODEState<double>> &lfs) const {
+        if (x0s.empty()) {
+            return {};
+        }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
@@ -1552,6 +1589,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             throw std::invalid_argument(
                 "List of initial states and final times must be the same size");
         }
+        validate_events(events);
 
         int n = x0s.size();
         std::vector<IntegEventRet> results(n);
@@ -1914,22 +1952,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 // main-thread exception is the primary trigger, but a worker may
                 // have faulted first with the real root cause (e.g., NaN on a
                 // specific lane).
-                std::string primary_msg;
-                try {
-                    throw; // rethrow in-flight to extract what()
-                } catch (const std::exception &e) {
-                    primary_msg = e.what();
-                } catch (...) {
-                    primary_msg = "<non-std::exception>";
-                }
+                const std::string primary_msg =
+                    tycho::utils::exception_what(std::current_exception());
                 std::vector<std::string> extra_msgs;
                 for (int j = 0; j < submitted; j++) {
                     try {
                         results[j].get();
-                    } catch (const std::exception &je) {
-                        extra_msgs.emplace_back(je.what());
                     } catch (...) {
-                        extra_msgs.emplace_back("<non-std::exception>");
+                        extra_msgs.emplace_back(
+                            tycho::utils::exception_what(std::current_exception()));
                     }
                 }
                 if (extra_msgs.empty()) {
@@ -1952,33 +1983,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                     jxall.topRows(this->output_rows()) = (jx * jxall).eval();
                     if (i == (n_parts - 1))
                         xs[i + 1] = xf;
-                } catch (const std::exception &e) {
-                    if (!ex) {
-                        ex = std::current_exception();
-                        primary_msg = e.what();
-                    }
-                    for (int j = i + 1; j < n_parts; j++) {
-                        try {
-                            results[j].get();
-                        } catch (const std::exception &je) {
-                            extra_msgs.emplace_back(je.what());
-                        } catch (...) {
-                            extra_msgs.emplace_back("<non-std::exception>");
-                        }
-                    }
-                    break;
                 } catch (...) {
-                    if (!ex) {
-                        ex = std::current_exception();
-                        primary_msg = "<non-std::exception>";
-                    }
+                    ex = std::current_exception();
+                    primary_msg = tycho::utils::exception_what(ex);
                     for (int j = i + 1; j < n_parts; j++) {
                         try {
                             results[j].get();
-                        } catch (const std::exception &je) {
-                            extra_msgs.emplace_back(je.what());
                         } catch (...) {
-                            extra_msgs.emplace_back("<non-std::exception>");
+                            extra_msgs.emplace_back(
+                                tycho::utils::exception_what(std::current_exception()));
                         }
                     }
                     break;

@@ -45,7 +45,11 @@ inline thread_local bool g_is_pool_worker{false};
 /// message concatenates every captured .what() — callers cannot distinguish
 /// "one lane diverged" from "all lanes diverged" without this.
 struct DispatchContext {
-    static constexpr int kMaxCaptured = 5;
+    // 16 lets a 256-trajectory STM that diverges in many lanes preserve
+    // enough distinct messages to debug without forcing every caller to
+    // unwrap a composite. Storage is per-DispatchContext on the dispatch
+    // caller's stack, so the size cost is bounded.
+    static constexpr int kMaxCaptured = 16;
 
     std::latch done;
     std::atomic<int> captured{0};
@@ -81,26 +85,35 @@ struct DispatchContext {
             std::rethrow_exception(exceptions[0]);
         }
 
-        std::string msg = "[Tycho] dispatch: ";
-        msg += std::to_string(total);
-        msg += " concurrent worker exception(s):";
-        for (int i = 0; i < n; ++i) {
-            msg += "\n--- [";
-            msg += std::to_string(i);
-            msg += "] ---\n";
-            try {
-                std::rethrow_exception(exceptions[i]);
-            } catch (const std::exception &e) {
-                msg += e.what();
-            } catch (...) {
-                msg += "<non-std::exception>";
+        // Build the aggregated message, but fall back to surfacing the
+        // first captured exception unchanged if string allocation fails:
+        // letting bad_alloc escape would mask every captured worker error
+        // with a misleading OOM at the dispatcher boundary.
+        std::string msg;
+        try {
+            msg = "[Tycho] dispatch: ";
+            msg += std::to_string(total);
+            msg += " concurrent worker exception(s):";
+            for (int i = 0; i < n; ++i) {
+                msg += "\n--- [";
+                msg += std::to_string(i);
+                msg += "] ---\n";
+                try {
+                    std::rethrow_exception(exceptions[i]);
+                } catch (const std::exception &e) {
+                    msg += e.what();
+                } catch (...) {
+                    msg += "<non-std::exception>";
+                }
             }
-        }
-        int extra = suppressed.load(std::memory_order_relaxed);
-        if (extra > 0) {
-            msg += "\n... and ";
-            msg += std::to_string(extra);
-            msg += " more suppressed";
+            int extra = suppressed.load(std::memory_order_relaxed);
+            if (extra > 0) {
+                msg += "\n... and ";
+                msg += std::to_string(extra);
+                msg += " more suppressed";
+            }
+        } catch (const std::bad_alloc &) {
+            std::rethrow_exception(exceptions[0]);
         }
         throw std::runtime_error(msg);
     }
