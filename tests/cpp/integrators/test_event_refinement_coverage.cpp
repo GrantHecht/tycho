@@ -271,6 +271,53 @@ TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
         << "Counter must increment once per emitted nullopt.";
 }
 
+// jx==0 (or non-finite) Jacobian sentinel at event_handler.h: when Newton
+// hits a singular Jacobian, the loop sets x[0] = NaN and breaks. NaN then
+// fails the in-bracket check in refine_one (NaN > lo and NaN < hi both
+// false under IEEE 754) and routes to std::nullopt, incrementing the
+// failure counter. A constant-value event VF has jx ≡ 0 by construction —
+// every Newton iterate hits the sentinel. This pins the path that, if
+// removed, would let Newton return its last iterate (potentially in-
+// bracket) and look like spurious convergence to the bracket check.
+TEST_F(EventRefinementCoverageTest, JacobianZero_TriggersSentinelToNullopt) {
+    astro::Kepler kep(kErcMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-13);
+
+    auto x0 = erc_eccentric_x0();
+    double tf = erc_eccentric_period();
+
+    std::vector<Integrator<astro::Kepler>::EventPack> no_events;
+    auto [xs, _ignored] = integ.integrate_dense(x0, tf, no_events, /*alloutput=*/true);
+    auto tab = integ.make_table(xs, /*fifthorder=*/false);
+
+    // Constant nonzero event VF: value = 1.0 everywhere, jacobian wrt all
+    // inputs = 0. Newton sees fx = 1, jx = 0 on every iterate.
+    auto args = Arguments<7>();
+    auto event_expr = args.coeff<0>() * 0.0 + 1.0;
+    GenericFunction<-1, 1> gf(event_expr);
+    std::vector<Integrator<astro::Kepler>::EventPack> events;
+    events.push_back({gf, 0, 0});
+
+    constexpr int kKeplerTVar = 6;
+    double tlow = xs[0][kKeplerTVar];
+    double thigh = xs[1][kKeplerTVar];
+    if (thigh < tlow)
+        std::swap(tlow, thigh);
+    std::vector<std::vector<Eigen::Vector2d>> eventtimes(1);
+    eventtimes[0].emplace_back(tlow, thigh);
+
+    auto eventlocs = integ.find_events(tab, events, eventtimes);
+
+    ASSERT_EQ(eventlocs.size(), 1u);
+    ASSERT_EQ(eventlocs[0].size(), 1u);
+    EXPECT_FALSE(eventlocs[0][0].has_value())
+        << "Constant-value event VF (jx=0) must route through the sentinel to nullopt";
+    EXPECT_EQ(integ.get_failed_event_count(), 1)
+        << "Sentinel-routed nullopt must increment the failure counter";
+}
+
 // The counter is reset at the start of each find_events call — a second
 // event-bearing integration must not accumulate state from the first. Force
 // a non-zero failure count via an impossibly tight event_tol so a stuck-at-

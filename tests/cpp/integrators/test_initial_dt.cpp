@@ -43,6 +43,30 @@ TEST(InitialDtTest, TinyDerivativeBranchFallsBackToSmallDt) {
     EXPECT_GT(dt0, 0.0) << "dt must remain finite and positive for forward integration";
 }
 
+// When per-component scaling sk[i] = atol + |x0|*rtol collapses to zero,
+// the residual scaling produces NaN and the HW initdt path must throw
+// rather than silently return non-finite (or zero) dt. Pins the family
+// of finite/zero guards in initial_dt.h (the f0 check, the f1 check,
+// and the final signed_dt check) — any of them firing satisfies the
+// user-visible contract. The substring match keeps the test resilient
+// to which guard catches a given configuration.
+TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 0.0, 0.0, 0.0;
+    Eigen::VectorXd atol = Eigen::VectorXd::Zero(2);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Zero(2);
+    try {
+        (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
+                                  ErrorNormType::RMS);
+        FAIL() << "estimate_initial_dt should have thrown on degenerate scaling";
+    } catch (const std::runtime_error &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("Hairer-Wanner initial-dt"), std::string::npos)
+            << "throw must originate in the HW initdt path: " << msg;
+    }
+}
+
 TEST(InitialDtTest, KeplerLEOYieldsReasonableFirstStep) {
     tycho::astro::Kepler kep(398600.4418);
     Eigen::Matrix<double, 7, 1> x0;
