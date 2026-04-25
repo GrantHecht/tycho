@@ -162,8 +162,17 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     DODE ode_;
     bool use_controller_ = false;
     ControllerType controller_;
-    ControllerType controller_source_;
-    Eigen::VectorXi controller_varlocs_;
+    // User-provided controller specification: the GenericFunction for the
+    // control law plus the input-variable locations it reads. Empty when
+    // the integrator was constructed without a user controller — replaces
+    // the previous (controller_source_, controller_varlocs_) pair plus a
+    // dummy-GenericFunction placeholder that existed only because
+    // GenericFunction's copy-ctor throws on a default-constructed value
+    // and would otherwise make an uncontrolled Integrator non-copyable.
+    // optional<pair<>> makes "no controller" structurally representable
+    // and lets the copy-ctor route through std::optional's conditional
+    // copy without touching a null function.
+    std::optional<std::pair<ControllerType, Eigen::VectorXi>> controller_spec_;
     StepperWrapperType stepper_;
     IVPAlg rk_method_ = IVPAlg::DOPRI87;
 
@@ -349,17 +358,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         this->use_controller_ = usecontrol;
         if (this->use_controller_) {
-            this->controller_source_ = ucon;
-            this->controller_varlocs_ = varlocs;
+            this->controller_spec_.emplace(ucon, varlocs);
         } else {
-            // Placeholder that is never read — copy_settings_from reads
-            // controller_source_ only when target_uses_controller. Must not
-            // be left default-constructed: GenericFunction's copy-ctor throws
-            // "Attempting to copy null function" on empty, so returning the
-            // Integrator by value (e.g., from ODE::integrator() into Python)
-            // would fail after any non-controller construction.
-            this->controller_source_ = Arguments<-1>(0);
-            this->controller_varlocs_.resize(0);
+            // No user controller — leave the optional empty. std::optional
+            // copies cleanly without invoking GenericFunction's null-throw,
+            // so the Integrator stays copyable.
+            this->controller_spec_.reset();
         }
 
         auto Stepper = StepperType<DODE, RKOp>(ode_);
@@ -790,11 +794,19 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// per-call output counters are not copied.
     template <class OtherDODE> void copy_settings_from(const Integrator<OtherDODE> &src) {
         const bool target_uses_controller = this->use_controller_;
+        // copy_settings_from preserves the target's own controller wiring —
+        // varlocs and the user-controller function are ODE-structure state,
+        // not user config, so they don't carry across from src. When the
+        // target uses a controller, controller_spec_ has_value (invariant
+        // tied to use_controller_); the no-controller branch ignores
+        // ucon/varlocs entirely so the default-constructed placeholders
+        // are never copied by set_method (which takes by const&).
         ControllerType target_controller_source;
+        Eigen::VectorXi target_controller_varlocs;
         if (target_uses_controller) {
-            target_controller_source = this->controller_source_;
+            target_controller_source = this->controller_spec_->first;
+            target_controller_varlocs = this->controller_spec_->second;
         }
-        Eigen::VectorXi target_controller_varlocs = this->controller_varlocs_;
 
         this->set_method(src.get_method(), this->ode_, src.def_step_size_, target_uses_controller,
                          target_controller_source, target_controller_varlocs);
