@@ -84,9 +84,9 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
 
     // Snapshot observable fields that copy_settings_from MUST NOT touch,
     // so we can verify they're unchanged after the copy.
-    const int pre_naccept = tgt.get_naccept();
-    const int pre_nreject = tgt.get_nreject();
-    const int pre_failed_event = tgt.get_failed_event_count();
+    const int64_t pre_naccept = tgt.get_naccept();
+    const int64_t pre_nreject = tgt.get_nreject();
+    const int64_t pre_failed_event = tgt.get_failed_event_count();
 
     tgt.copy_settings_from(src);
 

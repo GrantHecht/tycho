@@ -550,8 +550,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // (VectorFunction::compute contract forces compute_impl to be const).
     // Parallel paths that can't safely write back document that via
     // get_naccept/get_nreject docstrings.
-    mutable int naccept_ = 0;
-    mutable int nreject_ = 0;
+    // int64_t so batch aggregation across thousands of trajectories ×
+    // millions of steps cannot silently wrap (the per-trajectory `int`
+    // locals threaded through driver loops are bounded by `max_steps`,
+    // but their sum on the BatchCounterWriteback writeback path is not).
+    mutable int64_t naccept_ = 0;
+    mutable int64_t nreject_ = 0;
 
     // Writes local na/nr into the member counters on scope exit (success
     // OR exception unwind). Without this, a failed integrate() would leave
@@ -571,21 +575,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // Vector analogue of CounterWriteback: sums per-trajectory counters
     // into the member counters on scope exit. On exception the members
     // reflect only trajectories that completed before the first failure;
-    // unstarted lanes contribute zero. Accumulate in int64 so extreme
-    // batches (millions of steps × thousands of trajectories) don't
-    // silently overflow the int sum before narrowing to the int counters.
+    // unstarted lanes contribute zero.
     struct BatchCounterWriteback {
         const Integrator &integ;
         const std::vector<int> &nacc;
         const std::vector<int> &nrej;
         ~BatchCounterWriteback() noexcept {
-            long long nacc_sum = std::accumulate(nacc.begin(), nacc.end(), 0LL);
-            long long nrej_sum = std::accumulate(nrej.begin(), nrej.end(), 0LL);
-            assert(nacc_sum <= std::numeric_limits<int>::max() &&
-                   nrej_sum <= std::numeric_limits<int>::max() &&
-                   "Batch counter sum overflows int — consider widening Integrator counters.");
-            integ.naccept_ = static_cast<int>(nacc_sum);
-            integ.nreject_ = static_cast<int>(nrej_sum);
+            integ.naccept_ = std::accumulate(nacc.begin(), nacc.end(), int64_t{0});
+            integ.nreject_ = std::accumulate(nrej.begin(), nrej.end(), int64_t{0});
         }
     };
 
@@ -611,16 +608,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         const Integrator &integ;
         const std::vector<int> &nfailed;
         ~BatchEventCounterWriteback() noexcept {
-            long long nfailed_sum = std::accumulate(nfailed.begin(), nfailed.end(), 0LL);
-            assert(nfailed_sum <= std::numeric_limits<int>::max() &&
-                   "Batch event-refinement failure sum overflows int.");
+            int64_t nfailed_sum = std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0});
             if (nfailed_sum > 0) {
                 std::fprintf(stderr,
                              "tycho: %lld event-refinement failure(s) across batch; see "
                              "Integrator::get_failed_event_count() for diagnostics\n",
-                             nfailed_sum);
+                             static_cast<long long>(nfailed_sum));
             }
-            integ.n_failed_event_refinements_ = static_cast<int>(nfailed_sum);
+            integ.n_failed_event_refinements_ = nfailed_sum;
         }
     };
 
@@ -632,7 +627,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // partial progress — monotonic within a single find_events call and
     // overwritten on the next; we do not RAII-writeback this one because
     // the reset-on-entry contract already bounds its staleness.
-    mutable int n_failed_event_refinements_ = 0;
+    mutable int64_t n_failed_event_refinements_ = 0;
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
     // step is respected (principle of least surprise).
@@ -708,8 +703,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     void set_error_norm(ErrorNormType t) { this->error_norm_type_ = t; }
     ErrorNormType get_error_norm() const { return this->error_norm_type_; }
 
-    int get_naccept() const { return this->naccept_; }
-    int get_nreject() const { return this->nreject_; }
+    int64_t get_naccept() const { return this->naccept_; }
+    int64_t get_nreject() const { return this->nreject_; }
 
     /// Number of event crossings whose bisect+Newton refinement failed
     /// (both passes) during the most recent `integrate*` call that took
@@ -717,7 +712,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// `eventtimes` and marks each such crossing with `std::nullopt`; this
     /// counter is a cheap summary of how many nullopts are present. Reset
     /// to 0 at the start of every `find_events` invocation.
-    [[nodiscard]] int get_failed_event_count() const {
+    [[nodiscard]] int64_t get_failed_event_count() const {
         return this->n_failed_event_refinements_;
     }
 

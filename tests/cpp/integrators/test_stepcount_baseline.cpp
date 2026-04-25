@@ -65,8 +65,8 @@ constexpr BaselineEntry kBaseline[] = {
 };
 
 struct RunResult {
-    int naccept;
-    int nreject;
+    int64_t naccept;
+    int64_t nreject;
 };
 
 RunResult integrate_sho_2pi(IVPAlg alg, double atol, double rtol) {
@@ -87,11 +87,12 @@ RunResult run_entry(const BaselineEntry &e) {
     throw std::logic_error(std::string("Unknown baseline problem: ") + e.problem);
 }
 
-bool within_tolerance(int expected, int actual, double rel_tol = 0.05, int abs_floor = 2) {
+bool within_tolerance(int64_t expected, int64_t actual, double rel_tol = 0.05,
+                      int64_t abs_floor = 2) {
     if (expected == 0)
         return actual >= 0; // regen mode
-    int diff = std::abs(actual - expected);
-    int allowed = std::max(abs_floor, static_cast<int>(std::ceil(rel_tol * expected)));
+    int64_t diff = std::abs(actual - expected);
+    int64_t allowed = std::max(abs_floor, static_cast<int64_t>(std::ceil(rel_tol * expected)));
     return diff <= allowed;
 }
 

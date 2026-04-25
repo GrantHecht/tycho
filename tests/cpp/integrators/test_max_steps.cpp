@@ -204,7 +204,7 @@ TEST_F(MaxStepsTest, BoundaryCountAllowsSuccess) {
 
     // First, learn the natural step count for this configuration.
     auto xf_unbounded = integ.integrate(x0, tf);
-    int natural = integ.get_naccept() + integ.get_nreject();
+    int64_t natural = integ.get_naccept() + integ.get_nreject();
     ASSERT_GT(natural, 0);
 
     // Now cap at exactly the natural count — must still succeed. The cap
@@ -346,7 +346,7 @@ TEST_F(MaxStepsTest, CountersRepresentOnlyCleanRunAfterFailure) {
     } catch (const std::runtime_error &) {
         // expected
     }
-    const int failed_count = integ.get_naccept() + integ.get_nreject();
+    const int64_t failed_count = integ.get_naccept() + integ.get_nreject();
     ASSERT_GT(failed_count, 0)
         << "Precondition: failed run must have written a non-zero counter.";
 
@@ -358,7 +358,7 @@ TEST_F(MaxStepsTest, CountersRepresentOnlyCleanRunAfterFailure) {
 
     const double short_tf = leo_period() / 8.0; // distinct from the failed run
     (void)integ.integrate(x0, short_tf);
-    const int clean_count = integ.get_naccept() + integ.get_nreject();
+    const int64_t clean_count = integ.get_naccept() + integ.get_nreject();
 
     EXPECT_GT(clean_count, 0) << "Clean run must record a non-zero counter.";
     // Tuning-robust invariant: the clean counter must not equal the

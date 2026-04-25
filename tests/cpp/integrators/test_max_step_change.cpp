@@ -68,8 +68,8 @@ TEST_F(IntegratorTest, MaxStepChangeClamp_TighterBoundTakesMoreSteps) {
         return integ.get_naccept() + integ.get_nreject();
     };
 
-    const int steps_1p5 = run_with_clamp(1.5);
-    const int steps_10 = run_with_clamp(10.0);
+    const int64_t steps_1p5 = run_with_clamp(1.5);
+    const int64_t steps_10 = run_with_clamp(10.0);
 
     // Tighter clamp (1.5) constrains per-step growth, forcing more iterations
     // to cover the same interval than the loose clamp (10.0). This test

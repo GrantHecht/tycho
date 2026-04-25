@@ -130,8 +130,8 @@ void assert_parity_twobody(tycho::integrators::IVPAlg alg, const char *alg_name_
             << alg_name_lc << " two_body " << tier.tag << " state[" << i << "]";
     }
 
-    int naccept = integ.get_naccept();
-    int nreject = integ.get_nreject();
+    int64_t naccept = integ.get_naccept();
+    int64_t nreject = integ.get_nreject();
     EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(alg, ref.naccept))
         << alg_name_lc << " two_body " << tier.tag << " naccept Tycho=" << naccept
         << " Julia=" << ref.naccept;
@@ -160,8 +160,8 @@ void assert_parity_crtbp(tycho::integrators::IVPAlg alg, const char *alg_name_lc
             << alg_name_lc << " crtbp " << tier.tag << " state[" << i << "]";
     }
 
-    int naccept = integ.get_naccept();
-    int nreject = integ.get_nreject();
+    int64_t naccept = integ.get_naccept();
+    int64_t nreject = integ.get_nreject();
     EXPECT_LE(std::abs(naccept - ref.naccept), naccept_band(alg, ref.naccept))
         << alg_name_lc << " crtbp " << tier.tag << " naccept Tycho=" << naccept
         << " Julia=" << ref.naccept;

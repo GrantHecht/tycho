@@ -90,7 +90,7 @@ TEST_F(IntegratorTest, SegmentedSTMSerial_StepCountNotDoubled) {
     ref.set_abs_tol(1e-10);
     ref.set_rel_tol(1e-10);
     (void)ref.integrate_stm(x0, tf);
-    int single_total = ref.get_naccept() + ref.get_nreject();
+    int64_t single_total = ref.get_naccept() + ref.get_nreject();
 
     Integrator<SHO> seg(ode, IVPAlg::DOPRI87, 0.01);
     seg.set_abs_tol(1e-10);
@@ -98,7 +98,7 @@ TEST_F(IntegratorTest, SegmentedSTMSerial_StepCountNotDoubled) {
     ForceSerialThreadPool no_pool;
     (void)seg.integrate_stm_parallel(x0, tf, 4);
 
-    int segmented = seg.get_naccept() + seg.get_nreject();
+    int64_t segmented = seg.get_naccept() + seg.get_nreject();
 
     // Pre-fix, every non-final segment ran TWO propagations (one STM,
     // one plain) — with n_parts=4 that roughly doubled the step count
