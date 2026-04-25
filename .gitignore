@@ -553,6 +553,10 @@ examples/python_examples/Plots/**
 
 # Claude Code planning artifacts
 docs/superpowers/
+# Local agent / tool artifacts
+.claude/
+.codex
+package-lock.json
 # Git worktrees
 .worktrees/
 bench/julia_reference/.julia/
