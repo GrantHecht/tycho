@@ -54,6 +54,12 @@ inline std::string controller_invariant_msg(const char *controller, const char *
     return msg;
 }
 
+/// Friend shim that lets tests inject crafted internal state into the
+/// controllers. Production code should never use this — controllers are
+/// otherwise self-contained: gains are configured publicly, internal
+/// history is owned by the controller and read only via accessors.
+struct ControllerTestAccess;
+
 } // namespace detail
 
 // -----------------------------------------------------------------------------
@@ -78,8 +84,8 @@ struct IController {
     double qsteady_min_ = 1.0;
     double qsteady_max_ = 1.0;
 
-    // Internal state
-    double qold_ = 1.0;
+    /// Last-computed clipped growth factor (Julia convention: dt_new = dt / qold).
+    double qold() const noexcept { return qold_; }
 
     void validate() const {
         if (!(gamma_ > 0.0 && gamma_ <= 1.0))
@@ -122,6 +128,10 @@ struct IController {
     }
 
     void reset() { qold_ = 1.0; }
+
+  private:
+    double qold_ = 1.0;
+    friend struct detail::ControllerTestAccess;
 };
 
 // -----------------------------------------------------------------------------
@@ -151,9 +161,10 @@ struct PIController {
     double qsteady_max_ = 1.0;
     double qoldinit_ = 1.0e-4;
 
-    // Internal state
-    double errold_ = 1.0e-4;
-    double q11_ = 1.0;
+    /// Cached previous-step error norm (clamped to qoldinit_ on accept).
+    double errold() const noexcept { return errold_; }
+    /// Cached EEst^beta1_ from the most recent update.
+    double q11() const noexcept { return q11_; }
 
     void validate() const {
         if (!(beta1_ >= 0.0))
@@ -211,6 +222,11 @@ struct PIController {
         errold_ = qoldinit_;
         q11_ = 1.0;
     }
+
+  private:
+    double errold_ = 1.0e-4;
+    double q11_ = 1.0;
+    friend struct detail::ControllerTestAccess;
 };
 
 // -----------------------------------------------------------------------------
@@ -227,8 +243,8 @@ struct PIController {
 /// algorithm's `ErrorOrder` — order of the embedded error estimator).
 /// Beta values are NOT pre-scaled — the formula divides by k internally.
 ///
-/// `qold_` is diagnostic-only (last-computed dt_factor, readable by tests);
-/// it is not consumed by the control law itself.
+/// `qold_` is diagnostic-only (last-computed dt_factor, readable via the
+/// `qold()` accessor); it is not consumed by the control law itself.
 ///
 /// Matches OrdinaryDiffEqCore.jl `PIDController`.
 struct PIDController {
@@ -239,9 +255,10 @@ struct PIDController {
     double qsteady_min_ = 1.0;
     double qsteady_max_ = 1.0;
 
-    // Internal state: error history ε₁..ε₃ (= 1/EEst), and previous dt_factor
-    std::array<double, 3> err_ = {1.0, 1.0, 1.0};
-    double qold_ = 1.0;
+    /// Error history (ε₁..ε₃ where ε_i = 1/EEst_i), accessible by index.
+    const std::array<double, 3> &err() const noexcept { return err_; }
+    /// Last-computed (limited) dt_factor; diagnostic only.
+    double qold() const noexcept { return qold_; }
 
     void validate() const {
         if (!(beta1_ >= 0.0))
@@ -294,7 +311,26 @@ struct PIDController {
         err_ = {1.0, 1.0, 1.0};
         qold_ = 1.0;
     }
+
+  private:
+    std::array<double, 3> err_ = {1.0, 1.0, 1.0};
+    double qold_ = 1.0;
+    friend struct detail::ControllerTestAccess;
 };
+
+namespace detail {
+
+/// Test-only mutable access to controller internal state. Not for production.
+/// Returns references so tests can inject crafted state via assignment.
+struct ControllerTestAccess {
+    static double &qold(IController &c) noexcept { return c.qold_; }
+    static double &errold(PIController &c) noexcept { return c.errold_; }
+    static double &q11(PIController &c) noexcept { return c.q11_; }
+    static std::array<double, 3> &err(PIDController &c) noexcept { return c.err_; }
+    static double &qold(PIDController &c) noexcept { return c.qold_; }
+};
+
+} // namespace detail
 
 /// Runtime-dispatched controller state. Integrators and extracted drivers
 /// hold this as the concrete storage for "the current controller", then

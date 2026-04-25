@@ -66,20 +66,20 @@ TEST(PIDControllerTest, HistoryShiftsOnAccept) {
     // So after step 2 accept, err_[2] holds step 1's 1/EEst value.
     PIDController c = h211pi();
     c.update(0.1, 0.5, 5, 0);       // step 1 accept; err_[0]=2
-    double err1_before = c.err_[0]; // = 2 (= 1/0.5)
+    double err1_before = c.err()[0]; // = 2 (= 1/0.5)
     c.update(0.1, 0.3, 5, 1);       // step 2 accept; err_[0]=3.333
-    EXPECT_NEAR(c.err_[2], err1_before, 1e-15);
+    EXPECT_NEAR(c.err()[2], err1_before, 1e-15);
 }
 
 TEST(PIDControllerTest, HistoryUnchangedOnReject) {
     PIDController c = h211pi();
     c.update(0.1, 0.5, 5, 0);
-    auto err_snap = c.err_;
+    auto err_snap = c.err();
     c.update(0.1, 1e6, 5, 1); // reject (see RejectsWhenFactorBelowSafety)
     // err_[0] IS updated even on reject (Julia does this — controller.err[1] = inv(EEst))
     // but err_[1] and err_[2] are only shifted on accept.
-    EXPECT_NEAR(c.err_[1], err_snap[1], 1e-15);
-    EXPECT_NEAR(c.err_[2], err_snap[2], 1e-15);
+    EXPECT_NEAR(c.err()[1], err_snap[1], 1e-15);
+    EXPECT_NEAR(c.err()[2], err_snap[2], 1e-15);
 }
 
 TEST(PIDControllerTest, ResetRestoresInitialState) {
@@ -87,10 +87,10 @@ TEST(PIDControllerTest, ResetRestoresInitialState) {
     c.update(0.1, 0.5, 5, 0);
     c.update(0.1, 0.3, 5, 1);
     c.reset();
-    EXPECT_NEAR(c.err_[0], 1.0, 1e-15);
-    EXPECT_NEAR(c.err_[1], 1.0, 1e-15);
-    EXPECT_NEAR(c.err_[2], 1.0, 1e-15);
-    EXPECT_NEAR(c.qold_, 1.0, 1e-15);
+    EXPECT_NEAR(c.err()[0], 1.0, 1e-15);
+    EXPECT_NEAR(c.err()[1], 1.0, 1e-15);
+    EXPECT_NEAR(c.err()[2], 1.0, 1e-15);
+    EXPECT_NEAR(c.qold(), 1.0, 1e-15);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -119,8 +119,8 @@ TEST(PIDControllerTest, Beta3NonZero_H312PID_FactorMatchesClosedForm) {
     c.update(0.1, 0.4, order, 1);
 
     // Capture the history we expect to feed step 3.
-    double err1_pre = c.err_[1]; // 2.5  (from step 2's err_[0])
-    double err2_pre = c.err_[2]; // 2.0  (from step 1's err_[0])
+    double err1_pre = c.err()[1]; // 2.5  (from step 2's err_[0])
+    double err2_pre = c.err()[2]; // 2.0  (from step 1's err_[0])
 
     // Step 3: err_norm = 0.6 → err_[0] := 1/0.6
     double h = 0.05;

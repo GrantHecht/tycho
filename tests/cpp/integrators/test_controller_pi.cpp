@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 using tycho::integrators::PIController;
+using tycho::integrators::detail::ControllerTestAccess;
 
 namespace {
 constexpr double GAMMA = 0.9;
@@ -23,7 +24,7 @@ PIController dopri54_defaults() {
     c.qmin_ = QMIN;
     c.qmax_ = QMAX;
     c.qoldinit_ = QOLDINIT;
-    c.errold_ = QOLDINIT;
+    ControllerTestAccess::errold(c) = QOLDINIT;
     return c;
 }
 
@@ -52,7 +53,7 @@ TEST(PIControllerTest, SubsequentStepUsesErrold) {
     PIController c = dopri54_defaults();
     // Step 1: accept EEst=0.5
     c.update(0.1, 0.5, 4, 0);
-    EXPECT_NEAR(c.errold_, std::max(0.5, QOLDINIT), 1e-14);
+    EXPECT_NEAR(c.errold(), std::max(0.5, QOLDINIT), 1e-14);
     // Step 2: another accept
     double h2 = 0.15;
     double err_norm2 = 0.3;
@@ -73,7 +74,7 @@ TEST(PIControllerTest, RejectUsesQ11NotQ) {
     double q_reject = std::min(1.0 / c.qmin_, q11 / c.gamma_);
     EXPECT_NEAR(out.dt_new, h / q_reject, 1e-14);
     // errold_ unchanged after reject
-    EXPECT_NEAR(c.errold_, QOLDINIT, 1e-14);
+    EXPECT_NEAR(c.errold(), QOLDINIT, 1e-14);
 }
 
 TEST(PIControllerTest, ZeroErrGivesQmax) {
@@ -87,8 +88,8 @@ TEST(PIControllerTest, ResetClearsState) {
     PIController c = dopri54_defaults();
     c.update(0.1, 0.5, 4, 1);
     c.reset();
-    EXPECT_NEAR(c.errold_, c.qoldinit_, 1e-14);
-    EXPECT_NEAR(c.q11_, 1.0, 1e-14);
+    EXPECT_NEAR(c.errold(), c.qoldinit_, 1e-14);
+    EXPECT_NEAR(c.q11(), 1.0, 1e-14);
 }
 
 TEST(PIControllerTest, BackwardIntegrationPreservesSign) {
@@ -107,11 +108,32 @@ TEST(PIControllerTest, QsteadyDeadbandSnapsToOne) {
     PIController c = dopri54_defaults();
     c.qsteady_min_ = 0.5;
     c.qsteady_max_ = 2.0;
-    c.errold_ = 1.0;
+    ControllerTestAccess::errold(c) = 1.0;
     auto out = c.update(0.1, 0.9, 4, 1);
     EXPECT_TRUE(out.accepted);
     // q = 0.9^0.17 / 1.0^0.04 / 0.9 ≈ 0.982 / 0.9 ≈ 1.091 → in [0.5, 2.0] → snaps to 1
     EXPECT_NEAR(out.dt_new, 0.1, 1e-12);
+}
+
+// On reject the controller must NOT apply the qsteady deadband: the deadband
+// is gated on `accepted` so that a rejected step always shrinks dt.
+// Removing the `accepted &&` guard would silently freeze dt at h on reject
+// when q lands in [qsteady_min_, qsteady_max_], live-locking the controller.
+TEST(PIControllerTest, QsteadyDeadbandNotAppliedOnReject) {
+    PIController c = dopri54_defaults();
+    c.qsteady_min_ = 0.5;
+    c.qsteady_max_ = 2.0;
+    // err_norm = 2.5 > 1 → rejects. q11_ = 2.5^0.17 ≈ 1.169.
+    // q_reject = min(1/qmin_, q11_/gamma_) = min(5, 1.169/0.9) = 1.299.
+    // q_reject ∈ [0.5, 2.0] would land in the deadband if it were applied,
+    // but the reject branch must use h / q_reject directly.
+    double h = 0.1;
+    auto out = c.update(h, 2.5, /*order=*/4, /*naccept=*/5);
+    EXPECT_FALSE(out.accepted);
+    double q11 = std::pow(2.5, c.beta1_);
+    double q_reject = std::min(1.0 / c.qmin_, q11 / c.gamma_);
+    EXPECT_NEAR(out.dt_new, h / q_reject, 1e-14);
+    EXPECT_NE(out.dt_new, h) << "Reject must not snap to h via the qsteady deadband.";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -122,7 +144,7 @@ TEST(PIControllerTest, QsteadyDeadbandSnapsToOne) {
 ///////////////////////////////////////////////////////////////////////////////
 TEST(PIControllerTest, QmaxGrowthClampHitsOnTinyError) {
     PIController c = dopri54_defaults();
-    c.errold_ = 1.0; // neutralize the proportional history term
+    ControllerTestAccess::errold(c) = 1.0; // neutralize the proportional history term
     // Tiny err_norm → q_raw very small → clamped to 1/qmax_ → dt_new = h * qmax_
     auto out = c.update(/*h=*/0.1, /*err_norm=*/1.0e-12, /*order=*/4, /*naccept=*/5);
     EXPECT_TRUE(out.accepted);
@@ -137,7 +159,7 @@ TEST(PIControllerTest, QminShrinkClampHitsOnAccept) {
     // gamma_ scaling. With beta2_=0.04 the dependence is weak, so we need an
     // extreme errold to clear the clamp threshold.
     //   q_pre = (err_norm^beta1_ / errold^beta2_) / gamma_ must exceed 1/qmin_ = 5.
-    c.errold_ = 1.0e-50;
+    ControllerTestAccess::errold(c) = 1.0e-50;
     auto out = c.update(/*h=*/0.1, /*err_norm=*/0.95, /*order=*/4, /*naccept=*/5);
     ASSERT_TRUE(out.accepted) << "err_norm < 1 should accept";
     // q is clamped to 1/qmin_ → dt_new = h * qmin_ (the maximum permitted shrink).

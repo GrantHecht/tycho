@@ -16,7 +16,7 @@ TEST(StepControllerTest, ResetClearsState) {
     IController ctrl;
     ctrl.update(0.1, 1.5, 5, 1); // reject, stores qold
     ctrl.reset();
-    EXPECT_NEAR(ctrl.qold_, 1.0, 1e-15);
+    EXPECT_NEAR(ctrl.qold(), 1.0, 1e-15);
 }
 
 TEST(StepControllerTest, JuliaForm_EEstHalfShrinksByRoot) {
@@ -53,6 +53,25 @@ TEST(StepControllerTest, JuliaForm_QsteadyDeadband) {
     auto out = ctrl.update(0.1, 0.9, 5, 1);
     EXPECT_TRUE(out.accepted);
     EXPECT_NEAR(out.dt_new, 0.1, 1e-12);
+}
+
+// On reject the qsteady deadband must NOT engage. The deadband is gated on
+// `accepted` so a rejected step always shrinks dt; otherwise a controller
+// whose computed q lands in the deadband would freeze dt at h while still
+// reporting reject, producing a livelock with no naccept progress.
+TEST(StepControllerTest, JuliaForm_QsteadyDeadbandNotAppliedOnReject) {
+    IController ctrl;
+    ctrl.qsteady_min_ = 0.5;
+    ctrl.qsteady_max_ = 2.0;
+    // EEst = 1.5 > 1 → reject. q = 1.5^(1/6)/0.9 ≈ 1.0707/0.9 ≈ 1.1897 → would
+    // land in [0.5, 2.0] if the deadband were applied. dt_new must be h / q.
+    double h = 0.1;
+    double err_norm = 1.5;
+    auto out = ctrl.update(h, err_norm, /*order=*/5, /*naccept=*/3);
+    EXPECT_FALSE(out.accepted);
+    double q = std::pow(err_norm, 1.0 / 6.0) / ctrl.gamma_;
+    EXPECT_NEAR(out.dt_new, h / q, 1e-12);
+    EXPECT_NE(out.dt_new, h) << "Reject must not snap to h via the qsteady deadband.";
 }
 
 TEST(StepControllerTest, JuliaForm_FirstStepQmaxOverride) {
