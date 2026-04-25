@@ -141,6 +141,32 @@ TEST_F(IntegratorTest, STMParallelExtraFailuresCapWithAndNMore) {
     }
 }
 
+// When workers throw, the main thread has already run n_parts-1 segments
+// synchronously while dispatching tasks. Those completed segments' accept
+// counts must be visible in get_naccept() after the call (success or
+// exception), via the RAII CounterWriteback over the threadpool branch.
+TEST_F(IntegratorTest, STMParallelWorkerThrowsLeavesMainCountersCurrent) {
+    WorkerThreadThrowingSHO ode;
+    Integrator<WorkerThreadThrowingSHO> integ(ode, IVPAlg::DOPRI87, 0.05);
+    integ.set_abs_tol(1e-8);
+    integ.set_rel_tol(1e-8);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    const double tf = 4.0;
+
+    EXPECT_EQ(integ.get_naccept(), 0);
+
+    EXPECT_THROW((void)integ.integrate_stm_parallel(x0, tf, 4), std::runtime_error);
+
+    // Main thread completed n_parts-1 = 3 synchronous propagation segments
+    // before the futures were drained and threw. Those segments' accept
+    // counts must publish to the member counter via RAII writeback.
+    EXPECT_GT(integ.get_naccept(), 0)
+        << "Main-thread accept count from completed pre-throw segments must "
+           "land in get_naccept() via the threadpool branch's CounterWriteback.";
+}
+
 // P0.5: when the synchronous main-thread integrate_core inside the dispatch
 // loop throws, the unwind handler must aggregate any worker failures rather
 // than silently dropping them. This is distinct from the post-loop drain path

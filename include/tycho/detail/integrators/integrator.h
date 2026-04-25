@@ -1872,10 +1872,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
     /// Segmented parallel STM over a single trajectory.
-    /// Threadpool branch: `get_naccept()` / `get_nreject()` are NOT updated
-    /// (workers own private per-segment counters to avoid cross-thread
-    /// writes to member state). Non-threadpool fallback IS safe to write
-    /// back — runs single-threaded and accumulates into the members.
+    /// Threadpool branch: `get_naccept()` / `get_nreject()` reflect main-thread
+    /// propagation only (the n_parts-1 segments the main thread runs while
+    /// dispatching workers); per-worker counters are deliberately not
+    /// aggregated to avoid cross-thread member writes. The main-thread
+    /// total is published via RAII so it is current after both success
+    /// and exception unwind. For exact per-segment counts run sequentially
+    /// via `integrate_stm`. Non-threadpool fallback runs single-threaded
+    /// and accumulates the full segmented total into the members.
     STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
         if (n_parts < 0) {
             throw std::invalid_argument("integrate_stm_parallel: n_parts must be >= 0; got " +
@@ -1901,10 +1905,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         };
 
         if (n_parts > 1 && tycho::utils::use_thread_pool()) {
-            // Main-thread propagation runs concurrently with workers;
-            // keep its state strictly local (no member writes).
+            // Main-thread propagation runs concurrently with workers; keep
+            // per-segment state local (no member writes), then publish the
+            // accumulated main-thread totals via RAII so unwind paths leave
+            // get_naccept/get_nreject current rather than stale.
             ControllerVariant main_ctrl;
             int main_na = 0, main_nr = 0;
+            int total_main_na = 0, total_main_nr = 0;
+            CounterWriteback _main_writeback{*this, total_main_na, total_main_nr};
             int submitted = 0;
             try {
                 for (int i = 0; i < n_parts; i++) {
@@ -1925,6 +1933,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         auto stm_result =
                             this->integrate_stm_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
                         xs[i + 1] = std::get<0>(stm_result);
+                        total_main_na += main_na;
+                        total_main_nr += main_nr;
                     }
                 }
             } catch (...) {
