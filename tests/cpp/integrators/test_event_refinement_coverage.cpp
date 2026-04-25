@@ -198,15 +198,8 @@ TEST_F(EventRefinementCoverageTest, Nullopt_WhenNewtonOvershootsBracket_EmitsStd
         << "Counter must increment once per emitted nullopt";
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Mixed-nullopt shape contract. The std::optional<ODEState> API break
-// claims 1:1 alignment between eventtimes and eventstates, independent of
-// which crossings resolve. A bracket that resolves fills an engaged
-// optional; a bracket that fails to refine fills std::nullopt, keeping the
-// index stable. Existing tests cover all-engaged and all-nullopt; this
-// pins the mixed case, which is the real failure mode for consumers that
-// zip eventtimes with eventstates by index.
-///////////////////////////////////////////////////////////////////////////////
+// Mixed-engaged + nullopt brackets must preserve 1:1 index alignment with
+// eventtimes — pin the failure mode for consumers that zip by index.
 TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
     astro::Kepler kep(kErcMu);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
@@ -234,7 +227,8 @@ TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
     // Now build a dense trajectory + table so we can drive find_events with a
     // caller-constructed eventtimes that MIXES real brackets (from the
     // integrate above) with fabricated no-crossing brackets — the latter
-    // resolve to std::nullopt after the residual check (P0-1).
+    // resolve to std::nullopt after the residual check in
+    // EventHandler::refine_one.
     std::vector<Integrator<astro::Kepler>::EventPack> no_events;
     auto [xs, _] = integ.integrate_dense(x0, tf, no_events, /*alloutput=*/true);
     auto tab = integ.make_table(xs, /*fifthorder=*/false);
@@ -256,8 +250,9 @@ TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
     // Index 0: real crossing A — must resolve.
     eventtimes[0].emplace_back(te0 - half_window, te0 + half_window);
     // Index 1: fake bracket near t_start, far from any crossing — must
-    // produce std::nullopt (the residual check at P0-1 rejects the Newton
-    // iterate since |altitude - 7200| stays well above tol over this span).
+    // produce std::nullopt (the residual check in EventHandler::refine_one
+    // rejects the Newton iterate since |altitude - 7200| stays well above
+    // tol over this span).
     eventtimes[0].emplace_back(t_start + half_window * 0.1, t_start + half_window * 0.2);
     // Index 2: real crossing B — must resolve.
     eventtimes[0].emplace_back(te1 - half_window, te1 + half_window);
@@ -277,12 +272,18 @@ TEST_F(EventRefinementCoverageTest, MixedNullopt_ShapePreserved) {
 }
 
 // The counter is reset at the start of each find_events call — a second
-// event-bearing integration must not accumulate state from the first.
+// event-bearing integration must not accumulate state from the first. Force
+// a non-zero failure count via an impossibly tight event_tol so a stuck-at-
+// zero counter cannot silently pass.
 TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     astro::Kepler kep(kErcMu);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
+    // 1e-300 is unattainable: FP residuals bottom out at ~1e-16, so every
+    // refinement fails the residual check and emits std::nullopt.
+    integ.set_event_tol(1.0e-300);
+    integ.set_max_event_iters(4);
 
     auto x0 = erc_eccentric_x0();
     double tf = erc_eccentric_period();
@@ -299,7 +300,10 @@ TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     (void)integ.integrate(x0, tf, events);
     int after_second = integ.get_failed_event_count();
 
-    // Counter must reflect only the most recent call. With identical inputs
-    // the two values must match exactly; on the happy path both are 0.
+    // Both calls must report the SAME non-zero count — same inputs, same
+    // failure mode, full reset in between. A stuck-at-zero counter would
+    // pass EXPECT_EQ(0, 0) trivially; the >0 floor blocks that.
+    EXPECT_GT(after_first, 0)
+        << "Impossibly-tight event_tol must produce at least one nullopt.";
     EXPECT_EQ(after_first, after_second);
 }

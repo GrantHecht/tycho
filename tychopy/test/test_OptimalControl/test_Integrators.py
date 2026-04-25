@@ -428,8 +428,9 @@ class test_Integrators(unittest.TestCase):
         Optional[np.ndarray] on the Python surface. Force an event
         refinement to fail via an impossibly tight event_tol, then assert
         the corresponding EventLocs slot is literally `None` (not a
-        zero-array, not a silent drop) — the P0-1 residual check produces
-        std::nullopt, which the binding must relay as None.
+        zero-array, not a silent drop) — the residual check in
+        EventHandler::refine_one produces std::nullopt, which the binding
+        must relay as None.
         """
         r = 1.0
         v = 1.1
@@ -456,7 +457,8 @@ class test_Integrators(unittest.TestCase):
 
         # Impossibly tight tolerance — no Newton iterate can satisfy
         # |f(tevent)| <= 1e-300 since FP residuals bottom out at ~1e-16.
-        # With P0-1's residual check, every refinement emits std::nullopt.
+        # The residual check in EventHandler::refine_one then emits
+        # std::nullopt for every refinement.
         integ.event_tol = 1.0e-300
         integ.max_event_iters = 4
 
@@ -707,6 +709,71 @@ class TestBindingValidators(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             integ.integrate_stm2([X0], np.array([10.0]), [LF])
+
+    def test_BatchEmptyInputReturnsEmpty_VectorizedDefault(self):
+        # Empty input under the default vectorize_batch_calls=True must be a
+        # no-op, not an exception. Pre-fix this routed to ParallelDriver and
+        # threw "must supply at least one initial state."
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        integ = ode.integrator(0.01)
+        self.assertTrue(integ.vectorize_batch_calls)
+        self.assertEqual(integ.integrate([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm2([], np.array([]), []), [])
+
+    def test_BatchEmptyInputReturnsEmpty_NonVectorized(self):
+        # Symmetry check: the non-vectorized branch already returned empty
+        # via its for-loop, but pin the contract so the two branches stay
+        # interchangeable.
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        integ = ode.integrator(0.01)
+        integ.vectorize_batch_calls = False
+        self.assertEqual(integ.integrate([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm2([], np.array([]), []), [])
+
+    def test_EventPackPythonMutationRejectsInvalid(self):
+        # The Python def_prop_rw setters re-run the C++ ctor invariants so
+        # users cannot mutate a valid EventPack into an invalid state. A
+        # raw def_rw would silently accept direction=2 and let it coerce
+        # inside check_crossings.
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        pack = oc.EventPack(ApseFunc(), 0, 0)
+        with self.assertRaises(ValueError):
+            pack.direction = 2
+        with self.assertRaises(ValueError):
+            pack.direction = -2
+        with self.assertRaises(ValueError):
+            pack.stop_count = -1
+        # Valid round-trips work after rejection.
+        pack.direction = 1
+        self.assertEqual(pack.direction, 1)
+        pack.stop_count = 3
+        self.assertEqual(pack.stop_count, 3)
+
+    def test_EventPackTupleCoerceRejectsInvalid(self):
+        # The implicit tuple→EventPack converter routes through the C++
+        # constructor, which validates direction and stop_count. nanobind
+        # surfaces a failed implicit conversion as TypeError ("incompatible
+        # function arguments") rather than propagating the C++
+        # std::invalid_argument as ValueError, so accept either — the goal
+        # is "bad tuple is rejected before integrate begins."
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        ode = ast.Astro.Kepler.ode(1)
+        integ = ode.integrator(0.01)
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.1
+        with self.assertRaises((ValueError, TypeError)):
+            integ.integrate(X0, 10.0, [(ApseFunc(), 2, 0)])
+        with self.assertRaises((ValueError, TypeError)):
+            integ.integrate(X0, 10.0, [(ApseFunc(), 0, -1)])
 
 
 from mpl_toolkits.mplot3d import Axes3D

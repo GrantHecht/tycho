@@ -151,13 +151,8 @@ TEST_F(EventDirectionTest, StopCountHaltsIntegrationEarly) {
     EXPECT_EQ(eventlocs[0].size(), 1u);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// EventPack constructor validation: the domain of `direction` is {-1, 0, 1}
-// and `stop_count` must be >= 0. Any out-of-domain int must throw at
-// construction time — a silent coerce (e.g. a Python `bool`→int mistake or
-// an off-by-one `direction=2`) would otherwise slip into the sign-product
-// check and produce undefined behaviour.
-///////////////////////////////////////////////////////////////////////////////
+// Out-of-domain direction silently coerces inside the sign-product check;
+// reject at construction time.
 TEST_F(EventDirectionTest, InvalidDirectionRejected) {
     auto gf_x = make_component_zero_event(0);
     EXPECT_THROW((EventPack{gf_x, /*direction=*/2, /*stop_count=*/0}), std::invalid_argument);
@@ -169,4 +164,37 @@ TEST_F(EventDirectionTest, NegativeStopCountRejected) {
     auto gf_x = make_component_zero_event(0);
     EXPECT_THROW((EventPack{gf_x, /*direction=*/0, /*stop_count=*/-1}), std::invalid_argument);
     EXPECT_THROW((EventPack{gf_x, /*direction=*/0, /*stop_count=*/-42}), std::invalid_argument);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Post-construction mutation can take EventPack out of its invariant
+// envelope (public fields, direct assignment). The integrate-entry
+// validate_events call must catch that, with the failing index in the error
+// message.
+///////////////////////////////////////////////////////////////////////////////
+TEST_F(EventDirectionTest, PostConstructionMutationCaughtAtIntegrate) {
+    auto gf_x = make_component_zero_event(0);
+    std::vector<EventPack> events;
+    events.push_back({gf_x, event_direction::Any, 0});
+    events.push_back({gf_x, event_direction::Any, 0});
+    events[1].direction = 2; // out of {-1, 0, 1}; would silently coerce in check_crossings
+
+    EXPECT_THROW(sho_integrate_with_events(events), std::invalid_argument);
+
+    try {
+        sho_integrate_with_events(events);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_NE(std::string(e.what()).find("events[1]"), std::string::npos)
+            << "error message must identify the offending event index; got: " << e.what();
+    }
+}
+
+TEST_F(EventDirectionTest, PostConstructionNegativeStopCountCaughtAtIntegrate) {
+    auto gf_x = make_component_zero_event(0);
+    std::vector<EventPack> events;
+    events.push_back({gf_x, event_direction::Any, 0});
+    events[0].stop_count = -1;
+
+    EXPECT_THROW(sho_integrate_with_events(events), std::invalid_argument);
 }

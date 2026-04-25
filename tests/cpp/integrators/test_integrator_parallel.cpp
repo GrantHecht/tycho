@@ -562,6 +562,49 @@ INSTANTIATE_TEST_SUITE_P(VariousPartitionCounts, SegmentedSTMParallelTest,
                          });
 
 ///////////////////////////////////////////////////////////////////////////////
+// Bit-identity at segment endpoints: the parallel main-thread chaining at
+// integrator.h ~1942 calls integrate_stm_core (not integrate_core) so each
+// xs[i+1] handed to worker (i+1) matches byte-for-byte what a sequential
+// chain of integrate_stm calls produces. A regression replacing
+// integrate_stm_core with integrate_core would still satisfy the 1e-11
+// tolerance in SegmentedSTMParallelTest above; the EXPECT_DOUBLE_EQ here
+// pins the FP-identity contract.
+//
+// Reference path: integ.integrate_stm() wraps integrate_stm_core() with a
+// fresh worker controller — the same pair the parallel main thread uses for
+// its propagation step. We only compare the final state because the running
+// STM product inside the parallel dispatcher uses a partial-row update
+// (jxall.topRows(output_rows) = jx * jxall) that the public Jacobian return
+// shape does not expose; bit-identity at the final state is sufficient to
+// surface a regression at any chain link.
+///////////////////////////////////////////////////////////////////////////////
+TEST(SegmentedSTMParallelBitIdentityTest, MatchesSequentialIntegrateStmCoreChain) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    integ.set_abs_tol(1e-12);
+    integ.set_rel_tol(1e-12);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    const double tf = 2.0;
+    constexpr int kNParts = 4;
+
+    ScopedThreadCount threads(kNParts);
+    auto [par_xf, par_stm] = integ.integrate_stm_parallel(x0, tf, kNParts);
+
+    Eigen::VectorXd ts = Eigen::VectorXd::LinSpaced(kNParts + 1, x0[2], tf);
+    Eigen::Vector3d x_curr = x0;
+    for (int i = 0; i < kNParts; ++i) {
+        auto [seg_xf, _seg_jac] = integ.integrate_stm(x_curr, ts[i + 1]);
+        x_curr = seg_xf;
+    }
+
+    for (Eigen::Index i = 0; i < x_curr.size(); ++i) {
+        EXPECT_DOUBLE_EQ(par_xf[i], x_curr[i]) << "xf component " << i;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Concurrent worker-throw coverage for the non-STM parallel path.
 //
 // test_parallel_stm_errors.cpp exercises the composite-exception aggregation
@@ -623,4 +666,77 @@ TEST_F(IntegratorTest, ParallelIntegrateThrowsUnderConcurrency) {
     EXPECT_GT(integ.get_naccept(), 0)
         << "Expected BatchCounterWriteback to publish main-thread-inlined "
            "lane counts on unwind.";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Integrate-entry revalidation: controllers are public-field structs, so a
+// caller can construct a valid controller and mutate it post-construction
+// into an invalid state. The validate_controller call at adaptive_driver and
+// parallel_driver entry must catch this — otherwise the next integrate()
+// would compute steps with NaN-producing q clamps or division by zero.
+///////////////////////////////////////////////////////////////////////////////
+TEST(IntegrateEntryRevalidation, AdaptiveDriverRejectsPostMutationGamma) {
+    SHO ode(0.0);
+    integrators::Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    integ.set_abs_tol(kTol);
+    integ.set_rel_tol(kTol);
+
+    // Mutate the prototype controller into an invalid state. gamma_ must be
+    // in (0, 1]; setting it to 2.0 must be caught at integrate-entry.
+    auto &pi = std::get<integrators::PIController>(integ.controller_variant_);
+    pi.gamma_ = 2.0;
+
+    Eigen::Vector3d x0(1.0, 0.0, 0.0);
+    EXPECT_THROW((void)integ.integrate(x0, 1.0), std::invalid_argument);
+}
+
+TEST(IntegrateEntryRevalidation, ParallelDriverWorkerRejectsPostMutationWithTrajectoryPrefix) {
+    // integrate_parallel dispatches one AdaptiveDriver call per worker; each
+    // worker validates its cloned controller and decorate_trajectory prefixes
+    // the failure with "trajectory N: " so the user can identify the lane.
+    SHO ode(0.0);
+    integrators::Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    integ.set_abs_tol(kTol);
+    integ.set_rel_tol(kTol);
+
+    auto &pi = std::get<integrators::PIController>(integ.controller_variant_);
+    pi.qmin_ = 5.0; // out of (0, 1)
+
+    std::vector<Eigen::Vector3d> x0s(4, Eigen::Vector3d(1.0, 0.0, 0.0));
+    Eigen::VectorXd tfs = Eigen::VectorXd::Constant(4, 1.0);
+
+    ScopedThreadCount threads(2);
+    try {
+        (void)integ.integrate_parallel(x0s, tfs, 2);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_NE(std::string(e.what()).find("trajectory "), std::string::npos)
+            << "error message must identify the offending trajectory; got: " << e.what();
+    }
+}
+
+TEST(IntegrateEntryRevalidation, VectorizedBatchDriverRejectsPostMutationWithControllerIndex) {
+    // The vectorized batch path (integrate(x0s, tfs) under the default
+    // vectorize_batch_calls=true) dispatches via integrate_impl_vectorized →
+    // ParallelDriver, which validates the controllers vector with per-index
+    // try/catch and prepends "controllers[N]:" on failure. Pin that surface
+    // separately from the per-worker-AdaptiveDriver path above.
+    SHO ode(0.0);
+    integrators::Integrator<SHO> integ(ode, IVPAlg::DOPRI54, 0.01);
+    integ.set_abs_tol(kTol);
+    integ.set_rel_tol(kTol);
+
+    auto &pi = std::get<integrators::PIController>(integ.controller_variant_);
+    pi.qmin_ = 5.0;
+
+    std::vector<Eigen::Vector3d> x0s(4, Eigen::Vector3d(1.0, 0.0, 0.0));
+    Eigen::VectorXd tfs = Eigen::VectorXd::Constant(4, 1.0);
+
+    try {
+        (void)integ.integrate(x0s, tfs);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_NE(std::string(e.what()).find("controllers["), std::string::npos)
+            << "error message must identify the offending controller index; got: " << e.what();
+    }
 }
