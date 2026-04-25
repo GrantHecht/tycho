@@ -366,24 +366,19 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                                       xnext_mid_ss, update_control);
                     }
 
-                    // Extract f(xf) back to xdotnext_ss for FSAL methods so
-                    // accepted lanes propagate f(xf) to the next step. For
-                    // non-FSAL methods (Vern*) the next step recomputes
-                    // fresh — but if the caller asked us to store derivs,
-                    // we still need f(xf) for this step's record. Stepper
-                    // populates k_fsal_ = f(xf) whenever compute_midpoint
-                    // was set in the preceding step() call (see the
-                    // !LastStageIsFxf branch of Stepper::step, which is the
-                    // Vern7/8/9 path); peek_fsal is safe here regardless of
-                    // fsal_valid_.
+                    // Extract f(xf) back to xdotnext_ss so accepted FSAL
+                    // lanes propagate f(xf) into the next step's k[0] and
+                    // storederivs callers see the per-step derivative. Both
+                    // branches satisfy peek_fsal's freshness precondition
+                    // (peek_fresh_ == true): FSAL/LastStageIsFxf methods
+                    // populate k_fsal_ on every step regardless of
+                    // ComputeMidpoint, while non-FSAL methods need
+                    // step<true>() — guaranteed in the storederivs branch
+                    // below by the (storemidpoints||storederivs) disjunction
+                    // that drives the step<true>() dispatch.
                     if constexpr (method_does_fsal) {
                         xdotnext_ss = stepper_.peek_fsal();
                     } else if (storederivs) {
-                        // NOTE: peek_fsal's freshness precondition (see the
-                        // storederivs branch in adaptive_driver.h for the
-                        // rationale) is satisfied because the step<true>()
-                        // dispatch below is driven by the same
-                        // (storemidpoints||storederivs) disjunction.
                         xdotnext_ss = stepper_.peek_fsal();
                     }
 

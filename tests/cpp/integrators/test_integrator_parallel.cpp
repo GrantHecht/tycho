@@ -562,10 +562,10 @@ INSTANTIATE_TEST_SUITE_P(VariousPartitionCounts, SegmentedSTMParallelTest,
                          });
 
 ///////////////////////////////////////////////////////////////////////////////
-// Bit-identity at segment endpoints: the parallel main-thread chaining at
-// integrator.h ~1942 calls integrate_stm_core (not integrate_core) so each
-// xs[i+1] handed to worker (i+1) matches byte-for-byte what a sequential
-// chain of integrate_stm calls produces. A regression replacing
+// Bit-identity at segment endpoints: the segmented integrate_stm_parallel
+// main-thread chaining calls integrate_stm_core (not integrate_core) so
+// each xs[i+1] handed to worker (i+1) matches byte-for-byte what a
+// sequential chain of integrate_stm calls produces. A regression replacing
 // integrate_stm_core with integrate_core would still satisfy the 1e-11
 // tolerance in SegmentedSTMParallelTest above; the EXPECT_DOUBLE_EQ here
 // pins the FP-identity contract.

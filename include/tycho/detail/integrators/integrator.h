@@ -1183,6 +1183,10 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// each entry holds the refined ODEState, or std::nullopt when neither
     /// the fast bisect+Newton pass nor the wider-bracket retry resolves the
     /// crossing. `n_failed_event_refinements` increments once per nullopt.
+    /// Does NOT touch `n_failed_event_refinements_` on the integrator — pair
+    /// with `EventCounterWriteback` (or use the sibling `find_events()`
+    /// shorthand) when member-state publication into get_failed_event_count()
+    /// is required.
     EventLocsType find_events_counted(std::shared_ptr<LGLInterpTable> tab,
                                       const std::vector<EventPack> &events,
                                       const std::vector<std::vector<Eigen::Vector2d>> &eventtimes,
