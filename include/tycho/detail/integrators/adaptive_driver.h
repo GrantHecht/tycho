@@ -351,6 +351,13 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 // chokepoint above doesn't fire. Check xnext directly.
                 check_state_finite_or_throw(xnext.head(ode.x_vars()), xi[ode.t_var()], h,
                                             "AdaptiveDriver::stepper.step");
+                // xnext_mid is consumed by user storage when storemidpoints,
+                // so a NaN there silently corrupts output. The post-step xnext
+                // check above does not cover the midpoint slot.
+                if (storemidpoints) {
+                    check_state_finite_or_throw(xnext_mid.head(ode.x_vars()), xi[ode.t_var()], h,
+                                                "AdaptiveDriver::stepper.step (midpoint)");
+                }
             }
 
             bool eventbreak = false;

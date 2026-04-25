@@ -30,6 +30,7 @@
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <functional>
 #include <iostream>
@@ -589,15 +590,41 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         int &nfailed;
         // Counter is exposed via get_failed_event_count(); callers that
         // care about silent nullopt slots should poll that instead.
-        ~EventCounterWriteback() noexcept { integ.n_failed_event_refinements_ = nfailed; }
+        ~EventCounterWriteback() noexcept {
+            integ.n_failed_event_refinements_.value.store(static_cast<int64_t>(nfailed),
+                                                          std::memory_order_release);
+        }
     };
 
     struct BatchEventCounterWriteback {
         const Integrator &integ;
         const std::vector<int> &nfailed;
         ~BatchEventCounterWriteback() noexcept {
-            integ.n_failed_event_refinements_ =
-                std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0});
+            integ.n_failed_event_refinements_.value.store(
+                std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0}),
+                std::memory_order_release);
+        }
+    };
+
+    // Copyable wrapper around std::atomic<int64_t>. The atomic itself is
+    // non-copyable, but Integrator must remain copyable (control laws and
+    // ode_phase clone integrators by value). Copy/move snapshots the load
+    // without inheriting any cross-thread ordering — same semantics as
+    // memberwise copy of a plain int64_t.
+    struct AtomicInt64 {
+        std::atomic<int64_t> value{0};
+        AtomicInt64() = default;
+        AtomicInt64(const AtomicInt64 &o) noexcept
+            : value(o.value.load(std::memory_order_acquire)) {}
+        AtomicInt64 &operator=(const AtomicInt64 &o) noexcept {
+            if (this != &o)
+                value.store(o.value.load(std::memory_order_acquire), std::memory_order_release);
+            return *this;
+        }
+        AtomicInt64(AtomicInt64 &&o) noexcept : value(o.value.load(std::memory_order_acquire)) {}
+        AtomicInt64 &operator=(AtomicInt64 &&o) noexcept {
+            value.store(o.value.load(std::memory_order_acquire), std::memory_order_release);
+            return *this;
         }
     };
 
@@ -607,8 +634,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // callers that only want to know "did anything drop?". Published by
     // EventCounterWriteback / BatchEventCounterWriteback on scope exit
     // (success or unwind), so the value is always current after any
-    // public find_events / integrate call.
-    mutable int64_t n_failed_event_refinements_ = 0;
+    // public find_events / integrate call. atomic so concurrent reads via
+    // get_failed_event_count() do not race the writeback store on x86;
+    // release-store + acquire-load is one mov each on the single-threaded
+    // path.
+    mutable AtomicInt64 n_failed_event_refinements_{};
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
     // step is respected (principle of least surprise).
@@ -694,7 +724,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// counter is a cheap summary of how many nullopts are present. Reset
     /// to 0 at the start of every `find_events` invocation.
     [[nodiscard]] int64_t get_failed_event_count() const {
-        return this->n_failed_event_refinements_;
+        return this->n_failed_event_refinements_.value.load(std::memory_order_acquire);
     }
 
     void set_auto_initial_dt(bool on) { this->use_hairer_wanner_initdt_ = on; }
@@ -1240,8 +1270,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
   protected:
     std::vector<ODEState<double>> midpoints_removed(const std::vector<ODEState<double>> &xs) const {
         std::vector<ODEState<double>> x_new;
-        x_new.reserve((xs.size() - 1) / 2.0);
-        for (int i = 0; i < xs.size(); i += 2) {
+        x_new.reserve((xs.size() + 1) / 2);
+        for (std::size_t i = 0; i < xs.size(); i += 2) {
             x_new.push_back(xs[i]);
         }
         return x_new;

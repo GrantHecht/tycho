@@ -443,6 +443,14 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                             check_state_finite_or_throw(xnext.head(ode.x_vars()),
                                                         xis[itmp][ode.t_var()], hs[itmp],
                                                         "ParallelDriver::stepper.step", itmp);
+                            // xnext_mid is consumed by user storage when
+                            // storemidpoints, so a NaN there silently corrupts
+                            // output. The xnext check above does not cover it.
+                            if (storemidpoints) {
+                                check_state_finite_or_throw(
+                                    xnext_mid.head(ode.x_vars()), xis[itmp][ode.t_var()], hs[itmp],
+                                    "ParallelDriver::stepper.step (midpoint)", itmp);
+                            }
                         }
 
                         bool eventbreak = false;
@@ -453,7 +461,18 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         }
 
                         xis[itmp] = xnext;
-                        xdotis[itmp] = xdotnext;
+                        // Only update xdotis when xdotnext actually carries a
+                        // post-step f(xnext): FSAL methods refresh xdotnext_ss
+                        // via peek_fsal, and storederivs forces the same path.
+                        // For !FSAL && !storederivs (e.g. Vern*) the xdotnext
+                        // slot is the pre-step seed, so writing it back is
+                        // misleading. Today nothing downstream consumes xdotis
+                        // on that path, but the guard makes the contract local.
+                        if constexpr (method_does_fsal) {
+                            xdotis[itmp] = xdotnext;
+                        } else if (storederivs) {
+                            xdotis[itmp] = xdotnext;
+                        }
                         prev_event_vals_s[itmp] = next_event_vals_s[itmp];
 
                         if (storestates) {
