@@ -7,6 +7,7 @@
 #include "tycho/detail/integrators/rk_coeffs.h"
 #include "tycho/detail/utils/memory_management.h"
 #include <Eigen/Core>
+#include <stdexcept>
 
 namespace tycho::integrators {
 
@@ -41,18 +42,22 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     struct FsalSnapshot {
         ODEDeriv k;
         bool valid;
+        bool fresh;
     };
 
     /// Seed f(xi) into the FSAL cache and mark it valid. Callers that
     /// compute the per-lane derivative outside the stepper can use this to
-    /// have the next step() reuse it as stage 0.
+    /// have the next step() reuse it as stage 0. The seeded value is f(xi),
+    /// not f(xf) — peek_fresh_ stays false so peek_fsal() does not return
+    /// the seed as if it were a step endpoint.
     void seed_fsal(const ODEDeriv &k) {
         k_fsal_ = k;
         fsal_valid_ = true;
+        peek_fresh_ = false;
     }
 
-    /// Snapshot k_fsal_ + fsal_valid_ for later restore_fsal().
-    FsalSnapshot snapshot_fsal() const { return {k_fsal_, fsal_valid_}; }
+    /// Snapshot k_fsal_ + fsal_valid_ + peek_fresh_ for later restore_fsal().
+    FsalSnapshot snapshot_fsal() const { return {k_fsal_, fsal_valid_, peek_fresh_}; }
 
     /// Restore a previously-snapshotted FSAL state. Pairs with
     /// snapshot_fsal() for reject-rollback so the retry's stage 0 reads
@@ -60,29 +65,60 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     void restore_fsal(const FsalSnapshot &s) {
         k_fsal_ = s.k;
         fsal_valid_ = s.valid;
+        peek_fresh_ = s.fresh;
     }
 
-    /// Invalidate the FSAL cache without touching k_fsal_'s contents.
-    void reset_fsal() { fsal_valid_ = false; }
+    /// Invalidate both the FSAL seed flag and the post-step freshness flag
+    /// without touching k_fsal_'s contents.
+    void reset_fsal() {
+        fsal_valid_ = false;
+        peek_fresh_ = false;
+    }
 
     /// Read-only access to the FSAL cache. Callers that read this post-step
-    /// to recover f(xnext) must gate on fsal_valid() — the Vern* midpoint
-    /// branch populates k_fsal_ but intentionally leaves fsal_valid_=false.
+    /// to recover f(xf) must do so only after a step() that actually wrote
+    /// f(xf) into the cache — the unconditional check below catches misuse
+    /// in Release as well as Debug. Concretely, for !FSAL && !LastStageIsFxf
+    /// methods (Vern7/8/9), only step<true>() (i.e., ComputeMidpoint=true)
+    /// populates k_fsal_; step<false>() leaves it stale. peek_fresh_ tracks
+    /// this distinction.
     ///
     /// Aliasing contract: the returned reference aliases the internal
     /// buffer. Its contents become stale after any subsequent step() or
     /// seed_fsal() call (both overwrite k_fsal_); reset_fsal() flips
-    /// fsal_valid_ to false but leaves the buffer untouched.
-    const ODEDeriv &peek_fsal() const { return k_fsal_; }
+    /// peek_fresh_ to false but leaves the buffer untouched.
+    const ODEDeriv &peek_fsal() const {
+        if (!peek_fresh_) {
+            throw std::logic_error(
+                "Stepper::peek_fsal: k_fsal_ does not hold f(xf). The most recent step() did "
+                "not populate the FSAL endpoint cache for this method × ComputeMidpoint "
+                "combination. Methods without LastStageIsFxf require step<true>() to refresh "
+                "the cache.");
+        }
+        return k_fsal_;
+    }
     bool fsal_valid() const { return fsal_valid_; }
+    bool peek_fresh() const { return peek_fresh_; }
 
   private:
     // FSAL cache. Holds f(xf) at Scalar units (no h factor) after a step,
     // for any method where k_vals.back() contains f(xf)·h (FSAL or
     // LastStageIsFxf=true), or where the interpolant path's extra f(xf)
     // evaluation has been performed (LastStageIsFxf=false + compute_midpoint).
+    //
+    // Two flags rather than one because the semantics differ:
+    //   fsal_valid_ — "OK to consume k_fsal_ as the next step()'s k[0]
+    //                 (i.e., k_fsal_ is f(prev_xf) which equals f(curr_xi)
+    //                 when AdaptiveDriver chains accepted steps)"
+    //   peek_fresh_ — "k_fsal_ unambiguously holds f(curr_xf) as written
+    //                 by the most recent step()"
+    // For FSAL / LastStageIsFxf methods both flags toggle in lockstep.
+    // For !LastStageIsFxf methods (Vern*) the midpoint branch sets
+    // peek_fresh_=true while leaving fsal_valid_=false (see comment in
+    // step()), reflecting that the seeding decision is left to the driver.
     ODEDeriv k_fsal_;
     bool fsal_valid_ = false;
+    bool peek_fresh_ = false;
 
   public:
     /// Perform one RK step from state x to time tf.
@@ -112,6 +148,11 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             xtup = x;
             Scalar t0 = xtup[ode.t_var()];
             Scalar h = tf - t0;
+
+            // The previous step's peek freshness is invalidated as soon as
+            // we begin a new step — branches below that write f(xf) into
+            // k_fsal_ flip peek_fresh_ back to true on the way out.
+            peek_fresh_ = false;
 
             // Seed k_vals[0]. Reuse cached k_fsal_ = f(xi) (= f(prev xf)) if
             // the caller has signalled a valid FSAL state; otherwise compute
@@ -156,6 +197,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             if constexpr (RKData::FSAL || RKData::LastStageIsFxf) {
                 k_fsal_ = k_vals.back() * (Scalar(1.0) / h);
                 fsal_valid_ = true;
+                peek_fresh_ = true;
             }
 
             // xf_est = x + h · Σ Bhat[i]·k[i]
@@ -176,13 +218,15 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
                     ode.compute(xf, k_vals_extra[0]);
                     k_vals_extra[0] *= h;
                     k_fsal_ = k_vals_extra[0] * (Scalar(1.0) / h);
-                    // Intentionally do NOT set fsal_valid_=true here. Although
-                    // k_fsal_ now holds f(xf), promoting it to a FSAL seed
-                    // would silently corrupt direct Stepper callers that issue
-                    // the next step() call against a different x0 (the stale
-                    // f(xf_prev) would be used as k[0]). Coordinated callers
-                    // such as AdaptiveDriver — which always pass xi == prev xf
-                    // — can opt in by setting stepper.fsal_valid_ themselves.
+                    // k_fsal_ now unambiguously holds f(xf) — peek_fsal()
+                    // can read it. Intentionally do NOT set fsal_valid_=true:
+                    // promoting it to a FSAL seed would silently corrupt
+                    // direct Stepper callers that issue the next step()
+                    // against a different x0 (the stale f(xf_prev) would be
+                    // used as k[0]). Coordinated callers such as
+                    // AdaptiveDriver — which always pass xi == prev xf —
+                    // can opt in by setting stepper.fsal_valid_ themselves.
+                    peek_fresh_ = true;
                 }
 
                 // Compute interpolation extra stages. Each extra stage e
