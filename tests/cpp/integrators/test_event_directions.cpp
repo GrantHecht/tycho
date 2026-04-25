@@ -177,24 +177,20 @@ TEST_F(EventDirectionTest, PostConstructionMutationCaughtAtIntegrate) {
     std::vector<EventPack> events;
     events.push_back({gf_x, event_direction::Any, 0});
     events.push_back({gf_x, event_direction::Any, 0});
-    events[1].direction = 2; // out of {-1, 0, 1}; would silently coerce in check_crossings
-
-    EXPECT_THROW(sho_integrate_with_events(events), std::invalid_argument);
-
-    try {
-        sho_integrate_with_events(events);
-        FAIL() << "expected std::invalid_argument";
-    } catch (const std::invalid_argument &e) {
-        EXPECT_NE(std::string(e.what()).find("events[1]"), std::string::npos)
-            << "error message must identify the offending event index; got: " << e.what();
-    }
+    // direction/stop_count are now private; the only mutation paths are
+    // through validating setters. The post-construction-mutation hole that
+    // this test was named for is closed structurally — set_direction(2)
+    // throws before EventPack ever holds a non-canonical value.
+    EXPECT_THROW(events[1].set_direction(2), std::invalid_argument);
+    // Defense-in-depth: the integrate-entry validate_events call still
+    // runs (and remains a no-op when invariants hold), so the existing
+    // happy-path integrate succeeds.
+    EXPECT_NO_THROW((void)sho_integrate_with_events(events));
 }
 
 TEST_F(EventDirectionTest, PostConstructionNegativeStopCountCaughtAtIntegrate) {
     auto gf_x = make_component_zero_event(0);
     std::vector<EventPack> events;
     events.push_back({gf_x, event_direction::Any, 0});
-    events[0].stop_count = -1;
-
-    EXPECT_THROW(sho_integrate_with_events(events), std::invalid_argument);
+    EXPECT_THROW(events[0].set_stop_count(-1), std::invalid_argument);
 }

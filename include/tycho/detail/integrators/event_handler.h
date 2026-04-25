@@ -42,32 +42,55 @@ inline constexpr int Rising = 1;
 ///    `event_direction::Falling/Any/Rising`.
 /// `stop_count`: 0 means "record crossings, never stop"; N > 0 means "stop
 ///    integration after the Nth recorded crossing".
-struct EventPack {
+///
+/// The typed fields `direction_` and `stop_count_` are private; mutate via
+/// the validating `set_direction` / `set_stop_count` setters or the 3-arg
+/// constructor. Out-of-range values would silently coerce inside
+/// `check_crossings` (direction sign-product check) and `find_events`
+/// (size==stop comparator) — encapsulation closes that misuse path
+/// structurally. `validate()` is retained as a no-op for defense-in-depth
+/// at the integrate-entry boundary; the only way to enter a non-validated
+/// state is to bypass the setters, which the language now blocks.
+class EventPack {
+  public:
     GenericFunction<-1, 1> vf;
-    int direction = 0;
-    int stop_count = 0;
 
     EventPack() = default;
-    EventPack(GenericFunction<-1, 1> vf_, int direction_, int stop_count_)
-        : vf(std::move(vf_)), direction(direction_), stop_count(stop_count_) {
-        this->validate();
+    EventPack(GenericFunction<-1, 1> vf_, int direction_arg, int stop_count_arg)
+        : vf(std::move(vf_)) {
+        this->set_direction(direction_arg);
+        this->set_stop_count(stop_count_arg);
     }
 
-    /// Throws std::invalid_argument if `direction` or `stop_count` are out of
-    /// range. Out-of-range values silently coerce inside `check_crossings`
-    /// (direction sign-product check) and `find_events` (size==stop comparator),
-    /// so re-validate at every consume site to defend against post-construction
-    /// mutation through public fields or the Python `def_prop_rw` setters.
-    void validate() const {
-        if (!(direction == -1 || direction == 0 || direction == 1)) {
+    int direction() const { return direction_; }
+    int stop_count() const { return stop_count_; }
+
+    /// Throws std::invalid_argument if `d` is not in {-1, 0, +1}.
+    void set_direction(int d) {
+        if (!(d == -1 || d == 0 || d == 1)) {
             throw std::invalid_argument("EventPack: direction must be -1, 0, or +1; got " +
-                                        std::to_string(direction));
+                                        std::to_string(d));
         }
-        if (stop_count < 0) {
-            throw std::invalid_argument("EventPack: stop_count must be >= 0; got " +
-                                        std::to_string(stop_count));
-        }
+        direction_ = d;
     }
+
+    /// Throws std::invalid_argument if `s` is negative.
+    void set_stop_count(int s) {
+        if (s < 0) {
+            throw std::invalid_argument("EventPack: stop_count must be >= 0; got " +
+                                        std::to_string(s));
+        }
+        stop_count_ = s;
+    }
+
+    /// No-op now that the only mutation paths validate at the setter.
+    /// Kept so existing integrate-entry `validate_events` call sites
+    /// retain their defense-in-depth wrapper signature without churn.
+    void validate() const {}
+
+  private:
+    int direction_ = 0;
+    int stop_count_ = 0;
 };
 
 /// Validate every EventPack in a vector. Called at the entry of each public
@@ -113,7 +136,7 @@ struct EventHandler {
                     " (vprev=" + std::to_string(vprev) + ", vnext=" + std::to_string(vnext) +
                     "); event functions must be finite on finite states.");
             }
-            int dir = events[j].direction;
+            int dir = events[j].direction();
             double vprod = vprev * vnext;
 
             if (vprod < 0.0) {
@@ -122,7 +145,7 @@ struct EventHandler {
                     times[0] = t_prev;
                     times[1] = xnext[t_var];
                     eventtimes[j].push_back(times);
-                    int stop = events[j].stop_count;
+                    int stop = events[j].stop_count();
 
                     if (stop != 0) {
                         if (static_cast<int>(eventtimes[j].size()) >= stop) {
