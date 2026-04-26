@@ -129,6 +129,69 @@ option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang 
 option(ENABLE_ENZYME_AD
     "Enable experimental Enzyme automatic differentiation (requires Clang + Enzyme plugin)"
     OFF)
+
+if(ENABLE_ENZYME_AD)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR
+            "ENABLE_ENZYME_AD requires Clang. Got CMAKE_CXX_COMPILER_ID="
+            "${CMAKE_CXX_COMPILER_ID}. Override -DCMAKE_CXX_COMPILER=/path/to/clang++ "
+            "(typically a custom-built LLVM installation matching your Enzyme plugin).")
+    endif()
+
+    string(REGEX MATCH "^([0-9]+)" _tycho_clang_major "${CMAKE_CXX_COMPILER_VERSION}")
+    set(_tycho_clang_major "${CMAKE_MATCH_1}")
+
+    find_package(Enzyme CONFIG REQUIRED)
+    if(NOT Enzyme_LLVM_VERSION_MAJOR)
+        message(FATAL_ERROR
+            "find_package(Enzyme) succeeded but Enzyme_LLVM_VERSION_MAJOR is unset. "
+            "Check that your Enzyme installation provides EnzymeConfig.cmake "
+            "(this variable is set by the upstream config file).")
+    endif()
+
+    if(NOT "${Enzyme_LLVM_VERSION_MAJOR}" STREQUAL "${_tycho_clang_major}")
+        message(FATAL_ERROR
+            "Enzyme was built against LLVM ${Enzyme_LLVM_VERSION_MAJOR}, "
+            "but compiler is clang ${_tycho_clang_major}. Versions must match. "
+            "Rebuild Enzyme against the active Clang or override "
+            "-DCMAKE_CXX_COMPILER to a matching clang.")
+    endif()
+
+    set(_tycho_enzyme_target "ClangEnzyme-${Enzyme_LLVM_VERSION_MAJOR}")
+    if(NOT TARGET ${_tycho_enzyme_target})
+        message(FATAL_ERROR
+            "Imported target ${_tycho_enzyme_target} not defined by EnzymeConfig.cmake. "
+            "Reinstall Enzyme or check CMAKE_PREFIX_PATH.")
+    endif()
+    get_target_property(_tycho_enzyme_plugin_path ${_tycho_enzyme_target} IMPORTED_LOCATION)
+    if(NOT _tycho_enzyme_plugin_path)
+        # EnzymeConfig.cmake only sets per-config IMPORTED_LOCATION_<CONFIG>, not the
+        # generic IMPORTED_LOCATION. Try the imported configurations in turn.
+        get_target_property(_tycho_enzyme_imported_configs
+            ${_tycho_enzyme_target} IMPORTED_CONFIGURATIONS)
+        if(_tycho_enzyme_imported_configs)
+            foreach(_tycho_cfg IN LISTS _tycho_enzyme_imported_configs)
+                get_target_property(_tycho_enzyme_plugin_path
+                    ${_tycho_enzyme_target} IMPORTED_LOCATION_${_tycho_cfg})
+                if(_tycho_enzyme_plugin_path)
+                    break()
+                endif()
+            endforeach()
+        endif()
+    endif()
+    if(NOT _tycho_enzyme_plugin_path)
+        message(FATAL_ERROR
+            "${_tycho_enzyme_target} has no IMPORTED_LOCATION (or per-config "
+            "IMPORTED_LOCATION_<CONFIG>). Enzyme installation appears incomplete.")
+    endif()
+
+    set(TYCHO_ENZYME_COMPILE_FLAGS "-fplugin=${_tycho_enzyme_plugin_path}"
+        CACHE STRING "Enzyme plugin compile flag(s); applied to Enzyme-instantiating targets only" FORCE)
+    add_compile_definitions(TYCHO_HAS_ENZYME_AD)
+
+    message(STATUS "Enzyme AD: enabled (LLVM ${Enzyme_LLVM_VERSION_MAJOR}, plugin ${_tycho_enzyme_plugin_path})")
+endif()
+
 option(TYCHO_USE_SYSTEM_EIGEN
     "Use system-installed Eigen3 instead of bundled dep/eigen" OFF)
 
