@@ -111,11 +111,13 @@ struct StaticODE_DerivModeWrapper
         // set_jac_fd_steps / set_hess_fd_steps.
         static_assert(Jm == DenseDerivativeMode::Analytic || Jm == DenseDerivativeMode::FDiffFwd ||
                           Jm == DenseDerivativeMode::FDiffCentArray ||
-                          Jm == DenseDerivativeMode::AutodiffFwd,
+                          Jm == DenseDerivativeMode::AutodiffFwd ||
+                          Jm == DenseDerivativeMode::EnzymeAD,
                       "Unhandled Jacobian derivative mode — check FD step reinitialization");
         static_assert(Hm == DenseDerivativeMode::Analytic || Hm == DenseDerivativeMode::FDiffFwd ||
                           Hm == DenseDerivativeMode::FDiffCentArray ||
-                          Hm == DenseDerivativeMode::AutodiffFwd,
+                          Hm == DenseDerivativeMode::AutodiffFwd ||
+                          Hm == DenseDerivativeMode::EnzymeAD,
                       "Unhandled Hessian derivative mode — check FD step reinitialization");
     }
 
