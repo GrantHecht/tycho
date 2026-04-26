@@ -126,6 +126,9 @@ option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executabl
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+option(ENABLE_ENZYME_AD
+    "Enable experimental Enzyme automatic differentiation (requires Clang + Enzyme plugin)"
+    OFF)
 option(TYCHO_USE_SYSTEM_EIGEN
     "Use system-installed Eigen3 instead of bundled dep/eigen" OFF)
 
