@@ -38,8 +38,18 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 // Enzyme magic externs.  These are sentinel symbols Enzyme recognises at the
 // IR level; they are never linked.  Declaring them as extern "C" int avoids
 // C++ name mangling so the plugin sees the canonical names.
+//
+// enzyme_dup    — scalar duplicate (primal_ptr, shadow_ptr) pair.
+// enzyme_dupv   — vectorized duplicate; used WITH enzyme_width.  Arg form is
+//                 (enzyme_dupv, byte_stride, primal_ptr, shadow_base_ptr).
+//                 Shadow buffer holds W lanes laid out SoA-by-lane: lane k
+//                 starts at shadow_base_ptr + k*byte_stride.
+// enzyme_const  — argument is not differentiated.
+// enzyme_width  — followed by the integer batch width W; placed immediately
+//                 after the function pointer.
 extern "C" {
 extern int enzyme_dup;
+extern int enzyme_dupv;
 extern int enzyme_const;
 extern int enzyme_dupnoneed;
 extern int enzyme_width;
@@ -204,23 +214,35 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
         }
     }
 
-    // Phase 1 scalar Jacobian body. Templated on the local types so the
-    // SuperScalar dispatch can pass plain double-typed Eigen::Matrix locals.
-    // Inputs are read; fx / jx outputs are written via const_cast_derived.
+    // Phase 1 / Phase 3 scalar Jacobian body.  Templated on the local types
+    // so the SuperScalar dispatch can pass plain double-typed Eigen::Matrix
+    // locals.  Inputs are read; fx / jx outputs are written via
+    // const_cast_derived.
+    //
+    // Phase 3 batching: when TYCHO_ENZYME_BATCH_WIDTH > 1, the input-dim
+    // loop is chunked W at a time.  Each batched call uses
+    // __enzyme_fwddiff(..., enzyme_width, W, enzyme_dupv, ...) to propagate
+    // W tangents simultaneously.  Shadow buffers are SoA-by-lane: lane k's
+    // tangent vector occupies shadow[k*ir .. k*ir+ir-1].  The tail
+    // (ir % W != 0) falls back to single-tangent calls (W=1 path).
     template <class XLocal, class FxLocal, class JacLocal>
     inline void scalar_compute_jacobian_impl(const Eigen::MatrixBase<XLocal>& x,
                                              const Eigen::MatrixBase<FxLocal>& fx_,
                                              const Eigen::MatrixBase<JacLocal>& jx_) const {
+        constexpr int W = TYCHO_ENZYME_BATCH_WIDTH;
+        static_assert(W == 1 || W == 4 || W == 8,
+            "TYCHO_ENZYME_BATCH_WIDTH must be 1, 4, or 8.");
+
         FxLocal& fx = fx_.const_cast_derived();
         JacLocal& jx = jx_.const_cast_derived();
 
         const int ir = this->input_rows();
         const int or_ = this->output_rows();
 
-        // Contiguous double-precision scratch.  Using IR / OR template parameters
-        // gives a fixed-size Eigen::Matrix when IR/OR are known at compile time
-        // and a dynamic one when they are -1; the runtime ir / or_ resize args
-        // apply only in the dynamic case.
+        // Contiguous double-precision scratch.  IR/OR template params give a
+        // fixed-size Eigen::Matrix when known at compile time, runtime-sized
+        // otherwise.  Per-lane shadows allocate dynamically when W > 1
+        // (size = ir*W and or_*W).
         Eigen::Matrix<double, IR, 1> x_local = x;
         Eigen::Matrix<double, IR, 1> dx_local(ir);
         Eigen::Matrix<double, OR, 1> fx_local(or_);
@@ -228,7 +250,56 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
 
         const Derived* self = static_cast<const Derived*>(this);
 
-        for (int i = 0; i < ir; i++) {
+        int i = 0;
+
+        if constexpr (W > 1) {
+            // Batched fwddiff over W input-dim columns at a time.
+            //
+            // Shadow buffers are Eigen::Matrix<double, IR, W> (column-major)
+            // and Eigen::Matrix<double, OR, W>.  Column w == lane w's tangent
+            // vector; column-major layout means consecutive lanes are
+            // adjacent in memory at stride IR*sizeof(double) — exactly the
+            // SoA-by-lane layout enzyme_dupv expects.  Using Eigen::Matrix
+            // (vs std::vector) keeps the shadow stack-allocated when IR/OR
+            // are compile-time constants, avoiding per-call heap-alloc cost
+            // that dominated for small IR (Brach was 4× slower than W=1
+            // before this).
+            Eigen::Matrix<double, IR, W> dx_shadow(ir, W);
+            Eigen::Matrix<double, OR, W> dfx_shadow(or_, W);
+            const long stride_x = static_cast<long>(ir) * static_cast<long>(sizeof(double));
+            const long stride_y = static_cast<long>(or_) * static_cast<long>(sizeof(double));
+
+            const int ir_chunked = (ir / W) * W;
+            for (; i < ir_chunked; i += W) {
+                // Re-prime tangent vectors: lane w gets the unit tangent e_{i+w}.
+                dx_shadow.setZero();
+                for (int w = 0; w < W; ++w) dx_shadow(i + w, w) = 1.0;
+                dfx_shadow.setZero();
+                fx_local.setZero();
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(&detail::enzyme_compute_wrapper<Derived>),
+                    enzyme_width, W,
+                    enzyme_const, self,
+                    enzyme_dupv, stride_x,
+                        x_local.data(), dx_shadow.data(),
+                    enzyme_dupv, stride_y,
+                        fx_local.data(), dfx_shadow.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                // Lane w (= column w of dfx_shadow) → column i+w of the Jacobian.
+                for (int w = 0; w < W; ++w)
+                    for (int k = 0; k < or_; ++k)
+                        jx(k, i + w) = dfx_shadow(k, w);
+
+                if (i == 0)
+                    for (int k = 0; k < or_; ++k) fx[k] = fx_local[k];
+            }
+        }
+
+        // Tail (or full loop when W=1): single-tangent __enzyme_fwddiff.
+        for (; i < ir; ++i) {
             dx_local.setZero();
             dx_local[i] = 1.0;
             fx_local.setZero();

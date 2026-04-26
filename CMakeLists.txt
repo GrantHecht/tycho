@@ -220,6 +220,17 @@ if(ENABLE_ENZYME_AD)
         "ForwardOverReverse" "ForwardOverForward")
     add_compile_definitions(
         TYCHO_ENZYME_HESSIAN_STRATEGY_${TYCHO_ENZYME_HESSIAN_STRATEGY})
+
+    # Phase 3 batched forward-mode Jacobian width.  Drives the chunked
+    # __enzyme_fwddiff(..., enzyme_width, W, enzyme_dupv, ...) loop in the
+    # scalar Jacobian helper.  W=1 disables batching and falls back to the
+    # Phase 1 single-tangent loop.  W=4 / W=8 trade per-call Enzyme overhead
+    # for parallel tangent propagation; head-to-head pick is in
+    # /tmp/enzyme_phase3_decision.md.
+    set(TYCHO_ENZYME_BATCH_WIDTH "4" CACHE STRING
+        "Phase 3 batch width for Enzyme forward-mode Jacobian (1, 4, or 8)")
+    set_property(CACHE TYCHO_ENZYME_BATCH_WIDTH PROPERTY STRINGS "1" "4" "8")
+    add_compile_definitions(TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH})
 endif()
 
 option(TYCHO_USE_SYSTEM_EIGEN
