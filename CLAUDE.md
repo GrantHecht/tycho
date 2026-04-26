@@ -216,6 +216,43 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
 ```
 
+### Enzyme AD (experimental)
+
+`EnzymeAD` is an opt-in derivative mode for `VectorFunction`, gated by the
+CMake option `ENABLE_ENZYME_AD` (default `OFF`). Enabling it requires:
+
+1. A Clang installation matching the LLVM major version that Enzyme was built
+   against.
+2. The Enzyme Clang plugin available at a path discoverable via
+   `CMAKE_PREFIX_PATH` (Enzyme ships an `EnzymeConfig.cmake`).
+
+Default-`OFF` builds, the precompiled header, the Python bindings, and all
+existing examples/tests are unaffected by this option.
+
+**Override invocation (current dev machine — Linux):**
+
+```bash
+cmake --preset linux-clang-release \
+  -DCMAKE_CXX_COMPILER=$HOME/Software/llvm-project/install/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=$HOME/Software/Enzyme/install \
+  -DENABLE_ENZYME_AD=ON \
+  -DBUILD_CPP_TESTS=ON
+# Add -DBUILD_CPP_BENCHMARKS=ON for benchmarks.
+cd build && ninja -j8 tycho_enzyme_tests
+ctest --test-dir tests/cpp/enzyme --output-on-failure
+```
+
+**Mode constraints (Phase 1):**
+
+- `<EnzymeAD, EnzymeAD>` is rejected at compile time with a `static_assert`
+  pointing the user at Phase 2 of the rollout.
+- `<EnzymeAD, AutodiffFwd>` is the supported Phase 1 pairing.
+- `EnzymeAD` VectorFunctions must NOT be marked `Vectorizable<Derived>=true`
+  in Phase 1; the SuperScalar `static_assert` fires until Phase 5 lifts it.
+
+For the design rationale, see
+`docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
+
 ### Key CMake variables
 
 | Variable                      | Purpose                                                                                      |
