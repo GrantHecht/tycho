@@ -102,7 +102,8 @@ ALL_EXAMPLES = [
 # skipped rather than failed, so the suite stays green when optional system
 # packages are absent.
 OPTIONAL_DEPS: dict[str, list[str]] = {
-    "BettsLowThrust.py": ["mpl_toolkits.basemap"],
+    # BettsLowThrust.py runs without basemap — the orbit map plot is gated
+    # on HAS_BASEMAP; the solver path itself is plot-independent.
     "Delta3Launch.py": ["mpl_toolkits.basemap"],
     "DionysusLowThrust.py": ["mpl_toolkits.basemap"],
     "Reentry.py": ["mpl_toolkits.basemap"],
