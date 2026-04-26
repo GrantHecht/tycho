@@ -80,6 +80,21 @@ inline void enzyme_compute_wrapper(const Derived* self,
     self->compute_impl(x, fx);
 }
 
+// Phase 5b SIMD wrapper.  Same structure as enzyme_compute_wrapper but the
+// scalar type is the user's SuperScalar Eigen::Array<double, W, 1>.  Enzyme
+// differentiates through the SuperScalar ops directly (vector LLVM types),
+// producing W lane-local tangents per single __enzyme_fwddiff call — true
+// SIMD differentiation, not scalarize-per-lane.  Only enabled when the
+// VectorFunction opts in via Vectorizable<Derived>=true.
+template <class Derived, class SSType>
+inline void enzyme_compute_wrapper_simd(const Derived* self,
+                                        const SSType* x_data, SSType* fx_data,
+                                        int n_in, int n_out) {
+    Eigen::Map<const Eigen::Matrix<SSType, Eigen::Dynamic, 1>> x(x_data, n_in);
+    Eigen::Map<Eigen::Matrix<SSType, Eigen::Dynamic, 1>> fx(fx_data, n_out);
+    self->compute_impl(x, fx);
+}
+
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
 
 // FoR outer wrapper: computes g(x) = J(x)^T λ via Enzyme reverse mode.
@@ -182,35 +197,85 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
                                       CMatRef<JacType> jx_) const {
         using Scalar = typename InType::Scalar;
         if constexpr (IsSuperScalar<Scalar>) {
-            // Phase 5a: scalarize-per-lane dispatch.  For each lane in the
-            // SuperScalar Eigen::Array, extract a double-typed input vector,
-            // run the scalar EnzymeAD Jacobian, and pack the lane outputs
-            // back into the SuperScalar fx / jx.
-            constexpr int vsize = Scalar::SizeAtCompileTime;
-            const int ir = this->input_rows();
-            const int or_ = this->output_rows();
+            if constexpr (Vectorizable<Derived>) {
+                // Phase 5b: direct-SIMD Enzyme.  The user's compute_impl runs
+                // on Eigen::Array<double, W, 1> (SIMD) ops; Enzyme differentiates
+                // through them producing W per-lane tangents per call.  IR
+                // Enzyme calls total (vs IR*W for Phase 5a scalarize).
+                simd_compute_jacobian_impl(x, fx_, jx_);
+            } else {
+                // Phase 5a fallback: scalarize-per-lane.  For each lane, extract
+                // a double-typed input vector, run the scalar EnzymeAD Jacobian,
+                // pack lane outputs back.  Used when the VF is not Vectorizable.
+                constexpr int vsize = Scalar::SizeAtCompileTime;
+                const int ir = this->input_rows();
+                const int or_ = this->output_rows();
 
-            Eigen::Matrix<double, IR, 1> x_lane(ir);
-            Eigen::Matrix<double, OR, 1> fx_lane(or_);
-            Eigen::Matrix<double, OR, IR> jac_lane(or_, ir);
+                Eigen::Matrix<double, IR, 1> x_lane(ir);
+                Eigen::Matrix<double, OR, 1> fx_lane(or_);
+                Eigen::Matrix<double, OR, IR> jac_lane(or_, ir);
 
-            VecRef<OutType> fx = fx_.const_cast_derived();
-            MatRef<JacType> jx = jx_.const_cast_derived();
+                VecRef<OutType> fx = fx_.const_cast_derived();
+                MatRef<JacType> jx = jx_.const_cast_derived();
 
-            for (int lane = 0; lane < vsize; ++lane) {
-                for (int j = 0; j < ir; ++j) x_lane[j] = x[j][lane];
-                fx_lane.setZero();
-                jac_lane.setZero();
+                for (int lane = 0; lane < vsize; ++lane) {
+                    for (int j = 0; j < ir; ++j) x_lane[j] = x[j][lane];
+                    fx_lane.setZero();
+                    jac_lane.setZero();
 
-                this->scalar_compute_jacobian_impl(x_lane, fx_lane, jac_lane);
+                    this->scalar_compute_jacobian_impl(x_lane, fx_lane, jac_lane);
 
-                for (int j = 0; j < or_; ++j) fx[j][lane] = fx_lane[j];
-                for (int i = 0; i < ir; ++i)
-                    for (int j = 0; j < or_; ++j)
-                        jx(j, i)[lane] = jac_lane(j, i);
+                    for (int j = 0; j < or_; ++j) fx[j][lane] = fx_lane[j];
+                    for (int i = 0; i < ir; ++i)
+                        for (int j = 0; j < or_; ++j)
+                            jx(j, i)[lane] = jac_lane(j, i);
+                }
             }
         } else {
             this->scalar_compute_jacobian_impl(x, fx_, jx_);
+        }
+    }
+
+    // Phase 5b SIMD Jacobian: __enzyme_fwddiff over a SuperScalar-typed
+    // wrapper.  One Enzyme call per input dim, each processing W lanes via
+    // SIMD.  Requires Vectorizable<Derived> (= templated compute_impl that
+    // accepts SuperScalar Eigen::Matrix inputs).
+    template <class InType, class OutType, class JacType>
+    inline void simd_compute_jacobian_impl(CVecRef<InType> x,
+                                           CVecRef<OutType> fx_,
+                                           CMatRef<JacType> jx_) const {
+        using Scalar = typename InType::Scalar;
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+
+        const int ir = this->input_rows();
+        const int or_ = this->output_rows();
+
+        Eigen::Matrix<Scalar, IR, 1> x_local = x;
+        Eigen::Matrix<Scalar, IR, 1> dx_local(ir);
+        Eigen::Matrix<Scalar, OR, 1> fx_local(or_);
+        Eigen::Matrix<Scalar, OR, 1> dfx_local(or_);
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        for (int i = 0; i < ir; ++i) {
+            dx_local.setZero();
+            dx_local[i].setConstant(1.0);  // unit tangent for ALL lanes
+            fx_local.setZero();
+            dfx_local.setZero();
+
+            __enzyme_fwddiff<void>(
+                reinterpret_cast<void*>(
+                    &detail::enzyme_compute_wrapper_simd<Derived, Scalar>),
+                enzyme_const, self,
+                enzyme_dup,   x_local.data(),  dx_local.data(),
+                enzyme_dup,   fx_local.data(), dfx_local.data(),
+                enzyme_const, ir,
+                enzyme_const, or_);
+
+            for (int k = 0; k < or_; ++k) jx(k, i) = dfx_local[k];
+            if (i == 0)
+                for (int k = 0; k < or_; ++k) fx[k] = fx_local[k];
         }
     }
 

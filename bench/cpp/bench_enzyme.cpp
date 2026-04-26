@@ -82,6 +82,72 @@ void BM_MEE_Enzyme(benchmark::State& state) {
 }
 
 // -----------------------------------------------------------------------------
+// Phase 5b vectorized Jacobian benchmark.  Compares one batched call with W
+// SIMD lanes against the scalar Phase 1/Phase 3 path on the same problem.
+// Per-call cost / W is the figure of merit (each lane represents one
+// independent VF evaluation).
+// -----------------------------------------------------------------------------
+
+}  // close anonymous namespace temporarily so Vectorizable BrachBench
+   // gets external linkage (Enzyme's template-instantiated __enzyme_fwddiff
+   // refuses to bind to types in an unnamed namespace).
+
+namespace tycho_enzyme_bench {
+
+// Brach variant marked Vectorizable=true so the Phase 5b SIMD dispatch fires.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct BrachBench
+    : tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+    static constexpr bool is_vectorizable = true;
+    double g_;
+    BrachBench(double g = 32.2) : g_{g} {}
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using std::cos;
+        using std::sin;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        const Scalar v = x[2];
+        const Scalar theta = x[4];
+        fx[0] = sin(theta) * v;
+        fx[1] = -cos(theta) * v;
+        fx[2] = Scalar(g_) * cos(theta);
+    }
+};
+
+}  // namespace tycho_enzyme_bench
+
+namespace {
+
+using SS4 = Eigen::Array<double, 4, 1>;
+
+// AutodiffFwd does not natively support dual<Eigen::Array<...>>; the
+// Tycho convention is to scalarize per-lane externally for autodiff +
+// Vectorizable.  Reference comparison here is "scalar Enzyme × W lanes"
+// (the Phase 1 / Phase 3 path running W times).
+
+void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::BrachBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 5, 1> x;
+    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    Eigen::Matrix<SS4, 3, 1> fx;
+    Eigen::Matrix<SS4, 3, 5> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.compute_jacobian(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
 // adjoint gradient + adjoint Hessian via the active EnzymeAD pathway (FoR or
 // FoF, depending on TYCHO_ENZYME_HESSIAN_STRATEGY).  Compared head-to-head
@@ -207,6 +273,9 @@ BENCHMARK(BM_CR3BP_Enzyme)->Name("BM_Jacobian_Enzyme/CR3BP");
 // MEE (9 -> 6)
 BENCHMARK(BM_MEE_Autodiff)->Name("BM_Jacobian_Autodiff/MEE");
 BENCHMARK(BM_MEE_Enzyme)->Name("BM_Jacobian_Enzyme/MEE");
+
+// Phase 5b: vectorized Brach Jacobian (W=4 SIMD lanes per call, Enzyme only).
+BENCHMARK(BM_Brach_Vectorized_Enzyme)->Name("BM_JacobianVec_Enzyme/Brach");
 
 // Phase 2: Hessians.  EnzymeFull = <EnzymeAD, EnzymeAD>; the active
 // TYCHO_ENZYME_HESSIAN_STRATEGY chooses FoR vs FoF at compile time.
