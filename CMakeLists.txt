@@ -190,6 +190,9 @@ if(ENABLE_ENZYME_AD)
     add_compile_definitions(TYCHO_HAS_ENZYME_AD)
 
     message(STATUS "Enzyme AD: enabled (LLVM ${Enzyme_LLVM_VERSION_MAJOR}, plugin ${_tycho_enzyme_plugin_path})")
+
+    include("${CMAKE_SOURCE_DIR}/cmake/EnzymeTryCompile.cmake")
+    tycho_enzyme_try_compile_fwddiff()
 endif()
 
 option(TYCHO_USE_SYSTEM_EIGEN
