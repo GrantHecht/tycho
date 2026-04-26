@@ -112,13 +112,26 @@ inline void enzyme_for_outer_wrapper(const Derived* self,
 // FoF inner wrapper: computes f(x) AND J(x)·dx_inner via Enzyme forward mode.
 //
 // Outputs:
-//   fx_data       = f(x)               (primal)
+//   fx_data        = f(x)              (primal)
 //   dfx_inner_data = J(x) · dx_inner   (forward tangent)
 //
 // dx_inner is the fixed inner-seed (will be e_j when called from the FoF
 // caller).  Same allocation-discipline as the FoR wrapper: nothing inside
 // the wrapper allocates so Enzyme's analysis cannot encounter heap-resize
 // alignment-mask arithmetic that produces i128 shifts.
+//
+// Future-work note: when this wrapper is wired through the outer
+// __enzyme_fwddiff in compute_adjoint_hessian_fof_, the OUTPUT SHADOW on
+// fx_data is "J(x) · e_outer" — i.e. the corresponding column of the
+// Jacobian falls out of the same outer pass that computes the Hessian
+// element.  The current FoF caller still recomputes the full Jacobian
+// up-front via DenseFirstDerivatives::compute_jacobian_impl; a planned
+// optimisation reads the column out of the outer call's fx-shadow
+// instead, eliminating IR redundant Phase-1 forward sweeps per Hessian
+// computation.  This combined-J-and-H property — and the corresponding
+// W²-block under Phase 3 enzyme_width batching — is why FoF is retained
+// as research scaffolding even though it currently loses to FoR head-to-
+// head.
 template <class Derived>
 inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      const double* x_data, double* fx_data,
@@ -218,15 +231,31 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
      (DenseFirstDerivatives<..., JMode>::compute_jacobian_impl).
   2. The adjoint gradient gx = J^T lam is computed from jx by direct
      matrix multiply — Enzyme already produced jx, no need to recompute.
-  3. The adjoint Hessian hx is the column-by-column forward derivative of
-     g(x) = J(x)^T lam with respect to x.  Each column i comes from one
-     __enzyme_fwddiff call with input tangent e_i over a wrapper whose body
-     calls __enzyme_autodiff (Forward-over-Reverse strategy).
+  3. The adjoint Hessian hx is the column-by-column derivative of
+     g(x) = J(x)^T lam with respect to x, dispatched at configure time
+     via TYCHO_ENZYME_HESSIAN_STRATEGY:
 
-  Strategy selection happens at configure time via TYCHO_ENZYME_HESSIAN_STRATEGY;
-  the dispatch macro below picks the implementation Phase 2 has compiled.
-  Phase 2 keeps both strategies alongside each other to support the head-to-head
-  benchmark; Task 2.6 deletes the loser and removes this dispatch.
+       ForwardOverReverse (default):  __enzyme_fwddiff over a wrapper
+                                      that calls __enzyme_autodiff.
+                                      O(IR) outer Enzyme calls.
+       ForwardOverForward:            __enzyme_fwddiff over a wrapper
+                                      that calls __enzyme_fwddiff.
+                                      O(IR^2) outer Enzyme calls.
+
+  Phase 2's head-to-head benchmark picks FoR as the production default
+  (4–9× faster on every Hessian micro-benchmark; tied on full-solve TTS).
+  FoF is retained as internal research scaffolding — its outer fwddiff
+  pass naturally produces J(x)·e_i alongside the Hessian element, and a
+  future commit can reimplement compute_adjoint_hessian_fof_ to compute
+  Jacobian and Hessian simultaneously instead of calling
+  compute_jacobian_impl up-front.  Combined with Phase 3's enzyme_width
+  batching, that path could yield a W-column Jacobian slab and a W²
+  Hessian block per outer call.
+
+  Strategy is a private (cmake-time) selector — DenseDerivativeMode does
+  not surface a public FoF mode.  Promoting FoF to a public mode is a
+  future option once the combined-J+H optimisation is implemented and
+  benchmarked.
 */
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::EnzymeAD>
