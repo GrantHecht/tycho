@@ -199,14 +199,24 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
         if constexpr (IsSuperScalar<Scalar>) {
             if constexpr (Vectorizable<Derived>) {
                 // Phase 5b: direct-SIMD Enzyme.  The user's compute_impl runs
-                // on Eigen::Array<double, W, 1> (SIMD) ops; Enzyme differentiates
-                // through them producing W per-lane tangents per call.  IR
-                // Enzyme calls total (vs IR*W for Phase 5a scalarize).
+                // on Eigen::Array<double, W, 1> SIMD ops; Enzyme differentiates
+                // through them producing W per-lane tangents per call.
+                //
+                // Benchmarks (see /tmp/enzyme_phase5b_findings.md): Phase 5b
+                // wins ~25-37% per-lane on small bodies (Brach 5->3, CR3BP
+                // 7->6) vs scalarize-per-lane.  Loses ~1.7-6x on bodies
+                // with many transcendentals (MEE 9->6 with sqrt/sin/cos)
+                // because the SIMD math units don't keep up with Enzyme's
+                // analysis through Eigen's per-Scalar function dispatch.
+                // Net: Phase 5b is the right default for Vectorizable+SS;
+                // MEE-class users can fall back to scalar_compute_jacobian_impl
+                // via Vectorizable=false (base class will scalarize).
                 simd_compute_jacobian_impl(x, fx_, jx_);
             } else {
-                // Phase 5a fallback: scalarize-per-lane.  For each lane, extract
-                // a double-typed input vector, run the scalar EnzymeAD Jacobian,
-                // pack lane outputs back.  Used when the VF is not Vectorizable.
+                // Phase 5a fallback path.  Reachable only if compute_jacobian_impl
+                // is called directly with SS Scalar on a non-Vectorizable VF
+                // (the base-class compute_jacobian dispatch normally scalarizes
+                // before reaching this point for Vectorizable=false).
                 constexpr int vsize = Scalar::SizeAtCompileTime;
                 const int ir = this->input_rows();
                 const int or_ = this->output_rows();
@@ -237,14 +247,20 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
     }
 
     // Phase 5b SIMD Jacobian: __enzyme_fwddiff over a SuperScalar-typed
-    // wrapper.  One Enzyme call per input dim, each processing W lanes via
-    // SIMD.  Requires Vectorizable<Derived> (= templated compute_impl that
-    // accepts SuperScalar Eigen::Matrix inputs).
+    // wrapper.  Phase 3 batching (enzyme_width=BW) is layered on top so a
+    // single call propagates BW tangents simultaneously with each lane in W
+    // SIMD lanes — total BW*W parallelism per Enzyme invocation.
+    //
+    // Tail handles the (ir % BW != 0) remainder via single-tangent SIMD
+    // calls (BW=1 path).  Requires Vectorizable<Derived> (templated
+    // compute_impl that accepts SuperScalar Eigen::Matrix inputs).
     template <class InType, class OutType, class JacType>
     inline void simd_compute_jacobian_impl(CVecRef<InType> x,
                                            CVecRef<OutType> fx_,
                                            CMatRef<JacType> jx_) const {
         using Scalar = typename InType::Scalar;
+        constexpr int BW = TYCHO_ENZYME_BATCH_WIDTH;
+
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
 
@@ -258,7 +274,48 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
 
         const Derived* self = static_cast<const Derived*>(this);
 
-        for (int i = 0; i < ir; ++i) {
+        int i = 0;
+
+        if constexpr (BW > 1) {
+            // Batched Phase 3 + Phase 5b SIMD: enzyme_width=BW with
+            // enzyme_dupv shadows of SuperScalar elements.  Each shadow
+            // column is one tangent vector (Scalar = SS); BW columns =
+            // BW tangents stepped at byte stride IR*sizeof(SS).
+            Eigen::Matrix<Scalar, IR, BW> dx_shadow(ir, BW);
+            Eigen::Matrix<Scalar, OR, BW> dfx_shadow(or_, BW);
+            const long stride_x = static_cast<long>(ir) * static_cast<long>(sizeof(Scalar));
+            const long stride_y = static_cast<long>(or_) * static_cast<long>(sizeof(Scalar));
+
+            const int ir_chunked = (ir / BW) * BW;
+            for (; i < ir_chunked; i += BW) {
+                dx_shadow.setZero();
+                for (int b = 0; b < BW; ++b)
+                    dx_shadow(i + b, b).setConstant(1.0);
+                dfx_shadow.setZero();
+                fx_local.setZero();
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(
+                        &detail::enzyme_compute_wrapper_simd<Derived, Scalar>),
+                    enzyme_width, BW,
+                    enzyme_const, self,
+                    enzyme_dupv, stride_x,
+                        x_local.data(), dx_shadow.data(),
+                    enzyme_dupv, stride_y,
+                        fx_local.data(), dfx_shadow.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                for (int b = 0; b < BW; ++b)
+                    for (int k = 0; k < or_; ++k)
+                        jx(k, i + b) = dfx_shadow(k, b);
+                if (i == 0)
+                    for (int k = 0; k < or_; ++k) fx[k] = fx_local[k];
+            }
+        }
+
+        // Tail (or full when BW=1): single-tangent SIMD fwddiff.
+        for (; i < ir; ++i) {
             dx_local.setZero();
             dx_local[i].setConstant(1.0);  // unit tangent for ALL lanes
             fx_local.setZero();

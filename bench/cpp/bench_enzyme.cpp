@@ -118,6 +118,84 @@ struct BrachBench
     }
 };
 
+// CR3BP variant marked Vectorizable=true.  Scalar(...) casts are needed
+// because arithmetic mixing plain double with SS-typed Eigen ops requires
+// matching scalar types under Vectorizable dispatch.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct CR3BPBench
+    : tycho::vf::VectorFunction<CR3BPBench<Jm, Hm>, 7, 6, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<CR3BPBench<Jm, Hm>, 7, 6, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+    static constexpr bool is_vectorizable = true;
+    double mu_;
+    CR3BPBench(double mu = 0.0123) : mu_{mu} {}
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        tycho::Vector3<Scalar> X = x.template head<3>();
+        tycho::Vector3<Scalar> V = x.template segment<3>(3);
+        tycho::Vector3<Scalar> p1loc; p1loc[0] = Scalar(-mu_);
+        tycho::Vector3<Scalar> p2loc; p2loc[0] = Scalar(1.0 - mu_);
+        tycho::Vector3<Scalar> dvec = X - p1loc;
+        tycho::Vector3<Scalar> rvec = X - p2loc;
+        Scalar d = (dvec.array() * dvec.array()).sum();
+        d = sqrt(d);
+        Scalar r = (rvec.array() * rvec.array()).sum();
+        r = sqrt(r);
+        fx.template head<3>() = V;
+        fx.template segment<3>(3) =
+            (Scalar(-(1.0 - mu_)) / (d * d * d)) * dvec
+          + (Scalar(-mu_) / (r * r * r)) * rvec;
+        fx[3] += Scalar(2.0) * V[1] + X[0];
+        fx[4] += Scalar(-2.0) * V[0] + X[1];
+    }
+};
+
+// MEE variant marked Vectorizable=true.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct MEEBench
+    : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+    static constexpr bool is_vectorizable = true;
+    double mu_, sqm_;
+    MEEBench(double mu = 1.0) : mu_{mu}, sqm_{std::sqrt(mu)} {}
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        Scalar x0 = x[0], x1 = x[1], x2 = x[2], x3 = x[3], x4 = x[4];
+        Scalar x5 = x[5], x6 = x[6], x7 = x[7], x8 = x[8];
+        Scalar sqx0 = sqrt(x0);
+        Scalar x9 = Scalar(1.0 / sqm_);
+        Scalar x10 = cos(x5);
+        Scalar x11 = sin(x5);
+        Scalar x12 = x1 * x10 + x11 * x2;
+        Scalar x13 = x12 + 1.0;
+        Scalar x14 = 1.0 / x13;
+        Scalar x15 = x14 * x7;
+        Scalar x16 = x10 * x4;
+        Scalar x17 = x11 * x3;
+        Scalar x18 = x14 * x8;
+        Scalar x19 = x12 + 2.0;
+        Scalar x20 = sqx0 * x9;
+        Scalar x21 = x18 * (-x16 + x17);
+        Scalar x22 = 0.5 * x18 * x20 * ((x3 * x3) + (x4 * x4) + 1.0);
+        fx[0] = 2.0 * (x0 * sqx0) * x15 * x9;
+        fx[1] = x20 * (x11 * x6 + x15 * (x1 + x10 * x19) + x18 * x2 * (x16 - x17));
+        fx[2] = x20 * (x1 * x21 - x10 * x6 + x15 * (x11 * x19 + x2));
+        fx[3] = x10 * x22;
+        fx[4] = x11 * x22;
+        fx[5] = x20 * (mu_ * x13 * x13 / (x0 * x0) + 1.0 * x21);
+    }
+};
+
 }  // namespace tycho_enzyme_bench
 
 namespace {
@@ -128,6 +206,15 @@ using SS4 = Eigen::Array<double, 4, 1>;
 // Tycho convention is to scalarize per-lane externally for autodiff +
 // Vectorizable.  Reference comparison here is "scalar Enzyme × W lanes"
 // (the Phase 1 / Phase 3 path running W times).
+
+// Vectorizable+EnzymeAD compute_jacobian routes through Phase 5a
+// scalarize-per-lane by default (see dense_enzyme.h dispatch comment).
+// These benchmarks measure that default path — the scalar path runs IR
+// times per lane × W lanes, internally batched via Phase 3 enzyme_width.
+//
+// To benchmark the Phase 5b direct-SIMD path explicitly, see the
+// BM_JacobianVecSIMD_* variants below which call
+// simd_compute_jacobian_impl directly.
 
 void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::BrachBench<
@@ -141,6 +228,101 @@ void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
     fx.setZero(); jx.setZero();
     for (auto _ : state) {
         f.compute_jacobian(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+void BM_CR3BP_Vectorized_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 7, 1> x;
+    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 7> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.compute_jacobian(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+void BM_MEE_Vectorized_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::MEEBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 9, 1> x;
+    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 9> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.compute_jacobian(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+// Phase 5b direct-SIMD variants: call simd_compute_jacobian_impl directly,
+// bypassing the default scalarize-per-lane dispatch.  These measure the
+// SuperScalar primal path (Eigen::Array<double, W, 1> arithmetic in the
+// user's compute_impl, Enzyme differentiating through SIMD ops).
+
+void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::BrachBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 5, 1> x;
+    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    Eigen::Matrix<SS4, 3, 1> fx;
+    Eigen::Matrix<SS4, 3, 5> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.simd_compute_jacobian_impl(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 7, 1> x;
+    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 7> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.simd_compute_jacobian_impl(x, fx, jx);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+
+void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::MEEBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    ODE f;
+    Eigen::Matrix<SS4, 9, 1> x;
+    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 9> jx;
+    fx.setZero(); jx.setZero();
+    for (auto _ : state) {
+        f.simd_compute_jacobian_impl(x, fx, jx);
         benchmark::DoNotOptimize(fx);
         benchmark::DoNotOptimize(jx);
         benchmark::ClobberMemory();
@@ -274,8 +456,15 @@ BENCHMARK(BM_CR3BP_Enzyme)->Name("BM_Jacobian_Enzyme/CR3BP");
 BENCHMARK(BM_MEE_Autodiff)->Name("BM_Jacobian_Autodiff/MEE");
 BENCHMARK(BM_MEE_Enzyme)->Name("BM_Jacobian_Enzyme/MEE");
 
-// Phase 5b: vectorized Brach Jacobian (W=4 SIMD lanes per call, Enzyme only).
+// Vectorizable+EnzymeAD compute_jacobian (default: scalarize-per-lane).
 BENCHMARK(BM_Brach_Vectorized_Enzyme)->Name("BM_JacobianVec_Enzyme/Brach");
+BENCHMARK(BM_CR3BP_Vectorized_Enzyme)->Name("BM_JacobianVec_Enzyme/CR3BP");
+BENCHMARK(BM_MEE_Vectorized_Enzyme)->Name("BM_JacobianVec_Enzyme/MEE");
+
+// Phase 5b direct-SIMD path (explicit simd_compute_jacobian_impl call).
+BENCHMARK(BM_Brach_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/Brach");
+BENCHMARK(BM_CR3BP_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/CR3BP");
+BENCHMARK(BM_MEE_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/MEE");
 
 // Phase 2: Hessians.  EnzymeFull = <EnzymeAD, EnzymeAD>; the active
 // TYCHO_ENZYME_HESSIAN_STRATEGY chooses FoR vs FoF at compile time.
