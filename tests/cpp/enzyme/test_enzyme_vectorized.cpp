@@ -49,6 +49,10 @@ using BrachVectorizableEnzymeAD = BrachVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD,
     tycho::vf::DenseDerivativeMode::AutodiffFwd>;
 
+using BrachVectorizableEnzymeFull = BrachVectorizable<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
 } // namespace tycho_enzyme_test
 
 namespace {
@@ -95,6 +99,58 @@ TEST(EnzymeVectorized, JacobianMatchesScalar) {
                 EXPECT_NEAR(jx(j, i)[lane], jx_lane(j, i), 1e-12)
                     << "lane=" << lane << " jx(" << j << "," << i << ")";
             }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Vectorized full-Enzyme Hessian: <EnzymeAD, EnzymeAD> with is_vectorizable.
+// Per-lane comparison against the scalar full-Enzyme path.
+// -----------------------------------------------------------------------------
+TEST(EnzymeVectorized, HessianMatchesScalar) {
+    using SS = Eigen::Array<double, 4, 1>;
+    tycho_enzyme_test::BrachVectorizableEnzymeFull f(32.2);
+
+    Eigen::Matrix<SS, 5, 1> x;
+    Eigen::Matrix<SS, 3, 1> lam;
+    for (int j = 0; j < 5; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.1 * (j + 1) * (lane + 1);
+    for (int j = 0; j < 3; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.5 + 0.1 * j - 0.05 * lane;
+
+    Eigen::Matrix<SS, 3, 1> fx;
+    Eigen::Matrix<SS, 3, 5> jx;
+    Eigen::Matrix<SS, 5, 1> g;
+    Eigen::Matrix<SS, 5, 5> h;
+    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+
+    f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+
+    tycho_enzyme_test::BrachEnzymeFull f_scalar(32.2);
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, 5, 1> x_lane;
+        Eigen::Matrix<double, 3, 1> lam_lane;
+        for (int j = 0; j < 5; ++j) x_lane[j] = x(j)[lane];
+        for (int j = 0; j < 3; ++j) lam_lane[j] = lam(j)[lane];
+
+        Eigen::Matrix<double, 3, 1> fx_lane;
+        Eigen::Matrix<double, 3, 5> jx_lane;
+        Eigen::Matrix<double, 5, 1> g_lane;
+        Eigen::Matrix<double, 5, 5> h_lane;
+        fx_lane.setZero(); jx_lane.setZero();
+        g_lane.setZero();  h_lane.setZero();
+
+        f_scalar.compute_jacobian_adjointgradient_adjointhessian(
+            x_lane, fx_lane, jx_lane, g_lane, h_lane, lam_lane);
+
+        for (int i = 0; i < 5; ++i) {
+            EXPECT_NEAR(g(i)[lane], g_lane[i], 1e-12)
+                << "lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < 5; ++j)
+                EXPECT_NEAR(h(j, i)[lane], h_lane(j, i), 1e-10)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+        }
     }
 }
 

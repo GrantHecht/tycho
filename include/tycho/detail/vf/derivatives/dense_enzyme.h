@@ -304,16 +304,68 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {
         using Scalar = typename InType::Scalar;
-        static_assert(!IsSuperScalar<Scalar>,
-            "DenseDerivativeMode::EnzymeAD Hessian does not yet support SuperScalar/"
-            "Vectorizable dispatch. Vectorized EnzymeAD is planned for Phase 5; "
-            "until then, do not mark EnzymeAD VectorFunctions as "
-            "Vectorizable<Derived>=true.");
 
-        VecRef<OutType> fx = fx_.const_cast_derived();
-        MatRef<JacType> jx = jx_.const_cast_derived();
-        VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
-        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
+        if constexpr (IsSuperScalar<Scalar>) {
+            // Phase 5a: scalarize-per-lane Hessian. For each lane, extract
+            // double-typed locals, run the scalar Phase 2 Hessian, pack
+            // results back into the SuperScalar fx/jx/gx/hx.
+            constexpr int vsize = Scalar::SizeAtCompileTime;
+            const int ir = this->input_rows();
+            const int or_ = this->output_rows();
+
+            VecRef<OutType> fx = fx_.const_cast_derived();
+            MatRef<JacType> jx = jx_.const_cast_derived();
+            VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
+            MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
+
+            Eigen::Matrix<double, IR, 1> x_lane(ir);
+            Eigen::Matrix<double, OR, 1> fx_lane(or_);
+            Eigen::Matrix<double, OR, IR> jac_lane(or_, ir);
+            Eigen::Matrix<double, IR, 1> g_lane(ir);
+            Eigen::Matrix<double, IR, IR> h_lane(ir, ir);
+            Eigen::Matrix<double, OR, 1> lam_lane(or_);
+
+            for (int lane = 0; lane < vsize; ++lane) {
+                for (int j = 0; j < ir; ++j) x_lane[j] = x[j][lane];
+                for (int k = 0; k < or_; ++k) lam_lane[k] = adjvars[k][lane];
+                fx_lane.setZero();
+                jac_lane.setZero();
+                g_lane.setZero();
+                h_lane.setZero();
+
+                this->scalar_compute_jacobian_adjointgradient_adjointhessian_impl(
+                    x_lane, fx_lane, jac_lane, g_lane, h_lane, lam_lane);
+
+                for (int j = 0; j < or_; ++j) fx[j][lane] = fx_lane[j];
+                for (int i = 0; i < ir; ++i) {
+                    gx[i][lane] = g_lane[i];
+                    for (int j = 0; j < or_; ++j)
+                        jx(j, i)[lane] = jac_lane(j, i);
+                    for (int j = 0; j < ir; ++j)
+                        hx(j, i)[lane] = h_lane(j, i);
+                }
+            }
+        } else {
+            this->scalar_compute_jacobian_adjointgradient_adjointhessian_impl(
+                x, fx_, jx_, adjgrad_, adjhess_, adjvars);
+        }
+    }
+
+    // Phase 1/2 scalar body, factored out so the SuperScalar dispatch can
+    // call it per lane with already-double-typed Eigen::Matrix locals.
+    template <class XLocal, class FxLocal, class JacLocal, class AdjGradLocal,
+              class AdjHessLocal, class AdjVarLocal>
+    inline void scalar_compute_jacobian_adjointgradient_adjointhessian_impl(
+        const Eigen::MatrixBase<XLocal>& x, const Eigen::MatrixBase<FxLocal>& fx_,
+        const Eigen::MatrixBase<JacLocal>& jx_,
+        const Eigen::MatrixBase<AdjGradLocal>& adjgrad_,
+        const Eigen::MatrixBase<AdjHessLocal>& adjhess_,
+        const Eigen::MatrixBase<AdjVarLocal>& adjvars) const {
+
+        FxLocal& fx = fx_.const_cast_derived();
+        JacLocal& jx = jx_.const_cast_derived();
+        AdjGradLocal& gx = adjgrad_.const_cast_derived();
+        AdjHessLocal& hx = adjhess_.const_cast_derived();
 
         const int ir = this->input_rows();
         const int or_ = this->output_rows();
