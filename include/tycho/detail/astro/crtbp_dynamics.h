@@ -20,9 +20,10 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
-struct CRTBPDynamics
-    : VectorFunction<CRTBPDynamics, 9, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
-    using Base = VectorFunction<CRTBPDynamics, 9, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
+struct CRTBPDynamics : VectorFunction<CRTBPDynamics, 9, 6, DenseDerivativeMode::Analytic,
+                                      DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<CRTBPDynamics, 9, 6, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
     double mu_ = std::numeric_limits<double>::quiet_NaN(); // CR3BP Mass Ratio
@@ -33,36 +34,33 @@ struct CRTBPDynamics
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
     double pc2_ = std::numeric_limits<double>::quiet_NaN();
 
-    CRTBPDynamics() {
-        this->set_io_rows(9, 6);
-    }
+    CRTBPDynamics() { this->set_io_rows(9, 6); }
 
     CRTBPDynamics(double mu) {
         if (!(mu > 0.0 && mu < 1.0))
-            throw std::invalid_argument(
-                "CRTBPDynamics: mu must satisfy mu > 0.0 && mu < 1.0");
+            throw std::invalid_argument("CRTBPDynamics: mu must satisfy mu > 0.0 && mu < 1.0");
         this->set_io_rows(9, 6);
         mu_ = mu;
         pc0_ = mu_ - 1;
-        pc1_ = 3*mu_;
-        pc2_ = 5*mu_;
+        pc1_ = 3 * mu_;
+        pc2_ = 5 * mu_;
     }
 
     void set_mu(double mu) {
         if (!(mu > 0.0 && mu < 1.0))
-            throw std::invalid_argument(
-                "CRTBPDynamics: mu must satisfy mu > 0.0 && mu < 1.0");
+            throw std::invalid_argument("CRTBPDynamics: mu must satisfy mu > 0.0 && mu < 1.0");
         mu_ = mu;
         pc0_ = mu_ - 1;
-        pc1_ = 3*mu_;
-        pc2_ = 5*mu_;
+        pc1_ = 3 * mu_;
+        pc2_ = 5 * mu_;
     }
 
     template <class InType, class OutType>
-    inline void compute_impl(CVecRef<InType> x_,
-                         CVecRef<OutType> fx_) const {
+    inline void compute_impl(CVecRef<InType> x_, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        using std::cos; using std::sin; using std::sqrt;
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
         VecRef<OutType> _fx_ = fx_.const_cast_derived();
 
         Scalar x0 = x_[0];
@@ -75,26 +73,27 @@ struct CRTBPDynamics
         Scalar x7 = x_[7];
         Scalar x8 = x_[8];
         Scalar _hp0_ = Scalar(mu_ + x0);
-        Scalar _hp1_ = (_hp0_*_hp0_) + (x1*x1) + (x2*x2);
+        Scalar _hp1_ = (_hp0_ * _hp0_) + (x1 * x1) + (x2 * x2);
         Scalar _hp2_ = Scalar(mu_ + x0 - 1);
-        Scalar _hp3_ = (_hp2_*_hp2_) + (x1*x1) + (x2*x2);
-        Scalar x9 = Scalar(pc0_/(sqrt(_hp1_)*_hp1_));
-        Scalar x10 = Scalar(mu_/(sqrt(_hp3_)*_hp3_));
-        
+        Scalar _hp3_ = (_hp2_ * _hp2_) + (x1 * x1) + (x2 * x2);
+        Scalar x9 = Scalar(pc0_ / (sqrt(_hp1_) * _hp1_));
+        Scalar x10 = Scalar(mu_ / (sqrt(_hp3_) * _hp3_));
+
         _fx_[0] = x3;
         _fx_[1] = x4;
         _fx_[2] = x5;
-        _fx_[3] = _hp0_*x9 - _hp2_*x10 + x0 + 2*x4 + x6;
-        _fx_[4] = -x1*x10 + x1*x9 + x1 - 2*x3 + x7;
-        _fx_[5] = -x10*x2 + x2*x9 + x8;
+        _fx_[3] = _hp0_ * x9 - _hp2_ * x10 + x0 + 2 * x4 + x6;
+        _fx_[4] = -x1 * x10 + x1 * x9 + x1 - 2 * x3 + x7;
+        _fx_[5] = -x10 * x2 + x2 * x9 + x8;
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(CVecRef<InType> x_,
-                         CVecRef<OutType> fx_,
-                         CMatRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(CVecRef<InType> x_, CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
-        using std::cos; using std::sin; using std::sqrt;
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
         VecRef<OutType> _fx_ = fx_.const_cast_derived();
         MatRef<JacType> _jx_ = jx_.const_cast_derived();
 
@@ -108,102 +107,100 @@ struct CRTBPDynamics
         Scalar x7 = x_[7];
         Scalar x8 = x_[8];
         Scalar _hp0_ = Scalar(mu_ + x0);
-        Scalar _hp1_ = (_hp0_*_hp0_) + (x1*x1) + (x2*x2);
+        Scalar _hp1_ = (_hp0_ * _hp0_) + (x1 * x1) + (x2 * x2);
         Scalar _hp2_ = Scalar(mu_ + x0 - 1);
-        Scalar _hp3_ = (_hp2_*_hp2_) + (x1*x1) + (x2*x2);
-        Scalar x9 = (Scalar(1.0)/(sqrt(_hp1_)*_hp1_));
-        Scalar x10 = Scalar(pc0_*x9);
-        Scalar x11 = Scalar(mu_/(sqrt(_hp3_)*_hp3_));
-        Scalar x12 = Scalar(pc1_ + 3*x0);
+        Scalar _hp3_ = (_hp2_ * _hp2_) + (x1 * x1) + (x2 * x2);
+        Scalar x9 = (Scalar(1.0) / (sqrt(_hp1_) * _hp1_));
+        Scalar x10 = Scalar(pc0_ * x9);
+        Scalar x11 = Scalar(mu_ / (sqrt(_hp3_) * _hp3_));
+        Scalar x12 = Scalar(pc1_ + 3 * x0);
         Scalar x13 = -x12;
-        Scalar x14 = (Scalar(1.0)/(sqrt(_hp1_)*_hp1_*_hp1_));
-        Scalar x15 = Scalar(pc0_*x14);
-        Scalar x16 = (Scalar(1.0)/(sqrt(_hp3_)*_hp3_*_hp3_));
-        Scalar x17 = Scalar(mu_*x16*(3 - x12));
+        Scalar x14 = (Scalar(1.0) / (sqrt(_hp1_) * _hp1_ * _hp1_));
+        Scalar x15 = Scalar(pc0_ * x14);
+        Scalar x16 = (Scalar(1.0) / (sqrt(_hp3_) * _hp3_ * _hp3_));
+        Scalar x17 = Scalar(mu_ * x16 * (3 - x12));
         Scalar x18 = x10 - x11 + 1;
-        Scalar x19 = 3*x15;
-        Scalar x20 = _hp0_*x19;
-        Scalar x21 = (x1*x1);
-        Scalar x22 = Scalar(pc1_*x16);
-        Scalar x23 = x1*x2;
-        Scalar x24 = -x19*x23 + x22*x23;
-        Scalar x25 = (x2*x2);
-        
+        Scalar x19 = 3 * x15;
+        Scalar x20 = _hp0_ * x19;
+        Scalar x21 = (x1 * x1);
+        Scalar x22 = Scalar(pc1_ * x16);
+        Scalar x23 = x1 * x2;
+        Scalar x24 = -x19 * x23 + x22 * x23;
+        Scalar x25 = (x2 * x2);
+
         _fx_[0] = x3;
         _fx_[1] = x4;
         _fx_[2] = x5;
-        _fx_[3] = _hp0_*x10 - _hp2_*x11 + x0 + 2*x4 + x6;
-        _fx_[4] = x1*x10 - x1*x11 + x1 - 2*x3 + x7;
-        _fx_[5] = x10*x2 - x11*x2 + x8;
-        
-        _jx_(0,0) = 0;
-        _jx_(1,0) = 0;
-        _jx_(2,0) = 0;
-        _jx_(3,0) = _hp0_*x13*x15 - _hp2_*x17 + x18;
-        _jx_(4,0) = Scalar(pc0_*x1*x13*x14 - x1*x17);
-        _jx_(5,0) = Scalar(pc0_*x13*x14*x2 - x17*x2);
-        _jx_(0,1) = 0;
-        _jx_(1,1) = 0;
-        _jx_(2,1) = 0;
-        _jx_(3,1) = Scalar(_hp2_*pc1_*x1*x16 - x1*x20);
-        _jx_(4,1) = x18 - x19*x21 + x21*x22;
-        _jx_(5,1) = x24;
-        _jx_(0,2) = 0;
-        _jx_(1,2) = 0;
-        _jx_(2,2) = 0;
-        _jx_(3,2) = Scalar(_hp2_*pc1_*x16*x2 - x2*x20);
-        _jx_(4,2) = x24;
-        _jx_(5,2) = Scalar(pc0_*x9 + pc1_*x16*x25 - x11 - x19*x25);
-        _jx_(0,3) = 1;
-        _jx_(1,3) = 0;
-        _jx_(2,3) = 0;
-        _jx_(3,3) = 0;
-        _jx_(4,3) = -2;
-        _jx_(5,3) = 0;
-        _jx_(0,4) = 0;
-        _jx_(1,4) = 1;
-        _jx_(2,4) = 0;
-        _jx_(3,4) = 2;
-        _jx_(4,4) = 0;
-        _jx_(5,4) = 0;
-        _jx_(0,5) = 0;
-        _jx_(1,5) = 0;
-        _jx_(2,5) = 1;
-        _jx_(3,5) = 0;
-        _jx_(4,5) = 0;
-        _jx_(5,5) = 0;
-        _jx_(0,6) = 0;
-        _jx_(1,6) = 0;
-        _jx_(2,6) = 0;
-        _jx_(3,6) = 1;
-        _jx_(4,6) = 0;
-        _jx_(5,6) = 0;
-        _jx_(0,7) = 0;
-        _jx_(1,7) = 0;
-        _jx_(2,7) = 0;
-        _jx_(3,7) = 0;
-        _jx_(4,7) = 1;
-        _jx_(5,7) = 0;
-        _jx_(0,8) = 0;
-        _jx_(1,8) = 0;
-        _jx_(2,8) = 0;
-        _jx_(3,8) = 0;
-        _jx_(4,8) = 0;
-        _jx_(5,8) = 1;
+        _fx_[3] = _hp0_ * x10 - _hp2_ * x11 + x0 + 2 * x4 + x6;
+        _fx_[4] = x1 * x10 - x1 * x11 + x1 - 2 * x3 + x7;
+        _fx_[5] = x10 * x2 - x11 * x2 + x8;
+
+        _jx_(0, 0) = 0;
+        _jx_(1, 0) = 0;
+        _jx_(2, 0) = 0;
+        _jx_(3, 0) = _hp0_ * x13 * x15 - _hp2_ * x17 + x18;
+        _jx_(4, 0) = Scalar(pc0_ * x1 * x13 * x14 - x1 * x17);
+        _jx_(5, 0) = Scalar(pc0_ * x13 * x14 * x2 - x17 * x2);
+        _jx_(0, 1) = 0;
+        _jx_(1, 1) = 0;
+        _jx_(2, 1) = 0;
+        _jx_(3, 1) = Scalar(_hp2_ * pc1_ * x1 * x16 - x1 * x20);
+        _jx_(4, 1) = x18 - x19 * x21 + x21 * x22;
+        _jx_(5, 1) = x24;
+        _jx_(0, 2) = 0;
+        _jx_(1, 2) = 0;
+        _jx_(2, 2) = 0;
+        _jx_(3, 2) = Scalar(_hp2_ * pc1_ * x16 * x2 - x2 * x20);
+        _jx_(4, 2) = x24;
+        _jx_(5, 2) = Scalar(pc0_ * x9 + pc1_ * x16 * x25 - x11 - x19 * x25);
+        _jx_(0, 3) = 1;
+        _jx_(1, 3) = 0;
+        _jx_(2, 3) = 0;
+        _jx_(3, 3) = 0;
+        _jx_(4, 3) = -2;
+        _jx_(5, 3) = 0;
+        _jx_(0, 4) = 0;
+        _jx_(1, 4) = 1;
+        _jx_(2, 4) = 0;
+        _jx_(3, 4) = 2;
+        _jx_(4, 4) = 0;
+        _jx_(5, 4) = 0;
+        _jx_(0, 5) = 0;
+        _jx_(1, 5) = 0;
+        _jx_(2, 5) = 1;
+        _jx_(3, 5) = 0;
+        _jx_(4, 5) = 0;
+        _jx_(5, 5) = 0;
+        _jx_(0, 6) = 0;
+        _jx_(1, 6) = 0;
+        _jx_(2, 6) = 0;
+        _jx_(3, 6) = 1;
+        _jx_(4, 6) = 0;
+        _jx_(5, 6) = 0;
+        _jx_(0, 7) = 0;
+        _jx_(1, 7) = 0;
+        _jx_(2, 7) = 0;
+        _jx_(3, 7) = 0;
+        _jx_(4, 7) = 1;
+        _jx_(5, 7) = 0;
+        _jx_(0, 8) = 0;
+        _jx_(1, 8) = 0;
+        _jx_(2, 8) = 0;
+        _jx_(3, 8) = 0;
+        _jx_(4, 8) = 0;
+        _jx_(5, 8) = 1;
     }
 
-    template <class InType, class OutType, class JacType,
-                 class AdjGradType, class AdjHessType,
-                 class AdjVarType>
+    template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
+              class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        CVecRef<InType> x_,
-        CVecRef<OutType> fx_,
-        CMatRef<JacType> jx_,
-        CVecRef<AdjGradType> adjgrad_,
-        CMatRef<AdjHessType> adjhess_,
+        CVecRef<InType> x_, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        using std::cos; using std::sin; using std::sqrt;
+        using std::cos;
+        using std::sin;
+        using std::sqrt;
         VecRef<OutType> _fx_ = fx_.const_cast_derived();
         MatRef<JacType> _jx_ = jx_.const_cast_derived();
         VecRef<AdjGradType> _gx_ = adjgrad_.const_cast_derived();
@@ -225,231 +222,236 @@ struct CRTBPDynamics
         Scalar LM4 = adjvars[4];
         Scalar LM5 = adjvars[5];
         Scalar _hp0_ = Scalar(mu_ + x0);
-        Scalar _hp1_ = (_hp0_*_hp0_) + (x1*x1) + (x2*x2);
+        Scalar _hp1_ = (_hp0_ * _hp0_) + (x1 * x1) + (x2 * x2);
         Scalar _hp2_ = Scalar(mu_ + x0 - 1);
-        Scalar _hp3_ = (_hp2_*_hp2_) + (x1*x1) + (x2*x2);
-        Scalar x9 = (Scalar(1.0)/(sqrt(_hp1_)*_hp1_));
-        Scalar x10 = Scalar(pc0_*x9);
-        Scalar x11 = Scalar(mu_/(sqrt(_hp3_)*_hp3_));
-        Scalar x12 = Scalar(pc1_ + 3*x0);
+        Scalar _hp3_ = (_hp2_ * _hp2_) + (x1 * x1) + (x2 * x2);
+        Scalar x9 = (Scalar(1.0) / (sqrt(_hp1_) * _hp1_));
+        Scalar x10 = Scalar(pc0_ * x9);
+        Scalar x11 = Scalar(mu_ / (sqrt(_hp3_) * _hp3_));
+        Scalar x12 = Scalar(pc1_ + 3 * x0);
         Scalar x13 = -x12;
-        Scalar x14 = (Scalar(1.0)/(sqrt(_hp1_)*_hp1_*_hp1_));
-        Scalar x15 = Scalar(pc0_*x14);
+        Scalar x14 = (Scalar(1.0) / (sqrt(_hp1_) * _hp1_ * _hp1_));
+        Scalar x15 = Scalar(pc0_ * x14);
         Scalar x16 = 3 - x12;
-        Scalar x17 = (Scalar(1.0)/(sqrt(_hp3_)*_hp3_*_hp3_));
-        Scalar x18 = Scalar(mu_*x17);
-        Scalar x19 = x16*x18;
+        Scalar x17 = (Scalar(1.0) / (sqrt(_hp3_) * _hp3_ * _hp3_));
+        Scalar x18 = Scalar(mu_ * x17);
+        Scalar x19 = x16 * x18;
         Scalar x20 = x10 - x11 + 1;
-        Scalar x21 = _hp0_*x13*x15 - _hp2_*x19 + x20;
-        Scalar x22 = 3*x15;
-        Scalar x23 = _hp0_*x22;
-        Scalar x24 = Scalar(_hp2_*pc1_*x1*x17 - x1*x23);
-        Scalar x25 = Scalar(_hp2_*pc1_*x17*x2 - x2*x23);
-        Scalar x26 = Scalar(pc0_*x1*x13*x14 - x1*x19);
-        Scalar x27 = (x1*x1);
-        Scalar x28 = Scalar(pc1_*x17);
-        Scalar x29 = x20 - x22*x27 + x27*x28;
-        Scalar x30 = x1*x22;
-        Scalar x31 = x1*x2*x28 - x2*x30;
-        Scalar x32 = Scalar(pc0_*x13*x14*x2 - x19*x2);
-        Scalar x33 = (x2*x2);
-        Scalar x34 = Scalar(pc0_*x9 + pc1_*x17*x33 - x11 - x22*x33);
-        Scalar x35 = Scalar(pc2_ + 5*x0);
+        Scalar x21 = _hp0_ * x13 * x15 - _hp2_ * x19 + x20;
+        Scalar x22 = 3 * x15;
+        Scalar x23 = _hp0_ * x22;
+        Scalar x24 = Scalar(_hp2_ * pc1_ * x1 * x17 - x1 * x23);
+        Scalar x25 = Scalar(_hp2_ * pc1_ * x17 * x2 - x2 * x23);
+        Scalar x26 = Scalar(pc0_ * x1 * x13 * x14 - x1 * x19);
+        Scalar x27 = (x1 * x1);
+        Scalar x28 = Scalar(pc1_ * x17);
+        Scalar x29 = x20 - x22 * x27 + x27 * x28;
+        Scalar x30 = x1 * x22;
+        Scalar x31 = x1 * x2 * x28 - x2 * x30;
+        Scalar x32 = Scalar(pc0_ * x13 * x14 * x2 - x19 * x2);
+        Scalar x33 = (x2 * x2);
+        Scalar x34 = Scalar(pc0_ * x9 + pc1_ * x17 * x33 - x11 - x22 * x33);
+        Scalar x35 = Scalar(pc2_ + 5 * x0);
         Scalar x36 = -x35;
-        Scalar x37 = (Scalar(1.0)/(sqrt(_hp1_)*_hp1_*_hp1_*_hp1_));
-        Scalar x38 = Scalar(pc0_*x37);
-        Scalar x39 = x13*x38;
-        Scalar x40 = x36*x39;
-        Scalar x41 = (Scalar(1.0)/(sqrt(_hp3_)*_hp3_*_hp3_*_hp3_));
-        Scalar x42 = Scalar(mu_*x41);
+        Scalar x37 = (Scalar(1.0) / (sqrt(_hp1_) * _hp1_ * _hp1_ * _hp1_));
+        Scalar x38 = Scalar(pc0_ * x37);
+        Scalar x39 = x13 * x38;
+        Scalar x40 = x36 * x39;
+        Scalar x41 = (Scalar(1.0) / (sqrt(_hp3_) * _hp3_ * _hp3_ * _hp3_));
+        Scalar x42 = Scalar(mu_ * x41);
         Scalar x43 = 5 - x35;
-        Scalar x44 = x16*x43;
-        Scalar x45 = x42*x44;
-        Scalar x46 = 3*x18;
-        Scalar x47 = x1*x46 - x30;
-        Scalar x48 = x2*x22;
-        Scalar x49 = x2*x46 - x48;
-        Scalar x50 = _hp2_*x42;
-        Scalar x51 = Scalar(-3*_hp2_*mu_*x17 + x23);
-        Scalar x52 = 5*x39;
-        Scalar x53 = x1*x52;
-        Scalar x54 = x1*x41;
-        Scalar x55 = Scalar(pc2_*x16*x2*x54 - x2*x53);
-        Scalar x56 = Scalar(-pc1_*x1*x17 + x30);
-        Scalar x57 = Scalar(-pc0_*x13*x14 + x19);
-        Scalar x58 = _hp0_*x2;
-        Scalar x59 = Scalar(-pc1_*x17*x2 + x48);
-        Scalar x60 = Scalar(x38*(-3*pc2_ - 15*x0));
-        Scalar x61 = x1*x60;
-        Scalar x62 = Scalar(pc1_*x2*x43*x54 - x2*x61);
-        Scalar x63 = 9*x1;
-        Scalar x64 = 15*(x1*x1*x1);
-        Scalar x65 = Scalar(15*mu_);
-        Scalar x66 = x27*x41*x65;
-        Scalar x67 = 15*x38;
-        Scalar x68 = x2*x27*x67 - x2*x66 + x49;
-        Scalar x69 = x33*x41*x65;
-        Scalar x70 = x1*x33*x67 - x1*x69 + x47;
-        Scalar x71 = LM3*(-15*x1*x2*x50 + x1*x58*x67) + LM4*x68 + LM5*x70;
-        Scalar x72 = 9*x2;
-        Scalar x73 = 15*(x2*x2*x2);
-        
+        Scalar x44 = x16 * x43;
+        Scalar x45 = x42 * x44;
+        Scalar x46 = 3 * x18;
+        Scalar x47 = x1 * x46 - x30;
+        Scalar x48 = x2 * x22;
+        Scalar x49 = x2 * x46 - x48;
+        Scalar x50 = _hp2_ * x42;
+        Scalar x51 = Scalar(-3 * _hp2_ * mu_ * x17 + x23);
+        Scalar x52 = 5 * x39;
+        Scalar x53 = x1 * x52;
+        Scalar x54 = x1 * x41;
+        Scalar x55 = Scalar(pc2_ * x16 * x2 * x54 - x2 * x53);
+        Scalar x56 = Scalar(-pc1_ * x1 * x17 + x30);
+        Scalar x57 = Scalar(-pc0_ * x13 * x14 + x19);
+        Scalar x58 = _hp0_ * x2;
+        Scalar x59 = Scalar(-pc1_ * x17 * x2 + x48);
+        Scalar x60 = Scalar(x38 * (-3 * pc2_ - 15 * x0));
+        Scalar x61 = x1 * x60;
+        Scalar x62 = Scalar(pc1_ * x2 * x43 * x54 - x2 * x61);
+        Scalar x63 = 9 * x1;
+        Scalar x64 = 15 * (x1 * x1 * x1);
+        Scalar x65 = Scalar(15 * mu_);
+        Scalar x66 = x27 * x41 * x65;
+        Scalar x67 = 15 * x38;
+        Scalar x68 = x2 * x27 * x67 - x2 * x66 + x49;
+        Scalar x69 = x33 * x41 * x65;
+        Scalar x70 = x1 * x33 * x67 - x1 * x69 + x47;
+        Scalar x71 = LM3 * (-15 * x1 * x2 * x50 + x1 * x58 * x67) + LM4 * x68 + LM5 * x70;
+        Scalar x72 = 9 * x2;
+        Scalar x73 = 15 * (x2 * x2 * x2);
+
         _fx_[0] = x3;
         _fx_[1] = x4;
         _fx_[2] = x5;
-        _fx_[3] = _hp0_*x10 - _hp2_*x11 + x0 + 2*x4 + x6;
-        _fx_[4] = x1*x10 - x1*x11 + x1 - 2*x3 + x7;
-        _fx_[5] = x10*x2 - x11*x2 + x8;
-        
-        _jx_(0,0) = 0;
-        _jx_(1,0) = 0;
-        _jx_(2,0) = 0;
-        _jx_(3,0) = x21;
-        _jx_(4,0) = x26;
-        _jx_(5,0) = x32;
-        _jx_(0,1) = 0;
-        _jx_(1,1) = 0;
-        _jx_(2,1) = 0;
-        _jx_(3,1) = x24;
-        _jx_(4,1) = x29;
-        _jx_(5,1) = x31;
-        _jx_(0,2) = 0;
-        _jx_(1,2) = 0;
-        _jx_(2,2) = 0;
-        _jx_(3,2) = x25;
-        _jx_(4,2) = x31;
-        _jx_(5,2) = x34;
-        _jx_(0,3) = 1;
-        _jx_(1,3) = 0;
-        _jx_(2,3) = 0;
-        _jx_(3,3) = 0;
-        _jx_(4,3) = -2;
-        _jx_(5,3) = 0;
-        _jx_(0,4) = 0;
-        _jx_(1,4) = 1;
-        _jx_(2,4) = 0;
-        _jx_(3,4) = 2;
-        _jx_(4,4) = 0;
-        _jx_(5,4) = 0;
-        _jx_(0,5) = 0;
-        _jx_(1,5) = 0;
-        _jx_(2,5) = 1;
-        _jx_(3,5) = 0;
-        _jx_(4,5) = 0;
-        _jx_(5,5) = 0;
-        _jx_(0,6) = 0;
-        _jx_(1,6) = 0;
-        _jx_(2,6) = 0;
-        _jx_(3,6) = 1;
-        _jx_(4,6) = 0;
-        _jx_(5,6) = 0;
-        _jx_(0,7) = 0;
-        _jx_(1,7) = 0;
-        _jx_(2,7) = 0;
-        _jx_(3,7) = 0;
-        _jx_(4,7) = 1;
-        _jx_(5,7) = 0;
-        _jx_(0,8) = 0;
-        _jx_(1,8) = 0;
-        _jx_(2,8) = 0;
-        _jx_(3,8) = 0;
-        _jx_(4,8) = 0;
-        _jx_(5,8) = 1;
-        
-        _gx_[0] = LM3*x21 + LM4*x26 + LM5*x32;
-        _gx_[1] = LM3*x24 + LM4*x29 + LM5*x31;
-        _gx_[2] = LM3*x25 + LM4*x31 + LM5*x34;
-        _gx_[3] = LM0 - 2*LM4;
-        _gx_[4] = LM1 + 2*LM3;
+        _fx_[3] = _hp0_ * x10 - _hp2_ * x11 + x0 + 2 * x4 + x6;
+        _fx_[4] = x1 * x10 - x1 * x11 + x1 - 2 * x3 + x7;
+        _fx_[5] = x10 * x2 - x11 * x2 + x8;
+
+        _jx_(0, 0) = 0;
+        _jx_(1, 0) = 0;
+        _jx_(2, 0) = 0;
+        _jx_(3, 0) = x21;
+        _jx_(4, 0) = x26;
+        _jx_(5, 0) = x32;
+        _jx_(0, 1) = 0;
+        _jx_(1, 1) = 0;
+        _jx_(2, 1) = 0;
+        _jx_(3, 1) = x24;
+        _jx_(4, 1) = x29;
+        _jx_(5, 1) = x31;
+        _jx_(0, 2) = 0;
+        _jx_(1, 2) = 0;
+        _jx_(2, 2) = 0;
+        _jx_(3, 2) = x25;
+        _jx_(4, 2) = x31;
+        _jx_(5, 2) = x34;
+        _jx_(0, 3) = 1;
+        _jx_(1, 3) = 0;
+        _jx_(2, 3) = 0;
+        _jx_(3, 3) = 0;
+        _jx_(4, 3) = -2;
+        _jx_(5, 3) = 0;
+        _jx_(0, 4) = 0;
+        _jx_(1, 4) = 1;
+        _jx_(2, 4) = 0;
+        _jx_(3, 4) = 2;
+        _jx_(4, 4) = 0;
+        _jx_(5, 4) = 0;
+        _jx_(0, 5) = 0;
+        _jx_(1, 5) = 0;
+        _jx_(2, 5) = 1;
+        _jx_(3, 5) = 0;
+        _jx_(4, 5) = 0;
+        _jx_(5, 5) = 0;
+        _jx_(0, 6) = 0;
+        _jx_(1, 6) = 0;
+        _jx_(2, 6) = 0;
+        _jx_(3, 6) = 1;
+        _jx_(4, 6) = 0;
+        _jx_(5, 6) = 0;
+        _jx_(0, 7) = 0;
+        _jx_(1, 7) = 0;
+        _jx_(2, 7) = 0;
+        _jx_(3, 7) = 0;
+        _jx_(4, 7) = 1;
+        _jx_(5, 7) = 0;
+        _jx_(0, 8) = 0;
+        _jx_(1, 8) = 0;
+        _jx_(2, 8) = 0;
+        _jx_(3, 8) = 0;
+        _jx_(4, 8) = 0;
+        _jx_(5, 8) = 1;
+
+        _gx_[0] = LM3 * x21 + LM4 * x26 + LM5 * x32;
+        _gx_[1] = LM3 * x24 + LM4 * x29 + LM5 * x31;
+        _gx_[2] = LM3 * x25 + LM4 * x31 + LM5 * x34;
+        _gx_[3] = LM0 - 2 * LM4;
+        _gx_[4] = LM1 + 2 * LM3;
         _gx_[5] = LM2;
         _gx_[6] = LM3;
         _gx_[7] = LM4;
         _gx_[8] = LM5;
-        
-        _hx_(0,0) = Scalar(LM3*(_hp0_*pc0_*x13*x36*x37 + 2*pc0_*x13*x14 - 2*x19 - x44*x50 - x51) + LM4*(x1*x40 - x1*x45 + x47) + LM5*(x2*x40 - x2*x45 + x49));
-        _hx_(0,1) = Scalar(LM3*(-_hp0_*x53 + _hp2_*pc2_*x1*x16*x41 - x56) + LM4*(pc2_*x16*x27*x41 - x27*x52 - x57) + LM5*x55);
-        _hx_(1,1) = Scalar(LM3*(15*_hp0_*pc0_*x27*x37 - _hp2_*x66 - x51) + LM4*(-x15*x63 + x18*x63 + x38*x64 - x42*x64) + LM5*x68);
-        _hx_(0,2) = Scalar(LM3*(_hp2_*pc2_*x16*x2*x41 - x52*x58 - x59) + LM4*x55 + LM5*(pc2_*x16*x33*x41 - x33*x52 - x57));
-        _hx_(1,2) = x71;
-        _hx_(2,2) = Scalar(LM3*(15*_hp0_*pc0_*x33*x37 - _hp2_*x69 - x51) + LM4*x70 + LM5*(-x15*x72 + x18*x72 + x38*x73 - x42*x73));
-        _hx_(0,3) = 0;
-        _hx_(1,3) = 0;
-        _hx_(2,3) = 0;
-        _hx_(3,3) = 0;
-        _hx_(0,4) = 0;
-        _hx_(1,4) = 0;
-        _hx_(2,4) = 0;
-        _hx_(3,4) = 0;
-        _hx_(4,4) = 0;
-        _hx_(0,5) = 0;
-        _hx_(1,5) = 0;
-        _hx_(2,5) = 0;
-        _hx_(3,5) = 0;
-        _hx_(4,5) = 0;
-        _hx_(5,5) = 0;
-        _hx_(0,6) = 0;
-        _hx_(1,6) = 0;
-        _hx_(2,6) = 0;
-        _hx_(3,6) = 0;
-        _hx_(4,6) = 0;
-        _hx_(5,6) = 0;
-        _hx_(6,6) = 0;
-        _hx_(0,7) = 0;
-        _hx_(1,7) = 0;
-        _hx_(2,7) = 0;
-        _hx_(3,7) = 0;
-        _hx_(4,7) = 0;
-        _hx_(5,7) = 0;
-        _hx_(6,7) = 0;
-        _hx_(7,7) = 0;
-        _hx_(0,8) = 0;
-        _hx_(1,8) = 0;
-        _hx_(2,8) = 0;
-        _hx_(3,8) = 0;
-        _hx_(4,8) = 0;
-        _hx_(5,8) = 0;
-        _hx_(6,8) = 0;
-        _hx_(7,8) = 0;
-        _hx_(8,8) = 0;
-        
-        _hx_(1,0) = _hx_(0,1);
-        _hx_(2,0) = _hx_(0,2);
-        _hx_(3,0) = _hx_(0,3);
-        _hx_(4,0) = _hx_(0,4);
-        _hx_(5,0) = _hx_(0,5);
-        _hx_(6,0) = _hx_(0,6);
-        _hx_(7,0) = _hx_(0,7);
-        _hx_(8,0) = _hx_(0,8);
-        _hx_(2,1) = _hx_(1,2);
-        _hx_(3,1) = _hx_(1,3);
-        _hx_(4,1) = _hx_(1,4);
-        _hx_(5,1) = _hx_(1,5);
-        _hx_(6,1) = _hx_(1,6);
-        _hx_(7,1) = _hx_(1,7);
-        _hx_(8,1) = _hx_(1,8);
-        _hx_(3,2) = _hx_(2,3);
-        _hx_(4,2) = _hx_(2,4);
-        _hx_(5,2) = _hx_(2,5);
-        _hx_(6,2) = _hx_(2,6);
-        _hx_(7,2) = _hx_(2,7);
-        _hx_(8,2) = _hx_(2,8);
-        _hx_(4,3) = _hx_(3,4);
-        _hx_(5,3) = _hx_(3,5);
-        _hx_(6,3) = _hx_(3,6);
-        _hx_(7,3) = _hx_(3,7);
-        _hx_(8,3) = _hx_(3,8);
-        _hx_(5,4) = _hx_(4,5);
-        _hx_(6,4) = _hx_(4,6);
-        _hx_(7,4) = _hx_(4,7);
-        _hx_(8,4) = _hx_(4,8);
-        _hx_(6,5) = _hx_(5,6);
-        _hx_(7,5) = _hx_(5,7);
-        _hx_(8,5) = _hx_(5,8);
-        _hx_(7,6) = _hx_(6,7);
-        _hx_(8,6) = _hx_(6,8);
-        _hx_(8,7) = _hx_(7,8);
-    }
 
+        _hx_(0, 0) = Scalar(LM3 * (_hp0_ * pc0_ * x13 * x36 * x37 + 2 * pc0_ * x13 * x14 - 2 * x19 -
+                                   x44 * x50 - x51) +
+                            LM4 * (x1 * x40 - x1 * x45 + x47) + LM5 * (x2 * x40 - x2 * x45 + x49));
+        _hx_(0, 1) = Scalar(LM3 * (-_hp0_ * x53 + _hp2_ * pc2_ * x1 * x16 * x41 - x56) +
+                            LM4 * (pc2_ * x16 * x27 * x41 - x27 * x52 - x57) + LM5 * x55);
+        _hx_(1, 1) = Scalar(LM3 * (15 * _hp0_ * pc0_ * x27 * x37 - _hp2_ * x66 - x51) +
+                            LM4 * (-x15 * x63 + x18 * x63 + x38 * x64 - x42 * x64) + LM5 * x68);
+        _hx_(0, 2) = Scalar(LM3 * (_hp2_ * pc2_ * x16 * x2 * x41 - x52 * x58 - x59) + LM4 * x55 +
+                            LM5 * (pc2_ * x16 * x33 * x41 - x33 * x52 - x57));
+        _hx_(1, 2) = x71;
+        _hx_(2, 2) = Scalar(LM3 * (15 * _hp0_ * pc0_ * x33 * x37 - _hp2_ * x69 - x51) + LM4 * x70 +
+                            LM5 * (-x15 * x72 + x18 * x72 + x38 * x73 - x42 * x73));
+        _hx_(0, 3) = 0;
+        _hx_(1, 3) = 0;
+        _hx_(2, 3) = 0;
+        _hx_(3, 3) = 0;
+        _hx_(0, 4) = 0;
+        _hx_(1, 4) = 0;
+        _hx_(2, 4) = 0;
+        _hx_(3, 4) = 0;
+        _hx_(4, 4) = 0;
+        _hx_(0, 5) = 0;
+        _hx_(1, 5) = 0;
+        _hx_(2, 5) = 0;
+        _hx_(3, 5) = 0;
+        _hx_(4, 5) = 0;
+        _hx_(5, 5) = 0;
+        _hx_(0, 6) = 0;
+        _hx_(1, 6) = 0;
+        _hx_(2, 6) = 0;
+        _hx_(3, 6) = 0;
+        _hx_(4, 6) = 0;
+        _hx_(5, 6) = 0;
+        _hx_(6, 6) = 0;
+        _hx_(0, 7) = 0;
+        _hx_(1, 7) = 0;
+        _hx_(2, 7) = 0;
+        _hx_(3, 7) = 0;
+        _hx_(4, 7) = 0;
+        _hx_(5, 7) = 0;
+        _hx_(6, 7) = 0;
+        _hx_(7, 7) = 0;
+        _hx_(0, 8) = 0;
+        _hx_(1, 8) = 0;
+        _hx_(2, 8) = 0;
+        _hx_(3, 8) = 0;
+        _hx_(4, 8) = 0;
+        _hx_(5, 8) = 0;
+        _hx_(6, 8) = 0;
+        _hx_(7, 8) = 0;
+        _hx_(8, 8) = 0;
+
+        _hx_(1, 0) = _hx_(0, 1);
+        _hx_(2, 0) = _hx_(0, 2);
+        _hx_(3, 0) = _hx_(0, 3);
+        _hx_(4, 0) = _hx_(0, 4);
+        _hx_(5, 0) = _hx_(0, 5);
+        _hx_(6, 0) = _hx_(0, 6);
+        _hx_(7, 0) = _hx_(0, 7);
+        _hx_(8, 0) = _hx_(0, 8);
+        _hx_(2, 1) = _hx_(1, 2);
+        _hx_(3, 1) = _hx_(1, 3);
+        _hx_(4, 1) = _hx_(1, 4);
+        _hx_(5, 1) = _hx_(1, 5);
+        _hx_(6, 1) = _hx_(1, 6);
+        _hx_(7, 1) = _hx_(1, 7);
+        _hx_(8, 1) = _hx_(1, 8);
+        _hx_(3, 2) = _hx_(2, 3);
+        _hx_(4, 2) = _hx_(2, 4);
+        _hx_(5, 2) = _hx_(2, 5);
+        _hx_(6, 2) = _hx_(2, 6);
+        _hx_(7, 2) = _hx_(2, 7);
+        _hx_(8, 2) = _hx_(2, 8);
+        _hx_(4, 3) = _hx_(3, 4);
+        _hx_(5, 3) = _hx_(3, 5);
+        _hx_(6, 3) = _hx_(3, 6);
+        _hx_(7, 3) = _hx_(3, 7);
+        _hx_(8, 3) = _hx_(3, 8);
+        _hx_(5, 4) = _hx_(4, 5);
+        _hx_(6, 4) = _hx_(4, 6);
+        _hx_(7, 4) = _hx_(4, 7);
+        _hx_(8, 4) = _hx_(4, 8);
+        _hx_(6, 5) = _hx_(5, 6);
+        _hx_(7, 5) = _hx_(5, 7);
+        _hx_(8, 5) = _hx_(5, 8);
+        _hx_(7, 6) = _hx_(6, 7);
+        _hx_(8, 6) = _hx_(6, 8);
+        _hx_(8, 7) = _hx_(7, 8);
+    }
 };
 
 } // namespace tycho::astro

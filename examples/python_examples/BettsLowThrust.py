@@ -16,9 +16,18 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns  # pip install seaborn if you dont have it
 from matplotlib import ticker
-from mpl_toolkits.basemap import Basemap
+
+# Basemap is optional — the orbit map plot needs it, but the solver path
+# does not. Tracking the import lets the standard examples sweep run this
+# file unconditionally and skip just the rich-plot section if basemap is
+# absent.
+try:
+    from mpl_toolkits.basemap import Basemap
+
+    HAS_BASEMAP = True
+except ImportError:
+    HAS_BASEMAP = False
 
 import tychopy as typy
 from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
@@ -518,7 +527,7 @@ if __name__ == "__main__":
     IG = integ.integrate_dense(X0, tfig)
 
     phase = ode.phase("LGL5", IG, 16)
-    phase.integrator.set_step_sizes(0.1, 0.001, 10)
+    phase.integrator.set_initial_step_size(0.1)
     phase.add_boundary_value("Front", range(0, 8), X0[0:8])
     phase.add_equal_con("Path", Args(3).norm() - 1, [8, 9, 10])
     # Dont use control splines when placing equality path constraints on controls
@@ -541,7 +550,9 @@ if __name__ == "__main__":
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.set_mesh_tol(1.0e-7)
 
-    phase.optimize_solve()
+    t0 = time.perf_counter()
+    flag = phase.optimize_solve()
+    elapsed = time.perf_counter() - t0
 
     Traj = phase.return_traj()
 
@@ -549,9 +560,17 @@ if __name__ == "__main__":
     FinalTime = Traj[-1][7] * Tstar
     ThrottleParam = Traj[-1][-1]
 
-    print(f"Final Weight:{FinalWeight} lb")
-    print(f"Final Time:{FinalTime} s")
-    print(f"Throttle Parameter:{ThrottleParam} ")
+    print(f"LGL5 solve flag             : {flag}")
+    print(f"Wall-clock                  : {elapsed:.2f} s")
+    print(f"Final Weight                : {FinalWeight:.6f} lb")
+    print(f"Final Time                  : {FinalTime:.6f} s")
+    print(f"Throttle Parameter          : {ThrottleParam:.6f}")
 
-    PhaseMeshErrorPlot(phase, show=False)
-    Plot(MEEToCart(Traj))
+    if HAS_BASEMAP:
+        PhaseMeshErrorPlot(phase, show=False)
+        Plot(MEEToCart(Traj))
+    else:
+        print(
+            "\nbasemap not available — orbit map and mesh-error plots skipped. "
+            "Install via: conda install -c conda-forge basemap"
+        )

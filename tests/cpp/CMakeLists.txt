@@ -44,7 +44,10 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_type_storage.cpp
     utils/test_tuple_iterator.cpp
     utils/test_var_registry.cpp
+    utils/test_exception_what.cpp
     optimal_control/test_ode_sizes.cpp
+    integrators/test_step_controller.cpp
+    integrators/test_rk_tableau_consistency.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
@@ -103,6 +106,18 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_integration_dense.cpp
     integrators/test_runtime_ode_integrator.cpp
     integrators/test_parallel_stm_errors.cpp
+    integrators/test_segmented_stm_serial.cpp
+    integrators/test_integrator_parallel.cpp
+    integrators/test_stepper.cpp
+    integrators/test_max_steps.cpp
+    integrators/test_copy_settings.cpp
+    integrators/test_max_step_change.cpp
+    integrators/test_nan_propagation.cpp
+    integrators/test_stepcount_baseline.cpp
+    integrators/test_tolerance_validation.cpp
+    integrators/test_zero_interval.cpp
+    integrators/test_event_refinement_coverage.cpp
+    integrators/test_fsal_reset_after_throw.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp
@@ -188,4 +203,95 @@ set_source_files_properties(
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(tycho_tests PRIVATE $<$<CONFIG:Release>:-O1>)
     target_compile_options(tycho_tests_light PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+
+#-------------------------------------------------------------------------------
+# Golden regression corpus — generator + regression tests
+#-------------------------------------------------------------------------------
+set(_GOLDEN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/integrators/regression/golden")
+
+add_executable(generate_golden integrators/regression/generate_golden.cpp)
+target_compile_options(generate_golden PRIVATE ${COMPILE_FLAGS})
+target_include_directories(generate_golden PRIVATE ${_TYCHO_TEST_COMMON_INCLUDES})
+target_include_directories(generate_golden PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_link_libraries(generate_golden PRIVATE tycho GTest::gtest)
+target_compile_definitions(generate_golden PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET generate_golden PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(generate_golden PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+if(UNIX)
+    target_link_options(generate_golden PRIVATE ${LINKER_FLAGS})
+endif()
+
+set(TYCHO_REGRESSION_IVP_SOURCES
+    integrators/regression/test_regression_ivp.cpp
+)
+tycho_add_test_executable(tycho_regression_ivp TYCHO_REGRESSION_IVP_SOURCES)
+target_include_directories(tycho_regression_ivp PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_regression_ivp PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET tycho_regression_ivp PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_regression_ivp PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+
+set(TYCHO_REGRESSION_TRANSCRIPTION_SOURCES
+    integrators/regression/test_regression_transcription.cpp
+)
+tycho_add_test_executable(tycho_regression_transcription TYCHO_REGRESSION_TRANSCRIPTION_SOURCES)
+target_include_directories(tycho_regression_transcription PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_regression_transcription PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+)
+set_property(TARGET tycho_regression_transcription PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_regression_transcription PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+
+#-------------------------------------------------------------------------------
+# Method-comparison tests — validate each RK method against OrdinaryDiffEq.jl
+# reference outputs produced by bench/julia_reference.
+#-------------------------------------------------------------------------------
+set(_JULIA_REFERENCE_DIR "${CMAKE_SOURCE_DIR}/bench/julia_reference")
+
+set(TYCHO_METHOD_TEST_SOURCES
+    integrators/test_method_tsit5.cpp
+    integrators/test_method_bs3.cpp
+    integrators/test_method_bs5.cpp
+    integrators/test_method_vern7.cpp
+    integrators/test_method_vern8.cpp
+    integrators/test_method_vern9.cpp
+    integrators/test_method_superscalar.cpp
+    integrators/test_error_norm.cpp
+    integrators/test_controller_pi.cpp
+    integrators/test_controller_pid.cpp
+    integrators/test_initial_dt.cpp
+    integrators/test_adaptive_driver_compile.cpp
+    integrators/test_julia_parity.cpp
+    integrators/test_method_interpolation.cpp
+    integrators/test_parallel_driver.cpp
+    integrators/test_stm_all_methods.cpp
+    integrators/test_event_directions.cpp
+)
+tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
+target_include_directories(tycho_method_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+)
+target_compile_definitions(tycho_method_tests PRIVATE
+    GOLDEN_DATA_DIR="${_GOLDEN_DATA_DIR}"
+    JULIA_REFERENCE_DIR="${_JULIA_REFERENCE_DIR}"
+)
+set_property(TARGET tycho_method_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(tycho_method_tests PRIVATE $<$<CONFIG:Release>:-O1>)
 endif()

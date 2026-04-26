@@ -1,0 +1,162 @@
+Found 14 trace files
+
+==========================================================================================
+COMPILATION PHASE BREAKDOWN (aggregate across all TUs)
+==========================================================================================
+  InstantiateFunction        11431.1s   77.4%
+  InstantiateClass            1541.9s   10.4%
+  Backend                      669.5s    4.5%
+  Frontend                     637.6s    4.3%
+  Optimize                     476.9s    3.2%
+  CodeGen                        8.3s    0.1%
+
+==========================================================================================
+PER-TU BREAKDOWN
+==========================================================================================
+TU                                         Total   Front    Back InstCls  InstFn   CdGen   #Cls    #Fn
+bench_solvers.cpp                         193.2s   75.8s  116.6s  195.2s 1414.4s    1.5s  43737  50271
+bench_optimal_control.cpp                 132.2s   69.1s   62.4s  194.6s 1406.1s    0.8s  43632  50033
+kepler_model.cpp                          107.7s   58.5s   48.6s  143.5s  984.1s    0.9s  35458  40907
+ode_phase_base.cpp                         89.2s   25.5s   63.3s   42.0s  273.4s    0.3s  14497  22830
+runtime_ode.cpp                            86.4s   18.4s   67.8s   34.3s  334.8s    0.4s  10206  13854
+generate_golden.cpp                        85.4s   57.9s   26.8s  141.7s 1049.7s    0.5s  37208  45298
+kepler_utils.cpp                           84.7s   60.5s   23.6s  146.9s 1302.6s    0.3s  40898  53345
+bench_integrators.cpp                      82.0s   29.7s   51.9s   63.7s  456.6s    0.6s  16980  20909
+generic_odes_build_part4.cpp               80.5s   44.0s   35.9s  117.7s  756.1s    0.7s  25416  29043
+generic_odes_build_part3.cpp               80.2s   44.2s   35.5s  117.0s  763.6s    0.8s  25438  29521
+test_regression_ivp.cpp                    80.1s   56.8s   22.6s  141.2s 1040.4s    0.5s  36823  45055
+main.cpp                                   71.4s   49.6s   21.2s  124.2s  986.8s    0.1s  33186  41261
+generic_odes_build_part1.cpp               71.2s   24.5s   46.4s   45.1s  373.0s    0.6s  12788  17615
+vector_function_build_part2.cpp            70.1s   23.1s   46.7s   34.6s  289.5s    0.3s  12351  19716
+
+==========================================================================================
+TOP 30 CLASS TEMPLATE INSTANTIATIONS (by total time)
+==========================================================================================
+   195.28s  35884x  14 TUs  Eigen::MatrixBase
+   134.19s  22497x  14 TUs  Eigen::MapBase
+   111.26s  36695x  14 TUs  Eigen::DenseBase
+    90.99s  13283x  14 TUs  Eigen::Block
+    89.15s  13283x  14 TUs  Eigen::BlockImpl
+    87.64s  13283x  14 TUs  Eigen::internal::BlockImpl_dense
+    78.38s  18817x  14 TUs  std::is_nothrow_invocable
+    74.28s  21516x  14 TUs  std::__and_
+    65.34s  13567x  14 TUs  std::__invoke_result
+    63.11s  11606x  14 TUs  std::__result_of_impl
+    46.13s  29703x  14 TUs  Eigen::internal::evaluator
+    41.83s   6331x  14 TUs  Eigen::CwiseBinaryOp
+    39.59s   6331x  14 TUs  Eigen::CwiseBinaryOpImpl
+    36.27s   5414x  14 TUs  Eigen::Product
+    32.74s   5414x  14 TUs  Eigen::ProductImpl
+    30.96s   5414x  14 TUs  Eigen::internal::dense_product_base
+    25.37s   4217x  14 TUs  Eigen::Transpose
+    24.60s   4217x  14 TUs  Eigen::TransposeImpl
+    21.45s   2870x  14 TUs  Eigen::VectorBlock
+    21.04s  11105x  14 TUs  std::_Tuple_impl
+    14.38s   2046x  14 TUs  Eigen::PlainObjectBase
+    13.20s   4151x  14 TUs  std::tuple
+    13.09s   1785x  14 TUs  Eigen::Matrix
+    12.45s  20951x  14 TUs  Eigen::internal::generic_dense_assignment_kernel
+    12.32s   2102x  14 TUs  Eigen::CwiseNullaryOp
+    11.76s   2360x  14 TUs  tycho::utils::detail::ExactTempPack
+     7.96s    926x  14 TUs  Eigen::internal::generic_product_impl
+     7.52s  14296x  14 TUs  Eigen::internal::copy_using_evaluator_traits
+     7.11s    820x  14 TUs  Eigen::internal::generic_product_impl_base
+     6.67s   2662x  14 TUs  Eigen::internal::product_evaluator
+
+==========================================================================================
+TOP 30 FUNCTION TEMPLATE INSTANTIATIONS (by total time)
+==========================================================================================
+   903.29s  18817x  14 TUs  tycho::utils::BumpAllocator::allocate_run
+   605.00s  10004x  14 TUs  tycho::vf::DenseFunctionBase::compute_jacobian_adjointgradient_adjointhessian
+   456.13s   1022x  14 TUs  std::make_shared
+   455.52s   1050x  14 TUs  std::shared_ptr::shared_ptr
+   455.40s   1037x  14 TUs  std::__shared_ptr::__shared_ptr
+   455.02s   1035x  14 TUs  std::__shared_count::__shared_count
+   453.15s   1022x  14 TUs  std::_Sp_counted_ptr_inplace::_Sp_counted_ptr_inplace
+   371.13s   9058x  14 TUs  tycho::vf::DenseFunctionBase::compute_jacobian
+   338.12s    962x  14 TUs  tycho::vf::GFStorage::emplace
+   301.57s    617x  14 TUs  tycho::vf::GenericFunction::GenericFunction
+   252.81s  23491x  14 TUs  Eigen::internal::call_assignment_no_alias
+   246.12s  22759x  14 TUs  Eigen::internal::Assignment::run
+   238.11s     76x  12 TUs  tycho::integrators::Integrator::Integrator
+   158.25s     14x   7 TUs  tycho::oc::ODEPhase::ODEPhase
+   156.83s    809x  14 TUs  tycho::utils::TypeStorage::emplace
+   148.86s    166x  12 TUs  tycho::solvers::ConstraintInterface::ConstraintInterface
+   148.86s    568x  14 TUs  tycho::solvers::ConstraintModel::ConstraintModel
+   146.82s  26443x  14 TUs  Eigen::internal::call_assignment
+   134.16s     30x  12 TUs  tycho::integrators::Integrator::set_method
+   133.95s    240x  12 TUs  tycho::integrators::Integrator::init_stepper_and_controller
+   129.79s   1864x  14 TUs  tycho::vf::GFModelCommon::compute_jacobian_adjointgradient_adjointhessian
+   120.88s   1096x  14 TUs  tycho::vf::NestedFunction_Impl::compute_jacobian_adjointgradient_adjointhessian_
+   108.99s  18817x  14 TUs  std::apply
+   102.65s   7732x  14 TUs  tycho::vf::ComputableBase::compute
+   101.50s  20284x  14 TUs  Eigen::internal::call_dense_assignment_loop
+   101.26s    496x  14 TUs  tycho::vf::DenseFunctionBase::constraints_jacobian_adjointgradient_adjointhessia
+   100.21s     10x   7 TUs  tycho::oc::ODEPhase::transcribe_dynamics
+    98.19s   3659x  14 TUs  tycho::utils::BumpAllocator::run_arena_impl
+    97.63s    715x  13 TUs  tycho::vf::StackTwoOutputs_Impl::compute_jacobian_adjointgradient_adjointhessian
+    93.05s   1920x  14 TUs  Eigen::internal::generic_product_impl::scaleAndAddTo
+
+==========================================================================================
+TOP 20 HEADERS BY PARSE TIME
+==========================================================================================
+
+==========================================================================================
+TOP 20 CODE GENERATION COSTS (by total time)
+==========================================================================================
+     1.46s    928x  tycho::integrators::RKStepper::compute_jacobian_adjointgradient_adjointhessian_i
+     0.69s    856x  tycho::integrators::RKStepper::compute_jacobian_impl(const Eigen::MatrixBase &, 
+     0.57s    162x  tycho::oc::LGLDefects::compute_jacobian_adjointgradient_adjointhessian_impl(cons
+     0.52s    177x  tycho::oc::LGLDefects::compute_jacobian_impl(const Eigen::MatrixBase &, const Ei
+     0.32s    537x  Eigen::internal::product_evaluator::coeff
+     0.27s    387x  Eigen::internal::generic_product_impl::scaleAndAddTo
+     0.20s    315x  Eigen::internal::gemv_dense_selector::run
+     0.18s     91x  fmt::detail::write
+     0.16s    160x  tycho::oc::LGLDefects::compute_impl(const Eigen::MatrixBase &, const Eigen::Matr
+     0.12s      7x  Eigen::internal::BlockImpl_dense::BlockImpl_dense
+     0.11s    129x  tycho::utils::BumpAllocator::allocate_run
+     0.10s     46x  tycho::oc::TrapezoidalDefects::compute_jacobian_adjointgradient_adjointhessian_i
+     0.10s     24x  tycho::vf::DenseFunctionBase::compute_jacobian_adjointgradient_adjointhessian
+     0.10s    141x  tycho::integrators::Integrator::stepper_compute_impl(const ODEState &, double, O
+     0.10s     26x  Eigen::internal::gebp_kernel::operator()
+     0.09s    119x  tycho::integrators::Integrator::stepper_compute_impl(const ODEState &, Eigen::Ar
+     0.08s     53x  Eigen::internal::general_matrix_vector_product::run
+     0.08s    123x  tycho::vf::DenseFunctionBase::constraints_jacobian_adjointgradient_adjointhessia
+     0.08s     94x  tycho::integrators::Integrator::init_stepper_and_controller
+     0.07s    109x  Eigen::internal::dense_assignment_loop::run
+
+==========================================================================================
+DERIVATIVE MODE INSTANTIATIONS
+==========================================================================================
+
+  DenseFirstDerivatives distinct types:  1
+  DenseSecondDerivatives distinct types: 1
+
+==========================================================================================
+TEMPLATE INSTANTIATION TIME BY TYCHO CLASS FAMILY
+==========================================================================================
+  1267.97s   34627x  tycho::vf::DenseFunctionBase
+  1006.01s   23597x  tycho::utils::BumpAllocator
+   566.42s    1661x  tycho::integrators::Integrator
+   374.08s     202x  tycho::oc::ODEPhase
+   338.35s    1008x  tycho::vf::GFStorage
+   324.95s    9804x  tycho::vf::GFModelCommon
+   308.69s    1676x  tycho::vf::GenericFunction
+   297.45s    1479x  tycho::solvers::ConstraintModel
+   227.64s    3168x  tycho::vf::StackTwoOutputs_Impl
+   224.93s    5088x  tycho::vf::NestedFunction_Impl
+   171.75s   10364x  tycho::vf::ComputableBase
+   156.83s     814x  tycho::utils::TypeStorage
+   148.86s     166x  tycho::solvers::ConstraintInterface
+   105.67s    7656x  tycho::integrators::RKStepper
+   101.25s    1233x  tycho::oc::LGLDefects
+    96.65s    3285x  tycho::vf::TwoFunctionSum_Impl
+    89.12s    4409x  tycho::vf::VectorScalarFunctionProduct_Impl
+    76.43s       4x  tycho::bind::BuildGenODEModule
+    75.32s       4x  tycho::TychoBind::Build
+    65.46s     930x  tycho::vf::FunctionHolder
+    58.32s    3779x  tycho::vf::Scaled_Impl
+    43.09s      52x  tycho::vf::FDDerivArbitrary
+    42.09s    2095x  tycho::vf::CwiseFunctionOperator
+    41.13s    1600x  tycho::vf::right_jacobian_product_impl
+    40.40s    5047x  tycho::vf::Segment_Impl

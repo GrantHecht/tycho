@@ -7,10 +7,7 @@
 // Original Developer: James B. Pezent
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
-//   - Migrated pybind11 -> nanobind (PR 3)
-//   - Migrated to tycho:: sub-namespaces (PR #35)
+//   Apache 2.0 — see LICENSE.txt).
 // =============================================================================
 
 #include "tycho_optimal_control.h"
@@ -108,6 +105,30 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
     TychoBind<LinkFunction<GenericFunction<-1, 1>>>::Build(oc, "LinkObjective");
 
     TychoBind<MeshIterateInfo>::Build(oc);
+
+    // EventPack: 3-arg ctor for explicit C++ construction, tuple-accepting
+    // init so Python callers can pass (vf, direction, stop_count) tuples
+    // directly.
+    nb::class_<tycho::integrators::EventPack>(oc, "EventPack")
+        .def(nb::init<tycho::vf::GenericFunction<-1, 1>, int, int>(), nb::arg("vf"),
+             nb::arg("direction") = 0, nb::arg("stop_count") = 0)
+        .def(
+            "__init__",
+            [](tycho::integrators::EventPack *self, const nb::tuple &t) {
+                if (t.size() != 3)
+                    throw nb::type_error(
+                        "EventPack(tuple) expects exactly 3 elements: (vf, direction, stop_count)");
+                new (self)
+                    tycho::integrators::EventPack(nb::cast<tycho::vf::GenericFunction<-1, 1>>(t[0]),
+                                                  nb::cast<int>(t[1]), nb::cast<int>(t[2]));
+            },
+            nb::arg("t"))
+        .def_rw("vf", &tycho::integrators::EventPack::vf)
+        .def_prop_rw("direction", &tycho::integrators::EventPack::direction,
+                     &tycho::integrators::EventPack::set_direction)
+        .def_prop_rw("stop_count", &tycho::integrators::EventPack::stop_count,
+                     &tycho::integrators::EventPack::set_stop_count);
+    nb::implicitly_convertible<nb::tuple, tycho::integrators::EventPack>();
 
     TychoBind<ODEPhaseBase>::Build(oc);
     TychoBind<OptimalControlProblemBase>::Build(oc);

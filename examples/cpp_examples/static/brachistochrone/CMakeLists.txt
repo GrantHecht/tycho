@@ -6,5 +6,5 @@ if(NOT TARGET tycho::tycho)
     find_package(tycho REQUIRED)
 endif()
 
-add_executable(brachistochrone_cpp main.cpp)
+add_executable(brachistochrone_cpp main.cpp brachistochrone_ode.cpp)
 target_link_libraries(brachistochrone_cpp PRIVATE tycho::tycho)

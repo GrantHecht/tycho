@@ -275,13 +275,71 @@ TEST(DispatchHelpers, NestedDispatch_MainThread_Succeeds) {
 }
 
 TEST(DispatchHelpers, NestedDispatch_PoolWorker_Throws) {
-    // Dispatch from a pool worker must throw logic_error.
-    // parallel_sequence runs i=0..2 on pool workers and i=3 inline.
-    // The pool workers attempting nested dispatch should throw.
+    // Dispatch from a pool worker must be rejected. parallel_sequence runs
+    // i=0..2 on pool workers and i=3 inline; each attempts nested dispatch
+    // and throws. DispatchContext's aggregation wraps the 3 concurrent
+    // worker exceptions into a runtime_error whose message includes every
+    // "nested dispatch from pool worker" string — callers can no longer
+    // lose N-1 of the failures to stderr.
     ScopedThreadCount guard(4);
-    EXPECT_THROW(
-        tycho::utils::parallel_sequence(4, [](int) { tycho::utils::parallel_blocks(4, [](int, int) {}, 2); }),
-        std::logic_error);
+    try {
+        tycho::utils::parallel_sequence(
+            4, [](int) { tycho::utils::parallel_blocks(4, [](int, int) {}, 2); });
+        FAIL() << "Expected exception";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("nested dispatch from pool worker"), std::string::npos)
+            << "Aggregated message must include the underlying logic_error: " << msg;
+    }
+}
+
+TEST(DispatchHelpers, DispatchContext_AggregatesUpToCapAndCountsSuppressed) {
+    // DispatchContext caps captured exceptions at kMaxCaptured=16; throws
+    // beyond that increment the suppressed counter and are reported in the
+    // aggregated message tail. parallel_sequence(N) dispatches N-1 to the
+    // pool and runs index N-1 inline; only pool throws flow through
+    // DispatchContext, so to fire 17 captured-via-pool throws we need
+    // n = 18 (indices 0..16 → pool, throwing; index 17 inline, also throwing
+    // but rethrown only if the pool path is silent).
+    ScopedThreadCount guard(4);
+    constexpr int kPoolThrows = 17;
+    constexpr int kSequenceN = kPoolThrows + 1;
+    try {
+        tycho::utils::parallel_sequence(kSequenceN, [](int i) {
+            throw std::runtime_error("lane " + std::to_string(i));
+        });
+        FAIL() << "Expected aggregated runtime_error from " << kPoolThrows << " throwing lanes";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        // Header reports the total pool-captured count (stored + suppressed).
+        EXPECT_NE(msg.find(std::to_string(kPoolThrows) + " concurrent worker exception(s)"),
+                  std::string::npos)
+            << "Header must report total throw count: " << msg;
+        // Suppressed tail reports the count beyond the cap.
+        EXPECT_NE(msg.find("and 1 more suppressed"), std::string::npos)
+            << "Tail must report suppressed count: " << msg;
+        // Cap was hit — slot index 15 must appear (last distinct stored slot).
+        EXPECT_NE(msg.find("--- [15] ---"), std::string::npos)
+            << "Capped slot index 15 must be present in body: " << msg;
+        // Slot 16 must NOT appear — that one was suppressed, not stored.
+        EXPECT_EQ(msg.find("--- [16] ---"), std::string::npos)
+            << "Slot 16 must NOT be in body (suppressed by cap): " << msg;
+    }
+}
+
+TEST(DispatchHelpers, DispatchContext_PreservesSingleExceptionType) {
+    // The n==1 fast path rethrows the original exception unchanged so callers
+    // see the typed exception (e.g., invalid_argument) rather than the
+    // composed runtime_error. Verifies the typed-preservation contract that
+    // decorate_trajectory's typed-rethrow ladder relies on.
+    ScopedThreadCount guard(4);
+    EXPECT_THROW(tycho::utils::parallel_sequence(4,
+                                                 [](int i) {
+                                                     if (i == 1) {
+                                                         throw std::invalid_argument("typed");
+                                                     }
+                                                 }),
+                 std::invalid_argument);
 }
 
 TEST(DispatchHelpers, DualException_ParallelTask) {

@@ -1,0 +1,20 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-17-sp3-controllers.md",
+  "tasks": [
+    {"id": 0,  "subject": "Task 0: Extend Julia harness with step stats",                "status": "completed"},
+    {"id": 1,  "subject": "Task 1: Error norm + Julia residual (error_norm.h)",          "status": "completed"},
+    {"id": 2,  "subject": "Task 2: Extend IController to Julia formulation",             "status": "completed"},
+    {"id": 3,  "subject": "Task 3: Unit tests for PIController",                         "status": "completed", "blockedBy": [2]},
+    {"id": 4,  "subject": "Task 4: Unit tests for PIDController",                        "status": "completed", "blockedBy": [2]},
+    {"id": 5,  "subject": "Task 5: Controller variant + per-algorithm defaults",         "status": "completed", "blockedBy": [2, 3, 4]},
+    {"id": 6,  "subject": "Task 6: Controller dispatch in scalar adaptive loop",         "status": "completed", "blockedBy": [1, 5]},
+    {"id": 7,  "subject": "Task 7: Controller dispatch in SuperScalar batch loop",       "status": "completed", "blockedBy": [6]},
+    {"id": 8,  "subject": "Task 8: Hairer-Wanner initial dt",                            "status": "completed", "blockedBy": [1, 7]},
+    {"id": 9,  "subject": "Task 9: Update AdaptiveDriver scaffold to SP3 API",           "status": "completed", "blockedBy": [2]},
+    {"id": 10, "subject": "Task 10: Python bindings for controllers + stats",            "status": "completed", "blockedBy": [7]},
+    {"id": 11, "subject": "Task 11: Julia parity validation test suite",                 "status": "completed", "blockedBy": [0, 8]},
+    {"id": 12, "subject": "Task 12: Per-controller benchmarks",                          "status": "completed", "blockedBy": [7]},
+    {"id": 13, "subject": "Task 13: Final verification",                                 "status": "completed", "blockedBy": [10, 11, 12]}
+  ],
+  "lastUpdated": "2026-04-18T10:00:00Z"
+}

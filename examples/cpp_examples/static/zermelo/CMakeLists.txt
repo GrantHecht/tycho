@@ -5,5 +5,5 @@ if(NOT TARGET tycho::tycho)
     find_package(tycho REQUIRED)
 endif()
 
-add_executable(zermelo_cpp main.cpp)
+add_executable(zermelo_cpp main.cpp zermelo_ode.cpp)
 target_link_libraries(zermelo_cpp PRIVATE tycho::tycho)

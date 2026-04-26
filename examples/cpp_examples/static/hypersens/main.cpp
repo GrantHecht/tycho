@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// HyperSensitive Problem — C++ example (static DSL)
+// HyperSensitive Problem — C++ example (static DSL, TU-split)
 //
 // Classic hypersensitive mesh refinement benchmark from Rao et al.
 // https://onlinelibrary.wiley.com/doi/epdf/10.1002/oca.2114
@@ -16,13 +16,13 @@
 // pivot ordering produces a structurally singular factorization despite the
 // problem being well-posed.  MINDEG ordering is stable for this case.
 //
-// Corresponds to the Python example in examples/MeshRefinement/HyperSensLong.py.
+// Concrete HyperSens VectorFunction lives in hypersens_ode.cpp; this TU
+// only sees the erased factory (see doc/user_guide_example_tu_split.md).
 //
-// Phase 8 refinements applied:
-//   - ODEArguments<1,1,0> replaces Arguments<3> — auto-computed layout
-//   - XVar/UVar tags replace manual coeff<> indices
-//   - Zero-arg Definition() — no dummy parameter needed
+// Corresponds to the Python example in examples/MeshRefinement/HyperSensLong.py.
 ///////////////////////////////////////////////////////////////////////////////
+
+#include "hypersens_ode.h"
 
 #include <tycho/tycho.h>
 #include <iomanip>
@@ -32,30 +32,7 @@
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
-using namespace tycho::integrators;
 using namespace tycho::solvers;
-using namespace tycho::astro;
-using namespace tycho::utils;
-
-///////////////////////////////////////////////////////////////////////////////
-// ODE definition
-///////////////////////////////////////////////////////////////////////////////
-
-// Linear version: xdot = -x + u
-// The cubed version (xdot = -x^3 + u) would require a separate ODE type.
-struct HyperSens_Impl : ODESize<1, 1, 0> {
-    static auto Definition() {
-        auto args = ODEArguments<1, 1, 0>();
-        auto x = args[XVar<0>];
-        auto u = args[UVar<0>];
-        return u - x;
-    }
-};
-BUILD_ODE_FROM_EXPRESSION(HyperSens, HyperSens_Impl);
-
-///////////////////////////////////////////////////////////////////////////////
-// main
-///////////////////////////////////////////////////////////////////////////////
 
 int main() {
     const double xt0 = 1.5;
@@ -74,28 +51,25 @@ int main() {
         trajIG.push_back(pt);
     }
 
-    HyperSens ode;
-
-    auto phase = std::make_shared<ODEPhase<HyperSens>>(ode, TranscriptionModes::LGL7);
-    phase->set_traj(trajIG, nSeg);
+    auto erased = tycho_examples::make_hypersens_ode();
+    ODE ode(std::move(erased), 1, 1, 0);
+    auto phase = ode.phase(TranscriptionModes::LGL7, trajIG, nSeg);
 
     // Control mode
-    phase->set_control_mode(ControlModes::NoSpline);
+    phase.set_control_mode(ControlModes::NoSpline);
 
     // Boundary conditions
     Eigen::VectorXi front_idx(2);
     front_idx << 0, 1;
     Eigen::VectorXd front_val(2);
     front_val << xt0, 0.0;
-    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
-                            ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xtf, tf;
-    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
-                            ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Integral objective: minimize integral of (x^2 + u^2) / 2
     {
@@ -103,56 +77,54 @@ int main() {
         auto obj_expr = obj_args.squared_norm() / 2.0;
         Eigen::VectorXi obj_vars(2);
         obj_vars << 0, 2;
-        phase->add_integral_objective(GenericFunction<-1, 1>(obj_expr), obj_vars,
-                                    ScaleModes::AUTO);
+        phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), obj_vars, ScaleModes::AUTO);
     }
 
     // Variable bounds
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 0, -50.0, 50.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 2, -50.0, 50.0, 1.0);
 
     // Solver settings
-    phase->optimizer_->set_opt_ls_mode("L1");
-    phase->optimizer_->set_soe_ls_mode("L1");
-    phase->optimizer_->set_max_ls_iters(2);
-    phase->optimizer_->set_print_level(2);
-    phase->set_num_partitions(1);
+    phase.optimizer().set_opt_ls_mode("L1");
+    phase.optimizer().set_soe_ls_mode("L1");
+    phase.optimizer().set_max_ls_iters(2);
+    phase.optimizer().set_print_level(2);
+    phase.set_num_partitions(1);
 
     // MINDEG ordering — required for stability at tf=10000
-    phase->optimizer_->set_qp_ordering_mode("MINDEG");
+    phase.optimizer().set_qp_ordering_mode("MINDEG");
 
     // Adaptive mesh refinement
-    phase->set_adaptive_mesh(true);
-    phase->set_mesh_tol(1.0e-7);
-    phase->optimizer_->set_econ_tol(1.0e-7);
-    phase->set_max_mesh_iters(10);
-    phase->set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
-    phase->set_mesh_error_criteria(MeshErrorAggregation::MAX);
-    phase->set_mesh_inc_factor(5.0);
-    phase->set_mesh_red_factor(0.5);
-    phase->set_mesh_err_factor(10.0);
+    phase.set_adaptive_mesh(true);
+    phase.set_mesh_tol(1.0e-7);
+    phase.optimizer().set_econ_tol(1.0e-7);
+    phase.set_max_mesh_iters(10);
+    phase.set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
+    phase.set_mesh_error_criteria(MeshErrorAggregation::MAX);
+    phase.set_mesh_inc_factor(5.0);
+    phase.set_mesh_red_factor(0.5);
+    phase.set_mesh_err_factor(10.0);
 
     // Solve
-    std::cout << "Solving HyperSensitive problem (tf=" << std::fixed
-              << std::setprecision(0) << tf << ") ...\n"
+    std::cout << "Solving HyperSensitive problem (tf=" << std::fixed << std::setprecision(0) << tf
+              << ") ...\n"
               << std::flush;
 
-    const auto flag = phase->optimize_solve();
+    const auto flag = phase.optimize_solve();
 
-    if (phase->mesh_converged_) {
+    if (phase.mesh_converged()) {
         std::cout << "HyperSens: mesh CONVERGED\n";
     } else {
         std::cerr << "HyperSens: mesh did NOT converge\n";
     }
 
     if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "HyperSens: solver FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "HyperSens: solver FAILED (status " << static_cast<int>(flag) << ")\n";
         return 1;
     }
 
     // Print trajectory summary
-    auto traj = phase->return_traj();
+    auto traj = phase.return_traj();
     if (!traj.empty()) {
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "  x(0)  = " << traj.front()[0] << "\n";
@@ -160,10 +132,10 @@ int main() {
         std::cout << "  segments = " << traj.size() - 1 << "\n";
     }
 
-    if (phase->mesh_converged_) {
+    if (phase.mesh_converged()) {
         std::cout << "HyperSens: PASS\n";
     } else {
         std::cout << "HyperSens: FAIL (mesh did not converge)\n";
     }
-    return phase->mesh_converged_ ? 0 : 1;
+    return phase.mesh_converged() ? 0 : 1;
 }

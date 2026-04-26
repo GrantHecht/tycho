@@ -7,13 +7,12 @@
 // Original Developer: James B. Pezent
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
-//   - Migrated pybind11 -> nanobind (PR 3)
-//   - Migrated to tycho:: sub-namespaces (PR #35)
+//   Apache 2.0 — see LICENSE.txt).
 // =============================================================================
 
+#include "tycho/detail/integrators/error_norm.h"
 #include "tycho/detail/integrators/rk_coeffs.h"
+#include "tycho/detail/integrators/step_controller.h"
 
 namespace tycho {
 using namespace tycho::vf;
@@ -22,7 +21,22 @@ using namespace tycho::integrators;
 void RKFlagsBuild(nb::module_ &m) {
     nb::enum_<IVPAlg>(m, "IVPAlg")
         .value("DOPRI54", IVPAlg::DOPRI54)
-        .value("DOPRI87", IVPAlg::DOPRI87);
+        .value("DOPRI87", IVPAlg::DOPRI87)
+        .value("Tsit5", IVPAlg::Tsit5)
+        .value("BS3", IVPAlg::BS3)
+        .value("BS5", IVPAlg::BS5)
+        .value("Vern7", IVPAlg::Vern7)
+        .value("Vern8", IVPAlg::Vern8)
+        .value("Vern9", IVPAlg::Vern9);
+
+    nb::enum_<IVPController>(m, "IVPController")
+        .value("I", IVPController::I)
+        .value("PI", IVPController::PI)
+        .value("PID", IVPController::PID);
+
+    nb::enum_<ErrorNormType>(m, "ErrorNormType")
+        .value("RMS", ErrorNormType::RMS)
+        .value("MAX", ErrorNormType::MAX);
 }
 
 } // namespace tycho

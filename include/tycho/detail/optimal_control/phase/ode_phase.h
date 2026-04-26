@@ -166,12 +166,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                                           varlocs};
         }
 
-        Integ.adaptive_ = this->integrator_.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
-        Integ.abs_tols_ = this->integrator_.abs_tols_;
-        Integ.rel_tols_ = this->integrator_.rel_tols_;
-        Integ.min_step_size_ = this->integrator_.min_step_size_;
-        Integ.max_step_size_ = this->integrator_.max_step_size_;
+        Integ.copy_settings_from(this->integrator_);
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -187,12 +182,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                                      std::make_shared<LGLInterpTable>(this->table_)};
         }
 
-        Integ.adaptive_ = this->integrator_.adaptive_;
-        Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
-        Integ.abs_tols_ = this->integrator_.abs_tols_;
-        Integ.rel_tols_ = this->integrator_.rel_tols_;
-        Integ.min_step_size_ = this->integrator_.min_step_size_;
-        Integ.max_step_size_ = this->integrator_.max_step_size_;
+        Integ.copy_settings_from(this->integrator_);
         Integ.enable_vectorization_ = this->enable_vectorization_;
 
         return Integ;
@@ -374,13 +364,8 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
         if (this->auto_scaling_) {
             auto Integ = Integrator<ScaledODE>{this->ode_scaled_, this->integrator_.def_step_size_};
-            Integ.adaptive_ = this->integrator_.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
-            Integ.abs_tols_ = this->integrator_.abs_tols_;
-            Integ.min_step_size_ = this->integrator_.min_step_size_;
-            Integ.max_step_size_ = this->integrator_.max_step_size_;
+            Integ.copy_settings_from(this->integrator_);
             Integ.enable_vectorization_ = this->enable_vectorization_;
-            Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
             if (old_shooting_defect_) {
                 auto shooter = ShootingDefect{this->ode_scaled_, Integ};
@@ -396,13 +381,8 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         {
 
             auto Integ = Integrator<DODE>{this->ode_, this->integrator_.def_step_size_};
-            Integ.adaptive_ = this->integrator_.adaptive_;
-            Integ.fast_adaptive_stm_ = this->integrator_.fast_adaptive_stm_;
-            Integ.abs_tols_ = this->integrator_.abs_tols_;
-            Integ.min_step_size_ = this->integrator_.min_step_size_;
-            Integ.max_step_size_ = this->integrator_.max_step_size_;
+            Integ.copy_settings_from(this->integrator_);
             Integ.enable_vectorization_ = this->enable_vectorization_;
-            Integ.vectorize_batch_calls_ = this->integrator_.vectorize_batch_calls_;
 
             if (old_shooting_defect_) {
                 auto shooter = ShootingDefect{this->ode_, Integ};

@@ -144,7 +144,6 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator(defstepsize)
         integ.set_abs_tol(abstol)
-        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         Traj = integ.integrate_dense(X0, tf, n)
@@ -185,7 +184,6 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator("DOPRI54", defstepsize)
         integ.set_abs_tol(abstol)
-        integ.min_step_size = minstepsize
         integ.adaptive = True
 
         n = 100
@@ -268,7 +266,6 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.fast_adaptive_stm = False
 
         Xtol = 1.0e-10
         Jtol = 1.0e-9
@@ -349,7 +346,6 @@ class test_Integrators(unittest.TestCase):
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
-        integ.fast_adaptive_stm = False
 
         integ.event_tol = 1.0e-10
         integ.max_event_iters = 12
@@ -402,7 +398,7 @@ class test_Integrators(unittest.TestCase):
 
         integ = ode.integrator("DOPRI87", defstepsize)
         integ.set_abs_tol(abstol)
-        integ.set_step_sizes(defstepsize, minstepsize, 10)
+        integ.set_initial_step_size(defstepsize)
         integ.vectorize_batch_calls = True
 
         batchsizes = [1, 3, 4, 15, 100, 1003]
@@ -426,6 +422,82 @@ class test_Integrators(unittest.TestCase):
                 self.assertLess(
                     maxerr, errtol, "Integration Error exceeds expected maximum"
                 )
+
+    def test_EventRefinementFailureReturnsNone(self):
+        """Pin the nanobind translation of std::optional<ODEState> to
+        Optional[np.ndarray] on the Python surface. Force an event
+        refinement to fail via an impossibly tight event_tol, then assert
+        the corresponding EventLocs slot is literally `None` (not a
+        zero-array, not a silent drop) — the residual check in
+        EventHandler::refine_one produces std::nullopt, which the binding
+        must relay as None.
+        """
+        r = 1.0
+        v = 1.1
+        t0 = 0.0
+        tf = 20.0
+
+        X0 = np.zeros(7)
+        X0[0] = r
+        X0[4] = v
+        X0[6] = t0
+
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        # direction=0 (any), stop_count=0 (no stop) — record every crossing.
+        AllApseEvent = (ApseFunc(), 0, 0)
+        Events = [AllApseEvent]
+
+        ode = ast.Astro.Kepler.ode(1)
+        integ = ode.integrator(0.01)
+        integ.set_abs_tol(1.0e-13)
+        integ.adaptive = True
+
+        # Impossibly tight tolerance — no Newton iterate can satisfy
+        # |f(tevent)| <= 1e-300 since FP residuals bottom out at ~1e-16.
+        # The residual check in EventHandler::refine_one then emits
+        # std::nullopt for every refinement.
+        integ.event_tol = 1.0e-300
+        integ.max_event_iters = 4
+
+        Xf, EventLocs = integ.integrate(X0, tf, Events)
+
+        self.assertEqual(len(EventLocs), 1, "One event group")
+        self.assertGreater(len(EventLocs[0]), 0, "Event brackets were detected")
+        for k, loc in enumerate(EventLocs[0]):
+            self.assertIsNone(
+                loc,
+                f"Unresolvable refinement at index {k} must map to Python None, "
+                f"got {type(loc).__name__}",
+            )
+
+    def test_StopFuncExceptionPropagates(self):
+        """Pin the contract that a Python `stop_func` raising an exception
+        propagates to the caller as a Python exception (NOT a silent
+        truthy stop). The PR review flagged this as a possible silent-
+        failure in the integrator_bind.h `pyfunc(x).ptr()` path; this
+        test confirms nanobind's nb::python_error propagation makes the
+        concern moot. If a future binding rewrite breaks propagation,
+        this test will catch it.
+        """
+        ode = ast.Astro.Kepler.ode(1.0)
+        integ = ode.integrator(0.01)
+        integ.set_abs_tol(1.0e-10)
+
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.0
+
+        sentinel = "user-injected stop_func failure"
+
+        def bad_stop(_x):
+            raise ValueError(sentinel)
+
+        with self.assertRaises(ValueError) as ctx:
+            integ.integrate_dense(X0, 5.0, 100, bad_stop)
+        self.assertIn(sentinel, str(ctx.exception))
 
     def test_BatchCalls2(self):
 
@@ -499,6 +571,209 @@ class test_Integrators(unittest.TestCase):
                     self.assertLess(
                         Herr, Htol, "Hessian Integration Error exceeds expected maximum"
                     )
+
+
+class TestBindingValidators(unittest.TestCase):
+    """Pins the Python-side validator contract: setters that route through
+    C++ set_* raise ValueError on invalid input instead of silently storing
+    NaN / non-physical values that would later blow up inside the adaptive
+    loop. A regression bypassing the bind-side wrapper would accept the bad
+    value and this class would catch it."""
+
+    def _make(self):
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        return ode.integrator(0.01)
+
+    def test_event_tol_rejects_nonpositive(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.event_tol = -1.0
+        with self.assertRaises(ValueError):
+            integ.event_tol = 0.0
+        with self.assertRaises(ValueError):
+            integ.event_tol = float("nan")
+        with self.assertRaises(ValueError):
+            integ.event_tol = float("inf")
+        # Positive round-trips cleanly.
+        integ.event_tol = 1e-9
+        self.assertEqual(integ.event_tol, 1e-9)
+
+    def test_max_event_iters_rejects_below_one(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.max_event_iters = 0
+        with self.assertRaises(ValueError):
+            integ.max_event_iters = -5
+        integ.max_event_iters = 7
+        self.assertEqual(integ.max_event_iters, 7)
+
+    def test_set_abs_tol_rejects_negative_and_nonfinite(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(-1e-8)
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(float("nan"))
+        with self.assertRaises(ValueError):
+            integ.set_abs_tol(float("inf"))
+        integ.set_abs_tol(1e-10)  # sanity: zero allowed, positive works
+
+    def test_set_rel_tol_rejects_negative_and_nonfinite(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(-1e-8)
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(float("nan"))
+        with self.assertRaises(ValueError):
+            integ.set_rel_tol(float("inf"))
+        integ.set_rel_tol(1e-10)
+
+    def test_def_step_size_rejects_nonpositive(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.def_step_size = -0.01
+        with self.assertRaises(ValueError):
+            integ.def_step_size = 0.0
+        integ.def_step_size = 0.05
+        self.assertEqual(integ.def_step_size, 0.05)
+
+    def test_max_step_change_rejects_invalid(self):
+        integ = self._make()
+        with self.assertRaises(ValueError):
+            integ.max_step_change = 0.9  # must be > 1
+        with self.assertRaises(ValueError):
+            integ.max_step_change = 1.0
+        with self.assertRaises(ValueError):
+            integ.max_step_change = float("inf")
+        integ.max_step_change = 5.0
+
+    def test_max_steps_round_trip(self):
+        integ = self._make()
+        integ.set_max_steps(123)
+        self.assertEqual(integ.get_max_steps(), 123)
+
+    def test_max_steps_rejects_non_positive(self):
+        integ = self._make()
+        with self.assertRaises((ValueError, RuntimeError)):
+            integ.set_max_steps(0)
+        with self.assertRaises((ValueError, RuntimeError)):
+            integ.set_max_steps(-1)
+
+    def test_max_steps_enforces_cap(self):
+        # Force a runaway by demanding an impossible tolerance, then cap at
+        # a tiny value. The loop must trip the cap rather than spin forever.
+        # Assert the message names "max_steps" so a different RuntimeError
+        # (e.g., the non-finite-state guard) would not silently pass.
+        integ = self._make()
+        integ.set_abs_tol(1.0e-30)
+        integ.set_rel_tol(1.0e-30)
+        integ.set_max_steps(5)
+        # LorenzODE has 3 state vars + 1 t_var.
+        X0 = np.array([1.0, 1.0, 1.0, 0.0])
+        with self.assertRaisesRegex(RuntimeError, "max_steps"):
+            integ.integrate(X0, 10.0)
+
+    def test_max_steps_default_value(self):
+        # Default cap is 1_000_000 (see Integrator::max_steps_ default). A
+        # regression that changed the default would surface here as an
+        # unexpected value without breaking any integration in the examples.
+        # A distinctive round-trip covers the binding layout in the other
+        # direction — set/get against a non-default value.
+        integ = self._make()
+        self.assertEqual(integ.get_max_steps(), 1_000_000)
+        integ.set_max_steps(12345)
+        self.assertEqual(integ.get_max_steps(), 12345)
+        integ.set_max_steps(1_000_000)
+
+    def test_integrate_stm2_exception_path(self):
+        # Regression: the nanobind function-pointer cast for integrate_stm2
+        # previously hard-coded Eigen::MatrixXd for Jacobian/Hessian. For
+        # statically-sized DODEs (Kepler's 7-state/8-input) those resolve
+        # to fixed-size inline-storage matrices, so the cast overruns the
+        # return slot and aligned_free runs on garbage pointers during
+        # unwind. A regression would surface as a segfault or aligned_free
+        # crash — not as a Python-visible RuntimeError. By forcing a throw
+        # mid-call on the Kepler static-sized path, we exercise the
+        # exception-propagation pathway of the binding return slot;
+        # surviving this call without SIGSEGV is the pass condition.
+        kepler_ode = ast.Astro.Kepler.ode(1)  # mu=1 (dimensionless units)
+        integ = kepler_ode.integrator(0.001)
+        integ.set_abs_tol(1.0e-30)
+        integ.set_rel_tol(1.0e-30)
+        integ.set_max_steps(5)
+
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.35
+        LF = np.ones(7)
+        LF[6] = 0.0
+
+        with self.assertRaises(RuntimeError):
+            integ.integrate_stm2([X0], np.array([10.0]), [LF])
+
+    def test_BatchEmptyInputReturnsEmpty_VectorizedDefault(self):
+        # Empty input under the default vectorize_batch_calls=True must be a
+        # no-op, not an exception. Pre-fix this routed to ParallelDriver and
+        # threw "must supply at least one initial state."
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        integ = ode.integrator(0.01)
+        self.assertTrue(integ.vectorize_batch_calls)
+        self.assertEqual(integ.integrate([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm2([], np.array([]), []), [])
+
+    def test_BatchEmptyInputReturnsEmpty_NonVectorized(self):
+        # Symmetry check: the non-vectorized branch already returned empty
+        # via its for-loop, but pin the contract so the two branches stay
+        # interchangeable.
+        ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
+        integ = ode.integrator(0.01)
+        integ.vectorize_batch_calls = False
+        self.assertEqual(integ.integrate([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm([], np.array([])), [])
+        self.assertEqual(integ.integrate_stm2([], np.array([]), []), [])
+
+    def test_EventPackPythonMutationRejectsInvalid(self):
+        # The Python def_prop_rw setters re-run the C++ ctor invariants so
+        # users cannot mutate a valid EventPack into an invalid state. A
+        # raw def_rw would silently accept direction=2 and let it coerce
+        # inside check_crossings.
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        pack = oc.EventPack(ApseFunc(), 0, 0)
+        with self.assertRaises(ValueError):
+            pack.direction = 2
+        with self.assertRaises(ValueError):
+            pack.direction = -2
+        with self.assertRaises(ValueError):
+            pack.stop_count = -1
+        # Valid round-trips work after rejection.
+        pack.direction = 1
+        self.assertEqual(pack.direction, 1)
+        pack.stop_count = 3
+        self.assertEqual(pack.stop_count, 3)
+
+    def test_EventPackTupleCoerceRejectsInvalid(self):
+        # The implicit tuple→EventPack converter routes through the C++
+        # constructor, which validates direction and stop_count. nanobind
+        # surfaces a failed implicit conversion as TypeError ("incompatible
+        # function arguments") rather than propagating the C++
+        # std::invalid_argument as ValueError, so accept either — the goal
+        # is "bad tuple is rejected before integrate begins."
+        def ApseFunc():
+            R, V = Args(7).tolist([(0, 3), (3, 3)])
+            return R.dot(V)
+
+        ode = ast.Astro.Kepler.ode(1)
+        integ = ode.integrator(0.01)
+        X0 = np.zeros(7)
+        X0[0] = 1.0
+        X0[4] = 1.1
+        with self.assertRaises((ValueError, TypeError)):
+            integ.integrate(X0, 10.0, [(ApseFunc(), 2, 0)])
+        with self.assertRaises((ValueError, TypeError)):
+            integ.integrate(X0, 10.0, [(ApseFunc(), 0, -1)])
 
 
 from mpl_toolkits.mplot3d import Axes3D

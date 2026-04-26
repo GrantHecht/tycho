@@ -1,0 +1,41 @@
+# Phase A.3 measurements — zermelo TU split (multi-ODE example)
+# Zermelo has 4 wind-model ODEs + a templated `navigate` solver. The split
+# moves all 4 ODE expression trees to zermelo_ode.cpp behind GenericFunction
+# factories AND collapses `navigate` from a 4-instantiation template into a
+# single non-template function taking GenericFunction<-1,-1>.
+#
+# Method: /usr/bin/time -v on single-TU compile, deleted .o first.
+
+=== zermelo — baseline (from bench/build_perf/2026-04-18-baseline/) ===
+  main.cpp:          176 s wall, 8.19 GB peak RSS
+  (the heaviest TU in the entire codebase)
+
+=== zermelo — after split ===
+                               wall(s)  peak_rss(GB)
+  main.cpp                      37.2        4.14
+  zermelo_ode.cpp               43.2        4.45
+
+Pilot-gate check:
+  Peak RSS heavier new TU: 4.45 GB ≤ 0.70 × 8.19 GB (5.73 GB) → PASS (54.3 %)
+  Wall-clock at -j2: max(37.2, 43.2) ≈ 43.2 s vs 176 s → 75 % reduction
+
+Runtime verification (4/4 wind models converged):
+                           baseline tf    split tf       delta
+  no wind                   expect √5     2.2361 s       ≤ 1e-4 OK
+  uniform wind              n/a           1.7009 s       converged
+  const-dir wind            n/a           1.1945 s       converged
+  var-dir wind              n/a           2.4362 s       converged
+  ODE Jacobian dy col       (-0.0787)     -0.0787        OK
+
+# Aggregate Phase A (all 4 static examples split):
+#
+#                        baseline wall   split wall   ratio   baseline RSS   split RSS   ratio
+# brachistochrone        134 s            ~41 s        31 %     7.11 GB        4.32 GB    61 %
+# hypersens              115 s            ~41 s        36 %     6.56 GB        4.22 GB    64 %
+# delta3_launch          143 s            ~48 s        34 %     7.67 GB        4.72 GB    62 %
+# zermelo                176 s            ~43 s        24 %     8.19 GB        4.45 GB    54 %
+# ----------------------------------------------------------------------------------------------
+# aggregate @ -j2        568 s serial    ~173 s par   30 %     8.19 GB max    4.72 GB     58 %
+# 
+# RSS ceiling drops from 8.19 GB → 4.72 GB. On a 32 GB host, max parallel
+# heavy TUs: ⌊32/8.19⌋ = 3 → ⌊32/4.72⌋ = 6.  Doubled.

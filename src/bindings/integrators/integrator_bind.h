@@ -7,18 +7,14 @@
 // Original Developer: James B. Pezent
 //
 // Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
-//   - Migrated pybind11 -> nanobind (PR 3)
-//   - Migrated to tycho:: sub-namespaces (PR #35)
+//   Apache 2.0 — see LICENSE.txt).
 // =============================================================================
 
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// TychoBind<Integrator<DODE>> specialization and IntegratorBuildConstructors free function.
-// Replaces the out-of-class Integrator<DODE>::Build() and BuildConstructors() definitions
-// that were previously included from Integrator.h.
+// TychoBind<Integrator<DODE>> specialization + IntegratorBuildConstructors
+// free function (nanobind binding for the Integrator template).
 
 #include "dense_function_base_bind.h"
 
@@ -34,8 +30,42 @@ inline IVPAlg parse_ivp_alg(const std::string &str) {
         return IVPAlg::DOPRI54;
     if (str == "DOPRI87" || str == "DP87")
         return IVPAlg::DOPRI87;
+    if (str == "Tsit5")
+        return IVPAlg::Tsit5;
+    if (str == "BS3")
+        return IVPAlg::BS3;
+    if (str == "BS5")
+        return IVPAlg::BS5;
+    if (str == "Vern7")
+        return IVPAlg::Vern7;
+    if (str == "Vern8")
+        return IVPAlg::Vern8;
+    if (str == "Vern9")
+        return IVPAlg::Vern9;
     throw std::invalid_argument(fmt::format(
-        "Unknown IVP algorithm: '{}'; accepted values: DOPRI54, DP54, DOPRI87, DP87", str));
+        "Unknown IVP algorithm: '{}'; accepted values: DOPRI54, DP54, DOPRI87, DP87, Tsit5, BS3, "
+        "BS5, Vern7, Vern8, Vern9",
+        str));
+}
+
+inline IVPController parse_ivp_controller(const std::string &str) {
+    if (str == "I")
+        return IVPController::I;
+    if (str == "PI")
+        return IVPController::PI;
+    if (str == "PID")
+        return IVPController::PID;
+    throw std::invalid_argument(
+        fmt::format("Unknown IVPController: '{}'; accepted values: I, PI, PID", str));
+}
+
+inline ErrorNormType parse_error_norm(const std::string &str) {
+    if (str == "RMS")
+        return ErrorNormType::RMS;
+    if (str == "MAX")
+        return ErrorNormType::MAX;
+    throw std::invalid_argument(
+        fmt::format("Unknown ErrorNormType: '{}'; accepted values: RMS, MAX", str));
 }
 
 template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj) {
@@ -150,13 +180,8 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                     Integrator<DODE>::integrate_stm,
                 nb::arg("xt0_ups"), nb::arg("tfs"), nb::call_guard<nb::gil_scoped_release>());
 
-        obj.def("integrate_stm2",
-                (std::vector<std::tuple<ODEStateD, Eigen::MatrixXd, Eigen::MatrixXd>> (
-                    Integrator<DODE>::*)(const std::vector<ODEStateD> &, const Eigen::VectorXd &,
-                                         const std::vector<ODEStateD> &) const) &
-                    Integrator<DODE>::integrate_stm2,
-                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("lfs"),
-                nb::call_guard<nb::gil_scoped_release>());
+        obj.def("integrate_stm2", &Integrator<DODE>::integrate_stm2, nb::arg("xt0_ups"),
+                nb::arg("tfs"), nb::arg("lfs"), nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_parallel",
                 (std::vector<IntegRet> (Integrator<DODE>::*)(
@@ -190,7 +215,21 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                nb::object pyfunc) {
                 return integ.integrate_dense(x0, tf, n,
                                              [pyfunc](ConstEigenRef<Eigen::VectorXd> x) -> bool {
-                                                 return PyObject_IsTrue(pyfunc(x).ptr()) != 0;
+                                                 // pyfunc(x) raises nb::python_error if the Python
+                                                 // callable itself raises (nanobind converts the
+                                                 // Python exception). PyObject_IsTrue accepts any
+                                                 // truthy object — including numpy scalar bools
+                                                 // that users commonly return (e.g. `x[1] < 0`). An
+                                                 // error return (-1) from PyObject_IsTrue leaves
+                                                 // the Python error indicator set; propagate as
+                                                 // nb::python_error so the caller sees a clean
+                                                 // exception instead of a silent truncation (the
+                                                 // coerce -1→true trap).
+                                                 nb::object result = pyfunc(x);
+                                                 int truth = PyObject_IsTrue(result.ptr());
+                                                 if (truth == -1)
+                                                     throw nb::python_error();
+                                                 return truth != 0;
                                              });
             },
             nb::arg("xt0_up"), nb::arg("tf"), nb::arg("n"), nb::arg("stop_func"));
@@ -213,7 +252,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -221,14 +260,14 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
+            nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("events"), nb::arg("threads"),
             nb::call_guard<nb::gil_scoped_release>());
 
         obj.def("integrate_dense_parallel",
                 (std::vector<DenseRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<int> &, int))&Integrator<DODE>::integrate_dense_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("ns"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         obj.def(
@@ -236,8 +275,8 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
             (std::vector<DenseEventRet> (Integrator<DODE>::*)(
                 const std::vector<ODEStateD> &, const Eigen::VectorXd &, const std::vector<int> &,
                 const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_dense_parallel,
-            nb::arg("xt0_up"), nb::arg("tf"), nb::arg("ns"), nb::arg("events"), nb::arg("threads"),
-            nb::call_guard<nb::gil_scoped_release>());
+            nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("ns"), nb::arg("events"),
+            nb::arg("threads"), nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////
 
@@ -259,13 +298,13 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
                 (std::vector<STMRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
         obj.def("integrate_stm_parallel",
                 (std::vector<STMEventRet> (Integrator<DODE>::*)(
                     const std::vector<ODEStateD> &, const Eigen::VectorXd &,
                     const std::vector<EventPack> &, int))&Integrator<DODE>::integrate_stm_parallel,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("threads"),
+                nb::arg("xt0_ups"), nb::arg("tfs"), nb::arg("events"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>());
 
         /////////////////////////////////////////////////////
@@ -274,17 +313,25 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
 
         obj.def_rw("enable_vectorization", &Integrator<DODE>::enable_vectorization_);
 
-        obj.def_rw("def_step_size", &Integrator<DODE>::def_step_size_);
-        obj.def_rw("max_step_size", &Integrator<DODE>::max_step_size_);
-        obj.def_rw("min_step_size", &Integrator<DODE>::min_step_size_);
-        obj.def_rw("max_step_change", &Integrator<DODE>::max_step_change_);
-        obj.def_rw("fast_adaptive_stm", &Integrator<DODE>::fast_adaptive_stm_);
-
-        obj.def_rw("step_frac", &Integrator<DODE>::step_frac_);
-        obj.def_rw("err_pow_fac", &Integrator<DODE>::err_pow_fac_);
+        // def_step_size routes through set_initial_step_size so Python writes
+        // respect the documented contract (flips HW auto-initdt off, rejects
+        // non-positive values).
+        obj.def_prop_rw(
+            "def_step_size", [](const Integrator<DODE> &self) { return self.def_step_size_; },
+            [](Integrator<DODE> &self, double h) { self.set_initial_step_size(h); });
+        obj.def_prop_rw(
+            "max_step_change",
+            [](const Integrator<DODE> &self) { return self.get_max_step_change(); },
+            [](Integrator<DODE> &self, double v) { self.set_max_step_change(v); });
 
         obj.def_rw("adaptive", &Integrator<DODE>::adaptive_);
-        obj.def_rw("abs_tols", &Integrator<DODE>::abs_tols_);
+        // abs_tols routes through set_abs_tols so Python writes validate size
+        // and non-negativity.
+        obj.def_prop_rw(
+            "abs_tols", [](const Integrator<DODE> &self) { return self.get_abs_tols(); },
+            [](Integrator<DODE> &self, typename Integrator<DODE>::template ODEDeriv<double> tol) {
+                self.set_abs_tols(tol);
+            });
 
         obj.def("set_abs_tol", &Integrator<DODE>::set_abs_tol);
         obj.def("set_abs_tols", &Integrator<DODE>::set_abs_tols);
@@ -294,12 +341,38 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("set_rel_tols", &Integrator<DODE>::set_rel_tols);
         obj.def("get_rel_tols", &Integrator<DODE>::get_rel_tols);
 
-        obj.def("set_step_sizes", &Integrator<DODE>::set_step_sizes, nb::arg("def_step_size"),
-                nb::arg("min_step_size"), nb::arg("max_step_size"));
+        obj.def("set_initial_step_size", &Integrator<DODE>::set_initial_step_size, nb::arg("h"));
+        obj.def("set_max_steps", &Integrator<DODE>::set_max_steps, nb::arg("n"));
+        obj.def("get_max_steps", &Integrator<DODE>::get_max_steps);
 
-        obj.def_rw("event_tol", &Integrator<DODE>::event_tol_);
-        obj.def_rw("max_event_iters", &Integrator<DODE>::max_event_iters_);
+        obj.def_prop_rw(
+            "event_tol", [](const Integrator<DODE> &self) { return self.get_event_tol(); },
+            [](Integrator<DODE> &self, double v) { self.set_event_tol(v); });
+        obj.def_prop_rw(
+            "max_event_iters",
+            [](const Integrator<DODE> &self) { return self.get_max_event_iters(); },
+            [](Integrator<DODE> &self, int n) { self.set_max_event_iters(n); });
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_);
+
+        // Controller + stats + HW-initdt API
+        obj.def("set_controller", &Integrator<DODE>::set_controller);
+        obj.def("set_controller", [](Integrator<DODE> &self, const std::string &s) {
+            self.set_controller(bind::parse_ivp_controller(s));
+        });
+        obj.def("get_controller", &Integrator<DODE>::get_controller);
+
+        obj.def("set_error_norm", &Integrator<DODE>::set_error_norm);
+        obj.def("set_error_norm", [](Integrator<DODE> &self, const std::string &s) {
+            self.set_error_norm(bind::parse_error_norm(s));
+        });
+        obj.def("get_error_norm", &Integrator<DODE>::get_error_norm);
+
+        obj.def("get_naccept", &Integrator<DODE>::get_naccept);
+        obj.def("get_nreject", &Integrator<DODE>::get_nreject);
+        obj.def("get_failed_event_count", &Integrator<DODE>::get_failed_event_count);
+
+        obj.def("set_auto_initial_dt", &Integrator<DODE>::set_auto_initial_dt);
+        obj.def("get_auto_initial_dt", &Integrator<DODE>::get_auto_initial_dt);
     }
 };
 
