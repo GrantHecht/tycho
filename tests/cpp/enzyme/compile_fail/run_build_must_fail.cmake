@@ -14,9 +14,12 @@
 # and portable.
 #
 # Required input variables (passed on the command line via -D):
-#   BINARY_DIR    — top-level build dir to invoke `cmake --build` from
-#   TARGET        — the build target expected to fail
-#   CONFIG        — build config (e.g. Release)
+#   BINARY_DIR     — top-level build dir to invoke `cmake --build` from
+#   TARGET         — the build target expected to fail
+#   CONFIG         — build config (e.g. Release)
+#   EXPECTED_REGEX — (optional) pattern that must appear in the build log to
+#                    pin the failure to the intended diagnostic.  Defaults to
+#                    the Phase 1 Vectorizable+EnzymeAD assertion text.
 # =============================================================================
 
 if(NOT DEFINED BINARY_DIR)
@@ -27,6 +30,9 @@ if(NOT DEFINED TARGET)
 endif()
 if(NOT DEFINED CONFIG)
     set(CONFIG "")
+endif()
+if(NOT DEFINED EXPECTED_REGEX OR EXPECTED_REGEX STREQUAL "")
+    set(EXPECTED_REGEX "(does not yet support SuperScalar|Vectorizable<Derived>|IsSuperScalar)")
 endif()
 
 set(_build_args --build "${BINARY_DIR}" --target "${TARGET}")
@@ -48,26 +54,22 @@ if(_rc EQUAL 0)
     message("--- build STDERR ---\n${_err}")
     message(FATAL_ERROR
         "Compile-fail probe target '${TARGET}' built successfully — "
-        "the Phase 1 Vectorizable+EnzymeAD static_assert did NOT fire.")
+        "the expected diagnostic did NOT fire.")
 endif()
 
-# Pin the failure to the Phase 1 static_assert so an unrelated build error
-# (e.g. missing header) doesn't pass as a fake success.  The static_assert
-# message string contains "does not yet support SuperScalar/Vectorizable"
-# verbatim (see include/tycho/detail/vf/derivatives/dense_enzyme.h).
-string(REGEX MATCH
-    "(does not yet support SuperScalar|Vectorizable<Derived>|IsSuperScalar)"
-    _match "${_combined}")
+# Pin the failure to the expected diagnostic so an unrelated build error
+# (e.g. missing header) doesn't pass as a fake success.
+string(REGEX MATCH "${EXPECTED_REGEX}" _match "${_combined}")
 
 if(NOT _match)
     message("--- build STDOUT ---\n${_out}")
     message("--- build STDERR ---\n${_err}")
     message(FATAL_ERROR
         "Compile-fail probe target '${TARGET}' failed to build, but the "
-        "expected Phase 1 SuperScalar static_assert message was not found "
-        "in the output.  This may indicate an unrelated build break.")
+        "expected diagnostic regex '${EXPECTED_REGEX}' was not found in "
+        "the output.  This may indicate an unrelated build break.")
 endif()
 
 message(STATUS
     "Compile-fail probe target '${TARGET}' failed as expected, "
-    "with the Phase 1 SuperScalar static_assert message present.")
+    "with the expected diagnostic present.")
