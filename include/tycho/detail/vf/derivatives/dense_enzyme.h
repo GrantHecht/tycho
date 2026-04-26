@@ -171,14 +171,48 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
         using Scalar = typename InType::Scalar;
-        static_assert(!IsSuperScalar<Scalar>,
-            "DenseDerivativeMode::EnzymeAD does not yet support SuperScalar/"
-            "Vectorizable dispatch. Vectorized EnzymeAD is planned for Phase 5; "
-            "until then, do not mark EnzymeAD VectorFunctions as "
-            "Vectorizable<Derived>=true.");
+        if constexpr (IsSuperScalar<Scalar>) {
+            // Phase 5a: scalarize-per-lane dispatch.  For each lane in the
+            // SuperScalar Eigen::Array, extract a double-typed input vector,
+            // run the scalar EnzymeAD Jacobian, and pack the lane outputs
+            // back into the SuperScalar fx / jx.
+            constexpr int vsize = Scalar::SizeAtCompileTime;
+            const int ir = this->input_rows();
+            const int or_ = this->output_rows();
 
-        VecRef<OutType> fx = fx_.const_cast_derived();
-        MatRef<JacType> jx = jx_.const_cast_derived();
+            Eigen::Matrix<double, IR, 1> x_lane(ir);
+            Eigen::Matrix<double, OR, 1> fx_lane(or_);
+            Eigen::Matrix<double, OR, IR> jac_lane(or_, ir);
+
+            VecRef<OutType> fx = fx_.const_cast_derived();
+            MatRef<JacType> jx = jx_.const_cast_derived();
+
+            for (int lane = 0; lane < vsize; ++lane) {
+                for (int j = 0; j < ir; ++j) x_lane[j] = x[j][lane];
+                fx_lane.setZero();
+                jac_lane.setZero();
+
+                this->scalar_compute_jacobian_impl(x_lane, fx_lane, jac_lane);
+
+                for (int j = 0; j < or_; ++j) fx[j][lane] = fx_lane[j];
+                for (int i = 0; i < ir; ++i)
+                    for (int j = 0; j < or_; ++j)
+                        jx(j, i)[lane] = jac_lane(j, i);
+            }
+        } else {
+            this->scalar_compute_jacobian_impl(x, fx_, jx_);
+        }
+    }
+
+    // Phase 1 scalar Jacobian body. Templated on the local types so the
+    // SuperScalar dispatch can pass plain double-typed Eigen::Matrix locals.
+    // Inputs are read; fx / jx outputs are written via const_cast_derived.
+    template <class XLocal, class FxLocal, class JacLocal>
+    inline void scalar_compute_jacobian_impl(const Eigen::MatrixBase<XLocal>& x,
+                                             const Eigen::MatrixBase<FxLocal>& fx_,
+                                             const Eigen::MatrixBase<JacLocal>& jx_) const {
+        FxLocal& fx = fx_.const_cast_derived();
+        JacLocal& jx = jx_.const_cast_derived();
 
         const int ir = this->input_rows();
         const int or_ = this->output_rows();
