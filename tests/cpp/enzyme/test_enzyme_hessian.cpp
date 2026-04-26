@@ -23,8 +23,6 @@
 
 namespace {
 
-using tycho::vf::DenseDerivativeMode;
-
 // Convenience aliases for the two-mode pairings exercised in this matrix.
 // FDiff reference: FDiffCentArray Jacobian + FDiffFwd Hessian.
 // (These mirror the *FDiff aliases in enzyme_test_dynamics.h.)

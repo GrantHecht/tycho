@@ -1,10 +1,10 @@
 // =============================================================================
 // Enzyme microbenchmark suite.
 //
-// Phase 1: Jacobian comparisons __enzyme_fwddiff vs AutodiffFwd.
-// Phase 2: Hessian comparisons (full Enzyme path) vs AutodiffFwd, plus a
+// Phase 1: Jacobian comparisons __enzyme_fwddiff vs FDiffCentArray.
+// Phase 2: Hessian comparisons (full Enzyme path) vs FDiffFwd, plus a
 //          brachistochrone PSIOPT full-solve TTS comparison (gate criterion
-//          §8.2: full-Enzyme TTS ≤ 1.5× autodiff TTS).
+//          §8.2: full-Enzyme TTS ≤ 1.5× FDiff reference TTS).
 //
 // The benchmark is built once per TYCHO_ENZYME_HESSIAN_STRATEGY value (FoR /
 // FoF). Names stay neutral; users compare the two JSON dumps externally.
@@ -60,22 +60,22 @@ inline void bm_jacobian_body(benchmark::State& state,
 }
 
 // Per-ODE thunks so BENCHMARK_CAPTURE has a concrete function pointer.
-void BM_Brach_Autodiff(benchmark::State& state) {
-    bm_jacobian_body<tycho_enzyme_test::BrachAutodiff>(state, brach_input());
+void BM_Brach_FDiff(benchmark::State& state) {
+    bm_jacobian_body<tycho_enzyme_test::BrachFDiff>(state, brach_input());
 }
 void BM_Brach_Enzyme(benchmark::State& state) {
     bm_jacobian_body<tycho_enzyme_test::BrachEnzymeAD>(state, brach_input());
 }
 
-void BM_CR3BP_Autodiff(benchmark::State& state) {
-    bm_jacobian_body<tycho_enzyme_test::CR3BPAutodiff>(state, cr3bp_input());
+void BM_CR3BP_FDiff(benchmark::State& state) {
+    bm_jacobian_body<tycho_enzyme_test::CR3BPFDiff>(state, cr3bp_input());
 }
 void BM_CR3BP_Enzyme(benchmark::State& state) {
     bm_jacobian_body<tycho_enzyme_test::CR3BPEnzymeAD>(state, cr3bp_input());
 }
 
-void BM_MEE_Autodiff(benchmark::State& state) {
-    bm_jacobian_body<tycho_enzyme_test::MEEAutodiff>(state, mee_input());
+void BM_MEE_FDiff(benchmark::State& state) {
+    bm_jacobian_body<tycho_enzyme_test::MEEFDiff>(state, mee_input());
 }
 void BM_MEE_Enzyme(benchmark::State& state) {
     bm_jacobian_body<tycho_enzyme_test::MEEEnzymeAD>(state, mee_input());
@@ -202,10 +202,10 @@ namespace {
 
 using SS4 = Eigen::Array<double, 4, 1>;
 
-// AutodiffFwd does not natively support dual<Eigen::Array<...>>; the
-// Tycho convention is to scalarize per-lane externally for autodiff +
-// Vectorizable.  Reference comparison here is "scalar Enzyme × W lanes"
-// (the Phase 1 / Phase 3 path running W times).
+// FDiff reference (Vectorizable + FDiffCentArray Jacobian / FDiffFwd Hessian)
+// is not exercised here — the central-difference path scalarizes per-lane
+// externally, so the Vectorizable benches measure the EnzymeAD SIMD path
+// alone with the scalar Phase 1 / Phase 3 path as the implicit comparator.
 
 // Vectorizable+EnzymeAD compute_jacobian routes through Phase 5a
 // scalarize-per-lane by default (see dense_enzyme.h dispatch comment).
@@ -219,7 +219,7 @@ using SS4 = Eigen::Array<double, 4, 1>;
 void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::BrachBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 5, 1> x;
     for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
@@ -237,7 +237,7 @@ void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
 void BM_CR3BP_Vectorized_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::CR3BPBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 7, 1> x;
     for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
@@ -255,7 +255,7 @@ void BM_CR3BP_Vectorized_Enzyme(benchmark::State& state) {
 void BM_MEE_Vectorized_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::MEEBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 9, 1> x;
     for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
@@ -278,7 +278,7 @@ void BM_MEE_Vectorized_Enzyme(benchmark::State& state) {
 void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::BrachBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 5, 1> x;
     for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
@@ -296,7 +296,7 @@ void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State& state) {
 void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::CR3BPBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 7, 1> x;
     for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
@@ -314,7 +314,7 @@ void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State& state) {
 void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::MEEBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+        tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 9, 1> x;
     for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
@@ -333,7 +333,7 @@ void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
 // adjoint gradient + adjoint Hessian via the active EnzymeAD pathway (FoR or
 // FoF, depending on TYCHO_ENZYME_HESSIAN_STRATEGY).  Compared head-to-head
-// with the AutodiffFwd nested-dual reference.
+// with the FDiffFwd nested-FD reference.
 // -----------------------------------------------------------------------------
 template <class ODE>
 inline void bm_hessian_body(benchmark::State& state,
@@ -363,22 +363,22 @@ inline void bm_hessian_body(benchmark::State& state,
     }
 }
 
-void BM_Hessian_Brach_Autodiff(benchmark::State& state) {
-    bm_hessian_body<tycho_enzyme_test::BrachAutodiff>(state, brach_input());
+void BM_Hessian_Brach_FDiff(benchmark::State& state) {
+    bm_hessian_body<tycho_enzyme_test::BrachFDiff>(state, brach_input());
 }
 void BM_Hessian_Brach_Enzyme(benchmark::State& state) {
     bm_hessian_body<tycho_enzyme_test::BrachEnzymeFull>(state, brach_input());
 }
 
-void BM_Hessian_CR3BP_Autodiff(benchmark::State& state) {
-    bm_hessian_body<tycho_enzyme_test::CR3BPAutodiff>(state, cr3bp_input());
+void BM_Hessian_CR3BP_FDiff(benchmark::State& state) {
+    bm_hessian_body<tycho_enzyme_test::CR3BPFDiff>(state, cr3bp_input());
 }
 void BM_Hessian_CR3BP_Enzyme(benchmark::State& state) {
     bm_hessian_body<tycho_enzyme_test::CR3BPEnzymeFull>(state, cr3bp_input());
 }
 
-void BM_Hessian_MEE_Autodiff(benchmark::State& state) {
-    bm_hessian_body<tycho_enzyme_test::MEEAutodiff>(state, mee_input());
+void BM_Hessian_MEE_FDiff(benchmark::State& state) {
+    bm_hessian_body<tycho_enzyme_test::MEEFDiff>(state, mee_input());
 }
 void BM_Hessian_MEE_Enzyme(benchmark::State& state) {
     bm_hessian_body<tycho_enzyme_test::MEEEnzymeFull>(state, mee_input());
@@ -445,15 +445,15 @@ inline void bm_brachistochrone_solve_body(benchmark::State& state) {
 }  // namespace
 
 // Brachistochrone (5 -> 3)
-BENCHMARK(BM_Brach_Autodiff)->Name("BM_Jacobian_Autodiff/Brach");
+BENCHMARK(BM_Brach_FDiff)->Name("BM_Jacobian_FDiff/Brach");
 BENCHMARK(BM_Brach_Enzyme)->Name("BM_Jacobian_Enzyme/Brach");
 
 // CR3BP (7 -> 6)
-BENCHMARK(BM_CR3BP_Autodiff)->Name("BM_Jacobian_Autodiff/CR3BP");
+BENCHMARK(BM_CR3BP_FDiff)->Name("BM_Jacobian_FDiff/CR3BP");
 BENCHMARK(BM_CR3BP_Enzyme)->Name("BM_Jacobian_Enzyme/CR3BP");
 
 // MEE (9 -> 6)
-BENCHMARK(BM_MEE_Autodiff)->Name("BM_Jacobian_Autodiff/MEE");
+BENCHMARK(BM_MEE_FDiff)->Name("BM_Jacobian_FDiff/MEE");
 BENCHMARK(BM_MEE_Enzyme)->Name("BM_Jacobian_Enzyme/MEE");
 
 // Vectorizable+EnzymeAD compute_jacobian (default: scalarize-per-lane).
@@ -468,24 +468,24 @@ BENCHMARK(BM_MEE_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/MEE");
 
 // Phase 2: Hessians.  EnzymeFull = <EnzymeAD, EnzymeAD>; the active
 // TYCHO_ENZYME_HESSIAN_STRATEGY chooses FoR vs FoF at compile time.
-BENCHMARK(BM_Hessian_Brach_Autodiff)->Name("BM_Hessian_Autodiff/Brach");
+BENCHMARK(BM_Hessian_Brach_FDiff)->Name("BM_Hessian_FDiff/Brach");
 BENCHMARK(BM_Hessian_Brach_Enzyme)->Name("BM_Hessian_Enzyme/Brach");
-BENCHMARK(BM_Hessian_CR3BP_Autodiff)->Name("BM_Hessian_Autodiff/CR3BP");
+BENCHMARK(BM_Hessian_CR3BP_FDiff)->Name("BM_Hessian_FDiff/CR3BP");
 BENCHMARK(BM_Hessian_CR3BP_Enzyme)->Name("BM_Hessian_Enzyme/CR3BP");
-BENCHMARK(BM_Hessian_MEE_Autodiff)->Name("BM_Hessian_Autodiff/MEE");
+BENCHMARK(BM_Hessian_MEE_FDiff)->Name("BM_Hessian_FDiff/MEE");
 BENCHMARK(BM_Hessian_MEE_Enzyme)->Name("BM_Hessian_Enzyme/MEE");
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves PSIOPT, so the per-iteration cost includes
 // problem setup as well as the solve itself.
-void BM_Solve_Brach_Autodiff(benchmark::State& state) {
-    bm_brachistochrone_solve_body<tycho_enzyme_test::BrachAutodiff>(state);
+void BM_Solve_Brach_FDiff(benchmark::State& state) {
+    bm_brachistochrone_solve_body<tycho_enzyme_test::BrachFDiff>(state);
 }
 void BM_Solve_Brach_Enzyme(benchmark::State& state) {
     bm_brachistochrone_solve_body<tycho_enzyme_test::BrachEnzymeFull>(state);
 }
-BENCHMARK(BM_Solve_Brach_Autodiff)
-    ->Name("BM_FullSolve_Autodiff/Brach")
+BENCHMARK(BM_Solve_Brach_FDiff)
+    ->Name("BM_FullSolve_FDiff/Brach")
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_Solve_Brach_Enzyme)
     ->Name("BM_FullSolve_Enzyme/Brach")
