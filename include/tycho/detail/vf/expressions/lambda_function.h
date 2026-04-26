@@ -20,11 +20,11 @@ namespace tycho::vf {
 
 template <int IR, int OR, class Func, class Data = std::integral_constant<bool, false>>
 struct LambdaFunction
-    : VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR, DenseDerivativeMode::AutodiffFwd,
-                     DenseDerivativeMode::AutodiffFwd>,
+    : VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR, DenseDerivativeMode::FDiffCentArray,
+                     DenseDerivativeMode::FDiffFwd>,
       Data {
     using Base = VectorFunction<LambdaFunction<IR, OR, Func, Data>, IR, OR,
-                                DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
+                                DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base);
     using Base::compute;
 
@@ -49,10 +49,10 @@ template <int IR, int OR, class Func, class JacFunc,
           class Data = std::integral_constant<bool, false>>
 struct LambdaFunction2
     : VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR,
-                     DenseDerivativeMode::Analytic, DenseDerivativeMode::AutodiffFwd>,
+                     DenseDerivativeMode::Analytic, DenseDerivativeMode::FDiffFwd>,
       Data {
     using Base = VectorFunction<LambdaFunction2<IR, OR, Func, JacFunc, Data>, IR, OR,
-                                DenseDerivativeMode::Analytic, DenseDerivativeMode::AutodiffFwd>;
+                                DenseDerivativeMode::Analytic, DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base);
     using Base::compute;
 
