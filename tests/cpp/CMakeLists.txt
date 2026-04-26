@@ -295,3 +295,12 @@ set_property(TARGET tycho_method_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(tycho_method_tests PRIVATE $<$<CONFIG:Release>:-O1>)
 endif()
+
+#-------------------------------------------------------------------------------
+# Enzyme-mode test executable (gated on ENABLE_ENZYME_AD).  Plugin flag is
+# scoped to the target inside tests/cpp/enzyme/CMakeLists.txt; the rest of
+# the build remains plugin-free.
+#-------------------------------------------------------------------------------
+if(ENABLE_ENZYME_AD AND BUILD_CPP_TESTS)
+    add_subdirectory(enzyme)
+endif()
