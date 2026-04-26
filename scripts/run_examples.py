@@ -76,6 +76,8 @@ ALL_EXAMPLES = [
     "TopputtoLowThrust.py",
     "VanDerPol.py",
     "Zermelo.py",
+    # CentralShooting transcription showcase (no basemap dependency).
+    "BettsLowThrustCentralShooting.py",
     # Basemap examples
     "BettsLowThrust.py",
     "Delta3Launch.py",
