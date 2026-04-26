@@ -28,10 +28,10 @@ using vf::DenseDerivativeMode;
 using vf::VecRef;
 using vf::VectorFunction;
 
-struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd> {
-    using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd>;
+struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffCentArray> {
+    using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffCentArray>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 0.0123;
@@ -67,10 +67,10 @@ struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
 };
 
 struct ModifiedDynamicsAD
-    : VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
-                     DenseDerivativeMode::AutodiffFwd> {
-    using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd>;
+    : VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::FDiffCentArray,
+                     DenseDerivativeMode::FDiffCentArray> {
+    using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffCentArray>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 1.00;
