@@ -193,6 +193,33 @@ if(ENABLE_ENZYME_AD)
 
     include("${CMAKE_SOURCE_DIR}/cmake/EnzymeTryCompile.cmake")
     tycho_enzyme_try_compile_fwddiff()
+
+    # Phase 2: probe the two Hessian-via-nested-Enzyme strategies. Either may
+    # be unavailable on a given Enzyme build; both being unavailable is fatal
+    # (the user can still pair <EnzymeAD, AutodiffFwd> with ENABLE_ENZYME_AD=OFF
+    # if Enzyme Hessians are not needed at all).
+    tycho_enzyme_try_compile_nested_for(TYCHO_ENZYME_HAS_FOR)
+    tycho_enzyme_try_compile_nested_fof(TYCHO_ENZYME_HAS_FOF)
+    if(NOT TYCHO_ENZYME_HAS_FOR AND NOT TYCHO_ENZYME_HAS_FOF)
+        message(FATAL_ERROR
+            "Both Enzyme nested-call smoke tests failed. Disable Enzyme Hessians "
+            "by selecting <EnzymeAD, AutodiffFwd> template parameters or set "
+            "-DENABLE_ENZYME_AD=OFF.")
+    endif()
+    if(TYCHO_ENZYME_HAS_FOR)
+        add_compile_definitions(TYCHO_ENZYME_HAS_FOR_STRATEGY)
+    endif()
+    if(TYCHO_ENZYME_HAS_FOF)
+        add_compile_definitions(TYCHO_ENZYME_HAS_FOF_STRATEGY)
+    endif()
+
+    set(TYCHO_ENZYME_HESSIAN_STRATEGY "ForwardOverReverse"
+        CACHE STRING
+        "Hessian strategy (Phase 2 internal): ForwardOverReverse | ForwardOverForward")
+    set_property(CACHE TYCHO_ENZYME_HESSIAN_STRATEGY PROPERTY STRINGS
+        "ForwardOverReverse" "ForwardOverForward")
+    add_compile_definitions(
+        TYCHO_ENZYME_HESSIAN_STRATEGY_${TYCHO_ENZYME_HESSIAN_STRATEGY})
 endif()
 
 option(TYCHO_USE_SYSTEM_EIGEN
