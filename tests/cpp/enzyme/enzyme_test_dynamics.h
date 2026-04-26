@@ -142,13 +142,18 @@ struct MEEModed : VectorFunction<MEEModed<Jm, Hm>, 9, 6, Jm, Hm> {
     }
 };
 
-// Convenience aliases used by tests/benchmarks.  Phase 1 only differentiates
-// to Jacobian level via Enzyme; Hessian path stays AutodiffFwd until Phase 2.
-using BrachAutodiff = BrachODEModed<DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
-using BrachEnzymeAD = BrachODEModed<DenseDerivativeMode::EnzymeAD,    DenseDerivativeMode::AutodiffFwd>;
-using CR3BPAutodiff = CR3BPModed<DenseDerivativeMode::AutodiffFwd,    DenseDerivativeMode::AutodiffFwd>;
-using CR3BPEnzymeAD = CR3BPModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::AutodiffFwd>;
-using MEEAutodiff   = MEEModed<DenseDerivativeMode::AutodiffFwd,      DenseDerivativeMode::AutodiffFwd>;
-using MEEEnzymeAD   = MEEModed<DenseDerivativeMode::EnzymeAD,         DenseDerivativeMode::AutodiffFwd>;
+// Convenience aliases used by tests/benchmarks.
+//   *Autodiff   = <AutodiffFwd, AutodiffFwd> (reference path)
+//   *EnzymeAD   = <EnzymeAD, AutodiffFwd>    (Phase 1 mixed pairing)
+//   *EnzymeFull = <EnzymeAD, EnzymeAD>       (Phase 2 full Enzyme pipeline)
+using BrachAutodiff   = BrachODEModed<DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
+using BrachEnzymeAD   = BrachODEModed<DenseDerivativeMode::EnzymeAD,    DenseDerivativeMode::AutodiffFwd>;
+using BrachEnzymeFull = BrachODEModed<DenseDerivativeMode::EnzymeAD,    DenseDerivativeMode::EnzymeAD>;
+using CR3BPAutodiff   = CR3BPModed<DenseDerivativeMode::AutodiffFwd,    DenseDerivativeMode::AutodiffFwd>;
+using CR3BPEnzymeAD   = CR3BPModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::AutodiffFwd>;
+using CR3BPEnzymeFull = CR3BPModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::EnzymeAD>;
+using MEEAutodiff     = MEEModed<DenseDerivativeMode::AutodiffFwd,      DenseDerivativeMode::AutodiffFwd>;
+using MEEEnzymeAD     = MEEModed<DenseDerivativeMode::EnzymeAD,         DenseDerivativeMode::AutodiffFwd>;
+using MEEEnzymeFull   = MEEModed<DenseDerivativeMode::EnzymeAD,         DenseDerivativeMode::EnzymeAD>;
 
 } // namespace tycho_enzyme_test
