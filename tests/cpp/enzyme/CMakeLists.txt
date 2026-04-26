@@ -6,6 +6,7 @@
 
 add_executable(tycho_enzyme_tests
     test_enzyme_jacobian.cpp
+    test_enzyme_phase_e2e.cpp
 )
 
 target_compile_options(tycho_enzyme_tests PRIVATE ${TYCHO_ENZYME_COMPILE_FLAGS})
