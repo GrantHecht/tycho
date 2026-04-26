@@ -4,6 +4,11 @@
 **Date:** 2026-04-01
 **Scope:** Add an optional `EnzymeFwd` derivative mode alongside the existing `AutodiffFwd`, `FDiffFwd`, and `FDiffCentArray` modes. Disabled by default (`ENABLE_ENZYME_AD=OFF`). No changes to existing derivative paths.
 
+> **Note:** This document is **superseded** by
+> [`docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`](../docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md).
+> It is retained for historical context. Refer to the linked spec for the
+> current design.
+
 ---
 
 ## Motivation
