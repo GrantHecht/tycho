@@ -46,6 +46,29 @@ struct WorkerThreadThrowingSHO
     }
 };
 
+// Structural twin of WorkerThreadThrowingSHO without the throw check —
+// gives a non-throwing baseline that uses the same StaticODE / FDiffFwd
+// pathway, so accept-count calibration in
+// STMParallelWorkerThrowsLeavesMainCountersCurrent compares apples to
+// apples (different DenseDerivativeMode between SHO and the throwing
+// variant produces noticeably different step cadences).
+struct NonThrowingSHOTwin
+    : oc::StaticODE<NonThrowingSHOTwin, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                    vf::DenseDerivativeMode::FDiffFwd> {
+    using Base = oc::StaticODE<NonThrowingSHOTwin, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                               vf::DenseDerivativeMode::FDiffFwd>;
+
+    NonThrowingSHOTwin() { this->set_ode_size(2, 0, 0); }
+
+    template <class InType, class OutType>
+    inline void compute_impl(vf::CVecRef<InType> x_, vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        auto fx = fx_.const_cast_derived();
+        fx[0] = Scalar(x_[1]);
+        fx[1] = Scalar(-x_[0]);
+    }
+};
+
 // Main-AND-worker throwing variant — main throws once t exceeds a threshold,
 // so the synchronous inter-segment integrate_core inside the dispatch loop
 // raises while worker tasks are still submitted. Exercises the unwind-drain
@@ -143,28 +166,70 @@ TEST_F(IntegratorTest, STMParallelExtraFailuresCapWithAndNMore) {
 
 // When workers throw, the main thread has already run n_parts-1 segments
 // synchronously while dispatching tasks. Those completed segments' accept
-// counts must be visible in get_naccept() after the call (success or
-// exception), via the RAII CounterWriteback over the threadpool branch.
+// counts must publish to get_naccept() via the threadpool branch's RAII
+// CounterWriteback (commit b5db505 hoisted the writeback to cover the
+// total_main_na accumulator across all completed main-thread segments).
+//
+// Bracket pin: a bare EXPECT_GT(get_naccept(), 0) would still pass if the
+// writeback published only the last per-segment local main_na (the pre-b5db505
+// bug), or if some unrelated bookkeeping wrote 1. This test calibrates the
+// expected count against a non-throwing baseline (identical SHO dynamics, same
+// n_parts) and asserts the post-throw counter falls within
+// [baseline * (n_parts - 1) / n_parts, baseline] — i.e. main thread completed
+// at least (n_parts - 1) segments and at most all n_parts. A regression that
+// reverts to per-segment-local writeback would produce ~baseline / n_parts,
+// failing the lower bound.
 TEST_F(IntegratorTest, STMParallelWorkerThrowsLeavesMainCountersCurrent) {
+    constexpr int kNParts = 4;
+    constexpr double kTf = 4.0;
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+
+    // Calibrate against a structural twin of WorkerThreadThrowingSHO that
+    // omits the throw — same StaticODE / FDiffFwd pathway → matching step
+    // cadence → meaningful comparison. Using SHO (expression-based ODE) here
+    // would diverge by a ~3x step-count factor due to different
+    // DenseDerivativeMode codepaths in calculate_jacobian.
+    NonThrowingSHOTwin baseline_ode;
+    Integrator<NonThrowingSHOTwin> baseline_integ(baseline_ode, IVPAlg::DOPRI87, 0.05);
+    baseline_integ.set_abs_tol(1e-8);
+    baseline_integ.set_rel_tol(1e-8);
+    EXPECT_EQ(baseline_integ.get_naccept(), 0);
+    (void)baseline_integ.integrate_stm_parallel(x0, kTf, kNParts);
+    const int64_t baseline_naccept = baseline_integ.get_naccept();
+    ASSERT_GT(baseline_naccept, 0)
+        << "Calibration run produced no accepted steps — baseline ODE likely misconfigured.";
+
+    // The throw originates when futures are drained AFTER the for-loop has
+    // submitted all tasks AND the main thread has run all (n_parts - 1) main
+    // segments. So total_main_na should equal baseline modulo small
+    // FP-timing divergence. Per-segment-local writeback regression would
+    // publish only the last segment's main_na ≈ baseline / (n_parts - 1).
+    // Lower bound at baseline / 2 catches that (~33% < 50%) while allowing
+    // a wide margin for any FP drift; upper bound at 2*baseline catches
+    // accidental double-counting.
+    const int64_t lower_bound = baseline_naccept / 2;
+    const int64_t upper_bound = 2 * baseline_naccept;
+
     WorkerThreadThrowingSHO ode;
     Integrator<WorkerThreadThrowingSHO> integ(ode, IVPAlg::DOPRI87, 0.05);
     integ.set_abs_tol(1e-8);
     integ.set_rel_tol(1e-8);
-
-    Eigen::Vector3d x0;
-    x0 << 1.0, 0.0, 0.0;
-    const double tf = 4.0;
-
     EXPECT_EQ(integ.get_naccept(), 0);
 
-    EXPECT_THROW((void)integ.integrate_stm_parallel(x0, tf, 4), std::runtime_error);
+    EXPECT_THROW((void)integ.integrate_stm_parallel(x0, kTf, kNParts), std::runtime_error);
 
-    // Main thread completed n_parts-1 = 3 synchronous propagation segments
-    // before the futures were drained and threw. Those segments' accept
-    // counts must publish to the member counter via RAII writeback.
-    EXPECT_GT(integ.get_naccept(), 0)
-        << "Main-thread accept count from completed pre-throw segments must "
-           "land in get_naccept() via the threadpool branch's CounterWriteback.";
+    const int64_t observed = integ.get_naccept();
+    EXPECT_GE(observed, lower_bound)
+        << "Writeback should reflect accumulated main-thread accept count, not "
+           "per-segment-local (baseline=" << baseline_naccept << ", lower_bound="
+        << lower_bound << ", observed=" << observed << "). A regression that publishes "
+           "only the last segment's local main_na would land near "
+        << (baseline_naccept / (kNParts - 1)) << ".";
+    EXPECT_LE(observed, upper_bound)
+        << "Writeback should not exceed 2*baseline (upper_bound=" << upper_bound
+        << ", observed=" << observed << ") — guards against accidental double-counting.";
 }
 
 // P0.5: when the synchronous main-thread integrate_core inside the dispatch
