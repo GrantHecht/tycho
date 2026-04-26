@@ -245,8 +245,6 @@ ctest --test-dir tests/cpp/enzyme --output-on-failure
 **Mode constraints (Phase 1):**
 
 - `<EnzymeAD, AutodiffFwd>` is the supported Phase 1 pairing.
-- `EnzymeAD` VectorFunctions must NOT be marked `Vectorizable<Derived>=true`
-  until Phase 5 lifts it; the SuperScalar `static_assert` fires.
 
 **Mode constraints (Phase 2):**
 
@@ -290,6 +288,32 @@ Constraints:
   (`compute_jacobian`, `compute_jacobian_adjointgradient_adjointhessian`).
   Calling `.compute()` directly on a non-templated VF is a separate
   signature mismatch — use the templated form if `.compute()` is needed.
+
+**Vectorizable VFs with EnzymeAD (Phase 5a):**
+
+A VectorFunction with `static constexpr bool is_vectorizable = true;` may
+be paired with `EnzymeAD` Jacobian and/or Hessian modes.  Dispatch is
+**scalarize-per-lane**: when invoked with `Eigen::Array<double, W, 1>`
+SuperScalar Scalar, the EnzymeAD path extracts each lane into a
+double-typed local, runs the scalar Phase 1/2 Enzyme computation, and
+packs the lane results back into the SuperScalar `fx`/`jx`/`gx`/`hx`.
+
+This is correct lane-for-lane against scalar Enzyme (1e-12 Jacobian,
+1e-10 Hessian) but does not provide genuinely-SIMD differentiation —
+each lane pays the per-call cost of one `__enzyme_fwddiff` (or
+fwddiff-of-autodiff for Hessians).  An autodiff-vectorized path that
+SIMDs through `Eigen::Array<double, 4, 1>` arithmetic will typically be
+several times faster than scalarize-per-lane EnzymeAD, especially for
+small VF bodies.
+
+**Phase 5b (direct-SIMD differentiation through Enzyme) is not shipped.**
+The plan's Phase 5b would have called `__enzyme_fwddiff` over a wrapper
+that operates on `Eigen::Array<double, 4, 1>` directly, letting Enzyme
+differentiate through SIMD ops.  It is off-ramped because (a) the
+`enzyme_width` API path is currently broken on this Enzyme build (see
+`docs/superpowers/plans/...md` Task 3 off-ramp) and (b) the Phase 5a
+scalarize path is correctness-only; users wanting peak vector throughput
+should pair `Vectorizable<Derived>=true` with `AutodiffFwd` for now.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
