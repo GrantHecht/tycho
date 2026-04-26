@@ -107,6 +107,34 @@ inline void enzyme_for_outer_wrapper(const Derived* self,
 
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+
+// FoF inner wrapper: computes f(x) AND J(x)·dx_inner via Enzyme forward mode.
+//
+// Outputs:
+//   fx_data       = f(x)               (primal)
+//   dfx_inner_data = J(x) · dx_inner   (forward tangent)
+//
+// dx_inner is the fixed inner-seed (will be e_j when called from the FoF
+// caller).  Same allocation-discipline as the FoR wrapper: nothing inside
+// the wrapper allocates so Enzyme's analysis cannot encounter heap-resize
+// alignment-mask arithmetic that produces i128 shifts.
+template <class Derived>
+inline void enzyme_fof_inner_wrapper(const Derived* self,
+                                     const double* x_data, double* fx_data,
+                                     double* dx_inner, double* dfx_inner_data,
+                                     int n_in, int n_out) {
+    __enzyme_fwddiff<void>(
+        reinterpret_cast<void*>(&enzyme_compute_wrapper<Derived>),
+        enzyme_const, self,
+        enzyme_dup,   x_data,         dx_inner,
+        enzyme_dup,   fx_data,        dfx_inner_data,
+        enzyme_const, n_in,
+        enzyme_const, n_out);
+}
+
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward
+
 } // namespace detail
 
 //! First derivatives via Enzyme forward-mode AD.
@@ -302,6 +330,67 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
     }
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+    template <class InType, class AdjHessType, class AdjVarType>
+    inline void compute_adjoint_hessian_fof_(
+        CVecRef<InType> x,
+        MatRef<AdjHessType> hx,
+        CVecRef<AdjVarType> adjvars,
+        int ir, int or_) const {
+
+        Eigen::Matrix<double, IR, 1> x_local = x;
+        Eigen::Matrix<double, IR, 1> dx_outer(ir);
+        Eigen::Matrix<double, IR, 1> dx_inner(ir);
+        Eigen::Matrix<double, OR, 1> fx_primal(or_);
+        Eigen::Matrix<double, OR, 1> dfx_outer_shadow(or_);     // d/dx of fx, ignored
+        Eigen::Matrix<double, OR, 1> dfx_inner_primal(or_);     // J · e_j primal
+        Eigen::Matrix<double, OR, 1> ddfx_outer_shadow(or_);    // ∂(J·e_j)/∂x · e_i
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        // O(IR^2) outer fwddiff calls; each yields ∂²f_k/∂x_i∂x_j for all k.
+        for (int i = 0; i < ir; ++i) {
+            dx_outer.setZero();
+            dx_outer[i] = 1.0;
+
+            for (int j = 0; j < ir; ++j) {
+                dx_inner.setZero();
+                dx_inner[j] = 1.0;
+                fx_primal.setZero();
+                dfx_outer_shadow.setZero();
+                dfx_inner_primal.setZero();
+                ddfx_outer_shadow.setZero();
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(&detail::enzyme_fof_inner_wrapper<Derived>),
+                    enzyme_const, self,
+                    enzyme_dup,   x_local.data(),         dx_outer.data(),
+                    enzyme_dup,   fx_primal.data(),       dfx_outer_shadow.data(),
+                    enzyme_const, dx_inner.data(),
+                    enzyme_dup,   dfx_inner_primal.data(),
+                                  ddfx_outer_shadow.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                // ddfx_outer_shadow[k] = ∂²f_k/∂x_i∂x_j; sum with adjvars.
+                double acc = 0.0;
+                for (int k = 0; k < or_; ++k) acc += adjvars[k] * ddfx_outer_shadow[k];
+                hx(i, j) = acc;
+            }
+        }
+
+        // Symmetrize. Mathematically the Hessian is symmetric; numerically each
+        // (i,j) and (j,i) pair may differ by ~1e-13.
+        for (int i = 0; i < ir; ++i) {
+            for (int j = i + 1; j < ir; ++j) {
+                double avg = 0.5 * (hx(i, j) + hx(j, i));
+                hx(i, j) = avg;
+                hx(j, i) = avg;
+            }
+        }
+    }
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward
 };
 
 #endif // TYCHO_HAS_ENZYME_AD
