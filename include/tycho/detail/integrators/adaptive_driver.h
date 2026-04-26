@@ -328,6 +328,16 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                         "and intermediate-stage evaluations.");
                 }
 
+                // err_norm catches NaN that flows through xnext or xnext_est, but
+                // xnext_mid is computed from a different stage combination
+                // (extra-stage interpolant on Vern7/8/9) and can carry NaN while
+                // the embedded pair stays finite. Guard the midpoint slot
+                // separately when storemidpoints will push it into user storage.
+                if (storemidpoints) {
+                    check_state_finite_or_throw(xnext_mid.head(ode.x_vars()), xi[ode.t_var()], h,
+                                                "AdaptiveDriver::stepper.step (midpoint)");
+                }
+
                 auto outcome = update_controller(controller, static_cast<double>(h), err_norm,
                                                  cfg.error_order, naccept);
                 double hnext = outcome.dt_new;
@@ -390,6 +400,13 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                         ODEDeriv xdot_mid(ode.output_rows());
                         xdot_mid.setZero();
                         ode.compute(xnext_mid, xdot_mid);
+                        // The ODE may be singular at the midpoint state even
+                        // when xnext_mid itself is finite (e.g. 1/r dynamics
+                        // whose midpoint reconstruction lands near r=0). Guard
+                        // before pushing into the user's deriv buffer.
+                        check_state_finite_or_throw(
+                            xdot_mid.head(ode.x_vars()), xi[ode.t_var()], h,
+                            "AdaptiveDriver::stepper.step (midpoint deriv)");
                         derivs.push_back(xdot_mid);
                     }
                 }

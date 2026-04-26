@@ -207,6 +207,157 @@ TEST_F(NanPropagationTest, BatchPathReportsOffendingTrajectoryIndex) {
 }
 
 // -----------------------------------------------------------------------------
+// Adaptive midpoint guards: verify the new check_state_finite_or_throw calls
+// inside the AdaptiveDriver/ParallelDriver adaptive branches catch the two
+// midpoint-NaN paths the err_norm chokepoint cannot reach:
+//
+//   A.1 — extra-stage compute (Vern7/8/9, BS5) returns NaN, which propagates
+//         into xnext_mid via the Bmid weighted sum while xnext / xnext_est
+//         (computed from the standard stages only) stay finite. The new guard
+//         fires inside the adaptive branch with substring "(midpoint)".
+//
+//   A.2 — xnext_mid itself is finite, but the post-step
+//         ode.compute(xnext_mid, xdot_mid) call hits a singular RHS (e.g. 1/r
+//         dynamics whose midpoint reconstruction lands on the singularity),
+//         producing NaN xdot_mid. The new guard fires before push_back into
+//         the user's deriv buffer, with substring "(midpoint deriv)".
+//
+// Strategy: NaN-injection ODE keyed on the input state's time component.
+//   • BS5 (ExtraC[0] = 1/2): NaN at t = h/2 hits the extra-stage compute,
+//     corrupts xnext_mid, A.1 guard fires before A.2's compute call.
+//   • DOPRI87 (no extra stages, no main stage at c=1/2): NaN at t = h/2 hits
+//     only the line-392 ode.compute(xnext_mid, xdot_mid) call, A.2 fires.
+// -----------------------------------------------------------------------------
+
+namespace {
+
+// SHO variant that returns NaN derivatives when its input state's time
+// component matches `nan_at_t_` to within `tol_`. The trigger is keyed on the
+// state-vector time slot (x[2] for the 2-state SHO) so it activates uniformly
+// across stage / extra-stage / midpoint-deriv compute calls regardless of
+// FSAL bookkeeping or step counter.
+struct TimeKeyedNaNSHO
+    : oc::StaticODE<TimeKeyedNaNSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                    vf::DenseDerivativeMode::FDiffFwd> {
+    using Base = oc::StaticODE<TimeKeyedNaNSHO, 2, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                               vf::DenseDerivativeMode::FDiffFwd>;
+
+    // Default to a NaN trigger value so the equality check against any finite
+    // input time always evaluates false — this makes the default-constructed
+    // ODE behave like plain SHO. Required because Integrator's delegating
+    // constructor default-constructs ode_ before copying the user-supplied one.
+    double nan_at_t_ = std::numeric_limits<double>::quiet_NaN();
+    double tol_ = 1e-12;
+
+    TimeKeyedNaNSHO() { this->set_ode_size(2, 0, 0); }
+    TimeKeyedNaNSHO(double nan_at_t, double tol = 1e-12) : nan_at_t_(nan_at_t), tol_(tol) {
+        this->set_ode_size(2, 0, 0);
+    }
+
+    template <class InType, class OutType>
+    inline void compute_impl(vf::CVecRef<InType> x_, vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        // NOTE: auto& (not auto) so writes propagate to fx_; const_cast_derived
+        // returns Derived&, and `auto` would deduce Derived (a copy).
+        auto &fx = fx_.const_cast_derived();
+        const double t = static_cast<double>(x_[2]);
+        if (std::abs(t - nan_at_t_) < tol_) {
+            fx[0] = Scalar(std::numeric_limits<double>::quiet_NaN());
+            fx[1] = Scalar(std::numeric_limits<double>::quiet_NaN());
+            return;
+        }
+        fx[0] = Scalar(x_[1]);
+        fx[1] = Scalar(-x_[0]);
+    }
+};
+
+} // namespace
+
+// A.1 — BS5 with NaN injected at t = h/2 corrupts xnext_mid via the extra-stage
+// compute (BS5 ExtraC[0] = 1/2). Standard stages of BS5 evaluate at c values
+// {0, 1/6, 2/9, 3/7, 2/3, 3/4, 1, 1, 1} — none equals 1/2 — so xnext / xnext_est
+// stay finite, err_norm guard does NOT fire, and the new midpoint guard inside
+// the adaptive branch catches the NaN-laced xnext_mid.
+TEST_F(NanPropagationTest, AdaptiveMidpointStateGuardFiresOnExtraStageNaN) {
+    // Initial step under HW-disabled adaptive: with def_step_size = 0.1 and
+    // tf = 0.1, AdaptiveDriver computes h = 0.9 * H/numsteps = 0.9 * 0.1/2 =
+    // 0.045 (numsteps = abs(0.1/0.1)+1 = 2). First step's midpoint is at
+    // t = 0 + 0.045/2 = 0.0225. BS5's extra stage 0 fires at the same time.
+    //
+    // Loose tolerances ensure step 1 is accepted on first try (no controller
+    // rejection that would shrink h and shift the midpoint off the trigger).
+    constexpr double kFirstStepMidpoint = 0.0225;
+    TimeKeyedNaNSHO ode(kFirstStepMidpoint);
+    Integrator<TimeKeyedNaNSHO> integ(ode, IVPAlg::BS5, 0.1);
+    integ.set_auto_initial_dt(false); // make initial dt deterministic
+    integ.set_abs_tol(1.0);
+    integ.set_rel_tol(1.0);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    std::vector<Integrator<TimeKeyedNaNSHO>::EventPack> events;
+
+    try {
+        (void)integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true);
+        FAIL() << "Expected runtime_error from adaptive midpoint guard, got success.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
+            << "Diagnostic should mention 'Non-finite state'; got: " << msg;
+        EXPECT_NE(msg.find("AdaptiveDriver::stepper.step (midpoint)"), std::string::npos)
+            << "Should identify the new adaptive-branch midpoint guard; got: " << msg;
+        EXPECT_EQ(msg.find("Non-finite error norm"), std::string::npos)
+            << "err_norm guard must NOT fire here — extra-stage NaN does not flow into "
+               "xnext or xnext_est; got: "
+            << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error, got a different exception type.";
+    }
+}
+
+// A.2 — DOPRI87 with NaN injected at t = h/2 hits ONLY the post-step
+// ode.compute(xnext_mid, xdot_mid) call. DOPRI87 has InterpStages = 0 (no
+// extra stages) and no main stage at c = 1/2, so all stage evaluations stay
+// finite and xnext_mid is finite. The new xdot_mid guard catches the NaN
+// derivative before push_back into the user's deriv buffer.
+//
+// Loose tolerances ensure step 1 is accepted on first try (no controller
+// rejection that would shift the midpoint t off the trigger).
+TEST_F(NanPropagationTest, AdaptiveMidpointDerivGuardFiresOnSingularRhs) {
+    constexpr double kFirstStepMidpoint = 0.0225;
+    TimeKeyedNaNSHO ode(kFirstStepMidpoint);
+    Integrator<TimeKeyedNaNSHO> integ(ode, IVPAlg::DOPRI87, 0.1);
+    integ.set_auto_initial_dt(false);
+    integ.set_abs_tol(1.0);
+    integ.set_rel_tol(1.0);
+
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    std::vector<Integrator<TimeKeyedNaNSHO>::EventPack> events;
+
+    try {
+        (void)integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true);
+        FAIL() << "Expected runtime_error from midpoint-deriv guard, got success.";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
+            << "Diagnostic should mention 'Non-finite state'; got: " << msg;
+        EXPECT_NE(msg.find("AdaptiveDriver::stepper.step (midpoint deriv)"), std::string::npos)
+            << "Should identify the new midpoint-deriv guard; got: " << msg;
+        EXPECT_EQ(msg.find("Non-finite error norm"), std::string::npos)
+            << "err_norm guard must NOT fire — singular RHS only manifests at "
+               "ode.compute(xnext_mid); got: "
+            << msg;
+        EXPECT_EQ(msg.find("(midpoint)\""), std::string::npos)
+            << "The state-only midpoint guard must NOT fire — xnext_mid itself is "
+               "finite for DOPRI87 (no extra stages); got: "
+            << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error, got a different exception type.";
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Event VF NaN guard (event_handler.h:80-87).
 // An event function that returns a non-finite value on a finite state
 // must surface immediately with t + event-index context. Without the

@@ -430,6 +430,19 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                     "); state or embedded estimate produced NaN/Inf.");
                             }
 
+                            // err_norm catches NaN that flows through xnext or
+                            // xnext_est, but xnext_mid is computed from a
+                            // different stage combination (extra-stage
+                            // interpolant on Vern7/8/9) and can carry NaN while
+                            // the embedded pair stays finite. Guard the
+                            // midpoint slot separately when storemidpoints will
+                            // push it into user storage.
+                            if (storemidpoints) {
+                                check_state_finite_or_throw(
+                                    xnext_mid.head(ode.x_vars()), xis[itmp][ode.t_var()], h_lane,
+                                    "ParallelDriver::stepper.step (midpoint)", itmp);
+                            }
+
                             auto outcome = update_controller(controllers[itmp], h_lane, err_norm,
                                                              cfg.error_order, nacc[itmp]);
                             double hnext = outcome.dt_new;
@@ -493,6 +506,14 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                     ScalarDeriv xdot_mid(ode.output_rows());
                                     xdot_mid.setZero();
                                     ode.compute(xnext_mid, xdot_mid);
+                                    // Guard xdot_mid against ODE singularity at
+                                    // a finite midpoint state (e.g. 1/r dynamics
+                                    // whose midpoint reconstruction lands near
+                                    // r=0) before pushing into the user buffer.
+                                    check_state_finite_or_throw(
+                                        xdot_mid.head(ode.x_vars()), xis[itmp][ode.t_var()],
+                                        hs[itmp], "ParallelDriver::stepper.step (midpoint deriv)",
+                                        itmp);
                                     derivs_s[itmp].push_back(xdot_mid);
                                 }
                             }
