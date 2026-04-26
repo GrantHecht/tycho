@@ -591,8 +591,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // Counter is exposed via get_failed_event_count(); callers that
         // care about silent nullopt slots should poll that instead.
         ~EventCounterWriteback() noexcept {
-            integ.n_failed_event_refinements_.value.store(static_cast<int64_t>(nfailed),
-                                                          std::memory_order_release);
+            integ.n_failed_event_refinements_.store(static_cast<int64_t>(nfailed));
         }
     };
 
@@ -600,32 +599,41 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         const Integrator &integ;
         const std::vector<int> &nfailed;
         ~BatchEventCounterWriteback() noexcept {
-            integ.n_failed_event_refinements_.value.store(
-                std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0}),
-                std::memory_order_release);
+            integ.n_failed_event_refinements_.store(
+                std::accumulate(nfailed.begin(), nfailed.end(), int64_t{0}));
         }
     };
 
     // Copyable wrapper around std::atomic<int64_t>. The atomic itself is
     // non-copyable, but Integrator must remain copyable (control laws and
-    // ode_phase clone integrators by value). Copy/move snapshots the load
-    // without inheriting any cross-thread ordering — same semantics as
-    // memberwise copy of a plain int64_t.
-    struct AtomicInt64 {
-        std::atomic<int64_t> value{0};
+    // ode_phase clone integrators by value). Copy/move performs an
+    // acquire-load + release-store; the resulting object holds an
+    // observationally-identical snapshot, with the same per-load atomicity
+    // guarantees as the source. The acquire/release ordering is baked into
+    // the load()/store() members so all call sites use a single, file-wide
+    // ordering convention — direct access to the atomic is intentionally
+    // forbidden to prevent a future call site from quietly weakening the
+    // ordering.
+    class AtomicInt64 {
+      public:
         AtomicInt64() = default;
-        AtomicInt64(const AtomicInt64 &o) noexcept
-            : value(o.value.load(std::memory_order_acquire)) {}
+        AtomicInt64(const AtomicInt64 &o) noexcept : value_(o.load()) {}
         AtomicInt64 &operator=(const AtomicInt64 &o) noexcept {
             if (this != &o)
-                value.store(o.value.load(std::memory_order_acquire), std::memory_order_release);
+                store(o.load());
             return *this;
         }
-        AtomicInt64(AtomicInt64 &&o) noexcept : value(o.value.load(std::memory_order_acquire)) {}
+        AtomicInt64(AtomicInt64 &&o) noexcept : value_(o.load()) {}
         AtomicInt64 &operator=(AtomicInt64 &&o) noexcept {
-            value.store(o.value.load(std::memory_order_acquire), std::memory_order_release);
+            if (this != &o)
+                store(o.load());
             return *this;
         }
+        int64_t load() const noexcept { return value_.load(std::memory_order_acquire); }
+        void store(int64_t v) noexcept { value_.store(v, std::memory_order_release); }
+
+      private:
+        std::atomic<int64_t> value_{0};
     };
 
     // Count of event refinements that failed both bisect+Newton passes.
@@ -724,7 +732,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// counter is a cheap summary of how many nullopts are present. Reset
     /// to 0 at the start of every `find_events` invocation.
     [[nodiscard]] int64_t get_failed_event_count() const {
-        return this->n_failed_event_refinements_.value.load(std::memory_order_acquire);
+        return this->n_failed_event_refinements_.load();
     }
 
     void set_auto_initial_dt(bool on) { this->use_hairer_wanner_initdt_ = on; }
