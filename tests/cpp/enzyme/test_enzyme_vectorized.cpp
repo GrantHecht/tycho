@@ -47,7 +47,7 @@ struct BrachVectorizable
 
 using BrachVectorizableEnzymeAD = BrachVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD,
-    tycho::vf::DenseDerivativeMode::AutodiffFwd>;
+    tycho::vf::DenseDerivativeMode::FDiffFwd>;
 
 using BrachVectorizableEnzymeFull = BrachVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD,

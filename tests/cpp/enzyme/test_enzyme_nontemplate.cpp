@@ -9,8 +9,8 @@
 // observation that EnzymeAD's free-function-pointer differentiation has no
 // dual-number requirement.
 //
-// AutodiffFwd cannot do this — the canonical compile-fail mode is locked in
-// by tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
+// The old fwd-mode autodiff path cannot do this — the canonical compile-fail
+// mode is locked in by tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
 // =============================================================================
 
 #include <gtest/gtest.h>
@@ -38,7 +38,7 @@ TEST(EnzymeNonTemplate, ComputeJacobianMatchesAnalytic) {
 
 TEST(EnzymeNonTemplate, JacobianMatchesTemplatedReference) {
     tycho_enzyme_test::BrachEnzymeNonTemplate fNT(32.2);
-    tycho_enzyme_test::BrachAutodiff fA(32.2);
+    tycho_enzyme_test::BrachFDiff fA(32.2);
     Eigen::Matrix<double, 5, 1> x;
     x << 1.0, 2.0, 3.0, 0.0, 0.5;
 
@@ -50,13 +50,13 @@ TEST(EnzymeNonTemplate, JacobianMatchesTemplatedReference) {
     fNT.compute_jacobian(x, fxNT, jxNT);
     fA.compute_jacobian(x, fxA, jxA);
 
-    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-12))
-        << "Non-templated Enzyme Jacobian disagrees with autodiff reference";
+    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-5)) // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
+        << "Non-templated Enzyme Jacobian disagrees with FDiffCentArray reference";
 }
 
 TEST(EnzymeNonTemplate, HessianMatchesTemplatedReference) {
     tycho_enzyme_test::BrachEnzymeNonTemplate fNT(32.2);
-    tycho_enzyme_test::BrachAutodiff fA(32.2);
+    tycho_enzyme_test::BrachFDiff fA(32.2);
     Eigen::Matrix<double, 5, 1> x;
     x << 1.0, 2.0, 3.0, 0.0, 0.5;
     Eigen::Matrix<double, 3, 1> lam;
@@ -74,9 +74,9 @@ TEST(EnzymeNonTemplate, HessianMatchesTemplatedReference) {
     fNT.compute_jacobian_adjointgradient_adjointhessian(x, fxNT, jxNT, gNT, hNT, lam);
     fA.compute_jacobian_adjointgradient_adjointhessian(x, fxA, jxA, gA, hA, lam);
 
-    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-12)) << "Jacobian mismatch";
-    EXPECT_TRUE(gNT.isApprox(gA, 1e-12))   << "Adjoint gradient mismatch";
-    EXPECT_TRUE(hNT.isApprox(hA, 1e-10))   << "Adjoint Hessian mismatch";
+    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-5))  << "Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
+    EXPECT_TRUE(gNT.isApprox(gA, 1e-5))    << "Adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
+    EXPECT_TRUE(hNT.isApprox(hA, 1e-3))    << "Adjoint Hessian mismatch"; // FDiffCentArray Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
 }
 
 // Documents the dispatch constraint: SuperScalar lane-batched compute requires

@@ -2,7 +2,7 @@
 // Tycho — Copyright 2026-present Grant R. Hecht. Apache 2.0.
 // Enzyme-mode test ODE definitions.  Mirror existing structs in
 // extensions/Tycho_Extensions.h, parameterized by derivative mode so we can
-// pair <EnzymeAD, AutodiffFwd> against <AutodiffFwd, AutodiffFwd> for
+// pair <EnzymeAD, FDiffCentArray> against <FDiffCentArray, FDiffCentArray> for
 // lane-for-lane Jacobian comparison in Task 1.8.
 //
 // CR3BP and MEE bodies are lifted verbatim from
@@ -149,8 +149,8 @@ struct MEEModed : VectorFunction<MEEModed<Jm, Hm>, 9, 6, Jm, Hm> {
 //
 // This is the Phase 4 ergonomic win: when paired with <EnzymeAD, EnzymeAD>,
 // the user's compute_impl uses ordinary `double` arithmetic instead of
-// dual-number-friendly templated arithmetic.  AutodiffFwd cannot do this —
-// see tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
+// dual-number-friendly templated arithmetic.  The old fwd-mode autodiff path
+// could not do this — see tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
 struct BrachEnzymeNonTemplate
     : tycho::vf::VectorFunction<BrachEnzymeNonTemplate, 5, 3,
                                 tycho::vf::DenseDerivativeMode::EnzymeAD,
@@ -170,17 +170,19 @@ struct BrachEnzymeNonTemplate
 };
 
 // Convenience aliases used by tests/benchmarks.
-//   *Autodiff   = <AutodiffFwd, AutodiffFwd> (reference path)
-//   *EnzymeAD   = <EnzymeAD, AutodiffFwd>    (Phase 1 mixed pairing)
+//   *FDiff      = <FDiffCentArray, FDiffFwd> (reference path: central-diff Jacobian,
+//                  forward-diff Hessian; FDiffCentArray has no DenseSecondDerivatives
+//                  specialisation so FDiffFwd is used for the Hessian path)
+//   *EnzymeAD   = <EnzymeAD, FDiffFwd>       (Phase 1 mixed pairing)
 //   *EnzymeFull = <EnzymeAD, EnzymeAD>       (Phase 2 full Enzyme pipeline)
-using BrachAutodiff   = BrachODEModed<DenseDerivativeMode::AutodiffFwd, DenseDerivativeMode::AutodiffFwd>;
-using BrachEnzymeAD   = BrachODEModed<DenseDerivativeMode::EnzymeAD,    DenseDerivativeMode::AutodiffFwd>;
-using BrachEnzymeFull = BrachODEModed<DenseDerivativeMode::EnzymeAD,    DenseDerivativeMode::EnzymeAD>;
-using CR3BPAutodiff   = CR3BPModed<DenseDerivativeMode::AutodiffFwd,    DenseDerivativeMode::AutodiffFwd>;
-using CR3BPEnzymeAD   = CR3BPModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::AutodiffFwd>;
-using CR3BPEnzymeFull = CR3BPModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::EnzymeAD>;
-using MEEAutodiff     = MEEModed<DenseDerivativeMode::AutodiffFwd,      DenseDerivativeMode::AutodiffFwd>;
-using MEEEnzymeAD     = MEEModed<DenseDerivativeMode::EnzymeAD,         DenseDerivativeMode::AutodiffFwd>;
-using MEEEnzymeFull   = MEEModed<DenseDerivativeMode::EnzymeAD,         DenseDerivativeMode::EnzymeAD>;
+using BrachFDiff      = BrachODEModed<DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd>;
+using BrachEnzymeAD   = BrachODEModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::FDiffFwd>;
+using BrachEnzymeFull = BrachODEModed<DenseDerivativeMode::EnzymeAD,       DenseDerivativeMode::EnzymeAD>;
+using CR3BPFDiff      = CR3BPModed<DenseDerivativeMode::FDiffCentArray,    DenseDerivativeMode::FDiffFwd>;
+using CR3BPEnzymeAD   = CR3BPModed<DenseDerivativeMode::EnzymeAD,          DenseDerivativeMode::FDiffFwd>;
+using CR3BPEnzymeFull = CR3BPModed<DenseDerivativeMode::EnzymeAD,          DenseDerivativeMode::EnzymeAD>;
+using MEEFDiff        = MEEModed<DenseDerivativeMode::FDiffCentArray,       DenseDerivativeMode::FDiffFwd>;
+using MEEEnzymeAD     = MEEModed<DenseDerivativeMode::EnzymeAD,             DenseDerivativeMode::FDiffFwd>;
+using MEEEnzymeFull   = MEEModed<DenseDerivativeMode::EnzymeAD,             DenseDerivativeMode::EnzymeAD>;
 
 } // namespace tycho_enzyme_test

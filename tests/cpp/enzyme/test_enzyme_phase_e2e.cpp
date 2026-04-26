@@ -24,7 +24,7 @@
 
 namespace {
 
-TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdAutodiffFwd) {
+TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     using namespace tycho;
     using namespace tycho::oc;
     using namespace tycho::solvers;
