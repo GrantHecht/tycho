@@ -142,6 +142,33 @@ struct MEEModed : VectorFunction<MEEModed<Jm, Hm>, 9, 6, Jm, Hm> {
     }
 };
 
+// Phase 4: non-templated compute_impl variant. Same brachistochrone dynamics
+// as BrachODEModed<EnzymeAD, EnzymeAD>, but compute_impl drops the
+// `<class InType, class OutType>` template header and uses concrete-typed
+// arguments matching the EnzymeAD wrapper's `Eigen::Map<...>` exactly.
+//
+// This is the Phase 4 ergonomic win: when paired with <EnzymeAD, EnzymeAD>,
+// the user's compute_impl uses ordinary `double` arithmetic instead of
+// dual-number-friendly templated arithmetic.  AutodiffFwd cannot do this —
+// see tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
+struct BrachEnzymeNonTemplate
+    : tycho::vf::VectorFunction<BrachEnzymeNonTemplate, 5, 3,
+                                tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                tycho::vf::DenseDerivativeMode::EnzymeAD> {
+    double g_;
+    BrachEnzymeNonTemplate(double g = 32.2) : g_{g} {}
+
+    inline void compute_impl(
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1>> x,
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx) const {
+        const double v = x[2];
+        const double theta = x[4];
+        fx[0] = std::sin(theta) * v;
+        fx[1] = -std::cos(theta) * v;
+        fx[2] = g_ * std::cos(theta);
+    }
+};
+
 // Convenience aliases used by tests/benchmarks.
 //   *Autodiff   = <AutodiffFwd, AutodiffFwd> (reference path)
 //   *EnzymeAD   = <EnzymeAD, AutodiffFwd>    (Phase 1 mixed pairing)
