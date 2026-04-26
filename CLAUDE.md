@@ -308,30 +308,29 @@ Constraints:
   Calling `.compute()` directly on a non-templated VF is a separate
   signature mismatch — use the templated form if `.compute()` is needed.
 
-**Vectorizable VFs with EnzymeAD (Phase 5a):**
+**Vectorizable VFs with EnzymeAD (Phase 5a + 5b):**
 
 A VectorFunction with `static constexpr bool is_vectorizable = true;` may
-be paired with `EnzymeAD` Jacobian and/or Hessian modes.  Dispatch is
-**scalarize-per-lane**: when invoked with `Eigen::Array<double, W, 1>`
-SuperScalar Scalar, the EnzymeAD path extracts each lane into a
-double-typed local, runs the scalar Phase 1/2 Enzyme computation, and
-packs the lane results back into the SuperScalar `fx`/`jx`/`gx`/`hx`.
+be paired with `EnzymeAD`.  When invoked with `Eigen::Array<double, W, 1>`
+SuperScalar Scalar:
 
-This is correct lane-for-lane against scalar Enzyme (1e-12 Jacobian,
-1e-10 Hessian) but does not provide genuinely-SIMD differentiation —
-each lane pays the per-call cost of one `__enzyme_fwddiff` (or
-fwddiff-of-autodiff for Hessians).  An autodiff-vectorized path that
-SIMDs through `Eigen::Array<double, 4, 1>` arithmetic will typically be
-several times faster than scalarize-per-lane EnzymeAD, especially for
-small VF bodies.
+- **Jacobian (Phase 5b — direct SIMD):** the templated `compute_impl`
+  body is differentiated by Enzyme directly under the SuperScalar
+  arithmetic.  One `__enzyme_fwddiff` call per input dim produces W
+  per-lane tangents simultaneously via SIMD ops.  Per-lane speedup
+  ~1.78× vs scalar Enzyme on Brach (the rest of the cost is fixed
+  per-fwddiff overhead that doesn't parallelise).
+- **Hessian:** uses the Phase 5a scalarize-per-lane fallback (extract
+  lane → run scalar full-Enzyme Hessian → pack back).  A direct-SIMD
+  Hessian path would extend the FoR/FoF wrappers to operate on
+  SuperScalar; not yet implemented.
 
-**Phase 5b (direct-SIMD differentiation through Enzyme) is not shipped.**
-Phase 3's `enzyme_width` path now achieves near-SIMD-level speedups
-(60× MEE Jacobian) without requiring SIMD-typed `compute_impl` bodies,
-so the Phase 5b motivation has weakened.  Phase 5b would still let the
-user's `compute_impl` body run SIMD ops directly on
-`Eigen::Array<double, W, 1>` — relevant for compute-bound bodies whose
-math itself parallelises.  Investigating separately.
+A Vectorizable VF that is invoked with plain `double` Scalar still goes
+through the scalar Jacobian path (Phase 1 / Phase 3 batched), unchanged.
+
+Phase 3 (enzyme_width batched tangents) and Phase 5b (SIMD primal) are
+orthogonal axes.  A combined path (`enzyme_width=W` over the SS-typed
+wrapper) is a future optimisation that could give W² effective parallelism.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
