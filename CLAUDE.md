@@ -133,13 +133,13 @@ preset for your platform** — do not configure manually.
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
 | macOS (Apple Si) | `macos-llvm-release`    | `-j6`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
-| Windows x64      | `x64-Clang-Release`     | `-j8`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
+| Windows x64      | `x64-Clang-Release`     | `-j6`             |
 
 **Note:** The `-j` values above are upper bounds — use lower values on
 RAM-constrained systems. The `heavy_compile` ninja job pool auto-throttles
 heavy TUs (1 slot per 10 GB RAM), so higher `-j` values are safe: light TUs
-fill extra slots while heavy TUs are limited. On 32 GB, `-j8` is safe
+fill extra slots while heavy TUs are limited. On 32 GB, `-j6` is safe
 (pool depth 3); on 16 GB, use `-j4` (pool depth 1).
 
 **Build memory and ninja job pools:** Many binding, test, benchmark, and example
