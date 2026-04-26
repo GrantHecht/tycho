@@ -318,19 +318,41 @@ SuperScalar Scalar:
   body is differentiated by Enzyme directly under the SuperScalar
   arithmetic.  One `__enzyme_fwddiff` call per input dim produces W
   per-lane tangents simultaneously via SIMD ops.  Per-lane speedup
-  ~1.78× vs scalar Enzyme on Brach (the rest of the cost is fixed
-  per-fwddiff overhead that doesn't parallelise).
-- **Hessian:** uses the Phase 5a scalarize-per-lane fallback (extract
-  lane → run scalar full-Enzyme Hessian → pack back).  A direct-SIMD
-  Hessian path would extend the FoR/FoF wrappers to operate on
-  SuperScalar; not yet implemented.
+  ~1.78× on Brach (small body, scalar arithmetic) and ~1.58× on CR3BP
+  (`sqrt`-only, vectorises via `vsqrtpd`).
+- **Hessian:** uses the Phase 5a scalarize-per-lane fallback.  A
+  direct-SIMD Hessian path is future work.
+
+**Caveat — trig-heavy bodies regress under Phase 5b.**  `Eigen::Array
+<double, 4, 1>::cos()` and `::sin()` lower to **four separate scalar
+`cos(double)` / `sin(double)` libm calls** rather than vectorised
+`cos<4xdouble>` intrinsics.  For a body like the MEE dynamics (which
+calls `cos(x5)` and `sin(x5)` once each), the scalar Phase 3 path
+(`enzyme_width=8`) computes `cos(x5)` once and amortises across 8
+tangents; Phase 5b computes it 4× per call.  Net: Phase 5b is **~6×
+slower per lane on MEE**.
+
+Workaround: set `is_vectorizable = false` on the VF struct.  The base
+class then scalarises per lane *before* the EnzymeAD path is reached,
+and each lane uses the fast scalar Phase 3 W=8 path (~5.97 ns for MEE).
+4 lanes × 5.97 ns ≈ 24 ns — beats Phase 5b's 142 ns by ~6×.
+
+Rule of thumb:
+
+- **`is_vectorizable = true`** for VFs whose body is mostly arithmetic,
+  including `sqrt` (which vectorises): expect 1.5–1.8× per-lane wins.
+- **`is_vectorizable = false`** for VFs with trig (`sin`/`cos`/`tan`),
+  `exp`/`log`, and other transcendentals on Scalar: avoid Phase 5b's
+  scalar-libm penalty.
 
 A Vectorizable VF that is invoked with plain `double` Scalar still goes
 through the scalar Jacobian path (Phase 1 / Phase 3 batched), unchanged.
 
 Phase 3 (enzyme_width batched tangents) and Phase 5b (SIMD primal) are
-orthogonal axes.  A combined path (`enzyme_width=W` over the SS-typed
-wrapper) is a future optimisation that could give W² effective parallelism.
+orthogonal axes.  In current bench numbers the two don't compose
+materially — per-call Enzyme overhead is small once cached, so reducing
+call count via Phase 3 doesn't help when Phase 5b is already SIMD-
+saturated.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
