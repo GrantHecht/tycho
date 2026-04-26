@@ -29,9 +29,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
     static_assert(detail::enzyme_dependent_false<Derived>::value,
         "DenseDerivativeMode::EnzymeAD Hessian requires CMake option ENABLE_ENZYME_AD=ON "
-        "and the Enzyme Clang plugin installed. Note: EnzymeAD Hessian also requires "
-        "Phase 2 of the Enzyme rollout to have landed; before Phase 2, pair "
-        "<EnzymeAD, AutodiffFwd> instead.");
+        "and the Enzyme Clang plugin installed. See CLAUDE.md for the override "
+        "invocation.");
 };
 
 #else // TYCHO_HAS_ENZYME_AD
@@ -70,6 +69,43 @@ inline void enzyme_compute_wrapper(const Derived* self,
     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx(fx_data, n_out);
     self->compute_impl(x, fx);
 }
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+
+// FoR outer wrapper: computes g(x) = J(x)^T λ via Enzyme reverse mode.
+//
+// The trick: reverse-mode differentiation of a vector-output function with
+// the OUTPUT shadow seeded to v computes v^T J in the input shadow.  Setting
+// v = lam gives us the adjoint gradient g = J^T lam, written into g_data.
+// We differentiate the existing compute_wrapper directly — no extra scalar
+// wrapper s(x) = lam^T f(x) is needed.
+//
+// Scratch buffers are passed in (allocated by the caller in
+// compute_adjoint_hessian_for_).  Keeping the wrapper allocation-free is
+// important: Enzyme's IR analysis pulls in any Eigen::Matrix<…, Dynamic, …>
+// resize/allocate machinery that lives inside the wrapper, and the resulting
+// alignment-mask arithmetic emits i128 shifts that Enzyme cannot
+// differentiate.
+//
+// Pre-conditions (caller responsibility):
+//   - fx_scratch zero-initialised, length n_out.
+//   - lam_scratch initialised to lam (cotangent seed), length n_out.
+//   - g_data zero-initialised, length n_in.
+template <class Derived>
+inline void enzyme_for_outer_wrapper(const Derived* self,
+                                     const double* x_data, double* g_data,
+                                     double* fx_scratch, double* lam_scratch,
+                                     int n_in, int n_out) {
+    __enzyme_autodiff<void>(
+        reinterpret_cast<void*>(&enzyme_compute_wrapper<Derived>),
+        enzyme_const, self,
+        enzyme_dup,   x_data,     g_data,
+        enzyme_dup,   fx_scratch, lam_scratch,
+        enzyme_const, n_in,
+        enzyme_const, n_out);
+}
+
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 } // namespace detail
 
@@ -145,6 +181,127 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
             }
         }
     }
+};
+
+//! Second derivatives via Enzyme nested AD (Phase 2).
+/*!
+  Pipeline:
+  1. fx and jx come from the JMode-driven first-derivative path
+     (DenseFirstDerivatives<..., JMode>::compute_jacobian_impl).
+  2. The adjoint gradient gx = J^T lam is computed from jx by direct
+     matrix multiply — Enzyme already produced jx, no need to recompute.
+  3. The adjoint Hessian hx is the column-by-column forward derivative of
+     g(x) = J(x)^T lam with respect to x.  Each column i comes from one
+     __enzyme_fwddiff call with input tangent e_i over a wrapper whose body
+     calls __enzyme_autodiff (Forward-over-Reverse strategy).
+
+  Strategy selection happens at configure time via TYCHO_ENZYME_HESSIAN_STRATEGY;
+  the dispatch macro below picks the implementation Phase 2 has compiled.
+  Phase 2 keeps both strategies alongside each other to support the head-to-head
+  benchmark; Task 2.6 deletes the loser and removes this dispatch.
+*/
+template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
+struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::EnzymeAD>
+    : DenseFirstDerivatives<Derived, IR, OR, JMode> {
+    using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
+    VF_TYPE_ALIASES(Base)
+
+    template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
+              class AdjVarType>
+    inline void compute_jacobian_adjointgradient_adjointhessian_impl(
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
+        using Scalar = typename InType::Scalar;
+        static_assert(!IsSuperScalar<Scalar>,
+            "DenseDerivativeMode::EnzymeAD Hessian does not yet support SuperScalar/"
+            "Vectorizable dispatch. Vectorized EnzymeAD is planned for Phase 5; "
+            "until then, do not mark EnzymeAD VectorFunctions as "
+            "Vectorizable<Derived>=true.");
+
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
+
+        const int ir = this->input_rows();
+        const int or_ = this->output_rows();
+
+        // Step 1: fx and jx via the JMode first-derivative path.
+        this->compute_jacobian_impl(x, fx_, jx_);
+
+        // Step 2: gx = J^T lam (closed-form from the Jacobian).
+        for (int i = 0; i < ir; ++i) {
+            double acc = 0.0;
+            for (int k = 0; k < or_; ++k) acc += jx(k, i) * adjvars[k];
+            gx[i] = acc;
+        }
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+        compute_adjoint_hessian_for_(x, hx, adjvars, ir, or_);
+#elif defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+        compute_adjoint_hessian_fof_(x, hx, adjvars, ir, or_);
+#else
+#  error "TYCHO_ENZYME_HESSIAN_STRATEGY_<Strategy> must be defined."
+#endif
+    }
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+    template <class InType, class AdjHessType, class AdjVarType>
+    inline void compute_adjoint_hessian_for_(
+        CVecRef<InType> x,
+        MatRef<AdjHessType> hx,
+        CVecRef<AdjVarType> adjvars,
+        int ir, int or_) const {
+
+        Eigen::Matrix<double, IR, 1> x_local = x;
+        Eigen::Matrix<double, IR, 1> dx_local(ir);
+        Eigen::Matrix<double, IR, 1> g_local(ir);
+        Eigen::Matrix<double, IR, 1> dg_local(ir);
+        // Scratch buffers passed into the FoR wrapper.  Allocated here so the
+        // wrapper itself stays allocation-free — see the Enzyme i128-shift
+        // hazard note in the wrapper docstring.
+        Eigen::Matrix<double, OR, 1> fx_scratch(or_);
+        Eigen::Matrix<double, OR, 1> lam_scratch(or_);
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        for (int i = 0; i < ir; ++i) {
+            dx_local.setZero();
+            dx_local[i] = 1.0;
+            g_local.setZero();
+            dg_local.setZero();
+            // Re-prime the scratch each iteration: the inner reverse pass
+            // consumes fx_scratch and may modify lam_scratch.
+            for (int k = 0; k < or_; ++k) {
+                fx_scratch[k] = 0.0;
+                lam_scratch[k] = adjvars[k];
+            }
+
+            __enzyme_fwddiff<void>(
+                reinterpret_cast<void*>(&detail::enzyme_for_outer_wrapper<Derived>),
+                enzyme_const, self,
+                enzyme_dup,   x_local.data(),    dx_local.data(),
+                enzyme_dup,   g_local.data(),    dg_local.data(),
+                enzyme_const, fx_scratch.data(),
+                enzyme_const, lam_scratch.data(),
+                enzyme_const, ir,
+                enzyme_const, or_);
+
+            for (int j = 0; j < ir; ++j) hx(j, i) = dg_local[j];
+        }
+
+        // Symmetrize. Mathematically the Hessian is symmetric; numerically
+        // each column may differ from its row-counterpart by ~1e-13.
+        for (int i = 0; i < ir; ++i) {
+            for (int j = i + 1; j < ir; ++j) {
+                double avg = 0.5 * (hx(i, j) + hx(j, i));
+                hx(i, j) = avg;
+                hx(j, i) = avg;
+            }
+        }
+    }
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 };
 
 #endif // TYCHO_HAS_ENZYME_AD

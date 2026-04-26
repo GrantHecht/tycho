@@ -6,6 +6,7 @@
 
 add_executable(tycho_enzyme_tests
     test_enzyme_jacobian.cpp
+    test_enzyme_hessian.cpp
     test_enzyme_phase_e2e.cpp
 )
 
