@@ -244,11 +244,52 @@ ctest --test-dir tests/cpp/enzyme --output-on-failure
 
 **Mode constraints (Phase 1):**
 
-- `<EnzymeAD, EnzymeAD>` is rejected at compile time with a `static_assert`
-  pointing the user at Phase 2 of the rollout.
 - `<EnzymeAD, AutodiffFwd>` is the supported Phase 1 pairing.
 - `EnzymeAD` VectorFunctions must NOT be marked `Vectorizable<Derived>=true`
-  in Phase 1; the SuperScalar `static_assert` fires until Phase 5 lifts it.
+  until Phase 5 lifts it; the SuperScalar `static_assert` fires.
+
+**Mode constraints (Phase 2):**
+
+- `<EnzymeAD, EnzymeAD>` is now supported: the Hessian path uses Enzyme
+  Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`) by
+  default. A private `TYCHO_ENZYME_HESSIAN_STRATEGY` cmake-time toggle
+  selects between FoR and Forward-over-Forward; FoR wins the head-to-head
+  benchmark by 4–9× on Hessian micro-cases. FoF is retained as research
+  scaffolding for a planned combined-J+H optimisation; it is not exposed
+  as a public derivative mode.
+
+**Non-templated `compute_impl` (Phase 4):**
+
+When paired with `<EnzymeAD, EnzymeAD>` (or `<EnzymeAD, AutodiffFwd>`), a
+user dynamics struct may declare `compute_impl` with concrete-typed Eigen
+`Map` arguments instead of the templated `<class InType, class OutType>`
+form. The signature must match what the EnzymeAD wrapper passes:
+
+```cpp
+inline void compute_impl(
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1>> x,
+    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx) const {
+    // ordinary double-typed arithmetic only
+}
+```
+
+The user's body then uses ordinary `double` arithmetic — no need for the
+dual-number-friendly templated form autodiff requires.
+
+Constraints:
+- A non-templated `compute_impl` cannot be paired with `AutodiffFwd` —
+  AutodiffFwd's `compute_jacobian_impl` calls `compute()` with
+  `dual<double>`-typed Eigen vectors, which a concrete-`double` signature
+  cannot accept. The error is a substitution failure pinned by
+  `tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp`.
+- A non-templated `compute_impl` cannot be marked
+  `Vectorizable<Derived>=true`. SuperScalar dispatch's `VectorImpl()`
+  path requires templated `compute_impl`; this is a fundamental dispatch
+  constraint, not Enzyme-specific.
+- The non-templated form supports only the EnzymeAD-routed methods
+  (`compute_jacobian`, `compute_jacobian_adjointgradient_adjointhessian`).
+  Calling `.compute()` directly on a non-templated VF is a separate
+  signature mismatch — use the templated form if `.compute()` is needed.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
