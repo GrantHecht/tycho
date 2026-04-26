@@ -256,6 +256,25 @@ ctest --test-dir tests/cpp/enzyme --output-on-failure
   scaffolding for a planned combined-J+H optimisation; it is not exposed
   as a public derivative mode.
 
+**Batched forward-mode Jacobian (Phase 3):**
+
+The EnzymeAD Jacobian path uses `__enzyme_fwddiff` with `enzyme_width=W`
+to propagate `W` tangent vectors per call (`enzyme_dupv` with a byte
+stride for the shadow buffers, SoA-by-lane layout via column-major
+`Eigen::Matrix<double, IR, W>`).  `TYCHO_ENZYME_BATCH_WIDTH` selects
+`W` at configure time:
+
+- `W=1` (Phase 1 fallback) — one tangent per call.
+- `W=4` (default) — wins on every test case; Brach 1.17×, CR3BP 16×,
+  MEE 1.97× faster than scalar.
+- `W=8` — best for IR ≥ 8 workloads (MEE: **60× faster than autodiff**);
+  silently falls back to `W=1` tail loop when IR < 8.
+
+The Hessian path is unaffected (it still uses scalar `__enzyme_fwddiff`
+calls for the FoR outer pass; the inner pass is a separate `__enzyme_autodiff`
+that batching does not apply to).  Hessian wins on CR3BP/MEE come from the
+nested-AD strategy, not from `enzyme_width`.
+
 **Non-templated `compute_impl` (Phase 4):**
 
 When paired with `<EnzymeAD, EnzymeAD>` (or `<EnzymeAD, AutodiffFwd>`), a
@@ -307,13 +326,12 @@ several times faster than scalarize-per-lane EnzymeAD, especially for
 small VF bodies.
 
 **Phase 5b (direct-SIMD differentiation through Enzyme) is not shipped.**
-The plan's Phase 5b would have called `__enzyme_fwddiff` over a wrapper
-that operates on `Eigen::Array<double, 4, 1>` directly, letting Enzyme
-differentiate through SIMD ops.  It is off-ramped because (a) the
-`enzyme_width` API path is currently broken on this Enzyme build (see
-`docs/superpowers/plans/...md` Task 3 off-ramp) and (b) the Phase 5a
-scalarize path is correctness-only; users wanting peak vector throughput
-should pair `Vectorizable<Derived>=true` with `AutodiffFwd` for now.
+Phase 3's `enzyme_width` path now achieves near-SIMD-level speedups
+(60× MEE Jacobian) without requiring SIMD-typed `compute_impl` bodies,
+so the Phase 5b motivation has weakened.  Phase 5b would still let the
+user's `compute_impl` body run SIMD ops directly on
+`Eigen::Array<double, W, 1>` — relevant for compute-bound bodies whose
+math itself parallelises.  Investigating separately.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
