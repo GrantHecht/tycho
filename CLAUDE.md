@@ -321,30 +321,65 @@ SuperScalar Scalar:
 - **Hessian:** uses the Phase 5a scalarize-per-lane fallback.  A
   direct-SIMD Hessian path is future work.
 
-**Caveat — trig-heavy bodies regress under Phase 5b.**  `Eigen::Array
-<double, 4, 1>::cos()` and `::sin()` lower to **four separate scalar
-`cos(double)` / `sin(double)` libm calls** rather than vectorised
-`cos<4xdouble>` intrinsics.  For a body like the MEE dynamics (which
-calls `cos(x5)` and `sin(x5)` once each), the scalar Phase 3 path
-(`enzyme_width=8`) computes `cos(x5)` once and amortises across 8
-tangents; Phase 5b computes it 4× per call.  Net: Phase 5b is **~6×
-slower per lane on MEE**.
+**Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
 
-Workaround: set `is_vectorizable = false` on the VF struct.  The base
-class then scalarises per lane *before* the EnzymeAD path is reached,
-and each lane uses the fast scalar Phase 3 W=8 path (~5.97 ns for MEE).
-4 lanes × 5.97 ns ≈ 24 ns — beats Phase 5b's 142 ns by ~6×.
+Eigen 5 ships vectorised `pcos<Packet4d>` / `psin<Packet4d>` (and
+friends), but the lowered IR uses x86 round intrinsics + packed bitwise
+sign-bit tricks that Enzyme cannot currently differentiate (upstream
+issues [#689](https://github.com/EnzymeAD/Enzyme/issues/689),
+[#2679](https://github.com/EnzymeAD/Enzyme/issues/2679),
+[#2794](https://github.com/EnzymeAD/Enzyme/issues/2794)).  To use
+Phase 5b SIMD primal evaluation on a VF that calls `sin`/`cos` under
+EnzymeAD, route those calls through the wrapper API:
 
-Rule of thumb:
+```cpp
+#include "tycho/detail/utils/simd_math.h"   // public umbrella TBD
 
-- **`is_vectorizable = true`** for VFs whose body is mostly arithmetic,
-  including `sqrt` (which vectorises): expect 1.5–1.8× per-lane wins.
-- **`is_vectorizable = false`** for VFs with trig (`sin`/`cos`/`tan`),
-  `exp`/`log`, and other transcendentals on Scalar: avoid Phase 5b's
-  scalar-libm penalty.
+template <class InType, class OutType>
+inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+    using tycho::math::cos;   // ADL hits double (-> std::cos) and
+    using tycho::math::sin;   // Eigen::Array<double,W,1> (-> per-lane libm).
+    // ...
+}
+```
 
-A Vectorizable VF that is invoked with plain `double` Scalar still goes
-through the scalar Jacobian path (Phase 1 / Phase 3 batched), unchanged.
+The SuperScalar overloads (`Eigen::Array<double, W, 1>` for W ∈ {2, 4, 8})
+manually unroll into `W` scalar `std::cos(double)` / `std::sin(double)`
+calls.  Each lowers to `@llvm.cos.f64` / `@llvm.sin.f64`, which Enzyme's
+built-in handler differentiates cleanly under any `enzyme_width`.  Phase
+3 batched tangents and Phase 5b SIMD primal compose naturally — the
+surrounding arithmetic in `compute_impl` still vectorises across the W
+lanes; only the trig itself is per-lane scalar.
+
+Code paths that are NOT differentiated by Enzyme should keep using Eigen
+directly — the analytic-integration path (e.g.
+`include/tycho/detail/astro/mee_dynamics.h`) benefits from Eigen 5 SIMD
+trig (`pcos<Packet4d>`) without going through this layer.
+
+```cpp
+struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
+    static constexpr bool is_vectorizable = true;   // no other flags needed
+    // ...
+};
+```
+
+**Rule of thumb (post Eigen 5):**
+
+- **Arithmetic-only VFs** (no trig): `is_vectorizable = true`.  Gets
+  full Phase 3 + 5b composition with native Eigen SIMD primal.
+  Example: CR3BPBench in `bench/cpp/bench_enzyme.cpp`.
+- **Trig-bearing VFs needing Phase 5b SIMD primal** (e.g., ensemble
+  integrators): `is_vectorizable = true`, route trig through
+  `tycho::math::cos/sin`.  Examples: `BrachBench`, `MEEBench`,
+  `BrachVectorizable`.
+- **Trig-bearing VFs evaluated one trajectory at a time:** either
+  approach works; `tycho::math::*` with `is_vectorizable = true` is
+  consistent across single- and multi-trajectory call sites.
+
+A Vectorizable VF invoked with plain `double` Scalar still goes through
+the scalar Jacobian path (Phase 1 / Phase 3 batched), unchanged — the
+double-Scalar `tycho::math::cos/sin` overloads forward to `std::cos` /
+`std::sin` directly.
 
 Phase 3 (enzyme_width batched tangents) and Phase 5b (SIMD primal) are
 orthogonal axes.  In current bench numbers the two don't compose
@@ -354,6 +389,34 @@ saturated.
 
 For the design rationale, see
 `docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
+
+**Upstream canary — when can we drop the scalar-libm wrapper?**
+
+The two upstream gaps that forced the per-lane scalar libm design are
+tracked by a pair of compile-time canaries under
+`scripts/upstream_canary/`:
+
+  * Test A — `Eigen::Array<>::cos()` differentiable by Enzyme at
+    `enzyme_width > 1`. If this passes, drop `simd_math.h`'s manual
+    unrolling and call `x.cos() / x.sin()` directly.
+  * Test B — Enzyme custom-registered derivative composes with
+    `enzyme_width > 1`. If this passes, an alternative architecture
+    (custom derivative + SIMD packet trig + Phase 3 batching) becomes
+    viable.
+
+Run before bumping the Enzyme submodule, the Eigen submodule, or system
+clang/LLVM:
+
+```bash
+scripts/upstream_canary/check.sh
+```
+
+Exit 0 = status quo (both still fail). Non-zero = upstream changed,
+revisit `simd_math.h` and the rule-of-thumb above.
+
+| Last run | Toolchain | Result |
+|---|---|---|
+| 2026-04-27 | clang 21.1.8 / Enzyme tip (`cecf3492`) / Eigen 5.0.1 | both fail (status quo) |
 
 ### Key CMake variables
 
