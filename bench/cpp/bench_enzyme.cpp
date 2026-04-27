@@ -16,6 +16,8 @@
 
 #include <tycho/tycho.h>
 
+#include "tycho/detail/utils/simd_math.h"
+
 #include "enzyme_test_dynamics.h"
 
 namespace {
@@ -95,6 +97,10 @@ void BM_MEE_Enzyme(benchmark::State& state) {
 namespace tycho_enzyme_bench {
 
 // Brach variant marked Vectorizable=true so the Phase 5b SIMD dispatch fires.
+// Trig calls route through tycho::math::cos/sin which scalarises lane-wise
+// so Enzyme sees per-lane @llvm.cos.f64 / @llvm.sin.f64 — bithack-free,
+// composes with TYCHO_ENZYME_BATCH_WIDTH > 1.  See
+// include/tycho/detail/utils/simd_math.h.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct BrachBench
     : tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm> {
@@ -106,8 +112,8 @@ struct BrachBench
     template <class InType, class OutType>
     inline void compute_impl(tycho::vf::CVecRef<InType> x,
                              tycho::vf::CVecRef<OutType> fx_) const {
-        using std::cos;
-        using std::sin;
+        using tycho::math::cos;
+        using tycho::math::sin;
         using Scalar = typename InType::Scalar;
         tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
         const Scalar v = x[2];
@@ -153,7 +159,7 @@ struct CR3BPBench
     }
 };
 
-// MEE variant marked Vectorizable=true.
+// MEE variant marked Vectorizable=true.  See BrachBench notes above.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct MEEBench
     : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm> {
@@ -165,8 +171,8 @@ struct MEEBench
     template <class InType, class OutType>
     inline void compute_impl(tycho::vf::CVecRef<InType> x,
                              tycho::vf::CVecRef<OutType> fx_) const {
-        using std::cos;
-        using std::sin;
+        using tycho::math::cos;
+        using tycho::math::sin;
         using std::sqrt;
         using Scalar = typename InType::Scalar;
         tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();

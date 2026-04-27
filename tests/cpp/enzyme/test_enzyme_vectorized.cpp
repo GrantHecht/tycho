@@ -12,6 +12,8 @@
 
 #include <tycho/tycho.h>
 
+#include "tycho/detail/utils/simd_math.h"
+
 #include "enzyme_test_dynamics.h"
 
 namespace tycho_enzyme_test {
@@ -32,8 +34,8 @@ struct BrachVectorizable
     template <class InType, class OutType>
     inline void compute_impl(tycho::vf::CVecRef<InType> x,
                              tycho::vf::CVecRef<OutType> fx_) const {
-        using std::cos;
-        using std::sin;
+        using tycho::math::cos;
+        using tycho::math::sin;
         using Scalar = typename InType::Scalar;
         tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
 
