@@ -196,7 +196,7 @@ composition might become meaningful again.
 
 **State today.** The default is `W=4`. W=8 is selectable but silently
 falls back to the W=1 tail loop when IR<8 (so doesn't degrade Brach/CR3BP).
-On MEE (IR=9), W=8 gives **60× faster Jacobian than autodiff** (5.96 ns
+On MEE (IR=9), W=8 gives **60× faster Jacobian than the FDiff reference** (5.96 ns
 vs 359 ns).
 
 **Proposed change.** Make `W=8` the default. Pros:

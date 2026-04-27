@@ -79,7 +79,6 @@ tychopy/                Python package (pure-Python layer over _tychopy extensio
 
 dep/                    Vendored submodule dependencies
   eigen/                Eigen (MPL-2.0)
-  autodiff/             autodiff (MIT)
   fmt/                  {fmt} (MIT)
   nanobind/             nanobind (BSD)
 
@@ -161,7 +160,7 @@ cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
                                # use -j8 on 32 GB systems, -j4 on 16 GB
 ```
 
-The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
+The `dep/` submodules (eigen, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
 **Python environment (all platforms) — conda env named `tycho`:**
@@ -244,7 +243,7 @@ ctest --test-dir tests/cpp/enzyme --output-on-failure
 
 **Mode constraints (Phase 1):**
 
-- `<EnzymeAD, AutodiffFwd>` is the supported Phase 1 pairing.
+- `<EnzymeAD, FDiffFwd>` is the supported mixed pairing (Enzyme Jacobian + finite-difference Hessian).
 
 **Mode constraints (Phase 2):**
 
@@ -267,7 +266,7 @@ stride for the shadow buffers, SoA-by-lane layout via column-major
 - `W=1` (Phase 1 fallback) — one tangent per call.
 - `W=4` (default) — wins on every test case; Brach 1.17×, CR3BP 16×,
   MEE 1.97× faster than scalar.
-- `W=8` — best for IR ≥ 8 workloads (MEE: **60× faster than autodiff**);
+- `W=8` — best for IR ≥ 8 workloads (MEE: **60× faster than the FDiff reference**);
   silently falls back to `W=1` tail loop when IR < 8.
 
 The Hessian path is unaffected (it still uses scalar `__enzyme_fwddiff`
@@ -277,7 +276,7 @@ nested-AD strategy, not from `enzyme_width`.
 
 **Non-templated `compute_impl` (Phase 4):**
 
-When paired with `<EnzymeAD, EnzymeAD>` (or `<EnzymeAD, AutodiffFwd>`), a
+When paired with `<EnzymeAD, EnzymeAD>` (or `<EnzymeAD, FDiffFwd>`), a
 user dynamics struct may declare `compute_impl` with concrete-typed Eigen
 `Map` arguments instead of the templated `<class InType, class OutType>`
 form. The signature must match what the EnzymeAD wrapper passes:
@@ -291,14 +290,13 @@ inline void compute_impl(
 ```
 
 The user's body then uses ordinary `double` arithmetic — no need for the
-dual-number-friendly templated form autodiff requires.
+dual-number-friendly templated form that templated derivative modes require.
 
 Constraints:
-- A non-templated `compute_impl` cannot be paired with `AutodiffFwd` —
-  AutodiffFwd's `compute_jacobian_impl` calls `compute()` with
-  `dual<double>`-typed Eigen vectors, which a concrete-`double` signature
-  cannot accept. The error is a substitution failure pinned by
-  `tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp`.
+- A non-templated `compute_impl` is supported only under the `<EnzymeAD, EnzymeAD>`
+  pairing. FD modes (`FDiffFwd`, `FDiffCentArray`) require the templated form because
+  their `compute_jacobian_impl` calls `compute()` with an `Eigen::Array`-typed Scalar
+  for SuperScalar dispatch, which a concrete-`double` signature cannot accept.
 - A non-templated `compute_impl` cannot be marked
   `Vectorizable<Derived>=true`. SuperScalar dispatch's `VectorImpl()`
   path requires templated `compute_impl`; this is a fundamental dispatch
@@ -442,7 +440,7 @@ Key obligations:
 - **Eigen** (MPL-2.0) — any Eigen *source files* directly modified must remain MPL-2.0
 - **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
   flag any changes touching MKL integration for manual review
-- **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT) — all permissive, just preserve notices
+- **Nanobind** (BSD), **fmt** (MIT) — all permissive, just preserve notices
 - **boost-threads** (Boost Software License 1.0), **rubber_types** (MIT), **kepler propagator** (MIT),
   **lambert** (MIT), **ctpl** (Apache 2.0) — all permissive; see `notices/` for full list
 

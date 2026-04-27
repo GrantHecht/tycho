@@ -469,7 +469,7 @@ The binding layer uses a dedicated precompiled header (PCH) chain to avoid recom
 The `pch_bindings` static library defines the PCH order:
 
 ```
-src/pch.h                              # STL headers, Eigen, fmt, autodiff
+src/pch.h                              # STL headers, Eigen, fmt
   -> src/bindings/pch_nb.h             # nanobind headers, type_casters.h, function_registry.h, jet_bind.h
     -> src/vf/tycho_vector_functions.h # All VF type definitions
       -> src/bindings/vector_functions_bind.h        # VF binding helpers
