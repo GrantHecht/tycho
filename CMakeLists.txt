@@ -602,7 +602,6 @@ else()
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
 include_directories(dep/fmt/include)
-include_directories(dep/autodiff)
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)
@@ -857,19 +856,6 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/fmt/include/fmt/format.h")
 endif()
 install(DIRECTORY dep/fmt/include/fmt
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-# Install autodiff headers (header-only, required by tycho public API)
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/autodiff/autodiff/forward/dual.hpp")
-    message(FATAL_ERROR
-        "Bundled autodiff not found at dep/autodiff/. "
-        "Run: git submodule update --init dep/autodiff")
-endif()
-install(DIRECTORY dep/autodiff/autodiff
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp"
-    PATTERN "tests" EXCLUDE
-    PATTERN "pybind11" EXCLUDE
 )
 
 # CMake package config for find_package(tycho)
