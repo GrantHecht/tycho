@@ -22,7 +22,6 @@ enum class DenseDerivativeMode {
     Analytic,
     FDiffFwd,
     FDiffCentArray,
-    AutodiffFwd,
     EnzymeAD,
 };
 

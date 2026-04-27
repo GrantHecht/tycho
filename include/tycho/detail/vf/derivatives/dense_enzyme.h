@@ -179,8 +179,7 @@ inline void enzyme_fof_inner_wrapper(const Derived* self,
 /*!
   Per-column dispatch: for each input dimension i in [0, IR), seed the tangent
   vector with e_i and call __enzyme_fwddiff once.  Reads back column i of the
-  Jacobian and (on i==0) the primal output.  Mirrors AutodiffFwd's structure
-  exactly so the two paths are interchangeable.
+  Jacobian and (on i==0) the primal output.
 
   Phase 1 only supports scalar dispatch.  SuperScalar/Vectorizable specializations
   are deferred to Phase 5; until then, attempting EnzymeAD on a Vectorizable
