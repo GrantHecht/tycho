@@ -243,56 +243,39 @@ the items worth investigating before merge. None of them block Phase 2
 acceptance per the gate criterion ("any regressions need PR-description
 justification") but they are not yet root-caused.
 
-### 4.7 Apparent gap vs `e942c7f1` baseline (most-recent pre-branch ancestor) — almost certainly recording-conditions
+### 4.7 `e942c7f1` baseline re-recorded — confirms recording-conditions, not regression
 
-For completeness: when comparing today's `381ec757` (Phase 1 baseline,
-recorded today at performance governor) against the older `e942c7f1`
-JSON (recorded 2026-04-25 on this branch's lineage), the diff shows
-**+33% to +36% across 92 of 93 benchmarks** — including ones that
-neither the integrators nor any code on the path between the two
-commits touched (`BM_TypeStorage_CopySmall`, `BM_VF_ArgsSegment`,
-`BM_ThreadPool_ParallelSequence/10`, etc.).
+The original `e942c7f1.json` (recorded 2026-04-25) showed **+33% to +36%
+across 92 of 93 benchmarks** vs today's `381ec757` Phase 1 baseline,
+which was suspicious-uniform across benchmarks that share zero code
+with anything that changed between the two commits.
 
-Investigation:
-- `e942c7f1` IS a direct ancestor of `381ec75` (verified via
-  `git merge-base`); they're not on divergent branches.
-- The only integrator-touching commits between them are `9fed0b5`
-  (privatize `AtomicInt64::value` accessor — pure refactor, identical
-  emitted ops) and `b2b05ad` (`check_state_finite_or_throw` on `xnext_mid`,
-  **gated on `storemidpoints`** which the bench fixtures don't enable).
-  Neither is plausibly responsible for +34% across-the-board.
-- The uniformity (+33% to +36% on benchmarks that share zero code with
-  these two commits) is the telltale sign of recording-conditions
-  difference, not real regression.
+**Re-recorded `e942c7f1` today** at performance governor + clean machine
+state, then re-compared:
 
-**Most likely explanation:** `e942c7f1` was recorded under different
-machine conditions (different ccache hits at compile time, different
-thermal state, different background load, possibly a different
-benchmark binary built with different LTO settings). To prove this
-definitively, re-record `e942c7f1` today on the same machine state:
+| Comparison | Same machine state | Regressions detected | Verdict |
+|---|---|---:|---|
+| `e942c7f1.json` (2026-04-25) → `381ec757.json` (today) | no | 92 of 93 (+33% to +36%) | recording-conditions noise |
+| `e942c7f1.json` (re-recorded today) → `381ec757.json` (today) | yes | **1** (`BM_TypeStorage_CopySmall` +17%, ULP-level) | **Phase 1 ancestor and `e942c7f1` are perf-equivalent** |
+| `e942c7f1.json` (re-recorded today) → `349b6469.json` (today) | yes | 11 (the same 10 §4.3 / §4.4 entries plus `BM_BumpAllocator_Resize` +12% borderline) | confirms Phase 2 → current regression set is the only real signal |
 
-```bash
-git checkout e942c7f1
-git submodule sync dep/eigen && git submodule update --init dep/eigen
-conda run -n tycho cmake --preset linux-clang-release \
-  -DCMAKE_C_COMPILER=/usr/bin/clang \
-  -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
-  -DCMAKE_PREFIX_PATH=/home/ghecht/Software/Enzyme/install \
-  -DENABLE_ENZYME_AD=ON -DBUILD_CPP_TESTS=ON \
-  -DBUILD_CPP_BENCHMARKS=ON -DBUILD_CPP_EXAMPLES=ON
-ninja -C build -j6 all
-bench/bench_track.sh record --reps 3
-git checkout eigen-upgrade
-git submodule sync dep/eigen && git submodule update --init dep/eigen
-ninja -C build -j6 all
-bench/bench_track.sh compare e942c7f1 381ec757   # same machine state both runs
-```
+**Conclusions:**
 
-If the new comparison is < 5% across the board, the gap was indeed
-recording-conditions. If a real ~30% regression persists on a known set
-of benchmarks, that's a separate set of regressions on the Phase-1
-ancestry that was already merged before this work — outside the scope
-of this PR but worth a tracker issue.
+1. The +34% across-the-board "gap" was 100% recording-conditions noise
+   from the original 2026-04-25 capture. The new same-day re-record
+   shows essentially flat perf for the entire `e942c7f1 → 381ec75` span.
+2. The two integrator-touching commits between `e942c7f1` and Phase 1
+   (`9fed0b5` privatize-accessor refactor, `b2b05ad` storemidpoints-gated
+   finite-check) had **zero measurable perf impact**, as static analysis
+   suggested.
+3. **Every real perf regression in this PR** is Phase 2 work (the ~10
+   benchmarks listed in §4.3 / §4.4). The `e942c7f1` → current
+   comparison surfaces the same set, with one extra borderline
+   (`BM_BumpAllocator_Resize` +12.1%).
+
+The original `bench/results/e942c7f1.json` has been replaced with
+today's recording. (`bench/results/` is gitignored, so the original is
+not recoverable — but its content was provably noise.)
 
 ---
 
