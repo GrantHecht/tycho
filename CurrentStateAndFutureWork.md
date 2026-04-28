@@ -1,8 +1,9 @@
 # Tycho — Eigen 5 + Enzyme work — Current State and Future Work
 
-**Branch:** `eigen-upgrade` @ `349b646` (off `worktree-enzyme-ad-plan` @ `a31575a`).
-**Status:** Pre-merge gate passed; cleanup pass + worktree fast-forward + PR
-remaining.
+**Branch:** `eigen-upgrade` @ `553696f` (off `worktree-enzyme-ad-plan`,
+fast-forwarded to `553696f` per §5.7).
+**Status:** Pre-merge gate passed; §5.x cleanup landed; only §5.1 IR-level
+investigation (recommended, optional) and §5.8 PR creation remain.
 **Date:** 2026-04-27.
 
 This document is the resumable hand-off record for the Eigen 3.4 → 5.0.1
@@ -375,7 +376,7 @@ Whatever section there describes EnzymeAD usage should pick up the
 `tycho::math::cos / sin` opt-in pattern + the rule of thumb that's now
 in CLAUDE.md.
 
-### 5.7 Fast-forward `worktree-enzyme-ad-plan` to `eigen-upgrade`
+### 5.7 Fast-forward `worktree-enzyme-ad-plan` to `eigen-upgrade` — DONE (2026-04-27)
 
 The original plan (per the user) was: branch `eigen-upgrade` off
 `worktree-enzyme-ad-plan`, do the work on `eigen-upgrade`, and
@@ -611,8 +612,8 @@ but a known sharp edge if the toolchain bumps.
 
 After context compaction, verify in order:
 
-- [ ] `git rev-parse HEAD` → `349b646…`. If not, `git checkout
-      eigen-upgrade`.
+- [ ] `git rev-parse HEAD` → `553696f…` (post-cleanup). If not, `git
+      checkout eigen-upgrade`.
 - [ ] `git status --short` → clean (no uncommitted changes from
       mid-conversation work).
 - [ ] `git submodule status dep/eigen` → reports `bc3b39870e…` (Eigen
