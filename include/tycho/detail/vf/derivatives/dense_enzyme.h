@@ -200,6 +200,12 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // as research scaffolding even though it currently loses to FoR head-to-
 // head.
 // TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this wrapper.
+// When picking this up, also fold J extraction into the same pass: the
+// outer fwddiff's fx-shadow already carries J(x)·e_i, so the new SIMD
+// FoF Hessian helper should produce both J and H from one set of calls
+// (item 3 in doc/EnzymeAD_FutureWork.md).  Doing the SIMD migration
+// without the combined-output optimisation leaves a W-column J slab +
+// W² H block per outer call on the table.
 template <class Derived>
 inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      const double* x_data, double* fx_data,
@@ -844,6 +850,10 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
     // TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this helper.
+    // The new helper should also compute J alongside H in a single set
+    // of outer fwddiff calls (read column i of J from the fx-shadow on
+    // each outer pass) instead of calling compute_jacobian_impl up-front.
+    // See item 3 in doc/EnzymeAD_FutureWork.md.
     template <class InType, class AdjHessType, class AdjVarType>
     inline void compute_adjoint_hessian_fof_(
         CVecRef<InType> x,

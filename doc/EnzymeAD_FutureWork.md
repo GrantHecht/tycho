@@ -119,10 +119,16 @@ Phase 5a scalarize-per-lane path.
   validate the SIMD path matches the per-lane scalar reference to
   1e-10.
 
-**Open item — FoF SIMD.**  Forward-over-Forward SIMD Hessian remains
-deferred.  FoR is the production default and FoF retained as research
-scaffolding (see `dense_enzyme.h:148-159`); FoF's combined-J+H
-optimisation (item 3 below) is the planned follow-on path.
+**Open item — FoF SIMD + combined J+H.**  Forward-over-Forward SIMD
+Hessian remains deferred.  When picked up, **bundle it with item 3
+below** — FoF's outer `__enzyme_fwddiff` produces `J(x)·e_i` in the
+fx-shadow as a free byproduct, so the SIMD-FoF Hessian path should
+extract J from the same passes instead of running Phase 5b's Jacobian
+separately up-front.  Doing the SIMD migration without the J+H
+consolidation leaves measurable speedup on the table (W-column J slab
++ W² H block per outer call when composed with Phase 3 batching).
+FoR is the production default and FoF retained as research scaffolding
+(see `dense_enzyme.h:148-159`).
 
 **Open item — MEE-class fallback.**  The per-VF opt-out is shipped, but
 the upstream Enzyme limitation that forces it is real: composite bodies
