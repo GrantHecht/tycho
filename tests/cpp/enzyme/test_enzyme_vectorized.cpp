@@ -149,6 +149,36 @@ using MEEVectorizableEnzymeFull = MEEVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD,
     tycho::vf::DenseDerivativeMode::EnzymeAD>;
 
+// IR=8, OR=4 synthetic fixture for the Phase 7+ doubly-batched FoF helper.
+// IR is divisible by BW=4 so the doubly-batched rectangle covers the full
+// matrix without tail handling — keeps the proof-of-concept test minimal.
+// Body: simple polynomial mixture, no transcendentals; Vectorizable=true.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct PolyVectorizable8x4
+    : tycho::vf::VectorFunction<PolyVectorizable8x4<Jm, Hm>, 8, 4, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<PolyVectorizable8x4<Jm, Hm>, 8, 4, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        // Quadratic + cubic mixture so the Hessian has non-trivial entries
+        // across both diagonal and off-diagonal positions.
+        fx[0] = x[0] * x[1] + x[2] * x[3] + x[4] * x[4];
+        fx[1] = x[1] * x[2] * x[5] + x[6];
+        fx[2] = x[3] + x[4] * x[5] + x[6] * x[7];
+        fx[3] = x[0] * x[7] + x[2] * x[6] - x[5];
+    }
+};
+
+using PolyVectorizable8x4EnzymeFull = PolyVectorizable8x4<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
 } // namespace tycho_enzyme_test
 
 namespace {
@@ -348,6 +378,65 @@ TEST(EnzymeVectorized, HessianFoFSIMDMatchesScalarized_CR3BP) {
 TEST(EnzymeVectorized, HessianFoFSIMDMatchesScalarized_MEE) {
     tycho_enzyme_test::MEEVectorizableEnzymeFull f(1.0);
     check_hessian_simd_vs_scalarized<decltype(f), 9, 6>(f);
+}
+
+// Phase 7+ doubly-batched FoF helper — proof-of-concept on a synthetic
+// IR=8 OR=4 fixture (IR divisible by BW=4 so the full matrix is covered
+// by the doubly-batched rectangle, no tail handling).  Validates that
+// nested __enzyme_fwddiff(enzyme_width=BW) over inner __enzyme_fwddiff
+// (enzyme_width=BW) composes correctly and produces BW² Hessian elements
+// per outer call.
+TEST(EnzymeVectorized, HessianFoFSIMDdb_PolyMatchesScalarized) {
+    using SS = Eigen::Array<double, 4, 1>;
+    constexpr int IR = 8;
+    constexpr int OR = 4;
+    tycho_enzyme_test::PolyVectorizable8x4EnzymeFull f;
+
+    Eigen::Matrix<SS, IR, 1> x;
+    Eigen::Matrix<SS, OR, 1> lam;
+    for (int j = 0; j < IR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.13 * (j + 1) + 0.05 * lane;
+    for (int j = 0; j < OR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.4 - 0.05 * j + 0.03 * lane;
+
+    Eigen::Matrix<SS, OR, 1> fx_simd;
+    Eigen::Matrix<SS, OR, IR> jx_simd;
+    Eigen::Matrix<SS, IR, IR> h_simd;
+    fx_simd.setZero(); jx_simd.setZero(); h_simd.setZero();
+
+    f.compute_jacobian_adjoint_hessian_fof_simd_db_(
+        x, fx_simd, jx_simd, h_simd, lam, IR, OR);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, IR, 1> x_lane;
+        Eigen::Matrix<double, OR, 1> lam_lane;
+        for (int j = 0; j < IR; ++j) x_lane[j] = x(j)[lane];
+        for (int j = 0; j < OR; ++j) lam_lane[j] = lam(j)[lane];
+
+        Eigen::Matrix<double, OR, 1> fx_lane;
+        Eigen::Matrix<double, OR, IR> jx_lane;
+        Eigen::Matrix<double, IR, 1> g_lane;
+        Eigen::Matrix<double, IR, IR> h_lane;
+        fx_lane.setZero(); jx_lane.setZero();
+        g_lane.setZero();  h_lane.setZero();
+
+        f.scalar_compute_jacobian_adjointgradient_adjointhessian_impl(
+            x_lane, fx_lane, jx_lane, g_lane, h_lane, lam_lane);
+
+        for (int j = 0; j < OR; ++j)
+            EXPECT_NEAR(fx_simd(j)[lane], fx_lane[j], 1e-10)
+                << "lane=" << lane << " fx[" << j << "]";
+        for (int j = 0; j < OR; ++j)
+            for (int i = 0; i < IR; ++i)
+                EXPECT_NEAR(jx_simd(j, i)[lane], jx_lane(j, i), 1e-10)
+                    << "lane=" << lane << " jx(" << j << "," << i << ")";
+        for (int i = 0; i < IR; ++i)
+            for (int j = 0; j < IR; ++j)
+                EXPECT_NEAR(h_simd(j, i)[lane], h_lane(j, i), 1e-10)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+    }
 }
 #endif // ForwardOverForward
 

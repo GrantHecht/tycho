@@ -213,6 +213,28 @@ struct MEEBench
     }
 };
 
+// Synthetic polynomial fixture for the Phase 7+ doubly-batched FoF
+// proof-of-concept bench.  IR=8 (divisible by BW=4) so the doubly-batched
+// rectangle covers the whole matrix — clean baseline for measuring the
+// BW² Hessian elements per call claim.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct PolyBench8x4
+    : tycho::vf::VectorFunction<PolyBench8x4<Jm, Hm>, 8, 4, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<PolyBench8x4<Jm, Hm>, 8, 4, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+    static constexpr bool is_vectorizable = true;
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        fx[0] = x[0] * x[1] + x[2] * x[3] + x[4] * x[4];
+        fx[1] = x[1] * x[2] * x[5] + x[6];
+        fx[2] = x[3] + x[4] * x[5] + x[6] * x[7];
+        fx[3] = x[0] * x[7] + x[2] * x[6] - x[5];
+    }
+};
+
 }  // namespace tycho_enzyme_bench
 
 namespace {
@@ -409,6 +431,68 @@ void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
+// Phase 7+ doubly-batched FoF SIMD proof-of-concept benches.  Same VF
+// (Poly8x4: IR=8 OR=4 polynomial body, no transcendentals), called via:
+//   - singly-batched helper: BW outer × 1 inner per call
+//   - doubly-batched helper: BW outer × BW inner per call (W² Hessian
+//     elements per outer __enzyme_fwddiff)
+// Only meaningful under strategy=ForwardOverForward; both helpers are
+// FoF-strategy-only.  Calls helpers directly (bypass dispatch) because
+// the public dispatch routes to the singly-batched path only.
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward) \
+    && defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
+void BM_Poly8x4_HessianFoFSIMD_singly(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::PolyBench8x4<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+    ODE f;
+    Eigen::Matrix<SS4, 8, 1> x;
+    for (int i = 0; i < 8; ++i) x(i).setConstant(0.13 * (i + 1));
+    Eigen::Matrix<SS4, 4, 1> fx;
+    Eigen::Matrix<SS4, 4, 8> jx;
+    Eigen::Matrix<SS4, 8, 8> h;
+    Eigen::Matrix<SS4, 4, 1> lam;
+    fx.setZero(); jx.setZero(); h.setZero();
+    {
+        const double seed[4] = {0.4, -0.2, 0.6, 0.1};
+        for (int i = 0; i < 4; ++i)
+            for (int lane = 0; lane < 4; ++lane)
+                lam(i)(lane) = seed[i] + 0.05 * lane;
+    }
+    for (auto _ : state) {
+        f.compute_jacobian_adjoint_hessian_fof_simd_(x, fx, jx, h, lam, 8, 4);
+        benchmark::DoNotOptimize(h);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+void BM_Poly8x4_HessianFoFSIMD_doubly(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::PolyBench8x4<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+    ODE f;
+    Eigen::Matrix<SS4, 8, 1> x;
+    for (int i = 0; i < 8; ++i) x(i).setConstant(0.13 * (i + 1));
+    Eigen::Matrix<SS4, 4, 1> fx;
+    Eigen::Matrix<SS4, 4, 8> jx;
+    Eigen::Matrix<SS4, 8, 8> h;
+    Eigen::Matrix<SS4, 4, 1> lam;
+    fx.setZero(); jx.setZero(); h.setZero();
+    {
+        const double seed[4] = {0.4, -0.2, 0.6, 0.1};
+        for (int i = 0; i < 4; ++i)
+            for (int lane = 0; lane < 4; ++lane)
+                lam(i)(lane) = seed[i] + 0.05 * lane;
+    }
+    for (auto _ : state) {
+        f.compute_jacobian_adjoint_hessian_fof_simd_db_(x, fx, jx, h, lam, 8, 4);
+        benchmark::DoNotOptimize(h);
+        benchmark::DoNotOptimize(jx);
+        benchmark::ClobberMemory();
+    }
+}
+#endif // FoF + SIMD
+
 // MEE Hessian SIMD bench moved to bench_enzyme_mee_hessian.cpp — separate
 // TU isolates MEEBench<EnzymeAD,EnzymeAD>'s SuperScalar Hessian
 // instantiation from the rest of the bench's Enzyme template work.
@@ -570,6 +654,12 @@ BENCHMARK(BM_Hessian_MEE_Enzyme)->Name("BM_Hessian_Enzyme/MEE");
 BENCHMARK(BM_Brach_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/Brach");
 BENCHMARK(BM_CR3BP_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/CR3BP");
 // BM_MEE_HessianSIMD_Enzyme registered in bench_enzyme_mee_hessian.cpp.
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward) \
+    && defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
+BENCHMARK(BM_Poly8x4_HessianFoFSIMD_singly)->Name("BM_HessianVecFoFSIMD_singly/Poly8x4");
+BENCHMARK(BM_Poly8x4_HessianFoFSIMD_doubly)->Name("BM_HessianVecFoFSIMD_doubly/Poly8x4");
+#endif
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves PSIOPT, so the per-iteration cost includes

@@ -234,6 +234,33 @@ inline void enzyme_fof_inner_wrapper_simd(const Derived* self,
         enzyme_const, n_out);
 }
 
+// Doubly-batched FoF inner wrapper (Phase 7+): the inner __enzyme_fwddiff
+// itself uses enzyme_width=IBW so a single call propagates IBW different
+// inner tangents.  When the outer __enzyme_fwddiff also batches with
+// enzyme_width=OBW, the combined call yields OBW × IBW Hessian elements
+// per outer invocation (vs OBW × 1 with the singly-batched variant).
+//
+// Layout convention:
+//   dx_inner_shadow:    n_in * IBW SSType — IBW inner tangents column-major
+//   dfx_inner_shadow:   n_out * IBW SSType — IBW J·e_inner columns
+template <class Derived, class SSType, int IBW>
+inline void enzyme_fof_inner_wrapper_simd_innerbatch(
+    const Derived* self,
+    const SSType* x_data, SSType* fx_data,
+    SSType* dx_inner_shadow, SSType* dfx_inner_shadow,
+    int n_in, int n_out) {
+    const long stride_x = static_cast<long>(n_in) * static_cast<long>(sizeof(SSType));
+    const long stride_y = static_cast<long>(n_out) * static_cast<long>(sizeof(SSType));
+    __enzyme_fwddiff<void>(
+        reinterpret_cast<void*>(&enzyme_compute_wrapper_simd<Derived, SSType>),
+        enzyme_width, IBW,
+        enzyme_const, self,
+        enzyme_dupv, stride_x, x_data,  dx_inner_shadow,
+        enzyme_dupv, stride_y, fx_data, dfx_inner_shadow,
+        enzyme_const, n_in,
+        enzyme_const, n_out);
+}
+
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward
 
 } // namespace detail
@@ -1107,6 +1134,130 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
 
         // Symmetrize on SSType — each lane independently symmetric.
+        for (int i2 = 0; i2 < ir; ++i2) {
+            for (int j = i2 + 1; j < ir; ++j) {
+                SSType avg = 0.5 * (hx(i2, j) + hx(j, i2));
+                hx(i2, j) = avg;
+                hx(j, i2) = avg;
+            }
+        }
+    }
+
+    // Phase 7+ doubly-batched FoF SIMD combined J+H helper.  Both outer
+    // (dx_outer) and inner (dx_inner) tangents are batched at width BW,
+    // so each outer __enzyme_fwddiff produces BW × BW = BW² Hessian
+    // elements (vs BW × 1 with the singly-batched variant).
+    //
+    // Restricted to ir divisible by BW.  Caller must check before invoking.
+    // Ships as a research path — the BW²-element-per-call structure may
+    // close the FoR/FoF perf gap if Enzyme's nested enzyme_width composes
+    // efficiently.
+    //
+    // Shadow layout for the doubly-batched outer fwddiff:
+    //   dx_outer_shadow      (ir × BW): BW outer tangents
+    //   dfx_outer_shadow_b   (or × BW): BW columns of J·e_outer
+    //   dx_inner_shadow      (ir × BW): BW inner tangents (enzyme_const at outer)
+    //   dfx_inner_primal_b   (or × BW): inner output, BW J·e_inner cols
+    //   ddfx_outer_shadow_bb (or × BW × BW): outer shadow of dfx_inner_primal_b
+    //                         indexing: ddfx[k, c, b] at flat offset
+    //                         k + or*c + or*BW*b (col-major, b is outer-col)
+    template <class InType, class FxType, class JacType, class AdjHessType,
+              class AdjVarType>
+    inline void compute_jacobian_adjoint_hessian_fof_simd_db_(
+        CVecRef<InType> x,
+        const Eigen::MatrixBase<FxType>& fx_,
+        const Eigen::MatrixBase<JacType>& jx_,
+        MatRef<AdjHessType> hx,
+        CVecRef<AdjVarType> adjvars,
+        int ir, int or_) const {
+        using SSType = typename InType::Scalar;
+        constexpr int BW = TYCHO_ENZYME_BATCH_WIDTH;
+        static_assert(BW > 1, "doubly-batched helper requires BW > 1");
+
+        FxType& fx = fx_.const_cast_derived();
+        JacType& jx = jx_.const_cast_derived();
+
+        Eigen::Matrix<SSType, IR, 1> x_local = x;
+        Eigen::Matrix<SSType, IR, BW> dx_outer_shadow(ir, BW);
+        Eigen::Matrix<SSType, IR, BW> dx_inner_shadow(ir, BW);
+        Eigen::Matrix<SSType, OR, 1>  fx_primal(or_);
+        Eigen::Matrix<SSType, OR, BW> dfx_outer_shadow_b(or_, BW);
+        Eigen::Matrix<SSType, OR, BW> dfx_inner_primal_b(or_, BW);
+        // ddfx is logically (or, BW_inner, BW_outer) flattened col-major.
+        // Stored as (or*BW) × BW.  Element [k, c (inner), b (outer)] at
+        // ddfx_outer_shadow_bb(k + or_ * c, b).
+        Eigen::Matrix<SSType, OR * BW, BW> ddfx_outer_shadow_bb(or_ * BW, BW);
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        const long stride_x_outer =
+            static_cast<long>(ir) * static_cast<long>(sizeof(SSType));
+        const long stride_y_outer =
+            static_cast<long>(or_) * static_cast<long>(sizeof(SSType));
+        const long stride_y_inner_for_outer =
+            static_cast<long>(or_) * static_cast<long>(BW)
+                                   * static_cast<long>(sizeof(SSType));
+
+        for (int i_chunk = 0; i_chunk < ir; i_chunk += BW) {
+            // Prime BW outer tangents: e_{i_chunk + b}.
+            dx_outer_shadow.setZero();
+            for (int b = 0; b < BW; ++b)
+                dx_outer_shadow(i_chunk + b, b).setConstant(1.0);
+
+            for (int j_chunk = 0; j_chunk < ir; j_chunk += BW) {
+                // Prime BW inner tangents: e_{j_chunk + c}.
+                dx_inner_shadow.setZero();
+                for (int c = 0; c < BW; ++c)
+                    dx_inner_shadow(j_chunk + c, c).setConstant(1.0);
+
+                fx_primal.setZero();
+                dfx_outer_shadow_b.setZero();
+                dfx_inner_primal_b.setZero();
+                ddfx_outer_shadow_bb.setZero();
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(
+                        &detail::enzyme_fof_inner_wrapper_simd_innerbatch<
+                            Derived, SSType, BW>),
+                    enzyme_width, BW,
+                    enzyme_const, self,
+                    enzyme_dupv, stride_x_outer,
+                        x_local.data(), dx_outer_shadow.data(),
+                    enzyme_dupv, stride_y_outer,
+                        fx_primal.data(), dfx_outer_shadow_b.data(),
+                    enzyme_const, dx_inner_shadow.data(),
+                    enzyme_dupv, stride_y_inner_for_outer,
+                        dfx_inner_primal_b.data(), ddfx_outer_shadow_bb.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                // J extraction: read BW columns of J (one per outer tangent)
+                // on the first inner chunk only.
+                if (j_chunk == 0) {
+                    for (int b = 0; b < BW; ++b)
+                        for (int k = 0; k < or_; ++k)
+                            jx(k, i_chunk + b) = dfx_outer_shadow_b(k, b);
+                    if (i_chunk == 0) {
+                        for (int k = 0; k < or_; ++k) fx[k] = fx_primal[k];
+                    }
+                }
+
+                // Hessian extraction: BW outer × BW inner = BW² elements.
+                // ddfx_outer_shadow_bb(k + or_*c, b) = ∂²f_k/∂x_{i_chunk+b}∂x_{j_chunk+c}
+                for (int b = 0; b < BW; ++b) {
+                    for (int c = 0; c < BW; ++c) {
+                        SSType acc;
+                        acc.setZero();
+                        for (int k = 0; k < or_; ++k)
+                            acc = acc + adjvars[k]
+                                       * ddfx_outer_shadow_bb(k + or_ * c, b);
+                        hx(i_chunk + b, j_chunk + c) = acc;
+                    }
+                }
+            }
+        }
+
+        // Symmetrize on SSType.
         for (int i2 = 0; i2 < ir; ++i2) {
             for (int j = i2 + 1; j < ir; ++j) {
                 SSType avg = 0.5 * (hx(i2, j) + hx(j, i2));

@@ -170,11 +170,26 @@ respectively).  FoF wins qualitatively on MEE-class bodies (only
 viable SIMD Hessian path).  FoR remains the cmake default; FoF is the
 opt-in alternative for MEE-dominated workloads.
 
-**Open follow-on.**  Inner-direction batching (W-batched dx_inner +
-W-batched dx_outer → W² Hessian elements per outer call) might close
-the gap on Brach/CR3BP.  Index arithmetic for unpacking W² shadow
-entries is the main complexity.  Defer until a concrete workload makes
-the case.
+**Phase 7+ — Inner-direction batching (proof of concept, 2026-04-28).**
+Doubly-batched FoF SIMD helper `compute_jacobian_adjoint_hessian_fof_simd_db_`
+ships alongside the singly-batched one.  Outer `__enzyme_fwddiff(enzyme_width=BW)`
+over `enzyme_fof_inner_wrapper_simd_innerbatch<...,IBW>` (which itself does
+`__enzyme_fwddiff(enzyme_width=IBW)`) — confirmed Enzyme accepts nested
+enzyme_width composition.  Per outer call: BW outer × BW inner = BW²
+Hessian elements + BW columns of J.  Validated by
+`EnzymeVectorized.HessianFoFSIMDdb_PolyMatchesScalarized` on a synthetic
+IR=8 OR=4 fixture.
+
+Bench (Poly8x4, BW=4): singly-batched 769 ns vs doubly-batched 727 ns —
+**only 5% speedup**.  Per-call Enzyme overhead is not the dominant cost;
+body work dominates.  Same conclusion as item 4 below ("`enzyme_width` ×
+Phase 5b composition is neutral").  The 4× call-count reduction is
+absorbed by the 4× body work per call.
+
+The helper is shipped as a research path (not the default) — restricted to
+ir divisible by BW (no tail handling).  Promote when a workload arises
+where call overhead is the bottleneck.  Index arithmetic for the BW²
+shadow unpack is documented in the helper docstring.
 
 ---
 
