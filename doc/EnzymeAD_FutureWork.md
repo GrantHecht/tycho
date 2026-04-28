@@ -91,53 +91,45 @@ MEE example is one such workload.
 
 ---
 
-## 2. Direct-SIMD Hessian path
+## 2. Direct-SIMD Hessian path — RESOLVED for FoR (2026-04-28)
 
-**State today.** `DenseSecondDerivatives<..., EnzymeAD>::compute_jacobian_adjointgradient_adjointhessian_impl`
-uses `if constexpr (IsSuperScalar<Scalar>)` to route SuperScalar input
-through scalarise-per-lane. Each lane runs the scalar Phase 2 Hessian via
-the FoR (Forward-over-Reverse) outer wrapper.
+**Status.** Phase 6 ships direct-SIMD Forward-over-Reverse Hessian for
+`is_vectorizable=true` EnzymeAD VFs at SuperScalar input.  Gated by
+`TYCHO_ENZYME_SIMD_HESSIAN` (default ON); flag OFF falls back to the
+Phase 5a scalarize-per-lane path.
 
-**Proposed extension.** Mirror Phase 5b for the Hessian: a SuperScalar-typed
-FoR wrapper that has Enzyme differentiate through SIMD ops directly.
+**What landed.**
 
-```cpp
-template <class Derived, class SSType>
-inline void enzyme_for_outer_wrapper_simd(const Derived* self,
-                                          const SSType* x_data,
-                                          SSType* g_data,
-                                          SSType* fx_scratch,
-                                          SSType* lam_scratch,
-                                          int n_in, int n_out) {
-    __enzyme_autodiff<void>(
-        reinterpret_cast<void*>(
-            &enzyme_compute_wrapper_simd<Derived, SSType>),
-        enzyme_const, self,
-        enzyme_dup,   x_data,     g_data,
-        enzyme_dup,   fx_scratch, lam_scratch,
-        enzyme_const, n_in,
-        enzyme_const, n_out);
-}
-```
+- `enzyme_for_outer_wrapper_simd<Derived, SSType>` — SIMD twin of
+  the scalar FoR wrapper.  Inner `__enzyme_autodiff` runs reverse mode
+  on SuperScalar arithmetic, propagating W lane-local cotangents.
+- `compute_adjoint_hessian_for_simd_` — SS-typed FoR Hessian helper.
+  Outer `__enzyme_fwddiff` with `enzyme_width=BW` chains Phase 3
+  batching with Phase 5b SIMD, producing BW Hessian columns per call.
+- `simd_compute_jacobian_adjointgradient_adjointhessian_impl` — public
+  SIMD entry; tests call it directly to A/B against Phase 5a in the
+  same binary.
+- Per-VF opt-out marker `static constexpr bool
+  enzyme_simd_hessian_supported = false;` — for VFs whose body trips
+  Enzyme's SS reverse-mode IR type-deduction (composite trig+sqrt+
+  division composites; MEE is the canonical case in tycho today).
+  Eligible VFs are detected via `enzyme_simd_hessian_eligible<Derived>()`
+  in the dispatch.
+- Tests `EnzymeVectorized.HessianSIMDMatchesScalarized_{Brach,CR3BP}`
+  validate the SIMD path matches the per-lane scalar reference to
+  1e-10.
 
-Then in `compute_adjoint_hessian_for_`, route Vectorizable + SS through
-this SIMD wrapper instead of per-lane scalarisation.
+**Open item — FoF SIMD.**  Forward-over-Forward SIMD Hessian remains
+deferred.  FoR is the production default and FoF retained as research
+scaffolding (see `dense_enzyme.h:148-159`); FoF's combined-J+H
+optimisation (item 3 below) is the planned follow-on path.
 
-**Risks.**
-
-- Same Eigen-trig limitation as Phase 5b — bodies with `cos`/`sin` will
-  see the same regression.
-- Reverse-mode (`__enzyme_autodiff`) over SIMD types is less exercised in
-  Enzyme's test suite than forward-mode. May hit IR-analysis issues
-  similar to (but distinct from) the i128-shift hazard from the original
-  Phase 2 work.
-
-**Estimated effort.** 0.5–1 day for the symmetric reverse-mode wrapper +
-benchmark. Phase 5b's calling convention is the model.
-
-**Decision criterion.** Pursue after item 1 (SIMD trig) is in tree, so the
-Hessian path can benefit cleanly. Without item 1, the per-lane libm cost
-will dominate on any non-trivial body just as it does on Jacobian.
+**Open item — MEE-class fallback.**  The per-VF opt-out is shipped, but
+the upstream Enzyme limitation that forces it is real: composite bodies
+with cos/sin/sqrt/division saturate the type-deduction tape under
+SuperScalar reverse mode.  Track upstream Enzyme issues; if a future
+release makes SS reverse-mode robust to these patterns, the opt-out can
+be removed.
 
 ---
 

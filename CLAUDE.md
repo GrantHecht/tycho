@@ -318,8 +318,16 @@ SuperScalar Scalar:
   per-lane tangents simultaneously via SIMD ops.  Per-lane speedup
   ~1.78× on Brach (small body, scalar arithmetic) and ~1.58× on CR3BP
   (`sqrt`-only, vectorises via `vsqrtpd`).
-- **Hessian:** uses the Phase 5a scalarize-per-lane fallback.  A
-  direct-SIMD Hessian path is future work.
+- **Hessian (Phase 6 — direct SIMD FoR, opt-out per VF):** the outer
+  `__enzyme_fwddiff` over `enzyme_for_outer_wrapper_simd` propagates W
+  lane-local Hessian columns per call; the inner `__enzyme_autodiff`
+  runs reverse mode on SuperScalar arithmetic.  Gated at configure time
+  by `TYCHO_ENZYME_SIMD_HESSIAN` (default ON); `OFF` falls back to the
+  Phase 5a scalarize-per-lane Hessian.  A per-VF marker
+  `static constexpr bool enzyme_simd_hessian_supported = false` forces
+  fallback for VFs whose body trips Enzyme's SS reverse-mode IR analysis
+  (composite trig+sqrt+division — currently MEE-class bodies).  FoF SIMD
+  Hessian is deferred to a future commit.
 
 **Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
 
@@ -363,15 +371,23 @@ struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
 };
 ```
 
-**Rule of thumb (post Eigen 5):**
+**Rule of thumb (post Eigen 5 + Phase 6):**
 
-- **Arithmetic-only VFs** (no trig): `is_vectorizable = true`.  Gets
-  full Phase 3 + 5b composition with native Eigen SIMD primal.
-  Example: CR3BPBench in `bench/cpp/bench_enzyme.cpp`.
-- **Trig-bearing VFs needing Phase 5b SIMD primal** (e.g., ensemble
-  integrators): `is_vectorizable = true`, route trig through
-  `tycho::math::cos/sin`.  Examples: `BrachBench`, `MEEBench`,
-  `BrachVectorizable`.
+- **Arithmetic / `sqrt`-only VFs, IR ≥ 6** (e.g. CR3BP-class): leave
+  `is_vectorizable = true`.  Gets full Phase 3 + 5b Jacobian SIMD AND
+  Phase 6 Hessian SIMD.  Hessian wins ~12× on CR3BP (291 ns Phase 6 vs
+  3672 ns Phase 5a per SuperScalar call) — the per-call Enzyme overhead
+  is amortised across 4 lanes via the SIMD reverse pass.
+- **Tiny trig-bearing VFs, IR ≤ 5** (e.g. Brach-class): `is_vectorizable
+  = true`; route trig through `tycho::math::cos/sin`.  Phase 5b Jacobian
+  wins per-lane; **Phase 6 Hessian regresses** vs Phase 5a (~12× slower
+  on Brach: 1044 ns vs 87 ns) because the SS reverse-mode tape overhead
+  dwarfs the body cost.  Acceptable — PSIOPT vectorizable workloads run
+  CR3BP/MEE-class bodies, not toy Brach.
+- **Composite trig+sqrt+division VFs** (e.g. MEE-class):
+  `is_vectorizable = true` AND `enzyme_simd_hessian_supported = false`.
+  Phase 5b handles the Jacobian; Phase 6 SIMD Hessian fails Enzyme's
+  type-deduction so the Hessian falls back to Phase 5a.
 - **Trig-bearing VFs evaluated one trajectory at a time:** either
   approach works; `tycho::math::*` with `is_vectorizable = true` is
   consistent across single- and multi-trajectory call sites.

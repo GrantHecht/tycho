@@ -160,12 +160,19 @@ struct CR3BPBench
 };
 
 // MEE variant marked Vectorizable=true.  See BrachBench notes above.
+//
+// MEE opts out of Phase 6 direct-SIMD Hessian: the composite trig+sqrt+division
+// body trips Enzyme's SuperScalar reverse-mode IR type analysis ("Cannot
+// deduce single type of store").  Brach (sin/cos only) and CR3BP (sqrt only)
+// build cleanly under Phase 6; MEE falls through to the Phase 5a scalarize-
+// per-lane Hessian.  See dense_enzyme.h enzyme_simd_hessian_eligible<>.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct MEEBench
     : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm> {
     using Base = tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
+    static constexpr bool enzyme_simd_hessian_supported = false;
     double mu_, sqm_;
     MEEBench(double mu = 1.0) : mu_{mu}, sqm_{std::sqrt(mu)} {}
     template <class InType, class OutType>
@@ -336,6 +343,100 @@ void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
 }
 
 // -----------------------------------------------------------------------------
+// Phase 6 Hessian SIMD bench.  Routes through the dispatch entry point
+// (compute_jacobian_adjointgradient_adjointhessian) so the same bench runs
+// the Phase 5a scalarize-per-lane fallback when TYCHO_ENZYME_SIMD_HESSIAN
+// is OFF and the Phase 6 direct-SIMD FoR path when ON.  <EnzymeAD, EnzymeAD>
+// pairing exercises the EnzymeAD Hessian.  The lam seed perturbs each lane
+// by +0.05*lane so Enzyme cannot fold lane values together.
+// -----------------------------------------------------------------------------
+
+void BM_Brach_HessianSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::BrachBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+    ODE f;
+    Eigen::Matrix<SS4, 5, 1> x;
+    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    Eigen::Matrix<SS4, 3, 1> fx;
+    Eigen::Matrix<SS4, 3, 5> jx;
+    Eigen::Matrix<SS4, 5, 1> g;
+    Eigen::Matrix<SS4, 5, 5> h;
+    Eigen::Matrix<SS4, 3, 1> lam;
+    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    {
+        const double seed[3] = {0.7, -1.1, 0.3};
+        for (int i = 0; i < 3; ++i)
+            for (int lane = 0; lane < 4; ++lane)
+                lam(i)(lane) = seed[i] + 0.05 * lane;
+    }
+    for (auto _ : state) {
+        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+        benchmark::DoNotOptimize(h);
+        benchmark::DoNotOptimize(g);
+        benchmark::ClobberMemory();
+    }
+}
+
+void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+    ODE f;
+    Eigen::Matrix<SS4, 7, 1> x;
+    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 7> jx;
+    Eigen::Matrix<SS4, 7, 1> g;
+    Eigen::Matrix<SS4, 7, 7> h;
+    Eigen::Matrix<SS4, 6, 1> lam;
+    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    {
+        const double seed[6] = {0.2, -0.5, 0.7, 0.1, -0.3, 0.4};
+        for (int i = 0; i < 6; ++i)
+            for (int lane = 0; lane < 4; ++lane)
+                lam(i)(lane) = seed[i] + 0.05 * lane;
+    }
+    for (auto _ : state) {
+        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+        benchmark::DoNotOptimize(h);
+        benchmark::DoNotOptimize(g);
+        benchmark::ClobberMemory();
+    }
+}
+
+// MEE bench: opted out of Phase 6 SIMD via enzyme_simd_hessian_supported=false.
+// Always routes through Phase 5a scalarize-per-lane regardless of
+// TYCHO_ENZYME_SIMD_HESSIAN.  Kept here as a regression sentinel for the
+// Phase 5a fallback path.
+void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
+    using ODE = tycho_enzyme_bench::MEEBench<
+        tycho::vf::DenseDerivativeMode::EnzymeAD,
+        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+    ODE f;
+    Eigen::Matrix<SS4, 9, 1> x;
+    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    Eigen::Matrix<SS4, 6, 1> fx;
+    Eigen::Matrix<SS4, 6, 9> jx;
+    Eigen::Matrix<SS4, 9, 1> g;
+    Eigen::Matrix<SS4, 9, 9> h;
+    Eigen::Matrix<SS4, 6, 1> lam;
+    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    {
+        const double seed[6] = {0.2, -0.5, 0.7, 0.1, -0.3, 0.4};
+        for (int i = 0; i < 6; ++i)
+            for (int lane = 0; lane < 4; ++lane)
+                lam(i)(lane) = seed[i] + 0.05 * lane;
+    }
+    for (auto _ : state) {
+        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+        benchmark::DoNotOptimize(h);
+        benchmark::DoNotOptimize(g);
+        benchmark::ClobberMemory();
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
 // adjoint gradient + adjoint Hessian via the active EnzymeAD pathway (FoR or
 // FoF, depending on TYCHO_ENZYME_HESSIAN_STRATEGY).  Compared head-to-head
@@ -480,6 +581,12 @@ BENCHMARK(BM_Hessian_CR3BP_FDiff)->Name("BM_Hessian_FDiff/CR3BP");
 BENCHMARK(BM_Hessian_CR3BP_Enzyme)->Name("BM_Hessian_Enzyme/CR3BP");
 BENCHMARK(BM_Hessian_MEE_FDiff)->Name("BM_Hessian_FDiff/MEE");
 BENCHMARK(BM_Hessian_MEE_Enzyme)->Name("BM_Hessian_Enzyme/MEE");
+
+// Phase 6: SuperScalar Hessian via dispatch entry.  Flag OFF runs Phase 5a
+// scalarize-per-lane; flag ON runs Phase 6 direct-SIMD FoR.
+BENCHMARK(BM_Brach_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/Brach");
+BENCHMARK(BM_CR3BP_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/CR3BP");
+BENCHMARK(BM_MEE_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/MEE");
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves PSIOPT, so the per-iteration cost includes

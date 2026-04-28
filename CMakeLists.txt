@@ -231,6 +231,16 @@ if(ENABLE_ENZYME_AD)
         "Phase 3 batch width for Enzyme forward-mode Jacobian (1, 4, or 8)")
     set_property(CACHE TYCHO_ENZYME_BATCH_WIDTH PROPERTY STRINGS "1" "4" "8")
     add_compile_definitions(TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH})
+
+    # Phase 6: direct-SIMD EnzymeAD Hessian for is_vectorizable=true VFs at
+    # SuperScalar Scalar.  When OFF, falls through to the Phase 5a
+    # scalarize-per-lane fallback so we can A/B in the same binary.
+    option(TYCHO_ENZYME_SIMD_HESSIAN
+        "Phase 6: direct-SIMD EnzymeAD Hessian for Vectorizable VFs"
+        ON)
+    if(TYCHO_ENZYME_SIMD_HESSIAN)
+        add_compile_definitions(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
+    endif()
 endif()
 
 option(TYCHO_USE_SYSTEM_EIGEN

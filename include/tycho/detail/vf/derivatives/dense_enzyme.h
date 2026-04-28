@@ -58,6 +58,22 @@ extern int enzyme_width;
 template <typename RT, typename... Args> RT __enzyme_fwddiff(Args...);
 template <typename RT, typename... Args> RT __enzyme_autodiff(Args...);
 
+// Opt-out marker for Phase 6 SIMD Hessian.  Any Vectorizable+EnzymeAD VF is
+// eligible by default; VFs whose body is too dense for Enzyme's SS
+// reverse-mode IR analysis (e.g. composite trig+sqrt+division bodies like
+// MEE) can disable per-VF by declaring:
+//
+//   static constexpr bool enzyme_simd_hessian_supported = false;
+//
+// Such VFs fall through to the Phase 5a scalarize-per-lane fallback.
+template <class T>
+constexpr bool enzyme_simd_hessian_eligible() {
+    if constexpr (requires { T::enzyme_simd_hessian_supported; })
+        return static_cast<bool>(T::enzyme_simd_hessian_supported);
+    else
+        return true;
+}
+
 namespace detail {
 
 // Free-function wrapper for Enzyme to differentiate.  Enzyme operates on plain
@@ -130,6 +146,32 @@ inline void enzyme_for_outer_wrapper(const Derived* self,
         enzyme_const, n_out);
 }
 
+// Phase 6 SIMD twin of enzyme_for_outer_wrapper: computes g(x) = J(x)^T λ
+// under SuperScalar arithmetic, so the outer __enzyme_fwddiff in
+// compute_adjoint_hessian_for_simd_ propagates W lane-local Hessian columns
+// per call.  Differentiates enzyme_compute_wrapper_simd<Derived, SSType>
+// reused unchanged from the Phase 5b Jacobian path.
+//
+// Allocation discipline (CRITICAL): no Eigen::Map construction, no resize,
+// no heap touches inside this function.  Enzyme's IR analysis pulls in any
+// heap-resize alignment-mask arithmetic that lives in the differentiated
+// callee, and the resulting i128 shifts cannot be lowered.  Caller (the
+// SIMD Hessian helper) is responsible for sizing fx_scratch / lam_scratch
+// to n_out at compile time.
+template <class Derived, class SSType>
+inline void enzyme_for_outer_wrapper_simd(const Derived* self,
+                                          const SSType* x_data, SSType* g_data,
+                                          SSType* fx_scratch, SSType* lam_scratch,
+                                          int n_in, int n_out) {
+    __enzyme_autodiff<void>(
+        reinterpret_cast<void*>(&enzyme_compute_wrapper_simd<Derived, SSType>),
+        enzyme_const, self,
+        enzyme_dup,   x_data,     g_data,
+        enzyme_dup,   fx_scratch, lam_scratch,
+        enzyme_const, n_in,
+        enzyme_const, n_out);
+}
+
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
@@ -157,6 +199,7 @@ inline void enzyme_for_outer_wrapper(const Derived* self,
 // W²-block under Phase 3 enzyme_width batching — is why FoF is retained
 // as research scaffolding even though it currently loses to FoR head-to-
 // head.
+// TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this wrapper.
 template <class Derived>
 inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      const double* x_data, double* fx_data,
@@ -498,6 +541,19 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         using Scalar = typename InType::Scalar;
 
         if constexpr (IsSuperScalar<Scalar>) {
+#if defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED) \
+    && defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+            if constexpr (Vectorizable<Derived>
+                          && JMode == DenseDerivativeMode::EnzymeAD
+                          && enzyme_simd_hessian_eligible<Derived>()) {
+                // Phase 6 direct-SIMD FoR Hessian.  Routes through Phase 5b
+                // for fx + jx and the SIMD FoR helper for hx.  Falls through
+                // to Phase 5a otherwise.
+                simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+                    x, fx_, jx_, adjgrad_, adjhess_, adjvars);
+                return;
+            }
+#endif
             // Phase 5a: scalarize-per-lane Hessian. For each lane, extract
             // double-typed locals, run the scalar Phase 2 Hessian, pack
             // results back into the SuperScalar fx/jx/gx/hx.
@@ -582,6 +638,49 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     }
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+    // Phase 6 SIMD direct path: the SuperScalar twin of
+    // scalar_compute_jacobian_adjointgradient_adjointhessian_impl.  Public so
+    // tests can call it directly to A/B against the Phase 5a fallback.
+    //
+    //   1. fx + jx via Phase 5b SIMD Jacobian (simd_compute_jacobian_impl).
+    //   2. gx = J^T λ on SSType.
+    //   3. hx via direct-SIMD FoR (compute_adjoint_hessian_for_simd_).
+    //
+    // Requires Vectorizable<Derived> and JMode == EnzymeAD (the parent
+    // simd_compute_jacobian_impl is only defined for the EnzymeAD JMode
+    // specialisation of DenseFirstDerivatives).
+    template <class InType, class OutType, class JacType, class AdjGradType,
+              class AdjHessType, class AdjVarType>
+    inline void simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
+        using Scalar = typename InType::Scalar;
+
+        const int ir = this->input_rows();
+        const int or_ = this->output_rows();
+
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
+
+        // Step 1: fx + jx via Phase 5b SIMD Jacobian.
+        this->simd_compute_jacobian_impl(x, fx_, jx_);
+
+        // Step 2: gx = J^T λ on SSType.
+        for (int i = 0; i < ir; ++i) {
+            Scalar acc;
+            acc.setZero();
+            for (int k = 0; k < or_; ++k) acc = acc + jx(k, i) * adjvars[k];
+            gx[i] = acc;
+        }
+
+        // Step 3: hx via direct-SIMD FoR.
+        compute_adjoint_hessian_for_simd_(x, hx, adjvars, ir, or_);
+    }
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
     template <class InType, class AdjHessType, class AdjVarType>
     inline void compute_adjoint_hessian_for_(
         CVecRef<InType> x,
@@ -636,9 +735,115 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
             }
         }
     }
+
+    // Phase 6 SIMD FoR Hessian.  Direct-SIMD twin of compute_adjoint_hessian_for_:
+    // every local is SSType (Eigen::Array<double, W, 1>); the outer
+    // __enzyme_fwddiff over enzyme_for_outer_wrapper_simd propagates W
+    // lane-local Hessian columns per call.  Phase 3 batching (enzyme_width=BW)
+    // is layered on top so each call also propagates BW outer tangents.
+    //
+    // The inner __enzyme_autodiff (inside enzyme_for_outer_wrapper_simd) runs
+    // on SuperScalar arithmetic — the unproven combo flagged in the Phase 6
+    // plan.  fx_scratch / lam_scratch are passed enzyme_const at the outer
+    // fwddiff so they are not BW-replicated; the inner reverse pass mutates
+    // lam_scratch per its standard convention.
+    template <class InType, class AdjHessType, class AdjVarType>
+    inline void compute_adjoint_hessian_for_simd_(
+        CVecRef<InType> x,
+        MatRef<AdjHessType> hx,
+        CVecRef<AdjVarType> adjvars,
+        int ir, int or_) const {
+        using SSType = typename InType::Scalar;
+        constexpr int BW = TYCHO_ENZYME_BATCH_WIDTH;
+
+        Eigen::Matrix<SSType, IR, 1> x_local = x;
+        Eigen::Matrix<SSType, IR, 1> dx_local(ir);
+        Eigen::Matrix<SSType, IR, 1> g_local(ir);
+        Eigen::Matrix<SSType, IR, 1> dg_local(ir);
+        Eigen::Matrix<SSType, OR, 1> fx_scratch(or_);
+        Eigen::Matrix<SSType, OR, 1> lam_scratch(or_);
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        int i = 0;
+
+        if constexpr (BW > 1) {
+            // Batched outer fwddiff: BW Hessian columns per call.  Shadow
+            // buffers are SSType-valued and column-major (Eigen default), so
+            // BW columns at byte stride ir*sizeof(SSType) match the
+            // SoA-by-lane layout enzyme_dupv expects.
+            Eigen::Matrix<SSType, IR, BW> dx_shadow(ir, BW);
+            Eigen::Matrix<SSType, IR, BW> dg_shadow(ir, BW);
+            const long stride_x =
+                static_cast<long>(ir) * static_cast<long>(sizeof(SSType));
+
+            const int ir_chunked = (ir / BW) * BW;
+            for (; i < ir_chunked; i += BW) {
+                dx_shadow.setZero();
+                for (int b = 0; b < BW; ++b)
+                    dx_shadow(i + b, b).setConstant(1.0);
+                dg_shadow.setZero();
+                g_local.setZero();
+                fx_scratch.setZero();
+                for (int k = 0; k < or_; ++k) lam_scratch[k] = adjvars[k];
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(
+                        &detail::enzyme_for_outer_wrapper_simd<Derived, SSType>),
+                    enzyme_width, BW,
+                    enzyme_const, self,
+                    enzyme_dupv, stride_x,
+                        x_local.data(), dx_shadow.data(),
+                    enzyme_dupv, stride_x,
+                        g_local.data(), dg_shadow.data(),
+                    enzyme_const, fx_scratch.data(),
+                    enzyme_const, lam_scratch.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                for (int b = 0; b < BW; ++b)
+                    for (int j = 0; j < ir; ++j)
+                        hx(j, i + b) = dg_shadow(j, b);
+            }
+        }
+
+        // Tail (or full loop when BW=1): single-tangent SIMD fwddiff.
+        // Identical shape to the Phase 5b Jacobian tail at lines 316-335.
+        for (; i < ir; ++i) {
+            dx_local.setZero();
+            dx_local[i].setConstant(1.0);
+            g_local.setZero();
+            dg_local.setZero();
+            fx_scratch.setZero();
+            for (int k = 0; k < or_; ++k) lam_scratch[k] = adjvars[k];
+
+            __enzyme_fwddiff<void>(
+                reinterpret_cast<void*>(
+                    &detail::enzyme_for_outer_wrapper_simd<Derived, SSType>),
+                enzyme_const, self,
+                enzyme_dup,   x_local.data(),  dx_local.data(),
+                enzyme_dup,   g_local.data(),  dg_local.data(),
+                enzyme_const, fx_scratch.data(),
+                enzyme_const, lam_scratch.data(),
+                enzyme_const, ir,
+                enzyme_const, or_);
+
+            for (int j = 0; j < ir; ++j) hx(j, i) = dg_local[j];
+        }
+
+        // Symmetrize on SSType — each lane is independently symmetric.
+        for (int i2 = 0; i2 < ir; ++i2) {
+            for (int j = i2 + 1; j < ir; ++j) {
+                SSType avg = 0.5 * (hx(i2, j) + hx(j, i2));
+                hx(i2, j) = avg;
+                hx(j, i2) = avg;
+            }
+        }
+    }
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+    // TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this helper.
     template <class InType, class AdjHessType, class AdjVarType>
     inline void compute_adjoint_hessian_fof_(
         CVecRef<InType> x,
