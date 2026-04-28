@@ -13,13 +13,32 @@ are genuine extensions, not bug fixes.
 
 ---
 
-## 1. SIMD trig overload for `Eigen::Array<double, W, 1>`
+## 1. SIMD trig overload for `Eigen::Array<double, W, 1>` — RESOLVED (2026-04-27)
 
-**Problem.** Eigen's `Array<double, 4, 1>::cos()` / `::sin()` / `::exp()` /
-`::log()` are unrolled per-element and lower to four separate scalar libm
-calls (`@cos(double)` × 4, etc.) rather than a single vectorised
-`cos<4xdouble>` intrinsic. This kills Phase 5b SIMD performance on bodies
-whose math involves transcendentals.
+> **Resolution.** The Eigen 3.4 → 5.0.1 upgrade plus the opt-in
+> `tycho::math::cos / sin` wrapper API ships in `eigen-upgrade`. Eigen 5
+> *does* emit vectorised `pcos<Packet4d>` / `psin<Packet4d>` for the
+> analytic-integration paths that need it; it just turns out Enzyme can't
+> differentiate the resulting bithack IR yet (issues
+> [#689](https://github.com/EnzymeAD/Enzyme/issues/689),
+> [#2679](https://github.com/EnzymeAD/Enzyme/issues/2679),
+> [#2794](https://github.com/EnzymeAD/Enzyme/issues/2794)). VFs that pair
+> trig with `EnzymeAD` route their `cos`/`sin` calls through
+> `tycho::math::*` (umbrella `<tycho/math.h>`); the wrappers unroll into
+> per-lane scalar libm calls Enzyme handles cleanly under any
+> `enzyme_width`. Net Phase 5b numbers: MEE 562 ns total at W=4 (down
+> from prior 874 ns W=1 fallback), Brach 316 ns (down from 421 ns).
+> See `CurrentStateAndFutureWork.md` §3 (architecture decisions) and
+> `docs/superpowers/specs/2026-04-26-enzyme-trig-spike.md` for the spike
+> writeup. The compile-time canary at `scripts/upstream_canary/` detects
+> when Enzyme adds support for SIMD packet trig — at which point the
+> wrappers can be replaced with direct `x.cos() / x.sin()` calls.
+
+**Problem (historical).** Eigen 3.4's `Array<double, 4, 1>::cos()` /
+`::sin()` / `::exp()` / `::log()` were unrolled per-element and lowered to
+four separate scalar libm calls (`@cos(double)` × 4, etc.) rather than a
+single vectorised `cos<4xdouble>` intrinsic. This killed Phase 5b SIMD
+performance on bodies whose math involves transcendentals.
 
 **Concrete impact.** On the MEE dynamics test case (9→6 with one `cos(x5)`
 and one `sin(x5)` per body invocation):
@@ -220,15 +239,22 @@ Cons:
 
 ---
 
-## 6. Eigen upstream issue
+## 6. Eigen upstream issue — RESOLVED (2026-04-27)
 
-The `Array<double, W, 1>::cos()` per-element scalar-libm pattern is a
-genuine Eigen ecosystem issue. Filing an upstream issue with the
-distillation from item 1 above would benefit any project using Eigen's
-SuperScalar arithmetic with libm transcendentals.
+> **Resolution.** Eigen 5.0.1 ships vectorised `pcos<Packet4d>` /
+> `psin<Packet4d>` for `Array<double, W, 1>`, addressing the original
+> per-element scalar-libm pattern documented here. Code paths *not*
+> differentiated by Enzyme (e.g. `include/tycho/detail/astro/mee_dynamics.h`)
+> benefit directly. The remaining Enzyme-side limitation is tracked by
+> upstream Enzyme issues
+> [#689](https://github.com/EnzymeAD/Enzyme/issues/689),
+> [#2679](https://github.com/EnzymeAD/Enzyme/issues/2679),
+> [#2794](https://github.com/EnzymeAD/Enzyme/issues/2794) and by the
+> Tycho-side compile-time canary at `scripts/upstream_canary/`. No new
+> Eigen issue needs filing.
 
-**Status.** Not filed. Tycho can carry the workaround (item 1) regardless,
-but a proper upstream fix would let other projects benefit.
+The `Array<double, W, 1>::cos()` per-element scalar-libm pattern was a
+genuine Eigen ecosystem issue under Eigen 3.4. Eigen 5 fixes it.
 
 ---
 

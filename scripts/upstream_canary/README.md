@@ -22,7 +22,8 @@ Exit code:
 - **0**: status quo unchanged (both tests still fail at compile time).
 - **non-zero**: at least one test compiles or runs — upstream has changed
   and the dependent code in `simd_math.h`, `dense_enzyme.h`, and
-  `EnzymeTrig.md` should be revisited.
+  `docs/superpowers/specs/2026-04-26-enzyme-trig-spike.md` should be
+  revisited.
 
 Environment overrides (defaults shown):
 
@@ -40,7 +41,8 @@ schedule a periodic agent (e.g. monthly) to detect upstream changes.
 ## What to do if a test passes
 
 1. Re-read the current implementation rationale in `CLAUDE.md` (search for
-   "tycho::math") and in `EnzymeTrig.md` at the repo root.
+   "tycho::math") and in
+   `docs/superpowers/specs/2026-04-26-enzyme-trig-spike.md`.
 2. Verify the win is real with the existing benchmarks under
    `bench/cpp/bench_enzyme.cpp` (compare `BM_JacobianVecSIMD_Enzyme/*`
    numbers before vs after the simplification).

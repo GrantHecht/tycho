@@ -333,7 +333,7 @@ Phase 5b SIMD primal evaluation on a VF that calls `sin`/`cos` under
 EnzymeAD, route those calls through the wrapper API:
 
 ```cpp
-#include "tycho/detail/utils/simd_math.h"   // public umbrella TBD
+#include <tycho/math.h>
 
 template <class InType, class OutType>
 inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {

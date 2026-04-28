@@ -305,7 +305,7 @@ re-record that should also be done as part of this).
 If a real fix lands here it could land in a follow-up PR; the gate
 results are already publishable.
 
-### 5.2 `-Wnontrivial-memcall` warning fix
+### 5.2 `-Wnontrivial-memcall` warning fix — DONE (2026-04-27)
 
 clang 21 + Eigen 5's now-non-trivially-copyable `Array<double, 4, 1>`
 flags `std::memset` on a `Scalar*` at `include/tycho/detail/utils/memory_management.h:84`:
@@ -324,7 +324,7 @@ Casting is a smaller change but `uninitialized_value_construct_n` is
 arguably more correct (calls Scalar's value-constructor instead of
 zero-bit-bashing). Either is fine.
 
-### 5.3 Public umbrella header `include/tycho/math.h`
+### 5.3 Public umbrella header `include/tycho/math.h` — DONE (2026-04-27)
 
 Currently consumers include `tycho/detail/utils/simd_math.h` directly,
 which is fine for tycho-internal call sites but not idiomatic for the
@@ -340,7 +340,7 @@ A trivial umbrella:
 …lets external consumers write `#include <tycho/math.h>` per the
 existing convention (`tycho/vector_functions.h`, `tycho/utils.h`, etc.).
 
-### 5.4 Reset Phase 5b benchmark target (Task 2.4)
+### 5.4 Reset Phase 5b benchmark target (Task 2.4) — DONE (2026-04-27)
 
 Tracker Task 2.4 (current state: `pending`) was titled "Validate MEE
 Phase 5b benchmark target (≤ 30 ns total)". That target was based on
@@ -354,7 +354,7 @@ appears) to "≤ 600 ns at default `TYCHO_ENZYME_BATCH_WIDTH=4` for MEE
 Phase 5b SIMD; revisit if upstream canary fires", or close as
 "superseded by §4.5".
 
-### 5.5 Move/delete planning artifacts
+### 5.5 Move/delete planning artifacts — DONE (2026-04-27)
 
 `EnzymeTrig.md` and `EnzymeTrigFindings.md` live at the repo root and
 were committed in `349b646` as historical record. They should move to
@@ -368,7 +368,7 @@ Suggested target paths:
 - `docs/superpowers/specs/2026-04-26-enzyme-trig-spike.md` ← `EnzymeTrig.md`
 - `docs/superpowers/specs/2026-04-26-enzyme-trig-findings-codex.md` ← `EnzymeTrigFindings.md`
 
-### 5.6 `doc/VectorFunction.md` mention of `tycho::math`
+### 5.6 `doc/VectorFunction.md` mention of `tycho::math` — DONE (2026-04-27)
 
 CLAUDE.md cites `doc/VectorFunction.md` as the canonical VF doc.
 Whatever section there describes EnzymeAD usage should pick up the
@@ -596,13 +596,14 @@ but a known sharp edge if the toolchain bumps.
 | Math wrapper API | `include/tycho/detail/utils/simd_math.h` |
 | Eigen 5 SuperScalar shim | `include/tycho/detail/typedefs/super_scalar_traits.h` |
 | `eigen_types.h` (includes shim) | `include/tycho/detail/typedefs/eigen_types.h` |
+| Public umbrella | `include/tycho/math.h` (added §5.3) |
 | Test fixture using `tycho::math` | `tests/cpp/enzyme/test_enzyme_vectorized.cpp` |
 | Bench fixtures using `tycho::math` | `bench/cpp/bench_enzyme.cpp` (`BrachBench`, `MEEBench`) |
 | Eigen-5 regenerated regression goldens | `tests/cpp/integrators/regression/golden/{ivp_03_cr3bp_dopri87,trans_08_jacobian}.bin` |
 | Upstream canary | `scripts/upstream_canary/{check.sh, test_a_*.cpp, test_b_*.cpp, README.md}` |
 | Master rule-of-thumb doc | `CLAUDE.md` (search "Trig-bearing bodies under Phase 5b") |
-| Spike historical record | `EnzymeTrig.md`, `EnzymeTrigFindings.md` (root, planned move per §5.5) |
-| Memory-mgmt warning site | `include/tycho/detail/utils/memory_management.h:84` (§5.2) |
+| Spike historical record | `docs/superpowers/specs/2026-04-26-enzyme-trig-{spike,findings-codex}.md` (moved §5.5) |
+| Memory-mgmt warning fix | `include/tycho/detail/utils/memory_management.h:84` (fixed §5.2) |
 
 ---
 

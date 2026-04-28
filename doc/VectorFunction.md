@@ -504,6 +504,34 @@ Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`) — `IR` outer
 tangent calls, each invoking a reverse-mode sweep. Derivatives are machine-precision
 accurate. Requires `ENABLE_ENZYME_AD=ON` at configure time.
 
+**Trig in `compute_impl` under EnzymeAD.** Eigen 5's vectorised packet trig
+(`pcos<Packet4d>` etc.) lowers to bithack IR that Enzyme cannot currently
+differentiate. If a `compute_impl` body marked `is_vectorizable = true` calls
+`sin`/`cos` and is paired with `EnzymeAD`, route those calls through
+`tycho::math::cos / sin` (umbrella header `<tycho/math.h>`):
+
+```cpp
+#include <tycho/math.h>
+
+template <class InType, class OutType>
+inline void compute_impl(ConstVectorBaseRef<InType> x,
+                         ConstVectorBaseRef<OutType> fx_) const {
+    using tycho::math::cos;   // ADL hits both double (-> std::cos) and
+    using tycho::math::sin;   // Eigen::Array<double, W, 1> (-> per-lane libm).
+    // ...
+}
+```
+
+The SuperScalar overloads unroll into `W` scalar `std::cos(double)` /
+`std::sin(double)` calls, each lowering to `@llvm.cos.f64` / `@llvm.sin.f64`
+which Enzyme's built-in handler differentiates cleanly under any `enzyme_width`.
+Surrounding non-trig arithmetic still vectorises across W lanes; only the trig
+itself is per-lane scalar. Code paths *not* differentiated by Enzyme should
+keep using Eigen directly — e.g. analytic-integration paths benefit from
+Eigen 5 SIMD trig without going through this layer. See CLAUDE.md
+"Trig-bearing bodies under Phase 5b" for the full rule of thumb and the
+upstream-canary procedure that detects when this wrapper can be removed.
+
 #### 3. Forward Finite Differences (`FDiffFwd`)
 
 Standard numerical differentiation: `df/dx_i ≈ (f(x + h*e_i) - f(x)) / h`. Less accurate than EnzymeAD, but works for any function including ones that call external libraries.

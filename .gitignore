@@ -5,6 +5,7 @@
 ### Shell ###
 *.sh
 !bench/*.sh
+!scripts/upstream_canary/check.sh
 
 ### C++ ###
 # Prerequisites
