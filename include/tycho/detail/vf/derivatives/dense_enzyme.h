@@ -174,31 +174,107 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
+// =============================================================================
+// FoF (Forward-over-Forward) Hessian — ARCHIVED RESEARCH PATH
+// =============================================================================
+//
+// **Status (2026-04-28).** All FoF code below is **retained as a working
+// reference implementation**, but no tests or benchmarks exercise it in tree.
+// FoR (Forward-over-Reverse) is the production default; switch via cmake:
+//
+//   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse  (default, tested)
+//   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward  (untested research)
+//
+// **Architecture summary.** FoF computes the Hessian as
+// `__enzyme_fwddiff` over a wrapper that itself does `__enzyme_fwddiff`
+// — both passes are forward mode, no reverse-mode tape.  The outer pass
+// differentiates `J(x)·e_inner` w.r.t. x along e_outer, yielding
+// `∂²f_k / ∂x_i ∂x_j` for fixed (i,j) in the outer fx-shadow.
+//
+// **What's preserved here.**
+// - Three inner wrappers: scalar `enzyme_fof_inner_wrapper`, SIMD
+//   `enzyme_fof_inner_wrapper_simd`, doubly-batched
+//   `enzyme_fof_inner_wrapper_simd_innerbatch`.
+// - Three Hessian helpers under `DenseSecondDerivatives<...,EnzymeAD>`:
+//   `compute_jacobian_adjoint_hessian_fof_` (scalar combined J+H),
+//   `compute_jacobian_adjoint_hessian_fof_simd_` (SIMD singly-batched
+//   combined J+H), and `compute_jacobian_adjoint_hessian_fof_simd_db_`
+//   (SIMD doubly-batched combined J+H, restricted to ir % BW == 0).
+// - The FoF branch of the `compute_jacobian_adjointgradient_adjointhessian_impl`
+//   dispatch (routes Vectorizable+EnzymeAD+SS to the SIMD helper under
+//   strategy=FoF).
+//
+// **Phase 7 / 7+ benchmarks (2026-04-28, BW=4, AVX2).**
+//
+//   | VF      | FoR-SIMD | FoF-SIMD (singly) | FoF-SIMD (doubly) |
+//   |---------|----------|-------------------|-------------------|
+//   | Brach   |  1038 ns |  2102 ns          | n/a (IR=5 mod 4)  |
+//   | CR3BP   |   291 ns |  1545 ns          | n/a (IR=7 mod 4)  |
+//   | MEE     | fallback |  9812 ns @ -O1    | n/a (IR=9 mod 4)  |
+//   | Poly8x4 |    n/a   |   769 ns          |   727 ns (-5%)    |
+//
+// FoR wins decisively on every body where it can run.  FoF's only
+// qualitative advantage is on MEE-class composites (cos/sin/sqrt/division)
+// where the FoR path's inner __enzyme_autodiff over SuperScalar arithmetic
+// fails Enzyme's TypeAnalysis at -O3.  Even there, MEE FoF SIMD has to be
+// compiled at -O1 to avoid a separate "Cannot deduce single type of store"
+// IR-deduction failure (different cause from the FoR limit).
+//
+// The doubly-batched variant proves nested
+// `__enzyme_fwddiff(enzyme_width=BW)` over `__enzyme_fwddiff(enzyme_width=
+// IBW)` composes correctly, but the 4× call-count reduction is absorbed
+// by 4× body work per call — only ~5% net speedup.
+//
+// **When to revive.**
+// 1. **MEE-class workload dominance.**  If a real workload's runtime is
+//    dominated by composite trig+sqrt+division Hessians where FoR-SIMD
+//    can't go SIMD, FoF-SIMD is the only path.  Compile MEE-class TUs at
+//    -O1 (see git history for the bench_enzyme_mee_hessian.cpp
+//    workaround).
+// 2. **Per-call overhead becomes the bottleneck.**  If a future
+//    Enzyme/clang release reduces body-cost so per-call overhead
+//    dominates, the doubly-batched W² Hessian-elements-per-call may
+//    flip the FoR/FoF verdict.
+// 3. **Combined J+H needed in one pass for cache-locality reasons.**
+//    The FoF helpers write fx + jx + hx in one set of outer fwddiff
+//    calls (J read from the outer fx-shadow that FoR discards) — could
+//    matter for a fused-iteration NLP solver that reads J and H
+//    in the same cache line.
+//
+// **Reference commits.**
+// - 73d09a4 feat(enzyme): Phase 6 direct-SIMD FoR Hessian
+// - e8651d2 feat(enzyme): Phase 7 direct-SIMD FoF Hessian + combined J+H
+// - 4cd7391 fix(bench): split MEE FoF SIMD Hessian into its own -O1 TU
+//   (subsequently reverted — FoF benches are no longer in tree)
+// - e777544 feat(enzyme): Phase 7+ doubly-batched FoF SIMD helper
+//
+// **Reviving the tests/benches.**  Reproduce the test fixtures
+// `MEEVectorizable` and `PolyVectorizable8x4` from commit `e777544`
+// (test_enzyme_vectorized.cpp) and the matching
+// `BM_Poly8x4_HessianFoFSIMD_singly|doubly` benches plus the
+// MEE-bench-in-its-own-TU pattern from commit `4cd7391`.
+//
+// =============================================================================
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
 
-// FoF inner wrapper: computes f(x) AND J(x)·dx_inner via Enzyme forward mode.
+// FoF inner wrapper (scalar): computes f(x) AND J(x)·dx_inner via Enzyme
+// forward mode.
 //
 // Outputs:
 //   fx_data        = f(x)              (primal)
 //   dfx_inner_data = J(x) · dx_inner   (forward tangent)
 //
-// dx_inner is the fixed inner-seed (will be e_j when called from the FoF
-// caller).  Same allocation-discipline as the FoR wrapper: nothing inside
-// the wrapper allocates so Enzyme's analysis cannot encounter heap-resize
-// alignment-mask arithmetic that produces i128 shifts.
+// dx_inner is the fixed inner-seed (e_j from the FoF caller).
+// Allocation-discipline: nothing inside the wrapper allocates so Enzyme's
+// analysis cannot encounter heap-resize alignment-mask arithmetic that
+// produces i128 shifts (same hazard as the FoR wrapper).
 //
-// Future-work note: when this wrapper is wired through the outer
-// __enzyme_fwddiff in compute_adjoint_hessian_fof_, the OUTPUT SHADOW on
-// fx_data is "J(x) · e_outer" — i.e. the corresponding column of the
-// Jacobian falls out of the same outer pass that computes the Hessian
-// element.  The current FoF caller still recomputes the full Jacobian
-// up-front via DenseFirstDerivatives::compute_jacobian_impl; a planned
-// optimisation reads the column out of the outer call's fx-shadow
-// instead, eliminating IR redundant Phase-1 forward sweeps per Hessian
-// computation.  This combined-J-and-H property — and the corresponding
-// W²-block under Phase 3 enzyme_width batching — is why FoF is retained
-// as research scaffolding even though it currently loses to FoR head-to-
-// head.
+// When the outer __enzyme_fwddiff differentiates this wrapper w.r.t. x
+// along e_outer, the OUTPUT SHADOW on fx_data carries J(x)·e_outer = the
+// corresponding column of the Jacobian.  The combined-J+H caller below
+// extracts J from this shadow on the j == 0 inner pass, eliminating the
+// up-front Phase-1 forward sweep that the original (now-deleted)
+// `compute_adjoint_hessian_fof_` required.
 template <class Derived>
 inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      const double* x_data, double* fx_data,

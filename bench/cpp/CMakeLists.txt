@@ -47,27 +47,9 @@ if(UNIX)
 endif()
 
 if(ENABLE_ENZYME_AD AND BUILD_CPP_BENCHMARKS)
-    # bench_enzyme_mee_hessian.cpp is a separate TU on purpose: under FoF
-    # strategy at -O3, the MEE Hessian SIMD path triggers an Enzyme
-    # TypeAnalysis failure when it shares a TU with the rest of
-    # bench_enzyme.cpp's Enzyme template instantiations.  Splitting the
-    # MEE fixture into its own TU sidesteps the conflict; the resulting
-    # binary is identical for non-MEE benches.
-    add_executable(bench_enzyme bench_enzyme.cpp bench_enzyme_mee_hessian.cpp)
+    add_executable(bench_enzyme bench_enzyme.cpp)
     set_target_properties(bench_enzyme PROPERTIES POSITION_INDEPENDENT_CODE OFF)
     target_compile_options(bench_enzyme PRIVATE ${COMPILE_FLAGS} ${TYCHO_ENZYME_COMPILE_FLAGS})
-    # bench_enzyme_mee_hessian.cpp is force-built at -O1: the MEE FoF SIMD
-    # Hessian path fails Enzyme's TypeAnalysis at -O3 (composite trig+sqrt+
-    # division IR shapes hit the "Cannot deduce single type of store"
-    # diagnostic).  -O1 keeps Enzyme's analysis simple enough to deduce
-    # types cleanly.  The bench measures the SIMD WORK (compute_*_impl),
-    # which is template-inlined into the bench fn — at -O1 the inlined work
-    # also runs at -O1, so MEE numbers under FoF are NOT directly comparable
-    # to Brach/CR3BP at -O3.  Acceptable trade-off: we get a number for MEE
-    # at all (vs Phase 5a-only fallback under FoR), and qualitative trends
-    # (FoF vs FoR strategy choice) remain valid.
-    set_source_files_properties(bench_enzyme_mee_hessian.cpp PROPERTIES
-        COMPILE_OPTIONS "-O1")
     target_include_directories(bench_enzyme PRIVATE
         ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
         ${CMAKE_SOURCE_DIR}/tests/cpp/enzyme   # reuse enzyme_test_dynamics.h

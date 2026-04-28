@@ -139,57 +139,64 @@ be removed.
 
 ---
 
-## 3. FoF combined-J+H optimisation (spec §4.1 future work)
+## 3. FoF Hessian path — ARCHIVED (research scaffolding only)
 
-**Status.** RESOLVED via Phase 7 (2026-04-28).
+**Status (2026-04-28).** FoF (Forward-over-Forward) Hessian SIMD with
+combined-J+H output, plus the doubly-batched variant, were prototyped
+in Phase 7 / 7+ and have been **archived as reference code in
+`include/tycho/detail/vf/derivatives/dense_enzyme.h`**.  All FoF tests
+and benchmarks have been removed.  The code still compiles under
+`TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward` but is not exercised
+by CI or the bench suite.
 
-**What landed.**
+**What was prototyped.**
 
-- `compute_jacobian_adjoint_hessian_fof_` (scalar) replaces
-  `compute_adjoint_hessian_fof_` under FoF strategy.  The outer fwddiff
-  reads J(x)·e_i from the previously-discarded fx-shadow on the first
-  inner iteration (j == 0); subsequent j iterations recompute the same
-  column and are ignored.
-- `compute_jacobian_adjoint_hessian_fof_simd_` (SIMD twin) ships under
-  Phase 7 alongside `enzyme_fof_inner_wrapper_simd`.  Phase 3 batching
-  applies to the OUTER tangent (BW columns of J + BW Hessian column
-  entries per call); inner-direction batching deferred (would yield W²
-  Hessian elements per call but adds index-arithmetic complexity).
-- Dispatch under `TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward` +
-  `TYCHO_ENZYME_SIMD_HESSIAN=ON` routes Vectorizable+SS+EnzymeAD
-  inputs to the SIMD FoF path.  No `enzyme_simd_hessian_eligible<>`
-  gate — FoF avoids the SS reverse-mode tape that forced MEE-class
-  VFs to opt out of FoR SIMD.
-- Tests `EnzymeVectorized.HessianFoFSIMDMatchesScalarized_{Brach,
-  CR3BP,MEE}` validate the path.  MEE works for the first time under
-  any SIMD Hessian strategy.
+- Scalar combined J+H FoF helper that reads column i of J from the
+  outer fwddiff's fx-shadow (previously discarded) — saves the up-front
+  Phase-1 forward sweep.
+- SIMD combined J+H FoF helper (singly-batched outer at width BW).
+- Doubly-batched FoF SIMD helper (BW outer × BW inner = BW² Hessian
+  elements per outer call); confirms Enzyme accepts nested
+  `__enzyme_fwddiff(enzyme_width)` composition.
+- Per-VF MEE-class inner wrapper variant for the trig+sqrt+division
+  body that fails Enzyme's TypeAnalysis at -O3 (workaround: separate
+  TU at -O1).
 
-**Bench result.**  Phase 6 FoR-SIMD remains faster on Brach (1044 ns)
-and CR3BP (291 ns) than Phase 7 FoF-SIMD (2109 ns and 1543 ns
-respectively).  FoF wins qualitatively on MEE-class bodies (only
-viable SIMD Hessian path).  FoR remains the cmake default; FoF is the
-opt-in alternative for MEE-dominated workloads.
+**Why archived.**  Bench numbers at archival (BW=4, AVX2):
 
-**Phase 7+ — Inner-direction batching (proof of concept, 2026-04-28).**
-Doubly-batched FoF SIMD helper `compute_jacobian_adjoint_hessian_fof_simd_db_`
-ships alongside the singly-batched one.  Outer `__enzyme_fwddiff(enzyme_width=BW)`
-over `enzyme_fof_inner_wrapper_simd_innerbatch<...,IBW>` (which itself does
-`__enzyme_fwddiff(enzyme_width=IBW)`) — confirmed Enzyme accepts nested
-enzyme_width composition.  Per outer call: BW outer × BW inner = BW²
-Hessian elements + BW columns of J.  Validated by
-`EnzymeVectorized.HessianFoFSIMDdb_PolyMatchesScalarized` on a synthetic
-IR=8 OR=4 fixture.
+| VF      | FoR-SIMD | FoF-SIMD (singly) | FoF-SIMD (doubly) |
+|---------|----------|-------------------|-------------------|
+| Brach   |  1038 ns |  2102 ns          | n/a (IR=5 mod 4)  |
+| CR3BP   |   291 ns |  1545 ns          | n/a (IR=7 mod 4)  |
+| MEE     | fallback |  9812 ns @ -O1    | n/a (IR=9 mod 4)  |
+| Poly8x4 |    n/a   |   769 ns          |   727 ns (-5%)    |
 
-Bench (Poly8x4, BW=4): singly-batched 769 ns vs doubly-batched 727 ns —
-**only 5% speedup**.  Per-call Enzyme overhead is not the dominant cost;
-body work dominates.  Same conclusion as item 4 below ("`enzyme_width` ×
-Phase 5b composition is neutral").  The 4× call-count reduction is
-absorbed by the 4× body work per call.
+FoR wins decisively on every body where it can run.  MEE has no real
+PSIOPT workload demanding SIMD Hessian today.  The doubly-batched
+variant proved the W² claim but yielded only ~5% — per-call Enzyme
+overhead is not the dominant cost; body work is (same conclusion as
+item 4 below).
 
-The helper is shipped as a research path (not the default) — restricted to
-ir divisible by BW (no tail handling).  Promote when a workload arises
-where call overhead is the bottleneck.  Index arithmetic for the BW²
-shadow unpack is documented in the helper docstring.
+**When to revive.**
+1. **MEE-class workload dominance.**  Real workload's runtime
+   dominated by composite trig+sqrt+division Hessians where FoR-SIMD
+   can't go SIMD.  Compile MEE-class TUs at -O1 (see archived header
+   docstrings).
+2. **Per-call overhead becomes bottleneck.**  Future Enzyme/clang
+   reduces body cost so per-call dominates.
+3. **Cache-locality in fused J+H consumer.**  Solver reads J and H
+   in the same iteration; combined-J+H FoF saves a redundant
+   forward sweep + can produce both in one cache window.
+
+**Reference commits** for revival:
+- `e8651d2` feat(enzyme): Phase 7 direct-SIMD FoF Hessian + combined J+H
+- `4cd7391` fix(bench): split MEE FoF SIMD Hessian into its own -O1 TU
+- `e777544` feat(enzyme): Phase 7+ doubly-batched FoF SIMD helper
+
+Test fixtures (`MEEVectorizable`, `PolyVectorizable8x4`) and benches
+(`BM_Poly8x4_HessianFoFSIMD_singly|doubly`, `BM_MEE_HessianSIMD_Enzyme`
+under FoF strategy) reside in those commits and can be cherry-picked
+back when the case is made.
 
 ---
 
