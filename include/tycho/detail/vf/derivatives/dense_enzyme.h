@@ -199,13 +199,6 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // W²-block under Phase 3 enzyme_width batching — is why FoF is retained
 // as research scaffolding even though it currently loses to FoR head-to-
 // head.
-// TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this wrapper.
-// When picking this up, also fold J extraction into the same pass: the
-// outer fwddiff's fx-shadow already carries J(x)·e_i, so the new SIMD
-// FoF Hessian helper should produce both J and H from one set of calls
-// (item 3 in doc/EnzymeAD_FutureWork.md).  Doing the SIMD migration
-// without the combined-output optimisation leaves a W-column J slab +
-// W² H block per outer call on the table.
 template <class Derived>
 inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      const double* x_data, double* fx_data,
@@ -213,6 +206,27 @@ inline void enzyme_fof_inner_wrapper(const Derived* self,
                                      int n_in, int n_out) {
     __enzyme_fwddiff<void>(
         reinterpret_cast<void*>(&enzyme_compute_wrapper<Derived>),
+        enzyme_const, self,
+        enzyme_dup,   x_data,         dx_inner,
+        enzyme_dup,   fx_data,        dfx_inner_data,
+        enzyme_const, n_in,
+        enzyme_const, n_out);
+}
+
+// Phase 7 SIMD twin of enzyme_fof_inner_wrapper.  All forward mode (no
+// SuperScalar reverse-mode tape — the inner is fwddiff, the outer is
+// also fwddiff).  Reuses Phase 5b's SS primal entry point.
+//
+// Allocation discipline (CRITICAL): no Eigen::Map construction, no
+// resize, no heap touches inside this function.  Same i128-shift hazard
+// as the Phase 6 SIMD wrappers; caller sizes all buffers at compile-time.
+template <class Derived, class SSType>
+inline void enzyme_fof_inner_wrapper_simd(const Derived* self,
+                                          const SSType* x_data, SSType* fx_data,
+                                          SSType* dx_inner, SSType* dfx_inner_data,
+                                          int n_in, int n_out) {
+    __enzyme_fwddiff<void>(
+        reinterpret_cast<void*>(&enzyme_compute_wrapper_simd<Derived, SSType>),
         enzyme_const, self,
         enzyme_dup,   x_data,         dx_inner,
         enzyme_dup,   fx_data,        dfx_inner_data,
@@ -559,6 +573,18 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
                     x, fx_, jx_, adjgrad_, adjhess_, adjvars);
                 return;
             }
+#elif defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED) \
+    && defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+            if constexpr (Vectorizable<Derived>
+                          && JMode == DenseDerivativeMode::EnzymeAD) {
+                // Phase 7 direct-SIMD FoF combined J+H Hessian.  No
+                // enzyme_simd_hessian_eligible<> gate: FoF avoids the SS
+                // reverse-mode tape that forced MEE-class VFs to opt out
+                // of the FoR SIMD path.
+                simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+                    x, fx_, jx_, adjgrad_, adjhess_, adjvars);
+                return;
+            }
 #endif
             // Phase 5a: scalarize-per-lane Hessian. For each lane, extract
             // double-typed locals, run the scalar Phase 2 Hessian, pack
@@ -624,6 +650,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         const int ir = this->input_rows();
         const int or_ = this->output_rows();
 
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
         // Step 1: fx and jx via the JMode first-derivative path.
         this->compute_jacobian_impl(x, fx_, jx_);
 
@@ -634,10 +661,21 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
             gx[i] = acc;
         }
 
-#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+        // Step 3: hx via FoR.
         compute_adjoint_hessian_for_(x, hx, adjvars, ir, or_);
 #elif defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-        compute_adjoint_hessian_fof_(x, hx, adjvars, ir, or_);
+        // Phase 7: combined J+H — the FoF helper writes fx, jx, AND hx in
+        // one set of outer fwddiff calls (column i of J is read from the
+        // outer fx-shadow that was previously discarded).  Saves the
+        // up-front compute_jacobian_impl call.
+        compute_jacobian_adjoint_hessian_fof_(x, fx_, jx_, hx, adjvars, ir, or_);
+
+        // Step 2: gx = J^T lam (still a separate pass — no Enzyme call).
+        for (int i = 0; i < ir; ++i) {
+            double acc = 0.0;
+            for (int k = 0; k < or_; ++k) acc += jx(k, i) * adjvars[k];
+            gx[i] = acc;
+        }
 #else
 #  error "TYCHO_ENZYME_HESSIAN_STRATEGY_<Strategy> must be defined."
 #endif
@@ -849,29 +887,37 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-    // TODO: Phase 6 FoF SIMD follow-on — direct-SIMD twin of this helper.
-    // The new helper should also compute J alongside H in a single set
-    // of outer fwddiff calls (read column i of J from the fx-shadow on
-    // each outer pass) instead of calling compute_jacobian_impl up-front.
-    // See item 3 in doc/EnzymeAD_FutureWork.md.
-    template <class InType, class AdjHessType, class AdjVarType>
-    inline void compute_adjoint_hessian_fof_(
+    // Phase 7: combined J+H FoF helper.  The outer __enzyme_fwddiff
+    // naturally produces J(x)·e_i in dfx_outer_shadow as a free byproduct
+    // (it only depends on the outer dx_outer = e_i, not on dx_inner = e_j);
+    // we read column i of J on the FIRST inner-j iteration and ignore the
+    // recomputation on subsequent j.  Replaces compute_adjoint_hessian_fof_
+    // and saves one compute_jacobian_impl call per Hessian invocation.
+    template <class InType, class FxType, class JacType, class AdjHessType,
+              class AdjVarType>
+    inline void compute_jacobian_adjoint_hessian_fof_(
         CVecRef<InType> x,
+        const Eigen::MatrixBase<FxType>& fx_,
+        const Eigen::MatrixBase<JacType>& jx_,
         MatRef<AdjHessType> hx,
         CVecRef<AdjVarType> adjvars,
         int ir, int or_) const {
+
+        FxType& fx = fx_.const_cast_derived();
+        JacType& jx = jx_.const_cast_derived();
 
         Eigen::Matrix<double, IR, 1> x_local = x;
         Eigen::Matrix<double, IR, 1> dx_outer(ir);
         Eigen::Matrix<double, IR, 1> dx_inner(ir);
         Eigen::Matrix<double, OR, 1> fx_primal(or_);
-        Eigen::Matrix<double, OR, 1> dfx_outer_shadow(or_);     // d/dx of fx, ignored
-        Eigen::Matrix<double, OR, 1> dfx_inner_primal(or_);     // J · e_j primal
-        Eigen::Matrix<double, OR, 1> ddfx_outer_shadow(or_);    // ∂(J·e_j)/∂x · e_i
+        Eigen::Matrix<double, OR, 1> dfx_outer_shadow(or_);  // = J(x) · e_i (= column i of J)
+        Eigen::Matrix<double, OR, 1> dfx_inner_primal(or_);  // = J · e_j
+        Eigen::Matrix<double, OR, 1> ddfx_outer_shadow(or_); // = ∂(J·e_j)/∂x · e_i
 
         const Derived* self = static_cast<const Derived*>(this);
 
-        // O(IR^2) outer fwddiff calls; each yields ∂²f_k/∂x_i∂x_j for all k.
+        // O(IR^2) outer fwddiff calls.  Each (i, j) yields ∂²f_k/∂x_i∂x_j
+        // for all k AND, when j == 0, column i of J = J(x)·e_i.
         for (int i = 0; i < ir; ++i) {
             dx_outer.setZero();
             dx_outer[i] = 1.0;
@@ -895,6 +941,18 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
                     enzyme_const, ir,
                     enzyme_const, or_);
 
+                // J extraction: read column i of J on the first inner pass
+                // (the value depends only on dx_outer = e_i, so subsequent
+                // j iterations recompute the same column — ignore them).
+                if (j == 0) {
+                    for (int k = 0; k < or_; ++k) jx(k, i) = dfx_outer_shadow[k];
+                    // fx is the same across all (i, j); copy it on the very
+                    // first call so subsequent calls don't re-stamp it.
+                    if (i == 0) {
+                        for (int k = 0; k < or_; ++k) fx[k] = fx_primal[k];
+                    }
+                }
+
                 // ddfx_outer_shadow[k] = ∂²f_k/∂x_i∂x_j; sum with adjvars.
                 double acc = 0.0;
                 for (int k = 0; k < or_; ++k) acc += adjvars[k] * ddfx_outer_shadow[k];
@@ -910,6 +968,183 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
                 hx(i, j) = avg;
                 hx(j, i) = avg;
             }
+        }
+    }
+
+    // Phase 7 SIMD FoF combined J+H helper.  All-forward-mode (fwddiff over
+    // fwddiff over SuperScalar arithmetic) — no SS reverse-mode tape, so
+    // composite trig+sqrt+division bodies (MEE-class) work without opt-out.
+    //
+    // Per batched outer call (BW different e_i × one fixed e_j):
+    //   - dfx_outer_shadow_b[b][k] = J(x)·e_{i+b} → pack into jx(k, i+b)
+    //     (only on the j == 0 inner pass; J doesn't depend on dx_inner)
+    //   - ddfx_outer_shadow_b[b][k] = ∂²f_k/∂x_{i+b}∂x_j → reduce with
+    //     adjvars into hx(i+b, j)
+    template <class InType, class FxType, class JacType, class AdjHessType,
+              class AdjVarType>
+    inline void compute_jacobian_adjoint_hessian_fof_simd_(
+        CVecRef<InType> x,
+        const Eigen::MatrixBase<FxType>& fx_,
+        const Eigen::MatrixBase<JacType>& jx_,
+        MatRef<AdjHessType> hx,
+        CVecRef<AdjVarType> adjvars,
+        int ir, int or_) const {
+        using SSType = typename InType::Scalar;
+        constexpr int BW = TYCHO_ENZYME_BATCH_WIDTH;
+
+        FxType& fx = fx_.const_cast_derived();
+        JacType& jx = jx_.const_cast_derived();
+
+        Eigen::Matrix<SSType, IR, 1> x_local = x;
+        Eigen::Matrix<SSType, IR, 1> dx_outer(ir);
+        Eigen::Matrix<SSType, IR, 1> dx_inner(ir);
+        Eigen::Matrix<SSType, OR, 1> fx_primal(or_);
+        Eigen::Matrix<SSType, OR, 1> dfx_outer_shadow(or_);  // BW=1 tail: J·e_i
+        Eigen::Matrix<SSType, OR, 1> dfx_inner_primal(or_);
+        Eigen::Matrix<SSType, OR, 1> ddfx_outer_shadow(or_); // BW=1 tail: H column
+
+        const Derived* self = static_cast<const Derived*>(this);
+
+        int i = 0;
+
+        if constexpr (BW > 1) {
+            Eigen::Matrix<SSType, IR, BW> dx_outer_shadow(ir, BW);
+            Eigen::Matrix<SSType, OR, BW> dfx_outer_shadow_b(or_, BW);
+            Eigen::Matrix<SSType, OR, BW> ddfx_outer_shadow_b(or_, BW);
+            const long stride_x =
+                static_cast<long>(ir) * static_cast<long>(sizeof(SSType));
+            const long stride_y =
+                static_cast<long>(or_) * static_cast<long>(sizeof(SSType));
+
+            const int ir_chunked = (ir / BW) * BW;
+            for (; i < ir_chunked; i += BW) {
+                // Prime BW outer tangents: e_{i+0} .. e_{i+BW-1}.
+                dx_outer_shadow.setZero();
+                for (int b = 0; b < BW; ++b)
+                    dx_outer_shadow(i + b, b).setConstant(1.0);
+
+                for (int j = 0; j < ir; ++j) {
+                    dx_inner.setZero();
+                    dx_inner[j].setConstant(1.0);
+                    fx_primal.setZero();
+                    dfx_outer_shadow_b.setZero();
+                    dfx_inner_primal.setZero();
+                    ddfx_outer_shadow_b.setZero();
+
+                    __enzyme_fwddiff<void>(
+                        reinterpret_cast<void*>(
+                            &detail::enzyme_fof_inner_wrapper_simd<Derived, SSType>),
+                        enzyme_width, BW,
+                        enzyme_const, self,
+                        enzyme_dupv, stride_x,
+                            x_local.data(), dx_outer_shadow.data(),
+                        enzyme_dupv, stride_y,
+                            fx_primal.data(), dfx_outer_shadow_b.data(),
+                        enzyme_const, dx_inner.data(),
+                        enzyme_dupv, stride_y,
+                            dfx_inner_primal.data(), ddfx_outer_shadow_b.data(),
+                        enzyme_const, ir,
+                        enzyme_const, or_);
+
+                    if (j == 0) {
+                        for (int b = 0; b < BW; ++b)
+                            for (int k = 0; k < or_; ++k)
+                                jx(k, i + b) = dfx_outer_shadow_b(k, b);
+                        if (i == 0) {
+                            for (int k = 0; k < or_; ++k) fx[k] = fx_primal[k];
+                        }
+                    }
+
+                    for (int b = 0; b < BW; ++b) {
+                        SSType acc;
+                        acc.setZero();
+                        for (int k = 0; k < or_; ++k)
+                            acc = acc + adjvars[k] * ddfx_outer_shadow_b(k, b);
+                        hx(i + b, j) = acc;
+                    }
+                }
+            }
+        }
+
+        // Tail (or full when BW=1): single-tangent outer fwddiff.
+        for (; i < ir; ++i) {
+            dx_outer.setZero();
+            dx_outer[i].setConstant(1.0);
+
+            for (int j = 0; j < ir; ++j) {
+                dx_inner.setZero();
+                dx_inner[j].setConstant(1.0);
+                fx_primal.setZero();
+                dfx_outer_shadow.setZero();
+                dfx_inner_primal.setZero();
+                ddfx_outer_shadow.setZero();
+
+                __enzyme_fwddiff<void>(
+                    reinterpret_cast<void*>(
+                        &detail::enzyme_fof_inner_wrapper_simd<Derived, SSType>),
+                    enzyme_const, self,
+                    enzyme_dup,   x_local.data(),         dx_outer.data(),
+                    enzyme_dup,   fx_primal.data(),       dfx_outer_shadow.data(),
+                    enzyme_const, dx_inner.data(),
+                    enzyme_dup,   dfx_inner_primal.data(),
+                                  ddfx_outer_shadow.data(),
+                    enzyme_const, ir,
+                    enzyme_const, or_);
+
+                if (j == 0) {
+                    for (int k = 0; k < or_; ++k) jx(k, i) = dfx_outer_shadow[k];
+                    if (i == 0) {
+                        for (int k = 0; k < or_; ++k) fx[k] = fx_primal[k];
+                    }
+                }
+
+                SSType acc;
+                acc.setZero();
+                for (int k = 0; k < or_; ++k)
+                    acc = acc + adjvars[k] * ddfx_outer_shadow[k];
+                hx(i, j) = acc;
+            }
+        }
+
+        // Symmetrize on SSType — each lane independently symmetric.
+        for (int i2 = 0; i2 < ir; ++i2) {
+            for (int j = i2 + 1; j < ir; ++j) {
+                SSType avg = 0.5 * (hx(i2, j) + hx(j, i2));
+                hx(i2, j) = avg;
+                hx(j, i2) = avg;
+            }
+        }
+    }
+
+    // Phase 7 SIMD FoF public method.  Twin of the FoR variant under
+    // strategy=ForwardOverReverse.  Both produce SuperScalar fx + jx + g + h
+    // for Vectorizable+EnzymeAD VFs; this variant uses combined J+H FoF
+    // (one helper) where the FoR variant stitches separate Phase 5b + FoR.
+    template <class InType, class OutType, class JacType, class AdjGradType,
+              class AdjHessType, class AdjVarType>
+    inline void simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+        CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
+        CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
+        CVecRef<AdjVarType> adjvars) const {
+        using Scalar = typename InType::Scalar;
+
+        const int ir = this->input_rows();
+        const int or_ = this->output_rows();
+
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> gx = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> hx = adjhess_.const_cast_derived();
+
+        // Combined J+H: SIMD helper writes fx, jx, hx in one pass.
+        compute_jacobian_adjoint_hessian_fof_simd_(
+            x, fx_, jx_, hx, adjvars, ir, or_);
+
+        // gx = J^T λ on SSType.
+        for (int i = 0; i < ir; ++i) {
+            Scalar acc;
+            acc.setZero();
+            for (int k = 0; k < or_; ++k) acc = acc + jx(k, i) * adjvars[k];
+            gx[i] = acc;
         }
     }
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward

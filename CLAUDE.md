@@ -326,8 +326,41 @@ SuperScalar Scalar:
   Phase 5a scalarize-per-lane Hessian.  A per-VF marker
   `static constexpr bool enzyme_simd_hessian_supported = false` forces
   fallback for VFs whose body trips Enzyme's SS reverse-mode IR analysis
-  (composite trig+sqrt+division — currently MEE-class bodies).  FoF SIMD
-  Hessian is deferred to a future commit.
+  (composite trig+sqrt+division — currently MEE-class bodies).
+- **Hessian (Phase 7 — direct SIMD FoF combined J+H, MEE-friendly):**
+  selected at configure time by
+  `TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward`.  The outer
+  `__enzyme_fwddiff` over `enzyme_fof_inner_wrapper_simd` is fwddiff over
+  fwddiff over SuperScalar arithmetic — **no SS reverse-mode tape**, so
+  MEE-class composites compile and run.  The same set of outer fwddiff
+  calls produces J(x)·e_i in the fx-shadow as a free byproduct: Phase 7
+  reads it on the first inner-j iteration and writes both J and H from
+  one helper (`compute_jacobian_adjoint_hessian_fof_simd_`).  Saves the
+  up-front `compute_jacobian_impl` call vs Phase 6 which composes
+  separate Phase 5b + FoR.  `enzyme_simd_hessian_supported = false` is a
+  no-op under FoF (the trait gates only the FoR path).
+
+  Bench-measured at BW=4 (CR3BP/Brach):
+
+  | VF    | Phase 5a fallback | Phase 6 FoR-SIMD | Phase 7 FoF-SIMD |
+  |-------|-------------------|------------------|------------------|
+  | Brach |    87 ns          |  1038 ns         |  2109 ns         |
+  | CR3BP |  3672 ns          |   291 ns         |  1543 ns         |
+  | MEE   |  3089 ns (FoR)    |  3116 ns (forced fallback) | (validated by test, bench deferred — see note below) |
+
+  **Strategy choice rule:**
+  - **FoR (default)** is faster on every measured non-MEE body.
+    Recommended for production unless a concrete MEE-class workload
+    drives the decision.
+  - **FoF** is the only SIMD-Hessian-capable strategy for MEE-class
+    bodies.  Pick it when MEE-class VFs dominate the workload.
+
+  **MEE bench under FoF:** the MEE path is correctness-validated by
+  `EnzymeVectorized.HessianFoFSIMDMatchesScalarized_MEE` but the MEE
+  Hessian SIMD bench is excluded from FoF builds because compiling that
+  specific bench body (vs the same body in the test TU) trips an Enzyme
+  IR-deduction error — apparent translation-unit-level interaction with
+  the rest of the bench code.  Diagnosis deferred to a follow-on.
 
 **Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
 
@@ -371,7 +404,7 @@ struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
 };
 ```
 
-**Rule of thumb (post Eigen 5 + Phase 6):**
+**Rule of thumb (post Eigen 5 + Phase 6/7):**
 
 - **Arithmetic / `sqrt`-only VFs, IR ≥ 6** (e.g. CR3BP-class): leave
   `is_vectorizable = true`.  Gets full Phase 3 + 5b Jacobian SIMD AND
@@ -386,8 +419,12 @@ struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
   CR3BP/MEE-class bodies, not toy Brach.
 - **Composite trig+sqrt+division VFs** (e.g. MEE-class):
   `is_vectorizable = true` AND `enzyme_simd_hessian_supported = false`.
-  Phase 5b handles the Jacobian; Phase 6 SIMD Hessian fails Enzyme's
-  type-deduction so the Hessian falls back to Phase 5a.
+  Under the default FoR strategy, Phase 5b handles the Jacobian and
+  Phase 6 SIMD Hessian falls back to Phase 5a (the trait forces it).
+  **Switch to FoF strategy** (cmake `TYCHO_ENZYME_HESSIAN_STRATEGY=
+  ForwardOverForward`) for MEE-class workloads — Phase 7 SIMD FoF
+  combined J+H runs natively on these bodies (no SS reverse-mode tape).
+  The opt-out trait is a no-op under FoF.
 - **Trig-bearing VFs evaluated one trajectory at a time:** either
   approach works; `tycho::math::*` with `is_vectorizable = true` is
   consistent across single- and multi-trajectory call sites.
