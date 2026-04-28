@@ -340,13 +340,13 @@ SuperScalar Scalar:
   separate Phase 5b + FoR.  `enzyme_simd_hessian_supported = false` is a
   no-op under FoF (the trait gates only the FoR path).
 
-  Bench-measured at BW=4 (CR3BP/Brach):
+  Bench-measured at BW=4:
 
   | VF    | Phase 5a fallback | Phase 6 FoR-SIMD | Phase 7 FoF-SIMD |
   |-------|-------------------|------------------|------------------|
-  | Brach |    87 ns          |  1038 ns         |  2109 ns         |
-  | CR3BP |  3672 ns          |   291 ns         |  1543 ns         |
-  | MEE   |  3089 ns (FoR)    |  3116 ns (forced fallback) | (validated by test, bench deferred — see note below) |
+  | Brach |    87 ns          |  1038 ns         |  2102 ns         |
+  | CR3BP |  3672 ns          |   291 ns         |  1545 ns         |
+  | MEE   |  3089 ns (FoR)    |  3116 ns (forced fallback) | 9812 ns (-O1, see below) |
 
   **Strategy choice rule:**
   - **FoR (default)** is faster on every measured non-MEE body.
@@ -355,12 +355,19 @@ SuperScalar Scalar:
   - **FoF** is the only SIMD-Hessian-capable strategy for MEE-class
     bodies.  Pick it when MEE-class VFs dominate the workload.
 
-  **MEE bench under FoF:** the MEE path is correctness-validated by
-  `EnzymeVectorized.HessianFoFSIMDMatchesScalarized_MEE` but the MEE
-  Hessian SIMD bench is excluded from FoF builds because compiling that
-  specific bench body (vs the same body in the test TU) trips an Enzyme
-  IR-deduction error — apparent translation-unit-level interaction with
-  the rest of the bench code.  Diagnosis deferred to a follow-on.
+  **MEE bench TU compiled at -O1:** under FoF strategy, the MEE FoF SIMD
+  Hessian path fails Enzyme's TypeAnalysis at -O3 ("Cannot deduce single
+  type of store" on the composite trig+sqrt+division body).  The bench
+  ships `bench_enzyme_mee_hessian.cpp` as a separate TU forced to -O1
+  via `set_source_files_properties(... COMPILE_OPTIONS "-O1")` — Enzyme
+  analyses the simpler IR cleanly.  Caveat: the MEE bench number above
+  is at -O1 and **not directly comparable** to the -O3 numbers for
+  other configs.  The PSIOPT integration (full-solve TTS) compiles the
+  SIMD work at -O3 via the user's build, where Enzyme has not been
+  observed to fail on real workloads — only the bench TU's specific
+  template-instantiation density triggers the issue.  Production
+  correctness is validated by `EnzymeVectorized.HessianFoFSIMDMatches-
+  Scalarized_MEE` (test TU, also at -O1).
 
 **Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
 

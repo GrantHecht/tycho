@@ -409,47 +409,15 @@ void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-// MEE Hessian SIMD bench:
-//   - FoR strategy + flag ON: opted out of Phase 6 SIMD via
-//     enzyme_simd_hessian_supported=false → routes through Phase 5a
-//     scalarize-per-lane.
-//   - FoF strategy + flag ON: would route through Phase 7 FoF SIMD, but
-//     compiling the MEE FoF SIMD path inside the bench TU specifically
-//     hits an Enzyme "Cannot deduce single type of store" IR-analysis
-//     failure (the test TU compiles the same path cleanly — apparent
-//     translation-unit-level interaction with the rest of the bench code).
-//     The MEE FoF SIMD path IS validated by EnzymeVectorized.HessianFoFSIMD-
-//     MatchesScalarized_MEE; cross-strategy MEE Hessian benching is
-//     therefore deferred to a follow-on once the bench-TU IR issue is
-//     diagnosed upstream.
-#if !defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::MEEBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::EnzymeAD>;
-    ODE f;
-    Eigen::Matrix<SS4, 9, 1> x;
-    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
-    Eigen::Matrix<SS4, 6, 1> fx;
-    Eigen::Matrix<SS4, 6, 9> jx;
-    Eigen::Matrix<SS4, 9, 1> g;
-    Eigen::Matrix<SS4, 9, 9> h;
-    Eigen::Matrix<SS4, 6, 1> lam;
-    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
-    {
-        const double seed[6] = {0.2, -0.5, 0.7, 0.1, -0.3, 0.4};
-        for (int i = 0; i < 6; ++i)
-            for (int lane = 0; lane < 4; ++lane)
-                lam(i)(lane) = seed[i] + 0.05 * lane;
-    }
-    for (auto _ : state) {
-        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
-        benchmark::DoNotOptimize(h);
-        benchmark::DoNotOptimize(g);
-        benchmark::ClobberMemory();
-    }
-}
-#endif
+// MEE Hessian SIMD bench moved to bench_enzyme_mee_hessian.cpp — separate
+// TU isolates MEEBench<EnzymeAD,EnzymeAD>'s SuperScalar Hessian
+// instantiation from the rest of the bench's Enzyme template work.
+// Necessary under strategy=ForwardOverForward at -O3: when the FoF SIMD
+// MEE path is compiled in the same TU as the other bench bodies, Enzyme's
+// TypeAnalysis pass cannot deduce a single type for some 16-byte SSE2
+// stores ("Cannot deduce single type of store" — Float vs Pointer-to-SS4
+// conflict).  The same SIMD path compiles cleanly in either a separate TU
+// (this fix) or the test TU at -O1.  See bench_enzyme_mee_hessian.cpp.
 
 // -----------------------------------------------------------------------------
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
@@ -601,9 +569,7 @@ BENCHMARK(BM_Hessian_MEE_Enzyme)->Name("BM_Hessian_Enzyme/MEE");
 // scalarize-per-lane; flag ON runs Phase 6 direct-SIMD FoR.
 BENCHMARK(BM_Brach_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/Brach");
 BENCHMARK(BM_CR3BP_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/CR3BP");
-#if !defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-BENCHMARK(BM_MEE_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/MEE");
-#endif
+// BM_MEE_HessianSIMD_Enzyme registered in bench_enzyme_mee_hessian.cpp.
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves PSIOPT, so the per-iteration cost includes
