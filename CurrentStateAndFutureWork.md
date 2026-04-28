@@ -175,14 +175,36 @@ these two specific benchmarks before/after the Eigen swap to confirm.
 
 | Benchmark | Phase 1 | Current | Δ | Notes |
 |---|---:|---:|---:|---|
-| `BM_Integrate_Brach_DOPRI87` | 3.79 µs | 5.31 µs | +40% | Brach integrator. The Brach VF body has `sin(theta)` / `cos(theta)`; if these now flow through `tycho::math::*` for any path the integrator hits, this could be the cost. **Needs verification** — the integrator should be hitting the plain-`double` `tycho::math::cos(double) → std::cos(double)` overload, which is identical to before. May be a real Eigen 5 codegen regression on the integrator step itself. |
-| `BM_Integrate_Brach_DOPRI54` | 2.33 µs | 2.72 µs | +17% | Same family as above; same hypothesis. |
-| `BM_VF_ComputeAdjointGradient` | 46.9 ns | 59.6 ns | +27% | VF VJP path. Same family as 4.2 outliers. |
+| `BM_Integrate_Brach_DOPRI87` | 3.79 µs | 5.31 µs | **+40%** | Brach integrator. **Notable:** `BrachODE` (`bench/cpp/bench_odes.h:38`) is a VF *expression tree*, not a templated `compute_impl`, and it integrates with `Scalar=double` — so the trig calls go straight to libm `std::cos` / `std::sin` in both Eigen 3.4 and Eigen 5. The `tycho::math::cos(double)` overload added on this branch is a thin wrapper around `std::cos`; not the source. Most likely cause: Eigen 5's altered fixed-size matrix codegen on the RK butcher-tableau accumulation + the specific shape of `BrachODE`'s 3-output VF body (`sin(theta)*v`, `-cos(theta)*v`, `g*cos(theta)`). Sister benchmark `BM_Integrate_PolarLT_DOPRI87` (also trig-bearing, more complex shape) is flat at +0.4%, so this is **specific to BrachODE**, not a generic integrator regression. **This is the largest real integrator regression in the gate and the top priority for §5.1 follow-up investigation.** |
+| `BM_Integrate_Brach_DOPRI54` | 2.33 µs | 2.72 µs | +17% | Same `BrachODE` body, lower-order RK. Same hypothesis as DOPRI87. |
+| `BM_VF_ComputeAdjointGradient` | 46.9 ns | 59.6 ns | +27% | VF VJP path. Same family as §4.2 outliers. |
 | `BM_VF_ComputeFullVJP` | 94.9 ns | 110 ns | +16% | Same family. |
 | `BM_CartesianToClassic` | 115 ns | 134 ns | +16% | Orbital element conversion. Eigen 5 fixed-size 3-/6-vector codegen difference. |
-| `BM_GF_VJP_Brach` | 82.5 ns | 94.4 ns | +14% | Same family as 4.2 outliers. |
-| `BM_VF_ArgsSegment` | 8.94 ns | 10.1 ns | +13% | Small absolute (1 ns). Might just be Eigen 5's slightly different inlining heuristics. |
+| `BM_GF_VJP_Brach` | 82.5 ns | 94.4 ns | +14% | Same family as §4.2 outliers. |
+| `BM_VF_ArgsSegment` | 8.94 ns | 10.1 ns | +13% | Small absolute (1 ns). Most likely Eigen 5's inlining heuristics. |
 | `BM_ThreadPool_ParallelSequence/100` | 36.7 µs | 42.2 µs | +15% | **Likely noise** — `ParallelSequence/10` is unchanged at 7.62 → 7.68 µs. ThreadPool benchmarks are inherently noisy. |
+
+### 4.3.1 Integrator regression sub-summary
+
+The gate caught **only Brach-specific integrator regressions** — DOPRI54
+(+17%) and DOPRI87 (+40%). Other integrator benchmarks are flat:
+
+| Integrator benchmark | Phase 1 | Current | Δ |
+|---|---:|---:|---:|
+| `BM_Integrate_Brach_DOPRI54` | 2.33 µs | 2.72 µs | **+17%** |
+| `BM_Integrate_Brach_DOPRI87` | 3.79 µs | 5.31 µs | **+40%** |
+| `BM_Integrate_PolarLT_DOPRI87` | 7.01 µs | 7.04 µs | +0.4% |
+| `BM_Integrate_SHO_DOPRI54` | 75.94 µs | 76.47 µs | +0.7% |
+| `BM_Integrate_SHO_DOPRI87` | 10.67 µs | 10.63 µs | -0.4% |
+| `BM_Integrate_SHO_Dense_100` | 18.72 µs | 18.39 µs | -1.8% |
+| `BM_Integrate_SHO_FixedStep` | 164.32 µs | 163.26 µs | -0.6% |
+
+So:
+- Not a generic integrator-update regression (SHO + PolarLT are flat).
+- Not a tycho::math regression (BrachODE bench uses libm directly with
+  `Scalar=double`).
+- Specific to BrachODE's 3-output VF expression tree shape under Eigen 5
+  codegen.
 
 ### 4.4 Wins (gate)
 
@@ -203,11 +225,11 @@ wins are not contaminated by the across-the-board codegen shift in §4.3.
 
 ### 4.6 Reading the picture
 
-The 10 §4.3 / §4.4 regressions cluster on the VF inline / GF VJP paths
-and small fixed-size (3- and 6-vector) orbit-element conversions. This
-is exactly where Eigen 5's altered SIMD codegen on small matrices would
-most visibly differ from Eigen 3.4. Most are within the noise band you'd
-expect from a major Eigen version bump.
+The 10 §4.3 / §4.4 regressions cluster on the VF inline / GF VJP paths,
+small fixed-size (3- and 6-vector) orbit-element conversions, and the
+Brach integrator. This is exactly where Eigen 5's altered SIMD codegen
+on small matrices would most visibly differ from Eigen 3.4. Most are
+within the noise band you'd expect from a major Eigen version bump.
 
 The Phase 5b targeted wins (§4.5) more than offset for the workloads
 that touch the Phase 5b path. The original §4.1 trigger is resolved: the
@@ -215,11 +237,62 @@ mechanism that produced the 6× MEE slowdown is gone (Eigen 5 + scalar
 libm + Phase 3 batching now replaces the Eigen-3.4 packet-trig stub +
 `is_vectorizable=false` workaround).
 
-The §4.2 outliers (+49%, +33%) and the §4.3 secondary regressions on
-Brach integration (+40%, +17%) are the items worth investigating before
-merge. None of them block Phase 2 acceptance per the gate criterion
-("any regressions need PR-description justification") but they are not
-yet root-caused.
+The §4.2 outliers (+49% PolarLT VJP, +33% VF Composition) and the
+§4.3.1 BrachODE integrator regressions (+40% DOPRI87, +17% DOPRI54) are
+the items worth investigating before merge. None of them block Phase 2
+acceptance per the gate criterion ("any regressions need PR-description
+justification") but they are not yet root-caused.
+
+### 4.7 Apparent gap vs `e942c7f1` baseline (most-recent pre-branch ancestor) — almost certainly recording-conditions
+
+For completeness: when comparing today's `381ec757` (Phase 1 baseline,
+recorded today at performance governor) against the older `e942c7f1`
+JSON (recorded 2026-04-25 on this branch's lineage), the diff shows
+**+33% to +36% across 92 of 93 benchmarks** — including ones that
+neither the integrators nor any code on the path between the two
+commits touched (`BM_TypeStorage_CopySmall`, `BM_VF_ArgsSegment`,
+`BM_ThreadPool_ParallelSequence/10`, etc.).
+
+Investigation:
+- `e942c7f1` IS a direct ancestor of `381ec75` (verified via
+  `git merge-base`); they're not on divergent branches.
+- The only integrator-touching commits between them are `9fed0b5`
+  (privatize `AtomicInt64::value` accessor — pure refactor, identical
+  emitted ops) and `b2b05ad` (`check_state_finite_or_throw` on `xnext_mid`,
+  **gated on `storemidpoints`** which the bench fixtures don't enable).
+  Neither is plausibly responsible for +34% across-the-board.
+- The uniformity (+33% to +36% on benchmarks that share zero code with
+  these two commits) is the telltale sign of recording-conditions
+  difference, not real regression.
+
+**Most likely explanation:** `e942c7f1` was recorded under different
+machine conditions (different ccache hits at compile time, different
+thermal state, different background load, possibly a different
+benchmark binary built with different LTO settings). To prove this
+definitively, re-record `e942c7f1` today on the same machine state:
+
+```bash
+git checkout e942c7f1
+git submodule sync dep/eigen && git submodule update --init dep/eigen
+conda run -n tycho cmake --preset linux-clang-release \
+  -DCMAKE_C_COMPILER=/usr/bin/clang \
+  -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=/home/ghecht/Software/Enzyme/install \
+  -DENABLE_ENZYME_AD=ON -DBUILD_CPP_TESTS=ON \
+  -DBUILD_CPP_BENCHMARKS=ON -DBUILD_CPP_EXAMPLES=ON
+ninja -C build -j6 all
+bench/bench_track.sh record --reps 3
+git checkout eigen-upgrade
+git submodule sync dep/eigen && git submodule update --init dep/eigen
+ninja -C build -j6 all
+bench/bench_track.sh compare e942c7f1 381ec757   # same machine state both runs
+```
+
+If the new comparison is < 5% across the board, the gap was indeed
+recording-conditions. If a real ~30% regression persists on a known set
+of benchmarks, that's a separate set of regressions on the Phase-1
+ancestry that was already merged before this work — outside the scope
+of this PR but worth a tracker issue.
 
 ---
 
@@ -229,12 +302,22 @@ In rough sequence:
 
 ### 5.1 Investigate §4.2 / §4.3 outliers (recommended, optional for merge)
 
-For each of `BM_GF_VJP_PolarLT`, `BM_VF_Composition`,
-`BM_Integrate_Brach_DOPRI87`, dump the `-emit-llvm` IR before
-(`381ec75`, Eigen 3.4) and after (`349b646`, Eigen 5) for the relevant
-TU, diff the inlining + vectorisation choices. Most likely conclusion
-is "Eigen 5 codegen tradeoff" but worth confirming we didn't miss
-anything.
+Three benchmarks are worth dumping `-emit-llvm -O3` IR for at both
+commits and diffing the inline + vectorisation choices:
+
+1. `BM_GF_VJP_PolarLT` (+49%) — type-erased GF VJP path. Look at
+   `tycho::vf::GenericFunction::compute_jacobian_adjointgradient_adjointhessian`
+   instantiation for PolarLT.
+2. `BM_VF_Composition` (+33%) — VF Composition glue. Look at
+   `tycho::vf::Composition::compute_*` instantiations.
+3. `BM_Integrate_Brach_DOPRI87` (+40%) — `BrachODE` integrated under
+   DOPRI87. The Brach VF expression tree is in `bench/cpp/bench_odes.h:38`;
+   the integrator's RK accumulation uses `Eigen::Matrix<double, 4, 1>`
+   ops that may codegen differently under Eigen 5.
+
+Most likely conclusion is "Eigen 5 codegen tradeoff" but worth
+confirming we didn't miss anything (see §4.7 for the e942c7f1 baseline
+re-record that should also be done as part of this).
 
 If a real fix lands here it could land in a follow-up PR; the gate
 results are already publishable.
