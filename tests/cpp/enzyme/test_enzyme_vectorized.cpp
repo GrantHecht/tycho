@@ -95,14 +95,51 @@ using CR3BPVectorizableEnzymeFull = CR3BPVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD,
     tycho::vf::DenseDerivativeMode::EnzymeAD>;
 
+// Brachistochrone variant that opts out of Phase 6 SIMD Hessian via the
+// per-VF trait, forcing dispatch through Phase 5a scalarize-per-lane.
+// Body is identical to BrachVectorizable; the only difference is the
+// trait declaration.  Anchors the enzyme_simd_hessian_eligible<> gating
+// predicate.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct BrachVectorizableNoSimdHessian
+    : tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm> {
+    using Base =
+        tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+    static constexpr bool enzyme_simd_hessian_supported = false;
+
+    double g_;
+    BrachVectorizableNoSimdHessian(double g = 32.2) : g_{g} {}
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using tycho::math::cos;
+        using tycho::math::sin;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+
+        const Scalar v = x[2];
+        const Scalar theta = x[4];
+        fx[0] = sin(theta) * v;
+        fx[1] = -cos(theta) * v;
+        fx[2] = Scalar(g_) * cos(theta);
+    }
+};
+
+using BrachVectorizableNoSimdHessianEnzymeFull = BrachVectorizableNoSimdHessian<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
 } // namespace tycho_enzyme_test
 
 namespace {
 
 // -----------------------------------------------------------------------------
-// Phase 5a primary check: the Vectorizable+EnzymeAD combination compiles
-// (Phase 1 had a static_assert blocking this; Phase 5a's if-constexpr lifts
-// it) and computes correctly per lane.
+// Per-lane equivalence between the Vectorizable EnzymeAD Jacobian path and
+// the scalar EnzymeAD reference on Brachistochrone.
 // -----------------------------------------------------------------------------
 TEST(EnzymeVectorized, JacobianMatchesScalar) {
     using SS = Eigen::Array<double, 4, 1>;
@@ -275,12 +312,65 @@ TEST(EnzymeVectorized, HessianSIMDMatchesScalarized_CR3BP) {
     tycho_enzyme_test::CR3BPVectorizableEnzymeFull f(0.0123);
     check_hessian_simd_vs_scalarized<decltype(f), 7, 6>(f);
 }
+
+// Anchors enzyme_simd_hessian_eligible<>: when a VF sets
+// enzyme_simd_hessian_supported = false, the public dispatch must route
+// through the Phase 5a scalarize-per-lane fallback and produce the same
+// per-lane result as the SIMD Phase 6 path on the trait-true fixture.
+TEST(EnzymeVectorized, HessianFallbackOnSimdOptOut) {
+    using SS = Eigen::Array<double, 4, 1>;
+    constexpr int IR = 5, OR = 3;
+
+    tycho_enzyme_test::BrachVectorizableEnzymeFull f_simd(32.2);
+    tycho_enzyme_test::BrachVectorizableNoSimdHessianEnzymeFull f_fallback(32.2);
+
+    Eigen::Matrix<SS, IR, 1> x;
+    Eigen::Matrix<SS, OR, 1> lam;
+    for (int j = 0; j < IR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.13 * (j + 1) + 0.05 * lane;
+    for (int j = 0; j < OR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.4 - 0.05 * j + 0.03 * lane;
+
+    auto run = [&](auto& f, auto& fx, auto& jx, auto& g, auto& h) {
+        fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+        // Public dispatch entry — anchors the predicate that selects between
+        // SIMD and scalarize-per-lane.
+        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+    };
+
+    Eigen::Matrix<SS, OR, 1> fx_simd, fx_fb;
+    Eigen::Matrix<SS, OR, IR> jx_simd, jx_fb;
+    Eigen::Matrix<SS, IR, 1> g_simd, g_fb;
+    Eigen::Matrix<SS, IR, IR> h_simd, h_fb;
+    run(f_simd, fx_simd, jx_simd, g_simd, h_simd);
+    run(f_fallback, fx_fb, jx_fb, g_fb, h_fb);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        for (int j = 0; j < OR; ++j)
+            EXPECT_NEAR(fx_simd(j)[lane], fx_fb(j)[lane], 1e-10)
+                << "lane=" << lane << " fx[" << j << "]";
+        for (int j = 0; j < OR; ++j)
+            for (int i = 0; i < IR; ++i)
+                EXPECT_NEAR(jx_simd(j, i)[lane], jx_fb(j, i)[lane], 1e-10)
+                    << "lane=" << lane << " jx(" << j << "," << i << ")";
+        for (int i = 0; i < IR; ++i) {
+            EXPECT_NEAR(g_simd(i)[lane], g_fb(i)[lane], 1e-10)
+                << "lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < IR; ++j)
+                EXPECT_NEAR(h_simd(j, i)[lane], h_fb(j, i)[lane], 1e-10)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+        }
+    }
+}
 #endif // ForwardOverReverse
 
-// Note: FoF strategy SIMD tests (Phase 7 / 7+) were removed; FoR is the
-// production default.  The FoF SIMD code in dense_enzyme.h is retained
-// as research scaffolding — see the archived-FoF docstrings there for
-// the architecture and revival conditions.
+// Note: FoF strategy SIMD tests (Phase 7 / 7+) were removed in commit
+// 79fc589 and `ForwardOverForward` is no longer cmake-selectable.  The
+// FoF SIMD code in dense_enzyme.h is retained as research scaffolding —
+// see the archived-FoF docstrings there for the architecture and
+// revival conditions.
 
 #endif // TYCHO_ENZYME_SIMD_HESSIAN_ENABLED
 

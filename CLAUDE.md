@@ -330,19 +330,19 @@ SuperScalar Scalar:
 - **Hessian (Phase 7 / 7+ — FoF strategy, archived research path):**
   Forward-over-Forward direct-SIMD Hessian (with combined J+H output and
   doubly-batched variant) is **retained as a working but un-tested,
-  un-benched reference** in `dense_enzyme.h`.  Selected at configure
-  time by `TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward`.  Bench
-  results at the time of archival (BW=4): FoR-SIMD wins ~2× on Brach
-  (1038 vs 2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  FoF's only
-  qualitative advantage was on MEE-class composites (cos/sin/sqrt/
-  division) where FoR-SIMD's inner reverse pass fails Enzyme
-  TypeAnalysis — but no real PSIOPT workload has surfaced that case.
-  Doubly-batched variant proves nested
-  `__enzyme_fwddiff(enzyme_width)` composition works but yields only a
-  ~5% speedup over singly-batched (per-call overhead is not the
-  dominant cost; body work dominates).  See the heavy archive docstring
-  at the top of the FoF block in `dense_enzyme.h` for revival
-  conditions.
+  un-benched reference** in `dense_enzyme.h` and is **no longer
+  cmake-selectable** — `ForwardOverForward` was dropped from the
+  `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  Bench results
+  at the time of archival (BW=4): FoR-SIMD wins ~2× on Brach (1038 vs
+  2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  FoF's only qualitative
+  advantage was on MEE-class composites (cos/sin/sqrt/division) where
+  FoR-SIMD's inner reverse pass fails Enzyme TypeAnalysis — but no
+  real PSIOPT workload has surfaced that case.  Doubly-batched variant
+  proves nested `__enzyme_fwddiff(enzyme_width)` composition works but
+  yields only a ~5% speedup over singly-batched (per-call overhead is
+  not the dominant cost; body work dominates).  See the heavy archive
+  docstring at the top of the FoF block in `dense_enzyme.h` for
+  revival conditions.
 
 **Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
 
@@ -396,7 +396,7 @@ struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
 - **Tiny trig-bearing VFs, IR ≤ 5** (e.g. Brach-class): `is_vectorizable
   = true`; route trig through `tycho::math::cos/sin`.  Phase 5b Jacobian
   wins per-lane; **Phase 6 Hessian regresses** vs Phase 5a (~12× slower
-  on Brach: 1044 ns vs 87 ns) because the SS reverse-mode tape overhead
+  on Brach: 1038 ns vs 87 ns) because the SS reverse-mode tape overhead
   dwarfs the body cost.  Acceptable — PSIOPT vectorizable workloads run
   CR3BP/MEE-class bodies, not toy Brach.
 - **Composite trig+sqrt+division VFs** (e.g. MEE-class):

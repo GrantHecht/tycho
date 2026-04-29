@@ -91,16 +91,14 @@ MEE example is one such workload.
 
 ---
 
-## 2. Direct-SIMD Hessian path — RESOLVED for both FoR and FoF (2026-04-28)
+## 2. Direct-SIMD Hessian path — RESOLVED for FoR (2026-04-28)
 
-**Status.** Phase 6 ships direct-SIMD Forward-over-Reverse Hessian and
-Phase 7 ships direct-SIMD Forward-over-Forward (combined J+H) for
+**Status.** Phase 6 ships direct-SIMD Forward-over-Reverse Hessian for
 `is_vectorizable=true` EnzymeAD VFs at SuperScalar input.  Gated by
 `TYCHO_ENZYME_SIMD_HESSIAN` (default ON); flag OFF falls back to the
-Phase 5a scalarize-per-lane path under either strategy.  Strategy
-selected at cmake-time via `TYCHO_ENZYME_HESSIAN_STRATEGY`
-(`ForwardOverReverse` default, `ForwardOverForward` opt-in for
-MEE-class workloads — see item 3 below for the FoF perf table).
+Phase 5a scalarize-per-lane path.  `ForwardOverReverse` is the only
+cmake-selectable Hessian strategy; the Phase 7 / 7+ Forward-over-Forward
+prototype was archived (see item 3 below).
 
 **What landed.**
 
@@ -123,12 +121,11 @@ MEE-class workloads — see item 3 below for the FoF perf table).
   validate the SIMD path matches the per-lane scalar reference to
   1e-10.
 
-**Phase 7 follow-on shipped.**  FoF SIMD + combined J+H is now in tree
-(see item 3 below).  FoR remains the production default — it's faster
-on every measured non-MEE body — but FoF is the only SIMD-capable
-strategy for MEE-class composites.  Switch via
-`TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward` at cmake time when
-MEE-class VFs dominate the workload.
+**Phase 7 follow-on archived.**  FoF SIMD + combined J+H was prototyped
+in Phase 7 / 7+ and is preserved as reference code in `dense_enzyme.h`
+(see item 3 below); it is no longer cmake-selectable.  FoR-SIMD wins on
+every measured non-MEE body, and MEE-class workloads do not dominate
+any current PSIOPT use case.
 
 **Open item — MEE-class fallback.**  The per-VF opt-out is shipped, but
 the upstream Enzyme limitation that forces it is real: composite bodies
@@ -145,9 +142,12 @@ be removed.
 combined-J+H output, plus the doubly-batched variant, were prototyped
 in Phase 7 / 7+ and have been **archived as reference code in
 `include/tycho/detail/vf/derivatives/dense_enzyme.h`**.  All FoF tests
-and benchmarks have been removed.  The code still compiles under
-`TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward` but is not exercised
-by CI or the bench suite.
+and benchmarks have been removed and `ForwardOverForward` is no longer
+cmake-selectable — the helpers sit inside
+`#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)` blocks
+that the build never defines.  Reviving requires re-adding the cmake
+strategy STRINGS entry and the dispatch branches stripped from
+`dense_enzyme.h`'s scalar and SIMD dispatch sites.
 
 **What was prototyped.**
 
@@ -193,10 +193,12 @@ item 4 below).
 - `4cd7391` fix(bench): split MEE FoF SIMD Hessian into its own -O1 TU
 - `e777544` feat(enzyme): Phase 7+ doubly-batched FoF SIMD helper
 
-Test fixtures (`MEEVectorizable`, `PolyVectorizable8x4`) and benches
-(`BM_Poly8x4_HessianFoFSIMD_singly|doubly`, `BM_MEE_HessianSIMD_Enzyme`
-under FoF strategy) reside in those commits and can be cherry-picked
-back when the case is made.
+Test fixtures `MEEVectorizable` and `PolyVectorizable8x4` and benches
+`BM_Poly8x4_HessianFoFSIMD_singly|doubly` were removed in commit
+`79fc589`; the FoF-strategy registration of `BM_MEE_HessianSIMD_Enzyme`
+was also dropped (the bench itself still ships under the FoR strategy
+via the Phase 5a fallback).  Cherry-pick the fixtures and benches from
+the reference commits above when reviving.
 
 ---
 

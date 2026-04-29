@@ -161,22 +161,17 @@ struct CR3BPBench
 
 // MEE variant marked Vectorizable=true.  See BrachBench notes above.
 //
-// MEE under Phase 6 FoR SIMD: the composite trig+sqrt+division body trips
-// Enzyme's SuperScalar reverse-mode IR type analysis ("Cannot deduce single
-// type of store"), so under strategy=ForwardOverReverse we opt out via
-// enzyme_simd_hessian_supported=false and fall through to Phase 5a
-// scalarize-per-lane.  Under strategy=ForwardOverForward, Phase 7 SIMD FoF
-// has no SS reverse-mode tape and handles MEE natively — the opt-out is a
-// no-op there (FoF dispatch doesn't gate on enzyme_simd_hessian_eligible<>).
+// The composite trig+sqrt+division body trips Enzyme's SuperScalar reverse-mode
+// IR type analysis ("Cannot deduce single type of store") under the FoR Hessian
+// strategy, so we opt out via enzyme_simd_hessian_supported=false and fall
+// through to Phase 5a scalarize-per-lane.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct MEEBench
     : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm> {
     using Base = tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
-#if !defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
     static constexpr bool enzyme_simd_hessian_supported = false;
-#endif
     double mu_, sqm_;
     MEEBench(double mu = 1.0) : mu_{mu}, sqm_{std::sqrt(mu)} {}
     template <class InType, class OutType>
@@ -409,14 +404,10 @@ void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-// MEE Hessian SIMD bench: ships under TYCHO_ENZYME_HESSIAN_STRATEGY=
-// ForwardOverReverse only.  MEEBench opts out of FoR SIMD via
+// MEE Hessian SIMD bench: MEEBench opts out of FoR SIMD via
 // enzyme_simd_hessian_supported=false (composite trig+sqrt+division body
 // trips Enzyme's SS reverse-mode TypeAnalysis), so the bench routes
-// through the Phase 5a scalarize-per-lane fallback.  The FoF strategy's
-// SIMD code path exists in dense_enzyme.h but is not benched — see the
-// archived-FoF docstrings in that header for the rationale.
-#if !defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+// through the Phase 5a scalarize-per-lane fallback.
 void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::MEEBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,
@@ -443,7 +434,6 @@ void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
         benchmark::ClobberMemory();
     }
 }
-#endif
 
 // -----------------------------------------------------------------------------
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
@@ -595,9 +585,7 @@ BENCHMARK(BM_Hessian_MEE_Enzyme)->Name("BM_Hessian_Enzyme/MEE");
 // scalarize-per-lane; flag ON runs Phase 6 direct-SIMD FoR.
 BENCHMARK(BM_Brach_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/Brach");
 BENCHMARK(BM_CR3BP_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/CR3BP");
-#if !defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
 BENCHMARK(BM_MEE_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/MEE");
-#endif
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves PSIOPT, so the per-iteration cost includes

@@ -179,11 +179,18 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // =============================================================================
 //
 // **Status (2026-04-28).** All FoF code below is **retained as a working
-// reference implementation**, but no tests or benchmarks exercise it in tree.
-// FoR (Forward-over-Reverse) is the production default; switch via cmake:
+// reference implementation**, but no tests or benchmarks exercise it in tree
+// AND it is **no longer cmake-selectable** — `ForwardOverForward` was dropped
+// from the `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  FoR (Forward-
+// over-Reverse) is the only cmake-selectable strategy:
 //
 //   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse  (default, tested)
-//   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverForward  (untested research)
+//
+// Revival requires re-adding `ForwardOverForward` to the STRINGS list in
+// CMakeLists.txt, restoring the FoF dispatch branches that were stripped
+// from `compute_jacobian_adjointgradient_adjointhessian_impl` and
+// `scalar_compute_jacobian_adjointgradient_adjointhessian_impl`, and
+// re-introducing the test/bench coverage from the commits below.
 //
 // **Architecture summary.** FoF computes the Hessian as
 // `__enzyme_fwddiff` over a wrapper that itself does `__enzyme_fwddiff`
@@ -229,8 +236,7 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // 1. **MEE-class workload dominance.**  If a real workload's runtime is
 //    dominated by composite trig+sqrt+division Hessians where FoR-SIMD
 //    can't go SIMD, FoF-SIMD is the only path.  Compile MEE-class TUs at
-//    -O1 (see git history for the bench_enzyme_mee_hessian.cpp
-//    workaround).
+//    -O1 — see commit `4cd7391` for the split-TU pattern.
 // 2. **Per-call overhead becomes the bottleneck.**  If a future
 //    Enzyme/clang release reduces body-cost so per-call overhead
 //    dominates, the doubly-batched W² Hessian-elements-per-call may
@@ -347,9 +353,10 @@ inline void enzyme_fof_inner_wrapper_simd_innerbatch(
   vector with e_i and call __enzyme_fwddiff once.  Reads back column i of the
   Jacobian and (on i==0) the primal output.
 
-  Phase 1 only supports scalar dispatch.  SuperScalar/Vectorizable specializations
-  are deferred to Phase 5; until then, attempting EnzymeAD on a Vectorizable
-  VectorFunction triggers a static_assert with a guiding message.
+  Dispatch summary:
+    * `double` Scalar          → Phase 1 / Phase 3 batched scalar path.
+    * SuperScalar + Vectorizable → Phase 5b direct-SIMD primal/tangent.
+    * SuperScalar + !Vectorizable → Phase 5a scalarize-per-lane fallback.
 */
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
@@ -365,17 +372,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
             if constexpr (Vectorizable<Derived>) {
                 // Phase 5b: direct-SIMD Enzyme.  The user's compute_impl runs
                 // on Eigen::Array<double, W, 1> SIMD ops; Enzyme differentiates
-                // through them producing W per-lane tangents per call.
-                //
-                // Benchmarks (see /tmp/enzyme_phase5b_findings.md): Phase 5b
-                // wins ~25-37% per-lane on small bodies (Brach 5->3, CR3BP
-                // 7->6) vs scalarize-per-lane.  Loses ~1.7-6x on bodies
-                // with many transcendentals (MEE 9->6 with sqrt/sin/cos)
-                // because the SIMD math units don't keep up with Enzyme's
-                // analysis through Eigen's per-Scalar function dispatch.
-                // Net: Phase 5b is the right default for Vectorizable+SS;
-                // MEE-class users can fall back to scalar_compute_jacobian_impl
-                // via Vectorizable=false (base class will scalarize).
+                // through them producing W per-lane tangents per call.  Wins
+                // ~25-37% per-lane on small bodies (Brach 5->3, CR3BP 7->6)
+                // vs scalarize-per-lane.  Pre-Eigen-5 it lost ~1.7-6x on
+                // composite-trig bodies (MEE 9->6); post-Eigen-5 with
+                // `tycho::math::cos/sin` wrappers the regression is gone, so
+                // MEE-class VFs keep `is_vectorizable = true` and use the
+                // per-VF `enzyme_simd_hessian_supported = false` opt-out for
+                // the *Hessian* path only (see enzyme_simd_hessian_eligible).
                 simd_compute_jacobian_impl(x, fx_, jx_);
             } else {
                 // Phase 5a fallback path.  Reachable only if compute_jacobian_impl
@@ -624,30 +628,19 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
   2. The adjoint gradient gx = J^T lam is computed from jx by direct
      matrix multiply — Enzyme already produced jx, no need to recompute.
   3. The adjoint Hessian hx is the column-by-column derivative of
-     g(x) = J(x)^T lam with respect to x, dispatched at configure time
-     via TYCHO_ENZYME_HESSIAN_STRATEGY:
+     g(x) = J(x)^T lam with respect to x.  The only cmake-selectable
+     strategy is `TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse`:
+     `__enzyme_fwddiff` over a wrapper that calls `__enzyme_autodiff`
+     (O(IR) outer Enzyme calls).
 
-       ForwardOverReverse (default):  __enzyme_fwddiff over a wrapper
-                                      that calls __enzyme_autodiff.
-                                      O(IR) outer Enzyme calls.
-       ForwardOverForward:            __enzyme_fwddiff over a wrapper
-                                      that calls __enzyme_fwddiff.
-                                      O(IR^2) outer Enzyme calls.
-
-  Phase 2's head-to-head benchmark picks FoR as the production default
-  (4–9× faster on every Hessian micro-benchmark; tied on full-solve TTS).
-  FoF is retained as internal research scaffolding — its outer fwddiff
-  pass naturally produces J(x)·e_i alongside the Hessian element, and a
-  future commit can reimplement compute_adjoint_hessian_fof_ to compute
-  Jacobian and Hessian simultaneously instead of calling
-  compute_jacobian_impl up-front.  Combined with Phase 3's enzyme_width
-  batching, that path could yield a W-column Jacobian slab and a W²
-  Hessian block per outer call.
-
-  Strategy is a private (cmake-time) selector — DenseDerivativeMode does
-  not surface a public FoF mode.  Promoting FoF to a public mode is a
-  future option once the combined-J+H optimisation is implemented and
-  benchmarked.
+  ForwardOverForward was implemented in Phases 7 / 7+ (combined J+H;
+  doubly-batched W² block) and archived in commit `79fc589`; bench
+  evidence showed FoR-SIMD wins ~2× on Brach and ~5× on CR3BP, and the
+  doubly-batched variant added only ~5%.  The FoF helpers remain in this
+  header inside `#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)`
+  blocks as a revival reference; the strategy itself is no longer
+  cmake-selectable.  See the archive block above the FoF helpers for
+  revival conditions.
 */
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::EnzymeAD>
@@ -672,18 +665,6 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
                 // Phase 6 direct-SIMD FoR Hessian.  Routes through Phase 5b
                 // for fx + jx and the SIMD FoR helper for hx.  Falls through
                 // to Phase 5a otherwise.
-                simd_compute_jacobian_adjointgradient_adjointhessian_impl(
-                    x, fx_, jx_, adjgrad_, adjhess_, adjvars);
-                return;
-            }
-#elif defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED) \
-    && defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-            if constexpr (Vectorizable<Derived>
-                          && JMode == DenseDerivativeMode::EnzymeAD) {
-                // Phase 7 direct-SIMD FoF combined J+H Hessian.  No
-                // enzyme_simd_hessian_eligible<> gate: FoF avoids the SS
-                // reverse-mode tape that forced MEE-class VFs to opt out
-                // of the FoR SIMD path.
                 simd_compute_jacobian_adjointgradient_adjointhessian_impl(
                     x, fx_, jx_, adjgrad_, adjhess_, adjvars);
                 return;
@@ -766,21 +747,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 
         // Step 3: hx via FoR.
         compute_adjoint_hessian_for_(x, hx, adjvars, ir, or_);
-#elif defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-        // Phase 7: combined J+H — the FoF helper writes fx, jx, AND hx in
-        // one set of outer fwddiff calls (column i of J is read from the
-        // outer fx-shadow that was previously discarded).  Saves the
-        // up-front compute_jacobian_impl call.
-        compute_jacobian_adjoint_hessian_fof_(x, fx_, jx_, hx, adjvars, ir, or_);
-
-        // Step 2: gx = J^T lam (still a separate pass — no Enzyme call).
-        for (int i = 0; i < ir; ++i) {
-            double acc = 0.0;
-            for (int k = 0; k < or_; ++k) acc += jx(k, i) * adjvars[k];
-            gx[i] = acc;
-        }
 #else
-#  error "TYCHO_ENZYME_HESSIAN_STRATEGY_<Strategy> must be defined."
+#  error "TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse must be defined."
 #endif
     }
 
@@ -1237,6 +1205,10 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     //   ddfx_outer_shadow_bb (or × BW × BW): outer shadow of dfx_inner_primal_b
     //                         indexing: ddfx[k, c, b] at flat offset
     //                         k + or*c + or*BW*b (col-major, b is outer-col)
+    // ARCHIVED — see archive block at the top of this section.  No production
+    // caller; only known call site was BM_Poly8x4_HessianFoFSIMD_doubly,
+    // removed in commit 79fc589.  Revive only via the procedure described in
+    // the archive block.
     template <class InType, class FxType, class JacType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjoint_hessian_fof_simd_db_(
@@ -1249,6 +1221,16 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         using SSType = typename InType::Scalar;
         constexpr int BW = TYCHO_ENZYME_BATCH_WIDTH;
         static_assert(BW > 1, "doubly-batched helper requires BW > 1");
+        static_assert(IR != Eigen::Dynamic,
+            "compute_jacobian_adjoint_hessian_fof_simd_db_ requires fixed IR; "
+            "(OR * BW, BW) Eigen::Matrix shape is a compile-time constant.");
+        static_assert(OR != Eigen::Dynamic,
+            "compute_jacobian_adjoint_hessian_fof_simd_db_ requires fixed OR; "
+            "(OR * BW, BW) Eigen::Matrix shape is a compile-time constant.");
+        static_assert(IR % BW == 0,
+            "compute_jacobian_adjoint_hessian_fof_simd_db_ requires IR % BW == 0; "
+            "the chunked outer/inner loops have no tail-handling.  Caller must "
+            "either choose IR divisible by BW or use the singly-batched variant.");
 
         FxType& fx = fx_.const_cast_derived();
         JacType& jx = jx_.const_cast_derived();
