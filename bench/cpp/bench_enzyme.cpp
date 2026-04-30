@@ -6,8 +6,9 @@
 //          brachistochrone PSIOPT full-solve TTS comparison (gate criterion
 //          §8.2: full-Enzyme TTS ≤ 1.5× FDiff reference TTS).
 //
-// The benchmark is built once per TYCHO_ENZYME_HESSIAN_STRATEGY value (FoR /
-// FoF). Names stay neutral; users compare the two JSON dumps externally.
+// The benchmark is built against the only cmake-selectable strategy
+// (FoR; FoF is preserved as archived research — see
+// include/tycho/detail/vf/derivatives/dense_enzyme.h).
 //
 // Plugin flag is scoped to this target only (see bench/cpp/CMakeLists.txt);
 // the rest of the benchmark suite is unaffected.
@@ -437,9 +438,9 @@ void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
 
 // -----------------------------------------------------------------------------
 // Phase 2: Hessian benchmarks.  Each iteration computes the full Jacobian +
-// adjoint gradient + adjoint Hessian via the active EnzymeAD pathway (FoR or
-// FoF, depending on TYCHO_ENZYME_HESSIAN_STRATEGY).  Compared head-to-head
-// with the FDiffFwd nested-FD reference.
+// adjoint gradient + adjoint Hessian via the active EnzymeAD pathway (FoR;
+// FoF is archived, not cmake-selectable).  Compared head-to-head with the
+// FDiffFwd nested-FD reference.
 // -----------------------------------------------------------------------------
 template <class ODE>
 inline void bm_hessian_body(benchmark::State& state,
@@ -572,8 +573,8 @@ BENCHMARK(BM_Brach_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/Brach
 BENCHMARK(BM_CR3BP_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/CR3BP");
 BENCHMARK(BM_MEE_VectorizedSIMD_Enzyme)->Name("BM_JacobianVecSIMD_Enzyme/MEE");
 
-// Phase 2: Hessians.  EnzymeFull = <EnzymeAD, EnzymeAD>; the active
-// TYCHO_ENZYME_HESSIAN_STRATEGY chooses FoR vs FoF at compile time.
+// Phase 2: Hessians.  EnzymeFull = <EnzymeAD, EnzymeAD>; FoR is the only
+// cmake-selectable strategy (FoF archived in dense_enzyme.h).
 BENCHMARK(BM_Hessian_Brach_FDiff)->Name("BM_Hessian_FDiff/Brach");
 BENCHMARK(BM_Hessian_Brach_Enzyme)->Name("BM_Hessian_Enzyme/Brach");
 BENCHMARK(BM_Hessian_CR3BP_FDiff)->Name("BM_Hessian_FDiff/CR3BP");

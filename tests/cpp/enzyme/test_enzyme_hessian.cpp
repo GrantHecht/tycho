@@ -3,9 +3,9 @@
 // Phase 2 Enzyme Hessian unit-test matrix.
 //
 // Compares <EnzymeAD, EnzymeAD> against <FDiffCentArray, FDiffCentArray> for
-// the brachistochrone, CR3BP, and MEE test dynamics. Tests run under whichever
-// nested-Enzyme strategy (FoR or FoF) is selected at configure time via
-// TYCHO_ENZYME_HESSIAN_STRATEGY.
+// the brachistochrone, CR3BP, and MEE test dynamics. Tests run under FoR
+// (the only cmake-selectable nested-Enzyme strategy; FoF preserved as
+// archived research in include/tycho/detail/vf/derivatives/dense_enzyme.h).
 //
 // Tolerances:
 //   - Jacobian / adjoint gradient agree to 1e-5 (FDiffCentArray

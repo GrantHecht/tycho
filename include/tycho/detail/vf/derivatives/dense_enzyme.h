@@ -235,8 +235,10 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // **When to revive.**
 // 1. **MEE-class workload dominance.**  If a real workload's runtime is
 //    dominated by composite trig+sqrt+division Hessians where FoR-SIMD
-//    can't go SIMD, FoF-SIMD is the only path.  Compile MEE-class TUs at
-//    -O1 — see commit `4cd7391` for the split-TU pattern.
+//    can't go SIMD, FoF-SIMD is the only path.  MEE-class FoF TUs must
+//    be compiled at -O1 (separate "Cannot deduce single type of store"
+//    IR-deduction failure at -O3) — see the original MEE FoF SIMD
+//    Hessian bench TU split for the pattern.
 // 2. **Per-call overhead becomes the bottleneck.**  If a future
 //    Enzyme/clang release reduces body-cost so per-call overhead
 //    dominates, the doubly-batched W² Hessian-elements-per-call may
@@ -247,18 +249,17 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 //    matter for a fused-iteration NLP solver that reads J and H
 //    in the same cache line.
 //
-// **Reference commits.**
-// - 73d09a4 feat(enzyme): Phase 6 direct-SIMD FoR Hessian
-// - e8651d2 feat(enzyme): Phase 7 direct-SIMD FoF Hessian + combined J+H
-// - 4cd7391 fix(bench): split MEE FoF SIMD Hessian into its own -O1 TU
-//   (subsequently reverted — FoF benches are no longer in tree)
-// - e777544 feat(enzyme): Phase 7+ doubly-batched FoF SIMD helper
+// **Reference history.**  See `doc/EnzymeAD_FutureWork.md` for the
+// canonical revival commit chain (Phase 6 FoR-SIMD, Phase 7 FoF-SIMD,
+// Phase 7+ doubly-batched, archive); SHAs are kept there to avoid
+// rebase-rot in this header.
 //
-// **Reviving the tests/benches.**  Reproduce the test fixtures
-// `MEEVectorizable` and `PolyVectorizable8x4` from commit `e777544`
-// (test_enzyme_vectorized.cpp) and the matching
-// `BM_Poly8x4_HessianFoFSIMD_singly|doubly` benches plus the
-// MEE-bench-in-its-own-TU pattern from commit `4cd7391`.
+// **Reviving the tests/benches.**  The original FoF coverage included
+// `MEEVectorizable` and `PolyVectorizable8x4` test fixtures (in
+// test_enzyme_vectorized.cpp), the matching
+// `BM_Poly8x4_HessianFoFSIMD_singly|doubly` benches, and the
+// MEE-bench-in-its-own-TU `-O1` split pattern.  See
+// `doc/EnzymeAD_FutureWork.md` for the corresponding commits.
 //
 // =============================================================================
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
@@ -634,13 +635,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
      (O(IR) outer Enzyme calls).
 
   ForwardOverForward was implemented in Phases 7 / 7+ (combined J+H;
-  doubly-batched W² block) and archived in commit `79fc589`; bench
-  evidence showed FoR-SIMD wins ~2× on Brach and ~5× on CR3BP, and the
-  doubly-batched variant added only ~5%.  The FoF helpers remain in this
-  header inside `#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)`
-  blocks as a revival reference; the strategy itself is no longer
-  cmake-selectable.  See the archive block above the FoF helpers for
-  revival conditions.
+  doubly-batched W² block) and archived; bench evidence showed FoR-SIMD
+  wins ~2× on Brach and ~5× on CR3BP, and the doubly-batched variant
+  added only ~5%.  The FoF helpers remain in this header inside
+  `#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)` blocks
+  as a revival reference; the strategy itself is no longer cmake-
+  selectable.  See the archive block above the FoF helpers for revival
+  conditions; `doc/EnzymeAD_FutureWork.md` carries the canonical commit
+  chain.
 */
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::EnzymeAD>
@@ -858,8 +860,9 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     // is layered on top so each call also propagates BW outer tangents.
     //
     // The inner __enzyme_autodiff (inside enzyme_for_outer_wrapper_simd) runs
-    // on SuperScalar arithmetic — the unproven combo flagged in the Phase 6
-    // plan.  fx_scratch / lam_scratch are passed enzyme_const at the outer
+    // on SuperScalar arithmetic; validated by the
+    // EnzymeVectorized.HessianSIMDMatchesScalarized_{Brach,CR3BP} tests.
+    // fx_scratch / lam_scratch are passed enzyme_const at the outer
     // fwddiff so they are not BW-replicated; the inner reverse pass mutates
     // lam_scratch per its standard convention.
     template <class InType, class AdjHessType, class AdjVarType>
@@ -923,7 +926,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
 
         // Tail (or full loop when BW=1): single-tangent SIMD fwddiff.
-        // Identical shape to the Phase 5b Jacobian tail at lines 316-335.
+        // Identical shape to the Phase 5b Jacobian tail in
+        // simd_compute_jacobian_impl.
         for (; i < ir; ++i) {
             dx_local.setZero();
             dx_local[i].setConstant(1.0);
@@ -958,6 +962,9 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+    // ARCHIVED — see archive block at the top of this section.  Revive only
+    // via the procedure described there.
+    //
     // Phase 7: combined J+H FoF helper.  The outer __enzyme_fwddiff
     // naturally produces J(x)·e_i in dfx_outer_shadow as a free byproduct
     // (it only depends on the outer dx_outer = e_i, not on dx_inner = e_j);
@@ -1042,6 +1049,9 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
     }
 
+    // ARCHIVED — see archive block at the top of this section.  Revive only
+    // via the procedure described there.
+    //
     // Phase 7 SIMD FoF combined J+H helper.  All-forward-mode (fwddiff over
     // fwddiff over SuperScalar arithmetic) — no SS reverse-mode tape, so
     // composite trig+sqrt+division bodies (MEE-class) work without opt-out.
@@ -1206,9 +1216,9 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     //                         indexing: ddfx[k, c, b] at flat offset
     //                         k + or*c + or*BW*b (col-major, b is outer-col)
     // ARCHIVED — see archive block at the top of this section.  No production
-    // caller; only known call site was BM_Poly8x4_HessianFoFSIMD_doubly,
-    // removed in commit 79fc589.  Revive only via the procedure described in
-    // the archive block.
+    // caller; the only call site was BM_Poly8x4_HessianFoFSIMD_doubly, which
+    // was removed when the FoF tests/benches were stripped.  Revive only via
+    // the procedure described in the archive block.
     template <class InType, class FxType, class JacType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjoint_hessian_fof_simd_db_(

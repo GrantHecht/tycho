@@ -388,6 +388,9 @@ struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
 
 **Rule of thumb (post Eigen 5 + Phase 6):**
 
+Bench numbers below: 2026-04-28, BW=4, AVX2; reproducible via
+`bench/cpp/bench_enzyme.cpp` + `bench/bench_track.sh`.
+
 - **Arithmetic / `sqrt`-only VFs, IR ≥ 6** (e.g. CR3BP-class): leave
   `is_vectorizable = true`.  Gets full Phase 3 + 5b Jacobian SIMD AND
   Phase 6 Hessian SIMD.  Hessian wins ~12× on CR3BP (291 ns Phase 6 vs

@@ -53,10 +53,9 @@ function(tycho_enzyme_try_compile_fwddiff)
     message(STATUS "Enzyme AD: fwddiff smoke test passed.")
 endfunction()
 
-# Helper: shared body for the two nested smoke tests. Compiles + runs the named
+# Helper: shared body for the nested smoke test. Compiles + runs the named
 # source with the plugin flag attached; sets ${OUTVAR} to TRUE on pass, FALSE
-# otherwise. Does NOT FATAL_ERROR — Phase 2 wants the option to fall back
-# between FoR and FoF if one strategy is broken on a given Enzyme build.
+# otherwise. Does NOT FATAL_ERROR — the caller decides how to react.
 function(_tycho_enzyme_run_nested_smoke SRC_NAME CACHE_VAR LABEL OUTVAR)
     set(_src_path "${CMAKE_SOURCE_DIR}/cmake/try_compile_sources/${SRC_NAME}")
     if(NOT EXISTS "${_src_path}")
@@ -91,15 +90,6 @@ function(tycho_enzyme_try_compile_nested_for OUTVAR)
         enzyme_nested_for.cpp
         TYCHO_ENZYME_NESTED_FOR_SMOKE_TEST
         FoR
-        ${OUTVAR})
-    set(${OUTVAR} ${${OUTVAR}} PARENT_SCOPE)
-endfunction()
-
-function(tycho_enzyme_try_compile_nested_fof OUTVAR)
-    _tycho_enzyme_run_nested_smoke(
-        enzyme_nested_fof.cpp
-        TYCHO_ENZYME_NESTED_FOF_SMOKE_TEST
-        FoF
         ${OUTVAR})
     set(${OUTVAR} ${${OUTVAR}} PARENT_SCOPE)
 endfunction()

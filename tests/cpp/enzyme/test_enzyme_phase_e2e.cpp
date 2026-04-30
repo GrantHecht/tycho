@@ -95,9 +95,10 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
 // -----------------------------------------------------------------------------
 // Full Enzyme pipeline: <EnzymeAD, EnzymeAD>.  Same problem, same expected
 // optimal time, but the second-order derivatives PSIOPT consumes also flow
-// through Enzyme (Phase 2's nested-AD strategy, FoR or FoF depending on the
-// active TYCHO_ENZYME_HESSIAN_STRATEGY).  Convergence here is the integration
-// test that validates Phase 2 across the full direct-collocation stack.
+// through Enzyme (Phase 2's nested-AD strategy — FoR is the only cmake-
+// selectable strategy; FoF preserved as archived research in dense_enzyme.h).
+// Convergence here is the integration test that validates Phase 2 across the
+// full direct-collocation stack.
 // -----------------------------------------------------------------------------
 TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
     using namespace tycho;
