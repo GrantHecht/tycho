@@ -82,9 +82,11 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     const auto status = phase.solve_optimize();
-    ASSERT_LE(static_cast<int>(status),
-              static_cast<int>(PSIOPT::ConvergenceFlags::ACCEPTABLE))
-        << "PSIOPT did not converge; status=" << static_cast<int>(status);
+    ASSERT_EQ(static_cast<int>(status),
+              static_cast<int>(PSIOPT::ConvergenceFlags::CONVERGED))
+        << "PSIOPT did not reach CONVERGED; status=" << static_cast<int>(status);
+    EXPECT_LT(phase.optimizer().result().iter_num_, 50)
+        << "PSIOPT iter count regression (Enzyme Jacobian path)";
 
     const auto result = phase.return_traj();
     const double tf_opt = result.back()[3];
@@ -148,10 +150,12 @@ TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     const auto status = phase.solve_optimize();
-    ASSERT_LE(static_cast<int>(status),
-              static_cast<int>(PSIOPT::ConvergenceFlags::ACCEPTABLE))
-        << "PSIOPT did not converge under <EnzymeAD, EnzymeAD>; status="
+    ASSERT_EQ(static_cast<int>(status),
+              static_cast<int>(PSIOPT::ConvergenceFlags::CONVERGED))
+        << "PSIOPT did not reach CONVERGED under <EnzymeAD, EnzymeAD>; status="
         << static_cast<int>(status);
+    EXPECT_LT(phase.optimizer().result().iter_num_, 50)
+        << "PSIOPT iter count regression (full Enzyme pipeline)";
 
     const auto result = phase.return_traj();
     const double tf_opt = result.back()[3];

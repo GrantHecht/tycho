@@ -35,6 +35,10 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 
 #else // TYCHO_HAS_ENZYME_AD
 
+static_assert(TYCHO_ENZYME_BATCH_WIDTH == 1 || TYCHO_ENZYME_BATCH_WIDTH == 4
+                  || TYCHO_ENZYME_BATCH_WIDTH == 8,
+              "TYCHO_ENZYME_BATCH_WIDTH must be 1, 4, or 8.");
+
 // Enzyme magic externs.  These are sentinel symbols Enzyme recognises at the
 // IR level; they are never linked.  Declaring them as extern "C" int avoids
 // C++ name mangling so the plugin sees the canonical names.
@@ -522,8 +526,6 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
                                              const Eigen::MatrixBase<FxLocal>& fx_,
                                              const Eigen::MatrixBase<JacLocal>& jx_) const {
         constexpr int W = TYCHO_ENZYME_BATCH_WIDTH;
-        static_assert(W == 1 || W == 4 || W == 8,
-            "TYCHO_ENZYME_BATCH_WIDTH must be 1, 4, or 8.");
 
         FxLocal& fx = fx_.const_cast_derived();
         JacLocal& jx = jx_.const_cast_derived();

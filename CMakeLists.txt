@@ -231,6 +231,12 @@ if(ENABLE_ENZYME_AD)
     set(TYCHO_ENZYME_BATCH_WIDTH "4" CACHE STRING
         "Phase 3 batch width for Enzyme forward-mode Jacobian (1, 4, or 8)")
     set_property(CACHE TYCHO_ENZYME_BATCH_WIDTH PROPERTY STRINGS "1" "4" "8")
+    if(NOT TYCHO_ENZYME_BATCH_WIDTH MATCHES "^(1|4|8)$")
+        message(FATAL_ERROR
+            "TYCHO_ENZYME_BATCH_WIDTH must be 1, 4, or 8 (got: "
+            "${TYCHO_ENZYME_BATCH_WIDTH}).  STRINGS is a UI hint, not a "
+            "constraint; this regex pins the allowed values.")
+    endif()
     add_compile_definitions(TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH})
 
     # Phase 6: direct-SIMD EnzymeAD Hessian for is_vectorizable=true VFs at
