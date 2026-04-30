@@ -146,11 +146,10 @@ endif()
 # Note: TYCHO_DEFAULT_ARENA_SIZE is intentionally omitted — it is only
 # used in src/utils/memory_management.cpp (not in any public header).
 
-# fmt, autodiff, and sparse-solver include paths for build-tree consumers
-# (FetchContent). Install-tree consumers get these via tychoConfig.cmake.in.
+# fmt and sparse-solver include paths for build-tree consumers (FetchContent).
+# Install-tree consumers get these via tychoConfig.cmake.in.
 target_include_directories(tycho INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/fmt/include>
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/dep/autodiff>
 )
 # MKL include directories are needed by public headers (PardisoInterface.h
 # includes <mkl_pardiso.h>). On Apple, AccelerateSparse headers are part of

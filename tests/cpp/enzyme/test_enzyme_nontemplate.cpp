@@ -4,13 +4,7 @@
 //
 // Verifies that a user dynamics struct can declare compute_impl with concrete
 // double-typed arguments instead of the templated <class InType, class OutType>
-// form, and still works under <EnzymeAD, EnzymeAD>. This is the ergonomic win
-// Phase 4 documents — no changes to the core derivative machinery, just the
-// observation that EnzymeAD's free-function-pointer differentiation has no
-// dual-number requirement.
-//
-// The old fwd-mode autodiff path cannot do this — the canonical compile-fail
-// mode is locked in by tests/cpp/enzyme/compile_fail/non_template_autodiff.cpp.
+// form, and still works under <EnzymeAD, EnzymeAD>.
 // =============================================================================
 
 #include <gtest/gtest.h>

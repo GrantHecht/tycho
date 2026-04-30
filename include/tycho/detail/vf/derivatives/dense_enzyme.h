@@ -374,8 +374,8 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
                 // Phase 5b: direct-SIMD Enzyme.  The user's compute_impl runs
                 // on Eigen::Array<double, W, 1> SIMD ops; Enzyme differentiates
                 // through them producing W per-lane tangents per call.  Wins
-                // ~25-37% per-lane on small bodies (Brach 5->3, CR3BP 7->6)
-                // vs scalarize-per-lane.  Pre-Eigen-5 it lost ~1.7-6x on
+                // ~1.78× per-lane on Brach (5 ns scalar -> ~3 ns SIMD) and
+                // ~1.58× on CR3BP (7 ns -> ~6 ns).  Pre-Eigen-5 it lost ~1.7-6x on
                 // composite-trig bodies (MEE 9->6); post-Eigen-5 with
                 // `tycho::math::cos/sin` wrappers the regression is gone, so
                 // MEE-class VFs keep `is_vectorizable = true` and use the
@@ -766,6 +766,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     // Requires Vectorizable<Derived> and JMode == EnzymeAD (the parent
     // simd_compute_jacobian_impl is only defined for the EnzymeAD JMode
     // specialisation of DenseFirstDerivatives).
+    //
+    // FoF twin: ..._impl_fof inside the ARCHIVED FoF block.
     template <class InType, class OutType, class JacType, class AdjGradType,
               class AdjHessType, class AdjVarType>
     inline void simd_compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -962,15 +964,16 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
-    // ARCHIVED — see archive block at the top of this section.  Revive only
-    // via the procedure described there.
+    // ARCHIVED — see ARCHIVED block above (~line 177).  Revive only via the
+    // procedure described there.
     //
     // Phase 7: combined J+H FoF helper.  The outer __enzyme_fwddiff
     // naturally produces J(x)·e_i in dfx_outer_shadow as a free byproduct
     // (it only depends on the outer dx_outer = e_i, not on dx_inner = e_j);
     // we read column i of J on the FIRST inner-j iteration and ignore the
-    // recomputation on subsequent j.  Replaces compute_adjoint_hessian_fof_
-    // and saves one compute_jacobian_impl call per Hessian invocation.
+    // recomputation on subsequent j.  Replaces a separate-pass design used
+    // by the original Phase-6 prototype, saving one compute_jacobian_impl
+    // call per Hessian invocation.
     template <class InType, class FxType, class JacType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjoint_hessian_fof_(
@@ -1049,8 +1052,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
     }
 
-    // ARCHIVED — see archive block at the top of this section.  Revive only
-    // via the procedure described there.
+    // ARCHIVED — see ARCHIVED block above (~line 177).  Revive only via the
+    // procedure described there.
     //
     // Phase 7 SIMD FoF combined J+H helper.  All-forward-mode (fwddiff over
     // fwddiff over SuperScalar arithmetic) — no SS reverse-mode tape, so
@@ -1215,10 +1218,10 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     //   ddfx_outer_shadow_bb (or × BW × BW): outer shadow of dfx_inner_primal_b
     //                         indexing: ddfx[k, c, b] at flat offset
     //                         k + or*c + or*BW*b (col-major, b is outer-col)
-    // ARCHIVED — see archive block at the top of this section.  No production
-    // caller; the only call site was BM_Poly8x4_HessianFoFSIMD_doubly, which
-    // was removed when the FoF tests/benches were stripped.  Revive only via
-    // the procedure described in the archive block.
+    // ARCHIVED — see ARCHIVED block above (~line 177).  No production caller;
+    // the only call site was BM_Poly8x4_HessianFoFSIMD_doubly, which was
+    // removed when the FoF tests/benches were stripped.  Revive only via the
+    // procedure described in the archive block.
     template <class InType, class FxType, class JacType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjoint_hessian_fof_simd_db_(
@@ -1335,13 +1338,14 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
         }
     }
 
-    // Phase 7 SIMD FoF public method.  Twin of the FoR variant under
-    // strategy=ForwardOverReverse.  Both produce SuperScalar fx + jx + g + h
-    // for Vectorizable+EnzymeAD VFs; this variant uses combined J+H FoF
-    // (one helper) where the FoR variant stitches separate Phase 5b + FoR.
+    // Phase 7 SIMD FoF public method (ARCHIVED).  Renamed to _fof so a manual
+    // A/B revival that defines BOTH strategy macros simultaneously does not
+    // trigger a redefinition error against the FoR variant (..._impl in the
+    // ForwardOverReverse block above).  This variant uses combined J+H FoF
+    // (one helper); the FoR variant stitches separate Phase 5b + FoR.
     template <class InType, class OutType, class JacType, class AdjGradType,
               class AdjHessType, class AdjVarType>
-    inline void simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+    inline void simd_compute_jacobian_adjointgradient_adjointhessian_impl_fof(
         CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
         CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {

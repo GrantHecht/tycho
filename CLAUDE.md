@@ -247,13 +247,11 @@ ctest --test-dir tests/cpp/enzyme --output-on-failure
 
 **Mode constraints (Phase 2):**
 
-- `<EnzymeAD, EnzymeAD>` is now supported: the Hessian path uses Enzyme
-  Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`) by
-  default. A private `TYCHO_ENZYME_HESSIAN_STRATEGY` cmake-time toggle
-  selects between FoR and Forward-over-Forward; FoR wins the head-to-head
-  benchmark by 4–9× on Hessian micro-cases. FoF is retained as research
-  scaffolding for a planned combined-J+H optimisation; it is not exposed
-  as a public derivative mode.
+- `<EnzymeAD, EnzymeAD>` is supported. The Hessian path uses Enzyme
+  Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`).
+  FoR was selected over an early FoF prototype (4–9× faster on
+  Hessian micro-cases); FoF is no longer cmake-selectable — see the
+  Phase 7/7+ archive block below for revival conditions.
 
 **Batched forward-mode Jacobian (Phase 3):**
 
@@ -334,7 +332,9 @@ SuperScalar Scalar:
   cmake-selectable** — `ForwardOverForward` was dropped from the
   `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  Bench results
   at the time of archival (BW=4): FoR-SIMD wins ~2× on Brach (1038 vs
-  2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  FoF's only qualitative
+  2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  *(Both FoR-SIMD and
+  FoF-SIMD lose to Phase 5a on Brach — see the rule-of-thumb section
+  below for the regression context.)*  FoF's only qualitative
   advantage was on MEE-class composites (cos/sin/sqrt/division) where
   FoR-SIMD's inner reverse pass fails Enzyme TypeAnalysis — but no
   real PSIOPT workload has surfaced that case.  Doubly-batched variant
@@ -454,6 +454,7 @@ revisit `simd_math.h` and the rule-of-thumb above.
 | Last run | Toolchain | Result |
 |---|---|---|
 | 2026-04-27 | clang 21.1.8 / Enzyme tip (`cecf3492`) / Eigen 5.0.1 | both fail (status quo) |
+| 2026-04-30 | clang 21.1.8 / Enzyme plugin (`ClangEnzyme-21.so` mtime 2026-04-27) / Eigen 5.0.1 | both fail (status quo) |
 
 ### Key CMake variables
 
