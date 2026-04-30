@@ -97,6 +97,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_cartesian_dynamics.cpp
     astro/test_mee_dynamics.cpp
     astro/test_mee_to_cartesian.cpp
+    astro/test_cartesian_to_modified.cpp
 
     # Integrators
     integrators/test_integration_basic.cpp

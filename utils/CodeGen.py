@@ -62,12 +62,18 @@ class TychoHeaderGen:
         namespace="tycho::astro",
         include_path="tycho/vector_functions.h",
         gen_build_method=False,
+        compute_hessian=True,
+        precompute_params=True,
+        is_vectorizable=True,
     ):
 
         self.Name = Name
         self.namespace = namespace
         self.include_path = include_path
         self.gen_build_method = gen_build_method
+        self.compute_hessian = compute_hessian
+        self.precompute_params = precompute_params
+        self.is_vectorizable = is_vectorizable
         self.ninputs = len(Xs)
         self.noutputs = len(F)
 
@@ -141,18 +147,26 @@ class TychoHeaderGen:
         self.Jac = self.Func.jacobian(self.Inputs)
         print("Finished Jacobian")
         self.LMults = sp.Matrix(sp.symbols("LM:" + str(self.noutputs)))
-        print("Generating Gradient")
-        self.Grad = self.Jac.transpose() * self.LMults
-        print("Finished Gradient")
-        print("Generating Hessian")
-        self.Hess = self.Grad.jacobian(self.Inputs)
-        print("Finished Hessian")
+        if self.compute_hessian:
+            print("Generating Gradient")
+            self.Grad = self.Jac.transpose() * self.LMults
+            print("Finished Gradient")
+            print("Generating Hessian")
+            self.Hess = self.Grad.jacobian(self.Inputs)
+            print("Finished Hessian")
+        else:
+            self.Grad = None
+            self.Hess = None
 
         # Precomputed parameter-only subexpressions.
         # Substituted into Func/Jac/Grad/Hess at the SymPy level so that
         # per-method CSE naturally uses the member symbols (pcN_).
+        # Skipping (precompute_params=False) is useful when sp.cse over the
+        # full {Func, Jac, Grad, Hess} set is the codegen bottleneck and the
+        # lone-parameter case (e.g. mu) yields only trivial precomputes.
         self._precomputed = []  # [(member_name, resolved_expr), ...]
-        self._identify_precomputed()
+        if self.precompute_params:
+            self._identify_precomputed()
 
     def _identify_precomputed(self):
         """Find param-only CSE subexpressions and substitute into expressions.
@@ -166,7 +180,11 @@ class TychoHeaderGen:
         precomputed work.
         """
         print("Identifying parameter-only subexpressions")
-        all_cses, reduced = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
+        if self.compute_hessian:
+            cse_targets = [self.Func, self.Jac, self.Grad, self.Hess]
+        else:
+            cse_targets = [self.Func, self.Jac]
+        all_cses, reduced = sp.cse(cse_targets)
         param_cses, input_cses = self._partition_cses(all_cses)
 
         if not param_cses:
@@ -200,7 +218,10 @@ class TychoHeaderGen:
 
         # Expand reduced expressions: replace all CSE symbols with their
         # expanded forms. The result contains pcN_ atoms but no CSE vars.
-        print("  Substituting into Func/Jac/Grad/Hess")
+        if self.compute_hessian:
+            print("  Substituting into Func/Jac/Grad/Hess")
+        else:
+            print("  Substituting into Func/Jac")
         subs_list = list(expansion.items())
         new_exprs = []
         for item in reduced:
@@ -213,8 +234,9 @@ class TychoHeaderGen:
 
         self.Func = new_exprs[0]
         self.Jac = new_exprs[1]
-        self.Grad = new_exprs[2]
-        self.Hess = new_exprs[3]
+        if self.compute_hessian:
+            self.Grad = new_exprs[2]
+            self.Hess = new_exprs[3]
 
     def _partition_cses(self, cses):
         """Split CSE list into (param_only, input_dependent).
@@ -579,18 +601,19 @@ class TychoHeaderGen:
 
     def gen_class_header(self):
         I = _IND
-        dm = "DenseDerivativeMode::Analytic"
+        jm = "DenseDerivativeMode::Analytic"
+        hm = jm if self.compute_hessian else "DenseDerivativeMode::FDiffCentArray"
         nan_init = "std::numeric_limits<double>::quiet_NaN()"
 
         lines = []
         lines.append(f"struct {self.Name}")
         lines.append(
             f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
-            f"{self.noutputs}, {dm}, {dm}> {{"
+            f"{self.noutputs}, {jm}, {hm}> {{"
         )
         lines.append(
             f"{I}using Base = VectorFunction<{self.Name}, "
-            f"{self.ninputs}, {self.noutputs}, {dm}, {dm}>;"
+            f"{self.ninputs}, {self.noutputs}, {jm}, {hm}>;"
         )
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
         lines.append("")
@@ -608,7 +631,8 @@ class TychoHeaderGen:
             rows, cols = len(Mat), len(Mat[0])
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
-        lines.append(f"{I}static constexpr bool is_vectorizable = true;")
+        vec_flag = "true" if self.is_vectorizable else "false"
+        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
 
         # Precomputed member declarations — also NSDMI NaN so a
         # nullary-constructed instance propagates NaN through the compute
@@ -949,7 +973,7 @@ class TychoHeaderGen:
         header = self.gen_class_header()
         compute = self.gen_compute_impl()
         jacobian = self.gen_compute_jacobian_impl()
-        all_impl = self.gen_compute_all()
+        all_impl = self.gen_compute_all() if self.compute_hessian else ""
         ns_close = f"}};\n\n}} // namespace {self.namespace}\n"
 
         return (

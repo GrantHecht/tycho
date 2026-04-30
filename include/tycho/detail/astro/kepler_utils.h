@@ -313,10 +313,62 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
     return meelems;
 }
 
+// Direct posigrade Cartesian -> Modified Equinoctial Elements conversion.
+// No detour through classical elements: avoids the Mean<->Eccentric<->True
+// anomaly Kepler-equation path. Mirrors jacobwilliams Fortran-Astrodynamics-
+// Toolkit modified_equinoctial_module.f90::cartesian_to_equinoctial.
 template <class Scalar>
 Vector6<Scalar> cartesian_to_modified(const Vector6<Scalar> &XV, Scalar mu) {
-    Vector6<Scalar> oelems = cartesian_to_classic(XV, mu);
-    return classic_to_modified(oelems, mu);
+    using std::atan2;
+    using std::sqrt;
+
+    Vector3<Scalar> R = XV.template head<3>();
+    Vector3<Scalar> V = XV.template tail<3>();
+
+    Scalar rdv = R.dot(V);
+    Scalar rmag = R.norm();
+    Vector3<Scalar> rhat = R / rmag;
+
+    Vector3<Scalar> hvec = R.cross(V);
+    Scalar hmag_sq = hvec.squaredNorm();
+    Scalar hmag = sqrt(hmag_sq);
+    Vector3<Scalar> hhat = hvec / hmag;
+
+    Vector3<Scalar> vhat = (rmag * V - rdv * rhat) / hmag;
+
+    Scalar p = hmag_sq / mu;
+    Scalar inv_one_plus_hz = Scalar(1.0) / (Scalar(1.0) + hhat[2]);
+    Scalar k = hhat[0] * inv_one_plus_hz;
+    Scalar h = -hhat[1] * inv_one_plus_hz;
+    Scalar kk = k * k;
+    Scalar hh = h * h;
+    Scalar s2 = Scalar(1.0) + hh + kk;
+    Scalar inv_s2 = Scalar(1.0) / s2;
+    Scalar tkh = Scalar(2.0) * k * h;
+
+    Vector3<Scalar> fhat;
+    fhat[0] = (Scalar(1.0) - kk + hh) * inv_s2;
+    fhat[1] = tkh * inv_s2;
+    fhat[2] = Scalar(-2.0) * k * inv_s2;
+
+    Vector3<Scalar> ghat;
+    ghat[0] = tkh * inv_s2;
+    ghat[1] = (Scalar(1.0) + kk - hh) * inv_s2;
+    ghat[2] = Scalar(2.0) * h * inv_s2;
+
+    Vector3<Scalar> ecc = V.cross(hvec) / mu - rhat;
+    Scalar f = ecc.dot(fhat);
+    Scalar g = ecc.dot(ghat);
+    Scalar L = atan2(rhat[1] - vhat[0], rhat[0] + vhat[1]);
+
+    Vector6<Scalar> meelems;
+    meelems[0] = p;
+    meelems[1] = f;
+    meelems[2] = g;
+    meelems[3] = h;
+    meelems[4] = k;
+    meelems[5] = L;
+    return meelems;
 }
 
 template <class Scalar>

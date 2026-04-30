@@ -37,6 +37,13 @@ template <> struct TychoBind<CartesianToClassic> {
     }
 };
 
+template <> struct TychoBind<CartesianToModified> {
+    static void Build(nb::module_ &m, const char *name) {
+        auto obj = nb::class_<CartesianToModified>(m, name).def(nb::init<double>());
+        bind::DenseBaseBuild<CartesianToModified>(obj);
+    }
+};
+
 void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
@@ -80,6 +87,12 @@ void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
     });
 
     reg.Build_Register<CartesianToClassic>(m, "CartesianToClassic");
+
+    m.def("cartesian_to_modified", [](const GenericFunction<-1, -1> &RV, double mu) {
+        return GenericFunction<-1, -1>(CartesianToModified(mu).eval(RV));
+    });
+
+    reg.Build_Register<CartesianToModified>(m, "CartesianToModified");
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////              Propagators                  /////////////////////////
