@@ -72,7 +72,13 @@ template <typename RT, typename... Args> RT __enzyme_autodiff(Args...);
 // Such VFs fall through to the Phase 5a scalarize-per-lane fallback.
 template <class T>
 constexpr bool enzyme_simd_hessian_eligible() {
-    if constexpr (requires { T::enzyme_simd_hessian_supported; })
+    // Tighten the requires expression: only accept a member that converts to
+    // bool, so a same-named function or unrelated typedef cannot accidentally
+    // match.
+    if constexpr (requires {
+                      { T::enzyme_simd_hessian_supported }
+                          -> std::convertible_to<bool>;
+                  })
         return static_cast<bool>(T::enzyme_simd_hessian_supported);
     else
         return true;
@@ -191,8 +197,12 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 //   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse  (default, tested)
 //
 // Revival requires re-adding `ForwardOverForward` to the STRINGS list in
-// CMakeLists.txt, restoring the FoF dispatch branches that were stripped
-// from `compute_jacobian_adjointgradient_adjointhessian_impl` and
+// CMakeLists.txt, defining the **second sentinel** `TYCHO_ENZYME_FOF_ARCHIVE_REVIVED`
+// (so the archive blocks below become visible — both the FoF strategy macro
+// AND the sentinel must be set, preventing a manual `add_compile_definitions`
+// outside cmake from silently reviving the path), restoring the FoF dispatch
+// branches that were stripped from
+// `compute_jacobian_adjointgradient_adjointhessian_impl` and
 // `scalar_compute_jacobian_adjointgradient_adjointhessian_impl`, and
 // re-introducing the test/bench coverage from the commits below.
 //
@@ -266,7 +276,8 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // `doc/EnzymeAD_FutureWork.md` for the corresponding commits.
 //
 // =============================================================================
-#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward) \
+    && defined(TYCHO_ENZYME_FOF_ARCHIVE_REVIVED)
 
 // FoF inner wrapper (scalar): computes f(x) AND J(x)·dx_inner via Enzyme
 // forward mode.
@@ -348,7 +359,7 @@ inline void enzyme_fof_inner_wrapper_simd_innerbatch(
         enzyme_const, n_out);
 }
 
-#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward + REVIVED
 
 } // namespace detail
 
@@ -965,7 +976,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     }
 #endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse
 
-#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward) \
+    && defined(TYCHO_ENZYME_FOF_ARCHIVE_REVIVED)
     // ARCHIVED — see ARCHIVED block above (~line 177).  Revive only via the
     // procedure described there.
     //
@@ -1372,7 +1384,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
             gx[i] = acc;
         }
     }
-#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward
+#endif // TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward + REVIVED
 };
 
 #endif // TYCHO_HAS_ENZYME_AD
