@@ -26,7 +26,7 @@ struct CartesianToModified
     VF_TYPE_ALIASES(Base);
 
     double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational Parameter
-    static constexpr bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = true;
 
     CartesianToModified() {
         this->set_io_rows(6, 6);

@@ -83,12 +83,10 @@ def CartesianToModified():
     # caching 1/mu as a constructor-time member (negligible vs the
     # cost of computing it once per call).
     #
-    # is_vectorizable=False: the body uses atan2 of two arguments, and
-    # Eigen::Array<double, W, 1> has no free atan2(Array, Array)
-    # overload (only the unary member ArrayBase::atan2). Until a SIMD
-    # atan2 wrapper is added (analogous to tycho::math::cos/sin from
-    # the Phase 5b Enzyme path), opt out of SuperScalar primal so the
-    # VF dispatch only tries Scalar=double / AD types.
+    # SuperScalar primal works because tycho/detail/utils/simd_math.h
+    # adds the missing Eigen::atan2(Array<double, N, 1>, Array<double, N, 1>)
+    # free overload (Eigen 3.4 ships only the unary cwise free ops via
+    # EIGEN_ARRAY_DECLARE_GLOBAL_UNARY; binary atan2 stays a member).
     header = TychoHeaderGen(
         "CartesianToModified",
         Eq,
@@ -99,7 +97,6 @@ def CartesianToModified():
             "direct - no classical-element detour)"
         ),
         precompute_params=False,
-        is_vectorizable=False,
     )
 
     output_dir = os.path.join(
