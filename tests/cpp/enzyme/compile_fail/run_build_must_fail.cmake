@@ -1,11 +1,11 @@
 # =============================================================================
-# Wrapper for the Phase 1 Vectorizable+EnzymeAD compile-fail probe.
+# Generic wrapper for compile-fail probes.
 #
 # Drives `cmake --build` on a target that is *expected* to fail to compile.
 # Test passes (script exits 0) iff:
 #   - the build fails (cmake --build returns non-zero), AND
-#   - the build output contains a substring proving the Phase 1 SuperScalar
-#     static_assert (or its EIGEN_STATIC_ASSERT cousin) actually fired.
+#   - the build output contains a substring matching EXPECTED_REGEX
+#     (pins the failure to the intended diagnostic).
 #
 # The wrapper-script form is used (instead of CTest's WILL_FAIL +
 # PASS_REGULAR_EXPRESSION) because in CMake 3.16+ those two properties
@@ -17,9 +17,10 @@
 #   BINARY_DIR     — top-level build dir to invoke `cmake --build` from
 #   TARGET         — the build target expected to fail
 #   CONFIG         — build config (e.g. Release)
-#   EXPECTED_REGEX — (optional) pattern that must appear in the build log to
-#                    pin the failure to the intended diagnostic.  Defaults to
-#                    the Phase 1 Vectorizable+EnzymeAD assertion text.
+#   EXPECTED_REGEX — REQUIRED.  Pattern that must appear in the build log to
+#                    pin the failure to the intended diagnostic.  Each caller
+#                    must supply this; there is no default, so a typo in the
+#                    -D variable surfaces as a clear "regex was empty" error.
 # =============================================================================
 
 if(NOT DEFINED BINARY_DIR)
@@ -32,7 +33,11 @@ if(NOT DEFINED CONFIG)
     set(CONFIG "")
 endif()
 if(NOT DEFINED EXPECTED_REGEX OR EXPECTED_REGEX STREQUAL "")
-    set(EXPECTED_REGEX "(does not yet support SuperScalar|Vectorizable<Derived>|IsSuperScalar)")
+    message(FATAL_ERROR
+        "EXPECTED_REGEX not set or empty.  Each compile-fail probe must "
+        "supply a regex that pins the diagnostic, otherwise an unrelated "
+        "build break would silently pass.  See "
+        "tests/cpp/enzyme/CMakeLists.txt for examples.")
 endif()
 
 set(_build_args --build "${BINARY_DIR}" --target "${TARGET}")
