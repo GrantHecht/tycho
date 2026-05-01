@@ -62,27 +62,29 @@ extern int enzyme_width;
 template <typename RT, typename... Args> RT __enzyme_fwddiff(Args...);
 template <typename RT, typename... Args> RT __enzyme_autodiff(Args...);
 
-// Opt-out marker for Phase 6 SIMD Hessian.  Any Vectorizable+EnzymeAD VF is
-// eligible by default; VFs whose body is too dense for Enzyme's SS
-// reverse-mode IR analysis (e.g. composite trig+sqrt+division bodies like
-// MEE) can disable per-VF by declaring:
+// Empty marker base class — opt OUT of the Phase 6 direct-SIMD FoR Hessian
+// for Vectorizable+EnzymeAD VFs whose body is too dense for Enzyme's
+// SuperScalar reverse-mode IR analysis (e.g. composite trig+sqrt+division
+// bodies like MEE).  To opt out, inherit from this tag in addition to the
+// VectorFunction base:
 //
-//   static constexpr bool enzyme_simd_hessian_supported = false;
+//   struct MyMEE : tycho::vf::VectorFunction<MyMEE, 9, 6, EnzymeAD, EnzymeAD>,
+//                  tycho::vf::EnzymeSimdHessianUnsupported {
+//       static constexpr bool is_vectorizable = true;
+//       // ...
+//   };
 //
-// Such VFs fall through to the Phase 5a scalarize-per-lane fallback.
+// The dispatch consults `enzyme_simd_hessian_supported_v<Derived>`, which is
+// true unless Derived inherits from this marker.  Inheritance is typo-safe:
+// misspelling the base-class name is a hard compile error (unknown identifier
+// in base-clause) — member-trait and trait-specialization forms both fail
+// silently on typos and silently keep the user on the path they tried to
+// disable.  Empty base optimization keeps the size cost at zero.
+struct EnzymeSimdHessianUnsupported {};
+
 template <class T>
-constexpr bool enzyme_simd_hessian_eligible() {
-    // Tighten the requires expression: only accept a member that converts to
-    // bool, so a same-named function or unrelated typedef cannot accidentally
-    // match.
-    if constexpr (requires {
-                      { T::enzyme_simd_hessian_supported }
-                          -> std::convertible_to<bool>;
-                  })
-        return static_cast<bool>(T::enzyme_simd_hessian_supported);
-    else
-        return true;
-}
+inline constexpr bool enzyme_simd_hessian_supported_v =
+    !std::is_base_of_v<EnzymeSimdHessianUnsupported, T>;
 
 namespace detail {
 
@@ -101,6 +103,7 @@ template <class Derived>
 inline void enzyme_compute_wrapper(const Derived* self,
                                    const double* x_data, double* fx_data,
                                    int n_in, int n_out) {
+    assert(n_in > 0 && n_out > 0);
     Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1>> x(x_data, n_in);
     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx(fx_data, n_out);
     self->compute_impl(x, fx);
@@ -389,13 +392,14 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
                 // Phase 5b: direct-SIMD Enzyme.  The user's compute_impl runs
                 // on Eigen::Array<double, W, 1> SIMD ops; Enzyme differentiates
                 // through them producing W per-lane tangents per call.  Wins
-                // ~1.78× per-lane on Brach (5 ns scalar -> ~3 ns SIMD) and
-                // ~1.58× on CR3BP (7 ns -> ~6 ns).  Pre-Eigen-5 it lost ~1.7-6x on
-                // composite-trig bodies (MEE 9->6); post-Eigen-5 with
-                // `tycho::math::cos/sin` wrappers the regression is gone, so
-                // MEE-class VFs keep `is_vectorizable = true` and use the
-                // per-VF `enzyme_simd_hessian_supported = false` opt-out for
-                // the *Hessian* path only (see enzyme_simd_hessian_eligible).
+                // ~1.78× per-lane on Brach and ~1.58× on CR3BP (2026-04-28,
+                // BW=4, AVX2; reproducible via bench/cpp/bench_enzyme.cpp).
+                // Pre-Eigen-5 it lost ~1.7-6× on composite-trig bodies
+                // (MEE 9->6); post-Eigen-5 with `tycho::math::cos/sin`
+                // wrappers the regression is gone, so MEE-class VFs keep
+                // `is_vectorizable = true` and inherit from
+                // `EnzymeSimdHessianUnsupported` to opt out of the
+                // *Hessian* path only (see enzyme_simd_hessian_supported_v).
                 simd_compute_jacobian_impl(x, fx_, jx_);
             } else {
                 // Phase 5a fallback path.  Reachable only if compute_jacobian_impl
@@ -567,8 +571,7 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
             // SoA-by-lane layout enzyme_dupv expects.  Using Eigen::Matrix
             // (vs std::vector) keeps the shadow stack-allocated when IR/OR
             // are compile-time constants, avoiding per-call heap-alloc cost
-            // that dominated for small IR (Brach was 4× slower than W=1
-            // before this).
+            // (verified small-IR regression in early Phase 3 prototypes).
             Eigen::Matrix<double, IR, W> dx_shadow(ir, W);
             Eigen::Matrix<double, OR, W> dfx_shadow(or_, W);
             const long stride_x = static_cast<long>(ir) * static_cast<long>(sizeof(double));
@@ -663,6 +666,11 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     VF_TYPE_ALIASES(Base)
 
+    static_assert(JMode == DenseDerivativeMode::EnzymeAD
+                      || JMode == DenseDerivativeMode::FDiffFwd,
+        "EnzymeAD Hessian only supports paired JMode == EnzymeAD or FDiffFwd; "
+        "see CLAUDE.md 'Mode constraints' for the supported pairings.");
+
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -676,7 +684,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::Enzym
     && defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
             if constexpr (Vectorizable<Derived>
                           && JMode == DenseDerivativeMode::EnzymeAD
-                          && enzyme_simd_hessian_eligible<Derived>()) {
+                          && enzyme_simd_hessian_supported_v<Derived>) {
                 // Phase 6 direct-SIMD FoR Hessian.  Routes through Phase 5b
                 // for fx + jx and the SIMD FoR helper for hx.  Falls through
                 // to Phase 5a otherwise.

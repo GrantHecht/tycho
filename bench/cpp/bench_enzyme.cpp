@@ -3,8 +3,9 @@
 //
 // Phase 1: Jacobian comparisons __enzyme_fwddiff vs FDiffCentArray.
 // Phase 2: Hessian comparisons (full Enzyme path) vs FDiffFwd, plus a
-//          brachistochrone PSIOPT full-solve TTS comparison (gate criterion
-//          §8.2: full-Enzyme TTS ≤ 1.5× FDiff reference TTS).
+//          brachistochrone PSIOPT full-solve TTS comparison (acceptance:
+//          full-Enzyme TTS ≤ 1.5× FDiff reference TTS — see BM_FullSolve_*
+//          below).
 //
 // The benchmark is built against the only cmake-selectable strategy
 // (FoR; FoF is preserved as archived research — see
@@ -17,7 +18,7 @@
 
 #include <tycho/tycho.h>
 
-#include "tycho/detail/utils/simd_math.h"
+#include "tycho/math.h"
 
 #include "enzyme_test_dynamics.h"
 
@@ -164,15 +165,15 @@ struct CR3BPBench
 //
 // The composite trig+sqrt+division body trips Enzyme's SuperScalar reverse-mode
 // IR type analysis ("Cannot deduce single type of store") under the FoR Hessian
-// strategy, so we opt out via enzyme_simd_hessian_supported=false and fall
-// through to Phase 5a scalarize-per-lane.
+// strategy, so we opt out by inheriting from EnzymeSimdHessianUnsupported and
+// fall through to Phase 5a scalarize-per-lane.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct MEEBench
-    : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm> {
+    : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>,
+      tycho::vf::EnzymeSimdHessianUnsupported {
     using Base = tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
-    static constexpr bool enzyme_simd_hessian_supported = false;
     double mu_, sqm_;
     MEEBench(double mu = 1.0) : mu_{mu}, sqm_{std::sqrt(mu)} {}
     template <class InType, class OutType>
@@ -405,10 +406,10 @@ void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-// MEE Hessian SIMD bench: MEEBench opts out of FoR SIMD via
-// enzyme_simd_hessian_supported=false (composite trig+sqrt+division body
-// trips Enzyme's SS reverse-mode TypeAnalysis), so the bench routes
-// through the Phase 5a scalarize-per-lane fallback.
+// MEE Hessian SIMD bench: MEEBench opts out of FoR SIMD by inheriting from
+// EnzymeSimdHessianUnsupported (composite trig+sqrt+division body trips
+// Enzyme's SS reverse-mode TypeAnalysis), so the bench routes through the
+// Phase 5a scalarize-per-lane fallback.
 void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
     using ODE = tycho_enzyme_bench::MEEBench<
         tycho::vf::DenseDerivativeMode::EnzymeAD,

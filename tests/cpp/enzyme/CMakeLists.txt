@@ -66,17 +66,20 @@ foreach(_probe ${_enzyme_probes})
     endif()
 endforeach()
 
-# All three probes fire the same root-cause diagnostic: a non-templated
-# compute_impl that takes Eigen::Map<const Matrix<double,...>> cannot accept
-# the Eigen::Matrix<Array<double,W,1>,...> (or other) type the dispatch path
-# wraps it with.  The instantiation chain printed by clang distinguishes the
-# three constraints; the per-probe target name distinguishes them in ctest.
+# Each probe's force_instantiation() references a uniquely-named struct
+# (ProbeNonTemplated{FDiff,Vectorizable,CallsCompute}); clang prints the
+# struct name in the instantiation chain when the dispatch type-mismatch
+# fires.  Anchoring each probe's regex on its own struct name (instead of
+# sharing "no viable conversion.*Eigen::Map") prevents an unrelated build
+# break upstream of the dispatch from accidentally satisfying a probe — the
+# struct name only appears in diagnostics if the failure originated in that
+# probe's force_instantiation().
 add_test(NAME enzyme_compile_fail_non_templated_with_fdiff
     COMMAND ${CMAKE_COMMAND}
         -DBINARY_DIR=${CMAKE_BINARY_DIR}
         -DTARGET=enzyme_compile_fail_non_templated_with_fdiff
         -DCONFIG=$<CONFIG>
-        "-DEXPECTED_REGEX=no viable conversion.*Eigen::Map"
+        "-DEXPECTED_REGEX=ProbeNonTemplatedFDiff"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
 
 add_test(NAME enzyme_compile_fail_non_templated_vectorizable
@@ -84,7 +87,7 @@ add_test(NAME enzyme_compile_fail_non_templated_vectorizable
         -DBINARY_DIR=${CMAKE_BINARY_DIR}
         -DTARGET=enzyme_compile_fail_non_templated_vectorizable
         -DCONFIG=$<CONFIG>
-        "-DEXPECTED_REGEX=no viable conversion.*Eigen::Map"
+        "-DEXPECTED_REGEX=ProbeNonTemplatedVectorizable"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
 
 add_test(NAME enzyme_compile_fail_non_templated_calls_compute
@@ -92,5 +95,5 @@ add_test(NAME enzyme_compile_fail_non_templated_calls_compute
         -DBINARY_DIR=${CMAKE_BINARY_DIR}
         -DTARGET=enzyme_compile_fail_non_templated_calls_compute
         -DCONFIG=$<CONFIG>
-        "-DEXPECTED_REGEX=no viable conversion.*Eigen::Map"
+        "-DEXPECTED_REGEX=ProbeNonTemplatedCallsCompute"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)

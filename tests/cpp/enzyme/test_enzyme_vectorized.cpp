@@ -12,7 +12,7 @@
 
 #include <tycho/tycho.h>
 
-#include "tycho/detail/utils/simd_math.h"
+#include "tycho/math.h"
 
 #include "enzyme_test_dynamics.h"
 
@@ -96,19 +96,19 @@ using CR3BPVectorizableEnzymeFull = CR3BPVectorizable<
     tycho::vf::DenseDerivativeMode::EnzymeAD>;
 
 // Brachistochrone variant that opts out of Phase 6 SIMD Hessian via the
-// per-VF trait, forcing dispatch through Phase 5a scalarize-per-lane.
-// Body is identical to BrachVectorizable; the only difference is the
-// trait declaration.  Anchors the enzyme_simd_hessian_eligible<> gating
-// predicate.
+// EnzymeSimdHessianUnsupported marker base, forcing dispatch through
+// Phase 5a scalarize-per-lane.  Body is identical to BrachVectorizable;
+// the only difference is the inheritance.  Anchors the
+// enzyme_simd_hessian_supported_v<> gating predicate.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct BrachVectorizableNoSimdHessian
-    : tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm> {
+    : tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm>,
+      tycho::vf::EnzymeSimdHessianUnsupported {
     using Base =
         tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
 
     static constexpr bool is_vectorizable = true;
-    static constexpr bool enzyme_simd_hessian_supported = false;
 
     double g_;
     BrachVectorizableNoSimdHessian(double g = 32.2) : g_{g} {}
@@ -136,17 +136,17 @@ using BrachVectorizableNoSimdHessianEnzymeFull = BrachVectorizableNoSimdHessian<
 // MEE-class variant marked Vectorizable=true with the Phase 6 SIMD Hessian
 // opt-out.  CLAUDE.md rule-of-thumb: composite trig+sqrt+division bodies
 // (MEE) trip Enzyme's SS reverse-mode TypeAnalysis on the Phase 6 SIMD path,
-// so this VF MUST set enzyme_simd_hessian_supported = false.  Trig is routed
-// through tycho::math::* per the Phase 5b trig-wrapper rule.
+// so this VF MUST inherit from EnzymeSimdHessianUnsupported.  Trig is
+// routed through tycho::math::* per the Phase 5b trig-wrapper rule.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
 struct MEEVectorizableNoSimdHessian
-    : tycho::vf::VectorFunction<MEEVectorizableNoSimdHessian<Jm, Hm>, 9, 6, Jm, Hm> {
+    : tycho::vf::VectorFunction<MEEVectorizableNoSimdHessian<Jm, Hm>, 9, 6, Jm, Hm>,
+      tycho::vf::EnzymeSimdHessianUnsupported {
     using Base =
         tycho::vf::VectorFunction<MEEVectorizableNoSimdHessian<Jm, Hm>, 9, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
 
     static constexpr bool is_vectorizable = true;
-    static constexpr bool enzyme_simd_hessian_supported = false;
 
     double mu_;
     double sqm_;
@@ -394,10 +394,10 @@ TEST(EnzymeVectorized, HessianSIMDMatchesScalarized_CR3BP) {
     check_hessian_simd_vs_scalarized<decltype(f), 7, 6>(f);
 }
 
-// Anchors enzyme_simd_hessian_eligible<>: when a VF sets
-// enzyme_simd_hessian_supported = false, the public dispatch must route
-// through the Phase 5a scalarize-per-lane fallback and produce the same
-// per-lane result as the SIMD Phase 6 path on the trait-true fixture.
+// Anchors enzyme_simd_hessian_supported_v<>: when a VF inherits from
+// EnzymeSimdHessianUnsupported, the public dispatch must route through the
+// Phase 5a scalarize-per-lane fallback and produce the same per-lane result
+// as the SIMD Phase 6 path on the un-marked fixture.
 TEST(EnzymeVectorized, HessianFallbackOnSimdOptOut) {
     using SS = Eigen::Array<double, 4, 1>;
     constexpr int IR = 5, OR = 3;
