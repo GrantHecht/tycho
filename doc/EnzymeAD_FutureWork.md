@@ -34,60 +34,19 @@ are genuine extensions, not bug fixes.
 > when Enzyme adds support for SIMD packet trig — at which point the
 > wrappers can be replaced with direct `x.cos() / x.sin()` calls.
 
-**Problem (historical).** Eigen 3.4's `Array<double, 4, 1>::cos()` /
-`::sin()` / `::exp()` / `::log()` were unrolled per-element and lowered to
-four separate scalar libm calls (`@cos(double)` × 4, etc.) rather than a
-single vectorised `cos<4xdouble>` intrinsic. This killed Phase 5b SIMD
-performance on bodies whose math involves transcendentals.
-
-**Concrete impact.** On the MEE dynamics test case (9→6 with one `cos(x5)`
-and one `sin(x5)` per body invocation):
-
-- Scalar Phase 3 path with `enzyme_width=8`: 5.97 ns total. `cos(x5)` is
-  computed *once* per primal pass and amortised across 8 tangents.
-- Phase 5b SIMD primal: 142 ns total. Each lane has its own `x5_lane`,
-  so per body invocation `cos` is called 4 times. For IR=9 tangents,
-  that's ~36 cos + ~36 sin libm calls per Jacobian.
-
-The 18× libm-call ratio maps cleanly onto the ~6× per-lane runtime
-regression observed.
-
-**What was tried and didn't work.** Adding `-fveclib=libmvec` to the bench
-target made MEE Phase 5b *worse* (142 → 319 ns). Eigen unrolls
-`Array::cos()` to scalar libm calls in the C++ template *before* Clang's
-vector-loop pass runs, so libmvec's vector-loop-replacement pass has no
-vector loop to match against. Reverted.
-
-**Workaround in tree (CLAUDE.md).** Document a per-VF rule:
-
-| Body type | `is_vectorizable` | Path |
-|-----------|-------------------|------|
-| Arithmetic / `sqrt` only | `true` | Phase 5b SIMD (1.5–1.8× per-lane win) |
-| Trig / `exp` / `log` heavy | `false` | Base class scalarises → fast Phase 3 W=8 |
-
-**Proposed fix.** A Tycho-side header defining SIMD overloads for
-`Eigen::Array<double, 4, 1>` math functions, calling Sleef
-(<https://sleef.org/>) or libmvec's `_ZGVdN4v_*` symbols directly. Would
-need:
-
-1. New header `include/tycho/detail/vf/derivatives/enzyme_simd_math.h`
-   defining `cos`/`sin`/`tan`/`exp`/`log`/etc. for `Array<double, 4, 1>`
-   that emit a single SIMD library call.
-2. Specialisations gated on AVX2/AVX-512 detection (CMake check) so the
-   default build stays portable.
-3. Verification that Enzyme can differentiate through the new SIMD calls
-   (probably requires registering them as known math functions in
-   Enzyme's `KnownFunctions` table — Enzyme has rules for `_ZGVdN4v_*`
-   at the IR level).
-
-**Estimated effort.** 1–2 days. Maintenance burden: a header per math
-function family, plus a small CMake feature-detection script. Payoff:
-makes `is_vectorizable = true` universally beneficial under EnzymeAD,
-removing the trig-body asterisk from the migration trigger evaluation.
-
-**Decision criterion.** Pursue if any astrodynamics workload shipping
-through Tycho has Vectorizable + trig in the inner loop. The existing
-MEE example is one such workload.
+**Historical context (superseded by `tycho::math` wrappers in
+`include/tycho/detail/utils/simd_math.h`).** Eigen 3.4's
+`Array<double, 4, 1>::cos()` / `::sin()` / `::exp()` / `::log()` were
+unrolled per-element and lowered to four separate scalar libm calls
+(`@cos(double)` × 4, etc.) rather than a single vectorised
+`cos<4xdouble>` intrinsic. This killed Phase 5b SIMD performance on
+bodies whose math involves transcendentals — on MEE (9→6, one cos +
+one sin per body), the scalar Phase 3 path with `enzyme_width=8` was
+5.97 ns vs Phase 5b SIMD at 142 ns. Adding `-fveclib=libmvec` made
+MEE Phase 5b *worse* (319 ns) because Eigen unrolls before Clang's
+vector-loop pass runs. Both attempts reverted; resolved by Eigen 5
+upgrade + the per-lane scalar-libm `tycho::math::cos/sin` wrappers
+shipping in `<tycho/math.h>`.
 
 ---
 
@@ -111,12 +70,12 @@ prototype was archived (see item 3 below).
 - `simd_compute_jacobian_adjointgradient_adjointhessian_impl` — public
   SIMD entry; tests call it directly to A/B against Phase 5a in the
   same binary.
-- Per-VF opt-out marker `static constexpr bool
-  enzyme_simd_hessian_supported = false;` — for VFs whose body trips
-  Enzyme's SS reverse-mode IR type-deduction (composite trig+sqrt+
-  division composites; MEE is the canonical case in tycho today).
-  Eligible VFs are detected via `enzyme_simd_hessian_eligible<Derived>()`
-  in the dispatch.
+- Per-VF opt-out via `tycho::vf::EnzymeSimdHessianUnsupported` marker
+  base class — for VFs whose body trips Enzyme's SS reverse-mode IR
+  type-deduction (composite trig+sqrt+division composites; MEE is the
+  canonical case in tycho today).  The dispatch consults
+  `enzyme_simd_hessian_supported_v<Derived>` (true unless Derived
+  inherits from the marker).
 - Tests `EnzymeVectorized.HessianSIMDMatchesScalarized_{Brach,CR3BP}`
   validate the SIMD path matches the per-lane scalar reference to
   1e-10.
@@ -188,17 +147,23 @@ item 4 below).
    in the same iteration; combined-J+H FoF saves a redundant
    forward sweep + can produce both in one cache window.
 
-**Reference commits** for revival:
-- `e8651d2` feat(enzyme): Phase 7 direct-SIMD FoF Hessian + combined J+H
-- `4cd7391` fix(bench): split MEE FoF SIMD Hessian into its own -O1 TU
-- `e777544` feat(enzyme): Phase 7+ doubly-batched FoF SIMD helper
+**Reference commits** for revival (annotated git tags pinned locally; push
+when this branch lands so collaborators can resolve them):
+- tag `enzyme-fof-phase7` (commit `e8651d2`) — Phase 7 direct-SIMD FoF
+  Hessian + combined J+H
+- tag `enzyme-fof-mee-bench-split` (commit `4cd7391`) — MEE FoF SIMD
+  Hessian bench TU split for -O1
+- tag `enzyme-fof-phase7plus` (commit `e777544`) — Phase 7+ doubly-batched
+  FoF SIMD helper
+- tag `enzyme-fof-archive-2026-04-28` (commit `79fc589`) — archive point
+  where the FoF tests/benches were removed
 
 Test fixtures `MEEVectorizable` and `PolyVectorizable8x4` and benches
-`BM_Poly8x4_HessianFoFSIMD_singly|doubly` were removed in commit
-`79fc589`; the FoF-strategy registration of `BM_MEE_HessianSIMD_Enzyme`
-was also dropped (the bench itself still ships under the FoR strategy
-via the Phase 5a fallback).  Cherry-pick the fixtures and benches from
-the reference commits above when reviving.
+`BM_Poly8x4_HessianFoFSIMD_singly|doubly` were removed at the
+`enzyme-fof-archive-2026-04-28` tag; the FoF-strategy registration of
+`BM_MEE_HessianSIMD_Enzyme` was also dropped (the bench itself still
+ships under the FoR strategy via the Phase 5a fallback).  Cherry-pick
+the fixtures and benches from the reference tags above when reviving.
 
 ---
 
@@ -276,6 +241,113 @@ Cons:
 
 The `Array<double, W, 1>::cos()` per-element scalar-libm pattern was a
 genuine Eigen ecosystem issue under Eigen 3.4. Eigen 5 fixes it.
+
+---
+
+## 7. `TYCHO_ENZYME_BATCH_WIDTH ∈ {1, 4, 8}` automated correctness coverage
+
+**State today.** Tests run with whatever `TYCHO_ENZYME_BATCH_WIDTH` cmake
+selected (default `4`).  The W=1 (no batching) and W=8 paths — and
+specifically the W=8 silent fallback when IR<8 (Brach IR=5: `ir_chunked = 0`,
+all work routes through the tail loop; CR3BP IR=7: same) — have no
+automated correctness gate.  The tail loop is exercised at the default
+W=4 (Brach: chunked=4, tail=1) but the all-tail-loop case is not.
+
+**Architectural obstacle.**  `TYCHO_ENZYME_BATCH_WIDTH` is a global
+preprocessor define applied via `add_compile_definitions` in
+`CMakeLists.txt`, and `src/vf/extern_template_instantiations.cpp`
+(`vf_instantiations` static lib) instantiates downstream templates with
+that single global value.  Building per-W test executables that link
+against `vf_instantiations` would either (a) ODR-violate when the test TU
+sees a different W than the static lib, or (b) require the test target
+to compile its own copies of all transitively-instantiated templates with
+its own W.  Neither is a small change.
+
+**Suggested approach (when revisited).**
+
+1. Refactor `vf_instantiations` so the EnzymeAD-specific extern templates
+   live in their own translation unit isolated from the global W
+   definition (or are instantiated in headers only, paying the cost
+   per-TU).
+2. Add three test executables `tycho_enzyme_tests_w{1,4,8}.cpp`, each
+   built with `target_compile_options(... PRIVATE -UTYCHO_ENZYME_BATCH_WIDTH
+   -DTYCHO_ENZYME_BATCH_WIDTH=${W})` and `DISABLE_PRECOMPILE_HEADERS ON`,
+   linking only against the EnzymeAD-clean headers.
+3. Each TU asserts Jacobian correctness for the matrix
+   {Brach(IR=5), CR3BP(IR=7), MEE(IR=9)} × {W=1, W=4, W=8}, especially
+   the W=8/IR<8 silent-fallback cells.
+
+**Estimated effort.** 1 day (the harder half is the cmake refactor for
+`vf_instantiations`).
+
+**Decision criterion.**  Pursue if any future change to the chunked-loop
+or tail-loop dispatch lands without a regression-catch test, or if a
+real workload with IR≥8 ships through PSIOPT and needs W=8 confidence.
+
+---
+
+## 8. End-to-end PSIOPT test for CR3BP under `<EnzymeAD, EnzymeAD>`
+
+**State today.**  `tests/cpp/enzyme/test_enzyme_phase_e2e.cpp` exercises
+the full Enzyme pipeline only for brachistochrone (IR=5, OR=3, scalar
+trig).  CR3BP (IR=7, OR=6, sqrt-only — the body that actually wins from
+Phase 6 SIMD Hessian) has no end-to-end PSIOPT integration test; only
+the unit-level Jacobian/Hessian comparison tests.
+
+**Suggested approach.**
+
+1. Define a CR3BP optimal control problem (e.g., minimum-time L1 ⇄ L2
+   transfer, or a Halo orbit station-keeping problem).
+2. Solve under `<EnzymeAD, EnzymeAD>`, compare convergence + cost
+   against the `<FDiffCentArray, FDiffFwd>` reference to 1e-6.
+
+**Estimated effort.** 0.5 day for the OCP setup + verification.
+
+**Decision criterion.**  Pursue if a future PSIOPT internals change lands
+that could affect the nested-AD path on real-CR3BP-style workloads
+without being caught by the Brach E2E.  The unit tests cover the
+correctness invariants; this would catch dispatch-pipeline integration
+regressions specifically.
+
+---
+
+## 9. Extract FoF archive into a separate header
+
+**State today.**  The FoF archive lives in two `#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)`
+blocks inside `include/tycho/detail/vf/derivatives/dense_enzyme.h`:
+
+1. Free-function FoF inner wrappers (lines ~282–365, ~80 lines).
+2. FoF Hessian helper member functions inside the
+   `DenseSecondDerivatives<..., EnzymeAD>` class body (lines ~987–1395,
+   ~410 lines).
+
+The blocks are gated by a sentinel macro that nothing currently defines, so
+they are zero-cost in builds.  The header readability cost is real, however:
+~500 lines of archive code dominates the live FoR path.
+
+**Architectural obstacle.**  Block 2's helpers are declared as member
+functions inside the `DenseSecondDerivatives` class body, so they cannot be
+moved into a separate header without first refactoring them to out-of-class
+definitions.  The refactor itself is mechanical but not trivial — each
+helper would need its template parameter list re-stated outside the class
+and its `friend`-style access patterns verified.
+
+**Suggested approach (when revisited).**
+
+1. Refactor Block 2's member functions to out-of-class definitions inside
+   the same `#if` gate.  Verify build under hypothetical revival
+   (`-DTYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward` reinserted in
+   CMakeLists.txt + `TYCHO_ENZYME_FOF_ARCHIVE_REVIVED` sentinel).
+2. Move both blocks (now both at file scope) plus the archive docstring
+   into `include/tycho/detail/vf/derivatives/dense_enzyme_fof_archive.h`.
+3. Replace the blocks in `dense_enzyme.h` with `#include
+   "dense_enzyme_fof_archive.h"`.
+
+**Estimated effort.**  0.5 day for the out-of-class refactor + extraction.
+
+**Decision criterion.**  Pursue when `dense_enzyme.h` readability becomes
+a maintenance pain point on the live path, or as a prerequisite to actual
+FoF revival (the extraction makes revival mechanically simpler).
 
 ---
 

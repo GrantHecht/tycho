@@ -3,11 +3,11 @@
 // Enzyme-mode test ODE definitions.  Mirror existing structs in
 // extensions/Tycho_Extensions.h, parameterized by derivative mode so we can
 // pair <EnzymeAD, FDiffCentArray> against <FDiffCentArray, FDiffCentArray> for
-// lane-for-lane Jacobian comparison in Task 1.8.
+// lane-for-lane Jacobian comparison.
 //
 // CR3BP and MEE bodies are lifted verbatim from
-// extensions/Tycho_Extensions.h::CR3BPAD::compute_impl and
-// extensions/Tycho_Extensions.h::ModifiedDynamicsAD::compute_impl
+// extensions/Tycho_Extensions.h::CR3BP_FDiff::compute_impl and
+// extensions/Tycho_Extensions.h::ModifiedDynamics_FDiff::compute_impl
 // (only the constant member access is renamed: mu -> mu_, sqm -> sqm_).
 // =============================================================================
 #pragma once
@@ -47,7 +47,7 @@ struct BrachODEModed : VectorFunction<BrachODEModed<Jm, Hm>, 5, 3, Jm, Hm> {
 };
 
 // 7 inputs, 6 outputs.  Body lifted from
-// extensions/Tycho_Extensions.h::CR3BPAD::compute_impl verbatim
+// extensions/Tycho_Extensions.h::CR3BP_FDiff::compute_impl verbatim
 // (mu -> mu_).
 template <DenseDerivativeMode Jm, DenseDerivativeMode Hm>
 struct CR3BPModed : VectorFunction<CR3BPModed<Jm, Hm>, 7, 6, Jm, Hm> {
@@ -86,7 +86,7 @@ struct CR3BPModed : VectorFunction<CR3BPModed<Jm, Hm>, 7, 6, Jm, Hm> {
 };
 
 // 9 inputs, 6 outputs.  Body lifted from
-// extensions/Tycho_Extensions.h::ModifiedDynamicsAD::compute_impl verbatim
+// extensions/Tycho_Extensions.h::ModifiedDynamics_FDiff::compute_impl verbatim
 // (mu -> mu_, sqm -> sqm_).
 template <DenseDerivativeMode Jm, DenseDerivativeMode Hm>
 struct MEEModed : VectorFunction<MEEModed<Jm, Hm>, 9, 6, Jm, Hm> {
@@ -160,6 +160,42 @@ struct BrachEnzymeNonTemplate
         fx[0] = std::sin(theta) * v;
         fx[1] = -std::cos(theta) * v;
         fx[2] = g_ * std::cos(theta);
+    }
+};
+
+// Phase 4 + larger IR/OR: CR3BP non-templated variant.  Catches IR=7, OR=6
+// wrapper-sizing bugs in enzyme_compute_wrapper that the IR=5/OR=3 Brach
+// fixture cannot expose.  Body lifted from CR3BPModed::compute_impl with
+// Scalar -> double.
+struct CR3BPEnzymeNonTemplate
+    : tycho::vf::VectorFunction<CR3BPEnzymeNonTemplate, 7, 6,
+                                tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                tycho::vf::DenseDerivativeMode::EnzymeAD> {
+    double mu_;
+    CR3BPEnzymeNonTemplate(double mu = 0.0123) : mu_{mu} {}
+
+    inline void compute_impl(
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1>> x,
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx) const {
+        Vector3<double> X = x.head<3>();
+        Vector3<double> V = x.segment<3>(3);
+
+        Vector3<double> p1loc;
+        p1loc[0] = -mu_;
+
+        Vector3<double> p2loc;
+        p2loc[0] = 1.0 - mu_;
+
+        Vector3<double> dvec = X - p1loc;
+        Vector3<double> rvec = X - p2loc;
+
+        double d = dvec.norm();
+        double r = rvec.norm();
+
+        fx.head<3>() = V;
+        fx.segment<3>(3) = -(1.0 - mu_) * dvec / (d * d * d) - mu_ * rvec / (r * r * r);
+        fx[3] += 2.0 * V[1] + X[0];
+        fx[4] += -2.0 * V[0] + X[1];
     }
 };
 

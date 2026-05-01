@@ -36,6 +36,7 @@ include(GoogleTest)
 set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_timer.cpp
     utils/test_math_functions.cpp
+    utils/test_tycho_math.cpp
     utils/test_sizing_helpers.cpp
     utils/test_eigen_stl.cpp
     utils/test_lambda_jump_table.cpp

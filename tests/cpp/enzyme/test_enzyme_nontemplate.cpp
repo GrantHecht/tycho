@@ -70,7 +70,7 @@ TEST(EnzymeNonTemplate, HessianMatchesTemplatedReference) {
 
     EXPECT_TRUE(jxNT.isApprox(jxA, 1e-5))  << "Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
     EXPECT_TRUE(gNT.isApprox(gA, 1e-5))    << "Adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
-    EXPECT_TRUE(hNT.isApprox(hA, 1e-3))    << "Adjoint Hessian mismatch"; // FDiffCentArray Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
+    EXPECT_TRUE(hNT.isApprox(hA, 1e-3))    << "Adjoint Hessian mismatch"; // FDiffFwd Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
 }
 
 // Documents the dispatch constraint: SuperScalar lane-batched compute requires
@@ -79,6 +79,53 @@ TEST(EnzymeNonTemplate, NotVectorizable) {
     static_assert(!tycho::vf::Vectorizable<tycho_enzyme_test::BrachEnzymeNonTemplate>,
         "BrachEnzymeNonTemplate must NOT be marked Vectorizable: SuperScalar "
         "VectorImpl path requires templated compute_impl.");
+}
+
+// CR3BP non-templated coverage (IR=7, OR=6).  Catches wrapper-sizing bugs
+// in enzyme_compute_wrapper that the IR=5/OR=3 Brach fixture cannot expose.
+TEST(EnzymeNonTemplate, CR3BPJacobianMatchesTemplatedReference) {
+    tycho_enzyme_test::CR3BPEnzymeNonTemplate fNT(0.0123);
+    tycho_enzyme_test::CR3BPFDiff fA(0.0123);
+    Eigen::Matrix<double, 7, 1> x;
+    x << 0.5, 0.7, 0.3, 0.4, -0.2, 0.6, 1.0;
+
+    Eigen::Matrix<double, 6, 1> fxNT, fxA;
+    Eigen::Matrix<double, 6, 7> jxNT, jxA;
+    fxNT.setZero(); fxA.setZero();
+    jxNT.setZero(); jxA.setZero();
+
+    fNT.compute_jacobian(x, fxNT, jxNT);
+    fA.compute_jacobian(x, fxA, jxA);
+
+    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-5))
+        << "CR3BP non-templated Enzyme Jacobian disagrees with FDiffCentArray reference";
+}
+
+TEST(EnzymeNonTemplate, CR3BPHessianMatchesTemplatedReference) {
+    tycho_enzyme_test::CR3BPEnzymeNonTemplate fNT(0.0123);
+    tycho_enzyme_test::CR3BPFDiff fA(0.0123);
+    Eigen::Matrix<double, 7, 1> x;
+    x << 0.5, 0.7, 0.3, 0.4, -0.2, 0.6, 1.0;
+    Eigen::Matrix<double, 6, 1> lam;
+    lam << 0.2, -0.5, 0.7, 0.1, -0.3, 0.4;
+
+    Eigen::Matrix<double, 6, 1> fxNT, fxA;
+    Eigen::Matrix<double, 6, 7> jxNT, jxA;
+    Eigen::Matrix<double, 7, 1> gNT, gA;
+    Eigen::Matrix<double, 7, 7> hNT, hA;
+    fxNT.setZero(); fxA.setZero();
+    jxNT.setZero(); jxA.setZero();
+    gNT.setZero();  gA.setZero();
+    hNT.setZero();  hA.setZero();
+
+    fNT.compute_jacobian_adjointgradient_adjointhessian(x, fxNT, jxNT, gNT, hNT, lam);
+    fA.compute_jacobian_adjointgradient_adjointhessian(x, fxA, jxA, gA, hA, lam);
+
+    EXPECT_TRUE(jxNT.isApprox(jxA, 1e-5))  << "CR3BP Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
+    EXPECT_TRUE(gNT.isApprox(gA, 1e-5))    << "CR3BP adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
+    EXPECT_TRUE(hNT.isApprox(hA, 1e-3))    << "CR3BP adjoint Hessian mismatch"; // FDiffFwd Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
+    EXPECT_TRUE(hNT.isApprox(hNT.transpose(), 1e-12))
+        << "CR3BP Hessian not symmetric";
 }
 
 } // namespace
