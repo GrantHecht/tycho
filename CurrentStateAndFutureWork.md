@@ -441,12 +441,17 @@ If the branch gets pushed for review, the PR description needs:
 ```
 TYCHO_FP_MODE                  = SAFER_FAST
 TYCHO_ENZYME_BATCH_WIDTH       = 4
-TYCHO_ENZYME_HESSIAN_STRATEGY  = ForwardOverReverse
 ENABLE_ENZYME_AD               = ON
 BUILD_CPP_TESTS                = ON
 BUILD_CPP_BENCHMARKS           = ON
 BUILD_CPP_EXAMPLES             = ON
 ```
+
+The Phase 2 nested-Enzyme strategy is fixed at FoR — CMakeLists.txt
+unconditionally defines `TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse`
+and never defines the FoF strategy macro.  There is no cache variable
+or `-D` flag for strategy selection; FoF is archived (see the FoF block
+in `dense_enzyme.h` for revival conditions).
 
 ### CMake configure incantation
 
