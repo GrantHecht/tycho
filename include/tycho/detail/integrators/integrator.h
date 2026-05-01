@@ -826,6 +826,30 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->set_method(src.get_method(), this->ode_, src.def_step_size_, target_uses_controller,
                          target_controller_source, target_controller_varlocs);
 
+        // Tolerances are sized to the source ODE's x_vars().  set_abs_tols /
+        // set_rel_tols enforce dimension agreement with the target's
+        // ode_.x_vars(); copy_settings_from must enforce the same invariant
+        // because the cross-DODE template signature admits arbitrary source
+        // and target dimensions, and downstream consumers
+        // (driver.integrate, initial-step estimation, residual scaling)
+        // index abs_tols_ / rel_tols_ by the target's x_vars().  A silent
+        // size mismatch would surface as Eigen dimension assertions in
+        // debug builds and as out-of-bounds reads in release.
+        if (src.abs_tols_.size() != this->ode_.x_vars()) {
+            throw std::invalid_argument(
+                "copy_settings_from: src abs_tols size (" +
+                std::to_string(src.abs_tols_.size()) +
+                ") does not match target ode_.x_vars() (" +
+                std::to_string(this->ode_.x_vars()) + ")");
+        }
+        if (src.rel_tols_.size() != this->ode_.x_vars()) {
+            throw std::invalid_argument(
+                "copy_settings_from: src rel_tols size (" +
+                std::to_string(src.rel_tols_.size()) +
+                ") does not match target ode_.x_vars() (" +
+                std::to_string(this->ode_.x_vars()) + ")");
+        }
+
         this->adaptive_ = src.adaptive_;
         this->abs_tols_ = src.abs_tols_;
         this->rel_tols_ = src.rel_tols_;
