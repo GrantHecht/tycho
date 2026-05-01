@@ -42,6 +42,8 @@
 #include <Eigen/Core>
 #include <cmath>
 
+#include "tycho/detail/utils/compiler_macros.h"
+
 namespace tycho::math {
 
 // Scalar overloads — forward to libm; Enzyme handles natively.
@@ -52,11 +54,11 @@ inline double sin(double x) { return std::sin(x); }
 // @llvm.cos.f64 / @llvm.sin.f64 — bithack-free, composes with
 // enzyme_width > 1.
 //
-// `noinline` keeps the function-call boundary stable so Enzyme's
+// `TYCHO_NOINLINE` keeps the function-call boundary stable so Enzyme's
 // activity analysis doesn't have to walk through Eigen's expression
 // templates.  Each call is small (W libm invocations) so the overhead is
 // trivial.
-inline __attribute__((noinline)) Eigen::Array<double, 2, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 2, 1>
 cos(const Eigen::Array<double, 2, 1>& x) {
     Eigen::Array<double, 2, 1> y;
     y[0] = std::cos(x[0]);
@@ -64,7 +66,7 @@ cos(const Eigen::Array<double, 2, 1>& x) {
     return y;
 }
 
-inline __attribute__((noinline)) Eigen::Array<double, 2, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 2, 1>
 sin(const Eigen::Array<double, 2, 1>& x) {
     Eigen::Array<double, 2, 1> y;
     y[0] = std::sin(x[0]);
@@ -72,7 +74,7 @@ sin(const Eigen::Array<double, 2, 1>& x) {
     return y;
 }
 
-inline __attribute__((noinline)) Eigen::Array<double, 4, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 4, 1>
 cos(const Eigen::Array<double, 4, 1>& x) {
     Eigen::Array<double, 4, 1> y;
     y[0] = std::cos(x[0]);
@@ -82,7 +84,7 @@ cos(const Eigen::Array<double, 4, 1>& x) {
     return y;
 }
 
-inline __attribute__((noinline)) Eigen::Array<double, 4, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 4, 1>
 sin(const Eigen::Array<double, 4, 1>& x) {
     Eigen::Array<double, 4, 1> y;
     y[0] = std::sin(x[0]);
@@ -92,7 +94,7 @@ sin(const Eigen::Array<double, 4, 1>& x) {
     return y;
 }
 
-inline __attribute__((noinline)) Eigen::Array<double, 8, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 8, 1>
 cos(const Eigen::Array<double, 8, 1>& x) {
     Eigen::Array<double, 8, 1> y;
     y[0] = std::cos(x[0]);
@@ -106,7 +108,7 @@ cos(const Eigen::Array<double, 8, 1>& x) {
     return y;
 }
 
-inline __attribute__((noinline)) Eigen::Array<double, 8, 1>
+inline TYCHO_NOINLINE Eigen::Array<double, 8, 1>
 sin(const Eigen::Array<double, 8, 1>& x) {
     Eigen::Array<double, 8, 1> y;
     y[0] = std::sin(x[0]);

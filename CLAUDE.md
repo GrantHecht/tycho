@@ -19,7 +19,7 @@ simultaneously.
 
 As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j6 for builds
-- Linux / Windows (32 GB+): ALWAYS use -j8 for builds
+- Linux / Windows (32 GB+): ALWAYS use -j6 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 - **NEVER launch a second build if one is already running** — not even in the background.
   If you started a build with `run_in_background`, WAIT for the completion notification
@@ -156,8 +156,8 @@ safely use higher `-j` values — ninja automatically throttles the heavy TUs
 while keeping light TUs parallel.
 
 ```bash
-cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
-                               # use -j8 on 32 GB systems, -j4 on 16 GB
+cd build && ninja -j6 all      # safe — pool limits heavy TUs automatically
+                               # use -j6 on 32 GB systems, -j4 on 16 GB
 ```
 
 The `dep/` submodules (eigen, fmt, nanobind) must be initialised before the
@@ -201,7 +201,7 @@ source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
 ```bash
 mkdir build && conda activate tycho
 cmake --preset linux-clang-release
-cd build && ninja -j8 all
+cd build && ninja -j6 all
 ```
 
 ### Windows x64
@@ -212,7 +212,7 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 ### Subsequent builds (all platforms)
 
 ```bash
-cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
+cd build && ninja -j<N> all    # N = 6 on all platforms (4 on RAM-constrained 16 GB)
 ```
 
 ### Enzyme AD (experimental)
@@ -237,7 +237,7 @@ cmake --preset linux-clang-release \
   -DENABLE_ENZYME_AD=ON \
   -DBUILD_CPP_TESTS=ON
 # Add -DBUILD_CPP_BENCHMARKS=ON for benchmarks.
-cd build && ninja -j8 tycho_enzyme_tests
+cd build && ninja -j6 tycho_enzyme_tests
 ctest --test-dir tests/cpp/enzyme --output-on-failure
 ```
 
@@ -321,10 +321,11 @@ SuperScalar Scalar:
   lane-local Hessian columns per call; the inner `__enzyme_autodiff`
   runs reverse mode on SuperScalar arithmetic.  Gated at configure time
   by `TYCHO_ENZYME_SIMD_HESSIAN` (default ON); `OFF` falls back to the
-  Phase 5a scalarize-per-lane Hessian.  A per-VF marker
-  `static constexpr bool enzyme_simd_hessian_supported = false` forces
-  fallback for VFs whose body trips Enzyme's SS reverse-mode IR analysis
-  (composite trig+sqrt+division — currently MEE-class bodies).
+  Phase 5a scalarize-per-lane Hessian.  A per-VF opt-out is available
+  by inheriting from `tycho::vf::EnzymeSimdHessianUnsupported` (see
+  `enzyme_simd_hessian_supported_v` for the predicate); use it for VFs
+  whose body trips Enzyme's SS reverse-mode IR analysis (composite
+  trig+sqrt+division — currently MEE-class bodies).
 - **Hessian (Phase 7 / 7+ — FoF strategy, archived research path):**
   Forward-over-Forward direct-SIMD Hessian (with combined J+H output and
   doubly-batched variant) is **retained as a working but un-tested,
@@ -403,9 +404,10 @@ Bench numbers below: 2026-04-28, BW=4, AVX2; reproducible via
   dwarfs the body cost.  Acceptable — PSIOPT vectorizable workloads run
   CR3BP/MEE-class bodies, not toy Brach.
 - **Composite trig+sqrt+division VFs** (e.g. MEE-class):
-  `is_vectorizable = true` AND `enzyme_simd_hessian_supported = false`.
-  Phase 5b handles the Jacobian; Phase 6 SIMD Hessian falls back to
-  Phase 5a (the trait forces it).  An archived FoF SIMD path exists in
+  `is_vectorizable = true` AND inherit from
+  `tycho::vf::EnzymeSimdHessianUnsupported`.  Phase 5b handles the
+  Jacobian; Phase 6 SIMD Hessian falls back to Phase 5a (the marker
+  forces it).  An archived FoF SIMD path exists in
   `dense_enzyme.h` and could in principle handle MEE-class Hessians at
   SIMD; not currently tested or benched, see the FoF archive block in
   the header for revival.
@@ -617,7 +619,7 @@ or justify benchmark regressions in the same PR.
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
-cd build && ninja -j8 bench_all                      # heavy_compile pool auto-limits concurrent heavy TUs
+cd build && ninja -j6 bench_all                      # heavy_compile pool auto-limits concurrent heavy TUs
 ./bench/cpp/bench_all
 
 bench/bench_track.sh baseline   # record baseline

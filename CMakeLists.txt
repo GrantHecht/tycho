@@ -207,27 +207,16 @@ if(ENABLE_ENZYME_AD)
             "-DENABLE_ENZYME_AD=OFF.")
     endif()
 
-    set(TYCHO_ENZYME_HESSIAN_STRATEGY "ForwardOverReverse"
-        CACHE STRING
-        "Hessian strategy (Phase 2 internal): ForwardOverReverse")
-    set_property(CACHE TYCHO_ENZYME_HESSIAN_STRATEGY PROPERTY STRINGS
-        "ForwardOverReverse")
-    if(NOT TYCHO_ENZYME_HESSIAN_STRATEGY STREQUAL "ForwardOverReverse")
-        message(FATAL_ERROR
-            "TYCHO_ENZYME_HESSIAN_STRATEGY=${TYCHO_ENZYME_HESSIAN_STRATEGY} is not "
-            "supported.  Only ForwardOverReverse is cmake-selectable; "
-            "ForwardOverForward is archived research (see archive block in "
-            "include/tycho/detail/vf/derivatives/dense_enzyme.h).")
-    endif()
-    add_compile_definitions(
-        TYCHO_ENZYME_HESSIAN_STRATEGY_${TYCHO_ENZYME_HESSIAN_STRATEGY})
+    # Phase 2 nested-Enzyme strategy is fixed at ForwardOverReverse; FoF was
+    # archived (see dense_enzyme.h archive block for revival conditions).
+    add_compile_definitions(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
 
     # Phase 3 batched forward-mode Jacobian width.  Drives the chunked
     # __enzyme_fwddiff(..., enzyme_width, W, enzyme_dupv, ...) loop in the
     # scalar Jacobian helper.  W=1 disables batching and falls back to the
     # Phase 1 single-tangent loop.  W=4 / W=8 trade per-call Enzyme overhead
-    # for parallel tangent propagation; head-to-head pick is in
-    # /tmp/enzyme_phase3_decision.md.
+    # for parallel tangent propagation; see CLAUDE.md "Rule of thumb" +
+    # bench/cpp/bench_enzyme.cpp for the W=4 vs W=8 head-to-head.
     set(TYCHO_ENZYME_BATCH_WIDTH "4" CACHE STRING
         "Phase 3 batch width for Enzyme forward-mode Jacobian (1, 4, or 8)")
     set_property(CACHE TYCHO_ENZYME_BATCH_WIDTH PROPERTY STRINGS "1" "4" "8")
@@ -238,6 +227,10 @@ if(ENABLE_ENZYME_AD)
             "constraint; this regex pins the allowed values.")
     endif()
     add_compile_definitions(TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH})
+    message(STATUS
+        "Enzyme AD: TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH} — "
+        "VFs with compile-time IR < ${TYCHO_ENZYME_BATCH_WIDTH} silently "
+        "use the single-tangent tail-loop fallback.")
 
     # Phase 6: direct-SIMD EnzymeAD Hessian for is_vectorizable=true VFs at
     # SuperScalar Scalar.  When OFF, falls through to the Phase 5a
@@ -248,6 +241,9 @@ if(ENABLE_ENZYME_AD)
     if(TYCHO_ENZYME_SIMD_HESSIAN)
         add_compile_definitions(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
     endif()
+    message(STATUS
+        "Enzyme AD: Phase 6 SIMD Hessian "
+        "${TYCHO_ENZYME_SIMD_HESSIAN} (TYCHO_ENZYME_SIMD_HESSIAN)")
 endif()
 
 option(TYCHO_USE_SYSTEM_EIGEN

@@ -2,7 +2,7 @@
 // Tycho — Copyright 2026-present Grant R. Hecht. Apache 2.0.
 // Phase 2 Enzyme Hessian unit-test matrix.
 //
-// Compares <EnzymeAD, EnzymeAD> against <FDiffCentArray, FDiffCentArray> for
+// Compares <EnzymeAD, EnzymeAD> against <FDiffCentArray, FDiffFwd> for
 // the brachistochrone, CR3BP, and MEE test dynamics. Tests run under FoR
 // (the only cmake-selectable nested-Enzyme strategy; FoF preserved as
 // archived research in include/tycho/detail/vf/derivatives/dense_enzyme.h).
@@ -10,7 +10,7 @@
 // Tolerances:
 //   - Jacobian / adjoint gradient agree to 1e-5 (FDiffCentArray
 //     central-difference floor ~1e-5 with default step 1e-5).
-//   - Adjoint Hessian agrees to 1e-3 (FDiffCentArray Hessian floor ~1e-3;
+//   - Adjoint Hessian agrees to 1e-3 (FDiffFwd Hessian floor ~1e-3;
 //     higher than Jacobian floor due to second-difference compounding).
 //   - Hessian is symmetric to 1e-12 (we explicitly symmetrize).
 // =============================================================================
@@ -62,7 +62,7 @@ TEST(EnzymeHessian, BrachistochroneVsFDiff) {
     EXPECT_TRUE(fxE.isApprox(fxA, 1e-12)) << "fx mismatch";
     EXPECT_TRUE(jxE.isApprox(jxA, 1e-5)) << "Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
     EXPECT_TRUE(gE.isApprox(gA, 1e-5))   << "adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
-    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "adjoint Hessian mismatch"; // FDiffCentArray Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
+    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "adjoint Hessian mismatch"; // FDiffFwd Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
 
     // Hessian symmetry (we explicitly symmetrize, so this is tight).
     EXPECT_TRUE(hE.isApprox(hE.transpose(), 1e-12)) << "Hessian not symmetric";
@@ -96,7 +96,7 @@ TEST(EnzymeHessian, CR3BPVsFDiff) {
 
     EXPECT_TRUE(jxE.isApprox(jxA, 1e-5)) << "CR3BP Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
     EXPECT_TRUE(gE.isApprox(gA, 1e-5))   << "CR3BP adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
-    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "CR3BP adjoint Hessian mismatch"; // FDiffCentArray Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
+    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "CR3BP adjoint Hessian mismatch"; // FDiffFwd Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
     EXPECT_TRUE(hE.isApprox(hE.transpose(), 1e-12))
         << "CR3BP Hessian not symmetric";
 }
@@ -129,7 +129,7 @@ TEST(EnzymeHessian, MEEVsFDiff) {
 
     EXPECT_TRUE(jxE.isApprox(jxA, 1e-5)) << "MEE Jacobian mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
     EXPECT_TRUE(gE.isApprox(gA, 1e-5))   << "MEE adjoint gradient mismatch"; // FDiffCentArray central-difference floor (~1e-5 with default step 1e-5)
-    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "MEE adjoint Hessian mismatch"; // FDiffCentArray Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
+    EXPECT_TRUE(hE.isApprox(hA, 1e-3))   << "MEE adjoint Hessian mismatch"; // FDiffFwd Hessian floor (~1e-3); higher than Jacobian floor due to second-difference compounding
     EXPECT_TRUE(hE.isApprox(hE.transpose(), 1e-12))
         << "MEE Hessian not symmetric";
 }
