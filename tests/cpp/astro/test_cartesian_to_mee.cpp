@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// CartesianToModified unit tests
+// CartesianToMEE unit tests
 //
 // Direct posigrade Cartesian -> Modified Equinoctial Elements conversion
 // (no detour through classical orbital elements / Kepler equation). Covers:
@@ -7,7 +7,7 @@
 //   - Round-trip Cart -> MEE -> Cart matches the input.
 //   - Direct path agrees with the classical-routed reference
 //     (classic_to_modified . cartesian_to_classic) on non-degenerate orbits.
-//   - Analytic Jacobian (codegen CartesianToModified VF) matches a
+//   - Analytic Jacobian (codegen CartesianToMEE VF) matches a
 //     central-difference Jacobian on a spread of states.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -73,53 +73,53 @@ void check_matches_classical_route(const tycho::Vector6<double> &oe, double mu,
 
 } // namespace
 
-TEST(CartesianToModified, RoundTripLEO) {
+TEST(CartesianToMEE, RoundTripLEO) {
     check_round_trip(leoClassic(), MU_EARTH, 1e-7, "LEO");
 }
 
-TEST(CartesianToModified, RoundTripGEO) {
+TEST(CartesianToMEE, RoundTripGEO) {
     check_round_trip(geoClassic(), MU_EARTH, 1e-6, "GEO");
 }
 
-TEST(CartesianToModified, RoundTripMolniya) {
+TEST(CartesianToMEE, RoundTripMolniya) {
     check_round_trip(molniyaClassic(), MU_EARTH, 1e-6, "Molniya");
 }
 
-TEST(CartesianToModified, AgreesWithClassicalRouteLEO) {
+TEST(CartesianToMEE, AgreesWithClassicalRouteLEO) {
     check_matches_classical_route(leoClassic(), MU_EARTH, 1e-9, "LEO");
 }
 
-TEST(CartesianToModified, AgreesWithClassicalRouteGEO) {
+TEST(CartesianToMEE, AgreesWithClassicalRouteGEO) {
     check_matches_classical_route(geoClassic(), MU_EARTH, 1e-9, "GEO");
 }
 
-TEST(CartesianToModified, AgreesWithClassicalRouteMolniya) {
+TEST(CartesianToMEE, AgreesWithClassicalRouteMolniya) {
     check_matches_classical_route(molniyaClassic(), MU_EARTH, 1e-9, "Molniya");
 }
 
-TEST(CartesianToModified, JacobianMatchesFiniteDifferenceLEO) {
+TEST(CartesianToMEE, JacobianMatchesFiniteDifferenceLEO) {
     auto rv = astro::classic_to_cartesian<double>(leoClassic(), MU_EARTH);
     Eigen::VectorXd x = rv;
 
-    astro::CartesianToModified c2m(MU_EARTH);
+    astro::CartesianToMEE c2m(MU_EARTH);
     vf::GenericFunction<-1, -1> gf(c2m);
     verify_jacobian_fd(gf, x, 1e-4);
 }
 
-TEST(CartesianToModified, JacobianMatchesFiniteDifferenceGEO) {
+TEST(CartesianToMEE, JacobianMatchesFiniteDifferenceGEO) {
     auto rv = astro::classic_to_cartesian<double>(geoClassic(), MU_EARTH);
     Eigen::VectorXd x = rv;
 
-    astro::CartesianToModified c2m(MU_EARTH);
+    astro::CartesianToMEE c2m(MU_EARTH);
     vf::GenericFunction<-1, -1> gf(c2m);
     verify_jacobian_fd(gf, x, 1e-3);
 }
 
-TEST(CartesianToModified, JacobianMatchesFiniteDifferenceMolniya) {
+TEST(CartesianToMEE, JacobianMatchesFiniteDifferenceMolniya) {
     auto rv = astro::classic_to_cartesian<double>(molniyaClassic(), MU_EARTH);
     Eigen::VectorXd x = rv;
 
-    astro::CartesianToModified c2m(MU_EARTH);
+    astro::CartesianToMEE c2m(MU_EARTH);
     vf::GenericFunction<-1, -1> gf(c2m);
     verify_jacobian_fd(gf, x, 1e-3);
 }

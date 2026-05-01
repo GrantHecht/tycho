@@ -12,3 +12,18 @@
 #else
 #define TYCHO_ALWAYS_INLINE inline
 #endif
+
+// Portable noinline attribute. Use to keep a function-call boundary stable
+// (e.g. so Enzyme's activity analysis doesn't have to walk through Eigen's
+// expression templates inside the callee).
+// GCC/Clang: __attribute__((noinline)) (placement-permissive; can sit between
+//            `inline` and the return type without binding to the type).
+// MSVC:     __declspec(noinline).
+// Other:    no-op fallback.
+#if defined(__GNUC__) || defined(__clang__)
+#define TYCHO_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define TYCHO_NOINLINE __declspec(noinline)
+#else
+#define TYCHO_NOINLINE
+#endif

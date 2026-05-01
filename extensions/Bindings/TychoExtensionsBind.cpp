@@ -21,17 +21,17 @@ namespace tycho {
 
 void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod);
 
-template <> struct TychoBind<CR3BPAD> {
+template <> struct TychoBind<CR3BP_FDiff> {
     static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<CR3BPAD>(m, name).def(nb::init<double>());
-        bind::DenseBaseBuild<CR3BPAD>(obj);
+        auto obj = nb::class_<CR3BP_FDiff>(m, name).def(nb::init<double>());
+        bind::DenseBaseBuild<CR3BP_FDiff>(obj);
     }
 };
 
-template <> struct TychoBind<ModifiedDynamicsAD> {
+template <> struct TychoBind<ModifiedDynamics_FDiff> {
     static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<ModifiedDynamicsAD>(m, name).def(nb::init<double>());
-        bind::DenseBaseBuild<ModifiedDynamicsAD>(obj);
+        auto obj = nb::class_<ModifiedDynamics_FDiff>(m, name).def(nb::init<double>());
+        bind::DenseBaseBuild<ModifiedDynamics_FDiff>(obj);
     }
 };
 
@@ -74,6 +74,6 @@ void tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
         return GenericFunction<-1, -1>(ode); // Wrap as dynamic sized generic vector function
     });
 
-    reg.Build_Register<CR3BPAD>(extmod, "cpp_cr3bp_ad");
-    reg.Build_Register<ModifiedDynamicsAD>(extmod, "ModifiedDynamicsAD");
+    reg.Build_Register<CR3BP_FDiff>(extmod, "cpp_cr3bp_fdiff");
+    reg.Build_Register<ModifiedDynamics_FDiff>(extmod, "ModifiedDynamics_FDiff");
 }

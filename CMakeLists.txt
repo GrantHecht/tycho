@@ -126,6 +126,126 @@ option(BUILD_CPP_BENCHMARKS_LEGACY "Build legacy hand-rolled benchmark executabl
 option(BUILD_CPP_TESTS "Build C++ unit tests (requires Google Test via FetchContent)" OFF)
 option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nanobind default)" OFF)
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
+option(ENABLE_ENZYME_AD
+    "Enable experimental Enzyme automatic differentiation (requires Clang + Enzyme plugin)"
+    OFF)
+
+if(ENABLE_ENZYME_AD)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR
+            "ENABLE_ENZYME_AD requires Clang. Got CMAKE_CXX_COMPILER_ID="
+            "${CMAKE_CXX_COMPILER_ID}. Override -DCMAKE_CXX_COMPILER=/path/to/clang++ "
+            "(typically a custom-built LLVM installation matching your Enzyme plugin).")
+    endif()
+
+    string(REGEX MATCH "^([0-9]+)" _tycho_clang_major "${CMAKE_CXX_COMPILER_VERSION}")
+    set(_tycho_clang_major "${CMAKE_MATCH_1}")
+
+    find_package(Enzyme CONFIG REQUIRED)
+    if(NOT Enzyme_LLVM_VERSION_MAJOR)
+        message(FATAL_ERROR
+            "find_package(Enzyme) succeeded but Enzyme_LLVM_VERSION_MAJOR is unset. "
+            "Check that your Enzyme installation provides EnzymeConfig.cmake "
+            "(this variable is set by the upstream config file).")
+    endif()
+
+    if(NOT "${Enzyme_LLVM_VERSION_MAJOR}" STREQUAL "${_tycho_clang_major}")
+        message(FATAL_ERROR
+            "Enzyme was built against LLVM ${Enzyme_LLVM_VERSION_MAJOR}, "
+            "but compiler is clang ${_tycho_clang_major}. Versions must match. "
+            "Rebuild Enzyme against the active Clang or override "
+            "-DCMAKE_CXX_COMPILER to a matching clang.")
+    endif()
+
+    set(_tycho_enzyme_target "ClangEnzyme-${Enzyme_LLVM_VERSION_MAJOR}")
+    if(NOT TARGET ${_tycho_enzyme_target})
+        message(FATAL_ERROR
+            "Imported target ${_tycho_enzyme_target} not defined by EnzymeConfig.cmake. "
+            "Reinstall Enzyme or check CMAKE_PREFIX_PATH.")
+    endif()
+    get_target_property(_tycho_enzyme_plugin_path ${_tycho_enzyme_target} IMPORTED_LOCATION)
+    if(NOT _tycho_enzyme_plugin_path)
+        # EnzymeConfig.cmake only sets per-config IMPORTED_LOCATION_<CONFIG>, not the
+        # generic IMPORTED_LOCATION. Try the imported configurations in turn.
+        get_target_property(_tycho_enzyme_imported_configs
+            ${_tycho_enzyme_target} IMPORTED_CONFIGURATIONS)
+        if(_tycho_enzyme_imported_configs)
+            foreach(_tycho_cfg IN LISTS _tycho_enzyme_imported_configs)
+                get_target_property(_tycho_enzyme_plugin_path
+                    ${_tycho_enzyme_target} IMPORTED_LOCATION_${_tycho_cfg})
+                if(_tycho_enzyme_plugin_path)
+                    break()
+                endif()
+            endforeach()
+        endif()
+    endif()
+    if(NOT _tycho_enzyme_plugin_path)
+        message(FATAL_ERROR
+            "${_tycho_enzyme_target} has no IMPORTED_LOCATION (or per-config "
+            "IMPORTED_LOCATION_<CONFIG>). Enzyme installation appears incomplete.")
+    endif()
+
+    set(TYCHO_ENZYME_COMPILE_FLAGS "-fplugin=${_tycho_enzyme_plugin_path}"
+        CACHE STRING "Enzyme plugin compile flag(s); applied to Enzyme-instantiating targets only" FORCE)
+    add_compile_definitions(TYCHO_HAS_ENZYME_AD)
+
+    message(STATUS "Enzyme AD: enabled (LLVM ${Enzyme_LLVM_VERSION_MAJOR}, plugin ${_tycho_enzyme_plugin_path})")
+
+    include("${PROJECT_SOURCE_DIR}/cmake/EnzymeTryCompile.cmake")
+    tycho_enzyme_try_compile_fwddiff()
+
+    # Phase 2: probe the FoR Hessian-via-nested-Enzyme strategy.  ForwardOverForward
+    # is archived research scaffolding — the helpers live in dense_enzyme.h for
+    # future revival but are no longer cmake-selectable.  Failure here is fatal
+    # (the user can still pair <EnzymeAD, FDiffFwd> with ENABLE_ENZYME_AD=ON or
+    # set -DENABLE_ENZYME_AD=OFF if Enzyme Hessians are not needed at all).
+    tycho_enzyme_try_compile_nested_for(TYCHO_ENZYME_HAS_FOR)
+    if(NOT TYCHO_ENZYME_HAS_FOR)
+        message(FATAL_ERROR
+            "Enzyme nested-FoR smoke test failed. Disable Enzyme Hessians by "
+            "selecting <EnzymeAD, FDiffFwd> template parameters or set "
+            "-DENABLE_ENZYME_AD=OFF.")
+    endif()
+
+    # Phase 2 nested-Enzyme strategy is fixed at ForwardOverReverse; FoF was
+    # archived (see dense_enzyme.h archive block for revival conditions).
+    add_compile_definitions(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+
+    # Phase 3 batched forward-mode Jacobian width.  Drives the chunked
+    # __enzyme_fwddiff(..., enzyme_width, W, enzyme_dupv, ...) loop in the
+    # scalar Jacobian helper.  W=1 disables batching and falls back to the
+    # Phase 1 single-tangent loop.  W=4 / W=8 trade per-call Enzyme overhead
+    # for parallel tangent propagation; see CLAUDE.md "Rule of thumb" +
+    # bench/cpp/bench_enzyme.cpp for the W=4 vs W=8 head-to-head.
+    set(TYCHO_ENZYME_BATCH_WIDTH "4" CACHE STRING
+        "Phase 3 batch width for Enzyme forward-mode Jacobian (1, 4, or 8)")
+    set_property(CACHE TYCHO_ENZYME_BATCH_WIDTH PROPERTY STRINGS "1" "4" "8")
+    if(NOT TYCHO_ENZYME_BATCH_WIDTH MATCHES "^(1|4|8)$")
+        message(FATAL_ERROR
+            "TYCHO_ENZYME_BATCH_WIDTH must be 1, 4, or 8 (got: "
+            "${TYCHO_ENZYME_BATCH_WIDTH}).  STRINGS is a UI hint, not a "
+            "constraint; this regex pins the allowed values.")
+    endif()
+    add_compile_definitions(TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH})
+    message(STATUS
+        "Enzyme AD: TYCHO_ENZYME_BATCH_WIDTH=${TYCHO_ENZYME_BATCH_WIDTH} — "
+        "VFs with compile-time IR < ${TYCHO_ENZYME_BATCH_WIDTH} silently "
+        "use the single-tangent tail-loop fallback.")
+
+    # Phase 6: direct-SIMD EnzymeAD Hessian for is_vectorizable=true VFs at
+    # SuperScalar Scalar.  When OFF, falls through to the Phase 5a
+    # scalarize-per-lane fallback so we can A/B in the same binary.
+    option(TYCHO_ENZYME_SIMD_HESSIAN
+        "Phase 6: direct-SIMD EnzymeAD Hessian for Vectorizable VFs"
+        ON)
+    if(TYCHO_ENZYME_SIMD_HESSIAN)
+        add_compile_definitions(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
+    endif()
+    message(STATUS
+        "Enzyme AD: Phase 6 SIMD Hessian "
+        "${TYCHO_ENZYME_SIMD_HESSIAN} (TYCHO_ENZYME_SIMD_HESSIAN)")
+endif()
+
 option(TYCHO_USE_SYSTEM_EIGEN
     "Use system-installed Eigen3 instead of bundled dep/eigen" OFF)
 
@@ -495,7 +615,6 @@ else()
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
 include_directories(dep/fmt/include)
-include_directories(dep/autodiff)
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)
@@ -750,19 +869,6 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/fmt/include/fmt/format.h")
 endif()
 install(DIRECTORY dep/fmt/include/fmt
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-# Install autodiff headers (header-only, required by tycho public API)
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/autodiff/autodiff/forward/dual.hpp")
-    message(FATAL_ERROR
-        "Bundled autodiff not found at dep/autodiff/. "
-        "Run: git submodule update --init dep/autodiff")
-endif()
-install(DIRECTORY dep/autodiff/autodiff
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp"
-    PATTERN "tests" EXCLUDE
-    PATTERN "pybind11" EXCLUDE
 )
 
 # CMake package config for find_package(tycho)

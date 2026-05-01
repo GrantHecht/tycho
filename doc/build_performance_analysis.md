@@ -378,7 +378,6 @@ headers and group by source:
 $CMD -H -fsyntax-only 2>&1 | grep '^\.' | sed 's/^\.* //' | sort -u | awk -F'/' '{
   if ($0 ~ /tycho\/include/) print "tycho_public"
   else if ($0 ~ /tycho\/dep\/eigen/) print "eigen"
-  else if ($0 ~ /tycho\/dep\/autodiff/) print "autodiff"
   else if ($0 ~ /tycho\/dep\/fmt/) print "fmt"
   else if ($0 ~ /tycho\/dep\/nanobind/) print "nanobind"
   else if ($0 ~ /intel\/oneapi/) print "mkl"

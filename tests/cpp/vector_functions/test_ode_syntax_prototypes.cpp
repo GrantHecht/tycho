@@ -3,12 +3,12 @@
 //
 // Tests the Impl+macro ODE definition pattern with:
 //   - ODEArguments with offset-aware XVar/UVar tags
-//   - FD/FWAD macro variants for reduced compile time
-//   - Hessian consistency through FD/FWAD wrappers
+//   - FD macro variants for reduced compile time
+//   - Hessian consistency through FD wrappers
 //   - Dynamic-size ODE wrapping via StaticODE_DerivModeWrapper
 //
 // Both features are complementary: tags provide semantic access to ODE
-// variables, while FD/FWAD macros avoid expensive Jacobian/Hessian
+// variables, while FD macros avoid expensive Jacobian/Hessian
 // template instantiation.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -52,7 +52,7 @@ BUILD_ODE_FROM_EXPRESSION(SyntaxDragBrach, SyntaxDragBrach_Impl, double, double)
 BUILD_ODE_FROM_EXPRESSION_FD(SyntaxDragBrachFD, SyntaxDragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
-// FD/FWAD macro variants — same Impl+macro pattern but avoids expensive
+// FD macro variants — same Impl+macro pattern but avoids expensive
 // Jacobian/Hessian template instantiation
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -66,18 +66,6 @@ struct BrachistochroneFD_Impl : ODESize<3, 1, 0> {
     }
 };
 BUILD_ODE_FROM_EXPRESSION_FD(BrachistochroneFD, BrachistochroneFD_Impl, double);
-
-// Forward-AD variant
-struct BrachistochroneFWAD_Impl : ODESize<3, 1, 0> {
-    static auto Definition(double g) {
-        auto args = ODEArguments<3, 1, 0>();
-        auto v = args[XVar<2>];
-        auto theta = args[UVar<0>];
-        return StackedOutputs{sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta)};
-    }
-};
-BUILD_ODE_FROM_EXPRESSION_FWAD(BrachistochroneFWAD, BrachistochroneFWAD_Impl, double);
-BUILD_ODE_FROM_EXPRESSION_FWAD(SyntaxDragBrachFWAD, SyntaxDragBrach_Impl, double, double);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Dynamic-size ODE for testing StaticODE_DerivModeWrapper with IRC == -1
@@ -106,16 +94,6 @@ struct DynamicBrachFD
     using Base =
         StaticODE_DerivModeWrapper<DynamicBrachFD, DynamicBrach, DenseDerivativeMode::FDiffFwd,
                                    DenseDerivativeMode::FDiffFwd>;
-    using Base::Base;
-};
-
-struct DynamicBrachFWAD
-    : StaticODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach, DenseDerivativeMode::AutodiffFwd,
-                                 DenseDerivativeMode::AutodiffFwd> {
-    using Base =
-        StaticODE_DerivModeWrapper<DynamicBrachFWAD, DynamicBrach,
-                                   DenseDerivativeMode::AutodiffFwd,
-                                   DenseDerivativeMode::AutodiffFwd>;
     using Base::Base;
 };
 
@@ -160,7 +138,7 @@ TEST_F(VFCompositionTest, Brachistochrone_Integrator) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Tests — FD/FWAD Jacobian
+// Tests — FD Jacobian
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFCompositionTest, FD_ComputeMatchesAnalytic) {
@@ -237,80 +215,8 @@ TEST_F(VFCompositionTest, FD_MultiParam_JacobianMatchesAnalytic) {
                 << "Multi-param FD Jacobian mismatch at (" << i << "," << j << ")";
 }
 
-TEST_F(VFCompositionTest, FWAD_ComputeMatchesAnalytic) {
-    Brachistochrone analytic(9.81);
-    BrachistochroneFWAD fwad(9.81);
-
-    EXPECT_EQ(fwad.input_rows(), 5);
-    EXPECT_EQ(fwad.output_rows(), 3);
-
-    Eigen::VectorXd x(5);
-    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
-    Eigen::VectorXd fx_a(3), fx_fwad(3);
-    fx_a.setZero();
-    fx_fwad.setZero();
-    analytic.compute(x, fx_a);
-    fwad.compute(x, fx_fwad);
-
-    for (int i = 0; i < 3; ++i)
-        EXPECT_NEAR(fx_a[i], fx_fwad[i], 1e-14);
-}
-
-TEST_F(VFCompositionTest, FWAD_JacobianMatchesAnalytic) {
-    Brachistochrone analytic(9.81);
-    BrachistochroneFWAD fwad(9.81);
-
-    Eigen::VectorXd x(5);
-    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
-
-    Eigen::VectorXd fx_a(3);
-    Eigen::MatrixXd jx_a(3, 5);
-    fx_a.setZero();
-    jx_a.setZero();
-    analytic.compute_jacobian(x, fx_a, jx_a);
-
-    Eigen::VectorXd fx_fwad(3);
-    Eigen::MatrixXd jx_fwad(3, 5);
-    fx_fwad.setZero();
-    jx_fwad.setZero();
-    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
-
-    // Forward-AD should be more accurate than FD
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 5; ++j)
-            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
-                << "FWAD Jacobian mismatch at (" << i << "," << j << ")";
-}
-
-TEST_F(VFCompositionTest, FWAD_MultiParam_JacobianMatchesAnalytic) {
-    SyntaxDragBrach analytic(9.81, 0.1);
-    SyntaxDragBrachFWAD fwad(9.81, 0.1);
-    EXPECT_EQ(fwad.input_rows(), 5);
-    EXPECT_EQ(fwad.output_rows(), 3);
-
-    Eigen::VectorXd x(5);
-    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
-
-    Eigen::VectorXd fx_a(3);
-    Eigen::MatrixXd jx_a(3, 5);
-    fx_a.setZero();
-    jx_a.setZero();
-    analytic.compute_jacobian(x, fx_a, jx_a);
-
-    Eigen::VectorXd fx_fwad(3);
-    Eigen::MatrixXd jx_fwad(3, 5);
-    fx_fwad.setZero();
-    jx_fwad.setZero();
-    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
-
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 5; ++j)
-            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
-                << "Multi-param FWAD Jacobian mismatch at (" << i << "," << j << ")";
-}
-
 ///////////////////////////////////////////////////////////////////////////////
-// Tests — Hessian consistency through FD/FWAD wrappers
+// Tests — Hessian consistency through FD wrappers
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFCompositionTest, FD_HessianConsistency) {
@@ -322,17 +228,6 @@ TEST_F(VFCompositionTest, FD_HessianConsistency) {
 
     // FD Hessian: check symmetry and adjoint gradient consistency
     verify_hessian_consistency(fd, x, lm, 1e-5);
-}
-
-TEST_F(VFCompositionTest, FWAD_HessianConsistency) {
-    BrachistochroneFWAD fwad(9.81);
-
-    Eigen::VectorXd x(5);
-    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
-    Eigen::VectorXd lm = deterministic_random_vector(3, 501, -1.0, 1.0);
-
-    // Forward-AD Hessian: tighter tolerance than FD
-    verify_hessian_consistency(fwad, x, lm, 1e-10);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -397,60 +292,3 @@ TEST_F(VFCompositionTest, DynamicODE_FD_HessianConsistency) {
     verify_hessian_consistency(fd, x, lm, 1e-5);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Tests — Dynamic-size ODE wrapping with AutodiffFwd (IRC == -1)
-//
-// Exercises the AutodiffFwd path through StaticODE_DerivModeWrapper with a
-// dynamic-size inner ODE. The FD path is tested above; this verifies
-// that set_io_rows works correctly for the autodiff derivative mode too.
-///////////////////////////////////////////////////////////////////////////////
-
-TEST_F(VFCompositionTest, DynamicODE_FWAD_ComputeCorrect) {
-    DynamicBrachFWAD fwad;
-    EXPECT_EQ(fwad.input_rows(), 5);
-    EXPECT_EQ(fwad.output_rows(), 3);
-
-    Eigen::VectorXd x(5);
-    x << 0, 10, 5, 0, std::numbers::pi / 4.0;
-    Eigen::VectorXd fx(3);
-    fx.setZero();
-    fwad.compute(x, fx);
-
-    double v = 5.0, theta = std::numbers::pi / 4.0;
-    EXPECT_NEAR(fx[0], std::sin(theta) * v, 1e-12);
-    EXPECT_NEAR(fx[1], -std::cos(theta) * v, 1e-12);
-    EXPECT_NEAR(fx[2], 9.81 * std::cos(theta), 1e-12);
-}
-
-TEST_F(VFCompositionTest, DynamicODE_FWAD_JacobianMatchesAnalytic) {
-    Brachistochrone analytic(9.81);
-    DynamicBrachFWAD fwad;
-
-    Eigen::VectorXd x(5);
-    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
-
-    Eigen::VectorXd fx_a(3);
-    Eigen::MatrixXd jx_a(3, 5);
-    fx_a.setZero();
-    jx_a.setZero();
-    analytic.compute_jacobian(x, fx_a, jx_a);
-
-    Eigen::VectorXd fx_fwad(3);
-    Eigen::MatrixXd jx_fwad(3, 5);
-    fx_fwad.setZero();
-    jx_fwad.setZero();
-    fwad.compute_jacobian(x, fx_fwad, jx_fwad);
-
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 5; ++j)
-            EXPECT_NEAR(jx_a(i, j), jx_fwad(i, j), 1e-13)
-                << "Dynamic FWAD Jacobian mismatch at (" << i << "," << j << ")";
-}
-
-TEST_F(VFCompositionTest, DynamicODE_FWAD_HessianConsistency) {
-    DynamicBrachFWAD fwad;
-    Eigen::VectorXd x(5);
-    x << 0.5, 10, 5, 0.1, std::numbers::pi / 4.0;
-    Eigen::VectorXd lm = deterministic_random_vector(3, 503, -1.0, 1.0);
-    verify_hessian_consistency(fwad, x, lm, 1e-10);
-}

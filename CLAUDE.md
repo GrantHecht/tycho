@@ -19,7 +19,7 @@ simultaneously.
 
 As a rule of thumb:
 - macOS (Apple Silicon): ALWAYS use -j6 for builds
-- Linux / Windows (32 GB+): ALWAYS use -j8 for builds
+- Linux / Windows (32 GB+): ALWAYS use -j6 for builds
 - DO NOT PERFORM MORE THAN 2 SIMULTANEOUS BUILDS AT ONCE
 - **NEVER launch a second build if one is already running** — not even in the background.
   If you started a build with `run_in_background`, WAIT for the completion notification
@@ -79,7 +79,6 @@ tychopy/                Python package (pure-Python layer over _tychopy extensio
 
 dep/                    Vendored submodule dependencies
   eigen/                Eigen (MPL-2.0)
-  autodiff/             autodiff (MIT)
   fmt/                  {fmt} (MIT)
   nanobind/             nanobind (BSD)
 
@@ -133,13 +132,13 @@ preset for your platform** — do not configure manually.
 | Platform         | Configure preset        | Build parallelism |
 | ---------------- | ----------------------- | ----------------- |
 | macOS (Apple Si) | `macos-llvm-release`    | `-j6`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j8`             |
-| Windows x64      | `x64-Clang-Release`     | `-j8`             |
+| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
+| Windows x64      | `x64-Clang-Release`     | `-j6`             |
 
 **Note:** The `-j` values above are upper bounds — use lower values on
 RAM-constrained systems. The `heavy_compile` ninja job pool auto-throttles
 heavy TUs (1 slot per 10 GB RAM), so higher `-j` values are safe: light TUs
-fill extra slots while heavy TUs are limited. On 32 GB, `-j8` is safe
+fill extra slots while heavy TUs are limited. On 32 GB, `-j6` is safe
 (pool depth 3); on 16 GB, use `-j4` (pool depth 1).
 
 **Build memory and ninja job pools:** Many binding, test, benchmark, and example
@@ -157,11 +156,11 @@ safely use higher `-j` values — ninja automatically throttles the heavy TUs
 while keeping light TUs parallel.
 
 ```bash
-cd build && ninja -j8 all      # safe — pool limits heavy TUs automatically
-                               # use -j8 on 32 GB systems, -j4 on 16 GB
+cd build && ninja -j6 all      # safe — pool limits heavy TUs automatically
+                               # use -j6 on 32 GB systems, -j4 on 16 GB
 ```
 
-The `dep/` submodules (eigen, autodiff, fmt, nanobind) must be initialised before the
+The `dep/` submodules (eigen, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
 **Python environment (all platforms) — conda env named `tycho`:**
@@ -202,7 +201,7 @@ source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
 ```bash
 mkdir build && conda activate tycho
 cmake --preset linux-clang-release
-cd build && ninja -j8 all
+cd build && ninja -j6 all
 ```
 
 ### Windows x64
@@ -213,8 +212,251 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 ### Subsequent builds (all platforms)
 
 ```bash
-cd build && ninja -j<N> all    # N = 4 on macOS, 8 on Linux/Windows
+cd build && ninja -j<N> all    # N = 6 on all platforms (4 on RAM-constrained 16 GB)
 ```
+
+### Enzyme AD (experimental)
+
+`EnzymeAD` is an opt-in derivative mode for `VectorFunction`, gated by the
+CMake option `ENABLE_ENZYME_AD` (default `OFF`). Enabling it requires:
+
+1. A Clang installation matching the LLVM major version that Enzyme was built
+   against.
+2. The Enzyme Clang plugin available at a path discoverable via
+   `CMAKE_PREFIX_PATH` (Enzyme ships an `EnzymeConfig.cmake`).
+
+Default-`OFF` builds, the precompiled header, the Python bindings, and all
+existing examples/tests are unaffected by this option.
+
+**Override invocation (current dev machine — Linux):**
+
+```bash
+cmake --preset linux-clang-release \
+  -DCMAKE_CXX_COMPILER=$HOME/Software/llvm-project/install/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=$HOME/Software/Enzyme/install \
+  -DENABLE_ENZYME_AD=ON \
+  -DBUILD_CPP_TESTS=ON
+# Add -DBUILD_CPP_BENCHMARKS=ON for benchmarks.
+cd build && ninja -j6 tycho_enzyme_tests
+ctest --test-dir tests/cpp/enzyme --output-on-failure
+```
+
+**Mode constraints (Phase 1):**
+
+- `<EnzymeAD, FDiffFwd>` is the supported mixed pairing (Enzyme Jacobian + finite-difference Hessian).
+
+**Mode constraints (Phase 2):**
+
+- `<EnzymeAD, EnzymeAD>` is supported. The Hessian path uses Enzyme
+  Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`).
+  FoR was selected over an early FoF prototype (4–9× faster on
+  Hessian micro-cases); FoF is no longer cmake-selectable — see the
+  Phase 7/7+ archive block below for revival conditions.
+
+**Batched forward-mode Jacobian (Phase 3):**
+
+The EnzymeAD Jacobian path uses `__enzyme_fwddiff` with `enzyme_width=W`
+to propagate `W` tangent vectors per call (`enzyme_dupv` with a byte
+stride for the shadow buffers, SoA-by-lane layout via column-major
+`Eigen::Matrix<double, IR, W>`).  `TYCHO_ENZYME_BATCH_WIDTH` selects
+`W` at configure time:
+
+- `W=1` (Phase 1 fallback) — one tangent per call.
+- `W=4` (default) — wins on every test case; Brach 1.17×, CR3BP 16×,
+  MEE 1.97× faster than scalar.
+- `W=8` — best for IR ≥ 8 workloads (MEE: **60× faster than the FDiff reference**);
+  silently falls back to `W=1` tail loop when IR < 8.
+
+The Hessian path is unaffected (it still uses scalar `__enzyme_fwddiff`
+calls for the FoR outer pass; the inner pass is a separate `__enzyme_autodiff`
+that batching does not apply to).  Hessian wins on CR3BP/MEE come from the
+nested-AD strategy, not from `enzyme_width`.
+
+**Non-templated `compute_impl` (Phase 4):**
+
+When paired with `<EnzymeAD, EnzymeAD>` (or `<EnzymeAD, FDiffFwd>`), a
+user dynamics struct may declare `compute_impl` with concrete-typed Eigen
+`Map` arguments instead of the templated `<class InType, class OutType>`
+form. The signature must match what the EnzymeAD wrapper passes:
+
+```cpp
+inline void compute_impl(
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1>> x,
+    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> fx) const {
+    // ordinary double-typed arithmetic only
+}
+```
+
+The user's body then uses ordinary `double` arithmetic — no need for the
+dual-number-friendly templated form that templated derivative modes require.
+
+Constraints:
+- A non-templated `compute_impl` is supported only under the `<EnzymeAD, EnzymeAD>`
+  pairing. FD modes (`FDiffFwd`, `FDiffCentArray`) require the templated form because
+  their `compute_jacobian_impl` calls `compute()` with an `Eigen::Array`-typed Scalar
+  for SuperScalar dispatch, which a concrete-`double` signature cannot accept.
+- A non-templated `compute_impl` cannot be marked
+  `Vectorizable<Derived>=true`. SuperScalar dispatch's `VectorImpl()`
+  path requires templated `compute_impl`; this is a fundamental dispatch
+  constraint, not Enzyme-specific.
+- The non-templated form supports only the EnzymeAD-routed methods
+  (`compute_jacobian`, `compute_jacobian_adjointgradient_adjointhessian`).
+  Calling `.compute()` directly on a non-templated VF is a separate
+  signature mismatch — use the templated form if `.compute()` is needed.
+
+**Vectorizable VFs with EnzymeAD (Phase 5a + 5b):**
+
+A VectorFunction with `static constexpr bool is_vectorizable = true;` may
+be paired with `EnzymeAD`.  When invoked with `Eigen::Array<double, W, 1>`
+SuperScalar Scalar:
+
+- **Jacobian (Phase 5b — direct SIMD):** the templated `compute_impl`
+  body is differentiated by Enzyme directly under the SuperScalar
+  arithmetic.  One `__enzyme_fwddiff` call per input dim produces W
+  per-lane tangents simultaneously via SIMD ops.  Per-lane speedup
+  ~1.78× on Brach (small body, scalar arithmetic) and ~1.58× on CR3BP
+  (`sqrt`-only, vectorises via `vsqrtpd`).
+- **Hessian (Phase 6 — direct SIMD FoR, opt-out per VF):** the outer
+  `__enzyme_fwddiff` over `enzyme_for_outer_wrapper_simd` propagates W
+  lane-local Hessian columns per call; the inner `__enzyme_autodiff`
+  runs reverse mode on SuperScalar arithmetic.  Gated at configure time
+  by `TYCHO_ENZYME_SIMD_HESSIAN` (default ON); `OFF` falls back to the
+  Phase 5a scalarize-per-lane Hessian.  A per-VF opt-out is available
+  by inheriting from `tycho::vf::EnzymeSimdHessianUnsupported` (see
+  `enzyme_simd_hessian_supported_v` for the predicate); use it for VFs
+  whose body trips Enzyme's SS reverse-mode IR analysis (composite
+  trig+sqrt+division — currently MEE-class bodies).
+- **Hessian (Phase 7 / 7+ — FoF strategy, archived research path):**
+  Forward-over-Forward direct-SIMD Hessian (with combined J+H output and
+  doubly-batched variant) is **retained as a working but un-tested,
+  un-benched reference** in `dense_enzyme.h` and is **no longer
+  cmake-selectable** — `ForwardOverForward` was dropped from the
+  `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  Bench results
+  at the time of archival (BW=4): FoR-SIMD wins ~2× on Brach (1038 vs
+  2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  *(Both FoR-SIMD and
+  FoF-SIMD lose to Phase 5a on Brach — see the rule-of-thumb section
+  below for the regression context.)*  FoF's only qualitative
+  advantage was on MEE-class composites (cos/sin/sqrt/division) where
+  FoR-SIMD's inner reverse pass fails Enzyme TypeAnalysis — but no
+  real PSIOPT workload has surfaced that case.  Doubly-batched variant
+  proves nested `__enzyme_fwddiff(enzyme_width)` composition works but
+  yields only a ~5% speedup over singly-batched (per-call overhead is
+  not the dominant cost; body work dominates).  See the heavy archive
+  docstring at the top of the FoF block in `dense_enzyme.h` for
+  revival conditions.
+
+**Trig-bearing bodies under Phase 5b (Eigen 5 + opt-in `tycho::math`):**
+
+Eigen 5 ships vectorised `pcos<Packet4d>` / `psin<Packet4d>` (and
+friends), but the lowered IR uses x86 round intrinsics + packed bitwise
+sign-bit tricks that Enzyme cannot currently differentiate (upstream
+issues [#689](https://github.com/EnzymeAD/Enzyme/issues/689),
+[#2679](https://github.com/EnzymeAD/Enzyme/issues/2679),
+[#2794](https://github.com/EnzymeAD/Enzyme/issues/2794)).  To use
+Phase 5b SIMD primal evaluation on a VF that calls `sin`/`cos` under
+EnzymeAD, route those calls through the wrapper API:
+
+```cpp
+#include <tycho/math.h>
+
+template <class InType, class OutType>
+inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+    using tycho::math::cos;   // ADL hits double (-> std::cos) and
+    using tycho::math::sin;   // Eigen::Array<double,W,1> (-> per-lane libm).
+    // ...
+}
+```
+
+The SuperScalar overloads (`Eigen::Array<double, W, 1>` for W ∈ {2, 4, 8})
+manually unroll into `W` scalar `std::cos(double)` / `std::sin(double)`
+calls.  Each lowers to `@llvm.cos.f64` / `@llvm.sin.f64`, which Enzyme's
+built-in handler differentiates cleanly under any `enzyme_width`.  Phase
+3 batched tangents and Phase 5b SIMD primal compose naturally — the
+surrounding arithmetic in `compute_impl` still vectorises across the W
+lanes; only the trig itself is per-lane scalar.
+
+Code paths that are NOT differentiated by Enzyme should keep using Eigen
+directly — the analytic-integration path (e.g.
+`include/tycho/detail/astro/mee_dynamics.h`) benefits from Eigen 5 SIMD
+trig (`pcos<Packet4d>`) without going through this layer.
+
+```cpp
+struct MyVF : tycho::vf::VectorFunction<MyVF, IR, OR, EnzymeAD, ...> {
+    static constexpr bool is_vectorizable = true;   // no other flags needed
+    // ...
+};
+```
+
+**Rule of thumb (post Eigen 5 + Phase 6):**
+
+Bench numbers below: 2026-04-28, BW=4, AVX2; reproducible via
+`bench/cpp/bench_enzyme.cpp` + `bench/bench_track.sh`.
+
+- **Arithmetic / `sqrt`-only VFs, IR ≥ 6** (e.g. CR3BP-class): leave
+  `is_vectorizable = true`.  Gets full Phase 3 + 5b Jacobian SIMD AND
+  Phase 6 Hessian SIMD.  Hessian wins ~12× on CR3BP (291 ns Phase 6 vs
+  3672 ns Phase 5a per SuperScalar call) — the per-call Enzyme overhead
+  is amortised across 4 lanes via the SIMD reverse pass.
+- **Tiny trig-bearing VFs, IR ≤ 5** (e.g. Brach-class): `is_vectorizable
+  = true`; route trig through `tycho::math::cos/sin`.  Phase 5b Jacobian
+  wins per-lane; **Phase 6 Hessian regresses** vs Phase 5a (~12× slower
+  on Brach: 1038 ns vs 87 ns) because the SS reverse-mode tape overhead
+  dwarfs the body cost.  Acceptable — PSIOPT vectorizable workloads run
+  CR3BP/MEE-class bodies, not toy Brach.
+- **Composite trig+sqrt+division VFs** (e.g. MEE-class):
+  `is_vectorizable = true` AND inherit from
+  `tycho::vf::EnzymeSimdHessianUnsupported`.  Phase 5b handles the
+  Jacobian; Phase 6 SIMD Hessian falls back to Phase 5a (the marker
+  forces it).  An archived FoF SIMD path exists in
+  `dense_enzyme.h` and could in principle handle MEE-class Hessians at
+  SIMD; not currently tested or benched, see the FoF archive block in
+  the header for revival.
+- **Trig-bearing VFs evaluated one trajectory at a time:** either
+  approach works; `tycho::math::*` with `is_vectorizable = true` is
+  consistent across single- and multi-trajectory call sites.
+
+A Vectorizable VF invoked with plain `double` Scalar still goes through
+the scalar Jacobian path (Phase 1 / Phase 3 batched), unchanged — the
+double-Scalar `tycho::math::cos/sin` overloads forward to `std::cos` /
+`std::sin` directly.
+
+Phase 3 (enzyme_width batched tangents) and Phase 5b (SIMD primal) are
+orthogonal axes.  In current bench numbers the two don't compose
+materially — per-call Enzyme overhead is small once cached, so reducing
+call count via Phase 3 doesn't help when Phase 5b is already SIMD-
+saturated.
+
+For the design rationale, see
+`docs/superpowers/specs/2026-04-25-claude-enzyme-ad-support-design.md`.
+
+**Upstream canary — when can we drop the scalar-libm wrapper?**
+
+The two upstream gaps that forced the per-lane scalar libm design are
+tracked by a pair of compile-time canaries under
+`scripts/upstream_canary/`:
+
+  * Test A — `Eigen::Array<>::cos()` differentiable by Enzyme at
+    `enzyme_width > 1`. If this passes, drop `simd_math.h`'s manual
+    unrolling and call `x.cos() / x.sin()` directly.
+  * Test B — Enzyme custom-registered derivative composes with
+    `enzyme_width > 1`. If this passes, an alternative architecture
+    (custom derivative + SIMD packet trig + Phase 3 batching) becomes
+    viable.
+
+Run before bumping the Enzyme submodule, the Eigen submodule, or system
+clang/LLVM:
+
+```bash
+scripts/upstream_canary/check.sh
+```
+
+Exit 0 = status quo (both still fail). Non-zero = upstream changed,
+revisit `simd_math.h` and the rule-of-thumb above.
+
+| Last run | Toolchain | Result |
+|---|---|---|
+| 2026-04-27 | clang 21.1.8 / Enzyme tip (`cecf3492`) / Eigen 5.0.1 | both fail (status quo) |
+| 2026-04-30 | clang 21.1.8 / Enzyme plugin (`ClangEnzyme-21.so` mtime 2026-04-27) / Eigen 5.0.1 | both fail (status quo) |
 
 ### Key CMake variables
 
@@ -301,7 +543,7 @@ Key obligations:
 - **Eigen** (MPL-2.0) — any Eigen *source files* directly modified must remain MPL-2.0
 - **Intel MKL** (Intel Simplified Software License) — redistribution has specific terms;
   flag any changes touching MKL integration for manual review
-- **Nanobind** (BSD), **fmt** (MIT), **autodiff** (MIT) — all permissive, just preserve notices
+- **Nanobind** (BSD), **fmt** (MIT) — all permissive, just preserve notices
 - **boost-threads** (Boost Software License 1.0), **rubber_types** (MIT), **kepler propagator** (MIT),
   **lambert** (MIT), **ctpl** (Apache 2.0) — all permissive; see `notices/` for full list
 
@@ -377,7 +619,7 @@ or justify benchmark regressions in the same PR.
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON   # one-time reconfigure
-cd build && ninja -j8 bench_all                      # heavy_compile pool auto-limits concurrent heavy TUs
+cd build && ninja -j6 bench_all                      # heavy_compile pool auto-limits concurrent heavy TUs
 ./bench/cpp/bench_all
 
 bench/bench_track.sh baseline   # record baseline

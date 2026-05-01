@@ -36,6 +36,7 @@ include(GoogleTest)
 set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_timer.cpp
     utils/test_math_functions.cpp
+    utils/test_tycho_math.cpp
     utils/test_sizing_helpers.cpp
     utils/test_eigen_stl.cpp
     utils/test_lambda_jump_table.cpp
@@ -97,7 +98,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_cartesian_dynamics.cpp
     astro/test_mee_dynamics.cpp
     astro/test_mee_to_cartesian.cpp
-    astro/test_cartesian_to_modified.cpp
+    astro/test_cartesian_to_mee.cpp
 
     # Integrators
     integrators/test_integration_basic.cpp
@@ -295,4 +296,13 @@ target_compile_definitions(tycho_method_tests PRIVATE
 set_property(TARGET tycho_method_tests PROPERTY JOB_POOL_COMPILE heavy_compile)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(tycho_method_tests PRIVATE $<$<CONFIG:Release>:-O1>)
+endif()
+
+#-------------------------------------------------------------------------------
+# Enzyme-mode test executable (gated on ENABLE_ENZYME_AD).  Plugin flag is
+# scoped to the target inside tests/cpp/enzyme/CMakeLists.txt; the rest of
+# the build remains plugin-free.
+#-------------------------------------------------------------------------------
+if(ENABLE_ENZYME_AD AND BUILD_CPP_TESTS)
+    add_subdirectory(enzyme)
 endif()

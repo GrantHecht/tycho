@@ -22,7 +22,7 @@ enum class DenseDerivativeMode {
     Analytic,
     FDiffFwd,
     FDiffCentArray,
-    AutodiffFwd,
+    EnzymeAD,
 };
 
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>

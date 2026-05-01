@@ -28,15 +28,15 @@ using vf::DenseDerivativeMode;
 using vf::VecRef;
 using vf::VectorFunction;
 
-struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd> {
-    using Base = VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd>;
+struct CR3BP_FDiff : VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffFwd> {
+    using Base = VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 0.0123;
 
-    CR3BPAD(double mu) : mu(mu) {}
+    CR3BP_FDiff(double mu) : mu(mu) {}
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
@@ -66,17 +66,17 @@ struct CR3BPAD : VectorFunction<CR3BPAD, 7, 6, DenseDerivativeMode::AutodiffFwd,
     }
 };
 
-struct ModifiedDynamicsAD
-    : VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
-                     DenseDerivativeMode::AutodiffFwd> {
-    using Base = VectorFunction<ModifiedDynamicsAD, 9, 6, DenseDerivativeMode::AutodiffFwd,
-                                DenseDerivativeMode::AutodiffFwd>;
+struct ModifiedDynamics_FDiff
+    : VectorFunction<ModifiedDynamics_FDiff, 9, 6, DenseDerivativeMode::FDiffCentArray,
+                     DenseDerivativeMode::FDiffFwd> {
+    using Base = VectorFunction<ModifiedDynamics_FDiff, 9, 6, DenseDerivativeMode::FDiffCentArray,
+                                DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 1.00;
     double sqm = 1.0;
 
-    ModifiedDynamicsAD(double mu) : mu(mu), sqm(std::sqrt(mu)) {}
+    ModifiedDynamics_FDiff(double mu) : mu(mu), sqm(std::sqrt(mu)) {}
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {

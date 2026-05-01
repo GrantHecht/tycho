@@ -1,4 +1,4 @@
-"""Generate CartesianToModified VectorFunction with analytic derivatives.
+"""Generate CartesianToMEE VectorFunction with analytic derivatives.
 
 Direct posigrade Cartesian -> Modified Equinoctial Elements conversion that
 does NOT detour through classical orbital elements. Mirrors
@@ -6,10 +6,10 @@ jacobwilliams/Fortran-Astrodynamics-Toolkit
 modified_equinoctial_module.f90::cartesian_to_equinoctial.
 
 Usage:
-    cd utils && conda run -n tycho python codegen_cartesian_to_modified.py
+    cd utils && conda run -n tycho python codegen_cartesian_to_mee.py
 
 Output:
-    include/tycho/detail/astro/cartesian_to_modified.h
+    include/tycho/detail/astro/cartesian_to_mee.h
 """
 
 import os
@@ -18,7 +18,7 @@ import sympy as sp
 from CodeGen import TychoHeaderGen
 
 
-def CartesianToModified():
+def CartesianToMEE():
     """Generate Cartesian-to-MEE state conversion VectorFunction.
 
     Input:  [rx, ry, rz, vx, vy, vz] - Cartesian state
@@ -75,20 +75,19 @@ def CartesianToModified():
 
     Eq = sp.Matrix([p, f_eq, g_eq, h_eq, k_eq, L])
 
-    # precompute_params=False: the only parameter is mu, and the
-    # identify_precomputed step's full {Func, Jac, Grad, Hess} sp.cse
-    # blew past 30 min on this conversion just to surface the trivial
-    # 1/mu substitution. The per-method CSE in gen_compute_all still
-    # delivers analytic derivatives; we only forfeit the small win of
-    # caching 1/mu as a constructor-time member (negligible vs the
-    # cost of computing it once per call).
+    # SuperScalar primal (is_vectorizable=true, default) works because
+    # Eigen 5 ships a free Eigen::atan2(ArrayBase, ArrayBase) overload
+    # backed by scalar_atan2_op (true SIMD via the packet backend);
+    # ADL on Eigen::Array<double, W, 1> finds it.
     #
-    # SuperScalar primal works because tycho/detail/utils/simd_math.h
-    # adds the missing Eigen::atan2(Array<double, N, 1>, Array<double, N, 1>)
-    # free overload (Eigen 3.4 ships only the unary cwise free ops via
-    # EIGEN_ARRAY_DECLARE_GLOBAL_UNARY; binary atan2 stays a member).
+    # precompute_params left default (True): the identify_precomputed
+    # step's full {Func, Jac, Grad, Hess} sp.cse pass on this conversion
+    # is wall-clock heavy (sympy CSE over a Hessian whose terms compose
+    # atan2 with sqrt and division of all 6 inputs is intrinsically
+    # expensive), but the resulting 1/mu_ member precompute is worth
+    # the codegen wait - this script is run-once, not per build.
     header = TychoHeaderGen(
-        "CartesianToModified",
+        "CartesianToMEE",
         Eq,
         sp.Matrix(Xs),
         [(mu, "Gravitational Parameter", "mu > 0.0")],
@@ -96,7 +95,6 @@ def CartesianToModified():
             "Cartesian state to Modified Equinoctial Elements (posigrade, "
             "direct - no classical-element detour)"
         ),
-        precompute_params=False,
     )
 
     output_dir = os.path.join(
@@ -104,10 +102,10 @@ def CartesianToModified():
     )
     header.make_header(
         output_dir=output_dir,
-        script_name="utils/codegen_cartesian_to_modified.py",
+        script_name="utils/codegen_cartesian_to_mee.py",
     )
-    print(f"Generated cartesian_to_modified.h in {output_dir}")
+    print(f"Generated cartesian_to_mee.h in {output_dir}")
 
 
 if __name__ == "__main__":
-    CartesianToModified()
+    CartesianToMEE()
