@@ -191,7 +191,7 @@ if(ENABLE_ENZYME_AD)
 
     message(STATUS "Enzyme AD: enabled (LLVM ${Enzyme_LLVM_VERSION_MAJOR}, plugin ${_tycho_enzyme_plugin_path})")
 
-    include("${CMAKE_SOURCE_DIR}/cmake/EnzymeTryCompile.cmake")
+    include("${PROJECT_SOURCE_DIR}/cmake/EnzymeTryCompile.cmake")
     tycho_enzyme_try_compile_fwddiff()
 
     # Phase 2: probe the FoR Hessian-via-nested-Enzyme strategy.  ForwardOverForward

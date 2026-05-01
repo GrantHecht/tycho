@@ -29,9 +29,9 @@ using vf::VecRef;
 using vf::VectorFunction;
 
 struct CR3BP_FDiff : VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
-                                DenseDerivativeMode::FDiffCentArray> {
+                                DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
-                                DenseDerivativeMode::FDiffCentArray>;
+                                DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 0.0123;
@@ -68,9 +68,9 @@ struct CR3BP_FDiff : VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDif
 
 struct ModifiedDynamics_FDiff
     : VectorFunction<ModifiedDynamics_FDiff, 9, 6, DenseDerivativeMode::FDiffCentArray,
-                     DenseDerivativeMode::FDiffCentArray> {
+                     DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<ModifiedDynamics_FDiff, 9, 6, DenseDerivativeMode::FDiffCentArray,
-                                DenseDerivativeMode::FDiffCentArray>;
+                                DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)
 
     double mu = 1.00;

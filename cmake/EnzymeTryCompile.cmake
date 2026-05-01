@@ -18,7 +18,7 @@
 include(CheckCXXSourceRuns)
 
 function(tycho_enzyme_try_compile_fwddiff)
-    set(_src_path "${CMAKE_SOURCE_DIR}/cmake/try_compile_sources/enzyme_fwddiff.cpp")
+    set(_src_path "${PROJECT_SOURCE_DIR}/cmake/try_compile_sources/enzyme_fwddiff.cpp")
 
     if(NOT EXISTS "${_src_path}")
         message(FATAL_ERROR
@@ -57,7 +57,7 @@ endfunction()
 # source with the plugin flag attached; sets ${OUTVAR} to TRUE on pass, FALSE
 # otherwise. Does NOT FATAL_ERROR — the caller decides how to react.
 function(_tycho_enzyme_run_nested_smoke SRC_NAME CACHE_VAR LABEL OUTVAR)
-    set(_src_path "${CMAKE_SOURCE_DIR}/cmake/try_compile_sources/${SRC_NAME}")
+    set(_src_path "${PROJECT_SOURCE_DIR}/cmake/try_compile_sources/${SRC_NAME}")
     if(NOT EXISTS "${_src_path}")
         message(FATAL_ERROR
             "Enzyme nested ${LABEL} smoke-test source not found at: ${_src_path}")

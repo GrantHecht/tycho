@@ -90,13 +90,6 @@ if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/fmt/format.h")
         "${PACKAGE_PREFIX_DIR}/include/fmt/. "
         "The tycho installation may be incomplete.")
 endif()
-if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/autodiff/forward/dual.hpp")
-    message(FATAL_ERROR
-        "tycho: autodiff headers not found at "
-        "${PACKAGE_PREFIX_DIR}/include/autodiff/. "
-        "The tycho installation may be incomplete.")
-endif()
-
 # Re-attach transitive link dependencies that were stripped from the export.
 # The tycho target uses BUILD_INTERFACE guards on its link libraries (see
 # src/CMakeLists.txt line 105) to avoid encoding host-specific absolute paths
