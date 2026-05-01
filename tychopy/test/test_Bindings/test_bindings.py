@@ -317,5 +317,55 @@ class TestParsePythonArgs(unittest.TestCase):
         self.assertEqual(result.output_rows(), 4)
 
 
+# ---------------------------------------------------------------------------
+# TestCartesianToMEEBindings
+# ---------------------------------------------------------------------------
+
+
+class TestCartesianToMEEBindings(unittest.TestCase):
+    """Cover both bindings on the new direct Cartesian->MEE conversion:
+    the numpy Vector6 overload (via tychopy.Astro._vec6_wrap) and the
+    GenericFunction VF-composition overload registered in
+    src/bindings/astro/kepler_utils.cpp.
+    """
+
+    MU_EARTH = 398600.4418
+
+    # Molniya-shaped initial state in Cartesian (km, km/s).
+    RV = np.array(
+        [
+            -2301.67224489839,
+            -5371.07610250925,
+            -3421.14671530212,
+            6.1338624555516,
+            0.306265184163608,
+            -4.59713439017524,
+        ]
+    )
+
+    def test_vec6_numpy_round_trip(self):
+        """Cart -> MEE -> Cart through the numpy Vector6 overload returns
+        the input within machine precision.  Exercises _vec6_wrap's
+        numpy-input branch and the underlying
+        cartesian_to_modified(Vector6, mu) / modified_to_cartesian(Vector6, mu)
+        bindings."""
+        from tychopy import Astro as TyAstro
+
+        mee = np.asarray(TyAstro.cartesian_to_modified(self.RV, self.MU_EARTH))
+        rv2 = np.asarray(TyAstro.modified_to_cartesian(mee, self.MU_EARTH))
+        np.testing.assert_allclose(rv2, self.RV, atol=1e-9, rtol=0)
+
+    def test_vf_compose_overload(self):
+        """cartesian_to_modified(VectorFunction(seg), mu) hits the
+        GenericFunction VF-overload added in this PR (which constructs
+        a CartesianToMEE and composes via .eval())."""
+        from tychopy import Astro as TyAstro
+
+        seg = Args(6).head(6)
+        gen = TyAstro.cartesian_to_modified(vf.VectorFunction(seg), self.MU_EARTH)
+        self.assertEqual(gen.input_rows(), 6)
+        self.assertEqual(gen.output_rows(), 6)
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)

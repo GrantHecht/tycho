@@ -80,12 +80,14 @@ def CartesianToMEE():
     # backed by scalar_atan2_op (true SIMD via the packet backend);
     # ADL on Eigen::Array<double, W, 1> finds it.
     #
-    # precompute_params left default (True): the identify_precomputed
-    # step's full {Func, Jac, Grad, Hess} sp.cse pass on this conversion
-    # is wall-clock heavy (sympy CSE over a Hessian whose terms compose
-    # atan2 with sqrt and division of all 6 inputs is intrinsically
-    # expensive), but the resulting 1/mu_ member precompute is worth
-    # the codegen wait - this script is run-once, not per build.
+    # precompute_params left default (True): the post-diff
+    # _identify_precomputed_post_diff sp.cse pass on the full
+    # {Func, Jac, Grad, Hess} set is wall-clock heavy (sympy CSE over a
+    # Hessian whose terms compose atan2 with sqrt and division of all 6
+    # inputs is intrinsically expensive), but the resulting 1/mu_ member
+    # precompute is worth the codegen wait - this script is run-once,
+    # not per build.  In practice pre-diff catches 1/mu_ on Func alone
+    # and post-diff finds nothing new for this VF.
     header = TychoHeaderGen(
         "CartesianToMEE",
         Eq,

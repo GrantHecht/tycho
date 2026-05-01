@@ -28,6 +28,12 @@ _POW_INT_RANGE = range(2, 17)  # pow(x, 2) .. pow(x, 16)
 _POW_NEG_INT_RANGE = range(1, 17)  # pow(x, -1) .. pow(x, -16)
 _POW_HALF_INT_RANGE = range(0, 7)  # pow(x, ±0.5) .. pow(x, ±6.5)
 
+# Reserved symbol pattern for precompute-discovered members.  Inputs and
+# parameters that match this name pattern would be silently mis-classified
+# by _partition_cses (which treats pcN_ symbols as parameters so the
+# post-diff pass doesn't double-count them).
+_PC_RESERVED = re.compile(r"^pc\d+_$")
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -143,18 +149,43 @@ class TychoHeaderGen:
         # Input symbol names (for dependency analysis)
         self._input_syms = {s for s in self.Inputs}
 
+        # Guard against user symbols colliding with the pcN_ namespace.
+        # _partition_cses promotes pcN_ to "treat as parameter" so the
+        # post-diff pass classifies them correctly; a user symbol named
+        # pcN_ would be silently mis-classified.  Raise loudly here so
+        # the failure mode is obvious at codegen time, not as a wrong
+        # constructor body two passes later.
+        for sym in self._input_syms:
+            if _PC_RESERVED.match(str(sym)):
+                raise ValueError(
+                    f"Input symbol {sym!r} collides with reserved pcN_ "
+                    f"namespace; rename to avoid clashing with "
+                    f"precompute-discovered members."
+                )
+        for P, _, _ in self.ScalarParams:
+            if _PC_RESERVED.match(str(P)):
+                raise ValueError(
+                    f"ScalarParams symbol {P!r} collides with reserved "
+                    f"pcN_ namespace; rename to avoid clashing with "
+                    f"precompute-discovered members."
+                )
+
         # Precomputed parameter-only subexpressions.  Discovery runs in two
         # passes:
         #   1. Pre-diff: sp.cse on Func only, before differentiation.  Cheap
-        #      (Func is small).  Substitutes pcN_ atoms into Func so they
-        #      propagate through Jac/Grad/Hess as constants - input-variable
-        #      differentiation never introduces new functions of parameters.
+        #      (Func is small).  Substitutes pcN_ atoms into Func; chain rule
+        #      on input variables preserves any param-only subexpression
+        #      already in Func as a constant factor in the derivative
+        #      entries, so the pcN_ atoms ride through Jac/Grad/Hess.
         #   2. Post-diff: sp.cse on the fully-differentiated set (Func, Jac,
-        #      [Grad, Hess] if compute_hessian).  Catches the rare case where
-        #      a single-use param subexpr in Func becomes multi-use across
-        #      derivative entries via product rule.  Operates on the
-        #      pre-compressed set (pcN_ atoms already in place), so this pass
-        #      is cheaper than running it on the un-substituted set.
+        #      [Grad, Hess] if compute_hessian).  Catches what pre-diff
+        #      can miss: (a) a single-use param subexpr in Func that
+        #      becomes multi-use across derivative entries via product
+        #      rule, and (b) the narrow case where differentiation
+        #      synthesises a brand-new param-only function (e.g.
+        #      d/dx(mu**x) = log(mu) * mu**x).  Operates on the
+        #      pre-compressed set (pcN_ atoms already in place), so this
+        #      pass is cheaper than running it on the un-substituted set.
         # Skip both with precompute_params=False.
         self._precomputed = []  # [(member_name, resolved_expr), ...]
         if self.precompute_params:
@@ -183,15 +214,19 @@ class TychoHeaderGen:
 
         Runs sp.cse on Func only and substitutes pcN_ symbols for the
         param-only entries.  The substituted Func is then differentiated;
-        the pcN_ atoms ride through Jac/Grad/Hess as constants because
-        chain rule on input variables treats parameters as constants.
+        chain rule on input variables preserves the pcN_ atoms as constant
+        factors in the derivative entries.
 
         Cheap: Func is the original symbolic input (small, before the
         Hessian explosion).  Catches the typical pattern where a function
-        of mu (e.g. 1/mu, sqrt(mu)) appears in multiple Func entries.
+        of mu (e.g. 1/mu, sqrt(mu)) appears in multiple Func entries.  The
+        post-diff pass picks up two cases pre-diff can miss: param-only
+        subexprs that show up only after product-rule expansion, and rare
+        cases where differentiation synthesises a new param-only function
+        (e.g. d/dx(mu**x) = log(mu) * mu**x).
         """
         print("Identifying parameter-only subexpressions (pre-diff)")
-        self._absorb_precomputed_from_cse([self.Func], "Func")
+        self._absorb_precomputed_from_cse_or_none([self.Func], "Func")
 
     def _identify_precomputed_post_diff(self):
         """Discover any additional param-only subexpressions after differentiation.
@@ -211,7 +246,7 @@ class TychoHeaderGen:
             cse_targets = [self.Func, self.Jac, self.Grad, self.Hess]
         else:
             cse_targets = [self.Func, self.Jac]
-        new_exprs = self._absorb_precomputed_from_cse(cse_targets, "Func/Jac/Grad/Hess"
+        new_exprs = self._absorb_precomputed_from_cse_or_none(cse_targets, "Func/Jac/Grad/Hess"
                                                      if self.compute_hessian
                                                      else "Func/Jac")
         if new_exprs is None:
@@ -222,7 +257,7 @@ class TychoHeaderGen:
             self.Grad = new_exprs[2]
             self.Hess = new_exprs[3]
 
-    def _absorb_precomputed_from_cse(self, cse_targets, label):
+    def _absorb_precomputed_from_cse_or_none(self, cse_targets, label):
         """Run sp.cse on `cse_targets`, append param-only subexprs to
         self._precomputed (continuing the pcN_ numbering), and return the
         rewritten target expressions in pcN_ form.  Returns None if no new
