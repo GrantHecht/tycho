@@ -1,0 +1,68 @@
+{
+  "planPath": "doc/plans/2026-05-02-kepler-propagator-lcd-plan.md",
+  "tasks": [
+    {
+      "id": 7,
+      "subject": "Task 0: Iteration kernel (scalar)",
+      "status": "pending",
+      "description": "**Goal:** Header-only `kepler_lcd_iterate<double>` implementing EMTG-style Laguerre-Conway-Der at order N=1..10. Returns KeplerLCDResult with X*, U0..U3, r, sigma, converged flag.\n\n**Files:**\n- Create: `include/tycho/detail/astro/kepler_lcd_iterate.h`\n- Create: `tests/cpp/astro/test_kepler_lcd.cpp`\n- Modify: `tests/cpp/astro/CMakeLists.txt`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerLCDKernel --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_lcd_iterate.h\", \"tests/cpp/astro/test_kepler_lcd.cpp\", \"tests/cpp/astro/CMakeLists.txt\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerLCDKernel --output-on-failure\", \"acceptanceCriteria\": [\"Matches existing propagate_cartesian to 1e-10 rel on LEO/MEO/hyperbolic\", \"dt=0 fast path returns identity\", \"Hyperbolic asymptote guard returns converged=false\", \"Multi-period round-trip within 1e-4 km\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 1: Iteration kernel (per-lane SuperScalar)",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** Specialize `kepler_lcd_iterate` for `Eigen::Array<double, W, 1>` via per-lane scalar dispatch.\n\n**Files:**\n- Modify: `include/tycho/detail/astro/kepler_lcd_iterate.h`\n- Modify: `tests/cpp/astro/test_kepler_lcd.cpp`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerLCDKernelSS --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_lcd_iterate.h\", \"tests/cpp/astro/test_kepler_lcd.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerLCDKernelSS --output-on-failure\", \"acceptanceCriteria\": [\"SS dispatch matches scalar per-lane to 1e-12\", \"Mixed-orbit-type lanes all converge per-lane\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 2: Codegen script + generated header",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** SymPy script emits KeplerPrimal_VF (S, 11→6) and KeplerResidual_VF (F, 10→1) into `kepler_propagator_closed_form.h`.\n\n**Files:**\n- Create: `utils/codegen_kepler_propagator.py`\n- Create (generated): `include/tycho/detail/astro/kepler_propagator_closed_form.h`\n- Modify: `tests/cpp/astro/test_kepler_lcd.cpp`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerClosedForm --output-on-failure`\n\n```json:metadata\n{\"files\": [\"utils/codegen_kepler_propagator.py\", \"include/tycho/detail/astro/kepler_propagator_closed_form.h\", \"tests/cpp/astro/test_kepler_lcd.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerClosedForm --output-on-failure\", \"acceptanceCriteria\": [\"Codegen exits 0\", \"Generated header compiles\", \"No pow() calls in compute body\", \"Primal matches inline f/g to 1e-13\", \"Residual ~0 at converged X*\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 3: IFT layer — Jacobian",
+      "status": "pending",
+      "blockedBy": [9],
+      "description": "**Goal:** `kepler_propagate_jacobian` composes total 6×7 Jacobian via 1st-order IFT and U-recursions.\n\n**Files:**\n- Create: `include/tycho/detail/astro/kepler_propagator_ift.h`\n- Create: `tests/cpp/astro/test_kepler_ift.cpp`\n- Modify: `tests/cpp/astro/CMakeLists.txt`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerIFT_Jacobian --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator_ift.h\", \"tests/cpp/astro/test_kepler_ift.cpp\", \"tests/cpp/astro/CMakeLists.txt\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerIFT_Jacobian --output-on-failure\", \"acceptanceCriteria\": [\"xf bit-equivalent to propagate_cartesian\", \"Jacobian matches FD 5e-7 rel across orbit fixtures\", \"Near-parabolic Jacobian matches FD 5e-6 rel\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 4: IFT layer — adjoint Hessian",
+      "status": "pending",
+      "blockedBy": [10],
+      "description": "**Goal:** `kepler_propagate_adjoint_hessian` returns total xf, jac, adjgrad, adjhess via 2nd-order IFT.\n\n**Files:**\n- Modify: `include/tycho/detail/astro/kepler_propagator_ift.h`\n- Modify: `tests/cpp/astro/test_kepler_ift.cpp`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerIFT_Hessian --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator_ift.h\", \"tests/cpp/astro/test_kepler_ift.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerIFT_Hessian --output-on-failure\", \"acceptanceCriteria\": [\"xf and jac match Jacobian-only path\", \"adjgrad = jacᵀ·λ to 1e-13\", \"adjhess matches FD 5e-6 (5e-5 near-parabolic)\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 5: Rewrite propagate_cartesian",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** Replace body of propagate_cartesian<Scalar> with kernel call + closed-form. Public API unchanged.\n\n**Files:**\n- Modify: `include/tycho/detail/astro/kepler_utils.h`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_utils.h\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure\", \"acceptanceCriteria\": [\"MultiPeriodReturn passes\", \"HyperbolicTrajectory passes\", \"BM_PropagateCartesian builds\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 6: Rewrite KeplerPropagator VF",
+      "status": "pending",
+      "blockedBy": [8, 11],
+      "description": "**Goal:** Replace kepler_propagator.h with hand-written VF delegating to IFT layer. Delete commented-out hand-rolled block.\n\n**Files:**\n- Rewrite: `include/tycho/detail/astro/kepler_propagator.h`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure && conda run -n tycho python -m pytest tychopy/test/test_OptimalControl/test_Integrators.py -v`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator.h\"], \"verifyCommand\": \"ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure && conda run -n tycho python -m pytest tychopy/test/test_OptimalControl/test_Integrators.py -v\", \"acceptanceCriteria\": [\"VF<7,6,Analytic,Analytic>\", \"compute_impls delegate to IFT layer\", \"AdjointConsistency passes 1e-6\", \"Python integrator tests pass\", \"No commented-out code\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "Task 7: Add VF benchmarks",
+      "status": "pending",
+      "blockedBy": [13],
+      "description": "**Goal:** Add 4 new VF-path benchmarks to bench_kepler.cpp.\n\n**Files:**\n- Modify: `bench/cpp/kepler/bench_kepler.cpp`\n\n**Verify:** `cd build && ./bench/cpp/bench_all --benchmark_filter='BM_KeplerPropagator'`\n\n```json:metadata\n{\"files\": [\"bench/cpp/kepler/bench_kepler.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 bench_all && ./bench/cpp/bench_all --benchmark_filter='BM_KeplerPropagator'\", \"acceptanceCriteria\": [\"4 new VF benchmarks compile and run\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "Task 8: Pre-merge verification gate",
+      "status": "pending",
+      "blockedBy": [14, 12],
+      "description": "**Goal:** Run CLAUDE.md §Pre-Merge Verification Sequence — full ctest, all 38 examples, brachistochrone, bench compare. Document results.\n\n**Files:**\n- Create: `doc/plans/2026-05-02-kepler-propagator-lcd-bench.md`\n\n**Verify:** All four steps in CLAUDE.md §Pre-Merge Verification Sequence\n\n```json:metadata\n{\"files\": [\"doc/plans/2026-05-02-kepler-propagator-lcd-bench.md\"], \"verifyCommand\": \"cd build && ctest --output-on-failure && cd .. && conda run -n tycho bash -c 'MPLBACKEND=Agg python scripts/run_examples.py' && cd build && ninja -j6 brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp && cd .. && bench/bench_track.sh compare\", \"acceptanceCriteria\": [\"All ctest pass\", \"38 examples pass\", \"Brachistochrone converges\", \"Bench compare clean\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-02T00:00:00Z"
+}
