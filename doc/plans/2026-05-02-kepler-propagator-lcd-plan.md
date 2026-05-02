@@ -27,7 +27,7 @@
 | `tests/cpp/astro/test_kepler_lcd.cpp` | NEW | Iteration-kernel tests (scalar + per-lane SS) |
 | `tests/cpp/astro/test_kepler_ift.cpp` | NEW | IFT layer tests (Jac/Hess vs FD across orbit fixtures) |
 | `tests/cpp/astro/test_kepler_propagation.cpp` | unchanged | Existing tests must continue to pass |
-| `tests/cpp/astro/CMakeLists.txt` | MODIFIED | Register new test files |
+| `tests/cpp/CMakeLists.txt` | MODIFIED | Register new test files |
 | `bench/cpp/kepler/bench_kepler.cpp` | MODIFIED | Add 4 VF benchmarks |
 
 ---
@@ -57,7 +57,7 @@ Tasks 0–4 are pure additions (no existing file modified). Task 5 modifies `kep
 **Files:**
 - Create: `include/tycho/detail/astro/kepler_lcd_iterate.h`
 - Create: `tests/cpp/astro/test_kepler_lcd.cpp`
-- Modify: `tests/cpp/astro/CMakeLists.txt` (register new test)
+- Modify: `tests/cpp/CMakeLists.txt` (register new test)
 
 **Acceptance Criteria:**
 - [ ] `kepler_lcd_iterate<double>(R0, V0, dt, mu)` returns identical state to existing `propagate_cartesian<double>` (within 1e-10 rel) for LEO circular, MEO e=0.5, hyperbolic e=1.5.
@@ -366,7 +366,7 @@ TEST(KeplerLCDKernel, MultiPeriodReturn) {
 
 - [ ] **Step 5: Register the new test in CMakeLists.txt**
 
-Edit `tests/cpp/astro/CMakeLists.txt` — append `test_kepler_lcd.cpp` to the same list that contains `test_kepler_propagation.cpp`. Locate the pattern that registers astro tests and add the new file alongside.
+Edit `tests/cpp/CMakeLists.txt` — append `test_kepler_lcd.cpp` to the same list that contains `test_kepler_propagation.cpp`. Locate the pattern that registers astro tests and add the new file alongside.
 
 - [ ] **Step 6: Build and run tests**
 
@@ -382,7 +382,7 @@ Expected: all 6 `KeplerLCDKernel.*` tests pass.
 ```bash
 git add include/tycho/detail/astro/kepler_lcd_iterate.h \
         tests/cpp/astro/test_kepler_lcd.cpp \
-        tests/cpp/astro/CMakeLists.txt
+        tests/cpp/CMakeLists.txt
 git commit -m "$(cat <<'EOF'
 feat(astro): scalar Laguerre-Conway-Der Kepler iteration kernel
 
@@ -808,7 +808,7 @@ EOF
 **Files:**
 - Create: `include/tycho/detail/astro/kepler_propagator_ift.h`
 - Create: `tests/cpp/astro/test_kepler_ift.cpp`
-- Modify: `tests/cpp/astro/CMakeLists.txt` (register new test)
+- Modify: `tests/cpp/CMakeLists.txt` (register new test)
 
 **Acceptance Criteria:**
 - [ ] `kepler_propagate_jacobian<double>` reproduces (rf, vf) bit-equivalent to `propagate_cartesian<double>` (modulo CSE order, target 1e-13 rel).
@@ -1164,7 +1164,7 @@ TEST(KeplerIFT_Jacobian, NearParabolic) {
 
 - [ ] **Step 7: Register the new test in CMakeLists.txt**
 
-Add `test_kepler_ift.cpp` to `tests/cpp/astro/CMakeLists.txt` next to `test_kepler_lcd.cpp`.
+Add `test_kepler_ift.cpp` to `tests/cpp/CMakeLists.txt` next to `test_kepler_lcd.cpp`.
 
 - [ ] **Step 8: Build and run**
 
@@ -1180,7 +1180,7 @@ Expected: all 5 tests pass. If `NearParabolic` fails, raise the Taylor-fallback 
 ```bash
 git add include/tycho/detail/astro/kepler_propagator_ift.h \
         tests/cpp/astro/test_kepler_ift.cpp \
-        tests/cpp/astro/CMakeLists.txt
+        tests/cpp/CMakeLists.txt
 git commit -m "$(cat <<'EOF'
 feat(astro): IFT-composed Jacobian for Kepler propagator
 
