@@ -193,18 +193,18 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 //
 // **Status (2026-04-28).** All FoF code below is **retained as a working
 // reference implementation**, but no tests or benchmarks exercise it in tree
-// AND it is **no longer cmake-selectable** — `ForwardOverForward` was dropped
-// from the `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  FoR (Forward-
-// over-Reverse) is the only cmake-selectable strategy:
+// AND it is **no longer cmake-selectable** — CMakeLists.txt unconditionally
+// defines the FoR strategy macro
+// (`TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse`) and never defines the
+// FoF strategy macro.  There is no cache variable or `-D` flag a user can
+// pass to switch; FoR is the only production strategy compiled in tree.
 //
-//   -DTYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse  (default, tested)
-//
-// Revival requires re-adding `ForwardOverForward` to the STRINGS list in
-// CMakeLists.txt, defining the **second sentinel** `TYCHO_ENZYME_FOF_ARCHIVE_REVIVED`
-// (so the archive blocks below become visible — both the FoF strategy macro
-// AND the sentinel must be set, preventing a manual `add_compile_definitions`
-// outside cmake from silently reviving the path), restoring the FoF dispatch
-// branches that were stripped from
+// Revival requires patching CMakeLists.txt to define BOTH
+// `TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward` AND the second sentinel
+// `TYCHO_ENZYME_FOF_ARCHIVE_REVIVED` (so the archive blocks below become
+// visible — both macros must be set, preventing a manual
+// `add_compile_definitions` outside cmake from silently reviving the path),
+// restoring the FoF dispatch branches that were stripped from
 // `compute_jacobian_adjointgradient_adjointhessian_impl` and
 // `scalar_compute_jacobian_adjointgradient_adjointhessian_impl`, and
 // re-introducing the test/bench coverage from the commits below.
@@ -645,8 +645,9 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
   2. The adjoint gradient gx = J^T lam is computed from jx by direct
      matrix multiply — Enzyme already produced jx, no need to recompute.
   3. The adjoint Hessian hx is the column-by-column derivative of
-     g(x) = J(x)^T lam with respect to x.  The only cmake-selectable
-     strategy is `TYCHO_ENZYME_HESSIAN_STRATEGY=ForwardOverReverse`:
+     g(x) = J(x)^T lam with respect to x.  CMakeLists.txt unconditionally
+     defines `TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse`; there is
+     no user-facing cmake option for strategy selection.  FoR uses
      `__enzyme_fwddiff` over a wrapper that calls `__enzyme_autodiff`
      (O(IR) outer Enzyme calls).
 

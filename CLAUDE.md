@@ -330,8 +330,10 @@ SuperScalar Scalar:
   Forward-over-Forward direct-SIMD Hessian (with combined J+H output and
   doubly-batched variant) is **retained as a working but un-tested,
   un-benched reference** in `dense_enzyme.h` and is **no longer
-  cmake-selectable** — `ForwardOverForward` was dropped from the
-  `TYCHO_ENZYME_HESSIAN_STRATEGY` cache STRINGS list.  Bench results
+  cmake-selectable** — CMakeLists.txt unconditionally defines
+  `TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse` and never defines
+  the FoF strategy macro; there is no cache variable or `-D` flag a user
+  can pass to switch.  Bench results
   at the time of archival (BW=4): FoR-SIMD wins ~2× on Brach (1038 vs
   2102 ns) and ~5× on CR3BP (291 vs 1545 ns).  *(Both FoR-SIMD and
   FoF-SIMD lose to Phase 5a on Brach — see the rule-of-thumb section
