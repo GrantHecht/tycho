@@ -24,7 +24,11 @@ def _vec6_wrap(fn):
     """Wrap a C++ function whose first arg is Vector6<double> to also accept lists/tuples."""
 
     def wrapper(arr_or_func, *args):
-        if hasattr(arr_or_func, "eval"):  # VectorFunction overload — pass through
+        # `input_rows` is present on VectorFunction *and* arg-like VF types
+        # (Segment / Element / Arguments) which deliberately omit `eval` /
+        # `__call__` in the bindings. nanobind handles implicit conversion to
+        # the VectorFunction overload at the C++ boundary.
+        if hasattr(arr_or_func, "input_rows"):
             return fn(arr_or_func, *args)
         return fn(np.asarray(arr_or_func, dtype=np.float64), *args)
 
