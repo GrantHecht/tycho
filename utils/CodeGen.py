@@ -28,6 +28,12 @@ _POW_INT_RANGE = range(2, 17)  # pow(x, 2) .. pow(x, 16)
 _POW_NEG_INT_RANGE = range(1, 17)  # pow(x, -1) .. pow(x, -16)
 _POW_HALF_INT_RANGE = range(0, 7)  # pow(x, ±0.5) .. pow(x, ±6.5)
 
+# Reserved symbol pattern for precompute-discovered members.  Inputs and
+# parameters that match this name pattern would be silently mis-classified
+# by _partition_cses (which treats pcN_ symbols as parameters so the
+# post-diff pass doesn't double-count them).
+_PC_RESERVED = re.compile(r"^pc\d+_$")
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -62,12 +68,18 @@ class TychoHeaderGen:
         namespace="tycho::astro",
         include_path="tycho/vector_functions.h",
         gen_build_method=False,
+        compute_hessian=True,
+        precompute_params=True,
+        is_vectorizable=True,
     ):
 
         self.Name = Name
         self.namespace = namespace
         self.include_path = include_path
         self.gen_build_method = gen_build_method
+        self.compute_hessian = compute_hessian
+        self.precompute_params = precompute_params
+        self.is_vectorizable = is_vectorizable
         self.ninputs = len(Xs)
         self.noutputs = len(F)
 
@@ -137,90 +149,178 @@ class TychoHeaderGen:
         # Input symbol names (for dependency analysis)
         self._input_syms = {s for s in self.Inputs}
 
+        # Guard against user symbols colliding with the pcN_ namespace.
+        # _partition_cses promotes pcN_ to "treat as parameter" so the
+        # post-diff pass classifies them correctly; a user symbol named
+        # pcN_ would be silently mis-classified.  Raise loudly here so
+        # the failure mode is obvious at codegen time, not as a wrong
+        # constructor body two passes later.
+        for sym in self._input_syms:
+            if _PC_RESERVED.match(str(sym)):
+                raise ValueError(
+                    f"Input symbol {sym!r} collides with reserved pcN_ "
+                    f"namespace; rename to avoid clashing with "
+                    f"precompute-discovered members."
+                )
+        for P, _, _ in self.ScalarParams:
+            if _PC_RESERVED.match(str(P)):
+                raise ValueError(
+                    f"ScalarParams symbol {P!r} collides with reserved "
+                    f"pcN_ namespace; rename to avoid clashing with "
+                    f"precompute-discovered members."
+                )
+
+        # Precomputed parameter-only subexpressions.  Discovery runs in two
+        # passes:
+        #   1. Pre-diff: sp.cse on Func only, before differentiation.  Cheap
+        #      (Func is small).  Substitutes pcN_ atoms into Func; chain rule
+        #      on input variables preserves any param-only subexpression
+        #      already in Func as a constant factor in the derivative
+        #      entries, so the pcN_ atoms ride through Jac/Grad/Hess.
+        #   2. Post-diff: sp.cse on the fully-differentiated set (Func, Jac,
+        #      [Grad, Hess] if compute_hessian).  Catches what pre-diff
+        #      can miss: (a) a single-use param subexpr in Func that
+        #      becomes multi-use across derivative entries via product
+        #      rule, and (b) the narrow case where differentiation
+        #      synthesises a brand-new param-only function (e.g.
+        #      d/dx(mu**x) = log(mu) * mu**x).  Operates on the
+        #      pre-compressed set (pcN_ atoms already in place), so this
+        #      pass is cheaper than running it on the un-substituted set.
+        # Skip both with precompute_params=False.
+        self._precomputed = []  # [(member_name, resolved_expr), ...]
+        if self.precompute_params:
+            self._identify_precomputed_pre_diff()
+
         print("Generating Jacobian")
         self.Jac = self.Func.jacobian(self.Inputs)
         print("Finished Jacobian")
         self.LMults = sp.Matrix(sp.symbols("LM:" + str(self.noutputs)))
-        print("Generating Gradient")
-        self.Grad = self.Jac.transpose() * self.LMults
-        print("Finished Gradient")
-        print("Generating Hessian")
-        self.Hess = self.Grad.jacobian(self.Inputs)
-        print("Finished Hessian")
+        if self.compute_hessian:
+            print("Generating Gradient")
+            self.Grad = self.Jac.transpose() * self.LMults
+            print("Finished Gradient")
+            print("Generating Hessian")
+            self.Hess = self.Grad.jacobian(self.Inputs)
+            print("Finished Hessian")
+        else:
+            self.Grad = None
+            self.Hess = None
 
-        # Precomputed parameter-only subexpressions.
-        # Substituted into Func/Jac/Grad/Hess at the SymPy level so that
-        # per-method CSE naturally uses the member symbols (pcN_).
-        self._precomputed = []  # [(member_name, resolved_expr), ...]
-        self._identify_precomputed()
+        if self.precompute_params:
+            self._identify_precomputed_post_diff()
 
-    def _identify_precomputed(self):
-        """Find param-only CSE subexpressions and substitute into expressions.
+    def _identify_precomputed_pre_diff(self):
+        """Discover param-only subexpressions in Func before differentiation.
 
-        Runs CSE on the full expression set, identifies subexpressions that
-        depend only on constructor parameters (not inputs), then rebuilds
-        Func/Jac/Grad/Hess with member symbols (pcN_) in place of those
-        subexpressions. Works by expanding all input-dependent CSE variables
-        back while keeping param-only ones as pcN_ atoms, so per-method CSE
-        in _gen_cse_body() naturally re-optimizes without duplicating the
-        precomputed work.
+        Runs sp.cse on Func only and substitutes pcN_ symbols for the
+        param-only entries.  The substituted Func is then differentiated;
+        chain rule on input variables preserves the pcN_ atoms as constant
+        factors in the derivative entries.
+
+        Cheap: Func is the original symbolic input (small, before the
+        Hessian explosion).  Catches the typical pattern where a function
+        of mu (e.g. 1/mu, sqrt(mu)) appears in multiple Func entries.  The
+        post-diff pass picks up two cases pre-diff can miss: param-only
+        subexprs that show up only after product-rule expansion, and rare
+        cases where differentiation synthesises a new param-only function
+        (e.g. d/dx(mu**x) = log(mu) * mu**x).
         """
-        print("Identifying parameter-only subexpressions")
-        all_cses, reduced = sp.cse([self.Func, self.Jac, self.Grad, self.Hess])
+        print("Identifying parameter-only subexpressions (pre-diff)")
+        self._absorb_precomputed_from_cse_or_none([self.Func], "Func")
+
+    def _identify_precomputed_post_diff(self):
+        """Discover any additional param-only subexpressions after differentiation.
+
+        Some VFs introduce shared param subexpressions only in the
+        derivatives (e.g. f = g(mu) * x1 * x2 has g(mu) once in Func but
+        twice in Jac via product rule).  This pass catches them.
+
+        Operates on the pre-compressed expression set (pcN_ atoms already
+        substituted by the pre-diff pass), so the input set to sp.cse is
+        smaller than it would have been without the pre-diff pass.  Still
+        the most expensive single step in the codegen pipeline for
+        nontrivial functions.
+        """
+        print("Identifying parameter-only subexpressions (post-diff)")
+        if self.compute_hessian:
+            cse_targets = [self.Func, self.Jac, self.Grad, self.Hess]
+        else:
+            cse_targets = [self.Func, self.Jac]
+        new_exprs = self._absorb_precomputed_from_cse_or_none(cse_targets, "Func/Jac/Grad/Hess"
+                                                     if self.compute_hessian
+                                                     else "Func/Jac")
+        if new_exprs is None:
+            return
+        self.Func = new_exprs[0]
+        self.Jac = new_exprs[1]
+        if self.compute_hessian:
+            self.Grad = new_exprs[2]
+            self.Hess = new_exprs[3]
+
+    def _absorb_precomputed_from_cse_or_none(self, cse_targets, label):
+        """Run sp.cse on `cse_targets`, append param-only subexprs to
+        self._precomputed (continuing the pcN_ numbering), and return the
+        rewritten target expressions in pcN_ form.  Returns None if no new
+        param-only subexpressions were discovered.
+        """
+        all_cses, reduced = sp.cse(cse_targets)
         param_cses, input_cses = self._partition_cses(all_cses)
 
         if not param_cses:
             print("  No parameter-only subexpressions found")
-            return
+            # Still return the reduced form for callers that want to
+            # rewrite their stored expressions; for the pre-diff path
+            # there's nothing to rewrite (no pcN_ to insert), so return
+            # None and let the caller leave its Func untouched.
+            return None
 
-        print(f"  Found {len(param_cses)} parameter-only subexpressions")
+        start_idx = len(self._precomputed)
+        print(f"  Found {len(param_cses)} parameter-only subexpressions "
+              f"(pc{start_idx}_..pc{start_idx + len(param_cses) - 1}_)")
 
-        # Build param CSE sym → member sym map and constructor expressions
-        param_map = {}  # cse_sym → member_sym
-        for i, (cse_sym, cse_expr) in enumerate(param_cses):
-            member_name = f"pc{i}_"
+        # Build CSE sym → pcN_ member sym map.  Using xreplace (literal
+        # subtree replacement) instead of subs (mathematical rewrite) -
+        # the substitution is well-defined and sympy canonicalization is
+        # both unnecessary and expensive on Hessian-sized expressions.
+        param_map = {}
+        for offset, (cse_sym, cse_expr) in enumerate(param_cses):
+            member_name = f"pc{start_idx + offset}_"
             member_sym = sp.Symbol(member_name)
             param_map[cse_sym] = member_sym
-            # Constructor expression: resolve earlier CSE refs to pcN_
-            resolved = cse_expr.subs(
-                [(s, m) for s, m in param_map.items() if s != cse_sym]
+            resolved = cse_expr.xreplace(
+                {s: m for s, m in param_map.items() if s != cse_sym}
             )
             self._precomputed.append((member_name, resolved))
 
-        # Build expansion map for all CSE symbols:
-        # - param CSE syms → pcN_ member symbols
-        # - input CSE syms → their RHS with all CSE refs fully expanded
-        #   (param refs become pcN_, input refs become their expanded forms)
+        # Build full expansion: param CSE syms → pcN_; input CSE syms →
+        # their RHS with earlier CSE refs expanded.
         expansion = dict(param_map)
         for cse_sym, cse_expr in input_cses:
-            expanded = cse_expr
-            for s, repl in expansion.items():
-                expanded = expanded.subs(s, repl)
-            expansion[cse_sym] = expanded
+            expansion[cse_sym] = cse_expr.xreplace(expansion)
 
-        # Expand reduced expressions: replace all CSE symbols with their
-        # expanded forms. The result contains pcN_ atoms but no CSE vars.
-        print("  Substituting into Func/Jac/Grad/Hess")
-        subs_list = list(expansion.items())
-        new_exprs = []
-        for item in reduced:
-            if isinstance(item, sp.Matrix):
-                new_exprs.append(item.subs(subs_list))
-            elif isinstance(item, list):
-                new_exprs.append([e.subs(subs_list) for e in item])
-            else:
-                new_exprs.append(item.subs(subs_list))
+        print(f"  Substituting pcN_ atoms into {label}")
 
-        self.Func = new_exprs[0]
-        self.Jac = new_exprs[1]
-        self.Grad = new_exprs[2]
-        self.Hess = new_exprs[3]
+        def _xreplace_any(item):
+            if isinstance(item, list):
+                return [e.xreplace(expansion) for e in item]
+            return item.xreplace(expansion)
+
+        # Single-target pre-diff path: also rewrite self.Func directly so
+        # the caller doesn't have to.
+        if len(reduced) == 1:
+            self.Func = _xreplace_any(reduced[0])
+            return None
+
+        return [_xreplace_any(item) for item in reduced]
 
     def _partition_cses(self, cses):
         """Split CSE list into (param_only, input_dependent).
 
         A CSE variable is parameter-only if its RHS expression contains
         no input symbols and no CSE variables that depend on inputs.
+        Already-discovered pcN_ member symbols (from a previous pre-diff
+        pass) count as parameters, so the post-diff pass correctly treats
+        any expression rebuilt from them as still param-only.
         """
         param_syms = set()
         for P, _, _ in self.ScalarParams:
@@ -231,6 +331,8 @@ class TychoHeaderGen:
         for Mat, _, _, _ in self.MatrixParams:
             for elem in Mat:
                 param_syms.add(elem)
+        for member_name, _ in self._precomputed:
+            param_syms.add(sp.Symbol(member_name))
 
         # Track which CSE symbols are parameter-only
         param_only_syms = set()
@@ -579,18 +681,19 @@ class TychoHeaderGen:
 
     def gen_class_header(self):
         I = _IND
-        dm = "DenseDerivativeMode::Analytic"
+        jm = "DenseDerivativeMode::Analytic"
+        hm = jm if self.compute_hessian else "DenseDerivativeMode::FDiffCentArray"
         nan_init = "std::numeric_limits<double>::quiet_NaN()"
 
         lines = []
         lines.append(f"struct {self.Name}")
         lines.append(
             f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
-            f"{self.noutputs}, {dm}, {dm}> {{"
+            f"{self.noutputs}, {jm}, {hm}> {{"
         )
         lines.append(
             f"{I}using Base = VectorFunction<{self.Name}, "
-            f"{self.ninputs}, {self.noutputs}, {dm}, {dm}>;"
+            f"{self.ninputs}, {self.noutputs}, {jm}, {hm}>;"
         )
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
         lines.append("")
@@ -608,7 +711,8 @@ class TychoHeaderGen:
             rows, cols = len(Mat), len(Mat[0])
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
-        lines.append(f"{I}static constexpr bool is_vectorizable = true;")
+        vec_flag = "true" if self.is_vectorizable else "false"
+        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
 
         # Precomputed member declarations — also NSDMI NaN so a
         # nullary-constructed instance propagates NaN through the compute
@@ -949,7 +1053,7 @@ class TychoHeaderGen:
         header = self.gen_class_header()
         compute = self.gen_compute_impl()
         jacobian = self.gen_compute_jacobian_impl()
-        all_impl = self.gen_compute_all()
+        all_impl = self.gen_compute_all() if self.compute_hessian else ""
         ns_close = f"}};\n\n}} // namespace {self.namespace}\n"
 
         return (
