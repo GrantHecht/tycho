@@ -15,8 +15,8 @@
 #pragma once
 
 #include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/vf/derivatives/dense_autodiff_fwd.h"
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
+#include "tycho/detail/vf/derivatives/dense_enzyme.h"
 #include "tycho/detail/vf/derivatives/dense_fdiff_cent_array.h"
 #include "tycho/detail/vf/derivatives/dense_fdiff_fwd.h"
 

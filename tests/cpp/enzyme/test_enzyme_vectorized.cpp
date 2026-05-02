@@ -1,0 +1,519 @@
+// =============================================================================
+// Tycho — Copyright 2026-present Grant R. Hecht. Apache 2.0.
+// Phase 5a: SuperScalar dispatch via scalarize-per-lane.
+//
+// Validates that a Vectorizable<Derived>=true VectorFunction with EnzymeAD
+// produces lane-equivalent results to the scalar EnzymeAD path applied to
+// each lane independently.  Phase 1 forbade this combination; Phase 5a lifts
+// the restriction.
+// =============================================================================
+
+#include <gtest/gtest.h>
+
+#include <tycho/tycho.h>
+
+#include "tycho/math.h"
+
+#include "enzyme_test_dynamics.h"
+
+namespace tycho_enzyme_test {
+
+// Brachistochrone variant marked vectorizable. Body is identical to
+// BrachODEModed except for the is_vectorizable opt-in.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct BrachVectorizable
+    : tycho::vf::VectorFunction<BrachVectorizable<Jm, Hm>, 5, 3, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<BrachVectorizable<Jm, Hm>, 5, 3, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+
+    double g_;
+    BrachVectorizable(double g = 32.2) : g_{g} {}
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using tycho::math::cos;
+        using tycho::math::sin;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+
+        const Scalar v = x[2];
+        const Scalar theta = x[4];
+        fx[0] = sin(theta) * v;
+        fx[1] = -cos(theta) * v;
+        fx[2] = Scalar(g_) * cos(theta);
+    }
+};
+
+using BrachVectorizableEnzymeAD = BrachVectorizable<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::FDiffFwd>;
+
+using BrachVectorizableEnzymeFull = BrachVectorizable<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
+// CR3BP variant marked Vectorizable=true (sqrt-only body — Phase 6 SIMD
+// Hessian eligible).
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct CR3BPVectorizable
+    : tycho::vf::VectorFunction<CR3BPVectorizable<Jm, Hm>, 7, 6, Jm, Hm> {
+    using Base = tycho::vf::VectorFunction<CR3BPVectorizable<Jm, Hm>, 7, 6, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+
+    double mu_;
+    CR3BPVectorizable(double mu = 0.0123) : mu_{mu} {}
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using std::sqrt;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+        tycho::Vector3<Scalar> X = x.template head<3>();
+        tycho::Vector3<Scalar> V = x.template segment<3>(3);
+        tycho::Vector3<Scalar> p1loc; p1loc[0] = Scalar(-mu_);
+        tycho::Vector3<Scalar> p2loc; p2loc[0] = Scalar(1.0 - mu_);
+        tycho::Vector3<Scalar> dvec = X - p1loc;
+        tycho::Vector3<Scalar> rvec = X - p2loc;
+        Scalar d = sqrt((dvec.array() * dvec.array()).sum());
+        Scalar r = sqrt((rvec.array() * rvec.array()).sum());
+        fx.template head<3>() = V;
+        fx.template segment<3>(3) =
+            (Scalar(-(1.0 - mu_)) / (d * d * d)) * dvec
+          + (Scalar(-mu_) / (r * r * r)) * rvec;
+        fx[3] += Scalar(2.0) * V[1] + X[0];
+        fx[4] += Scalar(-2.0) * V[0] + X[1];
+    }
+};
+
+using CR3BPVectorizableEnzymeFull = CR3BPVectorizable<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
+// Brachistochrone variant that opts out of Phase 6 SIMD Hessian via the
+// EnzymeSimdHessianUnsupported marker base, forcing dispatch through
+// Phase 5a scalarize-per-lane.  Body is identical to BrachVectorizable;
+// the only difference is the inheritance.  Anchors the
+// enzyme_simd_hessian_supported_v<> gating predicate.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct BrachVectorizableNoSimdHessian
+    : tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm>,
+      tycho::vf::EnzymeSimdHessianUnsupported {
+    using Base =
+        tycho::vf::VectorFunction<BrachVectorizableNoSimdHessian<Jm, Hm>, 5, 3, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+
+    double g_;
+    BrachVectorizableNoSimdHessian(double g = 32.2) : g_{g} {}
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using tycho::math::cos;
+        using tycho::math::sin;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+
+        const Scalar v = x[2];
+        const Scalar theta = x[4];
+        fx[0] = sin(theta) * v;
+        fx[1] = -cos(theta) * v;
+        fx[2] = Scalar(g_) * cos(theta);
+    }
+};
+
+using BrachVectorizableNoSimdHessianEnzymeFull = BrachVectorizableNoSimdHessian<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
+// MEE-class variant marked Vectorizable=true with the Phase 6 SIMD Hessian
+// opt-out.  CLAUDE.md rule-of-thumb: composite trig+sqrt+division bodies
+// (MEE) trip Enzyme's SS reverse-mode TypeAnalysis on the Phase 6 SIMD path,
+// so this VF MUST inherit from EnzymeSimdHessianUnsupported.  Trig is
+// routed through tycho::math::* per the Phase 5b trig-wrapper rule.
+template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
+struct MEEVectorizableNoSimdHessian
+    : tycho::vf::VectorFunction<MEEVectorizableNoSimdHessian<Jm, Hm>, 9, 6, Jm, Hm>,
+      tycho::vf::EnzymeSimdHessianUnsupported {
+    using Base =
+        tycho::vf::VectorFunction<MEEVectorizableNoSimdHessian<Jm, Hm>, 9, 6, Jm, Hm>;
+    VF_TYPE_ALIASES(Base)
+
+    static constexpr bool is_vectorizable = true;
+
+    double mu_;
+    double sqm_;
+    MEEVectorizableNoSimdHessian(double mu = 1.0) : mu_(mu), sqm_(std::sqrt(mu)) {}
+
+    template <class InType, class OutType>
+    inline void compute_impl(tycho::vf::CVecRef<InType> x,
+                             tycho::vf::CVecRef<OutType> fx_) const {
+        using tycho::math::cos;
+        using tycho::math::sin;
+        using std::sqrt;
+        using Scalar = typename InType::Scalar;
+        tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
+
+        Scalar x0 = x[0];
+        Scalar x1 = x[1];
+        Scalar x2 = x[2];
+        Scalar x3 = x[3];
+        Scalar x4 = x[4];
+        Scalar x5 = x[5];
+        Scalar x6 = x[6];
+        Scalar x7 = x[7];
+        Scalar x8 = x[8];
+
+        Scalar sqx0 = sqrt(x0);
+        Scalar x9 = Scalar(1.0 / sqm_);
+        Scalar x10 = cos(x5);
+        Scalar x11 = sin(x5);
+        Scalar x12 = x1 * x10 + x11 * x2;
+        Scalar x13 = x12 + 1.0;
+        Scalar x14 = 1.0 / x13;
+        Scalar x15 = x14 * x7;
+        Scalar x16 = x10 * x4;
+        Scalar x17 = x11 * x3;
+        Scalar x18 = x14 * x8;
+        Scalar x19 = x12 + 2.0;
+        Scalar x20 = sqx0 * x9;
+        Scalar x21 = x18 * (-x16 + x17);
+        Scalar x22 = 0.5 * x18 * x20 * ((x3 * x3) + (x4 * x4) + 1.0);
+
+        fx[0] = 2.0 * (x0 * sqx0) * x15 * x9;
+        fx[1] = x20 * (x11 * x6 + x15 * (x1 + x10 * x19) + x18 * x2 * (x16 - x17));
+        fx[2] = x20 * (x1 * x21 - x10 * x6 + x15 * (x11 * x19 + x2));
+        fx[3] = x10 * x22;
+        fx[4] = x11 * x22;
+        fx[5] = x20 * (mu_ * x13 * x13 / (x0 * x0) + 1.0 * x21);
+    }
+};
+
+using MEEVectorizableNoSimdHessianEnzymeFull = MEEVectorizableNoSimdHessian<
+    tycho::vf::DenseDerivativeMode::EnzymeAD,
+    tycho::vf::DenseDerivativeMode::EnzymeAD>;
+
+} // namespace tycho_enzyme_test
+
+namespace {
+
+// -----------------------------------------------------------------------------
+// Per-lane equivalence between the Vectorizable EnzymeAD Jacobian path and
+// the scalar EnzymeAD reference on Brachistochrone.  Parameterised on
+// SuperScalar lane count W ∈ {2, 4, 8}; the W=8 case is the AVX-512 path
+// that CLAUDE.md identifies as the best for IR ≥ 8 workloads.
+// -----------------------------------------------------------------------------
+template <int W>
+void check_jacobian_matches_scalar() {
+    using SS = Eigen::Array<double, W, 1>;
+    tycho_enzyme_test::BrachVectorizableEnzymeAD f(32.2);
+
+    Eigen::Matrix<SS, 5, 1> x;
+    for (int j = 0; j < 5; ++j)
+        for (int lane = 0; lane < W; ++lane)
+            x(j)[lane] = 0.1 * (j + 1) * (lane + 1);
+
+    Eigen::Matrix<SS, 3, 1> fx;
+    Eigen::Matrix<SS, 3, 5> jx;
+    fx.setZero();
+    jx.setZero();
+
+    f.compute_jacobian(x, fx, jx);
+
+    tycho_enzyme_test::BrachEnzymeAD f_scalar(32.2);
+    for (int lane = 0; lane < W; ++lane) {
+        Eigen::Matrix<double, 5, 1> x_lane;
+        for (int j = 0; j < 5; ++j) x_lane[j] = x(j)[lane];
+
+        Eigen::Matrix<double, 3, 1> fx_lane;
+        Eigen::Matrix<double, 3, 5> jx_lane;
+        fx_lane.setZero();
+        jx_lane.setZero();
+        f_scalar.compute_jacobian(x_lane, fx_lane, jx_lane);
+
+        for (int j = 0; j < 3; ++j) {
+            EXPECT_NEAR(fx(j)[lane], fx_lane[j], 1e-12)
+                << "W=" << W << " lane=" << lane << " fx[" << j << "]";
+        }
+        for (int j = 0; j < 3; ++j)
+            for (int i = 0; i < 5; ++i) {
+                EXPECT_NEAR(jx(j, i)[lane], jx_lane(j, i), 1e-12)
+                    << "W=" << W << " lane=" << lane
+                    << " jx(" << j << "," << i << ")";
+            }
+    }
+}
+
+TEST(EnzymeVectorized, JacobianMatchesScalar_W2) { check_jacobian_matches_scalar<2>(); }
+TEST(EnzymeVectorized, JacobianMatchesScalar) { check_jacobian_matches_scalar<4>(); }
+TEST(EnzymeVectorized, JacobianMatchesScalar_W8) { check_jacobian_matches_scalar<8>(); }
+
+// -----------------------------------------------------------------------------
+// Vectorized full-Enzyme Hessian: <EnzymeAD, EnzymeAD> with is_vectorizable.
+// Per-lane comparison against the scalar full-Enzyme path.  Parameterised on
+// SuperScalar lane count W ∈ {2, 4, 8}.
+// -----------------------------------------------------------------------------
+template <int W>
+void check_hessian_matches_scalar() {
+    using SS = Eigen::Array<double, W, 1>;
+    tycho_enzyme_test::BrachVectorizableEnzymeFull f(32.2);
+
+    Eigen::Matrix<SS, 5, 1> x;
+    Eigen::Matrix<SS, 3, 1> lam;
+    for (int j = 0; j < 5; ++j)
+        for (int lane = 0; lane < W; ++lane)
+            x(j)[lane] = 0.1 * (j + 1) * (lane + 1);
+    for (int j = 0; j < 3; ++j)
+        for (int lane = 0; lane < W; ++lane)
+            lam(j)[lane] = 0.5 + 0.1 * j - 0.05 * lane;
+
+    Eigen::Matrix<SS, 3, 1> fx;
+    Eigen::Matrix<SS, 3, 5> jx;
+    Eigen::Matrix<SS, 5, 1> g;
+    Eigen::Matrix<SS, 5, 5> h;
+    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+
+    f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+
+    tycho_enzyme_test::BrachEnzymeFull f_scalar(32.2);
+    for (int lane = 0; lane < W; ++lane) {
+        Eigen::Matrix<double, 5, 1> x_lane;
+        Eigen::Matrix<double, 3, 1> lam_lane;
+        for (int j = 0; j < 5; ++j) x_lane[j] = x(j)[lane];
+        for (int j = 0; j < 3; ++j) lam_lane[j] = lam(j)[lane];
+
+        Eigen::Matrix<double, 3, 1> fx_lane;
+        Eigen::Matrix<double, 3, 5> jx_lane;
+        Eigen::Matrix<double, 5, 1> g_lane;
+        Eigen::Matrix<double, 5, 5> h_lane;
+        fx_lane.setZero(); jx_lane.setZero();
+        g_lane.setZero();  h_lane.setZero();
+
+        f_scalar.compute_jacobian_adjointgradient_adjointhessian(
+            x_lane, fx_lane, jx_lane, g_lane, h_lane, lam_lane);
+
+        for (int i = 0; i < 5; ++i) {
+            EXPECT_NEAR(g(i)[lane], g_lane[i], 1e-12)
+                << "W=" << W << " lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < 5; ++j)
+                EXPECT_NEAR(h(j, i)[lane], h_lane(j, i), 1e-10)
+                    << "W=" << W << " lane=" << lane
+                    << " h(" << j << "," << i << ")";
+        }
+    }
+}
+
+TEST(EnzymeVectorized, HessianMatchesScalar_W2) { check_hessian_matches_scalar<2>(); }
+TEST(EnzymeVectorized, HessianMatchesScalar) { check_hessian_matches_scalar<4>(); }
+TEST(EnzymeVectorized, HessianMatchesScalar_W8) { check_hessian_matches_scalar<8>(); }
+
+// -----------------------------------------------------------------------------
+// Direct-SIMD Hessian vs scalarize-per-lane reference.  The
+// `simd_compute_jacobian_adjointgradient_adjointhessian_impl` method is
+// defined under both Hessian strategies (Phase 6 FoR and Phase 7 FoF
+// combined J+H), so this helper works for either — the test cases below
+// pick the strategy-specific name.  Guarded by the SIMD flag only.
+// -----------------------------------------------------------------------------
+#if defined(TYCHO_ENZYME_SIMD_HESSIAN_ENABLED)
+
+template <class VF, int IR, int OR>
+void check_hessian_simd_vs_scalarized(VF& f) {
+    using SS = Eigen::Array<double, 4, 1>;
+
+    Eigen::Matrix<SS, IR, 1> x;
+    Eigen::Matrix<SS, OR, 1> lam;
+    // Additive seeds keep x positive across all lanes — matters for MEE
+    // (sqrt(x[0])) and other VFs with restricted input domains.
+    for (int j = 0; j < IR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.13 * (j + 1) + 0.05 * lane;
+    for (int j = 0; j < OR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.4 - 0.05 * j + 0.03 * lane;
+
+    Eigen::Matrix<SS, OR, 1> fx_simd;
+    Eigen::Matrix<SS, OR, IR> jx_simd;
+    Eigen::Matrix<SS, IR, 1> g_simd;
+    Eigen::Matrix<SS, IR, IR> h_simd;
+    fx_simd.setZero(); jx_simd.setZero();
+    g_simd.setZero(); h_simd.setZero();
+
+    f.simd_compute_jacobian_adjointgradient_adjointhessian_impl(
+        x, fx_simd, jx_simd, g_simd, h_simd, lam);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, IR, 1> x_lane;
+        Eigen::Matrix<double, OR, 1> lam_lane;
+        for (int j = 0; j < IR; ++j) x_lane[j] = x(j)[lane];
+        for (int j = 0; j < OR; ++j) lam_lane[j] = lam(j)[lane];
+
+        Eigen::Matrix<double, OR, 1> fx_lane;
+        Eigen::Matrix<double, OR, IR> jx_lane;
+        Eigen::Matrix<double, IR, 1> g_lane;
+        Eigen::Matrix<double, IR, IR> h_lane;
+        fx_lane.setZero(); jx_lane.setZero();
+        g_lane.setZero();  h_lane.setZero();
+
+        f.scalar_compute_jacobian_adjointgradient_adjointhessian_impl(
+            x_lane, fx_lane, jx_lane, g_lane, h_lane, lam_lane);
+
+        for (int j = 0; j < OR; ++j)
+            EXPECT_NEAR(fx_simd(j)[lane], fx_lane[j], 1e-10)
+                << "lane=" << lane << " fx[" << j << "]";
+        for (int j = 0; j < OR; ++j)
+            for (int i = 0; i < IR; ++i)
+                EXPECT_NEAR(jx_simd(j, i)[lane], jx_lane(j, i), 1e-10)
+                    << "lane=" << lane << " jx(" << j << "," << i << ")";
+        for (int i = 0; i < IR; ++i) {
+            EXPECT_NEAR(g_simd(i)[lane], g_lane[i], 1e-10)
+                << "lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < IR; ++j)
+                EXPECT_NEAR(h_simd(j, i)[lane], h_lane(j, i), 1e-10)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+        }
+    }
+}
+
+#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse)
+// Phase 6 SIMD FoR cases.  Brach + CR3BP only — MEE-class composites
+// (cos/sin/sqrt/division) opt out of FoR SIMD; see Phase 6 docs.
+TEST(EnzymeVectorized, HessianSIMDMatchesScalarized_Brach) {
+    tycho_enzyme_test::BrachVectorizableEnzymeFull f(32.2);
+    check_hessian_simd_vs_scalarized<decltype(f), 5, 3>(f);
+}
+
+TEST(EnzymeVectorized, HessianSIMDMatchesScalarized_CR3BP) {
+    tycho_enzyme_test::CR3BPVectorizableEnzymeFull f(0.0123);
+    check_hessian_simd_vs_scalarized<decltype(f), 7, 6>(f);
+}
+
+// Anchors enzyme_simd_hessian_supported_v<>: when a VF inherits from
+// EnzymeSimdHessianUnsupported, the public dispatch must route through the
+// Phase 5a scalarize-per-lane fallback and produce the same per-lane result
+// as the SIMD Phase 6 path on the un-marked fixture.
+TEST(EnzymeVectorized, HessianFallbackOnSimdOptOut) {
+    using SS = Eigen::Array<double, 4, 1>;
+    constexpr int IR = 5, OR = 3;
+
+    tycho_enzyme_test::BrachVectorizableEnzymeFull f_simd(32.2);
+    tycho_enzyme_test::BrachVectorizableNoSimdHessianEnzymeFull f_fallback(32.2);
+
+    Eigen::Matrix<SS, IR, 1> x;
+    Eigen::Matrix<SS, OR, 1> lam;
+    for (int j = 0; j < IR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.13 * (j + 1) + 0.05 * lane;
+    for (int j = 0; j < OR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.4 - 0.05 * j + 0.03 * lane;
+
+    auto run = [&](auto& f, auto& fx, auto& jx, auto& g, auto& h) {
+        fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+        // Public dispatch entry — anchors the predicate that selects between
+        // SIMD and scalarize-per-lane.
+        f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
+    };
+
+    Eigen::Matrix<SS, OR, 1> fx_simd, fx_fb;
+    Eigen::Matrix<SS, OR, IR> jx_simd, jx_fb;
+    Eigen::Matrix<SS, IR, 1> g_simd, g_fb;
+    Eigen::Matrix<SS, IR, IR> h_simd, h_fb;
+    run(f_simd, fx_simd, jx_simd, g_simd, h_simd);
+    run(f_fallback, fx_fb, jx_fb, g_fb, h_fb);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        for (int j = 0; j < OR; ++j)
+            EXPECT_NEAR(fx_simd(j)[lane], fx_fb(j)[lane], 1e-10)
+                << "lane=" << lane << " fx[" << j << "]";
+        for (int j = 0; j < OR; ++j)
+            for (int i = 0; i < IR; ++i)
+                EXPECT_NEAR(jx_simd(j, i)[lane], jx_fb(j, i)[lane], 1e-10)
+                    << "lane=" << lane << " jx(" << j << "," << i << ")";
+        for (int i = 0; i < IR; ++i) {
+            EXPECT_NEAR(g_simd(i)[lane], g_fb(i)[lane], 1e-10)
+                << "lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < IR; ++j)
+                EXPECT_NEAR(h_simd(j, i)[lane], h_fb(j, i)[lane], 1e-10)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+        }
+    }
+}
+// Anchors the rule-of-thumb scenario from CLAUDE.md: MEE-class composite
+// trig+sqrt+division bodies MUST opt out of Phase 6 SIMD Hessian via the
+// per-VF trait, otherwise the Phase 6 SIMD reverse-mode TypeAnalysis fails
+// inside Enzyme.  This test verifies that the opt-out path produces the
+// same per-lane Hessian as the scalar MEEEnzymeFull reference.
+TEST(EnzymeVectorized, HessianFallbackOnMEEOptOut) {
+    using SS = Eigen::Array<double, 4, 1>;
+    constexpr int IR = 9, OR = 6;
+
+    tycho_enzyme_test::MEEVectorizableNoSimdHessianEnzymeFull f_fb(1.0);
+    tycho_enzyme_test::MEEEnzymeFull f_scalar(1.0);
+
+    // Seeds keep MEE inputs in the regular domain (sqrt(p) defined, e<1).
+    Eigen::Matrix<SS, IR, 1> x;
+    Eigen::Matrix<SS, OR, 1> lam;
+    for (int j = 0; j < IR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            x(j)[lane] = 0.13 * (j + 1) + 0.05 * lane;
+    for (int j = 0; j < OR; ++j)
+        for (int lane = 0; lane < 4; ++lane)
+            lam(j)[lane] = 0.4 - 0.05 * j + 0.03 * lane;
+
+    Eigen::Matrix<SS, OR, 1> fx_fb;
+    Eigen::Matrix<SS, OR, IR> jx_fb;
+    Eigen::Matrix<SS, IR, 1> g_fb;
+    Eigen::Matrix<SS, IR, IR> h_fb;
+    fx_fb.setZero(); jx_fb.setZero(); g_fb.setZero(); h_fb.setZero();
+    f_fb.compute_jacobian_adjointgradient_adjointhessian(
+        x, fx_fb, jx_fb, g_fb, h_fb, lam);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, IR, 1> x_lane;
+        Eigen::Matrix<double, OR, 1> lam_lane;
+        for (int j = 0; j < IR; ++j) x_lane[j] = x(j)[lane];
+        for (int j = 0; j < OR; ++j) lam_lane[j] = lam(j)[lane];
+
+        Eigen::Matrix<double, OR, 1> fx_lane;
+        Eigen::Matrix<double, OR, IR> jx_lane;
+        Eigen::Matrix<double, IR, 1> g_lane;
+        Eigen::Matrix<double, IR, IR> h_lane;
+        fx_lane.setZero(); jx_lane.setZero();
+        g_lane.setZero();  h_lane.setZero();
+        f_scalar.compute_jacobian_adjointgradient_adjointhessian(
+            x_lane, fx_lane, jx_lane, g_lane, h_lane, lam_lane);
+
+        for (int j = 0; j < OR; ++j)
+            EXPECT_NEAR(fx_fb(j)[lane], fx_lane[j], 1e-10)
+                << "lane=" << lane << " fx[" << j << "]";
+        for (int j = 0; j < OR; ++j)
+            for (int i = 0; i < IR; ++i)
+                EXPECT_NEAR(jx_fb(j, i)[lane], jx_lane(j, i), 1e-10)
+                    << "lane=" << lane << " jx(" << j << "," << i << ")";
+        for (int i = 0; i < IR; ++i) {
+            EXPECT_NEAR(g_fb(i)[lane], g_lane[i], 1e-10)
+                << "lane=" << lane << " g[" << i << "]";
+            for (int j = 0; j < IR; ++j)
+                EXPECT_NEAR(h_fb(j, i)[lane], h_lane(j, i), 1e-9)
+                    << "lane=" << lane << " h(" << j << "," << i << ")";
+        }
+    }
+}
+#endif // ForwardOverReverse
+
+// Note: FoF strategy SIMD tests (Phase 7 / 7+) were removed in commit
+// 79fc589 and `ForwardOverForward` is no longer cmake-selectable.  The
+// FoF SIMD code in dense_enzyme.h is retained as research scaffolding —
+// see the archived-FoF docstrings there for the architecture and
+// revival conditions.
+
+#endif // TYCHO_ENZYME_SIMD_HESSIAN_ENABLED
+
+} // namespace

@@ -10,6 +10,7 @@
 
 #include "tycho/typedefs.h"
 #include "tycho/utils.h"
+#include "tycho/math.h"
 #include "tycho/vector_functions.h"
 #include "tycho/integrators.h"
 #include "tycho/optimal_control.h"

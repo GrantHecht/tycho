@@ -106,16 +106,16 @@ struct StaticODE_DerivModeWrapper
         } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
             this->set_hess_fd_steps(1.0e-5);
         }
-        // Other modes (AutodiffFwd, Analytic) don't use FD step vectors;
+        // Other modes (Analytic, EnzymeAD) don't use FD step vectors;
         // add new FD-like modes here with an if constexpr branch calling
         // set_jac_fd_steps / set_hess_fd_steps.
         static_assert(Jm == DenseDerivativeMode::Analytic || Jm == DenseDerivativeMode::FDiffFwd ||
                           Jm == DenseDerivativeMode::FDiffCentArray ||
-                          Jm == DenseDerivativeMode::AutodiffFwd,
+                          Jm == DenseDerivativeMode::EnzymeAD,
                       "Unhandled Jacobian derivative mode — check FD step reinitialization");
         static_assert(Hm == DenseDerivativeMode::Analytic || Hm == DenseDerivativeMode::FDiffFwd ||
                           Hm == DenseDerivativeMode::FDiffCentArray ||
-                          Hm == DenseDerivativeMode::AutodiffFwd,
+                          Hm == DenseDerivativeMode::EnzymeAD,
                       "Unhandled Hessian derivative mode — check FD step reinitialization");
     }
 
@@ -148,22 +148,6 @@ struct StaticODE_DerivModeWrapper
         using Base::Base;                                                                          \
     };
 
-// Same as BUILD_ODE_FROM_EXPRESSION_FD but uses forward-mode automatic
-// differentiation (autodiff) instead of finite differences.
-#define BUILD_ODE_FROM_EXPRESSION_FWAD(NAME, IMPL, ...)                                            \
-    struct NAME##_AnalyticBase_                                                                    \
-        : StaticODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__> {            \
-        using Base = StaticODE_Expression<NAME##_AnalyticBase_, IMPL __VA_OPT__(, ) __VA_ARGS__>;  \
-        using Base::Base;                                                                          \
-    };                                                                                             \
-    struct NAME                                                                                    \
-        : StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_, DenseDerivativeMode::AutodiffFwd, \
-                                     DenseDerivativeMode::AutodiffFwd> {                           \
-        using Base = StaticODE_DerivModeWrapper<NAME, NAME##_AnalyticBase_,                        \
-                                                DenseDerivativeMode::AutodiffFwd,                  \
-                                                DenseDerivativeMode::AutodiffFwd>;                 \
-        using Base::Base;                                                                          \
-    };
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV>
 struct ODEBase : BaseType, ODESize<_XV, _UV, _PV> {

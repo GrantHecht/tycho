@@ -75,8 +75,8 @@ with no type arguments.
 
 **Severity: Medium** | **Status: PARTIALLY RESOLVED (Phase 7/8)**
 
-`BUILD_ODE_FROM_EXPRESSION_FD` and `BUILD_ODE_FROM_EXPRESSION_FWAD` avoid
-instantiating the expression tree's Jacobian and Hessian templates, using finite
-differences or forward-mode autodiff instead. Delta3Launch uses `_FD` variant.
-The simpler ODEs (Brachistochrone, Zermelo, HyperSens) keep analytic derivatives
-since their expression trees are small enough that compile cost is acceptable.
+`BUILD_ODE_FROM_EXPRESSION_FD` avoids instantiating the expression tree's
+Jacobian and Hessian templates, using finite differences instead. Delta3Launch
+uses this variant. The simpler ODEs (Brachistochrone, Zermelo, HyperSens) keep
+analytic derivatives since their expression trees are small enough that compile
+cost is acceptable.

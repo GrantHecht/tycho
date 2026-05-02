@@ -41,7 +41,7 @@ VectorFunctions carry their own **derivative machinery**. They can compute:
 - `g(x, lambda)` -- the adjoint gradient `J^T * lambda` (IR x 1)
 - `H(x, lambda)` -- the adjoint Hessian `sum_i lambda_i * H_i(x)` (IR x IR)
 
-These derivatives can be computed analytically (hand-derived), via automatic differentiation (the `autodiff` library), or via finite differences.
+These derivatives can be computed analytically (hand-derived), via automatic differentiation (the EnzymeAD compiler plugin, opt-in), or via finite differences.
 
 **Key design principle:** VectorFunctions are compiled C++ expression templates. When you write `vf.sin(theta) * v` in Python, no computation happens -- you're building a C++ expression tree that will be evaluated later at full native speed by the optimizer.
 
@@ -105,7 +105,7 @@ The CRTP hierarchy is an **implementation choice**, not a mathematical or archit
 
 #### The Core Constraint: Templated Evaluation
 
-VectorFunctions must be callable with **multiple scalar types** -- `double`, `dual<double>` (for autodiff Jacobians), `dual<dual<double>>` (for Hessians), and `DefaultSuperScalar` (for batched evaluation). The `compute_impl`, `compute_jacobian_impl`, etc. are all **function templates** parameterized on the scalar type:
+VectorFunctions must be callable with **multiple scalar types** — `double` and `DefaultSuperScalar` (for batched evaluation). The `compute_impl`, `compute_jacobian_impl`, etc. are all **function templates** parameterized on the scalar type:
 
 ```cpp
 template <class InType, class OutType>
@@ -235,7 +235,7 @@ struct VectorFunction;
 | `Derived` | The concrete derived class (CRTP) | Any class inheriting VectorFunction                     |
 | `IR`      | Input dimension                   | Positive integer, or `-1` for dynamic                   |
 | `OR`      | Output dimension                  | Positive integer, or `-1` for dynamic                   |
-| `Jm`      | Jacobian computation mode         | `Analytic`, `FDiffFwd`, `FDiffCentArray`, `AutodiffFwd` |
+| `Jm`      | Jacobian computation mode         | `Analytic`, `FDiffFwd`, `FDiffCentArray`, `EnzymeAD`    |
 | `Hm`      | Hessian computation mode          | Same as Jm                                              |
 
 ### Static vs. Dynamic Sizing
@@ -277,7 +277,7 @@ To implement a new VectorFunction, you inherit from `VectorFunction<Derived, IR,
 | `compute_jacobian_impl`                                | `(x, fx_, jx_)`                              | Compute `f(x)` and Jacobian `J(x)` simultaneously                       |
 | `compute_jacobian_adjointgradient_adjointhessian_impl` | `(x, fx_, jx_, adjgrad_, adjhess_, adjvars)` | Compute `f(x)`, `J(x)`, `g = J^T * adjvars`, `H = sum(adjvars_i * H_i)` |
 
-If you set `Jm = AutodiffFwd`, you only need `compute_impl` -- the base class generates Jacobians by running your compute with dual numbers. If you set `Jm = Analytic`, you must provide `compute_jacobian_impl` yourself (the default implementation would call the compute dispatch which may not give correct Jacobians). Similarly for `Hm`.
+If you set `Jm = EnzymeAD` (requires `ENABLE_ENZYME_AD=ON` at build time), you only need `compute_impl` — the Enzyme Clang plugin generates the Jacobian at compile time via LLVM IR differentiation. If you set `Jm = Analytic`, you must provide `compute_jacobian_impl` yourself (the default implementation would call the compute dispatch which may not give correct Jacobians). Similarly for `Hm`.
 
 ### Compile-Time Flags
 
@@ -357,23 +357,25 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
 } // namespace tycho
 ```
 
-### Using AutodiffFwd Instead of Manual Derivatives
+### Using EnzymeAD Instead of Manual Derivatives
 
-If you only want to provide `compute_impl` and let the library handle derivatives:
+If you only want to provide `compute_impl` and let the library handle derivatives,
+use `EnzymeAD` for both modes (requires `ENABLE_ENZYME_AD=ON` at configure time):
 
 ```cpp
 template <int IR>
-struct CwiseSquareAD : VectorFunction<CwiseSquareAD<IR>, IR, IR,
-                                       AutodiffFwd, AutodiffFwd> {
-    using Base = VectorFunction<CwiseSquareAD<IR>, IR, IR, AutodiffFwd, AutodiffFwd>;
+struct CwiseSquareEnzyme : VectorFunction<CwiseSquareEnzyme<IR>, IR, IR,
+                                          EnzymeAD, EnzymeAD> {
+    using Base = VectorFunction<CwiseSquareEnzyme<IR>, IR, IR, EnzymeAD, EnzymeAD>;
     DENSE_FUNCTION_BASE_TYPES(Base);
 
     static const bool is_vectorizable = true;
 
-    CwiseSquareAD() {}
-    CwiseSquareAD(int ir) { this->set_io_rows(ir, ir); }
+    CwiseSquareEnzyme() {}
+    CwiseSquareEnzyme(int ir) { this->set_io_rows(ir, ir); }
 
-    // Only compute_impl is needed -- autodiff generates Jacobians and Hessians
+    // Only compute_impl is needed -- Enzyme generates Jacobians and Hessians
+    // at compile time via LLVM IR differentiation (no dual numbers required).
     template <class InType, class OutType>
     inline void compute_impl(ConstVectorBaseRef<InType> x,
                              ConstVectorBaseRef<OutType> fx_) const {
@@ -483,35 +485,56 @@ The `Jm` and `Hm` template parameters select the derivative strategy via partial
 
 The derived class provides hand-coded derivatives in `compute_jacobian_impl` and `compute_jacobian_adjointgradient_adjointhessian_impl`. This is the fastest option but requires manual derivation.
 
-#### 2. Forward Automatic Differentiation (`AutodiffFwd`)
+#### 2. Compiler-Pass Automatic Differentiation (`EnzymeAD`)
 
-Uses the `autodiff` library's dual numbers. For the Jacobian, each input variable is "seeded" one at a time:
+Uses the Enzyme Clang plugin to differentiate the function at the LLVM IR level.
+No dual-number types are needed — Enzyme transforms the compiled bitcode directly.
+For the Jacobian, `__enzyme_fwddiff` propagates one tangent vector per column
+(or up to `W` tangents simultaneously when `TYCHO_ENZYME_BATCH_WIDTH > 1`):
+
+```
+// Conceptually (from dense_enzyme.h dispatch):
+// For column i of the Jacobian, seed tangent e_i and call:
+//   __enzyme_fwddiff(compute_impl, x, e_i)  →  J[:,i]
+// With batch width W, W tangents are propagated per call via enzyme_width.
+```
+
+**Cost:** `ceil(IR / W)` differentiated calls for the Jacobian. The Hessian uses
+Forward-over-Reverse (`__enzyme_fwddiff(__enzyme_autodiff(...))`) — `IR` outer
+tangent calls, each invoking a reverse-mode sweep. Derivatives are machine-precision
+accurate. Requires `ENABLE_ENZYME_AD=ON` at configure time.
+
+**Trig in `compute_impl` under EnzymeAD.** Eigen 5's vectorised packet trig
+(`pcos<Packet4d>` etc.) lowers to bithack IR that Enzyme cannot currently
+differentiate. If a `compute_impl` body marked `is_vectorizable = true` calls
+`sin`/`cos` and is paired with `EnzymeAD`, route those calls through
+`tycho::math::cos / sin` (umbrella header `<tycho/math.h>`):
 
 ```cpp
-// From DenseAutodiffFwd.h -- Jacobian via forward AD
-template <class InType, class OutType, class JacType>
-void compute_jacobian_impl(x, fx_, jx_) {
-    Input<dual<Scalar>> xdual = x.cast<dual<Scalar>>();
-    Output<dual<Scalar>> fdual(output_rows());
+#include <tycho/math.h>
 
-    for (int i = 0; i < input_rows(); i++) {
-        xdual[i].grad = 1.0;          // Seed input i
-        compute(xdual, fdual);          // Evaluate with dual numbers
-        for (int j = 0; j < output_rows(); j++)
-            jx(j, i) = fdual[j].grad;  // Extract partial derivative
-        xdual[i].grad = 0.0;           // Reset seed
-        fdual.setZero();
-    }
+template <class InType, class OutType>
+inline void compute_impl(ConstVectorBaseRef<InType> x,
+                         ConstVectorBaseRef<OutType> fx_) const {
+    using tycho::math::cos;   // ADL hits both double (-> std::cos) and
+    using tycho::math::sin;   // Eigen::Array<double, W, 1> (-> per-lane libm).
+    // ...
 }
 ```
 
-For the Hessian, second-order duals (`dual<dual<Scalar>>`) are used.
-
-**Cost:** `IR` evaluations of `compute` for the Jacobian, `IR*(IR+1)/2` for the Hessian. Derivatives are machine-precision accurate.
+The SuperScalar overloads unroll into `W` scalar `std::cos(double)` /
+`std::sin(double)` calls, each lowering to `@llvm.cos.f64` / `@llvm.sin.f64`
+which Enzyme's built-in handler differentiates cleanly under any `enzyme_width`.
+Surrounding non-trig arithmetic still vectorises across W lanes; only the trig
+itself is per-lane scalar. Code paths *not* differentiated by Enzyme should
+keep using Eigen directly — e.g. analytic-integration paths benefit from
+Eigen 5 SIMD trig without going through this layer. See CLAUDE.md
+"Trig-bearing bodies under Phase 5b" for the full rule of thumb and the
+upstream-canary procedure that detects when this wrapper can be removed.
 
 #### 3. Forward Finite Differences (`FDiffFwd`)
 
-Standard numerical differentiation: `df/dx_i ≈ (f(x + h*e_i) - f(x)) / h`. Less accurate than autodiff, but works for any function including ones that call external libraries.
+Standard numerical differentiation: `df/dx_i ≈ (f(x + h*e_i) - f(x)) / h`. Less accurate than EnzymeAD, but works for any function including ones that call external libraries.
 
 #### 4. Central Finite Differences (`FDiffCentArray`)
 
@@ -1362,7 +1385,7 @@ DenseFunctionBase<Derived,IR,OR>       CORE: jacobian ops, indexing, math, KKT f
 DenseFunction<Derived,IR,OR>           Routing: OR=1 -> DenseScalarFunctionBase
     |
     v
-DenseFirstDerivatives<Derived,IR,OR,Jm>   Jacobian strategy (Analytic/AutodiffFwd/FDiff)
+DenseFirstDerivatives<Derived,IR,OR,Jm>   Jacobian strategy (Analytic/EnzymeAD/FDiff)
     |
     v
 DenseSecondDerivatives<Derived,IR,OR,Jm,Hm>  Hessian strategy
@@ -1435,7 +1458,6 @@ include/tycho/detail/vf/
     derivatives/
         dense_derivatives.h       DenseDerivativeMode enum, derivative layer structs
         detect_super_scalar.h     Is_SuperScalar<T> trait
-        dense_autodiff_fwd.h      Autodiff Jacobian/Hessian via dual numbers
         dense_fdiff_fwd.h         Forward finite-difference derivatives
         dense_fdiff_cent_array.h  Central finite-difference derivatives
         detect_diagonal.h         diagonal Jacobian detection trait

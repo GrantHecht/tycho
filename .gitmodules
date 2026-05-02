@@ -3,11 +3,7 @@
 	url = https://github.com/fmtlib/fmt.git
 [submodule "dep/eigen"]
 	path = dep/eigen
-	url = https://gitlab.com/wgledbetter/eigen.git
-	branch = asset-3.4
-[submodule "dep/autodiff"]
-	path = dep/autodiff
-	url = https://github.com/autodiff/autodiff
+	url = https://gitlab.com/libeigen/eigen.git
 [submodule "dep/nanobind"]
 	path = dep/nanobind
 	url = https://github.com/wjakob/nanobind

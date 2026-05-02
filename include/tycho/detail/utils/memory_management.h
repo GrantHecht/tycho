@@ -81,7 +81,7 @@ template <class Scalar> struct BumpStack {
         size_t aligned = align_up<Scalar>(offset_);
         size_t end = aligned + n;
         if (overflow_.empty() && end <= capacity_) {
-            std::memset(data_ + aligned, 0, n * sizeof(Scalar));
+            std::memset(static_cast<void *>(data_ + aligned), 0, n * sizeof(Scalar));
             offset_ = end;
             if (offset_ > high_water_)
                 high_water_ = offset_;

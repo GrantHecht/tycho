@@ -16,6 +16,8 @@
 
 #include <Eigen/Core>
 
+#include "tycho/detail/typedefs/super_scalar_traits.h"
+
 namespace tycho {
 
 template <class Scalar, int rows> using Vector = Eigen::Matrix<Scalar, rows, 1>;

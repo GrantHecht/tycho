@@ -1,5 +1,5 @@
 # Pure C++ extension library — no Python dependency.
-# Extension ODE models (CR3BPAD, ModifiedDynamicsAD, etc.) live in Tycho_Extensions.h
+# Extension ODE models (CR3BP_FDiff, ModifiedDynamics_FDiff, etc.) live in Tycho_Extensions.h
 # and are usable from standalone C++ programs without pulling in the Python C API.
 add_library(tycho_extensions STATIC Tycho_Extensions.h Tycho_Extensions.cpp)
 target_precompile_headers(tycho_extensions REUSE_FROM pch)

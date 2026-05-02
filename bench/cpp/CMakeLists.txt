@@ -45,3 +45,20 @@ set_property(TARGET bench_all PROPERTY JOB_POOL_COMPILE heavy_compile)
 if(UNIX)
     target_link_options(bench_all PRIVATE ${LINKER_FLAGS})
 endif()
+
+if(ENABLE_ENZYME_AD AND BUILD_CPP_BENCHMARKS)
+    add_executable(bench_enzyme bench_enzyme.cpp)
+    set_target_properties(bench_enzyme PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+    target_compile_options(bench_enzyme PRIVATE ${COMPILE_FLAGS} ${TYCHO_ENZYME_COMPILE_FLAGS})
+    target_include_directories(bench_enzyme PRIVATE
+        ${TYCHO_INCLUDES} ${INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR}/tests/cpp/enzyme   # reuse enzyme_test_dynamics.h
+    )
+    target_link_libraries(bench_enzyme PRIVATE tycho benchmark::benchmark_main)
+    set_target_properties(bench_enzyme PROPERTIES
+        JOB_POOL_COMPILE heavy_compile
+        DISABLE_PRECOMPILE_HEADERS ON)
+    if(UNIX)
+        target_link_options(bench_enzyme PRIVATE ${LINKER_FLAGS})
+    endif()
+endif()
