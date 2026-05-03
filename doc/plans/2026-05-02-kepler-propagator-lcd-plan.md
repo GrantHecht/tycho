@@ -1428,6 +1428,24 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar>& R0, const Ve
     //                         + ∂U_n/∂X · X''_{ij}    (depends on X''_{ij}, computed below)
     //                         + ∂U_n/∂α · α''_{ij}
     //
+    // *** WARNING — IMPLEMENTATION NOTE FROM TASK 4 EXECUTION ***
+    // The plan-as-originally-written labels the F_y* terms below as
+    // "F_y*_total" suggesting total y-derivatives.  This is WRONG for the
+    // IFT formula `0 = F̃_yy + F̃_yX·X' + F̃_XX·X'·X' + F̃_X·X''`, which
+    // requires PARTIALS at fixed X.  Using totals here introduced O(1e-3)
+    // errors on every Hessian fixture during execution.  The corrected
+    // formulas (also implemented in the committed code in
+    // kepler_propagator_ift.h) are partials at fixed X:
+    //   • F̃_yX(i)|_fixed_X has NO ∂²U_n/∂X²·X'_i contribution
+    //     (that term belongs to a total-derivative expansion only).
+    //   • F̃_yy(i,j)|_fixed_X uses ∂U_n/∂α · α'_i (the α-only path of dU),
+    //     and explicitly includes F_struct_{Un} · ∂²U_n/∂α²·α'·α' and
+    //     F_struct_{Un} · ∂U_n/∂α · α''_{ij} terms that the original plan
+    //     code below omits.
+    // The labels "F_yy_total" / "F_yX_total" in the variable names below
+    // are retained only for diff readability; the actual *quantities*
+    // computed in the committed implementation are the fixed-X partials.
+    //
     // We need X''_{ij} first.  Since X''_{ij} itself depends on dU values (through F_yy_total
     // and F_yX_total below), proceed in this order:
     //   (a) compute F_XX_total, F_yX_total, F_yy_total (all use dU but NOT d²U).

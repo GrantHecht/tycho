@@ -24,7 +24,7 @@
     {
       "id": 10,
       "subject": "Task 3: IFT layer — Jacobian",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [9],
       "description": "**Goal:** `kepler_propagate_jacobian` composes total 6×7 Jacobian via 1st-order IFT and U-recursions.\n\n**Files:**\n- Create: `include/tycho/detail/astro/kepler_propagator_ift.h`\n- Create: `tests/cpp/astro/test_kepler_ift.cpp`\n- Modify: `tests/cpp/CMakeLists.txt`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerIFT_Jacobian --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator_ift.h\", \"tests/cpp/astro/test_kepler_ift.cpp\", \"tests/cpp/CMakeLists.txt\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerIFT_Jacobian --output-on-failure\", \"acceptanceCriteria\": [\"xf bit-equivalent to propagate_cartesian\", \"Jacobian matches FD 5e-7 rel across orbit fixtures\", \"Near-parabolic Jacobian matches FD 5e-6 rel\"]}\n```"
     },
