@@ -34,7 +34,6 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 
 #include <cmath>
-#include <cstddef>
 
 namespace tycho::astro::detail {
 
