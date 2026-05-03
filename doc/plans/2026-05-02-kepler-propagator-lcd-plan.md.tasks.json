@@ -31,28 +31,28 @@
     {
       "id": 11,
       "subject": "Task 4: IFT layer — adjoint Hessian",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10],
       "description": "**Goal:** `kepler_propagate_adjoint_hessian` returns total xf, jac, adjgrad, adjhess via 2nd-order IFT.\n\n**Files:**\n- Modify: `include/tycho/detail/astro/kepler_propagator_ift.h`\n- Modify: `tests/cpp/astro/test_kepler_ift.cpp`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerIFT_Hessian --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator_ift.h\", \"tests/cpp/astro/test_kepler_ift.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerIFT_Hessian --output-on-failure\", \"acceptanceCriteria\": [\"xf and jac match Jacobian-only path\", \"adjgrad = jacᵀ·λ to 1e-13\", \"adjhess matches FD 5e-6 (5e-5 near-parabolic)\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 5: Rewrite propagate_cartesian",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** Replace body of propagate_cartesian<Scalar> with kernel call + closed-form. Public API unchanged.\n\n**Files:**\n- Modify: `include/tycho/detail/astro/kepler_utils.h`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_utils.h\"], \"verifyCommand\": \"cd build && ninja -j6 tycho_tests && ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure\", \"acceptanceCriteria\": [\"MultiPeriodReturn passes\", \"HyperbolicTrajectory passes\", \"BM_PropagateCartesian builds\"]}\n```"
     },
     {
       "id": 13,
       "subject": "Task 6: Rewrite KeplerPropagator VF",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8, 11],
       "description": "**Goal:** Replace kepler_propagator.h with hand-written VF delegating to IFT layer. Delete commented-out hand-rolled block.\n\n**Files:**\n- Rewrite: `include/tycho/detail/astro/kepler_propagator.h`\n\n**Verify:** `ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure && conda run -n tycho python -m pytest tychopy/test/test_OptimalControl/test_Integrators.py -v`\n\n```json:metadata\n{\"files\": [\"include/tycho/detail/astro/kepler_propagator.h\"], \"verifyCommand\": \"ctest --test-dir tests/cpp/astro -R KeplerPropagation --output-on-failure && conda run -n tycho python -m pytest tychopy/test/test_OptimalControl/test_Integrators.py -v\", \"acceptanceCriteria\": [\"VF<7,6,Analytic,Analytic>\", \"compute_impls delegate to IFT layer\", \"AdjointConsistency passes 1e-6\", \"Python integrator tests pass\", \"No commented-out code\"]}\n```"
     },
     {
       "id": 14,
       "subject": "Task 7: Add VF benchmarks",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [13],
       "description": "**Goal:** Add 4 new VF-path benchmarks to bench_kepler.cpp.\n\n**Files:**\n- Modify: `bench/cpp/kepler/bench_kepler.cpp`\n\n**Verify:** `cd build && ./bench/cpp/bench_all --benchmark_filter='BM_KeplerPropagator'`\n\n```json:metadata\n{\"files\": [\"bench/cpp/kepler/bench_kepler.cpp\"], \"verifyCommand\": \"cd build && ninja -j6 bench_all && ./bench/cpp/bench_all --benchmark_filter='BM_KeplerPropagator'\", \"acceptanceCriteria\": [\"4 new VF benchmarks compile and run\"]}\n```"
     },
