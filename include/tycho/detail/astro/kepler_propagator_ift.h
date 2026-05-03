@@ -212,6 +212,82 @@ compute_U_second_partials(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> 
     return p;
 }
 
+// SuperScalar overload of compute_U_second_partials.  Per-lane Taylor
+// blending via Eigen::Array::select avoids div-by-zero in lanes where
+// |α| < α_tol while using the recursion in well-conditioned lanes.
+// Mirrors the structure of the U_partials_alpha SuperScalar overload.
+template <int W>
+inline U_second_partials<Eigen::Array<double, W, 1>>
+compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
+                          const Eigen::Array<double, W, 1> &X,
+                          const KeplerLCDResult<Eigen::Array<double, W, 1>> &k, double alpha_tol,
+                          const Eigen::Array<double, W, 1> &dU0_dX,
+                          const Eigen::Array<double, W, 1> &dU1_dX,
+                          const Eigen::Array<double, W, 1> &dU2_dX,
+                          const Eigen::Array<double, W, 1> &dU3_dX,
+                          const Eigen::Array<double, W, 1> &dU0_da,
+                          const Eigen::Array<double, W, 1> &dU1_da,
+                          const Eigen::Array<double, W, 1> &dU2_da,
+                          const Eigen::Array<double, W, 1> &dU3_da) {
+    using SS = Eigen::Array<double, W, 1>;
+    U_second_partials<SS> p;
+
+    // ∂²U_n/∂X² (no singularity).
+    p.dU0_dX2 = -alpha * k.U0;
+    p.dU1_dX2 = -alpha * k.U1;
+    p.dU2_dX2 = k.U0;
+    p.dU3_dX2 = k.U1;
+
+    // Per-lane Taylor blend mask + safe inverse.
+    const SS abs_a = alpha.abs();
+    const auto is_para = (abs_a <= SS::Constant(alpha_tol));
+    const SS safe_a = is_para.select(SS::Constant(alpha_tol), alpha);
+    const SS inv2a = SS::Constant(0.5) / safe_a;
+    const SS inv_a = SS::Constant(1.0) / safe_a;
+
+    // Recursion-branch values (X-α partials, n ≥ 1).
+    const SS rec_dU1_dXda = inv2a * (k.U0 + X * dU0_dX - dU1_dX);
+    const SS rec_dU2_dXda = inv2a * (k.U1 + X * dU1_dX - SS::Constant(2.0) * dU2_dX);
+    const SS rec_dU3_dXda = inv2a * (k.U2 + X * dU2_dX - SS::Constant(3.0) * dU3_dX);
+
+    // Recursion-branch values (α-α partials, n ≥ 1).
+    const SS rec_dU1_da2 = inv2a * (X * dU0_da - dU1_da) - dU1_da * inv_a;
+    const SS rec_dU2_da2 = inv2a * (X * dU1_da - SS::Constant(2.0) * dU2_da) - dU2_da * inv_a;
+    const SS rec_dU3_da2 = inv2a * (X * dU2_da - SS::Constant(3.0) * dU3_da) - dU3_da * inv_a;
+
+    // Taylor-leading-term branch values.
+    const SS X2 = X * X;
+    const SS X3 = X2 * X;
+    const SS X4 = X3 * X;
+    const SS X5 = X4 * X;
+    const SS X6 = X5 * X;
+    const SS X7 = X6 * X;
+    const SS tay_dU1_dXda = SS::Constant(-1.0 / 2.0) * X2;
+    const SS tay_dU2_dXda = SS::Constant(-1.0 / 6.0) * X3;
+    const SS tay_dU3_dXda = SS::Constant(-1.0 / 24.0) * X4;
+    const SS tay_dU0_da2 = SS::Constant(2.0 / 24.0) * X4;
+    const SS tay_dU1_da2 = SS::Constant(2.0 / 120.0) * X5;
+    const SS tay_dU2_da2 = SS::Constant(2.0 / 720.0) * X6;
+    const SS tay_dU3_da2 = SS::Constant(2.0 / 5040.0) * X7;
+
+    // n = 0 partials (no singularity, common for both branches).
+    p.dU0_dXda = SS::Constant(-0.5) * (k.U1 + X * dU1_dX);
+    // For α-α: dU_0/dα = -X U_1 / 2  ⇒  ∂/∂α = -X (∂U_1/∂α) / 2 (recursion side);
+    // Taylor side gives 2 X^4 / 24 (from leading series).  Blend per-lane.
+    const SS rec_dU0_da2 = SS::Constant(-0.5) * X * dU1_da;
+    p.dU0_da2 = is_para.select(tay_dU0_da2, rec_dU0_da2);
+
+    p.dU1_dXda = is_para.select(tay_dU1_dXda, rec_dU1_dXda);
+    p.dU2_dXda = is_para.select(tay_dU2_dXda, rec_dU2_dXda);
+    p.dU3_dXda = is_para.select(tay_dU3_dXda, rec_dU3_dXda);
+
+    p.dU1_da2 = is_para.select(tay_dU1_da2, rec_dU1_da2);
+    p.dU2_da2 = is_para.select(tay_dU2_da2, rec_dU2_da2);
+    p.dU3_da2 = is_para.select(tay_dU3_da2, rec_dU3_da2);
+
+    return p;
+}
+
 // -------------------------------------------------------------------------
 // Primal-only propagation
 // -------------------------------------------------------------------------
@@ -415,8 +491,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     U_partials_X<Scalar>(k.alpha, k, dU0_dX, dU1_dX, dU2_dX, dU3_dX);
     Scalar dU0_da, dU1_da, dU2_da, dU3_da;
     U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol, dU0_da, dU1_da, dU2_da, dU3_da);
-    auto p2 = compute_U_second_partials<Scalar>(k.alpha, k.X, k, opts.alpha_tol, dU0_dX, dU1_dX,
-                                                dU2_dX, dU3_dX, dU0_da, dU1_da, dU2_da, dU3_da);
+    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol, dU0_dX, dU1_dX, dU2_dX,
+                                        dU3_dX, dU0_da, dU1_da, dU2_da, dU3_da);
 
     // --- Step D: α partials (1st and 2nd order).
     //   α = 2/r0 - v0²/μ.

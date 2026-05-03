@@ -1,321 +1,67 @@
+// =============================================================================
+// Originally from ASSET (AlabamaASRL/asset_asrl)
+// Copyright 2020-present The University of Alabama-Astrodynamics and Space
+//   Research Lab. Licensed under the Apache License, Version 2.0
+// License: notices/asset-apache2.txt.
+//
+// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+//   Apache 2.0 — see LICENSE.txt):
+//   - Reimplemented as a hand-written VF backed by kepler_lcd_iterate +
+//     codegen'd primal/residual + IFT composition layer (no DSL).
+// =============================================================================
 #pragma once
+#include "tycho/detail/astro/kepler_propagator_ift.h"
 #include "tycho/vector_functions.h"
 
 namespace tycho::astro {
 
-// Import cross-namespace types from vf and utils.
-using utils::SZ_SUM;
-using vf::Arguments;
 using vf::CMatRef;
-using vf::Constant;
 using vf::CVecRef;
 using vf::DenseDerivativeMode;
-using vf::GenericFunction;
-using vf::IfElseFunction;
 using vf::MatRef;
-using vf::ScalarRootFinder;
-using vf::SignFunction;
 using vf::VecRef;
-using vf::VectorExpression;
 using vf::VectorFunction;
 
-/*
-Kepler propagator implementation is partly based on the implementation found at
-https://www.mathworks.com/matlabcentral/fileexchange/35566-vectorized-analytic-two-body-propagator-kepler-universal-variables
-Reproducing the license here for reference.
-
-
-Copyright (c) 2012, Darin Koblick
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-* Redistributions of source code must retain the above copyright notice, this
-  list of conditions and the following disclaimer.
-
-* Redistributions in binary form must reproduce the above copyright notice,
-  this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-*/
-
-struct KeperPropagator_Impl {
-
-    static auto C2(double tol) {
-
-        auto psi = Arguments<1>().coeff<0>();
-        auto sqsi = sqrt(psi);
-
-        auto ell = (1.0 - cos(sqsi)) / psi;
-        auto hyp = (1.0 - cosh(sqrt(-1.0 * psi))) / psi;
-        Vector1<double> v;
-        v[0] = .5;
-
-        auto par = Constant<1, 1>(1, v);
-
-        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
-
-        return GenericFunction<1, 1>(f);
-    }
-
-    static auto C3(double tol) {
-
-        auto psi = Arguments<1>().coeff<0>();
-        auto sqsi = sqrt(psi);
-
-        auto ell = (sqsi - sin(sqsi)) / (sqsi * psi);
-        auto hyp = (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi);
-
-        Vector1<double> v;
-
-        v[0] = 1 / 6.0;
-
-        auto par = Constant<1, 1>(1, v);
-
-        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
-
-        return GenericFunction<1, 1>(f);
-    }
-
-    static auto C2C3(double tol) {
-
-        auto psi = Arguments<1>().coeff<0>();
-        auto sqsi = sqrt(psi);
-
-        auto ell = stack((1.0 - cos(sqsi)) / psi, (sqsi - sin(sqsi)) / (sqsi * psi));
-        auto hyp =
-            stack((1.0 - cosh(sqrt(-1.0 * psi))) / psi,
-                  (sinh(sqrt(-1.0 * psi)) - sqrt(-1.0 * psi)) / sqrt(-1.0 * psi * psi * psi));
-
-        Vector2<double> v;
-        v[0] = .5;
-        v[1] = 1 / 6.0;
-
-        auto par = Constant<1, 2>(1, v);
-
-        auto f = IfElseFunction{psi > tol, ell, IfElseFunction{psi < -tol, hyp, par}};
-
-        return GenericFunction<1, 2>(f);
-    }
-
-    static auto Funiv(double mu, double conictol, double roottol, int iters) {
-
-        auto args = Arguments<5>();
-
-        auto X0 = args.coeff<0>();
-        auto dt = args.coeff<1>();
-        auto r = args.coeff<2>();
-        auto drv = args.coeff<3>();
-        auto alpha = args.coeff<4>();
-
-        auto X02 = X0 * X0;
-
-        auto psi = X02 * alpha;
-
-        auto c2 = C2(conictol).eval(psi);
-        auto c3 = C3(conictol).eval(psi);
-
-        auto c2c3 = C2C3(conictol).eval(psi);
-
-        auto Nargs = stack(args.head<4>(), psi, c2c3);
-
-        auto [F, dF] = [mu]() {
-            auto args = Arguments<7>();
-
-            auto X0 = args.coeff<0>();
-            auto dt = args.coeff<1>();
-            auto r = args.coeff<2>();
-            auto drv = args.coeff<3>();
-            auto psi = args.coeff<4>();
-            auto c2 = args.coeff<5>();
-            auto c3 = args.coeff<6>();
-
-            auto X02 = X0 * X0;
-            auto X03 = X0 * X0 * X0;
-
-            auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-            auto X02tC2 = X02 * c2;
-
-            auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
-            auto dFU = -1.0 * (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
-
-            return std::tuple<decltype(FU), decltype(dFU)>{FU, dFU};
-        }();
-
-        auto FU = F.eval(Nargs);
-        auto dFU = dF.eval(Nargs);
-
-        auto X0F = ScalarRootFinder<decltype(FU), decltype(dFU)>{FU, dFU, iters, roottol};
-
-        return stack(GenericFunction<5, 1>(X0F), args.tail<4>());
-    }
-
-    static auto FGs(double mu, double conictol) {
-
-        auto args = Arguments<5>();
-
-        auto X0 = args.coeff<0>();
-        auto dt = args.coeff<1>();
-        auto r = args.coeff<2>();
-        auto drv = args.coeff<3>();
-        auto alpha = args.coeff<4>();
-
-        auto X02 = X0 * X0;
-
-        auto psi = X02 * alpha;
-
-        auto c2 = C2(conictol).eval(psi);
-        auto c3 = C3(conictol).eval(psi);
-
-        auto c2c3 = C2C3(conictol).eval(psi);
-
-        auto Nargs = stack(args.head<4>(), psi, c2c3);
-
-        auto FG = [mu]() {
-            double SQM = sqrt(mu);
-
-            auto args = Arguments<7>();
-
-            auto X0 = args.coeff<0>();
-            auto dt = args.coeff<1>();
-            auto r = args.coeff<2>();
-            auto drv = args.coeff<3>();
-            auto psi = args.coeff<4>();
-            auto c2 = args.coeff<5>();
-            auto c3 = args.coeff<6>();
-
-            auto X02 = X0 * X0;
-            auto X03 = X0 * X0 * X0;
-
-            auto X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-            auto X02tC2 = X02 * c2;
-
-            auto FU = sqrt(mu) * dt - X03 * c3 - drv * X02tC2 - r * X0tOmPsiC3;
-            auto rs = (X02tC2 + drv * X0tOmPsiC3 + r * (1.0 - psi * c2));
-
-            auto f = 1.0 - X02 * c2 / r;
-            auto g = dt - (X02 * X0) * c3 / SQM;
-            auto fdot = X0 * (psi * c3 - 1.0) * SQM / (rs * r);
-            auto gdot = 1.0 - c2 * (X02) / rs;
-
-            return stack(f, g, fdot, gdot);
-        }();
-
-        return FG.eval(Nargs);
-    }
-
-    static auto ApplyRVFG() {
-
-        auto args = Arguments<10>();
-
-        auto R = args.head<3>();
-        auto V = args.segment<3, 3>();
-
-        auto f = args.coeff<6>();
-        auto g = args.coeff<7>();
-        auto fdot = args.coeff<8>();
-        auto gdot = args.coeff<9>();
-
-        auto Rf = f * R + g * V;
-        auto Vf = fdot * R + gdot * V;
-
-        return stack(Rf, Vf);
-    }
-
-    static auto Definition(double mu, double conictol, double roottol, int iters) {
-
-        double SQM = sqrt(mu);
-
-        auto RVdt = Arguments<7>();
-
-        auto R = RVdt.head<3>();
-        auto V = RVdt.segment<3, 3>();
-        auto dt = RVdt.coeff<6>();
-
-        auto r = R.norm();
-        auto v = V.norm();
-        auto drv = R.dot(V) / SQM;
-        auto alpha = -1.0 * (v * v) / (mu) + (2.0 / r);
-
-        auto X0ell = SQM * dt * alpha;
-
-        auto signdt = SignFunction{dt};
-        auto X0hyp = signdt * sqrt(-1.0 / alpha) *
-                     log(abs((-2.0 * mu * alpha * dt) / (R.dot(V) + signdt) * sqrt(-mu / alpha) *
-                             (1.0 - r * alpha)));
-
-        auto X0IG = GenericFunction<7, 1>(IfElseFunction{alpha >= 0.0, X0ell, X0hyp});
-
-        auto XF = Funiv(mu, conictol, roottol, iters).eval(stack(X0IG, dt, r, drv, alpha));
-
-        auto FG = FGs(mu, conictol).eval(XF);
-
-        constexpr bool d = FG.is_vectorizable;
-
-        return ApplyRVFG().eval(stack(RVdt.head<6>(), FG));
-    }
-};
-
-struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
-                                         DenseDerivativeMode::Analytic> {
-    using Base = VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
-                                DenseDerivativeMode::Analytic>;
-
+struct KeplerPropagator
+    : VectorFunction<KeplerPropagator, 7, 6,
+                     DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+    using Base = VectorFunction<KeplerPropagator, 7, 6,
+                                DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    GenericFunction<-1, -1> propfunc_;
     double mu_ = 1.0;
-    double tol_ = 1.0e-12;
-    int iters_ = 19;
-    double conictol_ = 1.0e-11;
-    const double pi_ = 3.14159265358979;
-    double t0_ = 0.0;
-
     static constexpr bool is_vectorizable = true;
 
-    KeplerPropagator(double m) {
-        this->mu_ = m;
-        this->propfunc_ =
-            KeperPropagator_Impl::Definition(this->mu_, this->conictol_, this->tol_, this->iters_);
-    }
-    KeplerPropagator() {
-        this->propfunc_ =
-            KeperPropagator_Impl::Definition(this->mu_, this->conictol_, this->tol_, this->iters_);
-    }
-
-    template <class Scalar> static Scalar CBRT(Scalar x) {
-        if constexpr (std::is_same<Scalar, double>::value) {
-            return cbrt(x);
-        } else {
-            return Scalar(pow(x, 1.0 / 3.0));
-        }
-    }
+    KeplerPropagator() { this->set_io_rows(7, 6); }
+    explicit KeplerPropagator(double mu) : mu_(mu) { this->set_io_rows(7, 6); }
 
     template <class InType, class OutType>
-    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
-                             Eigen::MatrixBase<OutType> const &fx_) const {
-        typedef typename InType::Scalar Scalar;
-        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        this->propfunc_.compute(x, fx_);
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        using Scalar = typename InType::Scalar;
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        Vector3<Scalar> R0 = x.template head<3>();
+        Vector3<Scalar> V0 = x.template segment<3>(3);
+        Scalar dt = x[6];
+        Vector6<Scalar> out;
+        detail::kepler_propagate<Scalar>(R0, V0, dt, mu_, out);
+        fx = out;
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
-                                      Eigen::MatrixBase<OutType> const &fx_,
-                                      Eigen::MatrixBase<JacType> const &jx_) const {
-        typedef typename InType::Scalar Scalar;
-        this->propfunc_.compute_jacobian(x, fx_, jx_);
+    inline void compute_jacobian_impl(CVecRef<InType> x,
+                                      CVecRef<OutType> fx_,
+                                      CMatRef<JacType> jx_) const {
+        using Scalar = typename InType::Scalar;
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        Vector3<Scalar> R0 = x.template head<3>();
+        Vector3<Scalar> V0 = x.template segment<3>(3);
+        Scalar dt = x[6];
+        Vector6<Scalar> out;
+        Eigen::Matrix<Scalar, 6, 7> jac;
+        detail::kepler_propagate_jacobian<Scalar>(R0, V0, dt, mu_, out, jac);
+        fx = out;
+        jx = jac;
     }
 
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
@@ -324,235 +70,25 @@ struct KeplerPropagator : VectorFunction<KeplerPropagator, 7, 6, DenseDerivative
         CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
         CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {
-        typedef typename InType::Scalar Scalar;
-
-        this->propfunc_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                        adjhess_, adjvars);
-    }
-
-    /*
-    template <class InType, class OutType>
-    inline void compute_impl(const Eigen::MatrixBase<InType>& x,
-        Eigen::MatrixBase<OutType> const& fx_) const {
-        typedef typename InType::Scalar Scalar;
-        Eigen::MatrixBase<OutType>& fx = fx_.const_cast_derived();
-        Eigen::Matrix<Scalar, 6, 1> RV = x.template head<6>();
+        using Scalar = typename InType::Scalar;
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        MatRef<JacType> jx = jx_.const_cast_derived();
+        VecRef<AdjGradType> ag = adjgrad_.const_cast_derived();
+        MatRef<AdjHessType> ah = adjhess_.const_cast_derived();
+        Vector3<Scalar> R0 = x.template head<3>();
+        Vector3<Scalar> V0 = x.template segment<3>(3);
         Scalar dt = x[6];
-
-        Scalar r = RV.template head<3>().norm();
-        Scalar v = RV.template tail<3>().norm();
-        double SQM = sqrt(mu);
-
-        Scalar alpha = -(v * v) / (mu)+(2.0 / r);
-        Scalar a = 1.0 / alpha;
-        Scalar X0;
-        if (alpha > conictol)
-            X0 = SQM * dt * alpha;
-        else if (alpha < conictol && alpha > -conictol) {
-            Vector3<Scalar> h = RV.template head<3>().cross(RV.template tail<3>());
-            Scalar hmag = h.norm();
-            Scalar p = hmag * hmag / mu;
-            Scalar s = (Pi / 2.0 - atan(3.0 * sqrt(mu / (p * p * p)) * dt)) / 2.0;
-            Scalar w = atan(cbrt(tan(s)));
-            X0 = sqrt(p) * 2 / tan(2 * w);
-        }
-        else {
-            X0 = (abs(dt) / dt) * sqrt(-a) *
-                log(abs((-2.0 * mu * alpha * dt) /
-                    (RV.template head<3>().dot(RV.template tail<3>()) +
-                        abs(dt) / dt) *
-                    sqrt(-mu * a) * (1.0 - r * alpha)));
-        }
-        Scalar DRV = RV.template head<3>().dot(RV.template tail<3>()) / SQM;
-        Scalar SQMDT = SQM * dt;
-        double ptol = 1.0e-9;
-        Scalar c2, c3, Xn, psi, rs, X02, X03, X0tOmPsiC3, X02tC2, err;
-        for (int i = 0; i < iters; i++) {
-            X02 = X0 * X0;
-            X03 = X02 * X0;
-            psi = X02 * alpha;
-
-            if (psi > ptol) {  // ellpitic
-                Scalar sqsi = sqrt(psi);
-                c2 = (1.0 - cos(sqsi)) / psi;
-                c3 = (sqsi - sin(sqsi)) / (sqsi * psi);
-            }
-            else if (psi > -ptol && psi < ptol) {  // parabolic
-                c2 = 0.5;
-                c3 = 1.0 / 6.0;
-            }
-            else {  // hyperbolic
-                c2 = (1.0 - cosh(sqrt(-psi))) / psi;
-                c3 = (sinh(sqrt(-psi)) - sqrt(-psi)) / sqrt(-psi * psi * psi);
-            }
-            X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-            X02tC2 = X02 * c2;
-            rs = X02tC2 + DRV * X0tOmPsiC3 + r * (1.0 - psi * c2);
-            Xn = X0 + (SQMDT - X03 * c3 - DRV * X02tC2 - r * X0tOmPsiC3) / rs;
-            err = Xn - X0;
-            X0 = Xn;
-            if (abs(err) < tol) break;
-        }
-        Scalar Xn2 = Xn * Xn;
-        Scalar f = 1.0 - Xn2 * c2 / r;
-        Scalar g = dt - (Xn2 * Xn) * c3 / SQM;
-        Scalar fdot = Xn * (psi * c3 - 1.0) * SQM / (rs * r);
-        Scalar gdot = 1.0 - c2 * (Xn2) / rs;
-
-
-
-        fx.template head<3>() =
-            f * RV.template head<3>() + g * RV.template tail<3>();
-        fx.template tail<3>() =
-            fdot * RV.template head<3>() + gdot * RV.template tail<3>();
+        Vector6<Scalar> out;
+        Eigen::Matrix<Scalar, 6, 7> jac;
+        Vector7<Scalar> grad;
+        Eigen::Matrix<Scalar, 7, 7> hess;
+        Vector6<Scalar> lm = adjvars;
+        detail::kepler_propagate_adjoint_hessian<Scalar>(R0, V0, dt, mu_, lm, out, jac, grad, hess);
+        fx = out;
+        jx = jac;
+        ag = grad;
+        ah = hess;
     }
-
-    template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType>& x,
-        Eigen::MatrixBase<OutType> const& fx_,
-        Eigen::MatrixBase<JacType> const& jx_) const {
-        typedef typename InType::Scalar Scalar;
-        Eigen::MatrixBase<JacType>& jx = jx_.const_cast_derived();
-        Eigen::MatrixBase<OutType>& fx = fx_.const_cast_derived();
-
-        Eigen::Matrix<Scalar, 6, 1> RV = x.template head<6>();
-        Scalar dt = x[6];
-
-        Scalar r = RV.template head<3>().norm();
-        Scalar v = RV.template tail<3>().norm();
-        double SQM = sqrt(mu);
-
-        Scalar alpha = -(v * v) / (mu)+(2.0 / r);
-        Scalar a = 1.0 / alpha;
-        Scalar X0;
-        if (alpha > conictol)
-            X0 = SQM * dt * alpha;
-        else if (alpha < conictol && alpha > -conictol) {
-            Vector3<Scalar> h = RV.template head<3>().cross(RV.template tail<3>());
-            Scalar hmag = h.norm();
-            Scalar p = hmag * hmag / mu;
-            Scalar s = (Pi / 2.0 - atan(3.0 * sqrt(mu / (p * p * p)) * dt)) / 2.0;
-            Scalar w = atan(CBRT(Scalar(tan(s))));
-            X0 = sqrt(p) * 2 / tan(2 * w);
-        }
-        else {
-            X0 = (abs(dt) / dt) * sqrt(-a) *
-                log(abs((-2.0 * mu * alpha * dt) /
-                    (RV.template head<3>().dot(RV.template tail<3>()) +
-                        abs(dt) / dt) *
-                    sqrt(-mu * a) * (1.0 - r * alpha)));
-            // std::cout << "here";
-        }
-        Scalar DRV = RV.template head<3>().dot(RV.template tail<3>()) / SQM;
-        Scalar SQMDT = SQM * dt;
-        double ptol = 1.0e-9;
-        Scalar c2, c3, Xn, psi, rs, X02, X03, X0tOmPsiC3, X02tC2, err;
-        for (int i = 0; i < iters; i++) {
-
-            //std::cout << i << " "<< X0 << std::endl;
-            X02 = X0 * X0;
-            X03 = X02 * X0;
-            psi = X02 * alpha;
-            // StumpfC2C3(psi, c2, c3);
-            if (psi > ptol) {  // ellpitic
-                Scalar sqsi = sqrt(psi);
-                c2 = (1.0 - cos(sqsi)) / psi;
-                c3 = (sqsi - sin(sqsi)) / (sqsi * psi);
-            }
-            else if (psi > -ptol && psi < ptol) {  // parabolic
-                c2 = 0.5;
-                c3 = 1.0 / 6.0;
-                //std::cout << "ellint";
-            }
-            else {  // hyperbolic
-                c2 = (1.0 - cosh(sqrt(-psi))) / psi;
-                c3 = (sinh(sqrt(-psi)) - sqrt(-psi)) / sqrt(-psi * psi * psi);
-            }
-            X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-            X02tC2 = X02 * c2;
-            rs = X02tC2 + DRV * X0tOmPsiC3 + r * (1.0 - psi * c2);
-            Xn = X0 + (SQMDT - X03 * c3 - DRV * X02tC2 - r * X0tOmPsiC3) / rs;
-            err = Xn - X0;
-            X0 = Xn;
-
-            if (abs(err) < tol) break;
-        }
-        Scalar Xn2 = Xn * Xn;
-        Scalar f = 1.0 - Xn2 * c2 / r;
-        Scalar g = dt - (Xn2 * Xn) * c3 / SQM;
-        Scalar fdot = Xn * (psi * c3 - 1.0) * SQM / (rs * r);
-        Scalar gdot = 1.0 - c2 * (Xn2) / rs;
-
-        Vector3<Scalar> R0 = RV.template head<3>();
-        Vector3<Scalar> V0 = RV.template tail<3>();
-        Vector3<Scalar> R1 = f * RV.template head<3>() + g * RV.template tail<3>();
-        Vector3<Scalar> V1 =
-            fdot * RV.template head<3>() + gdot * RV.template tail<3>();
-
-        Scalar rn = R1.norm();
-        Scalar rn2 = rn * rn;
-        Scalar rn3 = rn2 * rn;
-
-        Scalar r2 = r * r;
-        Scalar r3 = r2 * r;
-
-        Scalar XI = alpha * SQM * dt + V1.dot(R1) / SQM - DRV;
-
-        Scalar U2 = r * (1.0 - f);
-        Scalar U3 = SQM * (dt - g);
-        Scalar U4 = (XI * XI / 2.0 - U2) * a;
-        Scalar U5 = (XI * XI * XI / 6.0 - U3) * a;
-
-        Scalar C = (1.0 / SQM) * (3.0 * U5 - XI * U4 - SQM * dt * U2);
-
-        Eigen::Matrix<Scalar, 3, 3> I;
-        I.setIdentity();
-
-        Vector3<Scalar> DR = R1 - R0;
-        Vector3<Scalar> DV = V1 - V0;
-
-        Eigen::Matrix<Scalar, 3, 3> DVT = DV * DV.transpose();
-        Eigen::Matrix<Scalar, 3, 3> R1R0T = R1 * R0.transpose();
-        Eigen::Matrix<Scalar, 3, 3> V1R0T = V1 * R0.transpose();
-
-        Eigen::Matrix<Scalar, 3, 3> DRV0T = DR * V0.transpose();
-        Eigen::Matrix<Scalar, 3, 3> DVR0T = DV * R0.transpose();
-        Eigen::Matrix<Scalar, 3, 3> VVT = V1 * V0.transpose();
-
-        Eigen::Matrix<Scalar, 3, 3> R1DVT = R1 * DV.transpose();
-        Eigen::Matrix<Scalar, 3, 3> R1R1T = ((1.0 / (rn2)) * R1) * R1.transpose();
-
-        Eigen::Matrix<Scalar, 3, 3> R1V1T_V1R1T =
-            (1.0 / (mu * rn)) * (R1 * V1.transpose() - V1 * R1.transpose());
-        // Matrix<Scalar, 3, 3> V1R1T = V1 * R1.transpose();
-
-        Eigen::Matrix<Scalar, 3, 3> R1V0T = R1 * V0.transpose();
-
-        fx.template head<3>() = R1;
-        fx.template tail<3>() = V1;
-
-        Scalar rmrf = (r - r * f);
-
-        jx.template block<3, 3>(0, 0) =
-            (rn / mu) * (DVT)+(1.0 / (r3)) * ((rmrf)*R1R0T + C * V1R0T) + f * I;
-        jx.template block<3, 3>(0, 3) =
-            ((r / mu) * (1.0 - f)) * (DRV0T - DVR0T) + (C / mu) * VVT + g * I;
-
-        jx.template block<3, 3>(3, 0) = (-1.0 / (r2)) * DVR0T +
-            (-1.0 / (rn2)) * R1DVT +
-            fdot * (I - R1R1T + (R1V1T_V1R1T)*R1DVT) -
-            (mu * C / (rn3 * r3)) * R1R0T;
-        jx.template block<3, 3>(3, 3) =
-            (r / mu) * DVT + (1.0 / (rn3)) * ((rmrf)*R1R0T - C * R1V0T) + gdot * I;
-
-        jx.col(6).template head<3>() = V1;
-        jx.col(6).template tail<3>() = -mu * R1 / (rn3);
-
-
-
-
-
-    }*/
 };
 
 } // namespace tycho::astro
