@@ -1,5 +1,6 @@
 #pragma once
 #include "tycho/detail/typedefs/eigen_types.h"
+#include <Eigen/Geometry>
 #include <cmath>
 
 namespace tycho::astro::detail {
