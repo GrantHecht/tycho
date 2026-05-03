@@ -1,30 +1,12 @@
 // =============================================================================
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 //
-// Implicit-function-theorem composition layer for the LCD Kepler propagator.
-//
-// Given an iteration kernel that returns the universal anomaly X* and the
-// derived universal functions U_n(α, X*) along with derived state quantities,
-// this header composes the structural Jacobians of the codegen primal-state
-// VF (S: 11 → 6) and the codegen Kepler-equation residual VF (F: 10 → 1)
-// into the total Jacobian d(rf, vf) / d(R0, V0, dt) by chain rule, treating
-// X* and U_n as implicit functions of (R0, V0, dt) via:
-//
-//   F(R0, V0, dt; X*, U_1, U_2, U_3) = 0   (Kepler's eqn in universal vars)
-//
-// Step 1: get X* by Newton-Raphson on F (handled by kepler_lcd_iterate).
-// Step 2: ∂U_n/∂X = U_{n-1}; ∂U_n/∂α follows the recursion
-//                 ∂U_n/∂α = (X·U_{n-1} - n·U_n) / (2α) for n ≥ 1.
-//         Near α = 0, the recursion has a 1/α singularity that cancels with
-//         the numerator; we Taylor-fall back to leading order to avoid the
-//         catastrophic cancellation: ∂U_n/∂α |_{α→0} ≈ -X^{n+2} / (n+2)!
-// Step 3: dα/dy comes from α = 2/r0 - v0²/μ.
-// Step 4: dX*/dy = -dF/dy_total / dF/dX* by IFT, where
-//         dF/dy_total = F_struct_y + Σ_{n=1,2,3} F_{Un} · ∂U_n/∂α · ∂α/∂y
-//         (F has no explicit X dependence; total dF/dX = r from the kernel).
-// Step 5: dS/dy_total = S_struct_y + S_struct_X · dX*/dy
-//                     + Σ_{n=0,1,2} S_{Un} · (∂U_n/∂X · dX*/dy + ∂U_n/∂α · ∂α/∂y)
-//
+// IFT composition for the LCD Kepler propagator: takes the structural Jacobians
+// of the codegen primal VF (S: 11 → 6) and Kepler residual VF (F: 10 → 1) and
+// composes them into the total d(rf, vf) / d(R0, V0, dt), treating X* and the
+// universal functions U_n(α, X*) as implicit functions of (R0, V0, dt) via
+// F(R0, V0, dt; X*, U_n) = 0.  The per-section comments below cover the
+// derivation step-by-step, including the Taylor fallback for ∂U_n/∂α near α=0.
 // =============================================================================
 #pragma once
 
@@ -297,6 +279,10 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
                              double mu, Vector6<Scalar> &xf) {
     using std::sqrt;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu);
+    if (!all_converged(k.converged)) {
+        xf.setConstant(kepler_nan_value<Scalar>());
+        return;
+    }
     const Scalar sqmu = sqrt(Scalar(mu));
     const Scalar aF = Scalar(1) - k.U2 / k.r0;
     const Scalar aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
@@ -316,6 +302,11 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
                                       Eigen::Matrix<Scalar, 6, 7> &jac) {
     KeplerLCDOptions opts;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
+    if (!all_converged(k.converged)) {
+        xf.setConstant(kepler_nan_value<Scalar>());
+        jac.setConstant(kepler_nan_value<Scalar>());
+        return;
+    }
 
     // -- Pack S input vector: (R0(3), V0(3), dt, X, U0, U1, U2)  -> 11 scalars
     Eigen::Matrix<Scalar, 11, 1> sin_;
@@ -365,7 +356,6 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
         dalpha_dy[i] = -Scalar(2) * R0[i] / r0_3;
         dalpha_dy[i + 3] = -Scalar(2) * V0[i] / Scalar(mu);
     }
-    // dalpha_dy[6] = 0  (kept from Zero())
 
     // -- Total dF/dy (F has no explicit X dependence in its structural form; the
     //    only X coupling comes through the (U1, U2, U3) packed inputs).
@@ -444,6 +434,13 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     using std::abs;
     KeplerLCDOptions opts;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
+    if (!all_converged(k.converged)) {
+        xf.setConstant(kepler_nan_value<Scalar>());
+        jac.setConstant(kepler_nan_value<Scalar>());
+        adjgrad.setConstant(kepler_nan_value<Scalar>());
+        adjhess.setConstant(kepler_nan_value<Scalar>());
+        return;
+    }
 
     // --- Step A: codegen call for S (primal) — 11-dim structural input,
     //     6-dim output, adjvar-contracted gradient and Hessian.
@@ -520,8 +517,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     for (int i = 0; i < 3; ++i)
         d2alpha_dy2(i + 3, i + 3) = -Scalar(2) / Scalar(mu);
 
-    // --- Step E: first-order IFT.  Replicate the Jacobian construction so
-    //     this routine is self-contained.
+    // --- Step E: first-order IFT.
     Vector7<Scalar> dF_dy_total;
     for (int i = 0; i < 7; ++i) {
         const Scalar dF_struct_y = F_jac(0, i);

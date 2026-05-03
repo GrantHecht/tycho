@@ -4,14 +4,13 @@
 //   Research Lab. Licensed under the Apache License, Version 2.0
 // License: notices/asset-apache2.txt.
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
-//   Apache 2.0 — see LICENSE.txt):
-//   - Reimplemented as a hand-written VF backed by kepler_lcd_iterate +
-//     codegen'd primal/residual + IFT composition layer (no DSL).
+// Tycho fork: Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt.
 // =============================================================================
 #pragma once
 #include "tycho/detail/astro/kepler/kepler_propagator_ift.h"
 #include "tycho/vector_functions.h"
+
+#include <stdexcept>
 
 namespace tycho::astro {
 
@@ -29,11 +28,20 @@ struct KeplerPropagator
                                 DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    double mu_ = 1.0;
     static constexpr bool is_vectorizable = true;
 
-    KeplerPropagator() { this->set_io_rows(7, 6); }
-    explicit KeplerPropagator(double mu) : mu_(mu) { this->set_io_rows(7, 6); }
+    KeplerPropagator() : KeplerPropagator(1.0) {}
+    explicit KeplerPropagator(double mu) {
+        set_mu(mu);
+        this->set_io_rows(7, 6);
+    }
+
+    void set_mu(double mu) {
+        if (!(mu > 0.0))
+            throw std::invalid_argument("KeplerPropagator: mu must satisfy mu > 0");
+        mu_ = mu;
+    }
+    double mu() const noexcept { return mu_; }
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
@@ -89,6 +97,9 @@ struct KeplerPropagator
         ag = grad;
         ah = hess;
     }
+
+private:
+    double mu_;
 };
 
 } // namespace tycho::astro

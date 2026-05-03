@@ -1,8 +1,7 @@
 """Generate KeplerPrimal_VF and KeplerResidual_VF closed-form helpers.
 
 These VFs are *internal* helpers consumed by the IFT layer of the Kepler
-propagator (Task 3 of the LCD plan); they are not registered as
-Python-visible VFs.
+propagator; they are not registered as Python-visible VFs.
 
 - ``KeplerPrimal_VF``: post-converged primal map
   ``S(R0, V0, dt, X*, U0, U1, U2) -> (rf, vf)`` via Goodyear ``aF, aG,
@@ -15,7 +14,7 @@ Python-visible VFs.
 
 Both VFs are emitted as separate snake_case headers
 (``kepler_primal_vf.h`` and ``kepler_residual_vf.h``) under
-``include/tycho/detail/astro/``; the IFT layer includes both directly.
+``include/tycho/detail/astro/kepler/``; the IFT layer includes both directly.
 
 Usage:
     cd utils && conda run -n tycho python codegen_kepler_propagator.py
@@ -99,7 +98,7 @@ def _kepler_residual():
 
 def main():
     output_dir = os.path.join(
-        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro"
+        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro", "kepler"
     )
 
     primal = _kepler_primal()
