@@ -1,10 +1,10 @@
 // =============================================================================
-// Originally from ASSET (AlabamaASRL/asset_asrl)
-// Copyright 2020-present The University of Alabama-Astrodynamics and Space
-//   Research Lab. Licensed under the Apache License, Version 2.0
-// License: notices/asset-apache2.txt.
-//
 // Tycho fork: Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt.
+//
+// VF wrapper over the LCD kernel + IFT composition; no algorithmic descent
+// from ASSET's KeplerPropagator (which used a GenericFunction + ScalarRoot-
+// Finder for differentiation through Newton iteration).  See
+// kepler_lcd_iterate.h and kepler_propagator_ift.h for the implementation.
 // =============================================================================
 #pragma once
 #include "tycho/detail/astro/kepler/kepler_propagator_ift.h"
