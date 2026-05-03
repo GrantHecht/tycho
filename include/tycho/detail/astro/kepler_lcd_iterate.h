@@ -2,6 +2,7 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 #include <Eigen/Geometry>
 #include <cmath>
+#include <numbers>
 
 namespace tycho::astro::detail {
 
@@ -117,7 +118,8 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         const Vector3<double> h = R0.cross(V0);
         const double hmag = h.norm();
         const double p = hmag * hmag / mu;
-        const double s = (M_PI / 2.0 - std::atan(3.0 * sqrt(mu / (p * p * p)) * dt)) / 2.0;
+        const double s =
+            (std::numbers::pi / 2.0 - std::atan(3.0 * sqrt(mu / (p * p * p)) * dt)) / 2.0;
         const double w = std::atan(std::cbrt(std::tan(s)));
         X = sqrt(p) * 2.0 / std::tan(2.0 * w);
     }

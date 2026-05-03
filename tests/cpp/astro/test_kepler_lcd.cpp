@@ -18,8 +18,7 @@ using namespace tycho::astro;
 using namespace tycho::astro::detail;
 
 namespace {
-Vector6<double> apply_fg(const Vector6<double> &RV, const KeplerLCDResult<double> &k, double mu,
-                         double /*dt*/) {
+Vector6<double> apply_fg(const Vector6<double> &RV, const KeplerLCDResult<double> &k, double mu) {
     const double sqmu = std::sqrt(mu);
     const double aF = 1.0 - k.U2 / k.r0;
     const double aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
@@ -37,7 +36,7 @@ TEST(KeplerLCDKernel, MatchesPropagateCartesianLEO) {
     auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 300.0, TychoTest::MU_EARTH);
     EXPECT_TRUE(k.converged);
     auto rv_ref = propagate_cartesian<double>(rv, 300.0, TychoTest::MU_EARTH);
-    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH, 300.0);
+    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv_lcd[i], rv_ref[i], 1e-10 * std::max(1.0, std::abs(rv_ref[i])))
             << "comp " << i;
@@ -50,7 +49,7 @@ TEST(KeplerLCDKernel, MatchesPropagateCartesianMEO) {
     auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 600.0, TychoTest::MU_EARTH);
     EXPECT_TRUE(k.converged);
     auto rv_ref = propagate_cartesian<double>(rv, 600.0, TychoTest::MU_EARTH);
-    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH, 600.0);
+    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv_lcd[i], rv_ref[i], 1e-10 * std::max(1.0, std::abs(rv_ref[i])));
 }
@@ -70,7 +69,7 @@ TEST(KeplerLCDKernel, MatchesPropagateCartesianHyperbolic) {
     auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
     auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH);
     EXPECT_TRUE(k.converged);
-    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH, 100.0);
+    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH);
 
     const double mu = TychoTest::MU_EARTH;
     const Vector3<double> R0 = rv.head<3>();
@@ -102,7 +101,7 @@ TEST(KeplerLCDKernel, ZeroDtFastPath) {
     EXPECT_DOUBLE_EQ(k.U1, 0.0);
     EXPECT_DOUBLE_EQ(k.U2, 0.0);
     EXPECT_DOUBLE_EQ(k.U3, 0.0);
-    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH, 0.0);
+    auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv_lcd[i], rv[i], 1e-13);
 }
@@ -129,7 +128,7 @@ TEST(KeplerLCDKernel, MultiPeriodReturn) {
     auto rv0 = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
     auto k = kepler_lcd_iterate<double>(rv0.head<3>(), rv0.tail<3>(), 5.0 * T, TychoTest::MU_EARTH);
     EXPECT_TRUE(k.converged);
-    auto rv5 = apply_fg(rv0, k, TychoTest::MU_EARTH, 5.0 * T);
+    auto rv5 = apply_fg(rv0, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv0[i], rv5[i], 1e-4);
 }
