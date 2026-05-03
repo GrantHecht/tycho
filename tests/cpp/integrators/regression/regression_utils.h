@@ -12,8 +12,8 @@
 #pragma once
 
 #include "integrator_test_utils.h"
-#include "tycho/detail/astro/crtbp_dynamics.h"
-#include "tycho/detail/astro/kepler_model.h"
+#include "tycho/detail/astro/dynamics/crtbp_dynamics.h"
+#include "tycho/detail/astro/kepler/kepler_model.h"
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/phase/ode.h"
 #include "tycho/vector_functions.h"

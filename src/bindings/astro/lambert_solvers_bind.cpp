@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "function_registry.h"
-#include "tycho/detail/astro/lambert_solvers.h"
+#include "tycho/detail/astro/kepler/lambert_solvers.h"
 
 namespace tycho {
 using namespace tycho::vf;

@@ -11,7 +11,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 #include <numbers>
-#include <tycho/detail/astro/kepler_propagator_ift.h>
+#include <tycho/detail/astro/kepler/kepler_propagator_ift.h>
 #include <tycho/tycho.h>
 
 using namespace tycho;

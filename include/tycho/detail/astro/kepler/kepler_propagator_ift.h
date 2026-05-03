@@ -28,9 +28,9 @@
 // =============================================================================
 #pragma once
 
-#include "tycho/detail/astro/kepler_lcd_iterate.h"
-#include "tycho/detail/astro/kepler_primal_vf.h"
-#include "tycho/detail/astro/kepler_residual_vf.h"
+#include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
+#include "tycho/detail/astro/kepler/kepler_primal_vf.h"
+#include "tycho/detail/astro/kepler/kepler_residual_vf.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 
 #include <cmath>

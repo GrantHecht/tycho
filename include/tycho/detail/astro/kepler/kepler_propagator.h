@@ -10,7 +10,7 @@
 //     codegen'd primal/residual + IFT composition layer (no DSL).
 // =============================================================================
 #pragma once
-#include "tycho/detail/astro/kepler_propagator_ift.h"
+#include "tycho/detail/astro/kepler/kepler_propagator_ift.h"
 #include "tycho/vector_functions.h"
 
 namespace tycho::astro {

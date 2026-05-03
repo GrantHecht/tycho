@@ -10,9 +10,9 @@
 #include <cmath>
 #include <gtest/gtest.h>
 #include <numbers>
-#include <tycho/detail/astro/kepler_lcd_iterate.h>
-#include <tycho/detail/astro/kepler_primal_vf.h>
-#include <tycho/detail/astro/kepler_residual_vf.h>
+#include <tycho/detail/astro/kepler/kepler_lcd_iterate.h>
+#include <tycho/detail/astro/kepler/kepler_primal_vf.h>
+#include <tycho/detail/astro/kepler/kepler_residual_vf.h>
 #include <tycho/tycho.h>
 
 using namespace tycho;

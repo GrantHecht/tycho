@@ -2,9 +2,10 @@
 // Kepler conversion and astrodynamics throughput benchmarks (Google Benchmark)
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <tycho/detail/astro/kepler_utils.h>
-#include <tycho/detail/astro/kepler_propagator.h>
-#include <tycho/detail/astro/lambert_solvers.h>
+#include <tycho/detail/astro/conversions/kepler_utils.h>
+#include <tycho/detail/astro/kepler/kepler_propagation.h>
+#include <tycho/detail/astro/kepler/kepler_propagator.h>
+#include <tycho/detail/astro/kepler/lambert_solvers.h>
 #include <benchmark/benchmark.h>
 #include <numbers>
 
@@ -172,7 +173,7 @@ BENCHMARK(BM_Lambert_MultiRev);
 // KeplerPropagator VF benchmarks (post-LCD-rewrite)
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <tycho/detail/astro/kepler_propagator.h>
+#include <tycho/detail/astro/kepler/kepler_propagator.h>
 
 static void BM_KeplerPropagator_VF_Compute(benchmark::State &state) {
     auto oe = leoClassic();
