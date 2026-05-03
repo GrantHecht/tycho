@@ -489,6 +489,9 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
                    const Eigen::Array<double, W, 1> &dt, double mu,
                    const KeplerLCDOptions &opts = {}) {
     using SS = Eigen::Array<double, W, 1>;
+    if (!(mu > 0.0)) [[unlikely]]
+        throw std::invalid_argument(
+            "kepler_lcd_iterate (SS): mu must satisfy mu > 0");
     opts.validate();
 
     // Dispatch to true-SIMD path only when every lane is elliptic with nonzero
@@ -497,6 +500,14 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
     // which exercises the full scalar dispatch (incl. orbit-type branches and
     // the dt==0 fast path).
     const SS r0 = (R0[0].square() + R0[1].square() + R0[2].square()).sqrt();
+    // Match the scalar kernel's r0 > 0 precondition uniformly across all
+    // SS lanes — the SIMD-ellipse path silently NaN-poisons on r0 == 0
+    // because it computes `2 / r0` unconditionally; the per-lane fallback
+    // would catch it via the inner scalar throw, so checking here gives
+    // both paths the same diagnostic.
+    if (!(r0 > SS::Zero()).all()) [[unlikely]]
+        throw std::invalid_argument(
+            "kepler_lcd_iterate (SS): every lane's r0 must satisfy r0 > 0");
     const SS v2 = V0[0].square() + V0[1].square() + V0[2].square();
     const SS alpha = SS::Constant(2.0) / r0 - v2 / SS::Constant(mu);
 

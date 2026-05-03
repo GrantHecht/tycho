@@ -385,6 +385,40 @@ TEST(KeplerLCDKernel, RejectsNonPositiveMu) {
                  std::invalid_argument);
 }
 
+TEST(KeplerLCDKernelSS, RejectsNonPositiveMu) {
+    // The SS dispatcher silently NaN-poisons on mu <= 0 unless validation is
+    // hoisted from the scalar kernel.  Mirror the scalar guard.
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    for (int i = 0; i < 3; ++i) {
+        R0[i] = SS::Constant(rv[i]);
+        V0[i] = SS::Constant(rv[i + 3]);
+    }
+    SS dt = SS::Constant(100.0);
+    EXPECT_THROW(kepler_lcd_iterate(R0, V0, dt, 0.0), std::invalid_argument);
+    EXPECT_THROW(kepler_lcd_iterate(R0, V0, dt, -1.0), std::invalid_argument);
+}
+
+TEST(KeplerLCDKernelSS, RejectsZeroR0Lane) {
+    // A single zero-r0 lane in an otherwise-valid SS batch must fail loud,
+    // not silently NaN-poison the entire batch via 2/r0 in the SIMD path.
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    for (int i = 0; i < 3; ++i) {
+        R0[i] = SS::Constant(rv[i]);
+        V0[i] = SS::Constant(rv[i + 3]);
+    }
+    // Lane 2 has r0 == 0.
+    R0[0][2] = 0.0;
+    R0[1][2] = 0.0;
+    R0[2][2] = 0.0;
+    SS dt = SS::Constant(100.0);
+    EXPECT_THROW(kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH),
+                 std::invalid_argument);
+}
+
 TEST(KeplerLCDKernelSS, AllLanesBailoutSnapshotRecovery) {
     // SIMD-path bailout regression test.  All four lanes are uniform-elliptic
     // with nonzero dt (so the dispatcher routes to kepler_lcd_iterate_simd_ellipse),
