@@ -132,16 +132,8 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     double rad = r0, sig = sigma0;
     double F = 0;
 
+    bool guard_tripped = false;
     while (fabs(dX) > opts.Xtol && N <= opts.max_order) {
-        ++iters_this_N;
-        if (iters_this_N >= opts.iters_per_order) {
-            ++N;
-            iters_this_N = 0;
-            if (N > opts.max_order) {
-                r.converged = false;
-                break;
-            }
-        }
         X = X_new;
 
         // Why the asymptote guard: on a hyperbolic orbit the universal anomaly
@@ -151,7 +143,7 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         if (alpha < -opts.alpha_tol) {
             const double sqma = sqrt(-alpha);
             if (fabs(sqma * X) > opts.hyp_guard) {
-                r.converged = false;
+                guard_tripped = true;
                 break;
             }
         }
@@ -171,12 +163,29 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         else
             dX = F / F1;
         X_new = X - dX;
-    }
 
-    X = X_new;
-    compute_universal_functions<double>(alpha, X, opts.alpha_tol, U0, U1, U2, U3);
-    rad = r0 * U0 + sigma0 * U1 + U2;
-    sig = sigma0 * U0 + (1.0 - alpha * r0) * U1;
+        // Counter bookkeeping done after the work so each order N actually
+        // gets opts.iters_per_order updates before promotion.  The order-cap
+        // condition is re-checked by the while header on the next pass.
+        ++iters_this_N;
+        if (iters_this_N >= opts.iters_per_order) {
+            ++N;
+            iters_this_N = 0;
+        }
+    }
+    if (guard_tripped || fabs(dX) > opts.Xtol)
+        r.converged = false;
+
+    // Only refresh the final U/r/sigma at X_new on a clean convergence exit.
+    // On guard- or order-cap bailout, X_new may be in the regime that tripped
+    // the guard, so reusing the last in-loop values (computed at the most
+    // recent stable X) is the safer reporting choice.
+    if (r.converged) {
+        X = X_new;
+        compute_universal_functions<double>(alpha, X, opts.alpha_tol, U0, U1, U2, U3);
+        rad = r0 * U0 + sigma0 * U1 + U2;
+        sig = sigma0 * U0 + (1.0 - alpha * r0) * U1;
+    }
 
     r.X = X;
     r.U0 = U0;
