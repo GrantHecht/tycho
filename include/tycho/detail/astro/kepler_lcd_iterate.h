@@ -228,35 +228,4 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
     return kepler_lcd_iterate_per_lane<W>(R0, V0, dt, mu, opts);
 }
 
-// Explicit specializations of the primary template for each SuperScalar width.
-// These forward to kepler_lcd_iterate_per_lane<W> so callers may invoke the
-// kernel with explicit Array Scalar template argument
-// (`kepler_lcd_iterate<Eigen::Array<double, W, 1>>(...)`) and resolve to the
-// per-lane dispatch path. The deducible `template <int W>` overload above
-// covers the implicit-argument call form.
-template <>
-inline KeplerLCDResult<Eigen::Array<double, 2, 1>>
-kepler_lcd_iterate<Eigen::Array<double, 2, 1>>(const Vector3<Eigen::Array<double, 2, 1>> &R0,
-                                               const Vector3<Eigen::Array<double, 2, 1>> &V0,
-                                               Eigen::Array<double, 2, 1> dt, double mu,
-                                               const KeplerLCDOptions &opts) {
-    return kepler_lcd_iterate_per_lane<2>(R0, V0, dt, mu, opts);
-}
-template <>
-inline KeplerLCDResult<Eigen::Array<double, 4, 1>>
-kepler_lcd_iterate<Eigen::Array<double, 4, 1>>(const Vector3<Eigen::Array<double, 4, 1>> &R0,
-                                               const Vector3<Eigen::Array<double, 4, 1>> &V0,
-                                               Eigen::Array<double, 4, 1> dt, double mu,
-                                               const KeplerLCDOptions &opts) {
-    return kepler_lcd_iterate_per_lane<4>(R0, V0, dt, mu, opts);
-}
-template <>
-inline KeplerLCDResult<Eigen::Array<double, 8, 1>>
-kepler_lcd_iterate<Eigen::Array<double, 8, 1>>(const Vector3<Eigen::Array<double, 8, 1>> &R0,
-                                               const Vector3<Eigen::Array<double, 8, 1>> &V0,
-                                               Eigen::Array<double, 8, 1> dt, double mu,
-                                               const KeplerLCDOptions &opts) {
-    return kepler_lcd_iterate_per_lane<8>(R0, V0, dt, mu, opts);
-}
-
 } // namespace tycho::astro::detail

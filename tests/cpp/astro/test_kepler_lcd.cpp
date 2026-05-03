@@ -148,11 +148,12 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
     Vector6<double> oe2;
     oe2 << -10000.0, 1.5, 0.2, 0.0, 0.0, 0.0;
     auto rv2 = classic_to_cartesian<double>(oe2, TychoTest::MU_EARTH);
-    // Lane 3: highly eccentric
+    // Lane 3: near-parabolic ellipse — orbit-regime diversity vs lane 1.
+    // a=1e7 km, e=0.99 → periapsis 1e5 km, alpha≈1e-7.  Well-conditioned
+    // (periapsis well above Earth) and exercises a distinct regime.  See
+    // plan §10 risks.
     Vector6<double> oe3;
-    // Highly eccentric (e=0.9) but well-conditioned — avoids Stumpff cancellation
-    // at near-parabolic orbits with sub-Earth periapsis.  See plan §10 risks.
-    oe3 << 1.0e5, 0.9, 0.1, 0.0, 0.0, 0.0;
+    oe3 << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
     auto rv3 = classic_to_cartesian<double>(oe3, TychoTest::MU_EARTH);
 
     for (int i = 0; i < 3; ++i) {
@@ -161,7 +162,7 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
     }
     dt << 100.0, 600.0, 50.0, 200.0;
 
-    auto k_ss = kepler_lcd_iterate<Eigen::Array<double, 4, 1>>(R0, V0, dt, TychoTest::MU_EARTH);
+    auto k_ss = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH);
     EXPECT_TRUE(k_ss.converged);
 
     Vector6<double> rv_arr[4] = {rv0, rv1, rv2, rv3};
