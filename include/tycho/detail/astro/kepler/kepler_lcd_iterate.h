@@ -9,6 +9,52 @@
 
 namespace tycho::astro::detail {
 
+// Threshold below which the Stumpff C(y) and S(y) functions switch from the
+// recursion form
+//   C(y) = (1 - cos(sqrt(y))) / y,    S(y) = (sqrt(y) - sin(sqrt(y))) / (y*sqrt(y))
+// to the leading-order Taylor expansions
+//   C(y) = 1/2 - y/24 + O(y^2),       S(y) = 1/6 - y/120 + O(y^2).
+// The recursion forms are 0/0 indeterminate at y == 0 and lose precision via
+// catastrophic cancellation as y -> 0.  The dispatcher guarantees alpha is
+// bounded away from 0 on the elliptic branch, but X (and therefore
+// y = alpha*X^2) can still pass through zero during the LCD iteration on
+// very small dt or near-period seeds.
+inline constexpr double kStumpffTaylorEps = 1.0e-8;
+
+// Stumpff helper shared by the scalar elliptic branch in
+// compute_universal_functions<double> and the true-SIMD elliptic kernel
+// kepler_lcd_iterate_simd_ellipse<W>.  Writes C(y) and S(y) on the
+// elliptic branch, switching between the recursion form and the
+// leading-order Taylor expansion at kStumpffTaylorEps.  Out-params
+// (rather than a returned pair) match the surrounding compute_*
+// idiom and keep clang's instruction selection bit-for-bit identical
+// to the inlined-by-hand form across both the scalar and SS paths.
+template <class Scalar>
+[[gnu::always_inline]] inline void stumpff_C_S(const Scalar &y, Scalar &C, Scalar &S) {
+    using std::cos;
+    using std::sin;
+    using std::sqrt;
+    if constexpr (std::is_same_v<Scalar, double>) {
+        if (y <= kStumpffTaylorEps) {
+            C = 0.5 - y / 24.0;
+            S = 1.0 / 6.0 - y / 120.0;
+        } else {
+            const double sq = sqrt(y);
+            C = (1.0 - cos(sq)) / y;
+            S = (sq - sin(sq)) / (sq * y);
+        }
+    } else {
+        const Scalar sq = y.sqrt();
+        const auto small = (y <= Scalar::Constant(kStumpffTaylorEps));
+        const Scalar C_rec = (Scalar::Constant(1.0) - sq.cos()) / y;
+        const Scalar S_rec = (sq - sq.sin()) / (sq * y);
+        const Scalar C_tay = Scalar::Constant(0.5) - y * Scalar::Constant(1.0 / 24.0);
+        const Scalar S_tay = Scalar::Constant(1.0 / 6.0) - y * Scalar::Constant(1.0 / 120.0);
+        C = small.select(C_tay, C_rec);
+        S = small.select(S_tay, S_rec);
+    }
+}
+
 struct KeplerLCDOptions {
     double Xtol = 1.0e-12;
     double alpha_tol = 1.0e-12;
@@ -100,9 +146,8 @@ inline void compute_universal_functions<double>(double alpha, double X, double a
     using std::sqrt;
     if (alpha > alpha_tol) { // ellipse
         const double y = alpha * X * X;
-        const double sq = sqrt(y);
-        const double C = (1.0 - cos(sq)) / y;
-        const double S = (sq - sin(sq)) / (sq * y);
+        double C, S;
+        stumpff_C_S<double>(y, C, S);
         U1 = X * (1.0 - y * S);
         U2 = X * X * C;
         U3 = X * X * X * S;
@@ -332,30 +377,14 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     int N = 1;
     int iters_this_N = 0;
 
-    // Threshold below which we switch from the recursion form
-    //   C(y) = (1 - cos(sqrt(y))) / y,    S(y) = (sqrt(y) - sin(sqrt(y))) / (y*sqrt(y))
-    // to the leading-order Taylor expansions
-    //   C(y) = 1/2 - y/24 + O(y^2),       S(y) = 1/6 - y/120 + O(y^2).
-    // The recursion forms are 0/0 indeterminate at y == 0 and lose precision via
-    // catastrophic cancellation as y -> 0.  Although the dispatcher guarantees
-    // alpha > alpha_tol, X (and therefore y = alpha*X^2) can still pass through
-    // zero during the Newton iteration on very small dt or near-period seeds.
-    constexpr double kStumpffTaylorEps = 1.0e-8;
-
     while (active.any() && N <= opts.max_order) {
         // Refresh working X from latest X_new.  Inactive lanes keep their
         // converged X_new, so this is safe (and avoids a select).
         X = X_new;
 
         const SS y = alpha * X * X;
-        const SS sq = y.sqrt();
-        const auto small_y = (y <= SS::Constant(kStumpffTaylorEps));
-        const SS C_rec = (SS::Constant(1.0) - sq.cos()) / y;
-        const SS S_rec = (sq - sq.sin()) / (sq * y);
-        const SS C_tay = SS::Constant(0.5) - y * SS::Constant(1.0 / 24.0);
-        const SS S_tay = SS::Constant(1.0 / 6.0) - y * SS::Constant(1.0 / 120.0);
-        const SS C = small_y.select(C_tay, C_rec);
-        const SS S = small_y.select(S_tay, S_rec);
+        SS C, S;
+        stumpff_C_S<SS>(y, C, S);
         U1 = X * (SS::Constant(1.0) - y * S);
         U2 = X * X * C;
         U3 = X * X * X * S;
@@ -413,14 +442,8 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     X = X_new;
     {
         const SS y = alpha * X * X;
-        const SS sq = y.sqrt();
-        const auto small_y = (y <= SS::Constant(kStumpffTaylorEps));
-        const SS C_rec = (SS::Constant(1.0) - sq.cos()) / y;
-        const SS S_rec = (sq - sq.sin()) / (sq * y);
-        const SS C_tay = SS::Constant(0.5) - y * SS::Constant(1.0 / 24.0);
-        const SS S_tay = SS::Constant(1.0 / 6.0) - y * SS::Constant(1.0 / 120.0);
-        const SS C = small_y.select(C_tay, C_rec);
-        const SS S = small_y.select(S_tay, S_rec);
+        SS C, S;
+        stumpff_C_S<SS>(y, C, S);
         U1 = X * (SS::Constant(1.0) - y * S);
         U2 = X * X * C;
         U3 = X * X * X * S;

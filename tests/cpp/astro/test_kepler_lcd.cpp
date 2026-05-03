@@ -105,6 +105,46 @@ TEST(KeplerLCDKernel, ZeroDtFastPath) {
         EXPECT_NEAR(rv_lcd[i], rv[i], 1e-13);
 }
 
+TEST(KeplerLCDKernel, SmallDtScalarHitsStumpffTaylorBranch) {
+    // Scalar analog of KeplerLCDKernelSS.SmallDtHitsStumpffTaylorBranch:
+    // tiny dt drives y = alpha*X^2 well below kStumpffTaylorEps on the
+    // elliptic Stumpff form.  Without the y-to-zero Taylor fallback, the
+    // recursion form (1 - cos(sqrt(y))) / y catastrophically cancels and
+    // U2 / U3 lose precision by many orders of magnitude.  Cross-check the
+    // scalar kernel against the SIMD-ellipse path (which has always had
+    // the Taylor switch) to verify the scalar path now uses it too.
+    const double mu = TychoTest::MU_EARTH;
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), mu);
+
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0_ss, V0_ss;
+    SS dt_ss;
+    for (int i = 0; i < 3; ++i) {
+        R0_ss[i] = SS::Constant(rv[i]);
+        V0_ss[i] = SS::Constant(rv[i + 3]);
+    }
+    dt_ss << 1.0e-6, 1.0e-3, 1.0, 100.0;
+    auto k_ss = kepler_lcd_iterate(R0_ss, V0_ss, dt_ss, mu);
+    ASSERT_TRUE(all_converged(k_ss.converged));
+
+    const double dts[4] = {1.0e-6, 1.0e-3, 1.0, 100.0};
+    for (int lane = 0; lane < 4; ++lane) {
+        auto k_scalar = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), dts[lane], mu);
+        ASSERT_TRUE(k_scalar.converged) << "scalar lane " << lane;
+        // Scalar must agree with the SIMD-ellipse path at the limit of
+        // double precision — only achievable if both paths use the
+        // Taylor branch when y < kStumpffTaylorEps.
+        EXPECT_NEAR(k_scalar.X, k_ss.X[lane], 1e-13 * std::max(1.0, std::abs(k_ss.X[lane])))
+            << "lane " << lane;
+        EXPECT_NEAR(k_scalar.U2, k_ss.U2[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U2[lane])))
+            << "lane " << lane;
+        EXPECT_NEAR(k_scalar.U3, k_ss.U3[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U3[lane])))
+            << "lane " << lane;
+        EXPECT_NEAR(k_scalar.r, k_ss.r[lane], 1e-13 * std::max(1.0, std::abs(k_ss.r[lane])))
+            << "lane " << lane;
+    }
+}
+
 TEST(KeplerLCDKernel, HyperbolicAsymptoteGuard) {
     // X grows only logarithmically with dt on a hyperbolic orbit, so even a
     // 1e8 s propagation leaves sqma*X ~ 11 — well below the default guard of
