@@ -9,7 +9,16 @@
 
 The Kepler propagator stack is now backed by an EMTG-style Laguerre-Conway-Der iteration kernel + SymPy-codegen'd primal/residual closed forms + a hand-written IFT composition layer. The public `KeplerPropagator` VF (`tycho::astro`) and the scalar `propagate_cartesian<Scalar>` (`tycho::astro::detail` indirectly via `kepler_utils.h`) both delegate to the same kernel — one canonical algorithm, two consumers.
 
-**The trade-off is intentional and matches the plan's design rationale (§ Risks):** LCD is ~28-38% slower than the old Newton on easy elliptic orbits because of its order-promotion and per-iteration arithmetic, but ~60% *faster* on hyperbolic orbits where Newton struggles to converge within the iteration cap. We gain analytic Jacobian + adjoint-Hessian on the VF path (previously DSL-only with significant overhead) for free, and the algorithm is now robust on the hyperbolic regime.
+**Headline VF-path speedups** (DSL `KeplerPropagator` on `main` vs hand-written on this branch, same fixture, same machine):
+
+| Path | DSL (main) | LCD (this PR) | Speedup |
+| --- | ---: | ---: | ---: |
+| Primal (`compute_impl`) | 381 ns | 176 ns | **2.16×** |
+| Jacobian (`compute_jacobian_impl`) | 902 ns | 304 ns | **2.97×** |
+| Adjoint-Hessian | 4419 ns | 1189 ns | **3.71×** |
+| 4-lane SuperScalar primal | 1465 ns | 815 ns | **1.80×** |
+
+**The scalar trade-off is intentional and matches the plan's design rationale (§ Risks):** LCD is ~28-38% slower than the old Newton on easy elliptic orbits via the `propagate_cartesian` path, because of its order-promotion and per-iteration arithmetic; but ~60% *faster* on hyperbolic orbits where Newton was hitting its 19-iteration cap. The VF path — which is what PSIOPT consumes through `KeplerPhase::make_shooter()` — is dramatically faster on every metric (above), and now provides analytic Jacobian + adjoint-Hessian without DSL machinery.
 
 ## Pre-merge gate (per CLAUDE.md § Pre-Merge Verification Sequence)
 
@@ -28,11 +37,11 @@ The Kepler propagator stack is now backed by an EMTG-style Laguerre-Conway-Der i
 | `BM_PropagateCartesian` (LEO, e=0.01) | 125.8 ns | 173.4 ns | **+37.9%** | LCD overhead |
 | `BM_Propagate_Moderate` (e=0.5) | 206.2 ns | 262.0 ns | **+27.1%** | LCD overhead |
 | `BM_Propagate_Hyperbolic` (e=1.5) | 1050 ns | 428.5 ns | **−59.2%** | LCD improvement (Newton was hitting iter cap) |
-| **New VF-path benchmarks** (no baseline — added in this PR) | | | | |
-| `BM_KeplerPropagator_VF_Compute` | – | 176 ns | – | Matches scalar (no DSL overhead) |
-| `BM_KeplerPropagator_VF_Jacobian` | – | 304 ns | – | Adds 6×7 IFT Jacobian |
-| `BM_KeplerPropagator_VF_AdjointHessian` | – | 1189 ns | – | Adds 7×7 adjoint Hessian |
-| `BM_KeplerPropagator_VF_Compute_SS4` | – | 815 ns | – | 4-lane SS = 4.6× scalar (1.16× per lane overhead) |
+| **VF-path benchmarks** (DSL `KeplerPropagator` on main vs hand-written on head — apples-to-apples after cherry-picking the bench commit onto a throwaway branch off `main`) | | | | |
+| `BM_KeplerPropagator_VF_Compute` | 381 ns | 176 ns | **−53.8%** (2.16× faster) | DSL `GenericFunction` type-erasure overhead removed |
+| `BM_KeplerPropagator_VF_Jacobian` | 902 ns | 304 ns | **−66.3%** (2.97× faster) | analytic Jac via IFT vs differentiation through `ScalarRootFinder` |
+| `BM_KeplerPropagator_VF_AdjointHessian` | 4419 ns | 1189 ns | **−73.1%** (3.71× faster) | adjoint Hessian via IFT vs differentiating-twice through DSL |
+| `BM_KeplerPropagator_VF_Compute_SS4` | 1465 ns | 815 ns | **−44.4%** (1.80× faster) | 4-lane SS — DSL was already SS-aware; LCD per-lane scalar dispatch still wins |
 | **Conversions** (regression check, no Kepler dependence) | | | | |
 | `BM_CartesianToClassic` | 134.3 ns | 133.7 ns | −0.4% | noise |
 | `BM_ClassicToCartesian` | 149.1 ns | 148.9 ns | −0.2% | noise |
