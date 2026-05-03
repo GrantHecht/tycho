@@ -55,27 +55,50 @@ template <class Scalar>
     }
 }
 
-struct KeplerLCDOptions {
-    double Xtol = 1.0e-12;
-    double alpha_tol = 1.0e-12;
-    int max_order = 10;
-    int iters_per_order = 10;
-    double hyp_guard = 30.0;
+// Iteration knobs for kepler_lcd_iterate.  Invariants are enforced at
+// construction — every reachable instance is well-formed.
+//
+// alpha_tol must be strictly positive (not just non-negative): the SS
+// dispatcher's parabolic mask is `abs(alpha) <= alpha_tol`, so an
+// alpha_tol == 0 mask is true only at exactly-zero alpha and lets
+// numerically-near-parabolic alphas slip through to the recursion
+// branch where they would suffer the catastrophic 1/(2*alpha) blow-up
+// that the Taylor branch is meant to avoid.
+class KeplerLCDOptions {
+public:
+    constexpr KeplerLCDOptions() noexcept = default;
 
+    // Validating ctor.  Throws std::invalid_argument on bad inputs.
     // The negated comparisons (!(x > 0)) reject NaN inputs as well as
     // zero/negative values, since any comparison against NaN is unordered.
-    void validate() const {
-        if (!(Xtol > 0.0))
+    KeplerLCDOptions(double Xtol, double alpha_tol, int max_order,
+                     int iters_per_order, double hyp_guard)
+        : Xtol_(Xtol), alpha_tol_(alpha_tol), max_order_(max_order),
+          iters_per_order_(iters_per_order), hyp_guard_(hyp_guard) {
+        if (!(Xtol_ > 0.0))
             throw std::invalid_argument("KeplerLCDOptions: Xtol must be > 0");
-        if (!(alpha_tol >= 0.0))
-            throw std::invalid_argument("KeplerLCDOptions: alpha_tol must be >= 0");
-        if (max_order < 1)
+        if (!(alpha_tol_ > 0.0))
+            throw std::invalid_argument("KeplerLCDOptions: alpha_tol must be > 0");
+        if (max_order_ < 1)
             throw std::invalid_argument("KeplerLCDOptions: max_order must be >= 1");
-        if (iters_per_order < 1)
+        if (iters_per_order_ < 1)
             throw std::invalid_argument("KeplerLCDOptions: iters_per_order must be >= 1");
-        if (!(hyp_guard > 0.0))
+        if (!(hyp_guard_ > 0.0))
             throw std::invalid_argument("KeplerLCDOptions: hyp_guard must be > 0");
     }
+
+    [[nodiscard]] constexpr double Xtol() const noexcept { return Xtol_; }
+    [[nodiscard]] constexpr double alpha_tol() const noexcept { return alpha_tol_; }
+    [[nodiscard]] constexpr int max_order() const noexcept { return max_order_; }
+    [[nodiscard]] constexpr int iters_per_order() const noexcept { return iters_per_order_; }
+    [[nodiscard]] constexpr double hyp_guard() const noexcept { return hyp_guard_; }
+
+private:
+    double Xtol_ = 1.0e-12;
+    double alpha_tol_ = 1.0e-12;
+    int max_order_ = 10;
+    int iters_per_order_ = 10;
+    double hyp_guard_ = 30.0;
 };
 
 // Per-lane convergence type: scalar bool for Scalar=double, Eigen lane mask for
@@ -176,7 +199,6 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     using std::sqrt;
     if (!(mu > 0.0)) [[unlikely]]
         throw std::invalid_argument("kepler_lcd_iterate: mu must satisfy mu > 0");
-    opts.validate();
     KeplerLCDResult<double> r;
     r.converged = true;
     const double sqmu = sqrt(mu);
@@ -204,9 +226,9 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     }
 
     double X;
-    if (alpha > opts.alpha_tol) {
+    if (alpha > opts.alpha_tol()) {
         X = sqmu * dt * alpha;
-    } else if (alpha < -opts.alpha_tol) {
+    } else if (alpha < -opts.alpha_tol()) {
         const double a = 1.0 / alpha;
         const double sgn_dt = dt >= 0.0 ? 1.0 : -1.0;
         X = sgn_dt * sqrt(-a) *
@@ -231,22 +253,22 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     double F = 0;
 
     bool guard_tripped = false;
-    while (fabs(dX) > opts.Xtol && N <= opts.max_order) {
+    while (fabs(dX) > opts.Xtol() && N <= opts.max_order()) {
         X = X_new;
 
         // Why the asymptote guard: on a hyperbolic orbit the universal anomaly
         // grows logarithmically with time, but cosh/sinh blow up exponentially
         // in sqrt(-alpha)*X.  If the iterate ever overshoots past the guard,
         // U0..U3 lose precision before the iteration can recover, so we bail.
-        if (alpha < -opts.alpha_tol) {
+        if (alpha < -opts.alpha_tol()) {
             const double sqma = sqrt(-alpha);
-            if (fabs(sqma * X) > opts.hyp_guard) {
+            if (fabs(sqma * X) > opts.hyp_guard()) {
                 guard_tripped = true;
                 break;
             }
         }
 
-        compute_universal_functions<double>(alpha, X, opts.alpha_tol, U0, U1, U2, U3);
+        compute_universal_functions<double>(alpha, X, opts.alpha_tol(), U0, U1, U2, U3);
         rad = r0 * U0 + sigma0 * U1 + U2;
         sig = sigma0 * U0 + (1.0 - alpha * r0) * U1;
         F = r0 * U1 + sigma0 * U2 + U3 - sqmu * dt;
@@ -263,14 +285,14 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         X_new = X - dX;
 
         // Counter bookkeeping done after the work so each order N actually
-        // gets opts.iters_per_order updates before promotion.
+        // gets opts.iters_per_order() updates before promotion.
         ++iters_this_N;
-        if (iters_this_N >= opts.iters_per_order) {
+        if (iters_this_N >= opts.iters_per_order()) {
             ++N;
             iters_this_N = 0;
         }
     }
-    if (guard_tripped || fabs(dX) > opts.Xtol)
+    if (guard_tripped || fabs(dX) > opts.Xtol())
         r.converged = false;
 
     // Only refresh the final U/r/sigma at X_new on a clean convergence exit.
@@ -279,7 +301,7 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     // recent stable X) is the safer reporting choice.
     if (r.converged) {
         X = X_new;
-        compute_universal_functions<double>(alpha, X, opts.alpha_tol, U0, U1, U2, U3);
+        compute_universal_functions<double>(alpha, X, opts.alpha_tol(), U0, U1, U2, U3);
         rad = r0 * U0 + sigma0 * U1 + U2;
         sig = sigma0 * U0 + (1.0 - alpha * r0) * U1;
     }
@@ -333,7 +355,7 @@ kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
 }
 
 // True-SIMD Laguerre-Conway-Der iteration for the case where all W lanes are
-// elliptic (alpha[i] > opts.alpha_tol) and all have nonzero dt.  The caller is
+// elliptic (alpha[i] > opts.alpha_tol()) and all have nonzero dt.  The caller is
 // responsible for verifying the precondition; this routine does not re-check.
 //
 // The iteration body is fully packed across lanes — no per-lane scalar
@@ -377,7 +399,7 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     int N = 1;
     int iters_this_N = 0;
 
-    while (active.any() && N <= opts.max_order) {
+    while (active.any() && N <= opts.max_order()) {
         // Refresh working X from latest X_new.  Inactive lanes keep their
         // converged X_new, so this is safe (and avoids a select).
         X = X_new;
@@ -422,10 +444,10 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
         // false on those lanes and reports converged = false.  Both terms
         // are needed: dropping isFinite() lets NaN through, dropping the
         // tolerance term loops forever on a finite-but-non-converging dX.
-        active = active && (dX.abs() > SS::Constant(opts.Xtol)) && dX.isFinite();
+        active = active && (dX.abs() > SS::Constant(opts.Xtol())) && dX.isFinite();
 
         ++iters_this_N;
-        if (iters_this_N >= opts.iters_per_order) {
+        if (iters_this_N >= opts.iters_per_order()) {
             ++N;
             iters_this_N = 0;
         }
@@ -492,7 +514,6 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
     if (!(mu > 0.0)) [[unlikely]]
         throw std::invalid_argument(
             "kepler_lcd_iterate (SS): mu must satisfy mu > 0");
-    opts.validate();
 
     // Dispatch to true-SIMD path only when every lane is elliptic with nonzero
     // dt — the common case for PSIOPT collocation across an elliptic phase.
@@ -511,7 +532,7 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
     const SS v2 = V0[0].square() + V0[1].square() + V0[2].square();
     const SS alpha = SS::Constant(2.0) / r0 - v2 / SS::Constant(mu);
 
-    const bool all_elliptic = (alpha > SS::Constant(opts.alpha_tol)).all();
+    const bool all_elliptic = (alpha > SS::Constant(opts.alpha_tol())).all();
     const bool all_nonzero_dt = (dt.abs() > SS::Zero()).all();
     if (all_elliptic && all_nonzero_dt)
         return kepler_lcd_iterate_simd_ellipse<W>(R0, V0, dt, mu, opts);

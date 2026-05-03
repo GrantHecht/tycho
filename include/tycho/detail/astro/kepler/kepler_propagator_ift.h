@@ -352,7 +352,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     Scalar dU0_dX, dU1_dX, dU2_dX, dU3_dX;
     U_partials_X<Scalar>(k.alpha, k, dU0_dX, dU1_dX, dU2_dX, dU3_dX);
     Scalar dU0_da, dU1_da, dU2_da, dU3_da;
-    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol, dU0_da, dU1_da, dU2_da, dU3_da);
+    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol(), dU0_da, dU1_da, dU2_da, dU3_da);
 
     // -- dα/dy where α = 2/r0 - v0²/μ and y = (R0_x, R0_y, R0_z, V0_x, V0_y, V0_z, dt)
     //    ∂α/∂R0_i = -2 · R0_i / r0³
@@ -496,8 +496,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     Scalar dU0_dX, dU1_dX, dU2_dX, dU3_dX;
     U_partials_X<Scalar>(k.alpha, k, dU0_dX, dU1_dX, dU2_dX, dU3_dX);
     Scalar dU0_da, dU1_da, dU2_da, dU3_da;
-    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol, dU0_da, dU1_da, dU2_da, dU3_da);
-    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol, dU0_dX, dU1_dX, dU2_dX,
+    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol(), dU0_da, dU1_da, dU2_da, dU3_da);
+    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol(), dU0_dX, dU1_dX, dU2_dX,
                                         dU3_dX, dU0_da, dU1_da, dU2_da, dU3_da);
 
     // --- Step D: α partials (1st and 2nd order).

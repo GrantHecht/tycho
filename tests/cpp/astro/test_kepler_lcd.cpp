@@ -153,8 +153,10 @@ TEST(KeplerLCDKernel, HyperbolicAsymptoteGuard) {
     Vector6<double> oe;
     oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
-    KeplerLCDOptions opts;
-    opts.hyp_guard = 1.0;
+    // Tighten hyp_guard from default 30 down to 1 to force the bail.
+    KeplerLCDOptions opts(/*Xtol=*/1.0e-12, /*alpha_tol=*/1.0e-12,
+                          /*max_order=*/10, /*iters_per_order=*/10,
+                          /*hyp_guard=*/1.0);
     auto k =
         kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 1.0e8, TychoTest::MU_EARTH, opts);
     EXPECT_FALSE(k.converged);
@@ -446,10 +448,11 @@ TEST(KeplerLCDKernelSS, AllLanesBailoutSnapshotRecovery) {
     }
     dt << 100.0, 600.0, 250.0, 200.0;
 
-    KeplerLCDOptions opts;
-    opts.Xtol = 1.0e-300; // unachievable
-    opts.max_order = 2;
-    opts.iters_per_order = 2;
+    // Tight Xtol and small order/iter budget force every lane to bail without
+    // converging — exercises the in-loop snapshot recovery path.
+    KeplerLCDOptions opts(/*Xtol=*/1.0e-300, /*alpha_tol=*/1.0e-12,
+                          /*max_order=*/2, /*iters_per_order=*/2,
+                          /*hyp_guard=*/30.0);
 
     auto k = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH, opts);
     for (int lane = 0; lane < 4; ++lane) {
@@ -530,49 +533,71 @@ TEST(KeplerLCDKernel, TrueParabolicConverges) {
     EXPECT_NEAR(F, 0.0, 1e-9);
 }
 
-TEST(KeplerLCDOptions, ValidateRejectsInvalid) {
+TEST(KeplerLCDOptions, ConstructorRejectsInvalid) {
+    // Invariants are enforced at construction; mutation post-construction is
+    // impossible (private fields), so the test exercises the ctor directly.
+    // Pass-through arguments use the default-valued field elsewhere so each
+    // case isolates a single invariant violation.
+    constexpr double kXtol_def = 1.0e-12;
+    constexpr double kAlpha_def = 1.0e-12;
+    constexpr int kMaxOrd_def = 10;
+    constexpr int kIters_def = 10;
+    constexpr double kHyp_def = 30.0;
+
+    // Xtol invariants: must be > 0; rejects 0, negatives, and NaN.
+    EXPECT_THROW(
+        KeplerLCDOptions(0.0, kAlpha_def, kMaxOrd_def, kIters_def, kHyp_def),
+        std::invalid_argument);
+    EXPECT_THROW(
+        KeplerLCDOptions(-1.0, kAlpha_def, kMaxOrd_def, kIters_def, kHyp_def),
+        std::invalid_argument);
+    EXPECT_THROW(KeplerLCDOptions(std::nan(""), kAlpha_def, kMaxOrd_def,
+                                  kIters_def, kHyp_def),
+                 std::invalid_argument);
+
+    // alpha_tol invariants: must be > 0 (NOT just >= 0 — the SS Taylor mask
+    // `abs(α) <= alpha_tol` is otherwise true only at α == 0 exactly).
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, 0.0, kMaxOrd_def, kIters_def, kHyp_def),
+        std::invalid_argument);
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, -1.0, kMaxOrd_def, kIters_def, kHyp_def),
+        std::invalid_argument);
+    EXPECT_THROW(KeplerLCDOptions(kXtol_def, std::nan(""), kMaxOrd_def,
+                                  kIters_def, kHyp_def),
+                 std::invalid_argument);
+
+    // max_order: must be >= 1.
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, kAlpha_def, 0, kIters_def, kHyp_def),
+        std::invalid_argument);
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, kAlpha_def, -1, kIters_def, kHyp_def),
+        std::invalid_argument);
+
+    // iters_per_order: must be >= 1.
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, kAlpha_def, kMaxOrd_def, 0, kHyp_def),
+        std::invalid_argument);
+
+    // hyp_guard: must be > 0.
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, kAlpha_def, kMaxOrd_def, kIters_def, 0.0),
+        std::invalid_argument);
+    EXPECT_THROW(
+        KeplerLCDOptions(kXtol_def, kAlpha_def, kMaxOrd_def, kIters_def, -1.0),
+        std::invalid_argument);
+
+    // Default-constructed options must not throw and must produce a usable
+    // LCD iteration.
     auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
-    auto call = [&](KeplerLCDOptions opts) {
-        return kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH,
-                                          opts);
-    };
-    {
-        KeplerLCDOptions o;
-        o.Xtol = 0.0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-        o.Xtol = -1.0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-        o.Xtol = std::nan("");
-        EXPECT_THROW(call(o), std::invalid_argument);
-    }
-    {
-        KeplerLCDOptions o;
-        o.alpha_tol = -1.0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-        o.alpha_tol = std::nan("");
-        EXPECT_THROW(call(o), std::invalid_argument);
-    }
-    {
-        KeplerLCDOptions o;
-        o.max_order = 0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-        o.max_order = -1;
-        EXPECT_THROW(call(o), std::invalid_argument);
-    }
-    {
-        KeplerLCDOptions o;
-        o.iters_per_order = 0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-    }
-    {
-        KeplerLCDOptions o;
-        o.hyp_guard = 0.0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-        o.hyp_guard = -1.0;
-        EXPECT_THROW(call(o), std::invalid_argument);
-    }
-    // Default-constructed options must not throw.
-    EXPECT_NO_THROW(call(KeplerLCDOptions{}));
+    EXPECT_NO_THROW(kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0,
+                                               TychoTest::MU_EARTH,
+                                               KeplerLCDOptions{}));
+    // Explicitly-defaulted ctor should match the default-constructor values.
+    EXPECT_NO_THROW(kepler_lcd_iterate<double>(
+        rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH,
+        KeplerLCDOptions(kXtol_def, kAlpha_def, kMaxOrd_def, kIters_def, kHyp_def)));
 }
 
 TEST(KeplerPropagator, MuValidationThrows) {
