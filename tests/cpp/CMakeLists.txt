@@ -94,6 +94,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_kepler_edge_cases.cpp
     astro/test_kepler_propagation.cpp
     astro/test_kepler_lcd.cpp
+    astro/test_kepler_ift.cpp
     astro/test_lambert_solver.cpp
     astro/test_crtbp_dynamics.cpp
     astro/test_cartesian_dynamics.cpp
@@ -206,6 +207,7 @@ set_source_files_properties(
 # previously-stable batches collide when the boundary moves by one.
 set_source_files_properties(
     astro/test_kepler_lcd.cpp
+    astro/test_kepler_ift.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
