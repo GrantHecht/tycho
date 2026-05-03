@@ -11,6 +11,8 @@
 #include <gtest/gtest.h>
 #include <numbers>
 #include <tycho/detail/astro/kepler_lcd_iterate.h>
+#include <tycho/detail/astro/kepler_primal_vf.h>
+#include <tycho/detail/astro/kepler_residual_vf.h>
 #include <tycho/tycho.h>
 
 using namespace tycho;
@@ -131,6 +133,51 @@ TEST(KeplerLCDKernel, MultiPeriodReturn) {
     auto rv5 = apply_fg(rv0, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv0[i], rv5[i], 1e-4);
+}
+
+TEST(KeplerClosedForm, PrimalMatchesInlineFG) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 300.0, TychoTest::MU_EARTH);
+    ASSERT_TRUE(k.converged);
+
+    // Pack codegen input: R0(3) + V0(3) + dt + X + U0..U2 = 11
+    Eigen::Matrix<double, 11, 1> in;
+    in.head<3>() = rv.head<3>();
+    in.segment<3>(3) = rv.tail<3>();
+    in[6] = 300.0;
+    in[7] = k.X;
+    in[8] = k.U0;
+    in[9] = k.U1;
+    in[10] = k.U2;
+
+    KeplerPrimal_VF primal{TychoTest::MU_EARTH};
+    Vector6<double> out;
+    primal.compute_impl(in, out);
+
+    Vector6<double> expected = apply_fg(rv, k, TychoTest::MU_EARTH);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(out[i], expected[i], 1e-13 * std::max(1.0, std::abs(expected[i])))
+            << "comp " << i;
+}
+
+TEST(KeplerClosedForm, ResidualVanishesAtConverged) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 300.0, TychoTest::MU_EARTH);
+    ASSERT_TRUE(k.converged);
+
+    // F input: R0(3) + V0(3) + dt + U1 + U2 + U3 = 10
+    Eigen::Matrix<double, 10, 1> in;
+    in.head<3>() = rv.head<3>();
+    in.segment<3>(3) = rv.tail<3>();
+    in[6] = 300.0;
+    in[7] = k.U1;
+    in[8] = k.U2;
+    in[9] = k.U3;
+
+    KeplerResidual_VF residual{TychoTest::MU_EARTH};
+    Eigen::Matrix<double, 1, 1> F_val;
+    residual.compute_impl(in, F_val);
+    EXPECT_NEAR(F_val[0], 0.0, 1e-9); // |F| at converged X* should be at noise floor
 }
 
 TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
