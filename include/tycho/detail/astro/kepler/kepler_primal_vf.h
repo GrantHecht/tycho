@@ -20,19 +20,22 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
-struct KeplerPrimal_VF
-    : VectorFunction<KeplerPrimal_VF, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+class KeplerPrimal_VF
+    : public VectorFunction<KeplerPrimal_VF, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+    public:
     using Base = VectorFunction<KeplerPrimal_VF, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
-
-    double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational parameter
     static constexpr bool is_vectorizable = true;
+
+    private:
+    double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational parameter
 
     // Precomputed from constructor parameters
     double pc0_ = std::numeric_limits<double>::quiet_NaN();
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
     double pc2_ = std::numeric_limits<double>::quiet_NaN();
 
+    public:
     KeplerPrimal_VF() {
         this->set_io_rows(11, 6);
     }

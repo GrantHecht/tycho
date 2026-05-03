@@ -686,17 +686,29 @@ class TychoHeaderGen:
         nan_init = "std::numeric_limits<double>::quiet_NaN()"
 
         lines = []
-        lines.append(f"struct {self.Name}")
+        # `class` (default-private) + `public` inheritance keeps state members
+        # encapsulated by default; the public surface is opt-in below.  The
+        # explicit `public` on the base class is required because `class`
+        # defaults to private inheritance, which would break CRTP.
+        lines.append(f"class {self.Name}")
         lines.append(
-            f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
+            f"{I}: public VectorFunction<{self.Name}, {self.ninputs}, "
             f"{self.noutputs}, {jm}, {hm}> {{"
         )
+        lines.append(f"{I}public:")
         lines.append(
             f"{I}using Base = VectorFunction<{self.Name}, "
             f"{self.ninputs}, {self.noutputs}, {jm}, {hm}>;"
         )
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
+        vec_flag = "true" if self.is_vectorizable else "false"
+        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
         lines.append("")
+
+        # State + precomputed members are private — external code must use
+        # the constructor / set_xxx setters so cache members stay in sync
+        # with their source parameters.
+        lines.append(f"{I}private:")
 
         # Members — scalar params get NSDMI NaN defaults so a nullary-
         # constructed instance fails loudly (NaN propagation) instead of
@@ -711,9 +723,6 @@ class TychoHeaderGen:
             rows, cols = len(Mat), len(Mat[0])
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
-        vec_flag = "true" if self.is_vectorizable else "false"
-        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
-
         # Precomputed member declarations — also NSDMI NaN so a
         # nullary-constructed instance propagates NaN through the compute
         # path instead of silently reading zero-initialized bytes.
@@ -723,6 +732,8 @@ class TychoHeaderGen:
             for member_name, _ in self._precomputed:
                 lines.append(f"{I}double {member_name} = {nan_init};")
         lines.append("")
+
+        lines.append(f"{I}public:")
 
         # Constructor params (use the original non-underscore name so the
         # caller-facing API is e.g. MEEDynamics(double mu) rather than mu_).
