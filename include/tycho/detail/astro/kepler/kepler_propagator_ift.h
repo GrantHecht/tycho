@@ -279,6 +279,13 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
                              double mu, Vector6<Scalar> &xf) {
     using std::sqrt;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu);
+    // SS reduction is all-or-nothing: when any lane fails to converge,
+    // every lane's output is NaN-poisoned, not just the failing lane.
+    // This matches PSIOPT's step-rejection semantics — the whole micro-
+    // batch is rejected — and avoids the implementation complexity of
+    // mixing converged-lane outputs with NaN-poisoned ones.  The same
+    // pattern is repeated in kepler_propagate_jacobian and
+    // kepler_propagate_adjoint_hessian below.
     if (!all_converged(k.converged)) {
         xf.setConstant(kepler_nan_value<Scalar>());
         return;
@@ -302,6 +309,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
                                       Eigen::Matrix<Scalar, 6, 7> &jac) {
     KeplerLCDOptions opts;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
+    // SS all-or-nothing NaN-poisoning — see kepler_propagate header above.
     if (!all_converged(k.converged)) {
         xf.setConstant(kepler_nan_value<Scalar>());
         jac.setConstant(kepler_nan_value<Scalar>());
@@ -373,8 +381,8 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     // -- Total dF/dX: F has no explicit X column in its structural Jacobian;
     //    the implicit X-derivative folds through (U1, U2, U3) via ∂U_n/∂X = U_{n-1}.
     //    Substituting and collecting terms gives dF/dX = r (closed-form from the
-    //    kernel — this is precisely the F1 = r used as Newton's first-derivative
-    //    term during the iteration loop).
+    //    kernel — this is the same F1 = r factor the LCD update uses as f'(X)
+    //    inside the iteration loop).
     const Scalar F_X_total = k.r;
 
     // -- IFT: dX*/dy = -dF/dy_total / dF/dX
@@ -434,6 +442,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     using std::abs;
     KeplerLCDOptions opts;
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
+    // SS all-or-nothing NaN-poisoning — see kepler_propagate header above.
     if (!all_converged(k.converged)) {
         xf.setConstant(kepler_nan_value<Scalar>());
         jac.setConstant(kepler_nan_value<Scalar>());
@@ -564,7 +573,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     // these partials simplify substantially.
     //
     // (F.3.a.i) F̃_XX|_fixed_X = Σ_n F_struct_{Un} · ∂²U_n/∂X² = σ
-    //          (closed-form from the kernel; equivalent to Newton's f''(X)).
+    //          (closed-form from the kernel; equals the LCD iteration's
+    //          f''(X) = σ).
     const Scalar F_XX_total = k.sigma;
 
     // (F.3.a.ii) F̃_yX(i)|_fixed_X = ∂²F̃/(∂y_i ∂X).

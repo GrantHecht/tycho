@@ -415,9 +415,13 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
 
         // Include dX.isFinite() in the active mask: a NaN dX evaluates the
         // tolerance comparison as unordered (false), which would otherwise
-        // deactivate the lane and let it masquerade as converged.  Keeping
-        // NaN-poisoned lanes active forces r.converged = false at the post-
-        // loop (!active) reduction, independent of the downstream finite mask.
+        // mask the lane out of `active` and let it masquerade as converged.
+        // The isFinite() term forces NaN-poisoned lanes to deactivate via
+        // the false branch; the post-loop reduction `(!active) && finite`
+        // (line below where converged is computed) then sees `finite` as
+        // false on those lanes and reports converged = false.  Both terms
+        // are needed: dropping isFinite() lets NaN through, dropping the
+        // tolerance term loops forever on a finite-but-non-converging dX.
         active = active && (dX.abs() > SS::Constant(opts.Xtol)) && dX.isFinite();
 
         ++iters_this_N;
