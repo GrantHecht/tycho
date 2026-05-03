@@ -132,3 +132,49 @@ TEST(KeplerLCDKernel, MultiPeriodReturn) {
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv0[i], rv5[i], 1e-4);
 }
+
+TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    SS dt;
+
+    // Lane 0: LEO
+    auto rv0 = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    // Lane 1: MEO e=0.5
+    Vector6<double> oe1;
+    oe1 << 12000.0, 0.5, 0.5, 0.0, 0.0, 0.0;
+    auto rv1 = classic_to_cartesian<double>(oe1, TychoTest::MU_EARTH);
+    // Lane 2: hyperbolic
+    Vector6<double> oe2;
+    oe2 << -10000.0, 1.5, 0.2, 0.0, 0.0, 0.0;
+    auto rv2 = classic_to_cartesian<double>(oe2, TychoTest::MU_EARTH);
+    // Lane 3: highly eccentric
+    Vector6<double> oe3;
+    // Highly eccentric (e=0.9) but well-conditioned — avoids Stumpff cancellation
+    // at near-parabolic orbits with sub-Earth periapsis.  See plan §10 risks.
+    oe3 << 1.0e5, 0.9, 0.1, 0.0, 0.0, 0.0;
+    auto rv3 = classic_to_cartesian<double>(oe3, TychoTest::MU_EARTH);
+
+    for (int i = 0; i < 3; ++i) {
+        R0[i] << rv0[i], rv1[i], rv2[i], rv3[i];
+        V0[i] << rv0[i + 3], rv1[i + 3], rv2[i + 3], rv3[i + 3];
+    }
+    dt << 100.0, 600.0, 50.0, 200.0;
+
+    auto k_ss = kepler_lcd_iterate<Eigen::Array<double, 4, 1>>(R0, V0, dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_ss.converged);
+
+    Vector6<double> rv_arr[4] = {rv0, rv1, rv2, rv3};
+    double dt_arr[4] = {100.0, 600.0, 50.0, 200.0};
+    for (int lane = 0; lane < 4; ++lane) {
+        auto k = kepler_lcd_iterate<double>(rv_arr[lane].head<3>(), rv_arr[lane].tail<3>(),
+                                            dt_arr[lane], TychoTest::MU_EARTH);
+        EXPECT_NEAR(k_ss.X[lane], k.X, 1e-12) << "X lane " << lane;
+        EXPECT_NEAR(k_ss.U0[lane], k.U0, 1e-12) << "U0 lane " << lane;
+        EXPECT_NEAR(k_ss.U1[lane], k.U1, 1e-12) << "U1 lane " << lane;
+        EXPECT_NEAR(k_ss.U2[lane], k.U2, 1e-12) << "U2 lane " << lane;
+        EXPECT_NEAR(k_ss.U3[lane], k.U3, 1e-12) << "U3 lane " << lane;
+        EXPECT_NEAR(k_ss.r[lane], k.r, 1e-12) << "r lane " << lane;
+        EXPECT_NEAR(k_ss.sigma[lane], k.sigma, 1e-12) << "sigma lane " << lane;
+    }
+}

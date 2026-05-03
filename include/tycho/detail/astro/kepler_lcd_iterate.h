@@ -188,4 +188,75 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     return r;
 }
 
+template <int W>
+inline KeplerLCDResult<Eigen::Array<double, W, 1>>
+kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
+                            const Vector3<Eigen::Array<double, W, 1>> &V0,
+                            const Eigen::Array<double, W, 1> &dt, double mu,
+                            const KeplerLCDOptions &opts) {
+    using SS = Eigen::Array<double, W, 1>;
+    KeplerLCDResult<SS> out;
+    out.converged = true;
+    for (int lane = 0; lane < W; ++lane) {
+        Vector3<double> R0_l, V0_l;
+        for (int i = 0; i < 3; ++i) {
+            R0_l[i] = R0[i][lane];
+            V0_l[i] = V0[i][lane];
+        }
+        auto k = kepler_lcd_iterate<double>(R0_l, V0_l, dt[lane], mu, opts);
+        out.X[lane] = k.X;
+        out.alpha[lane] = k.alpha;
+        out.r0[lane] = k.r0;
+        out.sigma0[lane] = k.sigma0;
+        out.r[lane] = k.r;
+        out.sigma[lane] = k.sigma;
+        out.U0[lane] = k.U0;
+        out.U1[lane] = k.U1;
+        out.U2[lane] = k.U2;
+        out.U3[lane] = k.U3;
+        out.converged = out.converged && k.converged;
+    }
+    return out;
+}
+
+template <int W>
+inline KeplerLCDResult<Eigen::Array<double, W, 1>>
+kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
+                   const Vector3<Eigen::Array<double, W, 1>> &V0,
+                   const Eigen::Array<double, W, 1> &dt, double mu,
+                   const KeplerLCDOptions &opts = {}) {
+    return kepler_lcd_iterate_per_lane<W>(R0, V0, dt, mu, opts);
+}
+
+// Explicit specializations of the primary template for each SuperScalar width.
+// These forward to kepler_lcd_iterate_per_lane<W> so callers may invoke the
+// kernel with explicit Array Scalar template argument
+// (`kepler_lcd_iterate<Eigen::Array<double, W, 1>>(...)`) and resolve to the
+// per-lane dispatch path. The deducible `template <int W>` overload above
+// covers the implicit-argument call form.
+template <>
+inline KeplerLCDResult<Eigen::Array<double, 2, 1>>
+kepler_lcd_iterate<Eigen::Array<double, 2, 1>>(const Vector3<Eigen::Array<double, 2, 1>> &R0,
+                                               const Vector3<Eigen::Array<double, 2, 1>> &V0,
+                                               Eigen::Array<double, 2, 1> dt, double mu,
+                                               const KeplerLCDOptions &opts) {
+    return kepler_lcd_iterate_per_lane<2>(R0, V0, dt, mu, opts);
+}
+template <>
+inline KeplerLCDResult<Eigen::Array<double, 4, 1>>
+kepler_lcd_iterate<Eigen::Array<double, 4, 1>>(const Vector3<Eigen::Array<double, 4, 1>> &R0,
+                                               const Vector3<Eigen::Array<double, 4, 1>> &V0,
+                                               Eigen::Array<double, 4, 1> dt, double mu,
+                                               const KeplerLCDOptions &opts) {
+    return kepler_lcd_iterate_per_lane<4>(R0, V0, dt, mu, opts);
+}
+template <>
+inline KeplerLCDResult<Eigen::Array<double, 8, 1>>
+kepler_lcd_iterate<Eigen::Array<double, 8, 1>>(const Vector3<Eigen::Array<double, 8, 1>> &R0,
+                                               const Vector3<Eigen::Array<double, 8, 1>> &V0,
+                                               Eigen::Array<double, 8, 1> dt, double mu,
+                                               const KeplerLCDOptions &opts) {
+    return kepler_lcd_iterate_per_lane<8>(R0, V0, dt, mu, opts);
+}
+
 } // namespace tycho::astro::detail
