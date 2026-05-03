@@ -542,6 +542,22 @@ TEST(KeplerIFT_Jacobian, TrueParabolic) {
     check_jacobian_fd(R0, V0, 100.0, mu, 5e-6);
 }
 
+TEST(KeplerIFT_Jacobian, NegativeDtTrueParabolic) {
+    // Closes a coverage gap flagged by the multi-agent review: the parabolic
+    // initial-X seed in compute_universal_functions's |α| ≤ alpha_tol branch
+    // uses the closed-form atan/cbrt/tan composition that depends on sgn(dt)
+    // through atan(3·sqrt(mu/p^3)·dt).  A sign error in the seed (or in any
+    // odd-in-X term in the IFT layer's α=0 Taylor partials, e.g.
+    //   ∂U_n/∂α ~ -X^{n+2}/(n+2)!  )
+    // would slip past the positive-dt fixture if it cancels with another
+    // sign.  FD-vs-analytic at dt < 0 catches that class.
+    const double mu = TychoTest::MU_EARTH;
+    const double r0 = 7000.0;
+    Vector3<double> R0(r0, 0.0, 0.0);
+    Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
+    check_jacobian_fd(R0, V0, -100.0, mu, 5e-6);
+}
+
 TEST(KeplerIFT_Hessian, TrueParabolicWellFormed) {
     // FD-vs-analytic comparison on a true-parabolic orbit is dominated by the
     // third-derivative magnitude of the propagation (which blows up at α=0,
