@@ -19,8 +19,9 @@
 | File | Status | Responsibility |
 |---|---|---|
 | `include/tycho/detail/astro/kepler_lcd_iterate.h` | NEW | Iteration kernel; `kepler_lcd_iterate<Scalar>` + `KeplerLCDResult<Scalar>` |
-| `utils/codegen_kepler_propagator.py` | NEW | SymPy script that emits `kepler_propagator_closed_form.h` |
-| `include/tycho/detail/astro/kepler_propagator_closed_form.h` | NEW (generated) | `KeplerPrimal_VF`, `KeplerResidual_VF` — internal helpers |
+| `utils/codegen_kepler_propagator.py` | NEW | SymPy script that emits the closed-form headers |
+| `include/tycho/detail/astro/kepler_primal_vf.h` | NEW (generated) | `KeplerPrimal_VF` — internal helper |
+| `include/tycho/detail/astro/kepler_residual_vf.h` | NEW (generated) | `KeplerResidual_VF` — internal helper |
 | `include/tycho/detail/astro/kepler_propagator_ift.h` | NEW | IFT composition: `kepler_propagate`, `kepler_propagate_jacobian`, `kepler_propagate_adjoint_hessian` |
 | `include/tycho/detail/astro/kepler_propagator.h` | REWRITTEN | Public `KeplerPropagator` VF; delegates to IFT layer |
 | `include/tycho/detail/astro/kepler_utils.h` | MODIFIED | `propagate_cartesian` body replaced; rest unchanged |
@@ -829,7 +830,8 @@ EOF
 // include/tycho/detail/astro/kepler_propagator_ift.h
 #pragma once
 #include "tycho/detail/astro/kepler_lcd_iterate.h"
-#include "tycho/detail/astro/kepler_propagator_closed_form.h"
+#include "tycho/detail/astro/kepler_primal_vf.h"
+#include "tycho/detail/astro/kepler_residual_vf.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 
 namespace tycho::astro::detail {
