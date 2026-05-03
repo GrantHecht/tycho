@@ -2,7 +2,10 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 #include <Eigen/Geometry>
 #include <cmath>
+#include <limits>
 #include <numbers>
+#include <stdexcept>
+#include <type_traits>
 
 namespace tycho::astro::detail {
 
@@ -12,7 +15,52 @@ struct KeplerLCDOptions {
     int max_order = 10;
     int iters_per_order = 10;
     double hyp_guard = 30.0;
+
+    // The negated comparisons (!(x > 0)) reject NaN inputs as well as
+    // zero/negative values, since any comparison against NaN is unordered.
+    void validate() const {
+        if (!(Xtol > 0.0))
+            throw std::invalid_argument("KeplerLCDOptions: Xtol must be > 0");
+        if (!(alpha_tol >= 0.0))
+            throw std::invalid_argument("KeplerLCDOptions: alpha_tol must be >= 0");
+        if (max_order < 1)
+            throw std::invalid_argument("KeplerLCDOptions: max_order must be >= 1");
+        if (iters_per_order < 1)
+            throw std::invalid_argument("KeplerLCDOptions: iters_per_order must be >= 1");
+        if (!(hyp_guard > 0.0))
+            throw std::invalid_argument("KeplerLCDOptions: hyp_guard must be > 0");
+    }
 };
+
+// Per-lane convergence type: scalar bool for Scalar=double, Eigen lane mask for
+// SuperScalar.  PSIOPT consumers use all_converged() below to reduce to a single
+// bool early-exit gate.
+template <class Scalar> struct KeplerLCDConvergedFlag {
+    using type = bool;
+};
+
+template <int W> struct KeplerLCDConvergedFlag<Eigen::Array<double, W, 1>> {
+    using type = Eigen::Array<bool, W, 1>;
+};
+
+inline bool all_converged(bool b) { return b; }
+
+template <int W>
+inline bool all_converged(const Eigen::Array<bool, W, 1> &m) {
+    return m.all();
+}
+
+// Polymorphic NaN scalar: yields a plain double NaN for Scalar=double, and an
+// SS-broadcast NaN for Scalar=Eigen::Array<double,W,1>.  Used by the IFT layer
+// and propagate_cartesian to NaN-poison outputs when the LCD kernel fails to
+// converge.
+template <class Scalar> inline Scalar kepler_nan_value() {
+    if constexpr (std::is_same_v<Scalar, double>) {
+        return std::numeric_limits<double>::quiet_NaN();
+    } else {
+        return Scalar::Constant(std::numeric_limits<double>::quiet_NaN());
+    }
+}
 
 template <class Scalar> struct KeplerLCDResult {
     Scalar X;
@@ -22,7 +70,7 @@ template <class Scalar> struct KeplerLCDResult {
     Scalar r;
     Scalar sigma;
     Scalar U0, U1, U2, U3;
-    bool converged;
+    typename KeplerLCDConvergedFlag<Scalar>::type converged;
 };
 
 // compute_universal_functions: orbit-type branch lives here.
@@ -81,10 +129,15 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     using std::fabs;
     using std::log;
     using std::sqrt;
+    if (!(mu > 0.0)) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate: mu must satisfy mu > 0");
+    opts.validate();
     KeplerLCDResult<double> r;
     r.converged = true;
     const double sqmu = sqrt(mu);
     const double r0 = R0.norm();
+    if (!(r0 > 0.0)) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate: r0 must satisfy r0 > 0");
     const double v2 = V0.squaredNorm();
     const double sigma0 = R0.dot(V0) / sqmu;
     const double alpha = 2.0 / r0 - v2 / mu;
@@ -165,8 +218,7 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         X_new = X - dX;
 
         // Counter bookkeeping done after the work so each order N actually
-        // gets opts.iters_per_order updates before promotion.  The order-cap
-        // condition is re-checked by the while header on the next pass.
+        // gets opts.iters_per_order updates before promotion.
         ++iters_this_N;
         if (iters_this_N >= opts.iters_per_order) {
             ++N;
@@ -194,6 +246,13 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     r.U3 = U3;
     r.r = rad;
     r.sigma = sig;
+    // NaN-poisoned outputs must not report converged=true: IEEE-754 makes the
+    // loop's dX > Xtol comparison false on NaN, so a poisoned loop can exit
+    // silently with the converged flag still set.
+    if (!(std::isfinite(r.X) && std::isfinite(r.r) && std::isfinite(r.sigma) &&
+          std::isfinite(r.U0) && std::isfinite(r.U1) && std::isfinite(r.U2) &&
+          std::isfinite(r.U3))) [[unlikely]]
+        r.converged = false;
     return r;
 }
 
@@ -205,7 +264,7 @@ kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
                             const KeplerLCDOptions &opts) {
     using SS = Eigen::Array<double, W, 1>;
     KeplerLCDResult<SS> out;
-    out.converged = true;
+    out.converged = Eigen::Array<bool, W, 1>::Constant(true);
     for (int lane = 0; lane < W; ++lane) {
         Vector3<double> R0_l, V0_l;
         for (int i = 0; i < 3; ++i) {
@@ -223,7 +282,7 @@ kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
         out.U1[lane] = k.U1;
         out.U2[lane] = k.U2;
         out.U3[lane] = k.U3;
-        out.converged = out.converged && k.converged;
+        out.converged[lane] = k.converged;
     }
     return out;
 }
@@ -248,7 +307,7 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     using std::sqrt;
 
     KeplerLCDResult<SS> r;
-    r.converged = true;
+    r.converged = Mask::Constant(true);
 
     const SS sqmu = SS::Constant(sqrt(mu));
     const SS r0 = (R0[0].square() + R0[1].square() + R0[2].square()).sqrt();
@@ -273,6 +332,16 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     int N = 1;
     int iters_this_N = 0;
 
+    // Threshold below which we switch from the recursion form
+    //   C(y) = (1 - cos(sqrt(y))) / y,    S(y) = (sqrt(y) - sin(sqrt(y))) / (y*sqrt(y))
+    // to the leading-order Taylor expansions
+    //   C(y) = 1/2 - y/24 + O(y^2),       S(y) = 1/6 - y/120 + O(y^2).
+    // The recursion forms are 0/0 indeterminate at y == 0 and lose precision via
+    // catastrophic cancellation as y -> 0.  Although the dispatcher guarantees
+    // alpha > alpha_tol, X (and therefore y = alpha*X^2) can still pass through
+    // zero during the Newton iteration on very small dt or near-period seeds.
+    constexpr double kStumpffTaylorEps = 1.0e-8;
+
     while (active.any() && N <= opts.max_order) {
         // Refresh working X from latest X_new.  Inactive lanes keep their
         // converged X_new, so this is safe (and avoids a select).
@@ -280,8 +349,13 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
 
         const SS y = alpha * X * X;
         const SS sq = y.sqrt();
-        const SS C = (SS::Constant(1.0) - sq.cos()) / y;
-        const SS S = (sq - sq.sin()) / (sq * y);
+        const auto small_y = (y <= SS::Constant(kStumpffTaylorEps));
+        const SS C_rec = (SS::Constant(1.0) - sq.cos()) / y;
+        const SS S_rec = (sq - sq.sin()) / (sq * y);
+        const SS C_tay = SS::Constant(0.5) - y * SS::Constant(1.0 / 24.0);
+        const SS S_tay = SS::Constant(1.0 / 6.0) - y * SS::Constant(1.0 / 120.0);
+        const SS C = small_y.select(C_tay, C_rec);
+        const SS S = small_y.select(S_tay, S_rec);
         U1 = X * (SS::Constant(1.0) - y * S);
         U2 = X * X * C;
         U3 = X * X * X * S;
@@ -310,7 +384,12 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
         X_new = active.select(X - dX_step, X_new);
         dX = active.select(dX_step, SS::Zero());
 
-        active = active && (dX.abs() > SS::Constant(opts.Xtol));
+        // Include dX.isFinite() in the active mask: a NaN dX evaluates the
+        // tolerance comparison as unordered (false), which would otherwise
+        // deactivate the lane and let it masquerade as converged.  Keeping
+        // NaN-poisoned lanes active forces r.converged = false at the post-
+        // loop (!active) reduction, independent of the downstream finite mask.
+        active = active && (dX.abs() > SS::Constant(opts.Xtol)) && dX.isFinite();
 
         ++iters_this_N;
         if (iters_this_N >= opts.iters_per_order) {
@@ -318,19 +397,30 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
             iters_this_N = 0;
         }
     }
-    if (active.any())
-        r.converged = false;
+    // Snapshot the last in-loop values before the post-loop refresh (these are
+    // computed at the committed X via "X = X_new" at the top of the loop body).
+    // Unconverged (still-active) lanes will keep this snapshot — the scalar
+    // path applies the same strategy via a `if (r.converged)` guard above.
+    const SS X_in = X;
+    const SS U0_in = U0, U1_in = U1, U2_in = U2, U3_in = U3;
+    const SS rad_in = rad, sig_in = sig;
 
-    // Final SIMD refresh at X = X_new for every lane (mirrors the scalar's
-    // post-loop refresh: U/r/sigma should reflect the converged X*).  For
-    // unconverged lanes this is a best-effort evaluation; r.converged is
-    // already false.
+    // Refresh U/r/sigma at the final X = X_new (matches scalar's "refresh on
+    // convergence" — for converged lanes X_new equals their committed X to
+    // within Xtol, so this is essentially idempotent and just polishes them
+    // to the latest iterate; for unconverged lanes we'll discard the result
+    // via the active-gated select below).
     X = X_new;
     {
         const SS y = alpha * X * X;
         const SS sq = y.sqrt();
-        const SS C = (SS::Constant(1.0) - sq.cos()) / y;
-        const SS S = (sq - sq.sin()) / (sq * y);
+        const auto small_y = (y <= SS::Constant(kStumpffTaylorEps));
+        const SS C_rec = (SS::Constant(1.0) - sq.cos()) / y;
+        const SS S_rec = (sq - sq.sin()) / (sq * y);
+        const SS C_tay = SS::Constant(0.5) - y * SS::Constant(1.0 / 24.0);
+        const SS S_tay = SS::Constant(1.0 / 6.0) - y * SS::Constant(1.0 / 120.0);
+        const SS C = small_y.select(C_tay, C_rec);
+        const SS S = small_y.select(S_tay, S_rec);
         U1 = X * (SS::Constant(1.0) - y * S);
         U2 = X * X * C;
         U3 = X * X * X * S;
@@ -338,6 +428,22 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
         rad = r0 * U0 + sigma0 * U1 + U2;
         sig = sigma0 * U0 + (SS::Constant(1.0) - alpha * r0) * U1;
     }
+
+    // Restore in-loop snapshot on unconverged lanes only.
+    X = active.select(X_in, X);
+    U0 = active.select(U0_in, U0);
+    U1 = active.select(U1_in, U1);
+    U2 = active.select(U2_in, U2);
+    U3 = active.select(U3_in, U3);
+    rad = active.select(rad_in, rad);
+    sig = active.select(sig_in, sig);
+
+    // Per-lane converged: lanes that left `active` (|dX| <= Xtol) AND whose
+    // current values are finite.
+    const Mask finite = X.isFinite() && rad.isFinite() && sig.isFinite() &&
+                        U0.isFinite() && U1.isFinite() && U2.isFinite() &&
+                        U3.isFinite();
+    r.converged = (!active) && finite;
 
     r.X = X;
     r.U0 = U0;
@@ -356,6 +462,7 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
                    const Eigen::Array<double, W, 1> &dt, double mu,
                    const KeplerLCDOptions &opts = {}) {
     using SS = Eigen::Array<double, W, 1>;
+    opts.validate();
 
     // Dispatch to true-SIMD path only when every lane is elliptic with nonzero
     // dt — the common case for PSIOPT collocation across an elliptic phase.

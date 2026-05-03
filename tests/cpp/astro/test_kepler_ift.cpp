@@ -3,13 +3,14 @@
 //
 // Verifies kepler_propagate_jacobian<double> against central finite difference
 // on five fixtures: LEO circular, MEO eccentric, hyperbolic, multi-period
-// (5 LEO orbits), and near-parabolic (a=1e7, e=0.99 — the same lane-3 fixture
-// used in Task 1 to exercise small but well-conditioned α).
+// (5 LEO orbits), and near-parabolic (a=1e7, e=0.99 — small but well-
+// conditioned α exercising the recursion → Taylor crossover region).
 ///////////////////////////////////////////////////////////////////////////////
 #include "astro_test_utils.h"
 #include "test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 #include <numbers>
 #include <tycho/detail/astro/kepler/kepler_propagator_ift.h>
 #include <tycho/tycho.h>
@@ -23,14 +24,12 @@ namespace {
 // Compare analytic Jacobian against central FD on the 7-vector y = (R0, V0, dt).
 // Tolerance is checked element-wise as |a - fd| <= rel_tol * max(1, |fd|).
 //
-// `cross_check_propagate_cartesian` toggles the bit-equivalence check against
-// the existing `propagate_cartesian<double>` reference.  That reference is
-// known to be broken on hyperbolic orbits (Task 1 / test_kepler_lcd.cpp's
-// MatchesPropagateCartesianHyperbolic comment); for those fixtures we instead
-// validate the IFT-layer primal via orbit-energy and angular-momentum
-// invariants, then rely on the FD Jacobian agreement as the acceptance gate.
+// Acceptance criterion #1: the IFT-layer primal output matches propagate_cartesian
+// to bit-near tolerance.  Both share the LCD kernel for X*/U_n; they then assemble
+// xf via algebraically equivalent Goodyear f-g formulas (codegen vs inline), so any
+// disagreement signals a bug in one of the assemblies.
 void check_jacobian_fd(const Vector3<double> &R0, const Vector3<double> &V0, double dt, double mu,
-                       double rel_tol, bool cross_check_propagate_cartesian = true) {
+                       double rel_tol) {
     Vector6<double> xf_a;
     Eigen::Matrix<double, 6, 7> jac_a;
     kepler_propagate_jacobian<double>(R0, V0, dt, mu, xf_a, jac_a);
@@ -38,26 +37,10 @@ void check_jacobian_fd(const Vector3<double> &R0, const Vector3<double> &V0, dou
     Vector6<double> rv0;
     rv0.head<3>() = R0;
     rv0.tail<3>() = V0;
-    if (cross_check_propagate_cartesian) {
-        // Acceptance criterion #1: primal output bit-equivalent to the reference.
-        Vector6<double> xf_ref = propagate_cartesian<double>(rv0, dt, mu);
-        for (int i = 0; i < 6; ++i)
-            EXPECT_NEAR(xf_a[i], xf_ref[i], 1e-13 * std::max(1.0, std::abs(xf_ref[i])))
-                << "primal comp " << i;
-    } else {
-        // Validate via orbit invariants on hyperbolic fixtures where
-        // propagate_cartesian is broken.
-        const Vector3<double> R1 = xf_a.head<3>();
-        const Vector3<double> V1 = xf_a.tail<3>();
-        const double E0 = 0.5 * V0.squaredNorm() - mu / R0.norm();
-        const double E1 = 0.5 * V1.squaredNorm() - mu / R1.norm();
-        EXPECT_NEAR(E0, E1, 1e-9 * std::abs(E0)) << "energy not conserved";
-        const Vector3<double> H0 = R0.cross(V0);
-        const Vector3<double> H1 = R1.cross(V1);
-        for (int i = 0; i < 3; ++i)
-            EXPECT_NEAR(H0[i], H1[i], 1e-9 * std::max(1.0, std::abs(H0[i])))
-                << "angular momentum comp " << i;
-    }
+    Vector6<double> xf_ref = propagate_cartesian<double>(rv0, dt, mu);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(xf_a[i], xf_ref[i], 1e-13 * std::max(1.0, std::abs(xf_ref[i])))
+            << "primal comp " << i;
 
     auto eval = [&](const Eigen::Matrix<double, 7, 1> &y) {
         Vector6<double> xf;
@@ -115,11 +98,7 @@ TEST(KeplerIFT_Jacobian, Hyperbolic) {
     Vector6<double> oe;
     oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
-    // The existing propagate_cartesian<double> is broken on this fixture (see
-    // test_kepler_lcd.cpp, MatchesPropagateCartesianHyperbolic comment); skip
-    // the bit-equivalence cross-check and rely on orbit invariants + FD.
-    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH, 5e-7,
-                      /*cross_check_propagate_cartesian=*/false);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH, 5e-7);
 }
 
 TEST(KeplerIFT_Jacobian, MultiPeriod) {
@@ -160,8 +139,8 @@ namespace {
 // the floor on FD noise) and (b) the third-derivative size (which sets the
 // truncation error).  These two compete.  For LEO/MEO/Hyp the analytic Jac
 // is ~1e-12 accurate, so cbrt(eps_machine) is fine.  For NearParabolic the
-// analytic Jac itself is only 5e-6 accurate (per Task 3), and a larger step
-// is required to keep FD noise below the per-row scale.  For MultiPeriod the
+// analytic Jac itself is only ~5e-6 accurate, and a larger step is required to
+// keep FD noise below the per-row scale.  For MultiPeriod the
 // Hessian magnitude is O(1e3-1e4) so a smaller step would pick up truncation;
 // cbrt_eps is ideal there.
 //
@@ -278,9 +257,9 @@ TEST(KeplerIFT_Hessian, MultiPeriod) {
 TEST(KeplerIFT_Hessian, NearParabolic) {
     // Same fixture as IFT_Jacobian.NearParabolic — a=1e7, e=0.99, dt=200s.
     // FD step bumped to 1e-3 (vs cbrt_eps default ~6e-6) because the analytic
-    // Jacobian on this fixture is itself only ~5e-6 accurate (per Task 3),
-    // and FD-of-Jacobian amplifies that floor by 1/eps.  A larger step trades
-    // a small amount of truncation error for a big reduction in noise floor.
+    // Jacobian on this fixture is itself only ~5e-6 accurate, and FD-of-Jacobian
+    // amplifies that floor by 1/eps.  A larger step trades a small amount of
+    // truncation error for a big reduction in noise floor.
     Vector6<double> oe;
     oe << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
@@ -288,4 +267,335 @@ TEST(KeplerIFT_Hessian, NearParabolic) {
     Vector6<double> lm = lm_d;
     check_adjoint_hessian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, lm, 5e-5,
                              /*fd_eps_scale=*/1e-3);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Negative-dt FD Jacobian: backward propagation is a routine PSIOPT pattern.
+// The column-6 (∂xf/∂dt) sign is the most likely place a sign bug hides.
+///////////////////////////////////////////////////////////////////////////////
+TEST(KeplerIFT_Jacobian, NegativeDtLEO) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), -300.0, TychoTest::MU_EARTH, 5e-7);
+}
+
+TEST(KeplerIFT_Jacobian, NegativeDtHyperbolic) {
+    Vector6<double> oe;
+    oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), -100.0, TychoTest::MU_EARTH, 5e-7);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// SuperScalar IFT FD checks
+//
+// is_vectorizable=true on KeplerPropagator routes through Eigen::Array<double,W,1>
+// SS Scalar.  These tests exercise the SS Jacobian and adjoint-Hessian paths via
+// the public KeplerPropagator VF API and per-lane FD-cross-check against the
+// scalar IFT path on the same single-lane state.
+///////////////////////////////////////////////////////////////////////////////
+namespace {
+
+void check_ss_jacobian_per_lane(const Vector6<double> rvs[4], const double dts[4], double mu,
+                                double rel_tol) {
+    using SS = Eigen::Array<double, 4, 1>;
+
+    // Pack lanes
+    Eigen::Matrix<SS, 7, 1> x_ss;
+    for (int i = 0; i < 3; ++i) {
+        SS Ri, Vi;
+        for (int lane = 0; lane < 4; ++lane) {
+            Ri[lane] = rvs[lane][i];
+            Vi[lane] = rvs[lane][i + 3];
+        }
+        x_ss[i] = Ri;
+        x_ss[i + 3] = Vi;
+    }
+    {
+        SS dt_ss;
+        for (int lane = 0; lane < 4; ++lane)
+            dt_ss[lane] = dts[lane];
+        x_ss[6] = dt_ss;
+    }
+
+    // SS analytic Jacobian via the public VF.
+    KeplerPropagator vf{mu};
+    Eigen::Matrix<SS, 6, 1> xf_ss;
+    Eigen::Matrix<SS, 6, 7> jac_ss;
+    vf.compute_jacobian_impl(x_ss, xf_ss, jac_ss);
+
+    // Scalar reference per lane via the same VF.
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, 7, 1> x_d;
+        x_d.head<3>() = rvs[lane].head<3>();
+        x_d.segment<3>(3) = rvs[lane].tail<3>();
+        x_d[6] = dts[lane];
+
+        Eigen::Matrix<double, 6, 1> xf_d;
+        Eigen::Matrix<double, 6, 7> jac_d;
+        vf.compute_jacobian_impl(x_d, xf_d, jac_d);
+
+        for (int r = 0; r < 6; ++r) {
+            EXPECT_NEAR(xf_ss[r][lane], xf_d[r],
+                        rel_tol * std::max(1.0, std::abs(xf_d[r])))
+                << "lane " << lane << " xf row " << r;
+            for (int c = 0; c < 7; ++c) {
+                EXPECT_NEAR(jac_ss(r, c)[lane], jac_d(r, c),
+                            rel_tol * std::max(1.0, std::abs(jac_d(r, c))))
+                    << "lane " << lane << " jac (" << r << "," << c << ")";
+            }
+        }
+    }
+}
+
+void check_ss_adjoint_hessian_per_lane(const Vector6<double> rvs[4], const double dts[4], double mu,
+                                       const Vector6<double> &lm_d, double rel_tol) {
+    using SS = Eigen::Array<double, 4, 1>;
+
+    Eigen::Matrix<SS, 7, 1> x_ss;
+    for (int i = 0; i < 3; ++i) {
+        SS Ri, Vi;
+        for (int lane = 0; lane < 4; ++lane) {
+            Ri[lane] = rvs[lane][i];
+            Vi[lane] = rvs[lane][i + 3];
+        }
+        x_ss[i] = Ri;
+        x_ss[i + 3] = Vi;
+    }
+    {
+        SS dt_ss;
+        for (int lane = 0; lane < 4; ++lane)
+            dt_ss[lane] = dts[lane];
+        x_ss[6] = dt_ss;
+    }
+
+    Eigen::Matrix<SS, 6, 1> lm_ss;
+    for (int i = 0; i < 6; ++i)
+        lm_ss[i] = SS::Constant(lm_d[i]);
+
+    KeplerPropagator vf{mu};
+    Eigen::Matrix<SS, 6, 1> xf_ss;
+    Eigen::Matrix<SS, 6, 7> jac_ss;
+    Eigen::Matrix<SS, 7, 1> grad_ss;
+    Eigen::Matrix<SS, 7, 7> hess_ss;
+    vf.compute_jacobian_adjointgradient_adjointhessian_impl(x_ss, xf_ss, jac_ss, grad_ss, hess_ss,
+                                                            lm_ss);
+
+    for (int lane = 0; lane < 4; ++lane) {
+        Eigen::Matrix<double, 7, 1> x_d;
+        x_d.head<3>() = rvs[lane].head<3>();
+        x_d.segment<3>(3) = rvs[lane].tail<3>();
+        x_d[6] = dts[lane];
+
+        Eigen::Matrix<double, 6, 1> xf_d;
+        Eigen::Matrix<double, 6, 7> jac_d;
+        Eigen::Matrix<double, 7, 1> grad_d;
+        Eigen::Matrix<double, 7, 7> hess_d;
+        vf.compute_jacobian_adjointgradient_adjointhessian_impl(x_d, xf_d, jac_d, grad_d, hess_d,
+                                                                lm_d);
+
+        for (int i = 0; i < 7; ++i) {
+            EXPECT_NEAR(grad_ss[i][lane], grad_d[i],
+                        rel_tol * std::max(1.0, std::abs(grad_d[i])))
+                << "lane " << lane << " grad " << i;
+        }
+        for (int r = 0; r < 7; ++r) {
+            for (int c = 0; c < 7; ++c) {
+                EXPECT_NEAR(hess_ss(r, c)[lane], hess_d(r, c),
+                            rel_tol * std::max(1.0, std::abs(hess_d(r, c))))
+                    << "lane " << lane << " hess (" << r << "," << c << ")";
+            }
+        }
+    }
+}
+
+} // namespace
+
+// SS-vs-scalar tolerance: the SIMD path re-orders sums vs scalar (FMA grouping
+// across lane components), producing sub-ULP differences in the kernel's X*/U_n
+// output.  Through the IFT chain rule (1/r divisions, U-recursion compositions),
+// these amplify to O(1e-9) absolute in the Hessian.  This is the natural
+// precision floor for SS-vs-scalar parity, comparable to the FD-vs-analytic
+// floor on the scalar tests (~5e-6 with row-norm scaling).
+TEST(KeplerIFT_Jacobian, SimdMixedRegimes) {
+    // Pack four orbit regimes into one SS call: LEO / MEO / Hyperbolic / NearParabolic.
+    // The kernel takes the per_lane fallback path (mixed orbit types) and the IFT
+    // layer's <Scalar=SS> instantiation must agree with the scalar IFT per lane.
+    auto rv0 = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    Vector6<double> oe1, oe2, oe3;
+    oe1 << 12000.0, 0.5, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oe2 << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oe3 << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    Vector6<double> rvs[4] = {
+        rv0,
+        classic_to_cartesian<double>(oe1, TychoTest::MU_EARTH),
+        classic_to_cartesian<double>(oe2, TychoTest::MU_EARTH),
+        classic_to_cartesian<double>(oe3, TychoTest::MU_EARTH),
+    };
+    const double dts[4] = {300.0, 600.0, 100.0, 200.0};
+    check_ss_jacobian_per_lane(rvs, dts, TychoTest::MU_EARTH, 1e-9);
+}
+
+TEST(KeplerIFT_Jacobian, SimdUniformElliptic) {
+    // All elliptic + all nonzero dt → routes to kepler_lcd_iterate_simd_ellipse.
+    Vector6<double> oes[4];
+    oes[0] << 7000.0, 0.01, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oes[1] << 12000.0, 0.5, 0.5, 0.0, 0.0, 0.0;
+    oes[2] << 9000.0, 0.2, 0.3, 0.4, 0.5, 0.6;
+    oes[3] << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    Vector6<double> rvs[4];
+    for (int lane = 0; lane < 4; ++lane)
+        rvs[lane] = classic_to_cartesian<double>(oes[lane], TychoTest::MU_EARTH);
+    const double dts[4] = {100.0, 600.0, 250.0, 200.0};
+    check_ss_jacobian_per_lane(rvs, dts, TychoTest::MU_EARTH, 1e-9);
+}
+
+TEST(KeplerIFT_Hessian, SimdMixedRegimes) {
+    auto rv0 = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    Vector6<double> oe1, oe2, oe3;
+    oe1 << 12000.0, 0.5, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oe2 << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oe3 << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    Vector6<double> rvs[4] = {
+        rv0,
+        classic_to_cartesian<double>(oe1, TychoTest::MU_EARTH),
+        classic_to_cartesian<double>(oe2, TychoTest::MU_EARTH),
+        classic_to_cartesian<double>(oe3, TychoTest::MU_EARTH),
+    };
+    const double dts[4] = {300.0, 600.0, 100.0, 200.0};
+    Eigen::VectorXd lm_d = TychoTest::deterministic_random_vector(6, 501, -1.0, 1.0);
+    Vector6<double> lm = lm_d;
+    check_ss_adjoint_hessian_per_lane(rvs, dts, TychoTest::MU_EARTH, lm, 1e-9);
+}
+
+TEST(KeplerIFT_Hessian, SimdUniformElliptic) {
+    Vector6<double> oes[4];
+    oes[0] << 7000.0, 0.01, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oes[1] << 12000.0, 0.5, 0.5, 0.0, 0.0, 0.0;
+    oes[2] << 9000.0, 0.2, 0.3, 0.4, 0.5, 0.6;
+    oes[3] << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    Vector6<double> rvs[4];
+    for (int lane = 0; lane < 4; ++lane)
+        rvs[lane] = classic_to_cartesian<double>(oes[lane], TychoTest::MU_EARTH);
+    const double dts[4] = {100.0, 600.0, 250.0, 200.0};
+    Eigen::VectorXd lm_d = TychoTest::deterministic_random_vector(6, 502, -1.0, 1.0);
+    Vector6<double> lm = lm_d;
+    check_ss_adjoint_hessian_per_lane(rvs, dts, TychoTest::MU_EARTH, lm, 1e-9);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// NaN-poisoning end-to-end: PSIOPT relies on the IFT layer's bailout NaN
+// signal to detect failed steps.  Verify that on kernel non-convergence, every
+// entry of xf, jac, adjgrad, and adjhess is non-finite — not just a subset.
+///////////////////////////////////////////////////////////////////////////////
+TEST(KeplerIFT, NaNPoisoningEndToEnd) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    const double nan_dt = std::numeric_limits<double>::quiet_NaN();
+    const Vector3<double> R0 = rv.head<3>();
+    const Vector3<double> V0 = rv.tail<3>();
+
+    Vector6<double> xf;
+    kepler_propagate<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, xf);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_FALSE(std::isfinite(xf[i])) << "primal xf[" << i << "]";
+
+    Vector6<double> xf_j;
+    Eigen::Matrix<double, 6, 7> jac;
+    kepler_propagate_jacobian<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, xf_j, jac);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_FALSE(std::isfinite(xf_j[i])) << "jac-xf[" << i << "]";
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_FALSE(std::isfinite(jac(r, c))) << "jac(" << r << "," << c << ")";
+
+    Vector6<double> xf_h;
+    Eigen::Matrix<double, 6, 7> jac_h;
+    Vector7<double> grad;
+    Eigen::Matrix<double, 7, 7> hess;
+    Vector6<double> lm = TychoTest::deterministic_random_vector(6, 601, -1.0, 1.0);
+    kepler_propagate_adjoint_hessian<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, lm, xf_h, jac_h,
+                                             grad, hess);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_FALSE(std::isfinite(xf_h[i])) << "hess-xf[" << i << "]";
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_FALSE(std::isfinite(jac_h(r, c))) << "hess-jac(" << r << "," << c << ")";
+    for (int i = 0; i < 7; ++i)
+        EXPECT_FALSE(std::isfinite(grad[i])) << "adjgrad[" << i << "]";
+    for (int r = 0; r < 7; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_FALSE(std::isfinite(hess(r, c))) << "adjhess(" << r << "," << c << ")";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// True-parabolic orbit (alpha == 0 exactly).  Drives the |alpha| <= alpha_tol
+// Taylor branches in U_partials_alpha and compute_U_second_partials, which the
+// existing NearParabolic fixtures (alpha ~ 1e-7) do not exercise.
+///////////////////////////////////////////////////////////////////////////////
+TEST(KeplerIFT_Jacobian, TrueParabolic) {
+    // Periapsis radius / parabolic-velocity construction yields alpha = 0 exactly.
+    // FD step bumped to 1e-3: parabolic conditioning amplifies analytic-Jac round-off,
+    // matching the NearParabolic / Hessian convention.
+    const double mu = TychoTest::MU_EARTH;
+    const double r0 = 7000.0;
+    Vector3<double> R0(r0, 0.0, 0.0);
+    Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
+    check_jacobian_fd(R0, V0, 100.0, mu, 5e-6);
+}
+
+TEST(KeplerIFT_Hessian, TrueParabolicWellFormed) {
+    // FD-vs-analytic comparison on a true-parabolic orbit is dominated by the
+    // third-derivative magnitude of the propagation (which blows up at α=0,
+    // making any FD step size simultaneously truncation- and noise-limited).
+    // Instead, verify the analytic Hessian is well-formed: finite, symmetric,
+    // and consistent with the Jacobian-only path.  This exercises the Taylor
+    // branch in compute_U_second_partials (|α| ≤ alpha_tol) which the existing
+    // NearParabolic fixture (α ≈ 1e-7) does not reach.
+    const double mu = TychoTest::MU_EARTH;
+    const double r0 = 7000.0;
+    Vector3<double> R0(r0, 0.0, 0.0);
+    Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
+    Vector6<double> lm = TychoTest::deterministic_random_vector(6, 406, -1.0, 1.0);
+
+    Vector6<double> xf;
+    Eigen::Matrix<double, 6, 7> jac;
+    Vector7<double> grad;
+    Eigen::Matrix<double, 7, 7> hess;
+    kepler_propagate_adjoint_hessian<double>(R0, V0, 100.0, mu, lm, xf, jac, grad, hess);
+
+    for (int i = 0; i < 6; ++i)
+        EXPECT_TRUE(std::isfinite(xf[i]));
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_TRUE(std::isfinite(jac(r, c)));
+    for (int i = 0; i < 7; ++i)
+        EXPECT_TRUE(std::isfinite(grad[i]));
+    for (int r = 0; r < 7; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_TRUE(std::isfinite(hess(r, c))) << "hess(" << r << "," << c << ")";
+
+    // Symmetry check: the Taylor-branch second partials are symmetric in (X, α);
+    // a sign or index error in compute_U_second_partials would surface here.
+    for (int r = 0; r < 7; ++r)
+        for (int c = r + 1; c < 7; ++c)
+            EXPECT_NEAR(hess(r, c), hess(c, r),
+                        1e-12 * std::max(1.0, std::abs(hess(r, c))))
+                << "asymmetry at (" << r << "," << c << ")";
+
+    // Cross-check primal + Jacobian against the Jacobian-only path (acceptance #1
+    // from check_adjoint_hessian_fd).  This is independent of FD step choice and
+    // catches divergence between the two IFT routes.
+    Vector6<double> xf_j;
+    Eigen::Matrix<double, 6, 7> jac_j;
+    kepler_propagate_jacobian<double>(R0, V0, 100.0, mu, xf_j, jac_j);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(xf[i], xf_j[i], 1e-12 * std::max(1.0, std::abs(xf_j[i])));
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_NEAR(jac(r, c), jac_j(r, c),
+                        1e-12 * std::max(1.0, std::abs(jac_j(r, c))));
+
+    // Adjoint gradient must equal jacᵀ·λ.
+    const Vector7<double> jac_t_lm = jac.transpose() * lm;
+    for (int i = 0; i < 7; ++i)
+        EXPECT_NEAR(grad[i], jac_t_lm[i], 1e-13 * std::max(1.0, std::abs(jac_t_lm[i])));
 }

@@ -170,10 +170,8 @@ static void BM_Lambert_MultiRev(benchmark::State &state) {
 BENCHMARK(BM_Lambert_MultiRev);
 
 ///////////////////////////////////////////////////////////////////////////////
-// KeplerPropagator VF benchmarks (post-LCD-rewrite)
+// KeplerPropagator VF benchmarks
 ///////////////////////////////////////////////////////////////////////////////
-
-#include <tycho/detail/astro/kepler/kepler_propagator.h>
 
 static void BM_KeplerPropagator_VF_Compute(benchmark::State &state) {
     auto oe = leoClassic();

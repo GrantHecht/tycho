@@ -23,6 +23,8 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
     const Vector3<Scalar> R0 = RV.template head<3>();
     const Vector3<Scalar> V0 = RV.template tail<3>();
     auto k = ::tycho::astro::detail::kepler_lcd_iterate(R0, V0, dt, double(mu));
+    if (!::tycho::astro::detail::all_converged(k.converged)) [[unlikely]]
+        return Vector6<Scalar>::Constant(::tycho::astro::detail::kepler_nan_value<Scalar>());
 
     Scalar sqmu = sqrt(mu);
     Scalar aF = Scalar(1) - k.U2 / k.r0;

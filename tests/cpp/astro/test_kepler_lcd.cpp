@@ -9,7 +9,9 @@
 #include "astro_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 #include <numbers>
+#include <stdexcept>
 #include <tycho/detail/astro/kepler/kepler_lcd_iterate.h>
 #include <tycho/detail/astro/kepler/kepler_primal_vf.h>
 #include <tycho/detail/astro/kepler/kepler_residual_vf.h>
@@ -57,15 +59,10 @@ TEST(KeplerLCDKernel, MatchesPropagateCartesianMEO) {
 }
 
 TEST(KeplerLCDKernel, MatchesPropagateCartesianHyperbolic) {
-    // The existing propagate_cartesian<double> does not converge on the e=1.5,
-    // a=-10000 km, dt=100 s reference case (its hyperbolic seed is far from the
-    // root and Newton-Raphson is capped at 19 iterations); the partially-
-    // converged output disagrees with the analytic answer by tens of thousands
-    // of km.  Task 5 of the LCD plan is the rewrite of propagate_cartesian on
-    // top of this kernel that fixes the bug.  Until that lands, validate the
-    // LCD answer against orbit invariants (energy, angular momentum) and the
-    // hyperbolic asymptote (radius monotonically increasing past periapsis)
-    // instead of point-comparing to the broken reference.
+    // propagate_cartesian uses the same LCD kernel, so equality would be
+    // tautological; validate via orbit invariants (energy + angular momentum)
+    // and the hyperbolic asymptote (radius monotonically increasing past
+    // periapsis) instead.
     Vector6<double> oe;
     oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
     auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
@@ -121,6 +118,16 @@ TEST(KeplerLCDKernel, HyperbolicAsymptoteGuard) {
     auto k =
         kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 1.0e8, TychoTest::MU_EARTH, opts);
     EXPECT_FALSE(k.converged);
+    // Bail-out U-state recovery: the kernel must report finite last-stable
+    // values, not garbage from the unstable post-loop refresh.
+    EXPECT_TRUE(std::isfinite(k.X));
+    EXPECT_TRUE(std::isfinite(k.U0));
+    EXPECT_TRUE(std::isfinite(k.U1));
+    EXPECT_TRUE(std::isfinite(k.U2));
+    EXPECT_TRUE(std::isfinite(k.U3));
+    EXPECT_TRUE(std::isfinite(k.r));
+    EXPECT_TRUE(std::isfinite(k.sigma));
+    EXPECT_GT(k.r, 0.0);
 }
 
 TEST(KeplerLCDKernel, MultiPeriodReturn) {
@@ -197,8 +204,7 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
     auto rv2 = classic_to_cartesian<double>(oe2, TychoTest::MU_EARTH);
     // Lane 3: near-parabolic ellipse — orbit-regime diversity vs lane 1.
     // a=1e7 km, e=0.99 → periapsis 1e5 km, alpha≈1e-7.  Well-conditioned
-    // (periapsis well above Earth) and exercises a distinct regime.  See
-    // plan §10 risks.
+    // (periapsis well above Earth) and exercises a distinct regime.
     Vector6<double> oe3;
     oe3 << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
     auto rv3 = classic_to_cartesian<double>(oe3, TychoTest::MU_EARTH);
@@ -210,7 +216,7 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
     dt << 100.0, 600.0, 50.0, 200.0;
 
     auto k_ss = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH);
-    EXPECT_TRUE(k_ss.converged);
+    EXPECT_TRUE(all_converged(k_ss.converged));
 
     Vector6<double> rv_arr[4] = {rv0, rv1, rv2, rv3};
     double dt_arr[4] = {100.0, 600.0, 50.0, 200.0};
@@ -257,7 +263,7 @@ TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
     }
 
     auto k_ss = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH);
-    EXPECT_TRUE(k_ss.converged);
+    EXPECT_TRUE(all_converged(k_ss.converged));
 
     // Tolerance is relative — SIMD evaluation re-orders sums vs scalar, so
     // sub-ULP rounding differences (~1e-15 relative) are expected.
@@ -276,4 +282,234 @@ TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
         EXPECT_NEAR(k_ss.sigma[lane], k.sigma, rel_near(k_ss.sigma[lane], k.sigma))
             << "sigma lane " << lane;
     }
+}
+
+TEST(KeplerLCDKernel, NegativeDtRoundtripLEO) {
+    // Backward propagation is a routine PSIOPT call pattern (e.g., shooting
+    // from a final state).  Ensure +dt then -dt recovers the initial state.
+    auto rv0 = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    const double dt = 300.0;
+    auto k_fwd =
+        kepler_lcd_iterate<double>(rv0.head<3>(), rv0.tail<3>(), dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_fwd.converged);
+    auto rv1 = apply_fg(rv0, k_fwd, TychoTest::MU_EARTH);
+    auto k_back =
+        kepler_lcd_iterate<double>(rv1.head<3>(), rv1.tail<3>(), -dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_back.converged);
+    auto rv_back = apply_fg(rv1, k_back, TychoTest::MU_EARTH);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(rv_back[i], rv0[i], 1e-10 * std::max(1.0, std::abs(rv0[i])));
+}
+
+TEST(KeplerLCDKernel, NegativeDtRoundtripHyperbolic) {
+    Vector6<double> oe;
+    oe << -10000.0, 1.5, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    auto rv0 = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    const double dt = 100.0;
+    auto k_fwd =
+        kepler_lcd_iterate<double>(rv0.head<3>(), rv0.tail<3>(), dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_fwd.converged);
+    auto rv1 = apply_fg(rv0, k_fwd, TychoTest::MU_EARTH);
+    auto k_back =
+        kepler_lcd_iterate<double>(rv1.head<3>(), rv1.tail<3>(), -dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_back.converged);
+    auto rv_back = apply_fg(rv1, k_back, TychoTest::MU_EARTH);
+    // Looser tolerance than LEO: hyperbolic round-trip is more sensitive to
+    // numerical conditioning of the forward + backward universal-variable solves.
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(rv_back[i], rv0[i], 1e-8 * std::max(1.0, std::abs(rv0[i])));
+}
+
+TEST(KeplerLCDKernel, NaNInjectionFlagsNonConvergence) {
+    // NaN in dt: r0 stays finite (so the input-validation throw isn't hit),
+    // but the loop body produces NaN, which IEEE-754 makes |NaN| > Xtol false.
+    // The post-loop finiteness gate must catch this and set converged = false.
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    const double nan_dt = std::numeric_limits<double>::quiet_NaN();
+    auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), nan_dt, TychoTest::MU_EARTH);
+    EXPECT_FALSE(k.converged);
+}
+
+TEST(KeplerLCDKernel, RejectsZeroR0) {
+    Vector3<double> R0 = Vector3<double>::Zero();
+    Vector3<double> V0(0.0, 7.5, 0.0);
+    EXPECT_THROW(kepler_lcd_iterate<double>(R0, V0, 100.0, TychoTest::MU_EARTH),
+                 std::invalid_argument);
+}
+
+TEST(KeplerLCDKernel, RejectsNonPositiveMu) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    EXPECT_THROW(kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0, 0.0),
+                 std::invalid_argument);
+    EXPECT_THROW(kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0, -1.0),
+                 std::invalid_argument);
+}
+
+TEST(KeplerLCDKernelSS, AllLanesBailoutSnapshotRecovery) {
+    // SIMD-path bailout regression test.  All four lanes are uniform-elliptic
+    // with nonzero dt (so the dispatcher routes to kepler_lcd_iterate_simd_ellipse),
+    // but Xtol is tightened below the achievable convergence floor with a low
+    // max_order budget — every lane must exit unconverged.  The kernel must:
+    //   (1) report converged=false on every lane, and
+    //   (2) keep the snapshot-restored X / U_n / r / sigma finite (the SIMD
+    //       analog of the scalar HyperbolicAsymptoteGuard recovery).
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    SS dt;
+    Vector6<double> oes[4];
+    oes[0] << 7000.0, 0.01, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oes[1] << 12000.0, 0.5, 0.5, 0.0, 0.0, 0.0;
+    oes[2] << 9000.0, 0.2, 0.3, 0.4, 0.5, 0.6;
+    oes[3] << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    Vector6<double> rvs[4];
+    for (int lane = 0; lane < 4; ++lane)
+        rvs[lane] = classic_to_cartesian<double>(oes[lane], TychoTest::MU_EARTH);
+    for (int i = 0; i < 3; ++i) {
+        for (int lane = 0; lane < 4; ++lane) {
+            R0[i][lane] = rvs[lane][i];
+            V0[i][lane] = rvs[lane][i + 3];
+        }
+    }
+    dt << 100.0, 600.0, 250.0, 200.0;
+
+    KeplerLCDOptions opts;
+    opts.Xtol = 1.0e-300; // unachievable
+    opts.max_order = 2;
+    opts.iters_per_order = 2;
+
+    auto k = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH, opts);
+    for (int lane = 0; lane < 4; ++lane) {
+        EXPECT_FALSE(k.converged[lane]) << "lane " << lane << " unexpectedly converged";
+        EXPECT_TRUE(std::isfinite(k.X[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U0[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U1[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U2[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U3[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.r[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.sigma[lane])) << "lane " << lane;
+        EXPECT_GT(k.r[lane], 0.0) << "lane " << lane;
+    }
+}
+
+TEST(KeplerLCDKernelSS, SmallDtHitsStumpffTaylorBranch) {
+    // Tiny per-lane dt drives the Newton seed X = sqmu*dt*alpha into the
+    // y = alpha*X^2 < kStumpffTaylorEps regime.  Without the y-to-zero Taylor
+    // fallback, the SIMD Stumpff (1 - cos(sqrt(y)))/y and (sqrt(y) - sin(sqrt(y)))/(y*sqrt(y))
+    // expressions divide 0/0 and poison every output to NaN.  This test asserts
+    // the kernel converges and produces finite, scalar-equivalent results.
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    SS dt;
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    for (int i = 0; i < 3; ++i) {
+        R0[i] = SS::Constant(rv[i]);
+        V0[i] = SS::Constant(rv[i + 3]);
+    }
+    // Lane dts span six orders of magnitude — from microseconds (where y is tiny)
+    // up to a normal LEO step (where the recursion form is well-conditioned).
+    dt << 1.0e-6, 1.0e-3, 1.0, 100.0;
+
+    auto k = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(all_converged(k.converged));
+    for (int lane = 0; lane < 4; ++lane) {
+        EXPECT_TRUE(std::isfinite(k.X[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U0[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U1[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U2[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U3[lane])) << "lane " << lane;
+    }
+
+    // Cross-check vs scalar.
+    const double dts[4] = {1.0e-6, 1.0e-3, 1.0, 100.0};
+    for (int lane = 0; lane < 4; ++lane) {
+        auto ks = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), dts[lane],
+                                             TychoTest::MU_EARTH);
+        EXPECT_TRUE(ks.converged) << "scalar ref lane " << lane;
+        EXPECT_NEAR(k.X[lane], ks.X, 1e-12 * std::max(1.0, std::abs(ks.X))) << "lane " << lane;
+        EXPECT_NEAR(k.r[lane], ks.r, 1e-12 * std::max(1.0, std::abs(ks.r))) << "lane " << lane;
+    }
+}
+
+TEST(KeplerLCDKernel, TrueParabolicConverges) {
+    // Construct an exactly-parabolic orbit: at periapsis (R perpendicular to V)
+    // with v = sqrt(2*mu/r0), so alpha = 2/r0 - v^2/mu = 0 exactly.  This drives
+    // the |alpha| <= alpha_tol Taylor branch in compute_universal_functions and
+    // the parabolic initial-X branch.  A working kernel produces a converged X*
+    // satisfying Barker's equation X + alpha*X^3/6 = sqrt(mu)*dt with alpha = 0.
+    const double mu = TychoTest::MU_EARTH;
+    const double r0 = 7000.0;
+    Vector3<double> R0(r0, 0.0, 0.0);
+    Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
+    const double dt = 100.0;
+    auto k = kepler_lcd_iterate<double>(R0, V0, dt, mu);
+    EXPECT_TRUE(k.converged);
+    EXPECT_TRUE(std::isfinite(k.X));
+    // Parabolic Stumpff U_n: U0=1, U1=X, U2=X^2/2, U3=X^3/6 (no recursion-form
+    // cancellation since alpha=0).  Confirm them directly.
+    EXPECT_DOUBLE_EQ(k.U0, 1.0);
+    EXPECT_DOUBLE_EQ(k.U1, k.X);
+    EXPECT_DOUBLE_EQ(k.U2, k.X * k.X / 2.0);
+    EXPECT_DOUBLE_EQ(k.U3, k.X * k.X * k.X / 6.0);
+    // Barker's equation: r0*X + sigma0*X^2/2 + X^3/6 = sqrt(mu)*dt.
+    // sigma0 = R.V/sqrt(mu) = 0 at periapsis.
+    const double F = r0 * k.X + k.X * k.X * k.X / 6.0 - std::sqrt(mu) * dt;
+    EXPECT_NEAR(F, 0.0, 1e-9);
+}
+
+TEST(KeplerLCDOptions, ValidateRejectsInvalid) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    auto call = [&](KeplerLCDOptions opts) {
+        return kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH,
+                                          opts);
+    };
+    {
+        KeplerLCDOptions o;
+        o.Xtol = 0.0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+        o.Xtol = -1.0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+        o.Xtol = std::nan("");
+        EXPECT_THROW(call(o), std::invalid_argument);
+    }
+    {
+        KeplerLCDOptions o;
+        o.alpha_tol = -1.0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+        o.alpha_tol = std::nan("");
+        EXPECT_THROW(call(o), std::invalid_argument);
+    }
+    {
+        KeplerLCDOptions o;
+        o.max_order = 0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+        o.max_order = -1;
+        EXPECT_THROW(call(o), std::invalid_argument);
+    }
+    {
+        KeplerLCDOptions o;
+        o.iters_per_order = 0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+    }
+    {
+        KeplerLCDOptions o;
+        o.hyp_guard = 0.0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+        o.hyp_guard = -1.0;
+        EXPECT_THROW(call(o), std::invalid_argument);
+    }
+    // Default-constructed options must not throw.
+    EXPECT_NO_THROW(call(KeplerLCDOptions{}));
+}
+
+TEST(KeplerPropagator, MuValidationThrows) {
+    EXPECT_THROW(KeplerPropagator(0.0), std::invalid_argument);
+    EXPECT_THROW(KeplerPropagator(-1.0), std::invalid_argument);
+    EXPECT_THROW(KeplerPropagator(std::nan("")), std::invalid_argument);
+    // Default-constructed propagator uses mu=1.0 — must not throw.
+    EXPECT_NO_THROW(KeplerPropagator());
+    // set_mu is the validation bottleneck for re-binding.
+    KeplerPropagator kp;
+    EXPECT_THROW(kp.set_mu(-1.0), std::invalid_argument);
+    EXPECT_NO_THROW(kp.set_mu(TychoTest::MU_EARTH));
+    EXPECT_DOUBLE_EQ(kp.mu(), TychoTest::MU_EARTH);
 }
