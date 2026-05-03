@@ -59,7 +59,7 @@
     {
       "id": 15,
       "subject": "Task 8: Pre-merge verification gate",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [14, 12],
       "description": "**Goal:** Run CLAUDE.md §Pre-Merge Verification Sequence — full ctest, all 38 examples, brachistochrone, bench compare. Document results.\n\n**Files:**\n- Create: `doc/plans/2026-05-02-kepler-propagator-lcd-bench.md`\n\n**Verify:** All four steps in CLAUDE.md §Pre-Merge Verification Sequence\n\n```json:metadata\n{\"files\": [\"doc/plans/2026-05-02-kepler-propagator-lcd-bench.md\"], \"verifyCommand\": \"cd build && ctest --output-on-failure && cd .. && conda run -n tycho bash -c 'MPLBACKEND=Agg python scripts/run_examples.py' && cd build && ninja -j6 brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp && cd .. && bench/bench_track.sh compare\", \"acceptanceCriteria\": [\"All ctest pass\", \"38 examples pass\", \"Brachistochrone converges\", \"Bench compare clean\"]}\n```"
     }
