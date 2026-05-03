@@ -532,8 +532,15 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
 
     // mu must be convertible to double (true for all current callers; SS-mu
     // would need a per-lane helper).
-    auto k = ::tycho::astro::detail::kepler_lcd_iterate<Scalar>(
-        RV.template head<3>(), RV.template tail<3>(), dt, double(mu));
+    //
+    // Materialize R0/V0 into concrete Vector3<Scalar> values: the segment
+    // expressions returned by .head<3>() / .tail<3>() are VectorBlock types,
+    // which prevent template-argument deduction from picking the right
+    // kepler_lcd_iterate overload (the deducible SS overload requires a
+    // concrete Vector3<Eigen::Array<...>>).
+    const Vector3<Scalar> R0 = RV.template head<3>();
+    const Vector3<Scalar> V0 = RV.template tail<3>();
+    auto k = ::tycho::astro::detail::kepler_lcd_iterate(R0, V0, dt, double(mu));
 
     Scalar sqmu = sqrt(mu);
     Scalar aF = Scalar(1) - k.U2 / k.r0;

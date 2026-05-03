@@ -296,7 +296,7 @@ template <class Scalar>
 inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
                              double mu, Vector6<Scalar> &xf) {
     using std::sqrt;
-    auto k = kepler_lcd_iterate<Scalar>(R0, V0, dt, mu);
+    auto k = kepler_lcd_iterate(R0, V0, dt, mu);
     const Scalar sqmu = sqrt(Scalar(mu));
     const Scalar aF = Scalar(1) - k.U2 / k.r0;
     const Scalar aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
@@ -315,7 +315,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
                                       Scalar dt, double mu, Vector6<Scalar> &xf,
                                       Eigen::Matrix<Scalar, 6, 7> &jac) {
     KeplerLCDOptions opts;
-    auto k = kepler_lcd_iterate<Scalar>(R0, V0, dt, mu, opts);
+    auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
 
     // -- Pack S input vector: (R0(3), V0(3), dt, X, U0, U1, U2)  -> 11 scalars
     Eigen::Matrix<Scalar, 11, 1> sin_;
@@ -443,7 +443,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
                                              Eigen::Matrix<Scalar, 7, 7> &adjhess) {
     using std::abs;
     KeplerLCDOptions opts;
-    auto k = kepler_lcd_iterate<Scalar>(R0, V0, dt, mu, opts);
+    auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
 
     // --- Step A: codegen call for S (primal) — 11-dim structural input,
     //     6-dim output, adjvar-contracted gradient and Hessian.
