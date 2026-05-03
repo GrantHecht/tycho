@@ -98,14 +98,31 @@ void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
     ////////////////////              Propagators                  /////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////
 
+    // Python contract: propagate_* raises RuntimeError on non-convergence.
+    // The C++ kernels return a NaN-filled Vector6 (PSIOPT step-rejection
+    // semantics), but Python users expect exceptions; translate at the
+    // boundary.  Detection via allFinite() is cheap (6 doubles) and avoids
+    // exposing the internal KeplerLCDResult::converged flag.
     m.def("propagate_cartesian", [](const Vector6<double> &RV, double dt, double mu) {
-        return propagate_cartesian(RV, dt, mu);
+        const auto rv = propagate_cartesian(RV, dt, mu);
+        if (!rv.allFinite())
+            throw std::runtime_error(
+                "propagate_cartesian: LCD iteration did not converge");
+        return rv;
     });
     m.def("propagate_classic", [](const Vector6<double> &oelems, double dt, double mu) {
-        return propagate_classic(oelems, dt, mu);
+        const auto out = propagate_classic(oelems, dt, mu);
+        if (!out.allFinite())
+            throw std::runtime_error(
+                "propagate_classic: LCD iteration did not converge");
+        return out;
     });
 
     m.def("propagate_modified", [](const Vector6<double> &meelems, double dt, double mu) {
-        return propagate_modified(meelems, dt, mu);
+        const auto out = propagate_modified(meelems, dt, mu);
+        if (!out.allFinite())
+            throw std::runtime_error(
+                "propagate_modified: LCD iteration did not converge");
+        return out;
     });
 }
