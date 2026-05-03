@@ -13,6 +13,7 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/detail/astro/kepler_lcd_iterate.h"
 #include "tycho/vector_functions.h"
 
 namespace tycho::astro {
@@ -525,77 +526,24 @@ BUILD_FROM_EXPRESSION(CartesianToClassic, CartesianToClassic_Impl, double)
 
 template <class Scalar>
 Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar mu) {
+    using std::sqrt;
+    if (dt == Scalar(0))
+        return RV;
 
-    const double Pi = 3.14159265358979;
-    const double ptol = 1.0e-9;
-    const double tol = 1.0e-12;
-    const int iters = 19;
-    const double conictol = 1.0e-11;
+    // mu must be convertible to double (true for all current callers; SS-mu
+    // would need a per-lane helper).
+    auto k = ::tycho::astro::detail::kepler_lcd_iterate<Scalar>(
+        RV.template head<3>(), RV.template tail<3>(), dt, double(mu));
+
+    Scalar sqmu = sqrt(mu);
+    Scalar aF = Scalar(1) - k.U2 / k.r0;
+    Scalar aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
+    Scalar aFt = -sqmu / (k.r0 * k.r) * k.U1;
+    Scalar aGt = Scalar(1) - k.U2 / k.r;
 
     Vector6<Scalar> fx;
-    if (dt == 0.0) {
-        fx = RV;
-        return fx;
-    }
-
-    Scalar r = RV.template head<3>().norm();
-    Scalar v = RV.template tail<3>().norm();
-    Scalar SQM = sqrt(mu);
-
-    Scalar alpha = -(v * v) / (mu) + (2.0 / r);
-    Scalar a = 1.0 / alpha;
-    Scalar X0;
-    if (alpha > conictol)
-        X0 = SQM * dt * alpha;
-    else if (alpha < conictol && alpha > -conictol) {
-        Vector3<Scalar> h = RV.template head<3>().cross(RV.template tail<3>());
-        Scalar hmag = h.norm();
-        Scalar p = hmag * hmag / mu;
-        Scalar s = (Pi / 2.0 - atan(3.0 * sqrt(mu / (p * p * p)) * dt)) / 2.0;
-        Scalar w = atan(cbrt(tan(s)));
-        X0 = sqrt(p) * 2 / tan(2 * w);
-    } else {
-        X0 = (abs(dt) / dt) * sqrt(-a) *
-             log(abs((-2.0 * mu * alpha * dt) /
-                     (RV.template head<3>().dot(RV.template tail<3>()) + abs(dt) / dt) *
-                     sqrt(-mu * a) * (1.0 - r * alpha)));
-    }
-    Scalar DRV = RV.template head<3>().dot(RV.template tail<3>()) / SQM;
-    Scalar SQMDT = SQM * dt;
-    Scalar c2, c3, Xn, psi, rs, X02, X03, X0tOmPsiC3, X02tC2, err;
-    for (int i = 0; i < iters; i++) {
-        X02 = X0 * X0;
-        X03 = X02 * X0;
-        psi = X02 * alpha;
-
-        if (psi > ptol) { // ellpitic
-            Scalar sqsi = sqrt(psi);
-            c2 = (1.0 - cos(sqsi)) / psi;
-            c3 = (sqsi - sin(sqsi)) / (sqsi * psi);
-        } else if (psi > -ptol && psi < ptol) { // parabolic
-            c2 = 0.5;
-            c3 = 1.0 / 6.0;
-        } else { // hyperbolic
-            c2 = (1.0 - cosh(sqrt(-psi))) / psi;
-            c3 = (sinh(sqrt(-psi)) - sqrt(-psi)) / sqrt(-psi * psi * psi);
-        }
-        X0tOmPsiC3 = X0 * (1.0 - psi * c3);
-        X02tC2 = X02 * c2;
-        rs = X02tC2 + DRV * X0tOmPsiC3 + r * (1.0 - psi * c2);
-        Xn = X0 + (SQMDT - X03 * c3 - DRV * X02tC2 - r * X0tOmPsiC3) / rs;
-        err = Xn - X0;
-        X0 = Xn;
-        if (abs(err) < tol)
-            break;
-    }
-    Scalar Xn2 = Xn * Xn;
-    Scalar f = 1.0 - Xn2 * c2 / r;
-    Scalar g = dt - (Xn2 * Xn) * c3 / SQM;
-    Scalar fdot = Xn * (psi * c3 - 1.0) * SQM / (rs * r);
-    Scalar gdot = 1.0 - c2 * (Xn2) / rs;
-
-    fx.template head<3>() = f * RV.template head<3>() + g * RV.template tail<3>();
-    fx.template tail<3>() = fdot * RV.template head<3>() + gdot * RV.template tail<3>();
+    fx.template head<3>() = aF * RV.template head<3>() + aG * RV.template tail<3>();
+    fx.template tail<3>() = aFt * RV.template head<3>() + aGt * RV.template tail<3>();
     return fx;
 }
 
