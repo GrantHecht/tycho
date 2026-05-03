@@ -226,3 +226,54 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
         EXPECT_NEAR(k_ss.sigma[lane], k.sigma, 1e-12) << "sigma lane " << lane;
     }
 }
+
+TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
+    // Four elliptic LEO/MEO orbits — exercises the true-SIMD uniform-ellipse
+    // path (kepler_lcd_iterate_simd_ellipse).  The dispatch in
+    // kepler_lcd_iterate<W> routes here when every lane satisfies
+    // alpha > alpha_tol and dt != 0; we still expect bit-near agreement with
+    // the per-lane scalar reference.
+    using SS = Eigen::Array<double, 4, 1>;
+    Vector3<SS> R0, V0;
+    SS dt;
+
+    Vector6<double> oes[4];
+    oes[0] << 7000.0, 0.01, 28.5 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    oes[1] << 12000.0, 0.5, 0.5, 0.0, 0.0, 0.0;
+    oes[2] << 9000.0, 0.2, 0.3, 0.4, 0.5, 0.6;
+    oes[3] << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    const double dts[4] = {100.0, 600.0, 250.0, 200.0};
+
+    Vector6<double> rvs[4];
+    for (int lane = 0; lane < 4; ++lane) {
+        rvs[lane] = classic_to_cartesian<double>(oes[lane], TychoTest::MU_EARTH);
+        dt[lane] = dts[lane];
+    }
+    for (int i = 0; i < 3; ++i) {
+        for (int lane = 0; lane < 4; ++lane) {
+            R0[i][lane] = rvs[lane][i];
+            V0[i][lane] = rvs[lane][i + 3];
+        }
+    }
+
+    auto k_ss = kepler_lcd_iterate(R0, V0, dt, TychoTest::MU_EARTH);
+    EXPECT_TRUE(k_ss.converged);
+
+    // Tolerance is relative — SIMD evaluation re-orders sums vs scalar, so
+    // sub-ULP rounding differences (~1e-15 relative) are expected.
+    auto rel_near = [](double a, double b) {
+        return std::max(1e-13, 1e-13 * std::max(std::abs(a), std::abs(b)));
+    };
+    for (int lane = 0; lane < 4; ++lane) {
+        auto k = kepler_lcd_iterate<double>(rvs[lane].head<3>(), rvs[lane].tail<3>(), dts[lane],
+                                            TychoTest::MU_EARTH);
+        EXPECT_NEAR(k_ss.X[lane], k.X, rel_near(k_ss.X[lane], k.X)) << "X lane " << lane;
+        EXPECT_NEAR(k_ss.U0[lane], k.U0, rel_near(k_ss.U0[lane], k.U0)) << "U0 lane " << lane;
+        EXPECT_NEAR(k_ss.U1[lane], k.U1, rel_near(k_ss.U1[lane], k.U1)) << "U1 lane " << lane;
+        EXPECT_NEAR(k_ss.U2[lane], k.U2, rel_near(k_ss.U2[lane], k.U2)) << "U2 lane " << lane;
+        EXPECT_NEAR(k_ss.U3[lane], k.U3, rel_near(k_ss.U3[lane], k.U3)) << "U3 lane " << lane;
+        EXPECT_NEAR(k_ss.r[lane], k.r, rel_near(k_ss.r[lane], k.r)) << "r lane " << lane;
+        EXPECT_NEAR(k_ss.sigma[lane], k.sigma, rel_near(k_ss.sigma[lane], k.sigma))
+            << "sigma lane " << lane;
+    }
+}
