@@ -27,14 +27,26 @@ template <class Scalar>
 inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
                              double mu, Vector6<Scalar> &xf);
 
+// The Jacobian and adjoint-Hessian routines take const refs to the codegen
+// primal/residual VFs.  The wrapping KeplerPropagator owns one of each as
+// private members so the precomputed `pcN_` cache (sqrt(mu), 1/sqrt(mu),
+// ...) is set up once at construction and reused across compute calls,
+// rather than being reconstructed per IFT invocation.  Both VFs must be
+// configured with the same mu — the wrapper's set_mu propagates to both.
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                      Scalar dt, double mu, Vector6<Scalar> &xf,
+                                      Scalar dt,
+                                      const ::tycho::astro::KeplerPrimal_VF &primal,
+                                      const ::tycho::astro::KeplerResidual_VF &residual,
+                                      Vector6<Scalar> &xf,
                                       Eigen::Matrix<Scalar, 6, 7> &jac);
 
 template <class Scalar>
 inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                             Scalar dt, double mu, const Vector6<Scalar> &adjvars,
+                                             Scalar dt,
+                                             const ::tycho::astro::KeplerPrimal_VF &primal,
+                                             const ::tycho::astro::KeplerResidual_VF &residual,
+                                             const Vector6<Scalar> &adjvars,
                                              Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac,
                                              Vector7<Scalar> &adjgrad,
                                              Eigen::Matrix<Scalar, 7, 7> &adjhess);
@@ -305,9 +317,13 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
 
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                      Scalar dt, double mu, Vector6<Scalar> &xf,
+                                      Scalar dt,
+                                      const ::tycho::astro::KeplerPrimal_VF &primal,
+                                      const ::tycho::astro::KeplerResidual_VF &residual,
+                                      Vector6<Scalar> &xf,
                                       Eigen::Matrix<Scalar, 6, 7> &jac) {
     KeplerLCDOptions opts;
+    const double mu = primal.mu();
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
     // SS all-or-nothing NaN-poisoning — see kepler_propagate header above.
     if (!all_converged(k.converged)) {
@@ -326,8 +342,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     sin_[9] = k.U1;
     sin_[10] = k.U2;
 
-    // -- Compute structural Jacobian of S (6 × 11)
-    ::tycho::astro::KeplerPrimal_VF primal{mu};
+    // -- Compute structural Jacobian of S (6 × 11) via the wrapper-owned VF.
     Eigen::Matrix<Scalar, 6, 1> sout;
     Eigen::Matrix<Scalar, 6, 11> S_jac;
     primal.compute_jacobian_impl(sin_, sout, S_jac);
@@ -342,8 +357,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     fin[8] = k.U2;
     fin[9] = k.U3;
 
-    // -- Compute structural Jacobian of F (1 × 10)
-    ::tycho::astro::KeplerResidual_VF residual{mu};
+    // -- Compute structural Jacobian of F (1 × 10) via the wrapper-owned VF.
     Eigen::Matrix<Scalar, 1, 1> F_val;
     Eigen::Matrix<Scalar, 1, 10> F_jac;
     residual.compute_jacobian_impl(fin, F_val, F_jac);
@@ -435,12 +449,16 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
 // F_grad and F_hess equal to the raw structural gradient/Hessian of F.
 template <class Scalar>
 inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                             Scalar dt, double mu, const Vector6<Scalar> &adjvars,
+                                             Scalar dt,
+                                             const ::tycho::astro::KeplerPrimal_VF &primal,
+                                             const ::tycho::astro::KeplerResidual_VF &residual,
+                                             const Vector6<Scalar> &adjvars,
                                              Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac,
                                              Vector7<Scalar> &adjgrad,
                                              Eigen::Matrix<Scalar, 7, 7> &adjhess) {
     using std::abs;
     KeplerLCDOptions opts;
+    const double mu = primal.mu();
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
     // SS all-or-nothing NaN-poisoning — see kepler_propagate header above.
     if (!all_converged(k.converged)) {
@@ -452,7 +470,9 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     }
 
     // --- Step A: codegen call for S (primal) — 11-dim structural input,
-    //     6-dim output, adjvar-contracted gradient and Hessian.
+    //     6-dim output, adjvar-contracted gradient and Hessian.  The
+    //     wrapper-owned VF carries the precomputed sqrt(mu) cache so we
+    //     avoid the per-call construction cost.
     Eigen::Matrix<Scalar, 11, 1> sin_;
     sin_.template head<3>() = R0;
     sin_.template segment<3>(3) = V0;
@@ -462,7 +482,6 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     sin_[9] = k.U1;
     sin_[10] = k.U2;
 
-    ::tycho::astro::KeplerPrimal_VF primal{mu};
     Vector6<Scalar> sout;
     Eigen::Matrix<Scalar, 6, 11> S_jac;
     Vector<Scalar, 11> S_grad;
@@ -482,7 +501,6 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     fin[8] = k.U2;
     fin[9] = k.U3;
 
-    ::tycho::astro::KeplerResidual_VF residual{mu};
     Eigen::Matrix<Scalar, 1, 1> F_val;
     Eigen::Matrix<Scalar, 1, 10> F_jac;
     Vector<Scalar, 10> F_grad;

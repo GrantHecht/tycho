@@ -30,9 +30,11 @@ namespace {
 // disagreement signals a bug in one of the assemblies.
 void check_jacobian_fd(const Vector3<double> &R0, const Vector3<double> &V0, double dt, double mu,
                        double rel_tol) {
+    KeplerPrimal_VF primal(mu);
+    KeplerResidual_VF residual(mu);
     Vector6<double> xf_a;
     Eigen::Matrix<double, 6, 7> jac_a;
-    kepler_propagate_jacobian<double>(R0, V0, dt, mu, xf_a, jac_a);
+    kepler_propagate_jacobian<double>(R0, V0, dt, primal, residual, xf_a, jac_a);
 
     Vector6<double> rv0;
     rv0.head<3>() = R0;
@@ -149,11 +151,14 @@ namespace {
 void check_adjoint_hessian_fd(const Vector3<double> &R0, const Vector3<double> &V0, double dt,
                               double mu, const Vector6<double> &lm, double rel_tol,
                               double fd_eps_scale = 6.0554544523933395e-6) {
+    KeplerPrimal_VF primal(mu);
+    KeplerResidual_VF residual(mu);
     Vector6<double> xf_a;
     Eigen::Matrix<double, 6, 7> jac_a;
     Vector7<double> grad_a;
     Eigen::Matrix<double, 7, 7> hess_a;
-    kepler_propagate_adjoint_hessian<double>(R0, V0, dt, mu, lm, xf_a, jac_a, grad_a, hess_a);
+    kepler_propagate_adjoint_hessian<double>(R0, V0, dt, primal, residual, lm, xf_a, jac_a, grad_a,
+                                             hess_a);
 
     // Acceptance #1: total xf and jac match the Jacobian-only path bit-for-bit
     // (within 1e-12 rel — reflects only differences in expression order,
@@ -161,7 +166,7 @@ void check_adjoint_hessian_fd(const Vector3<double> &R0, const Vector3<double> &
     {
         Vector6<double> xf_j;
         Eigen::Matrix<double, 6, 7> jac_j;
-        kepler_propagate_jacobian<double>(R0, V0, dt, mu, xf_j, jac_j);
+        kepler_propagate_jacobian<double>(R0, V0, dt, primal, residual, xf_j, jac_j);
         for (int i = 0; i < 6; ++i)
             EXPECT_NEAR(xf_a[i], xf_j[i], 1e-12 * std::max(1.0, std::abs(xf_j[i])))
                 << "xf comp " << i;
@@ -184,7 +189,8 @@ void check_adjoint_hessian_fd(const Vector3<double> &R0, const Vector3<double> &
     auto eval_adjgrad = [&](const Eigen::Matrix<double, 7, 1> &y) {
         Vector6<double> xf_;
         Eigen::Matrix<double, 6, 7> jac_;
-        kepler_propagate_jacobian<double>(y.head<3>(), y.segment<3>(3), y[6], mu, xf_, jac_);
+        kepler_propagate_jacobian<double>(y.head<3>(), y.segment<3>(3), y[6], primal, residual,
+                                          xf_, jac_);
         return Vector7<double>(jac_.transpose() * lm);
     };
 
@@ -498,9 +504,12 @@ TEST(KeplerIFT, NaNPoisoningEndToEnd) {
     for (int i = 0; i < 6; ++i)
         EXPECT_FALSE(std::isfinite(xf[i])) << "primal xf[" << i << "]";
 
+    KeplerPrimal_VF primal(TychoTest::MU_EARTH);
+    KeplerResidual_VF residual(TychoTest::MU_EARTH);
+
     Vector6<double> xf_j;
     Eigen::Matrix<double, 6, 7> jac;
-    kepler_propagate_jacobian<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, xf_j, jac);
+    kepler_propagate_jacobian<double>(R0, V0, nan_dt, primal, residual, xf_j, jac);
     for (int i = 0; i < 6; ++i)
         EXPECT_FALSE(std::isfinite(xf_j[i])) << "jac-xf[" << i << "]";
     for (int r = 0; r < 6; ++r)
@@ -512,7 +521,7 @@ TEST(KeplerIFT, NaNPoisoningEndToEnd) {
     Vector7<double> grad;
     Eigen::Matrix<double, 7, 7> hess;
     Vector6<double> lm = TychoTest::deterministic_random_vector(6, 601, -1.0, 1.0);
-    kepler_propagate_adjoint_hessian<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, lm, xf_h, jac_h,
+    kepler_propagate_adjoint_hessian<double>(R0, V0, nan_dt, primal, residual, lm, xf_h, jac_h,
                                              grad, hess);
     for (int i = 0; i < 6; ++i)
         EXPECT_FALSE(std::isfinite(xf_h[i])) << "hess-xf[" << i << "]";
@@ -572,11 +581,15 @@ TEST(KeplerIFT_Hessian, TrueParabolicWellFormed) {
     Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
     Vector6<double> lm = TychoTest::deterministic_random_vector(6, 406, -1.0, 1.0);
 
+    KeplerPrimal_VF primal(mu);
+    KeplerResidual_VF residual(mu);
+
     Vector6<double> xf;
     Eigen::Matrix<double, 6, 7> jac;
     Vector7<double> grad;
     Eigen::Matrix<double, 7, 7> hess;
-    kepler_propagate_adjoint_hessian<double>(R0, V0, 100.0, mu, lm, xf, jac, grad, hess);
+    kepler_propagate_adjoint_hessian<double>(R0, V0, 100.0, primal, residual, lm, xf, jac, grad,
+                                             hess);
 
     for (int i = 0; i < 6; ++i)
         EXPECT_TRUE(std::isfinite(xf[i]));
@@ -602,7 +615,7 @@ TEST(KeplerIFT_Hessian, TrueParabolicWellFormed) {
     // catches divergence between the two IFT routes.
     Vector6<double> xf_j;
     Eigen::Matrix<double, 6, 7> jac_j;
-    kepler_propagate_jacobian<double>(R0, V0, 100.0, mu, xf_j, jac_j);
+    kepler_propagate_jacobian<double>(R0, V0, 100.0, primal, residual, xf_j, jac_j);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(xf[i], xf_j[i], 1e-12 * std::max(1.0, std::abs(xf_j[i])));
     for (int r = 0; r < 6; ++r)
