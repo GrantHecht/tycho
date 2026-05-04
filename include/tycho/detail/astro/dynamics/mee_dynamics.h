@@ -40,7 +40,7 @@ struct MEEDynamics : VectorFunction<MEEDynamics, 9, 6, DenseDerivativeMode::Anal
     double pc0_ = std::numeric_limits<double>::quiet_NaN();
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
 
-    MEEDynamics() { this->set_io_rows(9, 6); }
+    MEEDynamics() : MEEDynamics(1.0) {}
 
     MEEDynamics(double mu) {
         if (!(mu > 0.0))

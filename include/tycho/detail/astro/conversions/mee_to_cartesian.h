@@ -29,7 +29,7 @@ struct MEEToCartesian : VectorFunction<MEEToCartesian, 6, 6, DenseDerivativeMode
     double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
 
-    MEEToCartesian() { this->set_io_rows(6, 6); }
+    MEEToCartesian() : MEEToCartesian(1.0) {}
 
     MEEToCartesian(double mu) {
         if (!(mu > 0.0))

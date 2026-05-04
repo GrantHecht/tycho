@@ -29,7 +29,7 @@ struct CartesianDynamics : VectorFunction<CartesianDynamics, 9, 6, DenseDerivati
     double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
 
-    CartesianDynamics() { this->set_io_rows(9, 6); }
+    CartesianDynamics() : CartesianDynamics(1.0) {}
 
     CartesianDynamics(double mu) {
         if (!(mu > 0.0))

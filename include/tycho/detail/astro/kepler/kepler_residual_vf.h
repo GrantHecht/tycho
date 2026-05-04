@@ -35,9 +35,7 @@ class KeplerResidual_VF
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
 
     public:
-    KeplerResidual_VF() {
-        this->set_io_rows(10, 1);
-    }
+    KeplerResidual_VF() : KeplerResidual_VF(1.0) {}
 
     KeplerResidual_VF(double mu) {
         if (!(mu > 0.0))
@@ -57,6 +55,8 @@ class KeplerResidual_VF
         pc0_ = std::sqrt(mu_);
         pc1_ = 1.0/pc0_;
     }
+
+    [[nodiscard]] double mu() const noexcept { return mu_; }
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x_,

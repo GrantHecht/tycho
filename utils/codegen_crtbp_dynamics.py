@@ -59,12 +59,12 @@ def CRTBPDynamics():
         "CRTBPDynamics",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "CR3BP Mass Ratio", "mu > 0.0 && mu < 1.0")],
+        [(mu, "CR3BP Mass Ratio", "mu > 0.0 && mu < 1.0", 0.5)],
         docstr="CR3BP rotating-frame dynamics with extra acceleration",
     )
 
     output_dir = os.path.join(
-        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro"
+        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro", "dynamics"
     )
     header.make_header(
         output_dir=output_dir,

@@ -34,6 +34,30 @@ _POW_HALF_INT_RANGE = range(0, 7)  # pow(x, ±0.5) .. pow(x, ±6.5)
 # post-diff pass doesn't double-count them).
 _PC_RESERVED = re.compile(r"^pc\d+_$")
 
+
+def _format_default_literal(value):
+    """Format a Python scalar as a C++ literal for the delegating default ctor.
+
+    Handles int → "<n>" and float → "<x>.<y>" with a trailing decimal so
+    that 1 emits as "1.0" (avoiding integer-narrowing warnings in the
+    generated ctor delegation).
+    """
+    if isinstance(value, bool):
+        # bool is a subclass of int — guard against accidental True/False.
+        raise TypeError(
+            f"Default value for scalar param must be int or float, got bool {value!r}"
+        )
+    if isinstance(value, int):
+        return f"{value}.0"
+    if isinstance(value, float):
+        s = repr(value)
+        # repr returns "1.0" for floats already; integers cast to float
+        # similarly. No special handling needed beyond ensuring a decimal.
+        return s if "." in s or "e" in s or "E" in s else f"{s}.0"
+    raise TypeError(
+        f"Default value for scalar param must be int or float, got {type(value).__name__} {value!r}"
+    )
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -61,7 +85,7 @@ class TychoHeaderGen:
         Name,
         F,
         Xs,
-        ScalarParams=[],  # [(Symbol, Description) | (Symbol, Description, Constraint)]
+        ScalarParams=[],  # [(Symbol, Description) | (Symbol, Description, Constraint) | (Symbol, Description, Constraint, DefaultValue)]
         VectorParams=[],  # [(Vec, Cppname, Description) | (..., Constraint)]
         MatrixParams=[],  # [(Mat, Cppname, Description) | (..., Constraint)]
         docstr="A doc string",
@@ -97,25 +121,37 @@ class TychoHeaderGen:
         param_subs = {}
         renamed_scalar_params = []
         self._ctor_arg_for = {}
+        # Maps member-form name (e.g. "mu_") to default value (Python scalar)
+        # — used by the default constructor delegation below.
+        self._scalar_param_defaults = {}
         for entry in ScalarParams:
             if len(entry) == 2:
                 sym, descr = entry
                 constraint = None
+                default_value = None
             elif len(entry) == 3:
                 sym, descr, constraint = entry
+                default_value = None
+            elif len(entry) == 4:
+                sym, descr, constraint, default_value = entry
             else:
                 raise ValueError(
-                    f"ScalarParams entry must be (Symbol, Description) or "
-                    f"(Symbol, Description, Constraint); got {entry!r}"
+                    f"ScalarParams entry must be (Symbol, Description), "
+                    f"(Symbol, Description, Constraint), or "
+                    f"(Symbol, Description, Constraint, DefaultValue); got {entry!r}"
                 )
             name = str(sym)
             if name.endswith("_"):
                 renamed_scalar_params.append((sym, descr, constraint))
+                if default_value is not None:
+                    self._scalar_param_defaults[name] = default_value
                 continue
             new_sym = sp.Symbol(name + "_")
             param_subs[sym] = new_sym
             renamed_scalar_params.append((new_sym, descr, constraint))
             self._ctor_arg_for[name + "_"] = name
+            if default_value is not None:
+                self._scalar_param_defaults[name + "_"] = default_value
 
         if param_subs:
             F = sp.Matrix(list(F)).xreplace(param_subs)
@@ -785,11 +821,41 @@ class TychoHeaderGen:
                 f'{indent}{I}{I}"{msg}");',
             ]
 
-        # Default constructor — NSDMI defaults plus set_io_rows.
-        lines.append(f"{I}{self.Name}() {{")
-        lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
-        lines.append(f"{I}}}")
-        lines.append("")
+        # Default constructor.
+        #
+        # If every scalar param has a declared canonical default and there
+        # are no vector/matrix params (which would also need defaults to
+        # delegate cleanly), emit a delegating default ctor that constructs
+        # via the validating parameterized form.  Otherwise the default
+        # ctor is = delete'd: leaving it as a "set_io_rows-only"
+        # half-initialized form silently NaN-poisons all compute outputs
+        # via the quiet-NaN NSDMI defaults on mu_/pcN_ — a two-phase-init
+        # smell flagged by the multi-agent type-design review.
+        all_scalars_have_defaults = (
+            len(self.ScalarParams) > 0
+            and all(
+                str(P) in self._scalar_param_defaults
+                for P, _, _ in self.ScalarParams
+            )
+            and not self.VectorParams
+            and not self.MatrixParams
+        )
+        if all_scalars_have_defaults:
+            default_args = ", ".join(
+                _format_default_literal(self._scalar_param_defaults[str(P)])
+                for P, _, _ in self.ScalarParams
+            )
+            lines.append(f"{I}{self.Name}() : {self.Name}({default_args}) {{}}")
+            lines.append("")
+        elif not self.ScalarParams and not self.VectorParams and not self.MatrixParams:
+            # Param-free VF: keep the original set_io_rows-only default ctor.
+            lines.append(f"{I}{self.Name}() {{")
+            lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
+            lines.append(f"{I}}}")
+            lines.append("")
+        else:
+            lines.append(f"{I}{self.Name}() = delete;")
+            lines.append("")
 
         # Parameterized constructor.
         #
@@ -839,6 +905,17 @@ class TychoHeaderGen:
             if affected:
                 lines += self._gen_precompute_assignments(affected, 2 * I)
             lines.append(f"{I}}}")
+            lines.append("")
+
+        # Per-parameter const getters (scalar params only — vector/matrix
+        # access is rare enough that the existing public-state setters
+        # cover the use case; revisit if a downstream consumer needs them).
+        for member_name, ctor_arg, _, kind in _param_records():
+            if kind != "scalar":
+                continue
+            lines.append(
+                f"{I}[[nodiscard]] double {ctor_arg}() const noexcept {{ return {member_name}; }}"
+            )
             lines.append("")
 
         return "\n".join(lines) + "\n"

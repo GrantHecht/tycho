@@ -62,7 +62,7 @@ def _kepler_primal():
         "KeplerPrimal_VF",
         Func,
         Xs,
-        [(mu, "Gravitational parameter", "mu > 0.0")],
+        [(mu, "Gravitational parameter", "mu > 0.0", 1.0)],
         docstr=("Kepler primal map post-converged: (R0,V0,dt,X*,U0..U2) -> (rf,vf)"),
         gen_build_method=False,
         is_vectorizable=True,
@@ -86,7 +86,7 @@ def _kepler_residual():
         "KeplerResidual_VF",
         sp.Matrix([F]),
         Xs,
-        [(mu, "Gravitational parameter", "mu > 0.0")],
+        [(mu, "Gravitational parameter", "mu > 0.0", 1.0)],
         docstr=(
             "Kepler universal-variable residual "
             "F = r0*U1 + sigma0*U2 + U3 - sqrt(mu)*dt"

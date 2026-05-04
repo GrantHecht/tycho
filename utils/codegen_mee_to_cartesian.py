@@ -53,12 +53,12 @@ def MEEToCartesian():
         "MEEToCartesian",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "Gravitational Parameter", "mu > 0.0")],
+        [(mu, "Gravitational Parameter", "mu > 0.0", 1.0)],
         docstr="MEE to Cartesian state conversion",
     )
 
     output_dir = os.path.join(
-        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro"
+        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro", "conversions"
     )
     header.make_header(
         output_dir=output_dir,

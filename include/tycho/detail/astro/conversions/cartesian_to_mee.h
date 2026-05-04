@@ -31,9 +31,7 @@ struct CartesianToMEE
     // Precomputed from constructor parameters
     double pc0_ = std::numeric_limits<double>::quiet_NaN();
 
-    CartesianToMEE() {
-        this->set_io_rows(6, 6);
-    }
+    CartesianToMEE() : CartesianToMEE(1.0) {}
 
     CartesianToMEE(double mu) {
         if (!(mu > 0.0))

@@ -36,9 +36,7 @@ class KeplerPrimal_VF
     double pc2_ = std::numeric_limits<double>::quiet_NaN();
 
     public:
-    KeplerPrimal_VF() {
-        this->set_io_rows(11, 6);
-    }
+    KeplerPrimal_VF() : KeplerPrimal_VF(1.0) {}
 
     KeplerPrimal_VF(double mu) {
         if (!(mu > 0.0))
@@ -60,6 +58,8 @@ class KeplerPrimal_VF
         pc1_ = 1.0/pc0_;
         pc2_ = (pc1_*pc1_);
     }
+
+    [[nodiscard]] double mu() const noexcept { return mu_; }
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x_,

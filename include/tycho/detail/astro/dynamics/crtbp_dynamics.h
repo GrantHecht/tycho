@@ -34,7 +34,7 @@ struct CRTBPDynamics : VectorFunction<CRTBPDynamics, 9, 6, DenseDerivativeMode::
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
     double pc2_ = std::numeric_limits<double>::quiet_NaN();
 
-    CRTBPDynamics() { this->set_io_rows(9, 6); }
+    CRTBPDynamics() : CRTBPDynamics(0.5) {}
 
     CRTBPDynamics(double mu) {
         if (!(mu > 0.0 && mu < 1.0))
