@@ -27,10 +27,10 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
         return Vector6<Scalar>::Constant(::tycho::astro::detail::kepler_nan_value<Scalar>());
 
     Scalar sqmu = sqrt(mu);
-    Scalar aF = Scalar(1) - k.U2 / k.r0;
-    Scalar aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
-    Scalar aFt = -sqmu / (k.r0 * k.r) * k.U1;
-    Scalar aGt = Scalar(1) - k.U2 / k.r;
+    Scalar aF = Scalar(1) - k.U.U2 / k.r0;
+    Scalar aG = (k.r0 * k.U.U1 + k.sigma0 * k.U.U2) / sqmu;
+    Scalar aFt = -sqmu / (k.r0 * k.r) * k.U.U1;
+    Scalar aGt = Scalar(1) - k.U.U2 / k.r;
 
     Vector6<Scalar> fx;
     fx.template head<3>() = aF * RV.template head<3>() + aG * RV.template tail<3>();

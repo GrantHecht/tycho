@@ -58,12 +58,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
 // ∂U_n/∂X = U_{n-1} for n ≥ 1, and ∂U_0/∂X = -α · U_1 (since U_0 = 1 - α U_2
 // and ∂U_2/∂X = U_1; equivalently U_0' = -α U_2' = -α U_1).
 template <class Scalar>
-inline void U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> &k, Scalar &dU0_dX,
-                         Scalar &dU1_dX, Scalar &dU2_dX, Scalar &dU3_dX) {
-    dU0_dX = -alpha * k.U1;
-    dU1_dX = k.U0;
-    dU2_dX = k.U1;
-    dU3_dX = k.U2;
+inline Stumpff<Scalar> U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> &k) {
+    return {-alpha * k.U.U1, k.U.U0, k.U.U1, k.U.U2};
 }
 
 // ∂U_n/∂α for n ≥ 1 via the recursion (X · U_{n-1} - n · U_n) / (2α).
@@ -75,36 +71,35 @@ inline void U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> &k, Scalar 
 //
 // (Scalar = double overload.)
 template <class Scalar>
-inline void U_partials_alpha(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> &k,
-                             double alpha_tol, Scalar &dU0_da, Scalar &dU1_da, Scalar &dU2_da,
-                             Scalar &dU3_da) {
+inline Stumpff<Scalar> U_partials_alpha(Scalar alpha, Scalar X,
+                                        const KeplerLCDResult<Scalar> &k, double alpha_tol) {
     using std::abs;
-    dU0_da = Scalar(-0.5) * X * k.U1;
+    Stumpff<Scalar> out;
+    out.U0 = Scalar(-0.5) * X * k.U.U1;
     if (abs(alpha) > Scalar(alpha_tol)) {
         const Scalar inv2a = Scalar(0.5) / alpha;
-        dU1_da = inv2a * (X * k.U0 - Scalar(1) * k.U1);
-        dU2_da = inv2a * (X * k.U1 - Scalar(2) * k.U2);
-        dU3_da = inv2a * (X * k.U2 - Scalar(3) * k.U3);
+        out.U1 = inv2a * (X * k.U.U0 - Scalar(1) * k.U.U1);
+        out.U2 = inv2a * (X * k.U.U1 - Scalar(2) * k.U.U2);
+        out.U3 = inv2a * (X * k.U.U2 - Scalar(3) * k.U.U3);
     } else {
         const Scalar X2 = X * X;
         const Scalar X3 = X2 * X;
         const Scalar X4 = X2 * X2;
         const Scalar X5 = X3 * X2;
-        dU1_da = -X3 * Scalar(1.0 / 6.0);
-        dU2_da = -X4 * Scalar(1.0 / 24.0);
-        dU3_da = -X5 * Scalar(1.0 / 120.0);
+        out.U1 = -X3 * Scalar(1.0 / 6.0);
+        out.U2 = -X4 * Scalar(1.0 / 24.0);
+        out.U3 = -X5 * Scalar(1.0 / 120.0);
     }
+    return out;
 }
 
 // SuperScalar overload for U_partials_alpha.  Per-lane Taylor blending via
 // Eigen::Array::select avoids div-by-zero in lanes where |α| < α_tol while
 // using the recursion in well-conditioned lanes.
 template <int W>
-inline void
+inline Stumpff<Eigen::Array<double, W, 1>>
 U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<double, W, 1> &X,
-                 const KeplerLCDResult<Eigen::Array<double, W, 1>> &k, double alpha_tol,
-                 Eigen::Array<double, W, 1> &dU0_da, Eigen::Array<double, W, 1> &dU1_da,
-                 Eigen::Array<double, W, 1> &dU2_da, Eigen::Array<double, W, 1> &dU3_da) {
+                 const KeplerLCDResult<Eigen::Array<double, W, 1>> &k, double alpha_tol) {
     using SS = Eigen::Array<double, W, 1>;
     const SS abs_a = alpha.abs();
     const auto is_para = (abs_a <= SS::Constant(alpha_tol));
@@ -113,10 +108,11 @@ U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<dou
     const SS safe_a = is_para.select(SS::Constant(alpha_tol), alpha);
     const SS inv2a = SS::Constant(0.5) / safe_a;
 
-    dU0_da = SS::Constant(-0.5) * X * k.U1;
-    const SS rec1 = inv2a * (X * k.U0 - k.U1);
-    const SS rec2 = inv2a * (X * k.U1 - SS::Constant(2.0) * k.U2);
-    const SS rec3 = inv2a * (X * k.U2 - SS::Constant(3.0) * k.U3);
+    Stumpff<SS> out;
+    out.U0 = SS::Constant(-0.5) * X * k.U.U1;
+    const SS rec1 = inv2a * (X * k.U.U0 - k.U.U1);
+    const SS rec2 = inv2a * (X * k.U.U1 - SS::Constant(2.0) * k.U.U2);
+    const SS rec3 = inv2a * (X * k.U.U2 - SS::Constant(3.0) * k.U.U3);
 
     const SS X2 = X * X;
     const SS X3 = X2 * X;
@@ -126,9 +122,10 @@ U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<dou
     const SS tay2 = SS::Constant(-1.0 / 24.0) * X4;
     const SS tay3 = SS::Constant(-1.0 / 120.0) * X5;
 
-    dU1_da = is_para.select(tay1, rec1);
-    dU2_da = is_para.select(tay2, rec2);
-    dU3_da = is_para.select(tay3, rec3);
+    out.U1 = is_para.select(tay1, rec1);
+    out.U2 = is_para.select(tay2, rec2);
+    out.U3 = is_para.select(tay3, rec3);
+    return out;
 }
 
 // -------------------------------------------------------------------------
@@ -149,9 +146,8 @@ template <class Scalar> struct U_second_partials {
 template <class Scalar>
 inline U_second_partials<Scalar>
 compute_U_second_partials(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> &k,
-                          double alpha_tol, Scalar dU0_dX, Scalar dU1_dX, Scalar dU2_dX,
-                          Scalar dU3_dX, Scalar dU0_da, Scalar dU1_da, Scalar dU2_da,
-                          Scalar dU3_da) {
+                          double alpha_tol, const Stumpff<Scalar> &dU_dX,
+                          const Stumpff<Scalar> &dU_da) {
     using std::abs;
     U_second_partials<Scalar> p;
 
@@ -160,30 +156,30 @@ compute_U_second_partials(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> 
     //   U_1' = U_0     ⇒  U_1'' = -α U_1
     //   U_2' = U_1     ⇒  U_2'' =  U_0
     //   U_3' = U_2     ⇒  U_3'' =  U_1
-    p.dU0_dX2 = -alpha * k.U0;
-    p.dU1_dX2 = -alpha * k.U1;
-    p.dU2_dX2 = k.U0;
-    p.dU3_dX2 = k.U1;
+    p.dU0_dX2 = -alpha * k.U.U0;
+    p.dU1_dX2 = -alpha * k.U.U1;
+    p.dU2_dX2 = k.U.U0;
+    p.dU3_dX2 = k.U.U1;
 
     // ∂²U_n/∂X∂α: differentiate dU_n/dα w.r.t. X.
     //   For n = 0: dU_0/dα = -X U_1 / 2  ⇒  ∂/∂X = -U_1/2 - X (∂U_1/∂X)/2
     //   For n ≥ 1: dU_n/dα = (X U_{n-1} - n U_n) / (2α)
     //              ⇒ ∂/∂X = (U_{n-1} + X (∂U_{n-1}/∂X) - n (∂U_n/∂X)) / (2α)
-    p.dU0_dXda = Scalar(-0.5) * (k.U1 + X * dU1_dX);
+    p.dU0_dXda = Scalar(-0.5) * (k.U.U1 + X * dU_dX.U1);
     if (abs(alpha) > Scalar(alpha_tol)) {
         const Scalar inv2a = Scalar(0.5) / alpha;
-        p.dU1_dXda = inv2a * (k.U0 + X * dU0_dX - Scalar(1) * dU1_dX);
-        p.dU2_dXda = inv2a * (k.U1 + X * dU1_dX - Scalar(2) * dU2_dX);
-        p.dU3_dXda = inv2a * (k.U2 + X * dU2_dX - Scalar(3) * dU3_dX);
+        p.dU1_dXda = inv2a * (k.U.U0 + X * dU_dX.U0 - Scalar(1) * dU_dX.U1);
+        p.dU2_dXda = inv2a * (k.U.U1 + X * dU_dX.U1 - Scalar(2) * dU_dX.U2);
+        p.dU3_dXda = inv2a * (k.U.U2 + X * dU_dX.U2 - Scalar(3) * dU_dX.U3);
 
         // ∂²U_n/∂α²: differentiate dU_n/dα w.r.t. α (n ≥ 1).
         //   dU_n/dα = (X U_{n-1} - n U_n) / (2α)
         //   ⇒ ∂/∂α = (X (∂U_{n-1}/∂α) - n (∂U_n/∂α)) / (2α) - dU_n/dα / α
         // For n = 0: dU_0/dα = -X U_1 / 2  ⇒  ∂/∂α = -X (∂U_1/∂α) / 2.
-        p.dU0_da2 = Scalar(-0.5) * X * dU1_da;
-        p.dU1_da2 = inv2a * (X * dU0_da - Scalar(1) * dU1_da) - dU1_da / alpha;
-        p.dU2_da2 = inv2a * (X * dU1_da - Scalar(2) * dU2_da) - dU2_da / alpha;
-        p.dU3_da2 = inv2a * (X * dU2_da - Scalar(3) * dU3_da) - dU3_da / alpha;
+        p.dU0_da2 = Scalar(-0.5) * X * dU_da.U1;
+        p.dU1_da2 = inv2a * (X * dU_da.U0 - Scalar(1) * dU_da.U1) - dU_da.U1 / alpha;
+        p.dU2_da2 = inv2a * (X * dU_da.U1 - Scalar(2) * dU_da.U2) - dU_da.U2 / alpha;
+        p.dU3_da2 = inv2a * (X * dU_da.U2 - Scalar(3) * dU_da.U3) - dU_da.U3 / alpha;
     } else {
         // Taylor leading terms.  From U_n = X^n/n! - α X^{n+2}/(n+2)! + α² X^{n+4}/(n+4)! - ...,
         //   ∂U_n/∂α |_{α→0}      = -X^{n+2}/(n+2)!
@@ -215,22 +211,16 @@ inline U_second_partials<Eigen::Array<double, W, 1>>
 compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
                           const Eigen::Array<double, W, 1> &X,
                           const KeplerLCDResult<Eigen::Array<double, W, 1>> &k, double alpha_tol,
-                          const Eigen::Array<double, W, 1> &dU0_dX,
-                          const Eigen::Array<double, W, 1> &dU1_dX,
-                          const Eigen::Array<double, W, 1> &dU2_dX,
-                          const Eigen::Array<double, W, 1> &dU3_dX,
-                          const Eigen::Array<double, W, 1> &dU0_da,
-                          const Eigen::Array<double, W, 1> &dU1_da,
-                          const Eigen::Array<double, W, 1> &dU2_da,
-                          const Eigen::Array<double, W, 1> &dU3_da) {
+                          const Stumpff<Eigen::Array<double, W, 1>> &dU_dX,
+                          const Stumpff<Eigen::Array<double, W, 1>> &dU_da) {
     using SS = Eigen::Array<double, W, 1>;
     U_second_partials<SS> p;
 
     // ∂²U_n/∂X² (no singularity).
-    p.dU0_dX2 = -alpha * k.U0;
-    p.dU1_dX2 = -alpha * k.U1;
-    p.dU2_dX2 = k.U0;
-    p.dU3_dX2 = k.U1;
+    p.dU0_dX2 = -alpha * k.U.U0;
+    p.dU1_dX2 = -alpha * k.U.U1;
+    p.dU2_dX2 = k.U.U0;
+    p.dU3_dX2 = k.U.U1;
 
     // Per-lane Taylor blend mask + safe inverse.
     const SS abs_a = alpha.abs();
@@ -240,14 +230,14 @@ compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
     const SS inv_a = SS::Constant(1.0) / safe_a;
 
     // Recursion-branch values (X-α partials, n ≥ 1).
-    const SS rec_dU1_dXda = inv2a * (k.U0 + X * dU0_dX - dU1_dX);
-    const SS rec_dU2_dXda = inv2a * (k.U1 + X * dU1_dX - SS::Constant(2.0) * dU2_dX);
-    const SS rec_dU3_dXda = inv2a * (k.U2 + X * dU2_dX - SS::Constant(3.0) * dU3_dX);
+    const SS rec_dU1_dXda = inv2a * (k.U.U0 + X * dU_dX.U0 - dU_dX.U1);
+    const SS rec_dU2_dXda = inv2a * (k.U.U1 + X * dU_dX.U1 - SS::Constant(2.0) * dU_dX.U2);
+    const SS rec_dU3_dXda = inv2a * (k.U.U2 + X * dU_dX.U2 - SS::Constant(3.0) * dU_dX.U3);
 
     // Recursion-branch values (α-α partials, n ≥ 1).
-    const SS rec_dU1_da2 = inv2a * (X * dU0_da - dU1_da) - dU1_da * inv_a;
-    const SS rec_dU2_da2 = inv2a * (X * dU1_da - SS::Constant(2.0) * dU2_da) - dU2_da * inv_a;
-    const SS rec_dU3_da2 = inv2a * (X * dU2_da - SS::Constant(3.0) * dU3_da) - dU3_da * inv_a;
+    const SS rec_dU1_da2 = inv2a * (X * dU_da.U0 - dU_da.U1) - dU_da.U1 * inv_a;
+    const SS rec_dU2_da2 = inv2a * (X * dU_da.U1 - SS::Constant(2.0) * dU_da.U2) - dU_da.U2 * inv_a;
+    const SS rec_dU3_da2 = inv2a * (X * dU_da.U2 - SS::Constant(3.0) * dU_da.U3) - dU_da.U3 * inv_a;
 
     // Taylor-leading-term branch values.
     const SS X2 = X * X;
@@ -265,10 +255,10 @@ compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
     const SS tay_dU3_da2 = SS::Constant(2.0 / 5040.0) * X7;
 
     // n = 0 partials (no singularity, common for both branches).
-    p.dU0_dXda = SS::Constant(-0.5) * (k.U1 + X * dU1_dX);
+    p.dU0_dXda = SS::Constant(-0.5) * (k.U.U1 + X * dU_dX.U1);
     // For α-α: dU_0/dα = -X U_1 / 2  ⇒  ∂/∂α = -X (∂U_1/∂α) / 2 (recursion side);
     // Taylor side gives 2 X^4 / 24 (from leading series).  Blend per-lane.
-    const SS rec_dU0_da2 = SS::Constant(-0.5) * X * dU1_da;
+    const SS rec_dU0_da2 = SS::Constant(-0.5) * X * dU_da.U1;
     p.dU0_da2 = is_para.select(tay_dU0_da2, rec_dU0_da2);
 
     p.dU1_dXda = is_para.select(tay_dU1_dXda, rec_dU1_dXda);
@@ -303,10 +293,10 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
         return;
     }
     const Scalar sqmu = sqrt(Scalar(mu));
-    const Scalar aF = Scalar(1) - k.U2 / k.r0;
-    const Scalar aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
-    const Scalar aFt = -sqmu / (k.r0 * k.r) * k.U1;
-    const Scalar aGt = Scalar(1) - k.U2 / k.r;
+    const Scalar aF = Scalar(1) - k.U.U2 / k.r0;
+    const Scalar aG = (k.r0 * k.U.U1 + k.sigma0 * k.U.U2) / sqmu;
+    const Scalar aFt = -sqmu / (k.r0 * k.r) * k.U.U1;
+    const Scalar aGt = Scalar(1) - k.U.U2 / k.r;
     xf.template head<3>() = aF * R0 + aG * V0;
     xf.template tail<3>() = aFt * R0 + aGt * V0;
 }
@@ -338,9 +328,9 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     sin_.template segment<3>(3) = V0;
     sin_[6] = dt;
     sin_[7] = k.X;
-    sin_[8] = k.U0;
-    sin_[9] = k.U1;
-    sin_[10] = k.U2;
+    sin_[8] = k.U.U0;
+    sin_[9] = k.U.U1;
+    sin_[10] = k.U.U2;
 
     // -- Compute structural Jacobian of S (6 × 11) via the wrapper-owned VF.
     Eigen::Matrix<Scalar, 6, 1> sout;
@@ -353,9 +343,9 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     fin.template head<3>() = R0;
     fin.template segment<3>(3) = V0;
     fin[6] = dt;
-    fin[7] = k.U1;
-    fin[8] = k.U2;
-    fin[9] = k.U3;
+    fin[7] = k.U.U1;
+    fin[8] = k.U.U2;
+    fin[9] = k.U.U3;
 
     // -- Compute structural Jacobian of F (1 × 10) via the wrapper-owned VF.
     Eigen::Matrix<Scalar, 1, 1> F_val;
@@ -363,10 +353,8 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     residual.compute_jacobian_impl(fin, F_val, F_jac);
 
     // -- U-recursions w.r.t. X and α
-    Scalar dU0_dX, dU1_dX, dU2_dX, dU3_dX;
-    U_partials_X<Scalar>(k.alpha, k, dU0_dX, dU1_dX, dU2_dX, dU3_dX);
-    Scalar dU0_da, dU1_da, dU2_da, dU3_da;
-    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol(), dU0_da, dU1_da, dU2_da, dU3_da);
+    const Stumpff<Scalar> dU_dX = U_partials_X<Scalar>(k.alpha, k);
+    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol());
 
     // -- dα/dy where α = 2/r0 - v0²/μ and y = (R0_x, R0_y, R0_z, V0_x, V0_y, V0_z, dt)
     //    ∂α/∂R0_i = -2 · R0_i / r0³
@@ -387,9 +375,9 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     Vector7<Scalar> dF_dy_total;
     for (int i = 0; i < 7; ++i) {
         const Scalar dF_struct_y = F_jac(0, i);
-        const Scalar dF_chain = F_jac(0, 7) * dU1_da * dalpha_dy[i] +
-                                F_jac(0, 8) * dU2_da * dalpha_dy[i] +
-                                F_jac(0, 9) * dU3_da * dalpha_dy[i];
+        const Scalar dF_chain = F_jac(0, 7) * dU_da.U1 * dalpha_dy[i] +
+                                F_jac(0, 8) * dU_da.U2 * dalpha_dy[i] +
+                                F_jac(0, 9) * dU_da.U3 * dalpha_dy[i];
         dF_dy_total[i] = dF_struct_y + dF_chain;
     }
     // -- Total dF/dX: F has no explicit X column in its structural Jacobian;
@@ -414,11 +402,11 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
             const Scalar dS_struct_y = S_jac(row, col);
             const Scalar dS_X_path = S_jac(row, 7) * dX_dy[col];
             const Scalar dS_U0_path =
-                S_jac(row, 8) * (dU0_dX * dX_dy[col] + dU0_da * dalpha_dy[col]);
+                S_jac(row, 8) * (dU_dX.U0 * dX_dy[col] + dU_da.U0 * dalpha_dy[col]);
             const Scalar dS_U1_path =
-                S_jac(row, 9) * (dU1_dX * dX_dy[col] + dU1_da * dalpha_dy[col]);
+                S_jac(row, 9) * (dU_dX.U1 * dX_dy[col] + dU_da.U1 * dalpha_dy[col]);
             const Scalar dS_U2_path =
-                S_jac(row, 10) * (dU2_dX * dX_dy[col] + dU2_da * dalpha_dy[col]);
+                S_jac(row, 10) * (dU_dX.U2 * dX_dy[col] + dU_da.U2 * dalpha_dy[col]);
             jac(row, col) = dS_struct_y + dS_X_path + dS_U0_path + dS_U1_path + dS_U2_path;
         }
     }
@@ -478,9 +466,9 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     sin_.template segment<3>(3) = V0;
     sin_[6] = dt;
     sin_[7] = k.X;
-    sin_[8] = k.U0;
-    sin_[9] = k.U1;
-    sin_[10] = k.U2;
+    sin_[8] = k.U.U0;
+    sin_[9] = k.U.U1;
+    sin_[10] = k.U.U2;
 
     Vector6<Scalar> sout;
     Eigen::Matrix<Scalar, 6, 11> S_jac;
@@ -497,9 +485,9 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     fin.template head<3>() = R0;
     fin.template segment<3>(3) = V0;
     fin[6] = dt;
-    fin[7] = k.U1;
-    fin[8] = k.U2;
-    fin[9] = k.U3;
+    fin[7] = k.U.U1;
+    fin[8] = k.U.U2;
+    fin[9] = k.U.U3;
 
     Eigen::Matrix<Scalar, 1, 1> F_val;
     Eigen::Matrix<Scalar, 1, 10> F_jac;
@@ -511,12 +499,9 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
                                                                   F_lm);
 
     // --- Step C: U partials (1st and 2nd order).
-    Scalar dU0_dX, dU1_dX, dU2_dX, dU3_dX;
-    U_partials_X<Scalar>(k.alpha, k, dU0_dX, dU1_dX, dU2_dX, dU3_dX);
-    Scalar dU0_da, dU1_da, dU2_da, dU3_da;
-    U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol(), dU0_da, dU1_da, dU2_da, dU3_da);
-    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol(), dU0_dX, dU1_dX, dU2_dX,
-                                        dU3_dX, dU0_da, dU1_da, dU2_da, dU3_da);
+    const Stumpff<Scalar> dU_dX = U_partials_X<Scalar>(k.alpha, k);
+    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol());
+    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol(), dU_dX, dU_da);
 
     // --- Step D: α partials (1st and 2nd order).
     //   α = 2/r0 - v0²/μ.
@@ -548,9 +533,9 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     Vector7<Scalar> dF_dy_total;
     for (int i = 0; i < 7; ++i) {
         const Scalar dF_struct_y = F_jac(0, i);
-        const Scalar dF_chain = F_jac(0, 7) * dU1_da * dalpha_dy[i] +
-                                F_jac(0, 8) * dU2_da * dalpha_dy[i] +
-                                F_jac(0, 9) * dU3_da * dalpha_dy[i];
+        const Scalar dF_chain = F_jac(0, 7) * dU_da.U1 * dalpha_dy[i] +
+                                F_jac(0, 8) * dU_da.U2 * dalpha_dy[i] +
+                                F_jac(0, 9) * dU_da.U3 * dalpha_dy[i];
         dF_dy_total[i] = dF_struct_y + dF_chain;
     }
     const Scalar F_X_total = k.r;
@@ -563,11 +548,11 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
             const Scalar dS_struct_y = S_jac(row, col);
             const Scalar dS_X_path = S_jac(row, 7) * dX_dy[col];
             const Scalar dS_U0_path =
-                S_jac(row, 8) * (dU0_dX * dX_dy[col] + dU0_da * dalpha_dy[col]);
+                S_jac(row, 8) * (dU_dX.U0 * dX_dy[col] + dU_da.U0 * dalpha_dy[col]);
             const Scalar dS_U1_path =
-                S_jac(row, 9) * (dU1_dX * dX_dy[col] + dU1_da * dalpha_dy[col]);
+                S_jac(row, 9) * (dU_dX.U1 * dX_dy[col] + dU_da.U1 * dalpha_dy[col]);
             const Scalar dS_U2_path =
-                S_jac(row, 10) * (dU2_dX * dX_dy[col] + dU2_da * dalpha_dy[col]);
+                S_jac(row, 10) * (dU_dX.U2 * dX_dy[col] + dU_da.U2 * dalpha_dy[col]);
             jac(row, col) = dS_struct_y + dS_X_path + dS_U0_path + dS_U1_path + dS_U2_path;
         }
     }
@@ -578,8 +563,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     // (F.1) Total first derivatives of U_n (n ∈ 0..3) w.r.t. y_i.
     Eigen::Matrix<Scalar, 4, 7> dU;
     {
-        const Scalar dUdX[4] = {dU0_dX, dU1_dX, dU2_dX, dU3_dX};
-        const Scalar dUda[4] = {dU0_da, dU1_da, dU2_da, dU3_da};
+        const Scalar dUdX[4] = {dU_dX.U0, dU_dX.U1, dU_dX.U2, dU_dX.U3};
+        const Scalar dUda[4] = {dU_da.U0, dU_da.U1, dU_da.U2, dU_da.U3};
         for (int n = 0; n < 4; ++n)
             for (int i = 0; i < 7; ++i)
                 dU(n, i) = dUdX[n] * dX_dy[i] + dUda[n] * dalpha_dy[i];
@@ -606,7 +591,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     Eigen::Matrix<Scalar, 1, 7> F_yX_total;
     {
         const int U_start = 7;
-        const Scalar dUdX_n[3] = {dU1_dX, dU2_dX, dU3_dX};
+        const Scalar dUdX_n[3] = {dU_dX.U1, dU_dX.U2, dU_dX.U3};
         const Scalar d2U_dXda_n[3] = {p2.dU1_dXda, p2.dU2_dXda, p2.dU3_dXda};
         for (int i = 0; i < 7; ++i) {
             Scalar acc = Scalar(0);
@@ -628,7 +613,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
     Eigen::Matrix<Scalar, 7, 7> F_yy_total;
     {
         const int U_start = 7;
-        const Scalar dUda_n[3] = {dU1_da, dU2_da, dU3_da};
+        const Scalar dUda_n[3] = {dU_da.U1, dU_da.U2, dU_da.U3};
         const Scalar d2Uda2_n[3] = {p2.dU1_da2, p2.dU2_da2, p2.dU3_da2};
         for (int i = 0; i < 7; ++i) {
             for (int j = 0; j <= i; ++j) {
@@ -673,8 +658,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
         const Scalar d2UdX2_n[4] = {p2.dU0_dX2, p2.dU1_dX2, p2.dU2_dX2, p2.dU3_dX2};
         const Scalar d2UdXda_n[4] = {p2.dU0_dXda, p2.dU1_dXda, p2.dU2_dXda, p2.dU3_dXda};
         const Scalar d2Uda2_n[4] = {p2.dU0_da2, p2.dU1_da2, p2.dU2_da2, p2.dU3_da2};
-        const Scalar dUdX_n[4] = {dU0_dX, dU1_dX, dU2_dX, dU3_dX};
-        const Scalar dUda_n[4] = {dU0_da, dU1_da, dU2_da, dU3_da};
+        const Scalar dUdX_n[4] = {dU_dX.U0, dU_dX.U1, dU_dX.U2, dU_dX.U3};
+        const Scalar dUda_n[4] = {dU_da.U0, dU_da.U1, dU_da.U2, dU_da.U3};
         for (int n = 0; n < 4; ++n) {
             for (int i = 0; i < 7; ++i) {
                 for (int j = 0; j <= i; ++j) {

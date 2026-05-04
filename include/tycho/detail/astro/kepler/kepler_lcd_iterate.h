@@ -1,4 +1,5 @@
 #pragma once
+#include "tycho/detail/astro/kepler/stumpff.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include <Eigen/Geometry>
 #include <cmath>
@@ -138,7 +139,7 @@ template <class Scalar> struct KeplerLCDResult {
     Scalar sigma0;
     Scalar r;
     Scalar sigma;
-    Scalar U0, U1, U2, U3;
+    Stumpff<Scalar> U;
     typename KeplerLCDConvergedFlag<Scalar>::type converged;
 };
 
@@ -216,10 +217,10 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         r.X = 0.0;
         // U_n(X=0) is the same on every branch: U0=1, U1=U2=U3=0.  Set directly
         // to avoid the 0/0 indeterminacy in the ellipse Stumpff form at y=0.
-        r.U0 = 1.0;
-        r.U1 = 0.0;
-        r.U2 = 0.0;
-        r.U3 = 0.0;
+        r.U.U0 = 1.0;
+        r.U.U1 = 0.0;
+        r.U.U2 = 0.0;
+        r.U.U3 = 0.0;
         r.r = r0;
         r.sigma = sigma0;
         return r;
@@ -259,7 +260,7 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         // Why the asymptote guard: on a hyperbolic orbit the universal anomaly
         // grows logarithmically with time, but cosh/sinh blow up exponentially
         // in sqrt(-alpha)*X.  If the iterate ever overshoots past the guard,
-        // U0..U3 lose precision before the iteration can recover, so we bail.
+        // U0..U.U3 lose precision before the iteration can recover, so we bail.
         if (alpha < -opts.alpha_tol()) {
             const double sqma = sqrt(-alpha);
             if (fabs(sqma * X) > opts.hyp_guard()) {
@@ -307,18 +308,18 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     }
 
     r.X = X;
-    r.U0 = U0;
-    r.U1 = U1;
-    r.U2 = U2;
-    r.U3 = U3;
+    r.U.U0 = U0;
+    r.U.U1 = U1;
+    r.U.U2 = U2;
+    r.U.U3 = U3;
     r.r = rad;
     r.sigma = sig;
     // NaN-poisoned outputs must not report converged=true: IEEE-754 makes the
     // loop's dX > Xtol comparison false on NaN, so a poisoned loop can exit
     // silently with the converged flag still set.
     if (!(std::isfinite(r.X) && std::isfinite(r.r) && std::isfinite(r.sigma) &&
-          std::isfinite(r.U0) && std::isfinite(r.U1) && std::isfinite(r.U2) &&
-          std::isfinite(r.U3))) [[unlikely]]
+          std::isfinite(r.U.U0) && std::isfinite(r.U.U1) && std::isfinite(r.U.U2) &&
+          std::isfinite(r.U.U3))) [[unlikely]]
         r.converged = false;
     return r;
 }
@@ -345,10 +346,10 @@ kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
         out.sigma0[lane] = k.sigma0;
         out.r[lane] = k.r;
         out.sigma[lane] = k.sigma;
-        out.U0[lane] = k.U0;
-        out.U1[lane] = k.U1;
-        out.U2[lane] = k.U2;
-        out.U3[lane] = k.U3;
+        out.U.U0[lane] = k.U.U0;
+        out.U.U1[lane] = k.U.U1;
+        out.U.U2[lane] = k.U.U2;
+        out.U.U3[lane] = k.U.U3;
         out.converged[lane] = k.converged;
     }
     return out;
@@ -495,10 +496,10 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
     r.converged = (!active) && finite;
 
     r.X = X;
-    r.U0 = U0;
-    r.U1 = U1;
-    r.U2 = U2;
-    r.U3 = U3;
+    r.U.U0 = U0;
+    r.U.U1 = U1;
+    r.U.U2 = U2;
+    r.U.U3 = U3;
     r.r = rad;
     r.sigma = sig;
     return r;

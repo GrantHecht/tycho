@@ -24,10 +24,10 @@ using namespace tycho::astro::detail;
 namespace {
 Vector6<double> apply_fg(const Vector6<double> &RV, const KeplerLCDResult<double> &k, double mu) {
     const double sqmu = std::sqrt(mu);
-    const double aF = 1.0 - k.U2 / k.r0;
-    const double aG = (k.r0 * k.U1 + k.sigma0 * k.U2) / sqmu;
-    const double aFt = -sqmu / (k.r0 * k.r) * k.U1;
-    const double aGt = 1.0 - k.U2 / k.r;
+    const double aF = 1.0 - k.U.U2 / k.r0;
+    const double aG = (k.r0 * k.U.U1 + k.sigma0 * k.U.U2) / sqmu;
+    const double aFt = -sqmu / (k.r0 * k.r) * k.U.U1;
+    const double aGt = 1.0 - k.U.U2 / k.r;
     Vector6<double> out;
     out.head<3>() = aF * RV.head<3>() + aG * RV.tail<3>();
     out.tail<3>() = aFt * RV.head<3>() + aGt * RV.tail<3>();
@@ -96,10 +96,10 @@ TEST(KeplerLCDKernel, ZeroDtFastPath) {
     auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 0.0, TychoTest::MU_EARTH);
     EXPECT_TRUE(k.converged);
     EXPECT_DOUBLE_EQ(k.X, 0.0);
-    EXPECT_DOUBLE_EQ(k.U0, 1.0);
-    EXPECT_DOUBLE_EQ(k.U1, 0.0);
-    EXPECT_DOUBLE_EQ(k.U2, 0.0);
-    EXPECT_DOUBLE_EQ(k.U3, 0.0);
+    EXPECT_DOUBLE_EQ(k.U.U0, 1.0);
+    EXPECT_DOUBLE_EQ(k.U.U1, 0.0);
+    EXPECT_DOUBLE_EQ(k.U.U2, 0.0);
+    EXPECT_DOUBLE_EQ(k.U.U3, 0.0);
     auto rv_lcd = apply_fg(rv, k, TychoTest::MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(rv_lcd[i], rv[i], 1e-13);
@@ -136,9 +136,9 @@ TEST(KeplerLCDKernel, SmallDtScalarHitsStumpffTaylorBranch) {
         // Taylor branch when y < kStumpffTaylorEps.
         EXPECT_NEAR(k_scalar.X, k_ss.X[lane], 1e-13 * std::max(1.0, std::abs(k_ss.X[lane])))
             << "lane " << lane;
-        EXPECT_NEAR(k_scalar.U2, k_ss.U2[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U2[lane])))
+        EXPECT_NEAR(k_scalar.U.U2, k_ss.U.U2[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U.U2[lane])))
             << "lane " << lane;
-        EXPECT_NEAR(k_scalar.U3, k_ss.U3[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U3[lane])))
+        EXPECT_NEAR(k_scalar.U.U3, k_ss.U.U3[lane], 1e-13 * std::max(1.0, std::abs(k_ss.U.U3[lane])))
             << "lane " << lane;
         EXPECT_NEAR(k_scalar.r, k_ss.r[lane], 1e-13 * std::max(1.0, std::abs(k_ss.r[lane])))
             << "lane " << lane;
@@ -163,10 +163,10 @@ TEST(KeplerLCDKernel, HyperbolicAsymptoteGuard) {
     // Bail-out U-state recovery: the kernel must report finite last-stable
     // values, not garbage from the unstable post-loop refresh.
     EXPECT_TRUE(std::isfinite(k.X));
-    EXPECT_TRUE(std::isfinite(k.U0));
-    EXPECT_TRUE(std::isfinite(k.U1));
-    EXPECT_TRUE(std::isfinite(k.U2));
-    EXPECT_TRUE(std::isfinite(k.U3));
+    EXPECT_TRUE(std::isfinite(k.U.U0));
+    EXPECT_TRUE(std::isfinite(k.U.U1));
+    EXPECT_TRUE(std::isfinite(k.U.U2));
+    EXPECT_TRUE(std::isfinite(k.U.U3));
     EXPECT_TRUE(std::isfinite(k.r));
     EXPECT_TRUE(std::isfinite(k.sigma));
     EXPECT_GT(k.r, 0.0);
@@ -189,15 +189,15 @@ TEST(KeplerClosedForm, PrimalMatchesInlineFG) {
     auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), 300.0, TychoTest::MU_EARTH);
     ASSERT_TRUE(k.converged);
 
-    // Pack codegen input: R0(3) + V0(3) + dt + X + U0..U2 = 11
+    // Pack codegen input: R0(3) + V0(3) + dt + X + U0..U.U2 = 11
     Eigen::Matrix<double, 11, 1> in;
     in.head<3>() = rv.head<3>();
     in.segment<3>(3) = rv.tail<3>();
     in[6] = 300.0;
     in[7] = k.X;
-    in[8] = k.U0;
-    in[9] = k.U1;
-    in[10] = k.U2;
+    in[8] = k.U.U0;
+    in[9] = k.U.U1;
+    in[10] = k.U.U2;
 
     KeplerPrimal_VF primal{TychoTest::MU_EARTH};
     Vector6<double> out;
@@ -219,9 +219,9 @@ TEST(KeplerClosedForm, ResidualVanishesAtConverged) {
     in.head<3>() = rv.head<3>();
     in.segment<3>(3) = rv.tail<3>();
     in[6] = 300.0;
-    in[7] = k.U1;
-    in[8] = k.U2;
-    in[9] = k.U3;
+    in[7] = k.U.U1;
+    in[8] = k.U.U2;
+    in[9] = k.U.U3;
 
     KeplerResidual_VF residual{TychoTest::MU_EARTH};
     Eigen::Matrix<double, 1, 1> F_val;
@@ -266,10 +266,10 @@ TEST(KeplerLCDKernelSS, MixedOrbitsFourLanes) {
         auto k = kepler_lcd_iterate<double>(rv_arr[lane].head<3>(), rv_arr[lane].tail<3>(),
                                             dt_arr[lane], TychoTest::MU_EARTH);
         EXPECT_NEAR(k_ss.X[lane], k.X, 1e-12) << "X lane " << lane;
-        EXPECT_NEAR(k_ss.U0[lane], k.U0, 1e-12) << "U0 lane " << lane;
-        EXPECT_NEAR(k_ss.U1[lane], k.U1, 1e-12) << "U1 lane " << lane;
-        EXPECT_NEAR(k_ss.U2[lane], k.U2, 1e-12) << "U2 lane " << lane;
-        EXPECT_NEAR(k_ss.U3[lane], k.U3, 1e-12) << "U3 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U0[lane], k.U.U0, 1e-12) << "U0 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U1[lane], k.U.U1, 1e-12) << "U1 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U2[lane], k.U.U2, 1e-12) << "U2 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U3[lane], k.U.U3, 1e-12) << "U3 lane " << lane;
         EXPECT_NEAR(k_ss.r[lane], k.r, 1e-12) << "r lane " << lane;
         EXPECT_NEAR(k_ss.sigma[lane], k.sigma, 1e-12) << "sigma lane " << lane;
     }
@@ -316,10 +316,10 @@ TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
         auto k = kepler_lcd_iterate<double>(rvs[lane].head<3>(), rvs[lane].tail<3>(), dts[lane],
                                             TychoTest::MU_EARTH);
         EXPECT_NEAR(k_ss.X[lane], k.X, rel_near(k_ss.X[lane], k.X)) << "X lane " << lane;
-        EXPECT_NEAR(k_ss.U0[lane], k.U0, rel_near(k_ss.U0[lane], k.U0)) << "U0 lane " << lane;
-        EXPECT_NEAR(k_ss.U1[lane], k.U1, rel_near(k_ss.U1[lane], k.U1)) << "U1 lane " << lane;
-        EXPECT_NEAR(k_ss.U2[lane], k.U2, rel_near(k_ss.U2[lane], k.U2)) << "U2 lane " << lane;
-        EXPECT_NEAR(k_ss.U3[lane], k.U3, rel_near(k_ss.U3[lane], k.U3)) << "U3 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U0[lane], k.U.U0, rel_near(k_ss.U.U0[lane], k.U.U0)) << "U0 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U1[lane], k.U.U1, rel_near(k_ss.U.U1[lane], k.U.U1)) << "U1 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U2[lane], k.U.U2, rel_near(k_ss.U.U2[lane], k.U.U2)) << "U2 lane " << lane;
+        EXPECT_NEAR(k_ss.U.U3[lane], k.U.U3, rel_near(k_ss.U.U3[lane], k.U.U3)) << "U3 lane " << lane;
         EXPECT_NEAR(k_ss.r[lane], k.r, rel_near(k_ss.r[lane], k.r)) << "r lane " << lane;
         EXPECT_NEAR(k_ss.sigma[lane], k.sigma, rel_near(k_ss.sigma[lane], k.sigma))
             << "sigma lane " << lane;
@@ -458,10 +458,10 @@ TEST(KeplerLCDKernelSS, AllLanesBailoutSnapshotRecovery) {
     for (int lane = 0; lane < 4; ++lane) {
         EXPECT_FALSE(k.converged[lane]) << "lane " << lane << " unexpectedly converged";
         EXPECT_TRUE(std::isfinite(k.X[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U0[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U1[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U2[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U3[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U0[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U1[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U2[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U3[lane])) << "lane " << lane;
         EXPECT_TRUE(std::isfinite(k.r[lane])) << "lane " << lane;
         EXPECT_TRUE(std::isfinite(k.sigma[lane])) << "lane " << lane;
         EXPECT_GT(k.r[lane], 0.0) << "lane " << lane;
@@ -490,10 +490,10 @@ TEST(KeplerLCDKernelSS, SmallDtHitsStumpffTaylorBranch) {
     EXPECT_TRUE(all_converged(k.converged));
     for (int lane = 0; lane < 4; ++lane) {
         EXPECT_TRUE(std::isfinite(k.X[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U0[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U1[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U2[lane])) << "lane " << lane;
-        EXPECT_TRUE(std::isfinite(k.U3[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U0[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U1[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U2[lane])) << "lane " << lane;
+        EXPECT_TRUE(std::isfinite(k.U.U3[lane])) << "lane " << lane;
     }
 
     // Cross-check vs scalar.
@@ -523,10 +523,10 @@ TEST(KeplerLCDKernel, TrueParabolicConverges) {
     EXPECT_TRUE(std::isfinite(k.X));
     // Parabolic Stumpff U_n: U0=1, U1=X, U2=X^2/2, U3=X^3/6 (no recursion-form
     // cancellation since alpha=0).  Confirm them directly.
-    EXPECT_DOUBLE_EQ(k.U0, 1.0);
-    EXPECT_DOUBLE_EQ(k.U1, k.X);
-    EXPECT_DOUBLE_EQ(k.U2, k.X * k.X / 2.0);
-    EXPECT_DOUBLE_EQ(k.U3, k.X * k.X * k.X / 6.0);
+    EXPECT_DOUBLE_EQ(k.U.U0, 1.0);
+    EXPECT_DOUBLE_EQ(k.U.U1, k.X);
+    EXPECT_DOUBLE_EQ(k.U.U2, k.X * k.X / 2.0);
+    EXPECT_DOUBLE_EQ(k.U.U3, k.X * k.X * k.X / 6.0);
     // Barker's equation: r0*X + sigma0*X^2/2 + X^3/6 = sqrt(mu)*dt.
     // sigma0 = R.V/sqrt(mu) = 0 at periapsis.
     const double F = r0 * k.X + k.X * k.X * k.X / 6.0 - std::sqrt(mu) * dt;
