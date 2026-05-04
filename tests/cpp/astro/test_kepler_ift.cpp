@@ -134,12 +134,25 @@ TEST(KeplerIFT_Jacobian, HighEccentricity_e0p999) {
     check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH, 5e-5);
 }
 
-// Note: e = 0.9999 fixture omitted — at any sensible (a, dt) combination
-// the periapsis velocity sits at-or-near the parabolic escape limit
-// v_esc = sqrt(2μ/r_p), and the kernel's elliptic-vs-parabolic boundary
-// (alpha_tol = 1e-12) produces NaN-bearing results either at the seed
-// state or under the FD perturbation that crosses the boundary.  e = 0.999
-// (above) is the deepest sensible elliptic-only fixture.
+TEST(KeplerIFT_Jacobian, HighEccentricity_e0p9999) {
+    // Long-period-comet-style fixture: e = 0.9999 with a = 1.5e9 km
+    // (periapsis r_p = a·(1-e) = 1.5e5 km, ~24 Earth radii).  This is
+    // physical (real long-period comets sit at e > 0.99 with periapsis
+    // around 1 AU), but FD-vs-analytic comparison is fundamentally
+    // limited at near-parabolic eccentricity: the orbit's specific
+    // energy |E| = μ/(2a) shrinks as a grows, so the FD perturbation
+    // dE = V·dV must satisfy dE << |E| to keep the perturbed orbit
+    // elliptic.  At a = 1.5e9 km, μ_Earth: |E| ≈ 1.3e-4 km²/s²,
+    // v_p ≈ 2.3 km/s, dV ≈ cbrt(eps_m)·v_p ≈ 1.4e-5 km/s,
+    // dE ≈ 3.2e-5 km²/s² ≪ |E| — FD stays well clear of the
+    // parabolic boundary.  Tolerance is wider than NearParabolic's
+    // 5e-6 because the analytic Jacobian's 1/(1-e) ≈ 1e4 conditioning
+    // amplifier interacts with FD's truncation at this regime.
+    Vector6<double> oe;
+    oe << 1.5e9, 0.9999, 0.1, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 1000.0, TychoTest::MU_EARTH, 5e-4);
+}
 
 TEST(KeplerIFT_Jacobian, DeepHyperbolic_e3) {
     // e = 3.0 hyperbolic — deeper than the e=1.5 Hyperbolic fixture; tests
