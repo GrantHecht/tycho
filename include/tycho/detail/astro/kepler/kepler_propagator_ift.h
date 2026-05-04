@@ -55,6 +55,16 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
 // U-derivative recursion helpers
 // -------------------------------------------------------------------------
 
+// Recursion-vs-Taylor cutoff for the IFT-layer α partials.  Distinct from
+// the kernel's orbit-type dispatch threshold KeplerLCDOptions::alpha_tol():
+// the kernel uses alpha_tol() to choose ellipse / parabola / hyperbola at
+// |α| ~ 1e-12 (essentially "is it exactly parabolic?"), but the IFT layer's
+// 1/(2α) factors in U_partials_alpha lose precision much earlier — the band
+// roughly 1e-12 < |α| < 1e-9 is well-conditioned for the kernel but suspect
+// for the IFT recursion form.  Set to match the kernel's Stumpff y→0
+// threshold so the Taylor branch covers the whole suspect band.
+inline constexpr double kIFTAlphaTaylorEps = 1.0e-8;
+
 // ∂U_n/∂X = U_{n-1} for n ≥ 1, and ∂U_0/∂X = -α · U_1 (since U_0 = 1 - α U_2
 // and ∂U_2/∂X = U_1; equivalently U_0' = -α U_2' = -α U_1).
 template <class Scalar>
@@ -354,7 +364,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
 
     // -- U-recursions w.r.t. X and α
     const Stumpff<Scalar> dU_dX = U_partials_X<Scalar>(k.alpha, k);
-    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol());
+    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, kIFTAlphaTaylorEps);
 
     // -- dα/dy where α = 2/r0 - v0²/μ and y = (R0_x, R0_y, R0_z, V0_x, V0_y, V0_z, dt)
     //    ∂α/∂R0_i = -2 · R0_i / r0³
@@ -500,8 +510,8 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
 
     // --- Step C: U partials (1st and 2nd order).
     const Stumpff<Scalar> dU_dX = U_partials_X<Scalar>(k.alpha, k);
-    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, opts.alpha_tol());
-    auto p2 = compute_U_second_partials(k.alpha, k.X, k, opts.alpha_tol(), dU_dX, dU_da);
+    const Stumpff<Scalar> dU_da = U_partials_alpha(k.alpha, k.X, k, kIFTAlphaTaylorEps);
+    auto p2 = compute_U_second_partials(k.alpha, k.X, k, kIFTAlphaTaylorEps, dU_dX, dU_da);
 
     // --- Step D: α partials (1st and 2nd order).
     //   α = 2/r0 - v0²/μ.

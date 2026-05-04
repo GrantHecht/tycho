@@ -122,6 +122,32 @@ TEST(KeplerIFT_Jacobian, NearParabolic) {
     check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, 5e-6);
 }
 
+TEST(KeplerIFT_Jacobian, AlphaBandRecursionVsTaylor) {
+    // Probes the band roughly 1e-12 < |α| < 1e-9 where the IFT layer's
+    // U_partials_alpha recursion form (which carries 1/(2α) factors) is
+    // numerically suspect but the kernel's Stumpff y→0 Taylor branch
+    // (kStumpffTaylorEps = 1e-8) is not yet active.  The existing
+    // NearParabolic fixture sits at α ≈ 1e-7; this fixture pushes to
+    // α ≈ 1e-11 to fence the recursion-branch precision in the band
+    // that matters.  The kIFTAlphaTaylorEps = 1e-8 cutoff in
+    // kepler_propagator_ift.h is precisely what makes this fixture
+    // converge: at α = 1e-11 < 1e-8, the IFT layer takes the Taylor
+    // branch and avoids the catastrophic 1/(2α) blow-up.  Without that
+    // cutoff (i.e. if the IFT used the kernel's alpha_tol = 1e-12), the
+    // recursion path would hit the suspect band and the FD comparison
+    // would diverge.
+    //
+    // Construction: a = 1e11 km (massive semi-major axis ⇒ α = 1e-11),
+    // e = 0.99, periapsis at t=0.  Tolerance is wider than NearParabolic
+    // because the FD truncation error at this scale (cbrt_eps · |y|
+    // ≈ 0.04 over a 1e11-km orbit) is itself in the 1e-4 regime, well
+    // above the analytic Jacobian's actual precision.
+    Vector6<double> oe;
+    oe << 1.0e11, 0.99, 0.1, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, 1e-4);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // IFT-composed adjoint Hessian tests
 //
