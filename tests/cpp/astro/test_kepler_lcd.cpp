@@ -612,3 +612,31 @@ TEST(KeplerPropagator, MuValidationThrows) {
     EXPECT_NO_THROW(kp.set_mu(TychoTest::MU_EARTH));
     EXPECT_DOUBLE_EQ(kp.mu(), TychoTest::MU_EARTH);
 }
+
+TEST(KeplerPropagator, SuperScalarPrimal_W4) {
+    // Direct VF compute_impl<> exercise on SuperScalar Scalar (W=4 lanes).
+    // Existing SS coverage hits compute_jacobian_impl and the adjoint-
+    // Hessian path; this one closes the gap on the primal-only path that
+    // PSIOPT calls during line search.
+    using SS = Eigen::Array<double, 4, 1>;
+    KeplerPropagator kp(TychoTest::MU_EARTH);
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    Eigen::Matrix<SS, 7, 1> x_ss;
+    for (int i = 0; i < 7; ++i)
+        x_ss[i] = SS::Constant(i < 6 ? rv[i] : 300.0);
+    Eigen::Matrix<SS, 6, 1> fx_ss;
+    kp.compute_impl(x_ss, fx_ss);
+
+    // Cross-check against the scalar VF on the same fixture.
+    Eigen::Matrix<double, 7, 1> x;
+    x.head<6>() = rv;
+    x[6] = 300.0;
+    Eigen::Matrix<double, 6, 1> fx;
+    kp.compute_impl(x, fx);
+
+    for (int i = 0; i < 6; ++i)
+        for (int lane = 0; lane < 4; ++lane)
+            EXPECT_NEAR(fx_ss[i][lane], fx[i],
+                        1e-12 * std::max(1.0, std::abs(fx[i])))
+                << "comp " << i << " lane " << lane;
+}

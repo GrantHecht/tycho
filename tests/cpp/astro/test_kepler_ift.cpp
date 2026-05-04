@@ -122,6 +122,48 @@ TEST(KeplerIFT_Jacobian, NearParabolic) {
     check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, 5e-6);
 }
 
+TEST(KeplerIFT_Jacobian, HighEccentricity_e0p999) {
+    // Higher-eccentricity ellipse than NearParabolic (e=0.99) — within the
+    // domain where the recursion form is well-conditioned but the orbit's
+    // periapsis sensitivity to V0 is amplified (1/(1-e) ≈ 1000), making it
+    // an effective fence against sign errors in the IFT chain rule that
+    // NearParabolic's milder sensitivity might not catch.
+    Vector6<double> oe;
+    oe << 7000.0, 0.999, 0.1, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 100.0, TychoTest::MU_EARTH, 5e-5);
+}
+
+// Note: e = 0.9999 fixture omitted — at any sensible (a, dt) combination
+// the periapsis velocity sits at-or-near the parabolic escape limit
+// v_esc = sqrt(2μ/r_p), and the kernel's elliptic-vs-parabolic boundary
+// (alpha_tol = 1e-12) produces NaN-bearing results either at the seed
+// state or under the FD perturbation that crosses the boundary.  e = 0.999
+// (above) is the deepest sensible elliptic-only fixture.
+
+TEST(KeplerIFT_Jacobian, DeepHyperbolic_e3) {
+    // e = 3.0 hyperbolic — deeper than the e=1.5 Hyperbolic fixture; tests
+    // the Stumpff cosh/sinh recursion at larger sqma·X (well-conditioned but
+    // past the e=1.5 regime that the existing tests reach).
+    Vector6<double> oe;
+    oe << -10000.0, 3.0, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, 5e-6);
+}
+
+TEST(KeplerIFT_Jacobian, NegativeDtNearParabolic) {
+    // Negative-dt near-parabolic — closes the gap that the test analyzer
+    // flagged where U_partials_alpha's Taylor coefficients have an
+    // X^{n+1}/(n+1)! factor that is odd in X (and hence in dt for parabolic).
+    // A sign error there would slip past positive-dt tests if it cancels
+    // with another sign; this test catches it.  Distinct from Commit 4's
+    // NegativeDtTrueParabolic which exercises α ≡ 0 exactly.
+    Vector6<double> oe;
+    oe << 1.0e7, 0.99, 0.1, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    check_jacobian_fd(rv.head<3>(), rv.tail<3>(), -200.0, TychoTest::MU_EARTH, 5e-6);
+}
+
 TEST(KeplerIFT_Jacobian, AlphaBandRecursionVsTaylor) {
     // Probes the band roughly 1e-12 < |α| < 1e-9 where the IFT layer's
     // U_partials_alpha recursion form (which carries 1/(2α) factors) is
