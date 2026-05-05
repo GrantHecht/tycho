@@ -13,8 +13,8 @@
 #include <numbers>
 #include <stdexcept>
 #include <tycho/detail/astro/kepler/kepler_lcd_iterate.h>
-#include <tycho/detail/astro/kepler/kepler_primal_vf.h>
-#include <tycho/detail/astro/kepler/kepler_residual_vf.h>
+#include <tycho/detail/astro/kepler/kepler_primal.h>
+#include <tycho/detail/astro/kepler/kepler_residual.h>
 #include <tycho/tycho.h>
 
 using namespace tycho;
@@ -199,7 +199,7 @@ TEST(KeplerClosedForm, PrimalMatchesInlineFG) {
     in[9] = k.U.U1;
     in[10] = k.U.U2;
 
-    KeplerPrimal_VF primal{TychoTest::MU_EARTH};
+    KeplerPrimal primal{TychoTest::MU_EARTH};
     Vector6<double> out;
     primal.compute_impl(in, out);
 
@@ -223,7 +223,7 @@ TEST(KeplerClosedForm, ResidualVanishesAtConverged) {
     in[8] = k.U.U2;
     in[9] = k.U.U3;
 
-    KeplerResidual_VF residual{TychoTest::MU_EARTH};
+    KeplerResidual residual{TychoTest::MU_EARTH};
     Eigen::Matrix<double, 1, 1> F_val;
     residual.compute_impl(in, F_val);
     EXPECT_NEAR(F_val[0], 0.0, 1e-9); // |F| at converged X* should be at noise floor
@@ -362,14 +362,25 @@ TEST(KeplerLCDKernel, NegativeDtRoundtripHyperbolic) {
         EXPECT_NEAR(rv_back[i], rv0[i], 1e-8 * std::max(1.0, std::abs(rv0[i])));
 }
 
-TEST(KeplerLCDKernel, NaNInjectionFlagsNonConvergence) {
-    // NaN in dt: r0 stays finite (so the input-validation throw isn't hit),
-    // but the loop body produces NaN, which IEEE-754 makes |NaN| > Xtol false.
-    // The post-loop finiteness gate must catch this and set converged = false.
+TEST(KeplerLCDKernel, RejectsNonFiniteInputs) {
+    // Boundary validation: NaN/Inf in dt or V0 is an obvious caller bug, so
+    // we throw at the kernel entry rather than letting the loop produce NaN
+    // and relying on the post-loop finite gate.  The post-loop gate stays in
+    // place as defense-in-depth for internal NaN emergence (e.g. catastrophic
+    // cancellation during iteration); see kepler_lcd_iterate.h for the gate.
     auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
     const double nan_dt = std::numeric_limits<double>::quiet_NaN();
-    auto k = kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), nan_dt, TychoTest::MU_EARTH);
-    EXPECT_FALSE(k.converged);
+    const double inf_dt = std::numeric_limits<double>::infinity();
+    EXPECT_THROW(
+        kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), nan_dt, TychoTest::MU_EARTH),
+        std::invalid_argument);
+    EXPECT_THROW(
+        kepler_lcd_iterate<double>(rv.head<3>(), rv.tail<3>(), inf_dt, TychoTest::MU_EARTH),
+        std::invalid_argument);
+
+    Vector3<double> V_nan(0.0, std::numeric_limits<double>::quiet_NaN(), 0.0);
+    EXPECT_THROW(kepler_lcd_iterate<double>(rv.head<3>(), V_nan, 100.0, TychoTest::MU_EARTH),
+                 std::invalid_argument);
 }
 
 TEST(KeplerLCDKernel, RejectsZeroR0) {
@@ -611,6 +622,54 @@ TEST(KeplerPropagator, MuValidationThrows) {
     EXPECT_THROW(kp.set_mu(-1.0), std::invalid_argument);
     EXPECT_NO_THROW(kp.set_mu(TychoTest::MU_EARTH));
     EXPECT_DOUBLE_EQ(kp.mu(), TychoTest::MU_EARTH);
+}
+
+// Re-binding mu via set_mu must propagate to the owned codegen VFs so the
+// post-rebind Jacobian matches a freshly-constructed propagator at the new
+// mu.  Fences a regression where a future refactor stops propagating mu to
+// primal_/residual_ private members (e.g., dropping the by-value storage).
+TEST(KeplerPropagator, SetMuRebindRoundtrip) {
+    const double mu1 = TychoTest::MU_EARTH;
+    const double mu2 = 2.0 * TychoTest::MU_EARTH;
+
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), mu1);
+    Eigen::Matrix<double, 7, 1> x;
+    x.head<6>() = rv;
+    x[6] = 300.0;
+
+    KeplerPropagator kp(mu1);
+    Eigen::Matrix<double, 6, 1> fx0;
+    Eigen::Matrix<double, 6, 7> jac0;
+    kp.compute_jacobian_impl(x, fx0, jac0);
+
+    // Rebind to mu2 and recompute via the same instance.
+    kp.set_mu(mu2);
+    Eigen::Matrix<double, 6, 1> fx_after;
+    Eigen::Matrix<double, 6, 7> jac_after;
+    kp.compute_jacobian_impl(x, fx_after, jac_after);
+
+    // Reference: a fresh propagator at mu2.
+    KeplerPropagator kp_ref(mu2);
+    Eigen::Matrix<double, 6, 1> fx_ref;
+    Eigen::Matrix<double, 6, 7> jac_ref;
+    kp_ref.compute_jacobian_impl(x, fx_ref, jac_ref);
+
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR(fx_after[i], fx_ref[i], 1e-13 * std::max(1.0, std::abs(fx_ref[i])))
+            << "fx component " << i;
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 7; ++c)
+            EXPECT_NEAR(jac_after(r, c), jac_ref(r, c),
+                        1e-13 * std::max(1.0, std::abs(jac_ref(r, c))))
+                << "jac (" << r << ", " << c << ")";
+
+    // Sanity: the post-rebind output must differ from the pre-rebind output
+    // — guards against the test passing trivially if set_mu were a no-op.
+    bool any_diff = false;
+    for (int i = 0; i < 6; ++i)
+        if (std::abs(fx0[i] - fx_after[i]) > 1e-9 * std::max(1.0, std::abs(fx0[i])))
+            any_diff = true;
+    EXPECT_TRUE(any_diff) << "set_mu(mu2) did not change compute output — possible no-op";
 }
 
 TEST(KeplerPropagator, SuperScalarPrimal_W4) {

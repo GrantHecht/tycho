@@ -1,6 +1,7 @@
 #pragma once
 #include "tycho/detail/astro/kepler/stumpff.h"
 #include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/utils/compiler_macros.h"
 #include <Eigen/Geometry>
 #include <cmath>
 #include <limits>
@@ -31,7 +32,7 @@ inline constexpr double kStumpffTaylorEps = 1.0e-8;
 // idiom and keep clang's instruction selection bit-for-bit identical
 // to the inlined-by-hand form across both the scalar and SS paths.
 template <class Scalar>
-[[gnu::always_inline]] inline void stumpff_C_S(const Scalar &y, Scalar &C, Scalar &S) {
+TYCHO_ALWAYS_INLINE void stumpff_C_S(const Scalar &y, Scalar &C, Scalar &S) {
     using std::cos;
     using std::sin;
     using std::sqrt;
@@ -59,21 +60,21 @@ template <class Scalar>
 // Iteration knobs for kepler_lcd_iterate.  Invariants are enforced at
 // construction — every reachable instance is well-formed.
 //
-// alpha_tol must be strictly positive (not just non-negative): the SS
-// dispatcher's parabolic mask is `abs(alpha) <= alpha_tol`, so an
-// alpha_tol == 0 mask is true only at exactly-zero alpha and lets
-// numerically-near-parabolic alphas slip through to the recursion
-// branch where they would suffer the catastrophic 1/(2*alpha) blow-up
-// that the Taylor branch is meant to avoid.
+// alpha_tol must be strictly positive (not just non-negative): the
+// IFT-layer Taylor-blend mask `abs(alpha) <= alpha_tol` (used in
+// U_partials_alpha and compute_U_second_partials) is true only at
+// exactly-zero alpha when alpha_tol == 0, letting numerically-near-
+// parabolic alphas slip through to the 1/(2*alpha) recursion branch
+// that the Taylor branch is meant to short-circuit.
 class KeplerLCDOptions {
-public:
+  public:
     constexpr KeplerLCDOptions() noexcept = default;
 
     // Validating ctor.  Throws std::invalid_argument on bad inputs.
     // The negated comparisons (!(x > 0)) reject NaN inputs as well as
     // zero/negative values, since any comparison against NaN is unordered.
-    KeplerLCDOptions(double Xtol, double alpha_tol, int max_order,
-                     int iters_per_order, double hyp_guard)
+    KeplerLCDOptions(double Xtol, double alpha_tol, int max_order, int iters_per_order,
+                     double hyp_guard)
         : Xtol_(Xtol), alpha_tol_(alpha_tol), max_order_(max_order),
           iters_per_order_(iters_per_order), hyp_guard_(hyp_guard) {
         if (!(Xtol_ > 0.0))
@@ -94,7 +95,7 @@ public:
     [[nodiscard]] constexpr int iters_per_order() const noexcept { return iters_per_order_; }
     [[nodiscard]] constexpr double hyp_guard() const noexcept { return hyp_guard_; }
 
-private:
+  private:
     double Xtol_ = 1.0e-12;
     double alpha_tol_ = 1.0e-12;
     int max_order_ = 10;
@@ -115,10 +116,7 @@ template <int W> struct KeplerLCDConvergedFlag<Eigen::Array<double, W, 1>> {
 
 inline bool all_converged(bool b) { return b; }
 
-template <int W>
-inline bool all_converged(const Eigen::Array<bool, W, 1> &m) {
-    return m.all();
-}
+template <int W> inline bool all_converged(const Eigen::Array<bool, W, 1> &m) { return m.all(); }
 
 // Polymorphic NaN scalar: yields a plain double NaN for Scalar=double, and an
 // SS-broadcast NaN for Scalar=Eigen::Array<double,W,1>.  Used by the IFT layer
@@ -200,6 +198,10 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     using std::sqrt;
     if (!(mu > 0.0)) [[unlikely]]
         throw std::invalid_argument("kepler_lcd_iterate: mu must satisfy mu > 0");
+    if (!std::isfinite(dt)) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate: dt must be finite");
+    if (!V0.allFinite()) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate: V0 must be finite");
     KeplerLCDResult<double> r;
     r.converged = true;
     const double sqmu = sqrt(mu);
@@ -260,7 +262,7 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
         // Why the asymptote guard: on a hyperbolic orbit the universal anomaly
         // grows logarithmically with time, but cosh/sinh blow up exponentially
         // in sqrt(-alpha)*X.  If the iterate ever overshoots past the guard,
-        // U0..U.U3 lose precision before the iteration can recover, so we bail.
+        // U0..U3 lose precision before the iteration can recover, so we bail.
         if (alpha < -opts.alpha_tol()) {
             const double sqma = sqrt(-alpha);
             if (fabs(sqma * X) > opts.hyp_guard()) {
@@ -325,11 +327,9 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
 }
 
 template <int W>
-inline KeplerLCDResult<Eigen::Array<double, W, 1>>
-kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
-                            const Vector3<Eigen::Array<double, W, 1>> &V0,
-                            const Eigen::Array<double, W, 1> &dt, double mu,
-                            const KeplerLCDOptions &opts) {
+inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_per_lane(
+    const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,
+    const Eigen::Array<double, W, 1> &dt, double mu, const KeplerLCDOptions &opts) {
     using SS = Eigen::Array<double, W, 1>;
     KeplerLCDResult<SS> out;
     out.converged = Eigen::Array<bool, W, 1>::Constant(true);
@@ -365,11 +365,9 @@ kepler_lcd_iterate_per_lane(const Vector3<Eigen::Array<double, W, 1>> &R0,
 // SIMD lane keeps its converged value.  The shared order N is promoted whenever
 // the budget for the current order is exhausted.
 template <int W>
-inline KeplerLCDResult<Eigen::Array<double, W, 1>>
-kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
-                                const Vector3<Eigen::Array<double, W, 1>> &V0,
-                                const Eigen::Array<double, W, 1> &dt, double mu,
-                                const KeplerLCDOptions &opts) {
+inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_simd_ellipse(
+    const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,
+    const Eigen::Array<double, W, 1> &dt, double mu, const KeplerLCDOptions &opts) {
     using SS = Eigen::Array<double, W, 1>;
     using Mask = Eigen::Array<bool, W, 1>;
     using std::sqrt;
@@ -419,17 +417,13 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
         const SS F1 = rad;
         const SS F2 = sig;
 
-        const SS sgn =
-            (F1 >= SS::Zero()).select(SS::Constant(1.0), SS::Constant(-1.0));
+        const SS sgn = (F1 >= SS::Zero()).select(SS::Constant(1.0), SS::Constant(-1.0));
         const double Nm = static_cast<double>(N);
         const double Nm1 = Nm - 1.0;
-        const SS disc =
-            SS::Constant(Nm1 * Nm1) * F1 * F1 - SS::Constant(Nm * Nm1) * F * F2;
+        const SS disc = SS::Constant(Nm1 * Nm1) * F1 * F1 - SS::Constant(Nm * Nm1) * F * F2;
         const SS denom = disc.abs();
-        const SS dX_step = (denom > SS::Zero())
-                               .select(SS::Constant(Nm) * F /
-                                           (F1 + sgn * denom.sqrt()),
-                                       F / F1);
+        const SS dX_step =
+            (denom > SS::Zero()).select(SS::Constant(Nm) * F / (F1 + sgn * denom.sqrt()), F / F1);
 
         // Only active lanes advance.  Inactive lanes keep their X_new fixed at
         // the converged value from the iteration where they deactivated.
@@ -443,8 +437,11 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
         // the false branch; the post-loop reduction `(!active) && finite`
         // (line below where converged is computed) then sees `finite` as
         // false on those lanes and reports converged = false.  Both terms
-        // are needed: dropping isFinite() lets NaN through, dropping the
-        // tolerance term loops forever on a finite-but-non-converging dX.
+        // are needed: dropping isFinite() costs iteration budget (a NaN
+        // lane would keep iterating until the order cap exhausts; the
+        // post-loop finite mask still catches it for correctness, but at
+        // wasted iterations); dropping the tolerance term loops forever
+        // on a finite-but-non-converging dX.
         active = active && (dX.abs() > SS::Constant(opts.Xtol())) && dX.isFinite();
 
         ++iters_this_N;
@@ -490,9 +487,8 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
 
     // Per-lane converged: lanes that left `active` (|dX| <= Xtol) AND whose
     // current values are finite.
-    const Mask finite = X.isFinite() && rad.isFinite() && sig.isFinite() &&
-                        U0.isFinite() && U1.isFinite() && U2.isFinite() &&
-                        U3.isFinite();
+    const Mask finite = X.isFinite() && rad.isFinite() && sig.isFinite() && U0.isFinite() &&
+                        U1.isFinite() && U2.isFinite() && U3.isFinite();
     r.converged = (!active) && finite;
 
     r.X = X;
@@ -506,15 +502,16 @@ kepler_lcd_iterate_simd_ellipse(const Vector3<Eigen::Array<double, W, 1>> &R0,
 }
 
 template <int W>
-inline KeplerLCDResult<Eigen::Array<double, W, 1>>
-kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
-                   const Vector3<Eigen::Array<double, W, 1>> &V0,
-                   const Eigen::Array<double, W, 1> &dt, double mu,
-                   const KeplerLCDOptions &opts = {}) {
+inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate(
+    const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,
+    const Eigen::Array<double, W, 1> &dt, double mu, const KeplerLCDOptions &opts = {}) {
     using SS = Eigen::Array<double, W, 1>;
     if (!(mu > 0.0)) [[unlikely]]
-        throw std::invalid_argument(
-            "kepler_lcd_iterate (SS): mu must satisfy mu > 0");
+        throw std::invalid_argument("kepler_lcd_iterate (SS): mu must satisfy mu > 0");
+    if (!dt.isFinite().all()) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate (SS): every lane's dt must be finite");
+    if (!(V0[0].isFinite() && V0[1].isFinite() && V0[2].isFinite()).all()) [[unlikely]]
+        throw std::invalid_argument("kepler_lcd_iterate (SS): every lane's V0 must be finite");
 
     // Dispatch to true-SIMD path only when every lane is elliptic with nonzero
     // dt — the common case for PSIOPT collocation across an elliptic phase.
@@ -528,8 +525,7 @@ kepler_lcd_iterate(const Vector3<Eigen::Array<double, W, 1>> &R0,
     // would catch it via the inner scalar throw, so checking here gives
     // both paths the same diagnostic.
     if (!(r0 > SS::Zero()).all()) [[unlikely]]
-        throw std::invalid_argument(
-            "kepler_lcd_iterate (SS): every lane's r0 must satisfy r0 > 0");
+        throw std::invalid_argument("kepler_lcd_iterate (SS): every lane's r0 must satisfy r0 > 0");
     const SS v2 = V0[0].square() + V0[1].square() + V0[2].square();
     const SS alpha = SS::Constant(2.0) / r0 - v2 / SS::Constant(mu);
 

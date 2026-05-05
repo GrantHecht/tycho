@@ -3,6 +3,7 @@
 #include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include <cmath>
+#include <stdexcept>
 
 namespace tycho::astro {
 
@@ -39,11 +40,20 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
 }
 
 // Classical-element two-body propagation: mean anomaly increments by n*dt,
-// where n = sqrt(mu / |a|^3).
+// where n = sqrt(mu / |a|^3).  No iteration here — the only way to produce
+// non-finite output is from non-finite input; validate at the boundary so
+// downstream callers don't have to attribute failure to a phantom kernel.
 template <class Scalar>
 Vector6<Scalar> propagate_classic(const Vector6<Scalar> &oelems, Scalar dt, Scalar mu) {
     using std::abs;
     using std::sqrt;
+    if constexpr (std::is_same_v<Scalar, double>) {
+        if (!(mu > 0.0))
+            throw std::invalid_argument("propagate_classic: mu must satisfy mu > 0");
+        if (!(std::isfinite(oelems[0]) && oelems[0] != 0.0))
+            throw std::invalid_argument(
+                "propagate_classic: semi-major axis a (oelems[0]) must be finite and non-zero");
+    }
     Scalar a = oelems[0];
     Scalar n = sqrt(mu / abs(a * a * a));
     Vector6<Scalar> noelems = oelems;
@@ -55,6 +65,10 @@ Vector6<Scalar> propagate_classic(const Vector6<Scalar> &oelems, Scalar dt, Scal
 // the analytic mean-anomaly update.
 template <class Scalar>
 Vector6<Scalar> propagate_modified(const Vector6<Scalar> &meelems, Scalar dt, Scalar mu) {
+    if constexpr (std::is_same_v<Scalar, double>) {
+        if (!(mu > 0.0))
+            throw std::invalid_argument("propagate_modified: mu must satisfy mu > 0");
+    }
     Vector6<Scalar> oelems = modified_to_classic(meelems, mu);
     Vector6<Scalar> noelems = propagate_classic(oelems, dt, mu);
     return classic_to_modified(noelems, mu);

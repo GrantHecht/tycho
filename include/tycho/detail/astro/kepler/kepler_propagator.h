@@ -1,17 +1,16 @@
 // =============================================================================
 // Tycho fork: Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt.
 //
-// VF wrapper over the LCD kernel + IFT composition; no algorithmic descent
-// from ASSET's KeplerPropagator (which used a GenericFunction + ScalarRoot-
-// Finder for differentiation through Newton iteration).  See
-// kepler_lcd_iterate.h and kepler_propagator_ift.h for the implementation.
+// VF wrapper over the LCD kernel + IFT composition.  See kepler_lcd_iterate.h
+// and kepler_propagator_ift.h for the implementation.
 // =============================================================================
 #pragma once
-#include "tycho/detail/astro/kepler/kepler_primal_vf.h"
+#include "tycho/detail/astro/kepler/kepler_primal.h"
 #include "tycho/detail/astro/kepler/kepler_propagator_ift.h"
-#include "tycho/detail/astro/kepler/kepler_residual_vf.h"
+#include "tycho/detail/astro/kepler/kepler_residual.h"
 #include "tycho/vector_functions.h"
 
+#include <limits>
 #include <stdexcept>
 
 namespace tycho::astro {
@@ -24,11 +23,11 @@ using vf::VecRef;
 using vf::VectorFunction;
 
 class KeplerPropagator
-    : public VectorFunction<KeplerPropagator, 7, 6,
-                            DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
-public:
-    using Base = VectorFunction<KeplerPropagator, 7, 6,
-                                DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
+    : public VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
+                            DenseDerivativeMode::Analytic> {
+  public:
+    using Base = VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
+                                DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
     static constexpr bool is_vectorizable = true;
@@ -68,8 +67,7 @@ public:
     }
 
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(CVecRef<InType> x,
-                                      CVecRef<OutType> fx_,
+    inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
         using Scalar = typename InType::Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
@@ -103,18 +101,18 @@ public:
         Vector7<Scalar> grad;
         Eigen::Matrix<Scalar, 7, 7> hess;
         Vector6<Scalar> lm = adjvars;
-        detail::kepler_propagate_adjoint_hessian<Scalar>(
-            R0, V0, dt, primal_, residual_, lm, out, jac, grad, hess);
+        detail::kepler_propagate_adjoint_hessian<Scalar>(R0, V0, dt, primal_, residual_, lm, out,
+                                                         jac, grad, hess);
         fx = out;
         jx = jac;
         ag = grad;
         ah = hess;
     }
 
-private:
-    double mu_;
-    KeplerPrimal_VF primal_;
-    KeplerResidual_VF residual_;
+  private:
+    double mu_ = std::numeric_limits<double>::quiet_NaN();
+    detail::KeplerPrimal primal_;
+    detail::KeplerResidual residual_;
 };
 
 } // namespace tycho::astro

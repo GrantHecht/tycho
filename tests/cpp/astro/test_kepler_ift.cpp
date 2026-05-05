@@ -30,8 +30,8 @@ namespace {
 // disagreement signals a bug in one of the assemblies.
 void check_jacobian_fd(const Vector3<double> &R0, const Vector3<double> &V0, double dt, double mu,
                        double rel_tol) {
-    KeplerPrimal_VF primal(mu);
-    KeplerResidual_VF residual(mu);
+    KeplerPrimal primal(mu);
+    KeplerResidual residual(mu);
     Vector6<double> xf_a;
     Eigen::Matrix<double, 6, 7> jac_a;
     kepler_propagate_jacobian<double>(R0, V0, dt, primal, residual, xf_a, jac_a);
@@ -232,8 +232,8 @@ namespace {
 void check_adjoint_hessian_fd(const Vector3<double> &R0, const Vector3<double> &V0, double dt,
                               double mu, const Vector6<double> &lm, double rel_tol,
                               double fd_eps_scale = 6.0554544523933395e-6) {
-    KeplerPrimal_VF primal(mu);
-    KeplerResidual_VF residual(mu);
+    KeplerPrimal primal(mu);
+    KeplerResidual residual(mu);
     Vector6<double> xf_a;
     Eigen::Matrix<double, 6, 7> jac_a;
     Vector7<double> grad_a;
@@ -353,6 +353,31 @@ TEST(KeplerIFT_Hessian, NearParabolic) {
     Eigen::VectorXd lm_d = TychoTest::deterministic_random_vector(6, 405, -1.0, 1.0);
     Vector6<double> lm = lm_d;
     check_adjoint_hessian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, lm, 5e-5,
+                             /*fd_eps_scale=*/1e-3);
+}
+
+// Backward-propagation Hessian: mirrors KeplerIFT_Jacobian.NegativeDtLEO so a
+// sign error in the Taylor-branch second partials, or in the IFT
+// composition's symmetric assembly, that flips with sgn(dt) is fenced.
+TEST(KeplerIFT_Hessian, NegativeDtLEO) {
+    auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
+    Eigen::VectorXd lm_d = TychoTest::deterministic_random_vector(6, 406, -1.0, 1.0);
+    Vector6<double> lm = lm_d;
+    check_adjoint_hessian_fd(rv.head<3>(), rv.tail<3>(), -300.0, TychoTest::MU_EARTH, lm, 5e-6);
+}
+
+// Alpha-band Hessian (mirrors KeplerIFT_Jacobian.AlphaBandRecursionVsTaylor):
+// fixture drives |α| ≈ 1e-11 — well below kIFTAlphaTaylorEps (1e-8) — so the
+// recursion-vs-Taylor switch in compute_U_second_partials is exercised on the
+// Hessian path.  Tolerance and FD step widened to match the AlphaBand
+// Jacobian rationale: huge a=1e11 amplifies FD-truncation noise.
+TEST(KeplerIFT_Hessian, AlphaBandRecursionVsTaylor) {
+    Vector6<double> oe;
+    oe << 1.0e11, 0.99, 0.1, 0.0, 0.0, 0.0;
+    auto rv = classic_to_cartesian<double>(oe, TychoTest::MU_EARTH);
+    Eigen::VectorXd lm_d = TychoTest::deterministic_random_vector(6, 407, -1.0, 1.0);
+    Vector6<double> lm = lm_d;
+    check_adjoint_hessian_fd(rv.head<3>(), rv.tail<3>(), 200.0, TychoTest::MU_EARTH, lm, 1e-3,
                              /*fd_eps_scale=*/1e-3);
 }
 
@@ -570,50 +595,42 @@ TEST(KeplerIFT_Hessian, SimdUniformElliptic) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// NaN-poisoning end-to-end: PSIOPT relies on the IFT layer's bailout NaN
-// signal to detect failed steps.  Verify that on kernel non-convergence, every
-// entry of xf, jac, adjgrad, and adjhess is non-finite — not just a subset.
+// Boundary validation: every IFT entry point routes through the LCD kernel,
+// which now rejects non-finite dt / V0 at construction.  PSIOPT users see
+// std::invalid_argument (translated to ValueError at the Python boundary)
+// instead of consuming a NaN-poisoned output.  The all-or-nothing NaN-
+// poisoning contract for *internal* non-convergence is preserved
+// (post-loop kernel gate + IFT post-composition gate); we don't have a
+// deterministic fixture to inject internal NaN that doesn't trip the
+// boundary validation, but the gates remain in code for defense-in-depth.
 ///////////////////////////////////////////////////////////////////////////////
-TEST(KeplerIFT, NaNPoisoningEndToEnd) {
+TEST(KeplerIFT, RejectsNonFiniteInputsEndToEnd) {
     auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
     const double nan_dt = std::numeric_limits<double>::quiet_NaN();
     const Vector3<double> R0 = rv.head<3>();
     const Vector3<double> V0 = rv.tail<3>();
 
     Vector6<double> xf;
-    kepler_propagate<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, xf);
-    for (int i = 0; i < 6; ++i)
-        EXPECT_FALSE(std::isfinite(xf[i])) << "primal xf[" << i << "]";
+    EXPECT_THROW(kepler_propagate<double>(R0, V0, nan_dt, TychoTest::MU_EARTH, xf),
+                 std::invalid_argument);
 
-    KeplerPrimal_VF primal(TychoTest::MU_EARTH);
-    KeplerResidual_VF residual(TychoTest::MU_EARTH);
+    KeplerPrimal primal(TychoTest::MU_EARTH);
+    KeplerResidual residual(TychoTest::MU_EARTH);
 
     Vector6<double> xf_j;
     Eigen::Matrix<double, 6, 7> jac;
-    kepler_propagate_jacobian<double>(R0, V0, nan_dt, primal, residual, xf_j, jac);
-    for (int i = 0; i < 6; ++i)
-        EXPECT_FALSE(std::isfinite(xf_j[i])) << "jac-xf[" << i << "]";
-    for (int r = 0; r < 6; ++r)
-        for (int c = 0; c < 7; ++c)
-            EXPECT_FALSE(std::isfinite(jac(r, c))) << "jac(" << r << "," << c << ")";
+    EXPECT_THROW(
+        kepler_propagate_jacobian<double>(R0, V0, nan_dt, primal, residual, xf_j, jac),
+        std::invalid_argument);
 
     Vector6<double> xf_h;
     Eigen::Matrix<double, 6, 7> jac_h;
     Vector7<double> grad;
     Eigen::Matrix<double, 7, 7> hess;
     Vector6<double> lm = TychoTest::deterministic_random_vector(6, 601, -1.0, 1.0);
-    kepler_propagate_adjoint_hessian<double>(R0, V0, nan_dt, primal, residual, lm, xf_h, jac_h,
-                                             grad, hess);
-    for (int i = 0; i < 6; ++i)
-        EXPECT_FALSE(std::isfinite(xf_h[i])) << "hess-xf[" << i << "]";
-    for (int r = 0; r < 6; ++r)
-        for (int c = 0; c < 7; ++c)
-            EXPECT_FALSE(std::isfinite(jac_h(r, c))) << "hess-jac(" << r << "," << c << ")";
-    for (int i = 0; i < 7; ++i)
-        EXPECT_FALSE(std::isfinite(grad[i])) << "adjgrad[" << i << "]";
-    for (int r = 0; r < 7; ++r)
-        for (int c = 0; c < 7; ++c)
-            EXPECT_FALSE(std::isfinite(hess(r, c))) << "adjhess(" << r << "," << c << ")";
+    EXPECT_THROW(kepler_propagate_adjoint_hessian<double>(R0, V0, nan_dt, primal, residual, lm,
+                                                          xf_h, jac_h, grad, hess),
+                 std::invalid_argument);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -662,8 +679,8 @@ TEST(KeplerIFT_Hessian, TrueParabolicWellFormed) {
     Vector3<double> V0(0.0, std::sqrt(2.0 * mu / r0), 0.0);
     Vector6<double> lm = TychoTest::deterministic_random_vector(6, 406, -1.0, 1.0);
 
-    KeplerPrimal_VF primal(mu);
-    KeplerResidual_VF residual(mu);
+    KeplerPrimal primal(mu);
+    KeplerResidual residual(mu);
 
     Vector6<double> xf;
     Eigen::Matrix<double, 6, 7> jac;

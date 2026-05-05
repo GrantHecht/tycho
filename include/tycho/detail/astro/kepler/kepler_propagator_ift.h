@@ -11,13 +11,41 @@
 #pragma once
 
 #include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
-#include "tycho/detail/astro/kepler/kepler_primal_vf.h"
-#include "tycho/detail/astro/kepler/kepler_residual_vf.h"
+#include "tycho/detail/astro/kepler/kepler_primal.h"
+#include "tycho/detail/astro/kepler/kepler_residual.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 
+#include <cassert>
 #include <cmath>
+#include <type_traits>
 
 namespace tycho::astro::detail {
+
+// -------------------------------------------------------------------------
+// Internal helpers
+// -------------------------------------------------------------------------
+
+// Scalar-polymorphic finite-check for the IFT outputs.  For Scalar=double we
+// can call Eigen::Matrix::allFinite() directly; for SS Scalar
+// (Eigen::Array<double, W, 1>) the matrix entries are themselves Eigen
+// arrays, so allFinite() is not available — iterate entries and AND-reduce
+// per-lane finiteness.  Used by kepler_propagate_jacobian /
+// kepler_propagate_adjoint_hessian to detect degenerate IFT composition
+// (e.g. r → 0 producing inf in 1/F_X_total) on lanes where the LCD kernel
+// itself converged.
+template <class Derived> inline bool kepler_block_all_finite(const Eigen::DenseBase<Derived> &m) {
+    using Scalar = typename Derived::Scalar;
+    if constexpr (std::is_same_v<Scalar, double>) {
+        return m.derived().allFinite();
+    } else {
+        // SS Scalar — iterate entries, AND-reduce lane-finite checks.
+        for (Eigen::Index i = 0; i < m.rows(); ++i)
+            for (Eigen::Index j = 0; j < m.cols(); ++j)
+                if (!m(i, j).isFinite().all())
+                    return false;
+        return true;
+    }
+}
 
 // -------------------------------------------------------------------------
 // Forward declarations
@@ -35,21 +63,18 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
 // configured with the same mu — the wrapper's set_mu propagates to both.
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                      Scalar dt,
-                                      const ::tycho::astro::KeplerPrimal_VF &primal,
-                                      const ::tycho::astro::KeplerResidual_VF &residual,
-                                      Vector6<Scalar> &xf,
-                                      Eigen::Matrix<Scalar, 6, 7> &jac);
+                                      Scalar dt, const ::tycho::astro::detail::KeplerPrimal &primal,
+                                      const ::tycho::astro::detail::KeplerResidual &residual,
+                                      Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac);
 
 template <class Scalar>
-inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                             Scalar dt,
-                                             const ::tycho::astro::KeplerPrimal_VF &primal,
-                                             const ::tycho::astro::KeplerResidual_VF &residual,
-                                             const Vector6<Scalar> &adjvars,
-                                             Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac,
-                                             Vector7<Scalar> &adjgrad,
-                                             Eigen::Matrix<Scalar, 7, 7> &adjhess);
+inline void
+kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
+                                 const ::tycho::astro::detail::KeplerPrimal &primal,
+                                 const ::tycho::astro::detail::KeplerResidual &residual,
+                                 const Vector6<Scalar> &adjvars, Vector6<Scalar> &xf,
+                                 Eigen::Matrix<Scalar, 6, 7> &jac, Vector7<Scalar> &adjgrad,
+                                 Eigen::Matrix<Scalar, 7, 7> &adjhess);
 
 // -------------------------------------------------------------------------
 // U-derivative recursion helpers
@@ -79,10 +104,11 @@ inline Stumpff<Scalar> U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> 
 // the Taylor leading order  U_n = X^n/n! - α X^{n+2}/(n+2)! + O(α²)
 //   ⇒ ∂U_n/∂α |_{α→0} = -X^{n+2} / (n+2)!
 //
-// (Scalar = double overload.)
+// Scalar/per-call path; SS argument types resolve to the Eigen::Array
+// overload below.
 template <class Scalar>
-inline Stumpff<Scalar> U_partials_alpha(Scalar alpha, Scalar X,
-                                        const KeplerLCDResult<Scalar> &k, double alpha_tol) {
+inline Stumpff<Scalar> U_partials_alpha(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> &k,
+                                        double alpha_tol) {
     using std::abs;
     Stumpff<Scalar> out;
     out.U0 = Scalar(-0.5) * X * k.U.U1;
@@ -148,21 +174,43 @@ U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<dou
 // removable singularity as the first-order α-recursion: near α=0 we Taylor-
 // fall back to the leading series term to avoid catastrophic cancellation.
 // 4×3 second-partials table: rows index U_n (n = 0..3), columns index the
-// partial kind (X², X·α, α²).  Replaces the loose 12-field layout flagged
-// by type-design review S7 — the named accessors expose the natural
-// row-by-Stumpff-index, column-by-partial-kind structure that downstream
-// consumers (the second-order IFT chain rule) read in groups.
-template <class Scalar> struct U_second_partials {
+// partial kind (X², X·α, α²).  Replaces the loose 12-field layout — the
+// named accessors expose the natural row-by-Stumpff-index, column-by-
+// partial-kind structure that downstream consumers (the second-order IFT
+// chain rule) read in groups.  data_ is private + accessed only via the
+// named accessors so the row/column convention can't be bypassed by a
+// later refactor.
+template <class Scalar> class U_second_partials {
+  public:
     enum Kind : int { dX2 = 0, dXda = 1, da2 = 2 };
 
-    Eigen::Matrix<Scalar, 4, 3> data;
+    [[nodiscard]] Scalar &d2U_dX2(int n) {
+        assert(0 <= n && n < 4);
+        return data_(n, dX2);
+    }
+    [[nodiscard]] Scalar &d2U_dXda(int n) {
+        assert(0 <= n && n < 4);
+        return data_(n, dXda);
+    }
+    [[nodiscard]] Scalar &d2U_da2(int n) {
+        assert(0 <= n && n < 4);
+        return data_(n, da2);
+    }
+    [[nodiscard]] const Scalar &d2U_dX2(int n) const {
+        assert(0 <= n && n < 4);
+        return data_(n, dX2);
+    }
+    [[nodiscard]] const Scalar &d2U_dXda(int n) const {
+        assert(0 <= n && n < 4);
+        return data_(n, dXda);
+    }
+    [[nodiscard]] const Scalar &d2U_da2(int n) const {
+        assert(0 <= n && n < 4);
+        return data_(n, da2);
+    }
 
-    [[nodiscard]] Scalar &d2U_dX2(int n) { return data(n, dX2); }
-    [[nodiscard]] Scalar &d2U_dXda(int n) { return data(n, dXda); }
-    [[nodiscard]] Scalar &d2U_da2(int n) { return data(n, da2); }
-    [[nodiscard]] const Scalar &d2U_dX2(int n) const { return data(n, dX2); }
-    [[nodiscard]] const Scalar &d2U_dXda(int n) const { return data(n, dXda); }
-    [[nodiscard]] const Scalar &d2U_da2(int n) const { return data(n, da2); }
+  private:
+    Eigen::Matrix<Scalar, 4, 3> data_;
 };
 
 template <class Scalar>
@@ -329,11 +377,9 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
 
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                      Scalar dt,
-                                      const ::tycho::astro::KeplerPrimal_VF &primal,
-                                      const ::tycho::astro::KeplerResidual_VF &residual,
-                                      Vector6<Scalar> &xf,
-                                      Eigen::Matrix<Scalar, 6, 7> &jac) {
+                                      Scalar dt, const ::tycho::astro::detail::KeplerPrimal &primal,
+                                      const ::tycho::astro::detail::KeplerResidual &residual,
+                                      Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac) {
     KeplerLCDOptions opts;
     const double mu = primal.mu();
     auto k = kepler_lcd_iterate(R0, V0, dt, mu, opts);
@@ -432,6 +478,16 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
             jac(row, col) = dS_struct_y + dS_X_path + dS_U0_path + dS_U1_path + dS_U2_path;
         }
     }
+
+    // Post-composition finite-guard.  The LCD kernel can converge to a
+    // numerically-degenerate state (e.g. r → 0 producing inf in
+    // 1/F_X_total = 1/r) where the IFT-derived xf / jac are non-finite
+    // even though k.converged was true.  PSIOPT step-rejection requires
+    // an observable NaN; mirror the all-or-nothing contract above.
+    if (!kepler_block_all_finite(xf) || !kepler_block_all_finite(jac)) [[unlikely]] {
+        xf.setConstant(kepler_nan_value<Scalar>());
+        jac.setConstant(kepler_nan_value<Scalar>());
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -458,14 +514,13 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
 // structural input space).  F is single-output, so passing F_lm[0] = 1 makes
 // F_grad and F_hess equal to the raw structural gradient/Hessian of F.
 template <class Scalar>
-inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
-                                             Scalar dt,
-                                             const ::tycho::astro::KeplerPrimal_VF &primal,
-                                             const ::tycho::astro::KeplerResidual_VF &residual,
-                                             const Vector6<Scalar> &adjvars,
-                                             Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac,
-                                             Vector7<Scalar> &adjgrad,
-                                             Eigen::Matrix<Scalar, 7, 7> &adjhess) {
+inline void
+kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
+                                 const ::tycho::astro::detail::KeplerPrimal &primal,
+                                 const ::tycho::astro::detail::KeplerResidual &residual,
+                                 const Vector6<Scalar> &adjvars, Vector6<Scalar> &xf,
+                                 Eigen::Matrix<Scalar, 6, 7> &jac, Vector7<Scalar> &adjgrad,
+                                 Eigen::Matrix<Scalar, 7, 7> &adjhess) {
     using std::abs;
     KeplerLCDOptions opts;
     const double mu = primal.mu();
@@ -741,6 +796,19 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Ve
             adjhess(i, j) = v;
             adjhess(j, i) = v;
         }
+    }
+
+    // Post-composition finite-guard — see kepler_propagate_jacobian's
+    // analogous block.  The Hessian path adds 1/(2α) factors in the U-α
+    // recursion and dot-product contractions that can amplify finite-but-
+    // ill-conditioned IFT inputs to non-finite outputs.  PSIOPT step-
+    // rejection requires an observable NaN on every output of the call.
+    if (!kepler_block_all_finite(xf) || !kepler_block_all_finite(jac) ||
+        !kepler_block_all_finite(adjgrad) || !kepler_block_all_finite(adjhess)) [[unlikely]] {
+        xf.setConstant(kepler_nan_value<Scalar>());
+        jac.setConstant(kepler_nan_value<Scalar>());
+        adjgrad.setConstant(kepler_nan_value<Scalar>());
+        adjhess.setConstant(kepler_nan_value<Scalar>());
     }
 }
 

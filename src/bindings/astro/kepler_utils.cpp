@@ -98,31 +98,42 @@ void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
     ////////////////////              Propagators                  /////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////
 
-    // Python contract: propagate_* raises RuntimeError on non-convergence.
-    // The C++ kernels return a NaN-filled Vector6 (PSIOPT step-rejection
-    // semantics), but Python users expect exceptions; translate at the
-    // boundary.  Detection via allFinite() is cheap (6 doubles) and avoids
-    // exposing the internal KeplerLCDResult::converged flag.
+    // Python contract: propagate_* raises RuntimeError on non-convergence
+    // or NaN-poisoned output.  The C++ kernels return a NaN-filled Vector6
+    // (PSIOPT step-rejection semantics), but Python users expect exceptions;
+    // translate at the boundary.  Detection via allFinite() is cheap (6
+    // doubles) and avoids exposing the internal KeplerLCDResult::converged
+    // flag.  A structured KeplerLCDStatus enum that distinguishes the
+    // bailout causes (max_iters / hyp_guard / NaN) is the more principled
+    // diagnostic surface and is intentionally deferred to a follow-up; the
+    // enriched messages below list the typical causes so users can debug
+    // without it.
     m.def("propagate_cartesian", [](const Vector6<double> &RV, double dt, double mu) {
         const auto rv = propagate_cartesian(RV, dt, mu);
         if (!rv.allFinite())
             throw std::runtime_error(
-                "propagate_cartesian: LCD iteration did not converge");
+                "propagate_cartesian: LCD iteration did not converge "
+                "(check dt magnitude, hyperbolic asymptote at sqrt(-alpha)*X = 30, "
+                "or non-finite inputs)");
         return rv;
     });
+    // propagate_classic / propagate_modified do not run an LCD iteration —
+    // input validation in the C++ overloads (see kepler_propagation.h) raises
+    // std::invalid_argument for mu <= 0 or non-finite/zero semi-major axis,
+    // which nanobind translates to ValueError.  This RuntimeError fires only
+    // if the analytic path itself produces non-finite output despite valid
+    // inputs (e.g. a numerically extreme intermediate via modified_to_classic).
     m.def("propagate_classic", [](const Vector6<double> &oelems, double dt, double mu) {
         const auto out = propagate_classic(oelems, dt, mu);
         if (!out.allFinite())
-            throw std::runtime_error(
-                "propagate_classic: LCD iteration did not converge");
+            throw std::runtime_error("propagate_classic: produced non-finite output");
         return out;
     });
 
     m.def("propagate_modified", [](const Vector6<double> &meelems, double dt, double mu) {
         const auto out = propagate_modified(meelems, dt, mu);
         if (!out.allFinite())
-            throw std::runtime_error(
-                "propagate_modified: LCD iteration did not converge");
+            throw std::runtime_error("propagate_modified: produced non-finite output");
         return out;
     });
 }
