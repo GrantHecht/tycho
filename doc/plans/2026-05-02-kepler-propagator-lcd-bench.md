@@ -79,8 +79,8 @@ Verified against central finite differences across orbit-type fixtures (LEO circ
 
 - New: `include/tycho/detail/astro/kepler_lcd_iterate.h`
 - New: `include/tycho/detail/astro/kepler_propagator_ift.h`
-- New: `include/tycho/detail/astro/kepler_primal_vf.h` (generated)
-- New: `include/tycho/detail/astro/kepler_residual_vf.h` (generated)
+- New: `include/tycho/detail/astro/kepler_primal.h` (generated)
+- New: `include/tycho/detail/astro/kepler_residual.h` (generated)
 - New: `utils/codegen_kepler_propagator.py`
 - New: `tests/cpp/astro/test_kepler_lcd.cpp`, `tests/cpp/astro/test_kepler_ift.cpp`
 - Rewritten: `include/tycho/detail/astro/kepler_propagator.h` (560 → 94 lines; DSL removed)

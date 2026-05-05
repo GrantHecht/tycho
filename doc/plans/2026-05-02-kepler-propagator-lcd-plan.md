@@ -4,7 +4,7 @@
 
 **Goal:** Replace `KeplerPropagator` (DSL) and `propagate_cartesian` (Newton) with a single canonical EMTG-style Laguerre-Conway-Der implementation. Hand-rolled iteration kernel + SymPy-codegen'd closed-form primal/residual + small IFT composition layer.
 
-**Architecture:** Five files, one canonical algorithm. Iteration kernel (hand-written, scalar/SuperScalar templated) drives F→0. SymPy script emits `KeplerPrimal_VF` and `KeplerResidual_VF` with CSE'd partials of the post-converged closed forms. IFT layer composes total Jac/adjoint-Hess via `dX*/dy = −F_y/F_X` and the U-recursion chain rule. Public `KeplerPropagator` VF and `propagate_cartesian` both delegate to the kernel. Per-lane SuperScalar in this PR; true SIMD blend deferred.
+**Architecture:** Five files, one canonical algorithm. Iteration kernel (hand-written, scalar/SuperScalar templated) drives F→0. SymPy script emits `KeplerPrimal` and `KeplerResidual` with CSE'd partials of the post-converged closed forms. IFT layer composes total Jac/adjoint-Hess via `dX*/dy = −F_y/F_X` and the U-recursion chain rule. Public `KeplerPropagator` VF and `propagate_cartesian` both delegate to the kernel. Per-lane SuperScalar in this PR; true SIMD blend deferred.
 
 **Tech Stack:** C++20, Eigen 5, SymPy (existing `utils/CodeGen.py`), Google Test, Google Benchmark.
 
@@ -20,8 +20,8 @@
 |---|---|---|
 | `include/tycho/detail/astro/kepler_lcd_iterate.h` | NEW | Iteration kernel; `kepler_lcd_iterate<Scalar>` + `KeplerLCDResult<Scalar>` |
 | `utils/codegen_kepler_propagator.py` | NEW | SymPy script that emits the closed-form headers |
-| `include/tycho/detail/astro/kepler_primal_vf.h` | NEW (generated) | `KeplerPrimal_VF` — internal helper |
-| `include/tycho/detail/astro/kepler_residual_vf.h` | NEW (generated) | `KeplerResidual_VF` — internal helper |
+| `include/tycho/detail/astro/kepler_primal.h` | NEW (generated) | `KeplerPrimal` — internal helper |
+| `include/tycho/detail/astro/kepler_residual.h` | NEW (generated) | `KeplerResidual` — internal helper |
 | `include/tycho/detail/astro/kepler_propagator_ift.h` | NEW | IFT composition: `kepler_propagate`, `kepler_propagate_jacobian`, `kepler_propagate_adjoint_hessian` |
 | `include/tycho/detail/astro/kepler_propagator.h` | REWRITTEN | Public `KeplerPropagator` VF; delegates to IFT layer |
 | `include/tycho/detail/astro/kepler_utils.h` | MODIFIED | `propagate_cartesian` body replaced; rest unchanged |
@@ -544,18 +544,18 @@ EOF
 
 ## Task 2: Codegen script + generated header
 
-**Goal:** SymPy script `utils/codegen_kepler_propagator.py` emits `include/tycho/detail/astro/kepler_propagator_closed_form.h` containing two `TychoHeaderGen`-produced structs: `KeplerPrimal_VF` (S, 11→6) and `KeplerResidual_VF` (F, 10→1). Both with full Jac+adjoint-Hess.
+**Goal:** SymPy script `utils/codegen_kepler_propagator.py` emits `include/tycho/detail/astro/kepler_propagator_closed_form.h` containing two `TychoHeaderGen`-produced structs: `KeplerPrimal` (S, 11→6) and `KeplerResidual` (F, 10→1). Both with full Jac+adjoint-Hess.
 
 **Files:**
 - Create: `utils/codegen_kepler_propagator.py`
 - Create (generated): `include/tycho/detail/astro/kepler_propagator_closed_form.h`
-- Create: smoke test in `tests/cpp/astro/test_kepler_lcd.cpp` (extend) — verify the generated header compiles and that `KeplerPrimal_VF::compute_impl` reproduces the expected closed-form output for a known fixture.
+- Create: smoke test in `tests/cpp/astro/test_kepler_lcd.cpp` (extend) — verify the generated header compiles and that `KeplerPrimal::compute_impl` reproduces the expected closed-form output for a known fixture.
 
 **Acceptance Criteria:**
 - [ ] `conda run -n tycho python utils/codegen_kepler_propagator.py` exits 0 and writes `kepler_propagator_closed_form.h`.
 - [ ] Generated header has no `pow(` calls in compute bodies (TychoHeaderGen guard).
 - [ ] Generated header compiles when included from a TU.
-- [ ] `KeplerPrimal_VF{mu}.compute_impl(input, out)` for a hand-crafted input vector matches the same closed form computed inline in C++ to 1e-13 relative.
+- [ ] `KeplerPrimal{mu}.compute_impl(input, out)` for a hand-crafted input vector matches the same closed form computed inline in C++ to 1e-13 relative.
 
 **Verify:** `ctest --test-dir tests/cpp/astro -R KeplerClosedForm --output-on-failure`
 
@@ -565,7 +565,7 @@ EOF
 
 ```python
 # utils/codegen_kepler_propagator.py
-"""Generate KeplerPrimal_VF and KeplerResidual_VF closed-form helpers.
+"""Generate KeplerPrimal and KeplerResidual closed-form helpers.
 
 Usage:
     cd utils && conda run -n tycho python codegen_kepler_propagator.py
@@ -602,7 +602,7 @@ def _kepler_primal():
     Xs = sp.Matrix(list(R0) + list(V0) + [dt, X, U0, U1, U2])
     Func = sp.Matrix.vstack(rf, vf)
     return TychoHeaderGen(
-        "KeplerPrimal_VF", Func, Xs,
+        "KeplerPrimal", Func, Xs,
         [(mu, "Gravitational parameter", "mu > 0.0")],
         docstr="Kepler primal map post-converged: (R0,V0,dt,X*,U0..U2) -> (rf,vf)",
         gen_build_method=False,
@@ -619,7 +619,7 @@ def _kepler_residual():
 
     Xs = sp.Matrix(list(R0) + list(V0) + [dt, U1, U2, U3])
     return TychoHeaderGen(
-        "KeplerResidual_VF", sp.Matrix([F]), Xs,
+        "KeplerResidual", sp.Matrix([F]), Xs,
         [(mu, "Gravitational parameter", "mu > 0.0")],
         docstr="Kepler universal-variable residual F = r0*U1 + sigma0*U2 + U3 - sqrt(mu)*dt",
         gen_build_method=False,
@@ -738,7 +738,7 @@ TEST(KeplerClosedForm, PrimalMatchesInlineFG) {
     in[9] = k.U1;
     in[10] = k.U2;
 
-    KeplerPrimal_VF primal{TychoTest::MU_EARTH};
+    KeplerPrimal primal{TychoTest::MU_EARTH};
     Vector6<double> out;
     primal.compute_impl(in, out);
 
@@ -761,14 +761,14 @@ TEST(KeplerClosedForm, ResidualVanishesAtConverged) {
     in[8] = k.U2;
     in[9] = k.U3;
 
-    KeplerResidual_VF residual{TychoTest::MU_EARTH};
+    KeplerResidual residual{TychoTest::MU_EARTH};
     Eigen::Matrix<double, 1, 1> F_val;
     residual.compute_impl(in, F_val);
     EXPECT_NEAR(F_val[0], 0.0, 1e-9);  // |F| at converged X* should be at noise floor
 }
 ```
 
-The `using` introduced by the generated header puts `KeplerPrimal_VF` and `KeplerResidual_VF` in the `tycho::astro` namespace; the `using namespace tycho::astro;` already at the top of the test file resolves them.
+The `using` introduced by the generated header puts `KeplerPrimal` and `KeplerResidual` in the `tycho::astro` namespace; the `using namespace tycho::astro;` already at the top of the test file resolves them.
 
 - [ ] **Step 4: Build and test**
 
@@ -790,8 +790,8 @@ git commit -m "$(cat <<'EOF'
 feat(astro): SymPy codegen for Kepler primal + residual closed forms
 
 utils/codegen_kepler_propagator.py emits kepler_propagator_closed_form.h
-containing KeplerPrimal_VF (11->6, post-converged Goodyear f/g/fdot/gdot
-applied to (R0,V0,dt,X,U0..U2)) and KeplerResidual_VF (10->1, the
+containing KeplerPrimal (11->6, post-converged Goodyear f/g/fdot/gdot
+applied to (R0,V0,dt,X,U0..U2)) and KeplerResidual (10->1, the
 universal-variable residual F linear in U1..U3). Both with TychoHeaderGen
 analytic Jacobian and adjoint-Hessian.
 
@@ -830,8 +830,8 @@ EOF
 // include/tycho/detail/astro/kepler_propagator_ift.h
 #pragma once
 #include "tycho/detail/astro/kepler_lcd_iterate.h"
-#include "tycho/detail/astro/kepler_primal_vf.h"
-#include "tycho/detail/astro/kepler_residual_vf.h"
+#include "tycho/detail/astro/kepler_primal.h"
+#include "tycho/detail/astro/kepler_residual.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 
 namespace tycho::astro::detail {
@@ -1001,7 +1001,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar>& R0, const Vector3<S
     sin[10] = k.U2;
 
     // Codegen primal partials
-    KeplerPrimal_VF primal{mu};
+    KeplerPrimal primal{mu};
     Vector6<Scalar> sout;
     Eigen::Matrix<Scalar, 6, 11> S_jac;
     primal.compute_jacobian_impl(sin, sout, S_jac);
@@ -1016,7 +1016,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar>& R0, const Vector3<S
     fin[8] = k.U2;
     fin[9] = k.U3;
 
-    KeplerResidual_VF residual{mu};
+    KeplerResidual residual{mu};
     Eigen::Matrix<Scalar, 1, 1> F_val;
     Eigen::Matrix<Scalar, 1, 10> F_jac;
     residual.compute_jacobian_impl(fin, F_val, F_jac);
@@ -1201,7 +1201,7 @@ EOF
 
 ## Task 4: IFT layer — adjoint Hessian
 
-**Goal:** Implement `kepler_propagate_adjoint_hessian`. The function returns total `(rf, vf)`, the 6×7 Jacobian, the 7-vector adjoint gradient `Jᵀλ`, and the 7×7 adjoint Hessian. Uses the second-derivative codegen entry points `compute_jacobian_adjointgradient_adjointhessian_impl` on both `KeplerPrimal_VF` and `KeplerResidual_VF`, and applies second-order IFT.
+**Goal:** Implement `kepler_propagate_adjoint_hessian`. The function returns total `(rf, vf)`, the 6×7 Jacobian, the 7-vector adjoint gradient `Jᵀλ`, and the 7×7 adjoint Hessian. Uses the second-derivative codegen entry points `compute_jacobian_adjointgradient_adjointhessian_impl` on both `KeplerPrimal` and `KeplerResidual`, and applies second-order IFT.
 
 **Files:**
 - Modify: `include/tycho/detail/astro/kepler_propagator_ift.h` (replace stub from Task 3 with full body)
@@ -1326,7 +1326,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar>& R0, const Ve
     sin[6]  = dt;     sin[7]  = k.X;
     sin[8]  = k.U0;   sin[9]  = k.U1;  sin[10] = k.U2;
 
-    KeplerPrimal_VF primal{mu};
+    KeplerPrimal primal{mu};
     Vector6<Scalar> sout;
     Eigen::Matrix<Scalar, 6, 11> S_jac;
     Vector<Scalar, 11> S_grad;             // structural adjoint-grad of S
@@ -1342,7 +1342,7 @@ inline void kepler_propagate_adjoint_hessian(const Vector3<Scalar>& R0, const Ve
     fin[6] = dt;
     fin[7] = k.U1;  fin[8] = k.U2;  fin[9] = k.U3;
 
-    KeplerResidual_VF residual{mu};
+    KeplerResidual residual{mu};
     Eigen::Matrix<Scalar, 1, 1> F_val;
     Eigen::Matrix<Scalar, 1, 10> F_jac;
     Vector<Scalar, 10> F_grad;
