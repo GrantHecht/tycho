@@ -93,6 +93,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     astro/test_kepler_conversions.cpp
     astro/test_kepler_edge_cases.cpp
     astro/test_kepler_propagation.cpp
+    astro/test_kepler_lcd.cpp
+    astro/test_kepler_ift.cpp
     astro/test_lambert_solver.cpp
     astro/test_crtbp_dynamics.cpp
     astro/test_cartesian_dynamics.cpp
@@ -196,6 +198,16 @@ set_target_properties(tycho_tests PROPERTIES
 # keep this TU standalone.
 set_source_files_properties(
     vector_functions/test_interp_table_nd.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_kepler_lcd.cpp: keep standalone so its insertion does not shift the
+# unity batch boundaries — adjacent astro test files use the same anonymous-
+# namespace helper names (geoClassic, molniyaClassic, check_round_trip) and
+# previously-stable batches collide when the boundary moves by one.
+set_source_files_properties(
+    astro/test_kepler_lcd.cpp
+    astro/test_kepler_ift.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

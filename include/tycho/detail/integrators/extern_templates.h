@@ -15,9 +15,9 @@
 // visible (Kepler::IRC is used by Integrator<Kepler>'s VectorFunction base
 // specialization). Most consumers of integrator.h do not need or want the
 // transitive kepler_model.h include; include this bridge header explicitly
-// from any TU that already depends on tycho/detail/astro/kepler_model.h.
+// from any TU that already depends on tycho/detail/astro/kepler/kepler_model.h.
 
-#include "tycho/detail/astro/kepler_model.h"
+#include "tycho/detail/astro/kepler/kepler_model.h"
 #include "tycho/detail/integrators/integrator.h"
 
 namespace tycho::integrators {

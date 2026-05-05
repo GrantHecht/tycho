@@ -2,9 +2,10 @@
 // Kepler conversion and astrodynamics throughput benchmarks (Google Benchmark)
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <tycho/detail/astro/kepler_utils.h>
-#include <tycho/detail/astro/kepler_propagator.h>
-#include <tycho/detail/astro/lambert_solvers.h>
+#include <tycho/detail/astro/conversions/kepler_utils.h>
+#include <tycho/detail/astro/kepler/kepler_propagation.h>
+#include <tycho/detail/astro/kepler/kepler_propagator.h>
+#include <tycho/detail/astro/kepler/lambert_solvers.h>
 #include <benchmark/benchmark.h>
 #include <numbers>
 
@@ -167,3 +168,73 @@ static void BM_Lambert_MultiRev(benchmark::State &state) {
     }
 }
 BENCHMARK(BM_Lambert_MultiRev);
+
+///////////////////////////////////////////////////////////////////////////////
+// KeplerPropagator VF benchmarks
+///////////////////////////////////////////////////////////////////////////////
+
+static void BM_KeplerPropagator_VF_Compute(benchmark::State &state) {
+    auto oe = leoClassic();
+    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+    Eigen::Matrix<double, 7, 1> in;
+    in.head<6>() = rv;
+    in[6] = 300.0;
+    KeplerPropagator prop(MU_EARTH);
+    Eigen::Matrix<double, 6, 1> out;
+    for (auto _ : state) {
+        prop.compute_impl(in, out);
+        benchmark::DoNotOptimize(out);
+    }
+}
+BENCHMARK(BM_KeplerPropagator_VF_Compute);
+
+static void BM_KeplerPropagator_VF_Jacobian(benchmark::State &state) {
+    auto oe = leoClassic();
+    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+    Eigen::Matrix<double, 7, 1> in;
+    in.head<6>() = rv;
+    in[6] = 300.0;
+    KeplerPropagator prop(MU_EARTH);
+    Eigen::Matrix<double, 6, 1> out;
+    Eigen::Matrix<double, 6, 7> jac;
+    for (auto _ : state) {
+        prop.compute_jacobian_impl(in, out, jac);
+        benchmark::DoNotOptimize(jac);
+    }
+}
+BENCHMARK(BM_KeplerPropagator_VF_Jacobian);
+
+static void BM_KeplerPropagator_VF_AdjointHessian(benchmark::State &state) {
+    auto oe = leoClassic();
+    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+    Eigen::Matrix<double, 7, 1> in;
+    in.head<6>() = rv;
+    in[6] = 300.0;
+    Eigen::Matrix<double, 6, 1> lm = Eigen::Matrix<double, 6, 1>::Constant(0.5);
+    KeplerPropagator prop(MU_EARTH);
+    Eigen::Matrix<double, 6, 1> out;
+    Eigen::Matrix<double, 6, 7> jac;
+    Eigen::Matrix<double, 7, 1> grad;
+    Eigen::Matrix<double, 7, 7> hess;
+    for (auto _ : state) {
+        prop.compute_jacobian_adjointgradient_adjointhessian_impl(
+            in, out, jac, grad, hess, lm);
+        benchmark::DoNotOptimize(hess);
+    }
+}
+BENCHMARK(BM_KeplerPropagator_VF_AdjointHessian);
+
+static void BM_KeplerPropagator_VF_Compute_SS4(benchmark::State &state) {
+    using SS = Eigen::Array<double, 4, 1>;
+    auto rv = classic_to_cartesian<double>(leoClassic(), MU_EARTH);
+    Eigen::Matrix<SS, 7, 1> in;
+    for (int i = 0; i < 6; ++i) in[i] = SS::Constant(rv[i]);
+    in[6] = SS::Constant(300.0);
+    KeplerPropagator prop(MU_EARTH);
+    Eigen::Matrix<SS, 6, 1> out;
+    for (auto _ : state) {
+        prop.compute_impl(in, out);
+        benchmark::DoNotOptimize(out);
+    }
+}
+BENCHMARK(BM_KeplerPropagator_VF_Compute_SS4);

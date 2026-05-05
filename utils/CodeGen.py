@@ -34,6 +34,31 @@ _POW_HALF_INT_RANGE = range(0, 7)  # pow(x, ±0.5) .. pow(x, ±6.5)
 # post-diff pass doesn't double-count them).
 _PC_RESERVED = re.compile(r"^pc\d+_$")
 
+
+def _format_default_literal(value):
+    """Format a Python scalar as a C++ literal for the delegating default ctor.
+
+    Handles int → "<n>" and float → "<x>.<y>" with a trailing decimal so
+    that 1 emits as "1.0" (avoiding integer-narrowing warnings in the
+    generated ctor delegation).
+    """
+    if isinstance(value, bool):
+        # bool is a subclass of int — guard against accidental True/False.
+        raise TypeError(
+            f"Default value for scalar param must be int or float, got bool {value!r}"
+        )
+    if isinstance(value, int):
+        return f"{value}.0"
+    if isinstance(value, float):
+        s = repr(value)
+        # repr returns "1.0" for floats already; integers cast to float
+        # similarly. No special handling needed beyond ensuring a decimal.
+        return s if "." in s or "e" in s or "E" in s else f"{s}.0"
+    raise TypeError(
+        f"Default value for scalar param must be int or float, got {type(value).__name__} {value!r}"
+    )
+
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -61,7 +86,7 @@ class TychoHeaderGen:
         Name,
         F,
         Xs,
-        ScalarParams=[],  # [(Symbol, Description) | (Symbol, Description, Constraint)]
+        ScalarParams=[],  # [(Symbol, Description) | (Symbol, Description, Constraint) | (Symbol, Description, Constraint, DefaultValue)]
         VectorParams=[],  # [(Vec, Cppname, Description) | (..., Constraint)]
         MatrixParams=[],  # [(Mat, Cppname, Description) | (..., Constraint)]
         docstr="A doc string",
@@ -97,25 +122,37 @@ class TychoHeaderGen:
         param_subs = {}
         renamed_scalar_params = []
         self._ctor_arg_for = {}
+        # Maps member-form name (e.g. "mu_") to default value (Python scalar)
+        # — used by the default constructor delegation below.
+        self._scalar_param_defaults = {}
         for entry in ScalarParams:
             if len(entry) == 2:
                 sym, descr = entry
                 constraint = None
+                default_value = None
             elif len(entry) == 3:
                 sym, descr, constraint = entry
+                default_value = None
+            elif len(entry) == 4:
+                sym, descr, constraint, default_value = entry
             else:
                 raise ValueError(
-                    f"ScalarParams entry must be (Symbol, Description) or "
-                    f"(Symbol, Description, Constraint); got {entry!r}"
+                    f"ScalarParams entry must be (Symbol, Description), "
+                    f"(Symbol, Description, Constraint), or "
+                    f"(Symbol, Description, Constraint, DefaultValue); got {entry!r}"
                 )
             name = str(sym)
             if name.endswith("_"):
                 renamed_scalar_params.append((sym, descr, constraint))
+                if default_value is not None:
+                    self._scalar_param_defaults[name] = default_value
                 continue
             new_sym = sp.Symbol(name + "_")
             param_subs[sym] = new_sym
             renamed_scalar_params.append((new_sym, descr, constraint))
             self._ctor_arg_for[name + "_"] = name
+            if default_value is not None:
+                self._scalar_param_defaults[name + "_"] = default_value
 
         if param_subs:
             F = sp.Matrix(list(F)).xreplace(param_subs)
@@ -246,9 +283,9 @@ class TychoHeaderGen:
             cse_targets = [self.Func, self.Jac, self.Grad, self.Hess]
         else:
             cse_targets = [self.Func, self.Jac]
-        new_exprs = self._absorb_precomputed_from_cse_or_none(cse_targets, "Func/Jac/Grad/Hess"
-                                                     if self.compute_hessian
-                                                     else "Func/Jac")
+        new_exprs = self._absorb_precomputed_from_cse_or_none(
+            cse_targets, "Func/Jac/Grad/Hess" if self.compute_hessian else "Func/Jac"
+        )
         if new_exprs is None:
             return
         self.Func = new_exprs[0]
@@ -275,8 +312,10 @@ class TychoHeaderGen:
             return None
 
         start_idx = len(self._precomputed)
-        print(f"  Found {len(param_cses)} parameter-only subexpressions "
-              f"(pc{start_idx}_..pc{start_idx + len(param_cses) - 1}_)")
+        print(
+            f"  Found {len(param_cses)} parameter-only subexpressions "
+            f"(pc{start_idx}_..pc{start_idx + len(param_cses) - 1}_)"
+        )
 
         # Build CSE sym → pcN_ member sym map.  Using xreplace (literal
         # subtree replacement) instead of subs (mathematical rewrite) -
@@ -626,11 +665,21 @@ class TychoHeaderGen:
     def _precompute_rhs(self, expr):
         """Render a precomputed-member RHS: ccode → powsimp → std::<fn> prefix.
 
-        Shared between the valued constructor and per-parameter setters so
-        the two emit byte-identical assignment lines.
+        Shared between the recompute_cache_() helper, the valued
+        constructor, and per-parameter setters so all emit byte-identical
+        assignment lines.
+
+        Why we strip Scalar(...) wrappers: powsimp emits ``Scalar(1.0)/...``
+        for ``pow(x, -N)`` shapes, which is correct inside the templated
+        ``compute_impl`` (where ``Scalar`` is the per-call typedef).  But
+        the cache helper and its callers are non-templated member
+        functions, and precomputed members are always plain ``double``,
+        so keeping the wrapper would fail to compile.  ``Scalar(<n>)``
+        on a numeric or single-var argument is a no-op cast there.
         """
         rhs = str(sp.ccode(expr))
         rhs = self.powsimp(rhs)
+        rhs = re.sub(r"Scalar\(([^()]*)\)", r"\1", rhs)
         for fn in (
             "sqrt",
             "sin",
@@ -686,17 +735,29 @@ class TychoHeaderGen:
         nan_init = "std::numeric_limits<double>::quiet_NaN()"
 
         lines = []
-        lines.append(f"struct {self.Name}")
+        # `class` (default-private) + `public` inheritance keeps state members
+        # encapsulated by default; the public surface is opt-in below.  The
+        # explicit `public` on the base class is required because `class`
+        # defaults to private inheritance, which would break CRTP.
+        lines.append(f"class {self.Name}")
         lines.append(
-            f"{I}: VectorFunction<{self.Name}, {self.ninputs}, "
+            f"{I}: public VectorFunction<{self.Name}, {self.ninputs}, "
             f"{self.noutputs}, {jm}, {hm}> {{"
         )
+        lines.append(f"{I}public:")
         lines.append(
             f"{I}using Base = VectorFunction<{self.Name}, "
             f"{self.ninputs}, {self.noutputs}, {jm}, {hm}>;"
         )
         lines.append(f"{I}VF_TYPE_ALIASES(Base);")
+        vec_flag = "true" if self.is_vectorizable else "false"
+        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
         lines.append("")
+
+        # State + precomputed members are private — external code must use
+        # the constructor / set_xxx setters so cache members stay in sync
+        # with their source parameters.
+        lines.append(f"{I}private:")
 
         # Members — scalar params get NSDMI NaN defaults so a nullary-
         # constructed instance fails loudly (NaN propagation) instead of
@@ -711,9 +772,6 @@ class TychoHeaderGen:
             rows, cols = len(Mat), len(Mat[0])
             lines.append(f"{I}Eigen::Matrix<double, {rows}, {cols}> {Name}; // {Descr}")
 
-        vec_flag = "true" if self.is_vectorizable else "false"
-        lines.append(f"{I}static constexpr bool is_vectorizable = {vec_flag};")
-
         # Precomputed member declarations — also NSDMI NaN so a
         # nullary-constructed instance propagates NaN through the compute
         # path instead of silently reading zero-initialized bytes.
@@ -722,7 +780,20 @@ class TychoHeaderGen:
             lines.append(f"{I}// Precomputed from constructor parameters")
             for member_name, _ in self._precomputed:
                 lines.append(f"{I}double {member_name} = {nan_init};")
+
+            # Single helper that recomputes every precomputed member from
+            # the current parameter state.  The constructor and any setter
+            # whose dependency set covers all precomputed members call this
+            # to avoid string-duplicating the cache-update sequence.  Setters
+            # whose dependency set is a strict subset still inline only the
+            # affected entries (preserves the multi-param optimization).
+            lines.append("")
+            lines.append(f"{I}void recompute_cache_() {{")
+            lines += self._gen_precompute_assignments(self._precomputed, 2 * I)
+            lines.append(f"{I}}}")
         lines.append("")
+
+        lines.append(f"{I}public:")
 
         # Constructor params (use the original non-underscore name so the
         # caller-facing API is e.g. MEEDynamics(double mu) rather than mu_).
@@ -774,19 +845,48 @@ class TychoHeaderGen:
                 f'{indent}{I}{I}"{msg}");',
             ]
 
-        # Default constructor — NSDMI defaults plus set_io_rows.
-        lines.append(f"{I}{self.Name}() {{")
-        lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
-        lines.append(f"{I}}}")
-        lines.append("")
+        # Default constructor.
+        #
+        # If every scalar param has a declared canonical default and there
+        # are no vector/matrix params (which would also need defaults to
+        # delegate cleanly), emit a delegating default ctor that constructs
+        # via the validating parameterized form.  Otherwise the default
+        # ctor is = delete'd: leaving it as a "set_io_rows-only"
+        # half-initialized form silently NaN-poisons all compute outputs
+        # via the quiet-NaN NSDMI defaults on mu_/pcN_ — a two-phase-init
+        # smell flagged by the multi-agent type-design review.
+        all_scalars_have_defaults = (
+            len(self.ScalarParams) > 0
+            and all(
+                str(P) in self._scalar_param_defaults for P, _, _ in self.ScalarParams
+            )
+            and not self.VectorParams
+            and not self.MatrixParams
+        )
+        if all_scalars_have_defaults:
+            default_args = ", ".join(
+                _format_default_literal(self._scalar_param_defaults[str(P)])
+                for P, _, _ in self.ScalarParams
+            )
+            lines.append(f"{I}{self.Name}() : {self.Name}({default_args}) {{}}")
+            lines.append("")
+        elif not self.ScalarParams and not self.VectorParams and not self.MatrixParams:
+            # Param-free VF: keep the original set_io_rows-only default ctor.
+            lines.append(f"{I}{self.Name}() {{")
+            lines.append(f"{I}{I}this->set_io_rows({self.ninputs}, {self.noutputs});")
+            lines.append(f"{I}}}")
+            lines.append("")
+        else:
+            lines.append(f"{I}{self.Name}() = delete;")
+            lines.append("")
 
         # Parameterized constructor.
         #
         # Validation must precede any assignment, so we use a function-body
         # initializer rather than a member-initializer list — this keeps
         # the emitted shape identical to each per-parameter setter body,
-        # and lets the shared _gen_precompute_assignments helper drive
-        # both call sites.
+        # and lets both call sites delegate to the same recompute_cache_()
+        # helper for cache-update emission.
         lines.append(f"{I}{self.Name}({paramstr}) {{")
         for member_name, ctor_arg, constraint, _ in _param_records():
             lines += _validation_lines(ctor_arg, constraint, 2 * I)
@@ -794,7 +894,7 @@ class TychoHeaderGen:
         for member_name, ctor_arg, _, kind in _param_records():
             lines.append(f"{I}{I}{member_name} = {ctor_arg};")
         if self._precomputed:
-            lines += self._gen_precompute_assignments(self._precomputed, 2 * I)
+            lines.append(f"{I}{I}this->recompute_cache_();")
         lines.append(f"{I}}}")
         lines.append("")
 
@@ -826,8 +926,22 @@ class TychoHeaderGen:
             lines.append(f"{I}{I}{member_name} = {ctor_arg};")
             affected = self._affected_precomputed(dep_roots)
             if affected:
-                lines += self._gen_precompute_assignments(affected, 2 * I)
+                if len(affected) == len(self._precomputed):
+                    lines.append(f"{I}{I}this->recompute_cache_();")
+                else:
+                    lines += self._gen_precompute_assignments(affected, 2 * I)
             lines.append(f"{I}}}")
+            lines.append("")
+
+        # Per-parameter const getters (scalar params only — vector/matrix
+        # access is rare enough that the existing public-state setters
+        # cover the use case; revisit if a downstream consumer needs them).
+        for member_name, ctor_arg, _, kind in _param_records():
+            if kind != "scalar":
+                continue
+            lines.append(
+                f"{I}[[nodiscard]] double {ctor_arg}() const noexcept {{ return {member_name}; }}"
+            )
             lines.append("")
 
         return "\n".join(lines) + "\n"

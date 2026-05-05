@@ -1,6 +1,9 @@
 #pragma once
 #include "tycho/vector_functions.h"
 
+#include <limits>
+#include <type_traits>
+
 namespace tycho::astro {
 
 /*
@@ -432,6 +435,10 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     V2 = (Vr2 * R2 + Vt2 * that2);
 }
 
+// NaN-poison V1/V2 on non-convergence (exitcode != 0) so callers can detect
+// failure via allFinite() rather than silently consuming the unconverged
+// final iterate.  Mirrors the LCD kernel's contract — callers translate to
+// std::runtime_error at the binding boundary (lambert_solvers_bind.cpp).
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway) {
@@ -440,6 +447,13 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
     Vector3<Scalar> V2;
     int exitcode;
     lambert_izzo_impl(R1, R2, dt, mu, longway, 0, false, V1, V2, exitcode);
+    if constexpr (std::is_same_v<Scalar, double>) {
+        if (exitcode != 0) [[unlikely]] {
+            const Scalar nan = std::numeric_limits<double>::quiet_NaN();
+            V1.setConstant(nan);
+            V2.setConstant(nan);
+        }
+    }
 
     return std::array<Vector3<Scalar>, 2>{V1, V2};
 }
@@ -453,6 +467,13 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
     Vector3<Scalar> V2;
     int exitcode;
     lambert_izzo_impl(R1, R2, dt, mu, longway, Nrevs, rightbranch, V1, V2, exitcode);
+    if constexpr (std::is_same_v<Scalar, double>) {
+        if (exitcode != 0) [[unlikely]] {
+            const Scalar nan = std::numeric_limits<double>::quiet_NaN();
+            V1.setConstant(nan);
+            V2.setConstant(nan);
+        }
+    }
 
     return std::array<Vector3<Scalar>, 2>{V1, V2};
 }

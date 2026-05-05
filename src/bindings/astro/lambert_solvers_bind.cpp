@@ -14,7 +14,10 @@
 // =============================================================================
 
 #include "function_registry.h"
-#include "tycho/detail/astro/lambert_solvers.h"
+#include "tycho/detail/astro/kepler/lambert_solvers.h"
+
+#include <stdexcept>
+#include <string>
 
 namespace tycho {
 using namespace tycho::vf;
@@ -26,19 +29,35 @@ void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
 
 void tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
 
-    m.def("lambert_izzo",
-          [](const Vector3<double> &R1, const Vector3<double> &R2, double dt, double mu,
-             bool longway) { return lambert_izzo(R1, R2, dt, mu, longway); });
+    // The scalar lambert_izzo overloads NaN-poison V1/V2 when the underlying
+    // iteration fails to converge within maxiters=20.  Translate at the
+    // binding boundary to RuntimeError, mirroring the propagate_cartesian
+    // pattern in kepler_utils.cpp.  (The vectorized overload below returns
+    // exitcodes per call, so it does not need translation.)
+    auto check_finite_pair = [](const std::array<Vector3<double>, 2> &result, const char *name) {
+        if (!result[0].allFinite() || !result[1].allFinite())
+            throw std::runtime_error(std::string(name) +
+                                     ": iteration did not converge within 20 iterations");
+        return result;
+    };
 
-    m.def("lambert_izzo", [](const Vector3<double> &R1, const Vector3<double> &R2, double dt,
-                             double mu, bool longway, int Nrevs, bool rightbranch) {
-        return lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch);
+    m.def("lambert_izzo", [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2,
+                                              double dt, double mu, bool longway) {
+        return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway), "lambert_izzo");
     });
 
+    m.def("lambert_izzo",
+          [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2, double dt,
+                              double mu, bool longway, int Nrevs, bool rightbranch) {
+              return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
+                                       "lambert_izzo");
+          });
+
     m.def("lambert_izzo_multirev",
-          [](const Vector3<double> &R1, const Vector3<double> &R2, double dt, double mu,
-             bool longway, int Nrevs, bool rightbranch) {
-              return lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch);
+          [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2, double dt,
+                              double mu, bool longway, int Nrevs, bool rightbranch) {
+              return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
+                                       "lambert_izzo_multirev");
           });
 
     using NumpyMat = Eigen::Matrix<double, -1, -1, Eigen::RowMajor>;

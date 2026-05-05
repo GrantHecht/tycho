@@ -12,4 +12,4 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
-#include "tycho/detail/astro/lambert_solvers.h"
+#include "tycho/detail/astro/kepler/lambert_solvers.h"

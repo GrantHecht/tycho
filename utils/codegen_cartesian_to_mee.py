@@ -92,7 +92,7 @@ def CartesianToMEE():
         "CartesianToMEE",
         Eq,
         sp.Matrix(Xs),
-        [(mu, "Gravitational Parameter", "mu > 0.0")],
+        [(mu, "Gravitational Parameter", "mu > 0.0", 1.0)],
         docstr=(
             "Cartesian state to Modified Equinoctial Elements (posigrade, "
             "direct - no classical-element detour)"
@@ -100,7 +100,7 @@ def CartesianToMEE():
     )
 
     output_dir = os.path.join(
-        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro"
+        os.path.dirname(__file__), "..", "include", "tycho", "detail", "astro", "conversions"
     )
     header.make_header(
         output_dir=output_dir,
