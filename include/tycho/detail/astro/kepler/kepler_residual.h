@@ -10,7 +10,7 @@
 
 #include "tycho/vector_functions.h"
 
-namespace tycho::astro {
+namespace tycho::astro::detail {
 
 // Import cross-namespace types from vf.
 using vf::CMatRef;
@@ -20,10 +20,10 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
-class KeplerResidual_VF
-    : public VectorFunction<KeplerResidual_VF, 10, 1, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+class KeplerResidual
+    : public VectorFunction<KeplerResidual, 10, 1, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
     public:
-    using Base = VectorFunction<KeplerResidual_VF, 10, 1, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
+    using Base = VectorFunction<KeplerResidual, 10, 1, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
     static constexpr bool is_vectorizable = true;
 
@@ -34,26 +34,29 @@ class KeplerResidual_VF
     double pc0_ = std::numeric_limits<double>::quiet_NaN();
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
 
-    public:
-    KeplerResidual_VF() : KeplerResidual_VF(1.0) {}
-
-    KeplerResidual_VF(double mu) {
-        if (!(mu > 0.0))
-            throw std::invalid_argument(
-                "KeplerResidual_VF: mu must satisfy mu > 0.0");
-        this->set_io_rows(10, 1);
-        mu_ = mu;
+    void recompute_cache_() {
         pc0_ = std::sqrt(mu_);
         pc1_ = 1.0/pc0_;
+    }
+
+    public:
+    KeplerResidual() : KeplerResidual(1.0) {}
+
+    KeplerResidual(double mu) {
+        if (!(mu > 0.0))
+            throw std::invalid_argument(
+                "KeplerResidual: mu must satisfy mu > 0.0");
+        this->set_io_rows(10, 1);
+        mu_ = mu;
+        this->recompute_cache_();
     }
 
     void set_mu(double mu) {
         if (!(mu > 0.0))
             throw std::invalid_argument(
-                "KeplerResidual_VF: mu must satisfy mu > 0.0");
+                "KeplerResidual: mu must satisfy mu > 0.0");
         mu_ = mu;
-        pc0_ = std::sqrt(mu_);
-        pc1_ = 1.0/pc0_;
+        this->recompute_cache_();
     }
 
     [[nodiscard]] double mu() const noexcept { return mu_; }
@@ -307,4 +310,4 @@ class KeplerResidual_VF
 
 };
 
-} // namespace tycho::astro
+} // namespace tycho::astro::detail

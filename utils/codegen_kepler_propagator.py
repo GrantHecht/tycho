@@ -1,19 +1,20 @@
-"""Generate KeplerPrimal_VF and KeplerResidual_VF closed-form helpers.
+"""Generate KeplerPrimal and KeplerResidual closed-form helpers.
 
 These VFs are *internal* helpers consumed by the IFT layer of the Kepler
-propagator; they are not registered as Python-visible VFs.
+propagator; they live in ``tycho::astro::detail`` and are not registered
+as Python-visible VFs.
 
-- ``KeplerPrimal_VF``: post-converged primal map
+- ``KeplerPrimal``: post-converged primal map
   ``S(R0, V0, dt, X*, U0, U1, U2) -> (rf, vf)`` via Goodyear ``aF, aG,
   aFt, aGt`` formulas.  ``mu`` is a member parameter (constructor arg).
   11 inputs -> 6 outputs.
-- ``KeplerResidual_VF``: universal-variable residual
+- ``KeplerResidual``: universal-variable residual
   ``F = r0*U1 + sigma0*U2 + U3 - sqrt(mu)*dt`` (note: F has *no*
   explicit ``X`` dependence).  ``mu`` is a member parameter.
   10 inputs -> 1 output.
 
 Both VFs are emitted as separate snake_case headers
-(``kepler_primal_vf.h`` and ``kepler_residual_vf.h``) under
+(``kepler_primal.h`` and ``kepler_residual.h``) under
 ``include/tycho/detail/astro/kepler/``; the IFT layer includes both directly.
 
 Usage:
@@ -59,11 +60,12 @@ def _kepler_primal():
     Xs = sp.Matrix(list(R0) + list(V0) + [dt, X, U0, U1, U2])
     Func = sp.Matrix.vstack(rf, vf)
     return TychoHeaderGen(
-        "KeplerPrimal_VF",
+        "KeplerPrimal",
         Func,
         Xs,
         [(mu, "Gravitational parameter", "mu > 0.0", 1.0)],
         docstr=("Kepler primal map post-converged: (R0,V0,dt,X*,U0..U2) -> (rf,vf)"),
+        namespace="tycho::astro::detail",
         gen_build_method=False,
         is_vectorizable=True,
     )
@@ -83,7 +85,7 @@ def _kepler_residual():
 
     Xs = sp.Matrix(list(R0) + list(V0) + [dt, U1, U2, U3])
     return TychoHeaderGen(
-        "KeplerResidual_VF",
+        "KeplerResidual",
         sp.Matrix([F]),
         Xs,
         [(mu, "Gravitational parameter", "mu > 0.0", 1.0)],
@@ -91,6 +93,7 @@ def _kepler_residual():
             "Kepler universal-variable residual "
             "F = r0*U1 + sigma0*U2 + U3 - sqrt(mu)*dt"
         ),
+        namespace="tycho::astro::detail",
         gen_build_method=False,
         is_vectorizable=True,
     )
@@ -113,7 +116,7 @@ def main():
         script_name="utils/codegen_kepler_propagator.py",
     )
 
-    print(f"Generated kepler_primal_vf.h and kepler_residual_vf.h in {output_dir}")
+    print(f"Generated kepler_primal.h and kepler_residual.h in {output_dir}")
 
 
 if __name__ == "__main__":

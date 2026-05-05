@@ -20,17 +20,24 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
-struct CartesianToMEE
-    : VectorFunction<CartesianToMEE, 6, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+class CartesianToMEE
+    : public VectorFunction<CartesianToMEE, 6, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+    public:
     using Base = VectorFunction<CartesianToMEE, 6, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
-
-    double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational Parameter
     static constexpr bool is_vectorizable = true;
+
+    private:
+    double mu_ = std::numeric_limits<double>::quiet_NaN(); // Gravitational Parameter
 
     // Precomputed from constructor parameters
     double pc0_ = std::numeric_limits<double>::quiet_NaN();
 
+    void recompute_cache_() {
+        pc0_ = 1.0/mu_;
+    }
+
+    public:
     CartesianToMEE() : CartesianToMEE(1.0) {}
 
     CartesianToMEE(double mu) {
@@ -39,7 +46,7 @@ struct CartesianToMEE
                 "CartesianToMEE: mu must satisfy mu > 0.0");
         this->set_io_rows(6, 6);
         mu_ = mu;
-        pc0_ = 1.0/mu_;
+        this->recompute_cache_();
     }
 
     void set_mu(double mu) {
@@ -47,8 +54,10 @@ struct CartesianToMEE
             throw std::invalid_argument(
                 "CartesianToMEE: mu must satisfy mu > 0.0");
         mu_ = mu;
-        pc0_ = 1.0/mu_;
+        this->recompute_cache_();
     }
+
+    [[nodiscard]] double mu() const noexcept { return mu_; }
 
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x_,

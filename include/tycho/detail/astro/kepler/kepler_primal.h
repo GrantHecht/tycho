@@ -10,7 +10,7 @@
 
 #include "tycho/vector_functions.h"
 
-namespace tycho::astro {
+namespace tycho::astro::detail {
 
 // Import cross-namespace types from vf.
 using vf::CMatRef;
@@ -20,10 +20,10 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
-class KeplerPrimal_VF
-    : public VectorFunction<KeplerPrimal_VF, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+class KeplerPrimal
+    : public VectorFunction<KeplerPrimal, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
     public:
-    using Base = VectorFunction<KeplerPrimal_VF, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
+    using Base = VectorFunction<KeplerPrimal, 11, 6, DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
     static constexpr bool is_vectorizable = true;
 
@@ -35,28 +35,30 @@ class KeplerPrimal_VF
     double pc1_ = std::numeric_limits<double>::quiet_NaN();
     double pc2_ = std::numeric_limits<double>::quiet_NaN();
 
-    public:
-    KeplerPrimal_VF() : KeplerPrimal_VF(1.0) {}
-
-    KeplerPrimal_VF(double mu) {
-        if (!(mu > 0.0))
-            throw std::invalid_argument(
-                "KeplerPrimal_VF: mu must satisfy mu > 0.0");
-        this->set_io_rows(11, 6);
-        mu_ = mu;
+    void recompute_cache_() {
         pc0_ = std::sqrt(mu_);
         pc1_ = 1.0/pc0_;
         pc2_ = (pc1_*pc1_);
     }
 
+    public:
+    KeplerPrimal() : KeplerPrimal(1.0) {}
+
+    KeplerPrimal(double mu) {
+        if (!(mu > 0.0))
+            throw std::invalid_argument(
+                "KeplerPrimal: mu must satisfy mu > 0.0");
+        this->set_io_rows(11, 6);
+        mu_ = mu;
+        this->recompute_cache_();
+    }
+
     void set_mu(double mu) {
         if (!(mu > 0.0))
             throw std::invalid_argument(
-                "KeplerPrimal_VF: mu must satisfy mu > 0.0");
+                "KeplerPrimal: mu must satisfy mu > 0.0");
         mu_ = mu;
-        pc0_ = std::sqrt(mu_);
-        pc1_ = 1.0/pc0_;
-        pc2_ = (pc1_*pc1_);
+        this->recompute_cache_();
     }
 
     [[nodiscard]] double mu() const noexcept { return mu_; }
@@ -1071,4 +1073,4 @@ class KeplerPrimal_VF
 
 };
 
-} // namespace tycho::astro
+} // namespace tycho::astro::detail

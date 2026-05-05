@@ -58,6 +58,7 @@ def _format_default_literal(value):
         f"Default value for scalar param must be int or float, got {type(value).__name__} {value!r}"
     )
 
+
 # Copyright header template
 _COPYRIGHT = """\
 // =============================================================================
@@ -282,9 +283,9 @@ class TychoHeaderGen:
             cse_targets = [self.Func, self.Jac, self.Grad, self.Hess]
         else:
             cse_targets = [self.Func, self.Jac]
-        new_exprs = self._absorb_precomputed_from_cse_or_none(cse_targets, "Func/Jac/Grad/Hess"
-                                                     if self.compute_hessian
-                                                     else "Func/Jac")
+        new_exprs = self._absorb_precomputed_from_cse_or_none(
+            cse_targets, "Func/Jac/Grad/Hess" if self.compute_hessian else "Func/Jac"
+        )
         if new_exprs is None:
             return
         self.Func = new_exprs[0]
@@ -311,8 +312,10 @@ class TychoHeaderGen:
             return None
 
         start_idx = len(self._precomputed)
-        print(f"  Found {len(param_cses)} parameter-only subexpressions "
-              f"(pc{start_idx}_..pc{start_idx + len(param_cses) - 1}_)")
+        print(
+            f"  Found {len(param_cses)} parameter-only subexpressions "
+            f"(pc{start_idx}_..pc{start_idx + len(param_cses) - 1}_)"
+        )
 
         # Build CSE sym → pcN_ member sym map.  Using xreplace (literal
         # subtree replacement) instead of subs (mathematical rewrite) -
@@ -662,11 +665,21 @@ class TychoHeaderGen:
     def _precompute_rhs(self, expr):
         """Render a precomputed-member RHS: ccode → powsimp → std::<fn> prefix.
 
-        Shared between the valued constructor and per-parameter setters so
-        the two emit byte-identical assignment lines.
+        Shared between the recompute_cache_() helper, the valued
+        constructor, and per-parameter setters so all emit byte-identical
+        assignment lines.
+
+        Why we strip Scalar(...) wrappers: powsimp emits ``Scalar(1.0)/...``
+        for ``pow(x, -N)`` shapes, which is correct inside the templated
+        ``compute_impl`` (where ``Scalar`` is the per-call typedef).  But
+        the cache helper and its callers are non-templated member
+        functions, and precomputed members are always plain ``double``,
+        so keeping the wrapper would fail to compile.  ``Scalar(<n>)``
+        on a numeric or single-var argument is a no-op cast there.
         """
         rhs = str(sp.ccode(expr))
         rhs = self.powsimp(rhs)
+        rhs = re.sub(r"Scalar\(([^()]*)\)", r"\1", rhs)
         for fn in (
             "sqrt",
             "sin",
@@ -767,6 +780,17 @@ class TychoHeaderGen:
             lines.append(f"{I}// Precomputed from constructor parameters")
             for member_name, _ in self._precomputed:
                 lines.append(f"{I}double {member_name} = {nan_init};")
+
+            # Single helper that recomputes every precomputed member from
+            # the current parameter state.  The constructor and any setter
+            # whose dependency set covers all precomputed members call this
+            # to avoid string-duplicating the cache-update sequence.  Setters
+            # whose dependency set is a strict subset still inline only the
+            # affected entries (preserves the multi-param optimization).
+            lines.append("")
+            lines.append(f"{I}void recompute_cache_() {{")
+            lines += self._gen_precompute_assignments(self._precomputed, 2 * I)
+            lines.append(f"{I}}}")
         lines.append("")
 
         lines.append(f"{I}public:")
@@ -834,8 +858,7 @@ class TychoHeaderGen:
         all_scalars_have_defaults = (
             len(self.ScalarParams) > 0
             and all(
-                str(P) in self._scalar_param_defaults
-                for P, _, _ in self.ScalarParams
+                str(P) in self._scalar_param_defaults for P, _, _ in self.ScalarParams
             )
             and not self.VectorParams
             and not self.MatrixParams
@@ -862,8 +885,8 @@ class TychoHeaderGen:
         # Validation must precede any assignment, so we use a function-body
         # initializer rather than a member-initializer list — this keeps
         # the emitted shape identical to each per-parameter setter body,
-        # and lets the shared _gen_precompute_assignments helper drive
-        # both call sites.
+        # and lets both call sites delegate to the same recompute_cache_()
+        # helper for cache-update emission.
         lines.append(f"{I}{self.Name}({paramstr}) {{")
         for member_name, ctor_arg, constraint, _ in _param_records():
             lines += _validation_lines(ctor_arg, constraint, 2 * I)
@@ -871,7 +894,7 @@ class TychoHeaderGen:
         for member_name, ctor_arg, _, kind in _param_records():
             lines.append(f"{I}{I}{member_name} = {ctor_arg};")
         if self._precomputed:
-            lines += self._gen_precompute_assignments(self._precomputed, 2 * I)
+            lines.append(f"{I}{I}this->recompute_cache_();")
         lines.append(f"{I}}}")
         lines.append("")
 
@@ -903,7 +926,10 @@ class TychoHeaderGen:
             lines.append(f"{I}{I}{member_name} = {ctor_arg};")
             affected = self._affected_precomputed(dep_roots)
             if affected:
-                lines += self._gen_precompute_assignments(affected, 2 * I)
+                if len(affected) == len(self._precomputed):
+                    lines.append(f"{I}{I}this->recompute_cache_();")
+                else:
+                    lines += self._gen_precompute_assignments(affected, 2 * I)
             lines.append(f"{I}}}")
             lines.append("")
 
