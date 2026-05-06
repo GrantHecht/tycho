@@ -119,11 +119,11 @@ class EPPRFrame(CR3BPFrame):
         Xrot = DCMT * Xnd
         Vrot = DCMT * Vnd + vf.cross(Xrot, W) - Xrot * rdot / r
 
-        state = vf.Stack([Xrot, Vrot, t])
+        state = vf.stack([Xrot, Vrot, t])
 
         realargs = Args(7)
         t = realargs[6]
-        dataargs = vf.Stack([realargs, self.BCFunc.eval(t), self.RFunc.eval(t)])
+        dataargs = vf.stack([realargs, self.BCFunc.eval(t), self.RFunc.eval(t)])
         return state.eval(dataargs)
 
     def EPPR_to_NDInertial(
@@ -325,13 +325,13 @@ class EPPRFrame(CR3BPFrame):
             muBody = self.AltBodyMuVals[Name]
             GravTerms.append((rBody - r).normalized_power3() * (muBody))
 
-        Grav = vf.Sum(GravTerms) * Gscale
+        Grav = vf.sum(GravTerms) * Gscale
 
         if Enable_J2 == True:
             otherAccs += self.J2_ACC(r, t)
 
         RelVec = r
-        wtemp = vf.Sum([(-2.0) * v, Vscale * RelVec, vf.cross(RelVec, W)])
+        wtemp = vf.sum([(-2.0) * v, Vscale * RelVec, vf.cross(RelVec, W)])
         Wacc = vf.cross(W, wtemp)
         Wdotacc = vf.cross(RelVec, Wdot)
         Pulseacc1 = (RelVec) * Rscale
@@ -375,7 +375,7 @@ class EPPRFrame(CR3BPFrame):
             J2Accs.append(j2func(RP2, NP2))
 
         if len(J2Accs) > 0:
-            return [vf.Sum(J2Accs) * j2sc]
+            return [vf.sum(J2Accs) * j2sc]
         else:
             return []
 

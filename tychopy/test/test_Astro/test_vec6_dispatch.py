@@ -37,7 +37,7 @@ class TestVec6Dispatch(unittest.TestCase):
         # form a 6-row arg-like expression that routes through _vec6_wrap.
         A6 = vf.Arguments(6)
         self.assertEqual(type(A6[0]).__name__, "Element")
-        stacked = vf.Stack([A6[i] for i in range(6)])
+        stacked = vf.stack([A6[i] for i in range(6)])
         out = typy.astro.modified_to_cartesian(stacked, 1.0)
         self.assertEqual(out.input_rows(), 6)
         self.assertEqual(out.output_rows(), 6)

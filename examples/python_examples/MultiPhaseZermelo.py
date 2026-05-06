@@ -61,7 +61,7 @@ class Zermelo(oc.ODEBase):
         xD = vMax * vf.cos(th) + wx
         yD = vMax * vf.sin(th) + wy
 
-        ode = vf.Stack([xD, yD])
+        ode = vf.stack([xD, yD])
 
         super().__init__(ode, Xvars, Uvars)
 

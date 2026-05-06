@@ -22,13 +22,13 @@ class FreeFlyingRobotODE(oc.ode_x_u.ode):
         omega = args[5]
         u = args.u_vec()
         xdot = args.segment2(2)
-        vscale = vf.SumElems([u[0], u[1], u[2], u[3]], [1, -1, 1, -1])
+        vscale = vf.sum_elems([u[0], u[1], u[2], u[3]], [1, -1, 1, -1])
 
         vdot = vf.stack([vf.cos(theta), vf.sin(theta)]) * vscale
 
         theta_dot = omega
 
-        omega_dot = vf.SumElems([u[0], u[1], u[2], u[3]], [alpha, -alpha, -beta, beta])
+        omega_dot = vf.sum_elems([u[0], u[1], u[2], u[3]], [alpha, -alpha, -beta, beta])
         ode = vf.stack([xdot, vdot, theta_dot, omega_dot])
         ##############################################################
         super().__init__(ode, Xvars, Uvars)

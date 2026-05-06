@@ -33,11 +33,6 @@ ScalarFunction = _tychopy.vector_functions.ScalarFunction
 Segment = _tychopy.vector_functions.Segment
 Segment2 = _tychopy.vector_functions.Segment2
 Segment3 = _tychopy.vector_functions.Segment3
-Stack = _tychopy.vector_functions.stack
-StackScalar = _tychopy.vector_functions.stack_scalar
-Sum = _tychopy.vector_functions.sum
-SumElems = _tychopy.vector_functions.sum_elems
-SumScalar = _tychopy.vector_functions.sum_scalar
 VectorFunction = _tychopy.vector_functions.VectorFunction
 
 arccos = _tychopy.vector_functions.arccos
