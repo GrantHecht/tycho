@@ -13,8 +13,8 @@ import numpy as np
 
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 Lstar = 10.0

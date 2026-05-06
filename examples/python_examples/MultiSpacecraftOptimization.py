@@ -21,8 +21,8 @@ import tychopy as typy
 
 ################################################################################
 ## Setup
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 
 Args = vf.Arguments
 
@@ -170,7 +170,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         Flag = ocp.optimize()
         tf = time.perf_counter()
         print((tf - t0) * 1000.0)
-        if Flag == typy.Solvers.ConvergenceFlags.NOTCONVERGED:
+        if Flag == typy.solvers.ConvergenceFlags.NOTCONVERGED:
             ocp.solve_optimize()
 
         Data.append(

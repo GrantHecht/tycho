@@ -16,4 +16,12 @@
 import inspect
 
 import _tychopy as _tychopy
-from _tychopy.Extensions import *
+from _tychopy.utils import *
+
+get_core_count = _tychopy.utils.get_core_count
+
+
+if __name__ == "__main__":
+    mlist = inspect.getmembers(_tychopy.utils)
+    for m in mlist:
+        print(m[0], "= _tychopy.utils." + str(m[0]))

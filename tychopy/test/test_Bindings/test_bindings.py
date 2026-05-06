@@ -14,7 +14,7 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
+vf = ast.vector_functions
 Args = vf.Arguments
 
 try:
@@ -254,7 +254,7 @@ class TestTypeCasters(unittest.TestCase):
             # Arguments(n).vf() returns a Gen; calling jacobian returns float64.
             # Use LGLInterpTable or similar if available.  For now verify
             # via variable indexing if accessible.
-            oc = ast.OptimalControl
+            oc = ast.optimal_control
             phase = oc.LGLPhase(Args(2), 10)
             phase.set_control_bounds([0.0, 0.0], [1.0, 1.0])
             idx = phase.return_control_vars(0)
@@ -324,7 +324,7 @@ class TestParsePythonArgs(unittest.TestCase):
 
 class TestCartesianToMEEBindings(unittest.TestCase):
     """Cover both bindings on the new direct Cartesian->MEE conversion:
-    the numpy Vector6 overload (via tychopy.Astro._vec6_wrap) and the
+    the numpy Vector6 overload (via tychopy.astro._vec6_wrap) and the
     GenericFunction VF-composition overload registered in
     src/bindings/astro/kepler_utils.cpp.
     """
@@ -349,7 +349,7 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         numpy-input branch and the underlying
         cartesian_to_modified(Vector6, mu) / modified_to_cartesian(Vector6, mu)
         bindings."""
-        from tychopy import Astro as TyAstro
+        from tychopy import astro as TyAstro
 
         mee = np.asarray(TyAstro.cartesian_to_modified(self.RV, self.MU_EARTH))
         rv2 = np.asarray(TyAstro.modified_to_cartesian(mee, self.MU_EARTH))
@@ -359,7 +359,7 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         """cartesian_to_modified(VectorFunction(seg), mu) hits the
         GenericFunction VF-overload added in this PR (which constructs
         a CartesianToMEE and composes via .eval())."""
-        from tychopy import Astro as TyAstro
+        from tychopy import astro as TyAstro
 
         seg = Args(6).head(6)
         gen = TyAstro.cartesian_to_modified(vf.VectorFunction(seg), self.MU_EARTH)

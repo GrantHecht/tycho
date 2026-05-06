@@ -8,8 +8,8 @@ from scipy import interpolate
 
 import tychopy as ast
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 
 

@@ -16,22 +16,22 @@
 import inspect
 
 import _tychopy as _tychopy
-from _tychopy.Solvers import *
+from _tychopy.solvers import *
 
-AlgorithmModes = _tychopy.Solvers.AlgorithmModes
-BarrierModes = _tychopy.Solvers.BarrierModes
-ConvergenceFlags = _tychopy.Solvers.ConvergenceFlags
-Jet = _tychopy.Solvers.Jet
-JetJobModes = _tychopy.Solvers.JetJobModes
-LineSearchModes = _tychopy.Solvers.LineSearchModes
-OptimizationProblem = _tychopy.Solvers.OptimizationProblem
-OptimizationProblemBase = _tychopy.Solvers.OptimizationProblemBase
-PDStepStrategies = _tychopy.Solvers.PDStepStrategies
-PSIOPT = _tychopy.Solvers.PSIOPT
-QPOrderingModes = _tychopy.Solvers.QPOrderingModes
-QPPivotModes = _tychopy.Solvers.QPPivotModes
+AlgorithmModes = _tychopy.solvers.AlgorithmModes
+BarrierModes = _tychopy.solvers.BarrierModes
+ConvergenceFlags = _tychopy.solvers.ConvergenceFlags
+Jet = _tychopy.solvers.Jet
+JetJobModes = _tychopy.solvers.JetJobModes
+LineSearchModes = _tychopy.solvers.LineSearchModes
+OptimizationProblem = _tychopy.solvers.OptimizationProblem
+OptimizationProblemBase = _tychopy.solvers.OptimizationProblemBase
+PDStepStrategies = _tychopy.solvers.PDStepStrategies
+PSIOPT = _tychopy.solvers.PSIOPT
+QPOrderingModes = _tychopy.solvers.QPOrderingModes
+QPPivotModes = _tychopy.solvers.QPPivotModes
 
 if __name__ == "__main__":
-    mlist = inspect.getmembers(_tychopy.Solvers)
+    mlist = inspect.getmembers(_tychopy.solvers)
     for m in mlist:
-        print(m[0], "= _tychopy.Solvers." + str(m[0]))
+        print(m[0], "= _tychopy.solvers." + str(m[0]))

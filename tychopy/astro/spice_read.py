@@ -16,8 +16,8 @@
 import numpy as np
 import spiceypy as sp
 
-import tychopy.Astro.Constants as c
-import tychopy.Astro.Date as dt
+import tychopy.astro.constants as c
+import tychopy.astro.date as dt
 
 # sp.furnsh('BasicKernel.txt')
 

@@ -23,7 +23,7 @@ import numpy as np
 class ODEBase:
     def __init__(self, odefunc, Xvars, Uvars=None, Pvars=None, Vgroups=None):
 
-        mlist = inspect.getmembers(_tychopy.OptimalControl)
+        mlist = inspect.getmembers(_tychopy.optimal_control)
 
         hasUvars = Uvars != None and Uvars != 0
         hasPvars = Pvars != None and Pvars != 0
@@ -44,17 +44,17 @@ class ODEBase:
                 break
         if constsize == False:
             if hasUvars and hasPvars:
-                self.ode = _tychopy.OptimalControl.ode_x_u_p.ode(
+                self.ode = _tychopy.optimal_control.ode_x_u_p.ode(
                     odefunc, Xvars, Uvars, Pvars
                 )
             elif hasUvars:
-                self.ode = _tychopy.OptimalControl.ode_x_u.ode(odefunc, Xvars, Uvars)
+                self.ode = _tychopy.optimal_control.ode_x_u.ode(odefunc, Xvars, Uvars)
             elif hasPvars:
-                self.ode = _tychopy.OptimalControl.ode_x_u_p.ode(
+                self.ode = _tychopy.optimal_control.ode_x_u_p.ode(
                     odefunc, Xvars, 0, Pvars
                 )
             else:
-                self.ode = _tychopy.OptimalControl.ode_x.ode(odefunc, Xvars)
+                self.ode = _tychopy.optimal_control.ode_x.ode(odefunc, Xvars)
 
         if Vgroups != None:
             self.add_Vgroups(Vgroups)

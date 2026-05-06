@@ -3,8 +3,8 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
 Args = vf.Arguments
@@ -95,7 +95,7 @@ class test_CartPole(unittest.TestCase):
             "Optimizer iterations exceeded expected maximum",
         )
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
         self.assertLess(
             ObjError,

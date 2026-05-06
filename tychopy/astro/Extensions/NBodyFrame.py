@@ -16,11 +16,11 @@
 import _tychopy as ast
 import numpy as np
 
-import tychopy.Astro.Constants as c
-import tychopy.Astro.Date as dt
-from tychopy.Astro.DataReadWrite import ReadCopernicusFile, ReadData, WriteData
-from tychopy.Astro.Extensions.TwoBodyFrame import TwoBodyFrame
-from tychopy.Astro.SpiceRead import GetEphemTraj2, PoleVector, SpiceFrameTransform
+import tychopy.astro.constants as c
+import tychopy.astro.date as dt
+from tychopy.astro.data_read_write import ReadCopernicusFile, ReadData, WriteData
+from tychopy.astro.Extensions.TwoBodyFrame import TwoBodyFrame
+from tychopy.astro.spice_read import GetEphemTraj2, PoleVector, SpiceFrameTransform
 
 BProps = c.SpiceBodyProps
 
@@ -32,12 +32,12 @@ def normalize(x):
     return np.copy(x) / norm(x)
 
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
-DiffTab = ast.OptimalControl.FiniteDiffTable
-InterpTab = ast.OptimalControl.LGLInterpTable
+DiffTab = ast.optimal_control.FiniteDiffTable
+InterpTab = ast.optimal_control.LGLInterpTable
 
 
 class NBodyFrame(TwoBodyFrame):
@@ -223,7 +223,7 @@ class NBodyFrame(TwoBodyFrame):
 
         if self.P1_J2 != False and Enable_J2 == True:
             p = self.P1_PoleFunc.eval(t)
-            j2func = ast.Astro.J2Cartesian((self.mu), self.P1_J2, self.P1_Rad)
+            j2func = ast.astro.J2Cartesian((self.mu), self.P1_J2, self.P1_Rad)
             otherAccs.append(j2func(r, p))
 
         if Enable_P1_Acc == True:

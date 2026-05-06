@@ -4,9 +4,9 @@ import _tychopy as ast
 import matplotlib.pyplot as plt
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
-sol = ast.Solvers
+vf = ast.vector_functions
+oc = ast.optimal_control
+sol = ast.solvers
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -81,7 +81,7 @@ class test_FreeFlyingRobot(unittest.TestCase):
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertLess(

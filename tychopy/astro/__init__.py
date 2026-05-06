@@ -17,7 +17,7 @@ import inspect
 
 import _tychopy as _tychopy
 import numpy as np
-from _tychopy.Astro import *
+from _tychopy.astro import *
 
 
 def _vec6_wrap(fn):
@@ -36,25 +36,25 @@ def _vec6_wrap(fn):
     return wrapper
 
 
-cartesian_to_classic = _vec6_wrap(_tychopy.Astro.cartesian_to_classic)
-cartesian_to_classic_true = _vec6_wrap(_tychopy.Astro.cartesian_to_classic_true)
-cartesian_to_modified = _vec6_wrap(_tychopy.Astro.cartesian_to_modified)
-classic_to_cartesian = _vec6_wrap(_tychopy.Astro.classic_to_cartesian)
-classic_to_modified = _vec6_wrap(_tychopy.Astro.classic_to_modified)
-modified_to_cartesian = _vec6_wrap(_tychopy.Astro.modified_to_cartesian)
-modified_to_classic = _vec6_wrap(_tychopy.Astro.modified_to_classic)
-propagate_cartesian = _vec6_wrap(_tychopy.Astro.propagate_cartesian)
-propagate_classic = _vec6_wrap(_tychopy.Astro.propagate_classic)
-propagate_modified = _vec6_wrap(_tychopy.Astro.propagate_modified)
+cartesian_to_classic = _vec6_wrap(_tychopy.astro.cartesian_to_classic)
+cartesian_to_classic_true = _vec6_wrap(_tychopy.astro.cartesian_to_classic_true)
+cartesian_to_modified = _vec6_wrap(_tychopy.astro.cartesian_to_modified)
+classic_to_cartesian = _vec6_wrap(_tychopy.astro.classic_to_cartesian)
+classic_to_modified = _vec6_wrap(_tychopy.astro.classic_to_modified)
+modified_to_cartesian = _vec6_wrap(_tychopy.astro.modified_to_cartesian)
+modified_to_classic = _vec6_wrap(_tychopy.astro.modified_to_classic)
+propagate_cartesian = _vec6_wrap(_tychopy.astro.propagate_cartesian)
+propagate_classic = _vec6_wrap(_tychopy.astro.propagate_classic)
+propagate_modified = _vec6_wrap(_tychopy.astro.propagate_modified)
 
-lambert_izzo = _tychopy.Astro.lambert_izzo
-Kepler = _tychopy.Astro.Kepler
-ModifiedDynamics = _tychopy.Astro.modified_dynamics
+lambert_izzo = _tychopy.astro.lambert_izzo
+Kepler = _tychopy.astro.kepler
+ModifiedDynamics = _tychopy.astro.modified_dynamics
 
 
-from .AstroFrames import CR3BPFrame
+from .astro_frames import CR3BPFrame
 
 if __name__ == "__main__":
-    mlist = inspect.getmembers(_tychopy.Astro)
+    mlist = inspect.getmembers(_tychopy.astro)
     for m in mlist:
-        print(m[0], "= _tychopy.Astro." + str(m[0]))
+        print(m[0], "= _tychopy.astro." + str(m[0]))

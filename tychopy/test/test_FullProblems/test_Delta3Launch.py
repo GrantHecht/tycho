@@ -3,8 +3,8 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -165,8 +165,8 @@ class test_Delta3Launch(unittest.TestCase):
         y0[3] += 0.0001 / Vstar
 
         M0 = -0.05
-        OEF = [at, et, istart, Ot, Wt, M0]
-        yf = ast.Astro.classic_to_cartesian(OEF, mu)
+        OEF = np.array([at, et, istart, Ot, Wt, M0])
+        yf = ast.astro.classic_to_cartesian(OEF, mu)
 
         ts = np.linspace(0, tf_phase4, nsegs)
 
@@ -273,7 +273,7 @@ class test_Delta3Launch(unittest.TestCase):
         MassError = abs(FinalMassKg - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertLess(

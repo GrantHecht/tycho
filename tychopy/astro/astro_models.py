@@ -16,21 +16,21 @@
 import _tychopy as ast
 import numpy as np
 
-import tychopy.Astro.Constants as c
-from tychopy.Astro.Extensions.CR3BPFrame import CR3BPFrame
-from tychopy.Astro.Extensions.EPPRFrame import EPPRFrame
-from tychopy.Astro.Extensions.MEETwoBodyFrame import MEETwoBodyFrame
-from tychopy.Astro.Extensions.NBodyFrame import NBodyFrame
-from tychopy.Astro.Extensions.ThrusterModels import (
+import tychopy.astro.constants as c
+from tychopy.astro.Extensions.CR3BPFrame import CR3BPFrame
+from tychopy.astro.Extensions.EPPRFrame import EPPRFrame
+from tychopy.astro.Extensions.MEETwoBodyFrame import MEETwoBodyFrame
+from tychopy.astro.Extensions.NBodyFrame import NBodyFrame
+from tychopy.astro.Extensions.ThrusterModels import (
     CSIThruster,
     LowThrustAcc,
     SolarSail,
 )
-from tychopy.Astro.Extensions.TwoBodyFrame import TwoBodyFrame
-from tychopy.OptimalControl import ODEBase
+from tychopy.astro.Extensions.TwoBodyFrame import TwoBodyFrame
+from tychopy.optimal_control import ODEBase
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 
 

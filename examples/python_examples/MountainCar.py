@@ -19,8 +19,8 @@ import seaborn as sns
 
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 """

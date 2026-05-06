@@ -18,7 +18,7 @@ import os
 
 import numpy as np
 
-import tychopy.Astro.Constants as c
+import tychopy.astro.constants as c
 
 norm = np.linalg.norm
 

@@ -21,7 +21,7 @@ from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import Axes3D, proj3d
 from seaborn import color_palette as colpal
 
-import tychopy.Astro.Constants as c
+import tychopy.astro.constants as c
 
 
 class Arrow3D(FancyArrowPatch):

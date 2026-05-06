@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as ast
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 
 class ODE(oc.ODEBase):

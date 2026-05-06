@@ -13,8 +13,8 @@
 #   - Imports updated accordingly
 # =============================================================================
 
-from tychopy.Astro.Extensions.CR3BPFrame import CR3BPFrame
-from tychopy.Astro.Extensions.EPPRFrame import EPPRFrame
-from tychopy.Astro.Extensions.MEETwoBodyFrame import MEETwoBodyFrame
-from tychopy.Astro.Extensions.NBodyFrame import NBodyFrame
-from tychopy.Astro.Extensions.TwoBodyFrame import TwoBodyFrame
+from tychopy.astro.Extensions.CR3BPFrame import CR3BPFrame
+from tychopy.astro.Extensions.EPPRFrame import EPPRFrame
+from tychopy.astro.Extensions.MEETwoBodyFrame import MEETwoBodyFrame
+from tychopy.astro.Extensions.NBodyFrame import NBodyFrame
+from tychopy.astro.Extensions.TwoBodyFrame import TwoBodyFrame

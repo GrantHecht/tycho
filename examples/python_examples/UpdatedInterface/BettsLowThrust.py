@@ -21,10 +21,10 @@ from matplotlib import ticker
 from mpl_toolkits.basemap import Basemap
 
 import tychopy as typy
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
+from tychopy.vector_functions import Arguments as Args
 
 """
 Low-Thrust Orbit Transfer taken from example 6 on page 265 of

@@ -26,10 +26,10 @@ from MinimumTimeToClimbTables import (
 )
 
 import tychopy as typy
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot, sns
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot, sns
+from tychopy.vector_functions import Arguments as Args
 
 """
 Minumum time to climb for supersonic aircraft. 

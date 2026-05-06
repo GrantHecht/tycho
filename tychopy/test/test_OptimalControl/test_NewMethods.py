@@ -11,8 +11,8 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 IVPAlg = oc.IVPAlg
 
 

@@ -16,11 +16,11 @@
 import _tychopy as ast
 import numpy as np
 
-import tychopy.Astro.Constants as c
-import tychopy.Astro.Date as dt
-from tychopy.Astro.DataReadWrite import ReadCopernicusFile, ReadData, WriteData
-from tychopy.Astro.Extensions.CR3BPFrame import CR3BPFrame
-from tychopy.Astro.SpiceRead import GetEphemTraj2, PoleVector, SpiceFrameTransform
+import tychopy.astro.constants as c
+import tychopy.astro.date as dt
+from tychopy.astro.data_read_write import ReadCopernicusFile, ReadData, WriteData
+from tychopy.astro.Extensions.CR3BPFrame import CR3BPFrame
+from tychopy.astro.spice_read import GetEphemTraj2, PoleVector, SpiceFrameTransform
 
 BProps = c.SpiceBodyProps
 
@@ -32,12 +32,12 @@ def normalize(x):
     return np.copy(x) / norm(x)
 
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
-DiffTab = ast.OptimalControl.FiniteDiffTable
-InterpTab = ast.OptimalControl.LGLInterpTable
+DiffTab = ast.optimal_control.FiniteDiffTable
+InterpTab = ast.optimal_control.LGLInterpTable
 
 
 class EPPRFrame(CR3BPFrame):
@@ -355,7 +355,7 @@ class EPPRFrame(CR3BPFrame):
             t2 = -6.0 * vf.dot(RP2.normalized_power5(), NP2) * NP2
             # J2Accs.append(Scale*( t1 + t2))
 
-            j2func = ast.Astro.J2Cartesian((self.mu), self.P2_J2, self.P2_Rad)
+            j2func = ast.astro.J2Cartesian((self.mu), self.P2_J2, self.P2_Rad)
 
             J2Accs.append(j2func(RP2, NP2))
 
@@ -370,7 +370,7 @@ class EPPRFrame(CR3BPFrame):
 
             # J2Accs.append(Scale*( t1 + t2))
 
-            j2func = ast.Astro.J2Cartesian((1 - self.mu), self.P1_J2, self.P1_Rad)
+            j2func = ast.astro.J2Cartesian((1 - self.mu), self.P1_J2, self.P1_Rad)
 
             J2Accs.append(j2func(RP2, NP2))
 

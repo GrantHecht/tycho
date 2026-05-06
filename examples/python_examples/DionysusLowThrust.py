@@ -16,14 +16,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as typy
-import tychopy.Astro.Constants as c
-from tychopy.Astro.AstroModels import MEETwoBody_CSI
-from tychopy.Astro.Extensions.ThrusterModels import CSIThruster
-from tychopy.Astro.FramePlot import TBPlot, colpal
+import tychopy.astro.constants as c
+from tychopy.astro.astro_models import MEETwoBody_CSI
+from tychopy.astro.Extensions.ThrusterModels import CSIThruster
+from tychopy.astro.frame_plot import TBPlot, colpal
 
 ##############################################################################
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 """
@@ -139,12 +139,12 @@ if __name__ == "__main__":
         XE = np.zeros((6))
         XE[0:5] = X0[0:5]
         XE[5] = ang
-        Earth.append(typy.Astro.modified_to_cartesian(XE, 1))
+        Earth.append(typy.astro.modified_to_cartesian(XE, 1))
 
         XD = np.zeros((6))
         XD[0:5] = XF[0:5]
         XD[5] = ang
-        Dion.append(typy.Astro.modified_to_cartesian(XD, 1))
+        Dion.append(typy.astro.modified_to_cartesian(XD, 1))
 
     TrajCart = ode.MEEToCartesian(ReintTraj1)
     TrajIGCart = ode.MEEToCartesian(TrajIG)

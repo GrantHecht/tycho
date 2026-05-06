@@ -40,8 +40,8 @@ def FDDerivChecker(Fun, X):
         np.set_printoptions(precision=3, linewidth=200)
         print("#############################################################")
         print("Step Size: ", s)
-        F = ast.VectorFunctions.PyVectorFunction(IRows, ORows, Value, s, s)
-        FD = ast.VectorFunctions.PyVectorFunction(IRows, IRows, Adjoint, s, s)
+        F = ast.vector_functions.PyVectorFunction(IRows, ORows, Value, s, s)
+        FD = ast.vector_functions.PyVectorFunction(IRows, IRows, Adjoint, s, s)
 
         JF = Fun.jacobian(X)
         JFT = F.jacobian(X)

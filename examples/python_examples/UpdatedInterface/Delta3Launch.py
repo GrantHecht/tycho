@@ -17,9 +17,9 @@ import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
 import tychopy as typy
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 ############################################################################
 Lstar = 6378145  ## m   Radius of Earth
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     ## eastward from KSC in and doesnt pass through earth when LERPed from KSC
     MF = -0.05
     OEF = [at, et, istart, Ot, Wt, MF]
-    yf = typy.Astro.classic_to_cartesian(OEF, mu)
+    yf = typy.astro.classic_to_cartesian(OEF, mu)
 
     ts = np.linspace(0, tf_phase4, 1000)
 

@@ -15,7 +15,7 @@
 
 import _tychopy as ast
 
-vf = ast.VectorFunctions
+vf = ast.vector_functions
 Args = vf.Arguments
 
 

@@ -62,13 +62,13 @@ struct FunctionRegistry {
 
     FunctionRegistry(nb::module_ &m)
         : mod(m), vfmod(m.def_submodule(
-                      "VectorFunctions",
+                      "vector_functions",
                       "SubModule Containing Vector and Scalar Function Types and Functions")),
           ocmod(
-              m.def_submodule("OptimalControl",
+              m.def_submodule("optimal_control",
                               "SubModule Containing Optimal Control ODEs, Phases, and Utilities")),
-          solmod(m.def_submodule("Solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
-          extmod(m.def_submodule("Extensions", "User Defined Extensions")),
+          solmod(m.def_submodule("solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
+          extmod(m.def_submodule("extensions", "User Defined Extensions")),
           vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction")),
           sfuncx(nb::class_<ScalarFunctionalX>(this->vfmod, "ScalarFunction")) {}
 

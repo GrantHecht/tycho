@@ -469,7 +469,7 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 // ---------------------------------------------------------------------------
 template <> struct type_caster<tycho::oc::ScaleType> {
     NB_TYPE_CASTER(tycho::oc::ScaleType,
-                   const_name("Union[float, numpy.ndarray, OptimalControl.ScaleModes, str, None]"))
+                   const_name("Union[float, numpy.ndarray, optimal_control.ScaleModes, str, None]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {

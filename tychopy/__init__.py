@@ -17,11 +17,12 @@ import inspect
 
 import _tychopy as _tychopy
 
-import tychopy.Astro
-import tychopy.OptimalControl
-import tychopy.Solvers
-import tychopy.Utils
-import tychopy.VectorFunctions
+import tychopy.astro
+import tychopy.extensions
+import tychopy.optimal_control
+import tychopy.solvers
+import tychopy.utils
+import tychopy.vector_functions
 
 software_info = _tychopy.software_info
 

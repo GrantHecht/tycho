@@ -3,8 +3,8 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -156,7 +156,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertLess(

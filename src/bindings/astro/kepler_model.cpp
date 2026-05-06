@@ -79,7 +79,7 @@ void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
 void tycho::BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m) {
-    auto odemod = m.def_submodule("Kepler");
+    auto odemod = m.def_submodule("kepler");
     reg.template Build_Register<Kepler>(odemod, "ode");
     reg.Build_Register<KeplerPropagator>(odemod, "KeplerPropagator");
     TychoBind<KeplerPhase>::Build(odemod);

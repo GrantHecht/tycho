@@ -28,8 +28,8 @@ params = {
 mpl.rcParams.update(params)
 ################################################################################
 ## Setup
-oc = typy.OptimalControl
-vf = typy.VectorFunctions
+oc = typy.optimal_control
+vf = typy.vector_functions
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes

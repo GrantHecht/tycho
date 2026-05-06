@@ -20,7 +20,7 @@ namespace tycho {
 using namespace tycho::utils;
 
 void UtilsBuild(nb::module_ &m) {
-    auto um = m.def_submodule("Utils", "Contains miscilanaeous utilities");
+    auto um = m.def_submodule("utils", "Contains miscilanaeous utilities");
     um.def("get_core_count", &tycho::utils::get_core_count);
     um.def("set_num_threads", &tycho::utils::set_num_threads, nb::arg("n"),
            "Set the number of threads for parallel work. "

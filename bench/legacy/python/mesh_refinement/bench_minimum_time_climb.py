@@ -23,8 +23,8 @@ from MinimumTimeToClimbTables import (
     sosTab,
 )
 
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
 
 g0 = 9.80665
 Lstar = 10000

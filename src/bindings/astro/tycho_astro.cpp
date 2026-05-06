@@ -28,7 +28,7 @@ void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
 void tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
-    auto mod = m.def_submodule("Astro");
+    auto mod = m.def_submodule("astro");
 
     BuildKeplerMod(reg, mod);
     BuildKeplerIntegrator(reg, mod);

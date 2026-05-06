@@ -11,8 +11,8 @@ import numpy as np
 
 import tychopy as typy
 
-oc = typy.OptimalControl
-vf = typy.VectorFunctions
+oc = typy.optimal_control
+vf = typy.vector_functions
 
 nSeg = 250
 tol = 1e-12

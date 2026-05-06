@@ -98,10 +98,10 @@ The `FunctionRegistry` constructor creates four submodules:
 
 | Python path | C++ variable | Purpose |
 |---|---|---|
-| `_tychopy.VectorFunctions` | `reg.vfmod` | Vector/scalar function types and free functions |
-| `_tychopy.OptimalControl` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
-| `_tychopy.Solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
-| `_tychopy.Extensions` | `reg.extmod` | User-defined extension types |
+| `_tychopy.vector_functions` | `reg.vfmod` | Vector/scalar function types and free functions |
+| `_tychopy.optimal_control` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
+| `_tychopy.solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
+| `_tychopy.extensions` | `reg.extmod` | User-defined extension types |
 
 The `Astro` submodule is created inside `AstroBuild()` rather than in the registry constructor.
 
@@ -679,7 +679,7 @@ add_custom_command(TARGET pytychosrc POST_BUILD
 
 The `tychopy/` package provides a pure-Python layer over the `_tychopy` extension module. Its main roles are:
 
-1. **Re-export** -- make C++ types available as `tychopy.VectorFunctions.Arguments` instead of `_tychopy.VectorFunctions.Arguments`.
+1. **Re-export** -- make C++ types available as `tychopy.vector_functions.Arguments` instead of `_tychopy.vector_functions.Arguments`.
 2. **Coerce types** -- wrap functions that accept fixed-size Eigen types (e.g., `Vector6<double>`) to also accept Python lists and tuples.
 3. **Add pure-Python extensions** -- like `ODEBase`, `CR3BPFrame`, and mesh error plotting.
 
@@ -689,11 +689,11 @@ Imports `_tychopy` and each subpackage:
 
 ```python
 import _tychopy as _tychopy
-import tychopy.Astro
-import tychopy.OptimalControl
-import tychopy.Solvers
-import tychopy.Utils
-import tychopy.VectorFunctions
+import tychopy.astro
+import tychopy.optimal_control
+import tychopy.solvers
+import tychopy.utils
+import tychopy.vector_functions
 ```
 
 ### `tychopy/VectorFunctions/__init__.py` -- `cross` wrapper
@@ -701,7 +701,7 @@ import tychopy.VectorFunctions
 The C++ `cross(a, b)` function expects VectorFunction types. When the first argument is a Python list or tuple (a constant vector), nanobind's fixed-size Eigen caster may reject it. The wrapper coerces it:
 
 ```python
-_cross_cpp = _tychopy.VectorFunctions.cross
+_cross_cpp = _tychopy.vector_functions.cross
 
 def cross(a, b):
     if isinstance(a, (list, tuple)):
@@ -722,8 +722,8 @@ def _vec6_wrap(fn):
     wrapper.__name__ = fn.__name__
     return wrapper
 
-cartesian_to_classic = _vec6_wrap(_tychopy.Astro.cartesian_to_classic)
-classic_to_cartesian = _vec6_wrap(_tychopy.Astro.classic_to_cartesian)
+cartesian_to_classic = _vec6_wrap(_tychopy.astro.cartesian_to_classic)
+classic_to_cartesian = _vec6_wrap(_tychopy.astro.classic_to_cartesian)
 # ... etc.
 ```
 
@@ -855,7 +855,7 @@ reg.Build_Register<MyNewFunction>(reg.vfmod, "MyNewFunction");
 5. **Re-export in Python** -- add to `tychopy/VectorFunctions/__init__.py`:
 
 ```python
-MyNewFunction = _tychopy.VectorFunctions.MyNewFunction
+MyNewFunction = _tychopy.vector_functions.MyNewFunction
 ```
 
 ### Adding a New ODE
@@ -867,7 +867,7 @@ Use `BuildGenODEModule` for a generic ODE (accepts any VectorFunction as dynamic
 tycho::bind::BuildGenODEModule<BaseType, XV, UV, PV>("my_ode", reg.ocmod, reg);
 ```
 
-This creates a submodule `_tychopy.OptimalControl.my_ode` with `ode`, `integrator`, and `phase` classes.
+This creates a submodule `_tychopy.optimal_control.my_ode` with `ode`, `integrator`, and `phase` classes.
 
 ### Adding a New Type Caster
 

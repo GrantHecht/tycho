@@ -19,12 +19,12 @@ import seaborn as sns
 import tychopy as typy
 
 norm = np.linalg.norm
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
-solvs = typy.Solvers
+solvs = typy.solvers
 
 
 class Chain(oc.ODEBase):
@@ -80,7 +80,7 @@ def Job(a, b, n, L):
     phase.optimizer.set_opt_ls_mode("L1")
     phase.optimizer.set_max_ls_iters(2)
     phase.optimizer.print_level = 1
-    phase.jet_job_mode = typy.Solvers.JetJobModes.SolveOptimize
+    phase.jet_job_mode = typy.solvers.JetJobModes.SolveOptimize
 
     return phase
 
