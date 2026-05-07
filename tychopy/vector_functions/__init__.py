@@ -70,6 +70,8 @@ squared = _tychopy.vector_functions.squared
 stack = _tychopy.vector_functions.stack
 stack_scalar = _tychopy.vector_functions.stack_scalar
 sum = _tychopy.vector_functions.sum
+sum_elems = _tychopy.vector_functions.sum_elems
+sum_scalar = _tychopy.vector_functions.sum_scalar
 tan = _tychopy.vector_functions.tan
 tanh = _tychopy.vector_functions.tanh
 

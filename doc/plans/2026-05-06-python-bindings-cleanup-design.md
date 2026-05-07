@@ -265,8 +265,9 @@ bound.
 
 ### Capability preservation audit
 
-Every legacy Python overload maps to a concrete new-API call. This
-table is the receipt:
+Every legacy Python overload that was *exercised* by any in-tree caller
+(tests, examples, benches, extensions) maps to a concrete new-API call.
+This table is the receipt:
 
 | Legacy form | New equivalent |
 |---|---|
@@ -276,8 +277,30 @@ table is the receipt:
 | `add_link_equal_con(func, regs, ptl, xtuvs, lpvs)` (5-arg, no opvs/spvs) | New 12-arg `add_link_equal_con(func, p0, reg0, XtUV0, OPV0, SPV0, p1, reg1, ...)` with empty `OPV/SPV` |
 | `add_link_equal_con(func, LinkFlags/str, ptl, xtuvs)` (4-arg) | New 9-arg `add_link_equal_con(func, p0, reg0, v0, p1, reg1, v1, lps, scale)` |
 | `add_forward_link_equal_con(int, int, VectorXi)` and `(PhasePtr, ...)` | `add_forward_link_equal_con(PhaseRefType, PhaseRefType, VarIndexType, ScaleType)` |
-| `add_direct_link_equal_con(LinkFlags, int, VectorXi, int, VectorXi)` | `add_direct_link_equal_con(p0, reg0, v0, p1, reg1, v1, scale)` (caller splits the symmetric `LinkFlags` into two regions) |
+| `add_direct_link_equal_con(LinkFlags, int, VectorXi, int, VectorXi)` | `add_direct_link_equal_con(p0, reg0, v0, p1, reg1, v1, scale)` (caller splits the symmetric `LinkFlags` into two regions) — see footnote |
 | `add_direct_link_equal_con(func, int/PhasePtr, PhaseRegionFlags/str, VectorXi, ...)` | Subsumed by `add_link_equal_con(func, p0, reg0, v0, p1, reg1, v1, ...)` |
+
+**Footnote on `LinkFlags` enum coverage.** Three legacy `LinkFlags` values
+warrant individual mention because they fall outside the symmetric
+"split into two `PhaseRegionFlags`" pattern:
+
+- `LinkFlags::LinkParams` is preserved. The new-API `add_link_param_*_con`
+  family (which still constructs `LinkConstraint(..., LinkFlags::LinkParams,
+  ...)` directly at `optimal_control_problem.h` `add_link_param_equal_con`
+  / `add_link_param_inequal_con` / `add_link_param_objective`) carries
+  the semantics; `link_function.h`'s `make_phase_reg_flags()` switch
+  resizes `RegFlags` to 0 for this case (line ~165). Callers do not
+  construct it explicitly via the new public API.
+- `LinkFlags::BackTwoToTwoFront` and `LinkFlags::FrontTwoToTwoBack` are
+  **dead enum values on both `main` and HEAD**. They have no
+  `make_phase_reg_flags()` cases in `link_function.h` (they hit the
+  `default:` empty branch, producing an empty `RegFlags`) and are not
+  referenced by any test, example, benchmark, or extension. The new
+  `RegionType = variant<int, PhaseRegionFlags, std::string>` cannot
+  express their intended "two contiguous points" semantics, so the
+  capability gap is real but theoretical: no in-tree caller exercises it.
+  These enum values are candidates for deletion in the same follow-up
+  PR that prunes the dead 2-arg `add_link_param_*` wrappers.
 
 ## Examples Folder Reorganisation
 

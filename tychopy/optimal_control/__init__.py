@@ -48,7 +48,7 @@ ode_x_u = _tychopy.optimal_control.ode_x_u
 ode_x_u_p = _tychopy.optimal_control.ode_x_u_p
 
 ###############################################################################
-## Expose Pure Python Extensions to OptimalControl
+## Expose Pure Python Extensions to optimal_control
 
 from .ode_base_class import ODEBase
 

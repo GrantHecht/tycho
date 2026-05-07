@@ -261,7 +261,7 @@ class TestTypeCasters(unittest.TestCase):
             self.assertEqual(
                 idx.dtype, np.int32, "VectorXi::from_cpp should emit np.int32"
             )
-        except Exception:
+        except (AttributeError, TypeError):
             self.skipTest("No accessible VectorXi-returning API for dtype check")
 
     def test_stack_list_arg(self):
@@ -278,6 +278,48 @@ class TestTypeCasters(unittest.TestCase):
         result = vf.stack(f, np.array([1.0, 2.0]))
         self.assertIsNotNone(result)
         self.assertEqual(result.output_rows(), 4)
+
+
+# ---------------------------------------------------------------------------
+# TestModuleLayoutHardBreak
+# ---------------------------------------------------------------------------
+
+
+class TestModuleLayoutHardBreak(unittest.TestCase):
+    """Pin the snake_case Python-module rename as a hard break with no
+    PascalCase aliases. If a future change adds a convenience alias
+    (e.g. resurrects ``_tychopy.OptimalControl`` or ``tychopy.Astro``)
+    these tests fail at CI time instead of silently softening the API.
+    """
+
+    PASCAL_NAMES = ["VectorFunctions", "OptimalControl", "Solvers", "Utils", "Astro"]
+
+    def test_no_pascalcase_underscore_tychopy_submodules(self):
+        import importlib
+
+        for name in self.PASCAL_NAMES:
+            with self.assertRaises(
+                (ImportError, ModuleNotFoundError, AttributeError),
+                msg=f"_tychopy.{name} should not be importable",
+            ):
+                importlib.import_module(f"_tychopy.{name}")
+
+    def test_no_pascalcase_tychopy_subpackages(self):
+        import importlib
+
+        for name in self.PASCAL_NAMES:
+            with self.assertRaises(
+                (ImportError, ModuleNotFoundError),
+                msg=f"tychopy.{name} should not be importable",
+            ):
+                importlib.import_module(f"tychopy.{name}")
+
+    def test_snake_case_paths_succeed(self):
+        import importlib
+
+        for name in ["vector_functions", "optimal_control", "solvers", "utils", "astro"]:
+            importlib.import_module(f"_tychopy.{name}")
+            importlib.import_module(f"tychopy.{name}")
 
 
 # ---------------------------------------------------------------------------

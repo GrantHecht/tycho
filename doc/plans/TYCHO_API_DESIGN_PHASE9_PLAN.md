@@ -14,7 +14,7 @@ prioritized into tiers but not scheduled.
 - 7 states, 3 controls, 1 parameter — MEE dynamics with J2/J3/J4
 - Requires control-law integration (see below) for initial guess generation
 - Candidate for both static DSL (with firebreaks) and builder API versions
-- Reference: `examples/UpdatedInterface/BettsLowThrust.py`
+- Reference: `examples/python_examples/BettsLowThrust.py`
 
 ### Control-Law Integration in C++
 - Python: `ode.integrator(step, control_law, var_group)`

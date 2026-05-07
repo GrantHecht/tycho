@@ -1,5 +1,31 @@
 # Binding Layer Developer Guide
 
+> **⚠️ Partial-staleness notice (post snake_case rename PR).**
+> Sections of this guide were authored before the Python-side rename of
+> aggregate `*Build` helpers and the `TychoBind<T>::Build` →
+> `::build` rename. The following are known to be stale and will be
+> rewritten in the deferred sub-aggregate-rename follow-up PR:
+>
+> - **Section 2** — the `NB_MODULE` example still calls
+>   `VectorFunctionBuild`, `OptimalControlBuild`, `SolversBuild`,
+>   `UtilsBuild`, `AstroBuild`, `ExtensionsBuild`. Real code now uses
+>   the snake_case forms (`vector_functions_build`, `optimal_control_build`,
+>   `solvers_build`, `utils_build`, `astro_build`, `extensions_build`).
+> - **Sections 3, 4, 11** — references to `TychoBind<T>::Build()` and
+>   `Build_Register`. Real code now uses `TychoBind<T>::build()` and
+>   `build_register`.
+> - **Section 9** — Python module paths (`tychopy/VectorFunctions/`,
+>   `tychopy/Astro/`, `tychopy/OptimalControl/`). Real paths are now all
+>   snake_case (`tychopy/vector_functions/`, `tychopy/astro/`,
+>   `tychopy/optimal_control/`).
+> - **Section 12 (file listing)** — both the directory tree and the per-file
+>   table retain the PascalCase `*Build` aggregate names and
+>   `TychoBind<X>::Build` references.
+>
+> The actual code under `src/bindings/`, `extensions/`, and `tychopy/` is
+> already on the new names. When in doubt, trust the source over this
+> document until the follow-up PR lands.
+
 This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
 
 This guide assumes familiarity with the [VectorFunction Developer Guide](VectorFunction.md). The binding layer is the bridge between that C++ system and the Python API users interact with.
