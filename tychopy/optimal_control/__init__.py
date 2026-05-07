@@ -32,10 +32,6 @@ InterpFunction_3 = _tychopy.optimal_control.InterpFunction_3
 InterpFunction_6 = _tychopy.optimal_control.InterpFunction_6
 LGLInterpTable = _tychopy.optimal_control.LGLInterpTable
 
-LinkConstraint = _tychopy.optimal_control.LinkConstraint
-LinkFlags = _tychopy.optimal_control.LinkFlags
-LinkObjective = _tychopy.optimal_control.LinkObjective
-
 ODEArguments = _tychopy.optimal_control.ODEArguments
 OptimalControlProblem = _tychopy.optimal_control.OptimalControlProblem
 PhaseInterface = _tychopy.optimal_control.PhaseInterface

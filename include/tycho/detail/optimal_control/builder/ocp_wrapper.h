@@ -50,6 +50,7 @@ class OptimalControlProblem {
     /// through p2 (using phase ordering within the OCP).  Both phases must
     /// have registries; throws if either is empty or if names resolve to
     /// different indices.
+    /// Returns one constraint index per consecutive phase pair.
     std::vector<int> add_forward_link_equal_con(Phase &p1, Phase &p2,
                                                 std::initializer_list<std::string> var_names) {
         bool p1_empty = p1.registry().empty();
@@ -83,14 +84,15 @@ class OptimalControlProblem {
                 fmt_idx(idx1), fmt_idx(idx2)));
         }
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), idx1,
-                                               std::string("auto"));
+                                               ScaleModes::AUTO);
     }
 
     /// Link two phases with an index vector.
+    /// Returns one constraint index per consecutive phase pair.
     std::vector<int> add_forward_link_equal_con(Phase &p1, Phase &p2,
                                                 const Eigen::VectorXi &vars) {
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), vars,
-                                               std::string("auto"));
+                                               ScaleModes::AUTO);
     }
 
     /// Index-based (int phase indices).
@@ -98,7 +100,7 @@ class OptimalControlProblem {
                                   const Eigen::VectorXi &vars_a, int phase_b,
                                   PhaseRegionFlags region_b, const Eigen::VectorXi &vars_b) {
         return ocp_.add_direct_link_equal_con(phase_a, region_a, vars_a, phase_b, region_b, vars_b,
-                                              std::string("auto"));
+                                              ScaleModes::AUTO);
     }
 
     /// Index-based (Phase& references).
@@ -107,7 +109,7 @@ class OptimalControlProblem {
                                   PhaseRegionFlags region_b, const Eigen::VectorXi &vars_b) {
         return ocp_.add_direct_link_equal_con(phase_a.base_ptr(), region_a, vars_a,
                                               phase_b.base_ptr(), region_b, vars_b,
-                                              std::string("auto"));
+                                              ScaleModes::AUTO);
     }
 
     /// Named (int phase indices) — resolves names via stored Phase references.
@@ -120,7 +122,7 @@ class OptimalControlProblem {
         auto idx_b =
             resolve_link_vars(*phases_.at(static_cast<std::size_t>(phase_b)), region_b, vars_b);
         return ocp_.add_direct_link_equal_con(phase_a, region_a, idx_a, phase_b, region_b, idx_b,
-                                              std::string("auto"));
+                                              ScaleModes::AUTO);
     }
 
     /// Named (Phase& references).
@@ -132,7 +134,7 @@ class OptimalControlProblem {
         auto idx_b = resolve_link_vars(phase_b, region_b, vars_b);
         return ocp_.add_direct_link_equal_con(phase_a.base_ptr(), region_a, idx_a,
                                               phase_b.base_ptr(), region_b, idx_b,
-                                              std::string("auto"));
+                                              ScaleModes::AUTO);
     }
 
     PSIOPT::ConvergenceFlags solve() {

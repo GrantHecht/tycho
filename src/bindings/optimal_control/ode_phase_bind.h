@@ -74,20 +74,6 @@ template <class FuncType> struct TychoBind<StateFunction<FuncType>> {
     }
 };
 
-template <class FuncType> struct TychoBind<LinkFunction<FuncType>> {
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<LinkFunction<FuncType>>(m, name);
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>, Eigen::VectorXi>());
-        obj.def(
-            nb::init<FuncType, Eigen::Matrix<PhaseRegionFlags, -1, 1>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-    }
-};
-
 template <class DType> struct TychoBind<FDDerivArbitrary<DType>> {
     static void Build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<FDDerivArbitrary<DType>>(m, name);

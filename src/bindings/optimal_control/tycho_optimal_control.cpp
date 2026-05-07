@@ -64,17 +64,6 @@ static void OCPFlagsBuild(nb::module_ &m) {
         .value("StaticParams", PhaseRegionFlags::StaticParams)
         .value("PairWisePath", PhaseRegionFlags::PairWisePath);
 
-    nb::enum_<LinkFlags>(m, "LinkFlags")
-        .value("BackToFront", LinkFlags::BackToFront)
-        .value("BackToBack", LinkFlags::BackToBack)
-        .value("FrontToBack", LinkFlags::FrontToBack)
-        .value("ParamsToParams", LinkFlags::ParamsToParams)
-        .value("LinkParams", LinkFlags::LinkParams)
-        .value("FrontToFront", LinkFlags::FrontToFront)
-        .value("PathToPath", LinkFlags::PathToPath)
-        .value("BackTwoToTwoFront", LinkFlags::BackTwoToTwoFront)
-        .value("FrontTwoToTwoBack", LinkFlags::FrontTwoToTwoBack);
-
     nb::enum_<ScaleModes>(m, "ScaleModes")
         .value("AUTO", ScaleModes::AUTO)
         .value("CUSTOM", ScaleModes::CUSTOM)
@@ -101,8 +90,6 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     TychoBind<StateFunction<GenericFunction<-1, -1>>>::Build(oc, "StateConstraint");
     TychoBind<StateFunction<GenericFunction<-1, 1>>>::Build(oc, "StateObjective");
-    TychoBind<LinkFunction<GenericFunction<-1, -1>>>::Build(oc, "LinkConstraint");
-    TychoBind<LinkFunction<GenericFunction<-1, 1>>>::Build(oc, "LinkObjective");
 
     TychoBind<MeshIterateInfo>::Build(oc);
 
