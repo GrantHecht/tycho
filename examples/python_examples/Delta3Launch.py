@@ -17,62 +17,53 @@ import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
 import tychopy as typy
-
-vf = typy.vector_functions
-oc = typy.optimal_control
-Args = vf.Arguments
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 ############################################################################
-
-g0 = 9.80665
 Lstar = 6378145  ## m   Radius of Earth
 Tstar = 961.0  ## sec Engine Burn Time
 Mstar = 301454.0  ## kgs Inital Mass of Rocket
-
-
-Astar = Lstar / Tstar**2
 Vstar = Lstar / Tstar
-Rhostar = Mstar / Lstar**3
-Estar = Mstar * (Vstar**2)
-Mustar = (Lstar**3) / (Tstar**2)
-Fstar = Astar * Mstar
 #############################################################################
 
-mu = 3.986012e14 / Mustar
-Re = 6378145 / Lstar
-We = 7.29211585e-5 * Tstar
+g0 = 9.80665
 
-RhoAir = 1.225 / Rhostar
-h_scale = 7200 / Lstar
-g = g0 / Astar
+mu = 3.986012e14
+Re = 6378145
+We = 7.29211585e-5
+
+RhoAir = 1.225
+h_scale = 7200
+g = g0
 
 
 CD = 0.5
-S = 4 * np.pi / Lstar**2
+S = 4 * np.pi
 
 
-TS = 628500 / Fstar
-T1 = 1083100 / Fstar
-T2 = 110094 / Fstar
+TS = 628500
+T1 = 1083100
+T2 = 110094
 
-IS = 283.33364 / Tstar
-I1 = 301.68 / Tstar
-I2 = 467.21 / Tstar
+IS = 283.33364
+I1 = 301.68
+I2 = 467.21
 
-tS = 75.2 / Tstar
-t1 = 261 / Tstar
-t2 = 700 / Tstar
-
-
-TMS = 19290 / Mstar
-TM1 = 104380 / Mstar
-TM2 = 19300 / Mstar
-TMPay = 4164 / Mstar
+tS = 75.2
+t1 = 261
+t2 = 700
 
 
-PMS = 17010 / Mstar
-PM1 = 95550 / Mstar
-PM2 = 16820 / Mstar
+TMS = 19290
+TM1 = 104380
+TM2 = 19300
+TMPay = 4164
+
+PMS = 17010
+PM1 = 95550
+PM2 = 16820
 
 SMS = TMS - PMS
 SM1 = TM1 - PM1
@@ -113,28 +104,35 @@ class RocketODE(oc.ODEBase):
         ####################################################
         XtU = oc.ODEArguments(7, 3)
 
-        R = XtU.x_vec().head3()
-        V = XtU.x_vec().segment3(3)
+        R = XtU.x_vec().head(3)
+        V = XtU.x_vec().segment(3, 3)
         m = XtU.x_var(6)
 
-        # We normalize the control direction in the dynamics so it doesnt have
-        # to be done as a path constraint
-        u = XtU.u_vec().normalized()
+        U = XtU.u_vec()
 
         h = R.norm() - Re
         rho = RhoAir * vf.exp(-h / h_scale)
         Vr = V + R.cross(np.array([0, 0, We]))
 
-        ## We cant let let Vr be exactly 0, derivative of norm of 0 vector is NAN
-        ## Will handle this in inititial conditions
         D = (-0.5 * CD * S) * rho * (Vr * Vr.norm())
 
         Rdot = V
-        Vdot = (-mu) * R.normalized_power3() + (T * u + D) / m
+        Vdot = (-mu) * R.normalized_power3() + (T * U.normalized() + D) / m
 
         ode = vf.stack(Rdot, Vdot, -mdot)
+
+        Vgroups = {}
+        ## Multiple names allowed, just index with tuple of names
+        Vgroups[("R", "Position")] = R
+        Vgroups[("V", "Velocity")] = V
+        Vgroups["U"] = U
+        Vgroups[("t", "time")] = XtU.t_var()
+        Vgroups[("m", "mass")] = m
+
+        Vgroups["RV"] = [0, 1, 2, 3, 4, 5]
+
         ####################################################
-        super().__init__(ode, 7, 3)
+        super().__init__(ode, 7, 3, Vgroups=Vgroups)
 
 
 def TargetOrbit(at, et, it, Ot, Wt):
@@ -205,10 +203,10 @@ def Plot(Phase1, Phase2, Phase3, Phase4):
         Xs = []
         for T in Traj:
             r = np.linalg.norm(T[0:3])
-            alt = (r - Re) * Lstar / 1000
-            v = np.linalg.norm(T[3:6]) * Vstar / 1000
-            m = T[6] * Mstar
-            t = T[7] * Tstar
+            alt = (r - Re) / 1000
+            v = np.linalg.norm(T[3:6]) / 1000
+            m = T[6]
+            t = T[7]
             Xs.append([alt, v, m, t])
 
         return np.array(Xs).T
@@ -283,7 +281,7 @@ if __name__ == "__main__":
     typy.software_info()
 
     # Target orbital elements
-    at = 24361140 / Lstar
+    at = 24361140
     et = 0.7308
     Ot = np.deg2rad(269.8)
     Wt = np.deg2rad(130.5)
@@ -293,10 +291,8 @@ if __name__ == "__main__":
     y0[0:3] = np.array([np.cos(istart), 0, np.sin(istart)]) * Re
     y0[3:6] = -np.cross(y0[0:3], np.array([0, 0, We]))
     y0[3] += (
-        0.00001 / Vstar
-    )  # cant be exactly zero,our drag equation's derivative would NAN !!!
-
-    print(y0[3:6])
+        0.00001  # cant be exactly zero,our drag equation's derivative would NAN !!!
+    )
 
     ## MF is the only magic number in the script, just trying to find
     ## a mean anomaly such that the terminal state on the orbit is downrange
@@ -312,95 +308,117 @@ if __name__ == "__main__":
     IG3 = []
     IG4 = []
 
-    for t in ts:
-        X = np.zeros((11))
-        X[0:6] = y0 + (yf - y0) * (t / ts[-1])
-        X[7] = t
-        X[8:11] = np.array([0, 1, 0])
-        if t < tf_phase1:
-            m = m0_phase1 + (mf_phase1 - m0_phase1) * (t / tf_phase1)
-            X[6] = m
-            IG1.append(X)
-        elif t < tf_phase2:
-            m = m0_phase2 + (mf_phase2 - m0_phase2) * (
-                (t - tf_phase1) / (tf_phase2 - tf_phase1)
-            )
-            X[6] = m
-            IG2.append(X)
-        elif t < tf_phase3:
-            m = m0_phase3 + (mf_phase3 - m0_phase3) * (
-                (t - tf_phase2) / (tf_phase3 - tf_phase2)
-            )
-            X[6] = m
-            IG3.append(X)
-        elif t < tf_phase4:
-            m = m0_phase4 + (mf_phase4 - m0_phase4) * (
-                (t - tf_phase3) / (tf_phase4 - tf_phase3)
-            )
-            X[6] = m
-            IG4.append(X)
-
     ode1 = RocketODE(T_phase1, mdot_phase1)
     ode2 = RocketODE(T_phase2, mdot_phase2)
     ode3 = RocketODE(T_phase3, mdot_phase3)
     ode4 = RocketODE(T_phase4, mdot_phase4)
 
+    for t in ts:
+        RVi = y0 + (yf - y0) * (t / ts[-1])
+        Ui = np.array([0, 1, 0])
+
+        if t < tf_phase1:
+            m = m0_phase1 + (mf_phase1 - m0_phase1) * (t / tf_phase1)
+            ## Create ODEinputs w/ named variable groups, 0 if unspecified
+            X = ode1.make_input(RV=RVi, t=t, m=m, U=Ui)
+            IG1.append(X)
+        elif t < tf_phase2:
+            m = m0_phase2 + (mf_phase2 - m0_phase2) * (
+                (t - tf_phase1) / (tf_phase2 - tf_phase1)
+            )
+            X = ode2.make_input(RV=RVi, t=t, m=m, U=Ui)
+            IG2.append(X)
+        elif t < tf_phase3:
+            m = m0_phase3 + (mf_phase3 - m0_phase3) * (
+                (t - tf_phase2) / (tf_phase3 - tf_phase2)
+            )
+            X = ode3.make_input(RV=RVi, t=t, m=m, U=Ui)
+            IG3.append(X)
+        elif t < tf_phase4:
+            m = m0_phase4 + (mf_phase4 - m0_phase4) * (
+                (t - tf_phase3) / (tf_phase4 - tf_phase3)
+            )
+            X = ode4.make_input(RV=RVi, t=t, m=m, U=Ui)
+            IG4.append(X)
+
     tmode = "LGL3"
     cmode = "HighestOrderSpline"
 
-    nsegs1 = 40
-    nsegs2 = 40
-    nsegs3 = 40
-    nsegs4 = 40
+    nsegs1 = 16
+    nsegs2 = 16
+    nsegs3 = 16
+    nsegs4 = 16
 
     #########################################
     phase1 = ode1.phase(tmode, IG1, nsegs1)
     phase1.set_control_mode(cmode)
 
-    ## Thrust direction is normalized in dynamics, so we dont
-    ## have to enforce norm of 1 on controls. For good measure,
-    ## we do bound the maginitude to prevent it from becoming too large or small
-    phase1.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
-    phase1.add_boundary_value("Front", range(0, 8), IG1[0][0:8])
+    ## Enable AutoScaling, off by default
+    phase1.set_auto_scaling(True)
+
+    units = np.ones((11))
+    units[0:3] = Lstar
+    units[3:6] = Vstar
+    units[6] = Mstar
+    units[7] = Tstar
+    ## All others are one,i.e no auto-scaling
+
+    phase1.set_units(units)  # As a single vector
+    # Or
+    phase1.set_units(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
+
+    phase1.add_lu_norm_bound("Path", "U", 0.5, 1.5)
+    phase1.add_boundary_value("Front", ["R", "V", "m", "t"], IG1[0][0:8])
 
     # Dont want our bound to interfere with initial condition which starts at Re
     # so i relax the Earth radius constraint slightly here
-    phase1.add_lower_norm_bound("Path", [0, 1, 2], Re * 0.999999)
-    phase1.add_boundary_value("Back", [7], [tf_phase1])
+    phase1.add_lower_norm_bound("Path", "R", Re * 0.999999)
+
+    phase1.add_boundary_value("Back", "time", tf_phase1)
 
     #########################################
     phase2 = ode2.phase(tmode, IG2, nsegs2)
     phase2.set_control_mode(cmode)
 
-    phase2.add_lower_norm_bound("Path", [0, 1, 2], Re)
-    phase2.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
+    phase2.add_lower_norm_bound("Path", "R", Re)
+    phase2.add_lu_norm_bound("Path", "U", 0.5, 1.5)
 
     ## Fixing initial mass and final time on first 3 phases.
     ## Since the engine cant be throttled, constraining final mass
     ## as well would be redundant and overconstrained
-    phase2.add_boundary_value("Front", [6], [m0_phase2])
-    phase2.add_boundary_value("Back", [7], [tf_phase2])
+    phase2.add_boundary_value("Front", "mass", m0_phase2)
+    phase2.add_boundary_value("Back", "time", tf_phase2)
 
     #########################################
     phase3 = ode3.phase(tmode, IG3, nsegs3)
     phase3.set_control_mode(cmode)
 
-    phase3.add_lower_norm_bound("Path", [0, 1, 2], Re)
-    phase3.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
-    phase3.add_boundary_value("Front", [6], [m0_phase3])
-    phase3.add_boundary_value("Back", [7], [tf_phase3])
+    phase3.add_lower_norm_bound("Path", "R", Re)
+    phase3.add_lu_norm_bound("Path", "U", 0.5, 1.5)
+    phase3.add_boundary_value("Front", "mass", m0_phase3)
+    phase3.add_boundary_value("Back", "time", tf_phase3)
 
     #########################################
     phase4 = ode4.phase(tmode, IG4, nsegs4)
     phase4.set_control_mode(cmode)
 
-    phase4.add_lower_norm_bound("Path", [0, 1, 2], Re)
-    phase4.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
-    phase4.add_boundary_value("Front", [6], [m0_phase4])
-    phase4.add_upper_var_bound("Back", 7, tf_phase4, 1.0)
-    phase4.add_equal_con("Back", TargetOrbit(at, et, istart, Ot, Wt), range(0, 6))
+    ## auto_scale = "auto" if not specified
+    phase4.add_boundary_value("Front", "mass", m0_phase4)
+    phase4.add_upper_var_bound("Back", "time", tf_phase4)
+    # auto_scale=None, will turn it off for this constraint
+    phase4.add_lu_norm_bound("Path", "U", 0.5, 1.5, auto_scale=None)
+
+    phase4.add_lower_norm_bound("Path", "R", Re, auto_scale=1 / Lstar)
+
+    phase4.add_equal_con(
+        "Back",
+        TargetOrbit(at, et, istart, Ot, Wt),
+        ["RV"],
+        auto_scale=[1 / Lstar, 1.0, 1.0, 1.0, 1.0],
+    )
+
     # Maximize final mass
-    phase4.add_value_objective("Back", 6, -1.0)
+    phase4.add_value_objective("Back", "mass", -1.0)
 
     #########################################
 
@@ -410,14 +428,27 @@ if __name__ == "__main__":
     ocp.add_phase(phase3)
     ocp.add_phase(phase4)
 
-    ## All phases contniuous in everything but mass (var 6)
-    ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+    ocp.set_auto_scaling(True, True)
+    ocp.set_adaptive_mesh(True)
+
+    for phase in ocp.phases:
+        phase.set_units(R=Lstar, V=Vstar, t=Tstar, m=Mstar)
+        phase.set_mesh_tol(1.0e-6)
+        phase.set_mesh_error_criteria(oc.MeshErrorAggregation.MAX)
+        phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
+
+    ## Each Phase does not have to have the same auto_scale units even if its the same ODE
+    phase4.set_units(R=2 * Lstar, V=Vstar, t=0.8 * Tstar, m=Mstar)
+
+    ## Everything but mass
+    ocp.add_forward_link_equal_con(
+        phase1, phase4, ["R", "V", "t", "U"], auto_scale="auto"
+    )
 
     ocp.optimizer.set_opt_ls_mode("L1")
     ocp.optimizer.set_soe_ls_mode("L1")
     ocp.optimizer.set_max_ls_iters(2)
-    ocp.optimizer.set_print_level(1)
-
+    ocp.optimizer.set_print_level(0)
     ocp.solve_optimize()
 
     Phase1Traj = phase1.return_traj()  # or ocp.phase(i).return_traj()
@@ -425,7 +456,33 @@ if __name__ == "__main__":
     Phase3Traj = phase3.return_traj()
     Phase4Traj = phase4.return_traj()
 
-    print("Final Mass = ", Phase4Traj[-1][6] * Mstar, " kg")
+    ## retrieve vars from vectors or trajs by name using ode.get_vars
+    mf = ode4.get_vars("mass", Phase4Traj[-1], retscalar=True)
+    print("Final Mass = ", mf, " kg")
 
     Plot(Phase1Traj, Phase2Traj, Phase3Traj, Phase4Traj)
+
+    TotalTraj = Phase1Traj + Phase2Traj + Phase3Traj + Phase4Traj
+
+    ## ode.get_vars alse works on full trajectories
+    ts, rx, ry, rz, vx, vy, vz = ode4.get_vars(["t", "R", "V"], TotalTraj).T
+
+    plt.plot(ts, rx, label="rx")
+    plt.plot(ts, ry, label="ry")
+    plt.plot(ts, rz, label="rz")
+    plt.xlabel("t")
+    plt.ylabel("R (m)")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    plt.plot(ts, vx, label="vx")
+    plt.plot(ts, vy, label="vy")
+    plt.plot(ts, vz, label="vz")
+    plt.xlabel("t")
+    plt.ylabel("V (m/s)")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
     #########################################

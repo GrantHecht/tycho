@@ -198,7 +198,7 @@ def MakeHeteroclinic(ode, Man1, Man2, L1Orbit, L2Orbit):
     ocp.add_phase(phase2)
 
     # Enforce continuity in position and velocity between phases
-    ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6))
+    ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6), auto_scale="auto")
     ocp.set_adaptive_mesh()
 
     ocp.optimizer.set_eq_con_tol(1.0e-9)

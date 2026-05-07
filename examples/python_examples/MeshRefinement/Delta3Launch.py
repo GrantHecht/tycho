@@ -446,7 +446,9 @@ if __name__ == "__main__":
     ###########################################################################
 
     ## All phases continuous in everything but mass (var 6)
-    ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+    ocp.add_forward_link_equal_con(
+        phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10], auto_scale="auto"
+    )
 
     ocp.optimizer.set_opt_ls_mode("L1")
     ocp.optimizer.set_soe_ls_mode("L1")

@@ -136,9 +136,11 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ocp.add_phase(aphase)
         ocp.add_phase(dphase)
 
-        ocp.add_forward_link_equal_con(aphase, dphase, [0, 1, 2, 3, 4])
+        ocp.add_forward_link_equal_con(
+            aphase, dphase, [0, 1, 2, 3, 4], auto_scale="auto"
+        )
         ocp.add_direct_link_equal_con(
-            aphase, "ODEParams", [0], dphase, "ODEParams", [0]
+            aphase, "ODEParams", [0], dphase, "ODEParams", [0], auto_scale="auto"
         )
 
         ocp.optimizer.set_opt_ls_mode("L1")

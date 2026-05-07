@@ -33,7 +33,9 @@ class test_VectorFunctions(unittest.TestCase):
         def Adjoint(X):
             return Fun.adjointgradient(X, L)
 
-        JacFun = ast.vector_functions.PyVectorFunction(IRows, ORows, Value, jsize, jsize)
+        JacFun = ast.vector_functions.PyVectorFunction(
+            IRows, ORows, Value, jsize, jsize
+        )
         HessFun = ast.vector_functions.PyVectorFunction(
             IRows, IRows, Adjoint, hsize, hsize
         )

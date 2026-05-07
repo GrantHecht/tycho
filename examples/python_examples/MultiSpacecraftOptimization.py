@@ -130,7 +130,12 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 
     # Forward the back state in each phase and the linkParams to the function
     for i in range(0, len(Trajs)):
-        ocp.add_link_equal_con(LinkFun, [(i, "Back", range(0, 7), [], [])], range(0, 7))
+        ocp.add_link_equal_con(
+            LinkFun,
+            [(i, "Back", range(0, 7), [], [])],
+            range(0, 7),
+            auto_scale="auto",
+        )
 
     ocp.add_link_param_equal_con(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
 

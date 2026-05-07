@@ -16,10 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as typy
-
-vf = typy.vector_functions
-oc = typy.optimal_control
-Args = vf.Arguments
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 """
 This example was taken from the Dymos Optimal control library. It is an excellent
@@ -37,18 +36,14 @@ g0 = 9.81
 Lstar = 1000  ## m
 Tstar = 60.0  ## sec
 Mstar = 10  ## kgs
-Astar = Lstar / Tstar**2
 Vstar = Lstar / Tstar
-Rhostar = Mstar / Lstar**3
-Estar = Mstar * (Vstar**2)
-
 
 CD = 0.5
-RhoAir = 1.225 / Rhostar
-RhoIron = 7870 / Rhostar
-h_scale = 8.44e3 / Lstar
-E0 = 400000 / Estar
-g = g0 / Astar
+RhoAir = 1.225
+RhoIron = 7870
+h_scale = 8.44e3
+E0 = 400000
+g = g0
 
 ###########################################
 
@@ -89,8 +84,20 @@ class Cannon(oc.ODEBase):
         rdot = v * vf.cos(gamma)
 
         ode = vf.stack([vdot, gammadot, hdot, rdot])
+
         ##############################################################
-        super().__init__(ode, 4, 0, 1)
+        Vgroups = {}
+        Vgroups["v"] = v
+        Vgroups["gamma"] = gamma
+        Vgroups["h"] = h
+        Vgroups[("r", "range")] = r
+        Vgroups["rad"] = rad
+        Vgroups["t"] = args.t_var()
+
+        super().__init__(ode, 4, 0, 1, Vgroups=Vgroups)
+
+        self.apogee_event = v * vf.sin(gamma)
+        self.ground_contact_event = h
 
 
 def EFunc():
@@ -105,20 +112,8 @@ def Plot(Ascent, Descent):
     AT = np.array(Ascent).T
     DT = np.array(Descent).T
 
-    AT[0] *= Vstar
-    DT[0] *= Vstar
-
     AT[1] *= 180 / np.pi
     DT[1] *= 180 / np.pi
-
-    AT[2] *= Lstar
-    DT[2] *= Lstar
-
-    AT[3] *= Lstar
-    DT[3] *= Lstar
-
-    AT[4] *= Tstar
-    DT[4] *= Tstar
 
     fig = plt.figure()
     ax0 = plt.subplot(421)
@@ -154,8 +149,8 @@ def Plot(Ascent, Descent):
 
 ##############################################################################
 if __name__ == "__main__":
-    rad0 = 0.1 / Lstar
-    h0 = 100 / Lstar
+    rad0 = 0.1
+    h0 = 100
     r0 = 0
     m0 = MFunc(rad0, RhoIron)
     gamma0 = np.deg2rad(45)
@@ -163,7 +158,7 @@ if __name__ == "__main__":
 
     ode = Cannon(CD, RhoAir, RhoIron, h_scale, g)
     integ = ode.integrator(0.01)
-    integ.set_abs_tol(1.0e-14)
+    integ.set_abs_tol(1.0e-12)
 
     IG = np.zeros((6))
     IG[0] = v0
@@ -172,50 +167,59 @@ if __name__ == "__main__":
     IG[3] = r0
     IG[5] = rad0
 
-    def AscentEvent():
-        args = oc.ODEArguments(4, 0, 1)
-        return args[0] * vf.sin(args[1])
+    XtP0 = ode.make_input(v=v0, gamma=gamma0, h=h0, r=r0, rad=rad0)
 
-    AscentIG = integ.integrate_dense(IG, 60 / Tstar, [(AscentEvent(), 0, 1)])[0]
+    AscentIG = integ.integrate_dense(XtP0, 60, [(ode.apogee_event, 0, 1)])[0]
 
     DescentIG = integ.integrate_dense(
-        AscentIG[-1],
-        AscentIG[-1][4] + 1000 / Tstar,
-        [(oc.ODEArguments(4, 0, 1)[2], 0, 1)],
+        AscentIG[-1], AscentIG[-1][4] + 1000, [(ode.ground_contact_event, 0, 1)]
     )[0]
+
     ##########################################################################
+
     tmode = "LGL5"
     nsegs = 128
 
-    aphase = ode.phase(tmode, AscentIG, nsegs)
-    aphase.add_lower_var_bound("ODEParams", 0, 0.0, 1)
-    aphase.add_lower_var_bound("Front", 1, 0.0, 1.0)
-    aphase.add_boundary_value("Front", [2, 3, 4], [h0, r0, 0])
+    units = ode.make_units(v=Vstar, h=Lstar, r=Lstar, rad=Lstar)
 
-    aphase.add_inequal_con("Front", EFunc() * 0.01, [0], [0], [])
-    aphase.add_boundary_value("Back", [1], [0.0])
+    aphase = ode.phase(tmode, AscentIG, nsegs)
+    aphase.set_auto_scaling(True)
+    aphase.set_units(units)
+    aphase.add_lower_var_bound("ODEParams", "rad", 0.0)
+    aphase.add_lower_var_bound("Front", "gamma", 0.0)
+    aphase.add_boundary_value("Front", ["h", "r", "t"], [h0, r0, 0])
+
+    aphase.add_inequal_con("Front", EFunc(), ["v"], ["rad"], [])
+    aphase.add_boundary_value("Back", "gamma", 0.0)
 
     dphase = ode.phase(tmode, DescentIG, nsegs)
-    dphase.add_boundary_value("Back", [2], [0.0])
-    dphase.add_value_objective("Back", 3, -1.0)
+    dphase.set_auto_scaling(True)
+    dphase.set_units(units)
+
+    dphase.add_boundary_value("Back", "h", 0.0)
+    dphase.add_value_objective("Back", "r", -1.0)
 
     ocp = oc.OptimalControlProblem()
+    ocp.set_auto_scaling(True)
     ocp.add_phase(aphase)
     ocp.add_phase(dphase)
 
-    # Enforce continuatiy in time dependent vars
-    ocp.add_forward_link_equal_con(aphase, dphase, [0, 1, 2, 3, 4])
-    ocp.add_direct_link_equal_con(0, "ODEParams", [0], 1, "ODEParams", [0])
+    # Enforce continuity in time dependent vars
+    ocp.add_forward_link_equal_con(aphase, dphase, range(0, 5))
+    # Enforce continuity in ODEParams
+    ocp.add_param_link_equal_con(aphase, dphase, "ODEParams", "rad")
 
-    ocp.optimizer.set_opt_ls_mode("L1")
     ocp.optimize()
 
     Ascent = aphase.return_traj()
     Descent = dphase.return_traj()
 
-    print("Launch Angle:", Ascent[0][1] * 180 / np.pi, " deg")
-    print("Optimized Distance:", Descent[-1][3] * Lstar, " m")
-    print("Optimized Radius:", Descent[-1][-1] * Lstar, " m")
+    gammaopt = ode.get_vars("gamma", Ascent[0])[0]
+    ropt, radopt = ode.get_vars(["r", "rad"], Descent[-1])
+
+    print("Launch Angle:", gammaopt * 180 / np.pi, " deg")
+    print("Optimized Range:", ropt, " m")
+    print("Optimized Radius:", radopt, " cm")
 
     Plot(Ascent, Descent)
 
