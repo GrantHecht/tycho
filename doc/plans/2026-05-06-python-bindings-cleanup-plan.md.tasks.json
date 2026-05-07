@@ -39,7 +39,7 @@
     {
       "id": 4,
       "subject": "Task 5: Remove legacy OCP link API (Python bindings + C++ class overloads)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2,
         3
@@ -53,8 +53,8 @@
       "blockedBy": [
         4
       ],
-      "description": "**Goal:** Rename TychoBind<T>::Build \u2192 ::build, Build_Register \u2192 build_register, and *Build aggregate free functions to snake_case (vector_functions_build, solvers_build, optimal_control_build, utils_build, astro_build, extensions_build, kepler_utils_build, lambert_solvers_build). Internal-only \u2014 does not affect Python API.\n\n**Verify:** `cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \"import _tychopy; _tychopy.software_info()\"`\n\n```json:metadata\n{\"files\":[\"src/bindings/function_registry.h\",\"src/bindings/tycho_module.cpp\",\"src/bindings/bump_allocator_bind.cpp\",\"src/bindings/utils_bind.cpp\",\"src/bindings/astro/\",\"src/bindings/optimal_control/\",\"src/bindings/solvers/\",\"src/bindings/vf/\"],\"verifyCommand\":\"cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \\\"import _tychopy; _tychopy.software_info()\\\" && ctest --test-dir build --output-on-failure\",\"acceptanceCriteria\":[\"TychoBind::Build \u2192 ::build\",\"Build_Register \u2192 build_register\",\"*Build \u2192 *_build\",\"build succeeds\",\"examples pass\",\"clang-format clean\"]}\n```"
+      "description": "**Goal:** Rename TychoBind<T>::Build \u2192 ::build, Build_Register \u2192 build_register, and *Build aggregate free functions to snake_case (vector_functions_build, solvers_build, optimal_control_build, utils_build, astro_build, extensions_build, kepler_utils_build, lambert_solvers_build). Internal-only \u2014 does not affect Python API.\n\n**Verify:** `cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \"import _tychopy; _tychopy.software_info()\"`\n\n```json:metadata\n{\"files\":[\"src/bindings/function_registry.h\",\"src/bindings/tycho_module.cpp\",\"src/bindings/bump_allocator_bind.cpp\",\"src/bindings/utils_bind.cpp\",\"src/bindings/astro/\",\"src/bindings/optimal_control/\",\"src/bindings/solvers/\",\"src/bindings/vf/\"],\"verifyCommand\":\"cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \\\"import _tychopy; _tychopy.software_info()\\\" && ctest --test-dir build --output-on-failure\",\"acceptanceCriteria\":[\"TychoBind::Build \u2192 ::build\",\"Build_Register \u2192 build_register\",\"*Build \u2192 *_build\",\"build succeeds\",\"examples pass\",\"clang-format clean\"]}\n```\n\n**Deferred from Task 5 review:**\n- Delete 6 dead 2-arg add_link_param_{equal,inequal}_con and add_link_param_objective overloads in optimal_control_problem.h (lines 683-691, 743-751, 801-809). They have no Python bindings or C++ callers; functionally redundant with the 3-arg ScaleType variants.\n- Add explicit `#include \"tycho/detail/optimal_control/core/optimal_control_flags.h\"` to ocp_wrapper.h (currently relies on transitive include \u2014 fragile)."
     }
   ],
-  "lastUpdated": "2026-05-07T00:55:09.686825+00:00"
+  "lastUpdated": "2026-05-07T01:49:42.800946+00:00"
 }

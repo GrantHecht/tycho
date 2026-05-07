@@ -127,7 +127,7 @@ struct NumbaVectorFunction
 // ── TychoBind<PyVectorFunction>
 // ───────────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
 
         if constexpr (ORR != 1) {
@@ -155,7 +155,7 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
 
 // ── TychoBind<NumbaVectorFunction> ───────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
                          double>());

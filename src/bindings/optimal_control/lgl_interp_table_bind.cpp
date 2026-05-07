@@ -23,7 +23,7 @@ using namespace tycho::astro;
 using namespace tycho::utils;
 using VectorFunctionalX = GenericFunction<-1, -1>;
 
-void TychoBind<LGLInterpTable>::Build(nb::module_ &m) {
+void TychoBind<LGLInterpTable>::build(nb::module_ &m) {
     auto obj = nb::class_<LGLInterpTable>(m, "LGLInterpTable");
     obj.def(nb::init<VectorFunctionalX, int, int, TranscriptionModes,
                      const std::vector<Eigen::VectorXd> &, int>());

@@ -28,7 +28,7 @@ using namespace tycho::utils;
 // and cannot be in CommonFunctionsBind.h since IOScaled.h is not included by CommonFunctions.h.
 namespace tycho {
 template <class Func> struct TychoBind<IOScaled<Func>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<IOScaled<Func>>(m, name);
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());
         bind::DenseBaseBuild<IOScaled<Func>>(obj);
@@ -49,7 +49,7 @@ template <class Func> struct TychoBind<IOScaled<Func>> {
 #endif
 
 namespace tycho {
-void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
+void vector_functions_build(FunctionRegistry &reg, nb::module_ &m);
 void VectorFunctionBuildPart1(FunctionRegistry &reg, nb::module_ &m);
 void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m);
 void ArgsSegBuildPart1(FunctionRegistry &reg, nb::module_ &m);
@@ -62,7 +62,7 @@ void FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m);
 void MatrixFunctionBuild(nb::module_ &m);
 } // namespace tycho
 
-void tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::vector_functions_build(FunctionRegistry &reg, nb::module_ &m) {
     auto &mod = reg.getVectorFunctionsModule();
 
     using Gen = GenericFunction<-1, -1>;
@@ -92,15 +92,15 @@ void tycho::VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m) {
     bind::ConditionalBuild(mod);
     bind::ComparativeBuild(mod);
 
-    reg.Build_Register<PyVectorFunction<-1, -1>>(mod, "PyVectorFunction");
-    reg.Build_Register<PyVectorFunction<-1, 1>>(mod, "PyScalarFunction");
-    reg.Build_Register<NumbaVectorFunction<-1, -1>>(mod, "NumbaVectorFunction");
-    reg.Build_Register<NumbaVectorFunction<-1, 1>>(mod, "NumbaScalarFunction");
+    reg.build_register<PyVectorFunction<-1, -1>>(mod, "PyVectorFunction");
+    reg.build_register<PyVectorFunction<-1, 1>>(mod, "PyScalarFunction");
+    reg.build_register<NumbaVectorFunction<-1, -1>>(mod, "NumbaVectorFunction");
+    reg.build_register<NumbaVectorFunction<-1, 1>>(mod, "NumbaScalarFunction");
 
-    reg.Build_Register<Constant<-1, -1>>(mod, "ConstantVector");
-    reg.Build_Register<Constant<-1, 1>>(mod, "ConstantScalar");
+    reg.build_register<Constant<-1, -1>>(mod, "ConstantVector");
+    reg.build_register<Constant<-1, 1>>(mod, "ConstantScalar");
 
-    reg.Build_Register<IOScaled<Gen>>(mod, "IOScaled");
+    reg.build_register<IOScaled<Gen>>(mod, "IOScaled");
 
     nb::enum_<InterpType>(mod, "InterpType")
         .value("Cubic", InterpType::Cubic)

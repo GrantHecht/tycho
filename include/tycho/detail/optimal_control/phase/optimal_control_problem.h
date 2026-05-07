@@ -680,17 +680,6 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         return this->add_link_param_equal_con(lc, lpvs, scale_t);
     }
 
-    int add_link_param_equal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
-        std::vector<Eigen::VectorXi> empty;
-        auto LC = LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs);
-        return add_func_impl(LC, this->link_equalities_, "Link Equality Constraint");
-    }
-    int add_link_param_equal_con(VectorFunctionalX lc, VectorXi lpvs) {
-        std::vector<Eigen::VectorXi> lpvss;
-        lpvss.push_back(lpvs);
-        return this->add_link_param_equal_con(lc, lpvss);
-    }
-
     ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////
 
@@ -739,20 +728,8 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         lpvs.push_back(lpv);
         return this->add_link_param_inequal_con(lc, lpvs, scale_t);
     }
-
-    int add_link_param_inequal_con(VectorFunctionalX lc, std::vector<VectorXi> lpvs) {
-        std::vector<Eigen::VectorXi> empty;
-        auto LC = LinkConstraint(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs);
-        return add_func_impl(LC, this->link_inequalities_, "Link Inequality Constraint");
-    }
-    int add_link_param_inequal_con(VectorFunctionalX lc, VectorXi lpvs) {
-        std::vector<Eigen::VectorXi> lpvss;
-        lpvss.push_back(lpvs);
-        return this->add_link_param_inequal_con(lc, lpvss);
-    }
     ////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////
-
 
     int add_link_objective(ScalarFunctionalX lc, std::vector<PhasePack> packs, VarIndexType lv,
                            ScaleType scale_t) {
@@ -796,17 +773,6 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         std::vector<Eigen::VectorXi> lpvs;
         lpvs.push_back(lpv);
         return this->add_link_param_objective(lc, lpvs, scale_t);
-    }
-
-    int add_link_param_objective(ScalarFunctionalX lc, std::vector<VectorXi> lpvs) {
-        std::vector<Eigen::VectorXi> empty;
-        auto LC = LinkObjective(lc, LinkFlags::LinkParams, empty, empty, empty, empty, lpvs);
-        return add_func_impl(LC, this->link_objectives_, "Link Objective");
-    }
-    int add_link_param_objective(ScalarFunctionalX lc, VectorXi lpvs) {
-        std::vector<Eigen::VectorXi> lpvss;
-        lpvss.push_back(lpvs);
-        return this->add_link_param_objective(lc, lpvss);
     }
 
     ///////////////////////////////////////////////////

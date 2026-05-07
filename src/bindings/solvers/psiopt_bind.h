@@ -24,7 +24,7 @@ namespace tycho {
 using namespace tycho::solvers;
 
 template <> struct TychoBind<PSIOPT> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho

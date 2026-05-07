@@ -24,10 +24,10 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
-void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
+void lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
-void tycho::LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m) {
 
     // The scalar lambert_izzo overloads NaN-poison V1/V2 when the underlying
     // iteration fails to converge within maxiters=20.  Translate at the

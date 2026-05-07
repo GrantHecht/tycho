@@ -21,5 +21,5 @@ void BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m);
 
 void tycho::BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m) {
     auto odemod = nb::borrow<nb::module_>(m.attr("kepler"));
-    reg.template Build_Register<Integrator<Kepler>>(odemod, "integrator");
+    reg.template build_register<Integrator<Kepler>>(odemod, "integrator");
 }

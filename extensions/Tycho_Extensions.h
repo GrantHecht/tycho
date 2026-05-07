@@ -29,7 +29,7 @@ using vf::VecRef;
 using vf::VectorFunction;
 
 struct CR3BP_FDiff : VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
-                                DenseDerivativeMode::FDiffFwd> {
+                                    DenseDerivativeMode::FDiffFwd> {
     using Base = VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDiffCentArray,
                                 DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)

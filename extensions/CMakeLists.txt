@@ -9,7 +9,7 @@ target_compile_options(tycho_extensions PRIVATE ${COMPILE_FLAGS})
 
 if(ENABLE_PYTHON_BINDINGS)
     # Python binding layer for extensions — compiled WITH TYCHO_PYTHON_BINDINGS.
-    # Contains TychoBind<> specializations and ExtensionsBuild().
+    # Contains TychoBind<> specializations and extensions_build().
     # FunctionRegistry, TychoBind<T>, and binding helpers are provided by the
     # pch_bindings PCH (pch_nb.h -> FunctionRegistry.h, VectorFunctionsBind.h).
     add_library(tycho_extensions_bindings STATIC Bindings/TychoExtensionsBind.cpp)

@@ -32,7 +32,7 @@ using PhasePack = std::tuple<PhaseRefType, RegionType, VarIndexType, VarIndexTyp
 static void
 build_link_interface(nb::class_<OptimalControlProblemBase, OptimizationProblemBase> &obj);
 
-void TychoBind<OptimalControlProblemBase>::Build(nb::module_ &m) {
+void TychoBind<OptimalControlProblemBase>::build(nb::module_ &m) {
     auto obj =
         nb::class_<OptimalControlProblemBase, OptimizationProblemBase>(m, "OptimalControlProblem");
     obj.def(nb::init<>());
@@ -278,4 +278,3 @@ build_link_interface(nb::class_<OptimalControlProblemBase, OptimizationProblemBa
                 nb::arg("auto_scale").none() = std::string("auto"));
     }
 }
-

@@ -24,7 +24,7 @@ namespace tycho {
 using namespace tycho::utils;
 
 template <> struct TychoBind<BumpAllocator> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho

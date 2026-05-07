@@ -28,7 +28,7 @@ using ScalarFunctionalX = GenericFunction<-1, 1>;
 using StateConstraint = StateFunction<VectorFunctionalX>;
 using StateObjective = StateFunction<ScalarFunctionalX>;
 
-void TychoBind<ODEPhaseBase>::Build(nb::module_ &m) {
+void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
     auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
     obj.doc() = "Base Class for All Optimal Control Phases";
 

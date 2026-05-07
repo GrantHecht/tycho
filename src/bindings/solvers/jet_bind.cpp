@@ -24,7 +24,7 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<Jet>::Build(nb::module_ &m) {
+void TychoBind<Jet>::build(nb::module_ &m) {
     auto obj = nb::class_<Jet>(m, "Jet");
 
     obj.def_static(

@@ -20,20 +20,20 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
-void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+void astro_build(FunctionRegistry &reg, nb::module_ &m);
 void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
 void BuildKeplerIntegrator(FunctionRegistry &reg, nb::module_ &m);
-void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
-void LambertSolversBuild(FunctionRegistry &reg, nb::module_ &m);
+void kepler_utils_build(FunctionRegistry &reg, nb::module_ &m);
+void lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
-void tycho::AstroBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::astro_build(FunctionRegistry &reg, nb::module_ &m) {
     auto mod = m.def_submodule("astro");
 
     BuildKeplerMod(reg, mod);
     BuildKeplerIntegrator(reg, mod);
-    KeplerUtilsBuild(reg, mod);
-    LambertSolversBuild(reg, mod);
+    kepler_utils_build(reg, mod);
+    lambert_solvers_build(reg, mod);
 
     /////////////////////////////////////////////////////////////
     //////////// Binding Misc CPP Functions here for now ////////

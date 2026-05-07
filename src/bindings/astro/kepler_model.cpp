@@ -23,7 +23,7 @@ using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
 template <> struct TychoBind<KeplerPropagator> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<KeplerPropagator>(m, name);
         obj.def(nb::init<double>());
         bind::DenseBaseBuild<KeplerPropagator>(obj);
@@ -38,7 +38,7 @@ using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
 template <> struct TychoBind<KeplerPhase> {
-    static void Build(nb::module_ &m) {
+    static void build(nb::module_ &m) {
         auto phase = nb::class_<KeplerPhase, ODEPhaseBase>(m, "phase");
         bind::ODEPhaseBuildImpl<Kepler>(phase);
         phase.def_rw("integrator", &KeplerPhase::integrator_);
@@ -54,7 +54,7 @@ using namespace tycho::oc;
 using namespace tycho::astro;
 using namespace tycho::integrators;
 template <> struct TychoBind<Kepler> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Kepler>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<Kepler>(obj);
         obj.def("phase", [](const Kepler &od, TranscriptionModes Tmode) {
@@ -80,7 +80,7 @@ void BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m);
 
 void tycho::BuildKeplerMod(FunctionRegistry &reg, nb::module_ &m) {
     auto odemod = m.def_submodule("kepler");
-    reg.template Build_Register<Kepler>(odemod, "ode");
-    reg.Build_Register<KeplerPropagator>(odemod, "KeplerPropagator");
-    TychoBind<KeplerPhase>::Build(odemod);
+    reg.template build_register<Kepler>(odemod, "ode");
+    reg.build_register<KeplerPropagator>(odemod, "KeplerPropagator");
+    TychoBind<KeplerPhase>::build(odemod);
 }

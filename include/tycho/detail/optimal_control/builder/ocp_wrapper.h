@@ -12,6 +12,7 @@
 #pragma once
 
 #include "tycho/detail/optimal_control/builder/phase_wrapper.h"
+#include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 
 namespace tycho {
@@ -89,8 +90,7 @@ class OptimalControlProblem {
 
     /// Link two phases with an index vector.
     /// Returns one constraint index per consecutive phase pair.
-    std::vector<int> add_forward_link_equal_con(Phase &p1, Phase &p2,
-                                                const Eigen::VectorXi &vars) {
+    std::vector<int> add_forward_link_equal_con(Phase &p1, Phase &p2, const Eigen::VectorXi &vars) {
         return ocp_.add_forward_link_equal_con(p1.base_ptr(), p2.base_ptr(), vars,
                                                ScaleModes::AUTO);
     }

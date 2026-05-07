@@ -83,15 +83,15 @@ static void OCPFlagsBuild(nb::module_ &m) {
           nb::overload_cast<const std::string &>(&strto_PhaseRegionFlag));
 }
 
-void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
+void optimal_control_build(FunctionRegistry &reg, nb::module_ &m) {
     auto &oc = reg.getOptimalControlModule();
     RKFlagsBuild(oc);
     OCPFlagsBuild(oc);
 
-    TychoBind<StateFunction<GenericFunction<-1, -1>>>::Build(oc, "StateConstraint");
-    TychoBind<StateFunction<GenericFunction<-1, 1>>>::Build(oc, "StateObjective");
+    TychoBind<StateFunction<GenericFunction<-1, -1>>>::build(oc, "StateConstraint");
+    TychoBind<StateFunction<GenericFunction<-1, 1>>>::build(oc, "StateObjective");
 
-    TychoBind<MeshIterateInfo>::Build(oc);
+    TychoBind<MeshIterateInfo>::build(oc);
 
     // EventPack: 3-arg ctor for explicit C++ construction, tuple-accepting
     // init so Python callers can pass (vf, direction, stop_count) tuples
@@ -117,17 +117,17 @@ void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m) {
                      &tycho::integrators::EventPack::set_stop_count);
     nb::implicitly_convertible<nb::tuple, tycho::integrators::EventPack>();
 
-    TychoBind<ODEPhaseBase>::Build(oc);
-    TychoBind<OptimalControlProblemBase>::Build(oc);
-    TychoBind<LGLInterpTable>::Build(oc);
+    TychoBind<ODEPhaseBase>::build(oc);
+    TychoBind<OptimalControlProblemBase>::build(oc);
+    TychoBind<LGLInterpTable>::build(oc);
 
-    reg.Build_Register<InterpFunction<-1>>(oc, "InterpFunction");
-    reg.Build_Register<InterpFunction<1>>(oc, "InterpFunction_1");
-    reg.Build_Register<InterpFunction<3>>(oc, "InterpFunction_3");
-    reg.Build_Register<InterpFunction<6>>(oc, "InterpFunction_6");
+    reg.build_register<InterpFunction<-1>>(oc, "InterpFunction");
+    reg.build_register<InterpFunction<1>>(oc, "InterpFunction_1");
+    reg.build_register<InterpFunction<3>>(oc, "InterpFunction_3");
+    reg.build_register<InterpFunction<6>>(oc, "InterpFunction_6");
 
-    TychoBind<FDDerivArbitrary<Eigen::VectorXd>>::Build(oc, "FiniteDiffTable");
-    TychoBind<ODEArguments<-1, -1, -1>>::Build(oc, "ODEArguments");
+    TychoBind<FDDerivArbitrary<Eigen::VectorXd>>::build(oc, "FiniteDiffTable");
+    TychoBind<ODEArguments<-1, -1, -1>>::build(oc, "ODEArguments");
 
     GenericODESBuildPart1(reg, oc);
     GenericODESBuildPart2(reg, oc);

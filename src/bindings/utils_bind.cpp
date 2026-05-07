@@ -19,7 +19,7 @@
 namespace tycho {
 using namespace tycho::utils;
 
-void UtilsBuild(nb::module_ &m) {
+void utils_build(nb::module_ &m) {
     auto um = m.def_submodule("utils", "Contains miscilanaeous utilities");
     um.def("get_core_count", &tycho::utils::get_core_count);
     um.def("set_num_threads", &tycho::utils::set_num_threads, nb::arg("n"),
@@ -27,7 +27,7 @@ void UtilsBuild(nb::module_ &m) {
            "n=1 for single-threaded mode, n>1 to use n threads.");
     um.def("get_num_threads", &tycho::utils::get_num_threads,
            "Get the current thread count setting. 1 = single-threaded mode.");
-    TychoBind<BumpAllocator>::Build(um);
+    TychoBind<BumpAllocator>::build(um);
 }
 
 } // namespace tycho
