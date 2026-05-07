@@ -10,7 +10,7 @@
     {
       "id": 1,
       "subject": "Task 2: Drop duplicate PascalCase factory aliases",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0
       ],
@@ -56,5 +56,5 @@
       "description": "**Goal:** Rename TychoBind<T>::Build \u2192 ::build, Build_Register \u2192 build_register, and *Build aggregate free functions to snake_case (vector_functions_build, solvers_build, optimal_control_build, utils_build, astro_build, extensions_build, kepler_utils_build, lambert_solvers_build). Internal-only \u2014 does not affect Python API.\n\n**Verify:** `cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \"import _tychopy; _tychopy.software_info()\"`\n\n```json:metadata\n{\"files\":[\"src/bindings/function_registry.h\",\"src/bindings/tycho_module.cpp\",\"src/bindings/bump_allocator_bind.cpp\",\"src/bindings/utils_bind.cpp\",\"src/bindings/astro/\",\"src/bindings/optimal_control/\",\"src/bindings/solvers/\",\"src/bindings/vf/\"],\"verifyCommand\":\"cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \\\"import _tychopy; _tychopy.software_info()\\\" && ctest --test-dir build --output-on-failure\",\"acceptanceCriteria\":[\"TychoBind::Build \u2192 ::build\",\"Build_Register \u2192 build_register\",\"*Build \u2192 *_build\",\"build succeeds\",\"examples pass\",\"clang-format clean\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-06T23:45:35.963472+00:00"
+  "lastUpdated": "2026-05-06T23:53:17.982336+00:00"
 }
