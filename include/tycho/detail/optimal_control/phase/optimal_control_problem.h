@@ -587,9 +587,19 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (fphase < 0)
             fphase = (this->phases.size() + fphase);
 
+        // Validate both endpoints up-front: the insertion loop calls add_func_impl
+        // per iteration, so a mid-loop validation failure (e.g. fphase out of range)
+        // would leave earlier link constraints already inserted, producing duplicates
+        // on retry.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent phase:{0:}\n", iphase));
+                "Link Equality constraint references non-existent starting phase:{0:}\n",
+                iphase));
+        }
+        if (fphase < 0 || fphase >= this->phases.size()) {
+            throw std::invalid_argument(fmt::format(
+                "Link Equality constraint references non-existent ending phase:{0:}\n",
+                fphase));
         }
 
         int vsize = this->phases[iphase]->get_xt_up_vars(PhaseRegionFlags::Front, vars).size();
@@ -614,13 +624,20 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                                   ScaleType scale_t) {
 
         int phase = get_phase_num(p0);
+        int phase1 = get_phase_num(p1);
 
         if (phase < 0)
             phase = (this->phases.size() + phase);
+        if (phase1 < 0)
+            phase1 = (this->phases.size() + phase1);
 
         if (phase < 0 || phase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
                 "Link Equality constraint references non-existent phase:{0:}\n", phase));
+        }
+        if (phase1 < 0 || phase1 >= this->phases.size()) {
+            throw std::invalid_argument(fmt::format(
+                "Link Equality constraint references non-existent phase:{0:}\n", phase1));
         }
 
         PhaseRegionFlags reg0 = get_PhaseRegion(reg0_t);
@@ -651,9 +668,16 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (fphase < 0)
             fphase = (this->phases.size() + fphase);
 
+        // Validate both endpoints up-front: see add_forward_link_equal_con for rationale.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent phase:{0:}\n", iphase));
+                "Link Equality constraint references non-existent starting phase:{0:}\n",
+                iphase));
+        }
+        if (fphase < 0 || fphase >= this->phases.size()) {
+            throw std::invalid_argument(fmt::format(
+                "Link Equality constraint references non-existent ending phase:{0:}\n",
+                fphase));
         }
 
         std::vector<int> idxs;
