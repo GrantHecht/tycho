@@ -26,6 +26,7 @@
 #include <string>
 #include <type_traits>
 #include <typeinfo>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -65,8 +66,6 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
 
     using VectorFunctionalX = GenericFunction<-1, -1>;
     using ScalarFunctionalX = GenericFunction<-1, 1>;
-
-    using RegVec = Eigen::Matrix<PhaseRegionFlags, -1, 1>;
 
     using LinkConstraint = LinkFunction<VectorFunctionalX>;
     using LinkObjective = LinkFunction<ScalarFunctionalX>;
@@ -344,18 +343,6 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         return ptl;
     }
 
-    std::vector<VectorXi> ptl_from_phases(std::vector<std::vector<PhasePtr>> ptlnamevec) {
-        std::vector<VectorXi> ptl;
-        for (auto &appl : ptlnamevec) {
-            VectorXi ptlv(appl.size());
-            for (int i = 0; i < appl.size(); i++) {
-                ptlv[i] = this->get_phase_num(appl[i]);
-            }
-            ptl.push_back(ptlv);
-        }
-        return ptl;
-    }
-
     void remove_phase(int ith) {
         this->reset_transcription();
         if (ith < 0)
@@ -532,13 +519,16 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
 
     template <class FuncType, class FuncMap>
     int add_func_impl(FuncType func, FuncMap &map, const std::string &funcstr) {
+        // Validate before any mutation: check_function_size can throw, and
+        // any state we mutate before the throw would leak into the OCP and
+        // duplicate on retry.
+        int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
+        func.storage_index_ = index;
+        check_function_size(func, funcstr);
+
         this->reset_transcription();
         this->invalidate_post_opt_info();
-        int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
-        map[index] = func;
-        map[index].storage_index_ = index;
-
-        check_function_size(map.at(index), funcstr);
+        map[index] = std::move(func);
         return index;
     }
 
@@ -593,13 +583,17 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         // on retry.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent starting phase:{0:}\n",
-                iphase));
+                "Link Equality constraint references non-existent starting phase:{0:}\n", iphase));
         }
         if (fphase < 0 || fphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent ending phase:{0:}\n",
-                fphase));
+                "Link Equality constraint references non-existent ending phase:{0:}\n", fphase));
+        }
+        if (iphase >= fphase) {
+            throw std::invalid_argument(
+                fmt::format("add_forward_link_equal_con requires iphase < fphase; got iphase={0:}, "
+                            "fphase={1:}\n",
+                            iphase, fphase));
         }
 
         int vsize = this->phases[iphase]->get_xt_up_vars(PhaseRegionFlags::Front, vars).size();
@@ -631,6 +625,10 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (phase1 < 0)
             phase1 = (this->phases.size() + phase1);
 
+        // Validate both endpoints up-front so that an out-of-range phase
+        // throws std::invalid_argument with the bad phase number, instead
+        // of std::out_of_range from the deeper phases[phase] access in
+        // get_xt_up_vars below. Mirrors add_forward_link_equal_con.
         if (phase < 0 || phase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
                 "Link Equality constraint references non-existent phase:{0:}\n", phase));
@@ -671,13 +669,17 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         // Validate both endpoints up-front: see add_forward_link_equal_con for rationale.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent starting phase:{0:}\n",
-                iphase));
+                "Link Equality constraint references non-existent starting phase:{0:}\n", iphase));
         }
         if (fphase < 0 || fphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
-                "Link Equality constraint references non-existent ending phase:{0:}\n",
-                fphase));
+                "Link Equality constraint references non-existent ending phase:{0:}\n", fphase));
+        }
+        if (iphase >= fphase) {
+            throw std::invalid_argument(
+                fmt::format("add_param_link_equal_con requires iphase < fphase; got iphase={0:}, "
+                            "fphase={1:}\n",
+                            iphase, fphase));
         }
 
         std::vector<int> idxs;
