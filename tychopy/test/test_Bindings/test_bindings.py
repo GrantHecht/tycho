@@ -1,5 +1,5 @@
 """
-Comprehensive tests for recently changed binding code in src/Bindings/.
+Comprehensive tests for recently changed binding code in src/bindings/.
 
 Covers:
   - PyVectorFunction compute paths (numpy, list, tuple) and thread_safe property
@@ -320,6 +320,70 @@ class TestModuleLayoutHardBreak(unittest.TestCase):
         for name in ["vector_functions", "optimal_control", "solvers", "utils", "astro"]:
             importlib.import_module(f"_tychopy.{name}")
             importlib.import_module(f"tychopy.{name}")
+
+
+# ---------------------------------------------------------------------------
+# TestLegacyLinkAPIRemoved
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyLinkAPIRemoved(unittest.TestCase):
+    """Pin the legacy OCP link API removal as a hard break. PR #50
+    deleted ``LinkFlags``, ``LinkConstraint``, and ``LinkObjective``
+    from the ``_tychopy.optimal_control`` namespace and removed ~30
+    legacy ``add_link_*`` overloads taking a pre-built ``LinkConstraint``
+    object. If a future change reintroduces any of them as a
+    convenience alias these assertions fail at CI time instead of
+    silently re-softening the API.
+    """
+
+    LEGACY_NAMES = ["LinkFlags", "LinkConstraint", "LinkObjective"]
+
+    def test_legacy_classes_absent(self):
+        oc_mod = ast.optimal_control
+        for name in self.LEGACY_NAMES:
+            with self.assertRaises(
+                AttributeError,
+                msg=f"_tychopy.optimal_control.{name} should not exist",
+            ):
+                getattr(oc_mod, name)
+
+
+# ---------------------------------------------------------------------------
+# TestUncoveredLinkBindings
+# ---------------------------------------------------------------------------
+
+
+class TestUncoveredLinkBindings(unittest.TestCase):
+    """Pin that the four link bindings with zero downstream callers
+    today are registered. ``add_link_inequal_con``, ``add_link_objective``,
+    ``add_link_param_inequal_con``, ``add_link_param_objective`` are
+    bound in ``build_link_interface`` (see
+    ``src/bindings/optimal_control/optimal_control_problem_bind.cpp``)
+    but no test or example exercises them today. If a future refactor
+    silently drops one — or breaks an overload-cast template arg — these
+    assertions catch it before users do.
+    """
+
+    BINDINGS = [
+        "add_link_inequal_con",
+        "add_link_objective",
+        "add_link_param_inequal_con",
+        "add_link_param_objective",
+    ]
+
+    def test_bindings_registered(self):
+        ocp_class = ast.optimal_control.OptimalControlProblem
+        for name in self.BINDINGS:
+            self.assertTrue(
+                hasattr(ocp_class, name),
+                msg=f"OptimalControlProblem.{name} must be registered",
+            )
+            attr = getattr(ocp_class, name)
+            self.assertTrue(
+                callable(attr),
+                msg=f"OptimalControlProblem.{name} must be callable",
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -214,3 +214,120 @@ TEST_F(OcpDirectLinkTest, ParamLinkRejectsBadEndingPhaseWithoutPartialMutation) 
                  std::invalid_argument);
     EXPECT_EQ(ocp.base().link_equalities_.size(), before);
 }
+
+TEST_F(OcpDirectLinkTest, ForwardLinkRejectsBadStartingPhaseWithoutPartialMutation) {
+    // Symmetric coverage to the bad-fphase case: a bad iphase must throw
+    // before any insertion. Pre-fix the fphase pre-check existed but the
+    // iphase pre-check was added in the same commit; this test pins that the
+    // iphase branch is reachable and equally exception-safe.
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    EXPECT_THROW(ocp.base().add_forward_link_equal_con(99, 1, vars, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+TEST_F(OcpDirectLinkTest, ForwardLinkRejectsIphaseGreaterEqualFphase) {
+    // iphase >= fphase used to be a silent no-op: the for-loop ran zero
+    // iterations and returned an empty std::vector<int>, so the user got no
+    // continuity constraints with no diagnostic. Now it must throw.
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+    auto p2 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(2.0, 3.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+    ocp.add_phase(p2);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // iphase > fphase: misordered.
+    EXPECT_THROW(ocp.base().add_forward_link_equal_con(2, 0, vars, ScaleModes::AUTO),
+                 std::invalid_argument);
+    // iphase == fphase: linking a phase to itself.
+    EXPECT_THROW(ocp.base().add_forward_link_equal_con(1, 1, vars, ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+TEST_F(OcpDirectLinkTest, ParamLinkRejectsIphaseGreaterEqualFphase) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+    auto p2 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(2.0, 3.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+    ocp.add_phase(p2);
+
+    Eigen::VectorXi vars(0);
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    EXPECT_THROW(ocp.base().add_param_link_equal_con(2, 0, PhaseRegionFlags::StaticParams, vars,
+                                                     ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_THROW(ocp.base().add_param_link_equal_con(1, 1, PhaseRegionFlags::StaticParams, vars,
+                                                     ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+TEST_F(OcpDirectLinkTest, AddLinkEqualConPartialMutationOnVarsSizeMismatch) {
+    // Pins add_func_impl's validate-before-mutate ordering. Pre-fix:
+    // map[index] = func ran, then check_function_size threw, leaving the
+    // bad entry behind in link_equalities_. Now check_function_size runs
+    // first and the map is untouched on throw.
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    // Functional with IRows = 4, but indexing implies IRows = 2 (one var per
+    // side). check_function_size's PhaseToPhase IRows check (the
+    // "Input size of {} (IRows = {}) does not match that implied by indexing
+    // parameters (IRows = {})." branch) must fire.
+    auto args = Arguments<-1>(4);
+    auto bad_expr = args.head<-1>(2) - args.tail<-1>(2);
+    GenericFunction<-1, -1> bad_func(bad_expr);
+
+    Eigen::VectorXi v_one(1);
+    v_one << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    EXPECT_THROW(ocp.base().add_link_equal_con(bad_func, 0, PhaseRegionFlags::Back, v_one, 1,
+                                               PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before)
+        << "Failed insertion must leave the constraint map untouched";
+
+    // Retry: pre-fix the first insert succeeded into the map and only the
+    // size-check threw, so this would have produced two duplicate entries.
+    EXPECT_THROW(ocp.base().add_link_equal_con(bad_func, 0, PhaseRegionFlags::Back, v_one, 1,
+                                               PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
