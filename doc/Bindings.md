@@ -17,10 +17,20 @@
 > - **Section 9** — Python module paths (`tychopy/VectorFunctions/`,
 >   `tychopy/Astro/`, `tychopy/OptimalControl/`). Real paths are now all
 >   snake_case (`tychopy/vector_functions/`, `tychopy/astro/`,
->   `tychopy/optimal_control/`).
+>   `tychopy/optimal_control/`). The `_vec6_wrap` example in §9 also
+>   uses an outdated `hasattr(arr_or_func, "eval")` discriminator; real
+>   code at `tychopy/astro/__init__.py` uses
+>   `hasattr(arr_or_func, "input_rows")` because Segment / Element /
+>   Arguments deliberately omit `eval`.
 > - **Section 12 (file listing)** — both the directory tree and the per-file
 >   table retain the PascalCase `*Build` aggregate names and
->   `TychoBind<X>::Build` references.
+>   `TychoBind<X>::Build` references. The listing also pre-dates the
+>   Kepler-binding split and is missing
+>   `astro/kepler_integrator.cpp`, `astro/kepler_model.cpp`,
+>   `astro/kepler_utils.cpp`, and
+>   `optimal_control/generic_odes_integrator_part{1..4,6}.cpp`. The
+>   `generic_odes_build_part5.cpp` row was never split out — the on-disk
+>   numbering jumps from `part4` to `part6`.
 >
 > The actual code under `src/bindings/`, `extensions/`, and `tychopy/` is
 > already on the new names. When in doubt, trust the source over this
@@ -129,7 +139,7 @@ The `FunctionRegistry` constructor creates four submodules:
 | `_tychopy.solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
 | `_tychopy.extensions` | `reg.extmod` | User-defined extension types |
 
-The `Astro` submodule is created inside `AstroBuild()` rather than in the registry constructor.
+The `astro` submodule is created inside `astro_build()` rather than in the registry constructor.
 
 ### The `FunctionRegistry` Struct
 

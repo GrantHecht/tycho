@@ -4,6 +4,12 @@
 **Status:** Design approved, ready for implementation plan
 **Author:** Grant Hecht (with Claude Opus 4.7)
 
+> **Example count note:** This design was written before Task 4's
+> `examples/python_examples/UpdatedInterface/` merge collapsed seven
+> duplicate examples into the parent directory. References to "38
+> Python examples" below were accurate at design-authoring time; the
+> post-merge count is **32**.
+
 ## Motivation
 
 The Python bindings for Tycho carry two layers of legacy state from the
@@ -366,6 +372,18 @@ Pre-merge sequence per CLAUDE.md, plus extras specific to this work:
 - Submodule docstrings (currently say things like "SubModule
   Containing..."). Cosmetic; can be improved opportunistically but is
   not required.
+- Nested `Extensions/` subpackages — `tychopy/astro/Extensions/`,
+  `tychopy/optimal_control/Extensions/`, `tychopy/solvers/Extensions/`,
+  `tychopy/utils/Extensions/`, `tychopy/vector_functions/Extensions/`
+  remain PascalCase. Internal callers in
+  `tychopy/astro/{astro_frames.py,astro_models.py}` and
+  `tychopy/vector_functions/__init__.py` still use
+  `from .Extensions.X import …`. Deferred to a follow-up PR alongside
+  the sub-aggregate-helper rename so the snake_case sweep is one
+  coherent change rather than spread across multiple PRs. The
+  top-level `tychopy/Extensions/` (now `tychopy/extensions/`) WAS
+  renamed in this PR — only the nested per-submodule `Extensions/`
+  directories are deferred.
 
 ## Risks
 

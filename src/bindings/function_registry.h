@@ -36,7 +36,7 @@ using namespace tycho::astro;
 using namespace tycho::integrators;
 using namespace tycho::utils;
 
-// Primary template — undefined; specializations in *Bind.h files
+// Primary template — undefined; specializations in *_bind.h files
 template <class T> struct TychoBind;
 
 #ifdef TYCHO_PYTHON_BINDINGS

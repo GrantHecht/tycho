@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Example count note:** This plan was written before Task 4's
+> `examples/python_examples/UpdatedInterface/` merge collapsed seven
+> duplicate examples into the parent directory. References to "38
+> examples" / "38-example suite" / "all 38" below were accurate at
+> plan-authoring time; the post-merge count is **32**
+> (`find examples/python_examples -name "*.py" -not -path
+> "*/UpdatedInterface/*"`). Trust the actual count over the plan body.
+
 **Goal:** Rename Python-facing submodules, packages, and files from PascalCase to snake_case (hard break, no aliases); fully remove the legacy OCP link API (Python bindings + C++ class overloads + builder migration + C++ test migration); drop duplicate PascalCase factory aliases; rename internal C++ binding helper functions for consistency with the project's snake_case convention.
 
 **Architecture:** Six sequential tasks ordered to keep the build green at every step. Task 1 lands the foundational snake_case rename so all subsequent tasks see canonical paths. Tasks 3 and 4 prepare callers (C++ builder, C++ tests, Python examples, Python tests) for the legacy OCP link API removal in Task 5. Task 6 cleans up internal binding helper names last so it doesn't conflict with Task 5's binding edits.
