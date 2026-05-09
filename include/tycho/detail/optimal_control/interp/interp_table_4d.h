@@ -44,7 +44,9 @@ struct InterpTable4D {
     Eigen::VectorXd zs_;
     Eigen::VectorXd ws_;
 
-    // numpy meshgrid ij format (x,y,z,w)
+    // numpy meshgrid ij format (x,y,z,w). ColMajor (Eigen's tensor default)
+    // intentional for cache-friendly inner-loop X-axis stride; see
+    // InterpTable3D's fs_ comment for the layout-conversion rationale.
     Eigen::Tensor<double, 4> fs_;
 
     // Holds f, and all derivatives at each data point contiguously

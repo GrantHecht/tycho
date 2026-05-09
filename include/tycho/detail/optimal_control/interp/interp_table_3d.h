@@ -43,7 +43,12 @@ struct InterpTable3D {
     Eigen::VectorXd ys_;
     Eigen::VectorXd zs_;
 
-    // numpy meshgrid ij format (x,y,z)
+    // numpy meshgrid ij format (x,y,z). ColMajor (Eigen's tensor default) is
+    // intentional: the calc_alphavec inner loop accesses (i, j, k) and
+    // (i+1, j, k) consecutively, which is contiguous in ColMajor (X-axis
+    // stride 1). Layout conversion from numpy's row-major data happens in the
+    // type_caster<Eigen::Tensor> at construction time; see
+    // src/bindings/type_casters.h for the swap_layout()+shuffle() conversion.
     Eigen::Tensor<double, 3> fs_;
 
     Eigen::Tensor<double, 3> fs_dx_;
