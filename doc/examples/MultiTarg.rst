@@ -1,6 +1,22 @@
 Multi-Spacecraft Optimization
 ========================================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename and the legacy OCP link-API removal (PR #50). They still
+   use pre-rename identifiers (``ast.VectorFunctions``, ``ast.OptimalControl``,
+   ``oc.ode_x_u``, ``head3``, ``addPhase``, ``addLinkEqualCon`` taking a
+   ``LinkFlags``/``LinkConstraint`` object, ``setLinkParams``, ``setTraj``,
+   etc.). The actual Python bindings now expose only the snake_case forms
+   (``ast.vector_functions``, ``ast.optimal_control``, ``add_phase``,
+   ``add_link_equal_con(func, packs, lpv, scale=...)``,
+   ``set_link_params``, ``set_traj``), and the legacy ``LinkConstraint``-
+   style API has been removed. Copy-pasting these samples will fail with
+   ``AttributeError`` or ``TypeError``. For a runnable, up-to-date version
+   of this exact problem, see
+   ``examples/python_examples/MultiSpacecraftOptimization.py``. A faithful
+   rewrite of this page is tracked separately.
 
 Performing a multi-spacecraft optimization with ASSET is virtually identically to the single spacecraft case, except for one new constraint that we will focus on later.
 For now, the standard problem procedure is the same, where we need to import everything from ASSET with our standard conventions, as well as some plotting tools for the output.

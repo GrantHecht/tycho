@@ -2,6 +2,30 @@
 Optimal Control Problem Tutorial
 ================================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename and the legacy OCP link-API removal (PR #50). They still
+   use pre-rename identifiers (``ast.VectorFunctions``, ``ast.OptimalControl``,
+   ``XVec()``, ``addPhase``, ``addLinkEqualCon``, ``addLinkParamEqualCon``,
+   ``addLinkInequalCon``, ``addLinkObjective``, ``removeLinkObjective``,
+   ``setLinkParams``, ``setControlMode``, ``setTraj``, ``addValueLock``,
+   ``addLUNormBound``, ``addDeltaTimeObjective``, etc.) along with the old
+   ``LinkConstraint``/``LinkObjective``/``LinkFlags`` Python classes. The
+   actual Python bindings now expose only the snake_case forms
+   (``ast.vector_functions``, ``ast.optimal_control``, ``add_phase``,
+   ``add_forward_link_equal_con``, ``add_direct_link_equal_con``,
+   ``add_link_param_equal_con``, ``add_link_inequal_con``,
+   ``add_link_objective``, ``set_link_params``, ``set_control_mode``,
+   ``set_traj``, ``add_value_lock``, ``add_lu_norm_bound``,
+   ``add_delta_time_objective``), and the legacy ``LinkConstraint``-style
+   API has been removed. Copy-pasting these samples will fail with
+   ``AttributeError``. For runnable, up-to-date code, see the multi-phase
+   scripts under ``examples/python_examples/`` (e.g.
+   ``MultiSpacecraftOptimization.py``, ``MultiPhaseCannon.py``,
+   ``MultiPhaseZermelo.py``, ``Delta3Launch.py``). A faithful rewrite of
+   this tutorial is tracked separately.
+
 The previous section on :ref:`phases <phase-guide>` covers everything you need to know about formulating and solving
 single phase optimal control problems. In this section, we will cover how you can link these 
 phases together into a multi phase optimal control problem using the :code:`oc.OptimalControlProblem` type.
