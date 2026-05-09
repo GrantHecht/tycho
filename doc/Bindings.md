@@ -11,24 +11,33 @@
 >   `UtilsBuild`, `AstroBuild`, `ExtensionsBuild`. Real code now uses
 >   the snake_case forms (`vector_functions_build`, `optimal_control_build`,
 >   `solvers_build`, `utils_build`, `astro_build`, `extensions_build`).
-> - **Sections 3, 4, 11** — references to `TychoBind<T>::Build()` and
+> - **Sections 3, 11** — references to `TychoBind<T>::Build()` and
 >   `Build_Register`. Real code now uses `TychoBind<T>::build()` and
->   `build_register`.
+>   `build_register`. Section 11's example file path
+>   (`tychopy/VectorFunctions/__init__.py`) is also stale — the
+>   snake_case path is `tychopy/vector_functions/__init__.py`.
+> - **Section 4** — the `bind::*Build` free-function helpers
+>   (`DenseBaseBuild`, `SegBuild`, `GenericBuild`, `ODEPhaseBuildImpl`,
+>   etc.) documented here are intentionally still PascalCase per the
+>   deferred sub-aggregate-rename plan. This section is accurate to
+>   current code and is listed here only to flag the asymmetry: the
+>   trait-method `::build` is lower-case but these free-function helpers
+>   remain `*Build`.
 > - **Section 9** — Python module paths (`tychopy/VectorFunctions/`,
 >   `tychopy/Astro/`, `tychopy/OptimalControl/`). Real paths are now all
 >   snake_case (`tychopy/vector_functions/`, `tychopy/astro/`,
->   `tychopy/optimal_control/`). The `_vec6_wrap` example in §9 also
+>   `tychopy/optimal_control/`). The `ODEBaseClass.py` reference in §9
+>   is now `ode_base_class.py`. The `_vec6_wrap` example in §9 also
 >   uses an outdated `hasattr(arr_or_func, "eval")` discriminator; real
 >   code at `tychopy/astro/__init__.py` uses
 >   `hasattr(arr_or_func, "input_rows")` because Segment / Element /
 >   Arguments deliberately omit `eval`.
 > - **Section 12 (file listing)** — both the directory tree and the per-file
 >   table retain the PascalCase `*Build` aggregate names and
->   `TychoBind<X>::Build` references. The listing also pre-dates the
->   Kepler-binding split and is missing
->   `astro/kepler_integrator.cpp`, `astro/kepler_model.cpp`,
->   `astro/kepler_utils.cpp`, and
->   `optimal_control/generic_odes_integrator_part{1..4,6}.cpp`. The
+>   `TychoBind<X>::Build` references. The listing is also missing
+>   `astro/kepler_integrator.cpp` and
+>   `optimal_control/generic_odes_integrator_part{1..4,6}.cpp`
+>   from the Kepler-binding split. The
 >   `generic_odes_build_part5.cpp` row was never split out — the on-disk
 >   numbering jumps from `part4` to `part6`.
 >

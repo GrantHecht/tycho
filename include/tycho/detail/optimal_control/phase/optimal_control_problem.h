@@ -577,10 +577,13 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (fphase < 0)
             fphase = (this->phases.size() + fphase);
 
-        // Validate both endpoints up-front: the insertion loop calls add_func_impl
-        // per iteration, so a mid-loop validation failure (e.g. fphase out of range)
-        // would leave earlier link constraints already inserted, producing duplicates
-        // on retry.
+        // Validate phase indices up-front. The insertion loop calls add_func_impl
+        // per iteration, so a mid-loop *index* failure (e.g. fphase out of range)
+        // would leave earlier link constraints already inserted, producing
+        // duplicates on retry. Body failures inside add_link_equal_con (e.g.
+        // check_function_size on a heterogeneous phase var layout) remain
+        // possible but are caught atomically per insertion by add_func_impl's
+        // validate-before-mutate ordering.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
                 "Link Equality constraint references non-existent starting phase:{0:}\n", iphase));
@@ -625,10 +628,12 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (phase1 < 0)
             phase1 = (this->phases.size() + phase1);
 
-        // Validate both endpoints up-front so that an out-of-range phase
+        // Validate phase indices up-front so that an out-of-range phase
         // throws std::invalid_argument with the bad phase number, instead
         // of std::out_of_range from the deeper phases[phase] access in
-        // get_xt_up_vars below. Mirrors add_forward_link_equal_con.
+        // get_xt_up_vars below. Single-shot insertion (no loop), so body
+        // failures further down are caught atomically by add_func_impl.
+        // Mirrors add_forward_link_equal_con.
         if (phase < 0 || phase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
                 "Link Equality constraint references non-existent phase:{0:}\n", phase));
@@ -666,7 +671,9 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         if (fphase < 0)
             fphase = (this->phases.size() + fphase);
 
-        // Validate both endpoints up-front: see add_forward_link_equal_con for rationale.
+        // Validate phase indices up-front so a mid-loop *index* failure cannot
+        // leave earlier link constraints partially inserted; see
+        // add_forward_link_equal_con for the same rationale and scope.
         if (iphase < 0 || iphase >= this->phases.size()) {
             throw std::invalid_argument(fmt::format(
                 "Link Equality constraint references non-existent starting phase:{0:}\n", iphase));

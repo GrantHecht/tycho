@@ -41,7 +41,7 @@ void tycho::extensions_build(FunctionRegistry &reg, nb::module_ &extmod) {
 
     extmod.def("cpp_cr3bp", [](double mu) {
         // Example of how to write CR3BP dynamics as C++ vector function and bind it to python
-        // After compilation can import in python w/ tycho.Extensions.cpp_cr3bp(mu)
+        // After compilation can import in python w/ tychopy.extensions.cpp_cr3bp(mu)
         // Docs on CPP vector function interface forthcoming but in general it mimics python
 
         auto args = Arguments<7>();

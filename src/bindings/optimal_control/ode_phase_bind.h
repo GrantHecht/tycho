@@ -16,7 +16,7 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// TychoBind specializations for ODEPhase<DODE>, StateFunction<T>, LinkFunction<T>,
+// TychoBind specializations for ODEPhase<DODE>, StateFunction<T>,
 // FDDerivArbitrary<T>, ODEPhaseBase, LGLInterpTable, and OptimalControlProblemBase.
 
 #include "tycho/detail/optimal_control/core/link_function.h"
