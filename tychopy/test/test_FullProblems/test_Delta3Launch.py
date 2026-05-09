@@ -124,7 +124,8 @@ def TargetOrbit(at, et, it, Ot, Wt):
     rvec, vvec = Args(6).tolist([(0, 3), (3, 3)])
 
     hvec = rvec.cross(vvec)
-    nvec = vf.cross([0, 0, 1], hvec)
+    # np.array required: the bare _tychopy binding takes Eigen::Vector3d, no list caster.
+    nvec = vf.cross(np.array([0, 0, 1]), hvec)
 
     r = rvec.norm()
     v = vvec.norm()
