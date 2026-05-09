@@ -125,7 +125,10 @@ class test_InterpTables(unittest.TestCase):
                     jx1 = func.jacobian(xin)
 
                     fxerr = abs(Val - fx).max()
-                    jxerr = abs(dVal - jx.T).max()
+                    # jx is (1, d) for a scalar-output table; flatten to (d,) before
+                    # subtracting dVal — `jx.T` would broadcast (d,)-(d,1) to a (d,d)
+                    # Cartesian-product matrix and .max() would pick |df/dx_i - df/dx_j|.
+                    jxerr = abs(dVal - jx[0]).max()
                     gxerr = abs(dVal * lm - gx).max()
                     hxerr = abs(d2Val * lm - hx).max()
                     selffxerr = abs(fx1 - fx).max()
@@ -189,7 +192,7 @@ class test_InterpTables(unittest.TestCase):
                         fx, jx, gx, hx = func.computeall(xin, [lm])
 
                         fxerr = abs(Val - fx).max()
-                        jxerr = abs(dVal - jx.T).max()
+                        jxerr = abs(dVal - jx[0]).max()  # see Interp2D_test for shape rationale
                         gxerr = abs(dVal * lm - gx).max()
                         hxerr = abs(d2Val * lm - hx).max()
 
@@ -257,7 +260,7 @@ class test_InterpTables(unittest.TestCase):
                             fx, jx, gx, hx = func.computeall(xin, [lm])
 
                             fxerr = abs(Val - fx).max()
-                            jxerr = abs(dVal - jx.T).max()
+                            jxerr = abs(dVal - jx[0]).max()  # see Interp2D_test for shape rationale
                             gxerr = abs(dVal * lm - gx).max()
                             hxerr = abs(d2Val * lm - hx).max()
 
