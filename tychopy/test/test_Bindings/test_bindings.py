@@ -354,15 +354,46 @@ class TestLegacyLinkAPIRemoved(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+def _build_2phase_ocp():
+    """Two phases of the trivial ODE x' = u, with one link param.
+    Used by TestUncoveredLinkBindings to exercise each link binding.
+    """
+    oc = ast.optimal_control
+
+    class _SimpleODE(oc.ode_x_u.ode):
+        def __init__(self):
+            args = oc.ODEArguments(1, 1)
+            x_dot = args.u_var(0)
+            super().__init__(vf.stack([x_dot]), 1, 1)
+
+    ode = _SimpleODE()
+
+    n = 8
+    traj_a = [np.array([i / (n - 1), i / (n - 1), 1.0]) for i in range(n)]
+    traj_b = [np.array([1.0 + i / (n - 1), i / (n - 1) + 1.0, 1.0]) for i in range(n)]
+
+    p0 = ode.phase("LGL3", traj_a, n - 1)
+    p1 = ode.phase("LGL3", traj_b, n - 1)
+
+    ocp = oc.OptimalControlProblem()
+    ocp.add_phase(p0)
+    ocp.add_phase(p1)
+    ocp.set_link_params(np.array([0.0]))
+    return ocp
+
+
 class TestUncoveredLinkBindings(unittest.TestCase):
     """Pin that the four link bindings with zero downstream callers
-    today are registered. ``add_link_inequal_con``, ``add_link_objective``,
-    ``add_link_param_inequal_con``, ``add_link_param_objective`` are
-    bound in ``build_link_interface`` (see
+    today are (a) registered AND (b) actually callable end-to-end. A
+    broken ``nb::overload_cast`` template arg compiles to a callable
+    attribute and only fails at call time with ``TypeError``, so a
+    pure ``hasattr``/``callable`` check would not catch it.
+    ``add_link_inequal_con``, ``add_link_objective``,
+    ``add_link_param_inequal_con``, and ``add_link_param_objective``
+    are bound in ``build_link_interface`` (see
     ``src/bindings/optimal_control/optimal_control_problem_bind.cpp``)
-    but no test or example exercises them today. If a future refactor
-    silently drops one — or breaks an overload-cast template arg — these
-    assertions catch it before users do.
+    but no test or example exercises them today. These tests construct
+    a 2-phase OCP and invoke each binding.
     """
 
     BINDINGS = [
@@ -384,6 +415,42 @@ class TestUncoveredLinkBindings(unittest.TestCase):
                 callable(attr),
                 msg=f"OptimalControlProblem.{name} must be callable",
             )
+
+    def test_add_link_inequal_con_packs_form_callable(self):
+        ocp = _build_2phase_ocp()
+        # IRows = 2: one var per phase. f(a, b) = a - b returns a length-1 vector.
+        cons_func = Args(2).head(1) - Args(2).tail(1)
+        idx = ocp.add_link_inequal_con(
+            cons_func,
+            [(0, "Back", [0], [], []), (1, "Front", [0], [], [])],
+        )
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_objective_packs_form_callable(self):
+        ocp = _build_2phase_ocp()
+        # Scalar function f(a, b) = (a - b) . (a - b)  — IRows = 2, ORows = 1.
+        diff = Args(2).head(1) - Args(2).tail(1)
+        obj_func = diff.dot(diff)
+        idx = ocp.add_link_objective(
+            obj_func,
+            [(0, "Back", [0], [], []), (1, "Front", [0], [], [])],
+        )
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_param_inequal_con_callable(self):
+        ocp = _build_2phase_ocp()
+        # Single-link-param scalar function.
+        cons_func = Args(1).head(1)  # vector function with IRows = 1, ORows = 1
+        idx = ocp.add_link_param_inequal_con(cons_func, np.array([0], dtype=np.int32))
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_param_objective_callable(self):
+        ocp = _build_2phase_ocp()
+        # Single-link-param scalar function f(p) = p . p.
+        a = Args(1)
+        obj_func = a.dot(a)
+        idx = ocp.add_link_param_objective(obj_func, np.array([0], dtype=np.int32))
+        self.assertIsInstance(idx, int)
 
 
 # ---------------------------------------------------------------------------

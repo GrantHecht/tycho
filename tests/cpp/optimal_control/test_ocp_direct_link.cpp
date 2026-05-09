@@ -331,3 +331,112 @@ TEST_F(OcpDirectLinkTest, AddLinkEqualConPartialMutationOnVarsSizeMismatch) {
                  std::invalid_argument);
     EXPECT_EQ(ocp.base().link_equalities_.size(), before);
 }
+
+// Heterogeneous-phase loop-pattern coverage. The per-call atomicity guaranteed
+// by add_func_impl's validate-before-mutate ordering covers each iteration of
+// the add_forward_link_equal_con loop. This test pins that guarantee for a
+// case that the existing single-insertion AddLinkEqualConPartialMutationOnVarsSizeMismatch
+// does not exercise: iter 0 succeeds (insert), iter 1 throws inside
+// check_function_size. Pre-fix, iter 1 would have ALSO inserted before throwing,
+// producing 2 entries instead of 1.
+//
+// NOTE: this test pins per-call atomicity, NOT loop-level rollback. A
+// successful iter 0 insertion is preserved on iter 1 throw — the loop is not
+// transactional. Body failures inside the loop on heterogeneous phases are
+// acknowledged out-of-scope per the comment in add_forward_link_equal_con.
+TEST_F(OcpDirectLinkTest, ForwardLinkPerIterationAtomicityOnHeterogeneousPhases) {
+    // Three phases with the same ODE but different named-group definitions.
+    // "g" resolves to size 1 in phases 0 and 1, size 2 in phase 2.
+    auto ode_g1 = ODEBuilder(2, 1)
+                      .var_names({{"x", 0}, {"v", 1}, {"t", 2}, {"u", 3}})
+                      .var_group("g", 0, 1)
+                      .define([](auto &args) {
+                          auto v = args.x_var(1);
+                          auto u = args.u_var(0);
+                          return stack(v, u);
+                      })
+                      .build();
+    auto ode_g2 = ODEBuilder(2, 1)
+                      .var_names({{"x", 0}, {"v", 1}, {"t", 2}, {"u", 3}})
+                      .var_group("g", 0, 2)
+                      .define([](auto &args) {
+                          auto v = args.x_var(1);
+                          auto u = args.u_var(0);
+                          return stack(v, u);
+                      })
+                      .build();
+
+    auto p0 = ode_g1.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode_g1.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+    auto p2 = ode_g2.phase(TranscriptionModes::LGL3, make_linear_guess_dl(2.0, 3.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+    ocp.add_phase(p2);
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // vsize is computed from phase 0's "g" → size 1, so func.IRows = 2.
+    // Iter 0 (link p0,p1): xtu sizes 1,1 → isize=2 == irows. OK, inserts.
+    // Iter 1 (link p1,p2): xtu sizes 1,2 → isize=3 != irows=2. Throws.
+    EXPECT_THROW(ocp.base().add_forward_link_equal_con(0, 2, std::string("g"),
+                                                       ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    // Iter 0's successful insertion is preserved (per-call atomicity, not
+    // loop atomicity). Iter 1's failed insertion did NOT mutate, so the
+    // total is exactly +1, not +2.
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before + 1)
+        << "Iter 0 must remain inserted (per-call atomicity); iter 1 must not "
+           "have mutated before throwing (validate-before-mutate ordering).";
+}
+
+// Region-rejection coverage for add_param_link_equal_con. Pre-validation at
+// optimal_control_problem.h:657-659 rejects regions other than ODEParams or
+// StaticParams before any mutation.
+TEST_F(OcpDirectLinkTest, ParamLinkRejectsNonParamRegion) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(0);
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // Front is not a param region — must be rejected up-front before any
+    // mutation. Pre-validation lives at the top of add_param_link_equal_con.
+    EXPECT_THROW(ocp.base().add_param_link_equal_con(0, 1, PhaseRegionFlags::Front, vars,
+                                                     ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+// Symmetric coverage to ParamLinkRejectsBadEndingPhaseWithoutPartialMutation.
+// Pre-fix, the iphase pre-check existed for add_forward_link_equal_con but
+// ParamLinkRejectsBadStartingPhase was not exercised. This test pins that
+// the iphase branch is reachable and equally exception-safe.
+TEST_F(OcpDirectLinkTest, ParamLinkRejectsBadStartingPhaseWithoutPartialMutation) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+    auto p2 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(2.0, 3.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+    ocp.add_phase(p2);
+
+    Eigen::VectorXi vars(0);
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    EXPECT_THROW(ocp.base().add_param_link_equal_con(99, 1, PhaseRegionFlags::StaticParams,
+                                                     vars, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}

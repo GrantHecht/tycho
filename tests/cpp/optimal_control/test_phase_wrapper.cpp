@@ -389,3 +389,54 @@ TEST_F(PhaseWrapperTest, ResolveForRegionODEParamsRejectsXBlockName) {
     EXPECT_THROW(phase.add_boundary_value(PhaseRegionFlags::ODEParams, "x", 0.0),
                  std::invalid_argument);
 }
+
+// Pins ODEPhaseBase::add_func_impl's validate-before-mutate ordering on the
+// phase-side equality-constraint map. Pre-fix, map[index] = func ran first and
+// check_function_size threw afterwards, leaving a bad entry in
+// user_equalities_ that would duplicate on retry. Mirrors the OCP-side test
+// AddLinkEqualConPartialMutationOnVarsSizeMismatch in test_ocp_direct_link.cpp.
+//
+// user_equalities_ is protected on ODEPhaseBase, so this test pins the fix
+// indirectly: the index returned by a follow-up successful add_equal_con
+// must be 0 if the prior failed add did not mutate the map. Pre-fix it would
+// have been 1 (the failed insert sat at index 0).
+TEST_F(PhaseWrapperTest, AddEqualConPartialMutationOnFuncSizeMismatch) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 32);
+
+    // Brach phase has xtu = 5 (3 states + 1 control + 1 time). Build a function
+    // with IRows = 4 and pass vars of size 2; check_function_size compares
+    // irows=4 against isize=vars.size()=2 in the Front-region branch and throws.
+    auto args = Arguments<-1>(4);
+    auto bad_expr = args.head<-1>(2);
+    GenericFunction<-1, -1> bad_func(bad_expr);
+
+    Eigen::VectorXi vars(2);
+    vars << 0, 1;
+
+    EXPECT_THROW(phase.base().add_equal_con(PhaseRegionFlags::Front, bad_func, vars,
+                                            ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    // Retry must also throw cleanly (pre-fix, the second insert would have
+    // landed at index 1 next to the orphaned index 0, duplicating).
+    EXPECT_THROW(phase.base().add_equal_con(PhaseRegionFlags::Front, bad_func, vars,
+                                            ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    // A valid follow-up add must land at index 0. Pre-fix it would have landed
+    // at index 1 or 2 because the failed inserts left orphans at 0 (and 1).
+    auto good_args = Arguments<-1>(2);
+    auto good_expr = good_args.head<-1>(1);
+    GenericFunction<-1, -1> good_func(good_expr);
+
+    Eigen::VectorXi good_vars(2);
+    good_vars << 0, 1;
+
+    int idx = phase.base().add_equal_con(PhaseRegionFlags::Front, good_func, good_vars,
+                                         ScaleModes::AUTO);
+    EXPECT_EQ(idx, 0)
+        << "First valid add after failed adds must land at index 0; pre-fix it "
+           "would have been bumped to 1 or 2 because the failed inserts orphaned "
+           "entries at 0 and 1.";
+}
