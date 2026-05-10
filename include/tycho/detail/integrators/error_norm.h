@@ -48,11 +48,16 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
     throw std::runtime_error(msg);
 }
 
-/// Error norm kind applied to scaled residuals.
+/// @brief Error-norm aggregation strategy used by adaptive integrator step
+///        controllers.
 ///
-///   RMS — sqrt(sum(res_i²) / n) — Julia's ODE_DEFAULT_NORM (default).
-///   MAX — max_i |res_i|.
-enum class ErrorNormType { RMS, MAX };
+/// Smoke-test docstring for documentation pipeline verification.
+/// Full integrator docstring rollout follows in Plan 5 of the docs
+/// strategy umbrella.
+enum class ErrorNormType {
+    RMS,   ///< @brief Root-mean-square of per-component errors.
+    MAX    ///< @brief Maximum of per-component errors.
+};
 
 /// Compute element-wise scaled residuals per Julia's convention:
 ///

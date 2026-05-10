@@ -73,14 +73,16 @@ intersphinx_mapping = {
 
 # Strict mode (enabled in CI; relaxed locally if desired)
 nitpicky = True
-nitpick_ignore = []
-# Suppress Breathe-emitted reference warnings for symbols not yet documented.
-# Coverage expands in Task 8 (VectorFunction docstring rollout); these resolve
-# naturally as more public symbols receive @brief / @param documentation.
-nitpick_ignore_regex = [
-    ("cpp:identifier", r".*"),
+# Breathe renders qualified C++ symbol names as a chain of cpp:identifier
+# cross-references (one per namespace component). When the namespace itself is
+# not yet documented in the cpp domain, Sphinx's nitpicky mode warns. Each
+# entry below is explicit and narrowly scoped to one specific namespace; the
+# list shrinks naturally as docstring coverage expands through Plans 2-5 of
+# the docs strategy umbrella.
+nitpick_ignore = [
+    ("cpp:identifier", "tycho"),
+    ("cpp:identifier", "tycho::integrators"),
 ]
-suppress_warnings = ["ref.ref"]
 
 # -- HTML output -------------------------------------------------------------
 html_theme = "pydata_sphinx_theme"
