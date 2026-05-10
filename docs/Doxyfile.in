@@ -12,7 +12,16 @@ RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp
 # Note on detail/ — many public-facing types live in include/tycho/detail/<subsys>/
 # (e.g., detail/vf/core/vector_function.h). We scan all of include/tycho/ and use
-# @internal blocks + EXCLUDE_SYMBOLS for truly-internal helpers.
+# @internal blocks + the rules below for truly-internal helpers.
+#
+# Conventions (no symbols currently match — these reserve names for future use):
+#   - Implementation symbols we don't want documented live in the
+#     `tycho::detail::internal::*` namespace.
+#   - Internal implementation files use the `internal_*` filename prefix under
+#     detail/<subsys>/.
+# As VectorFunction / OptimalControl / Solvers / Astro internals are tightened
+# (Plans 2-5), genuinely-internal helpers should migrate into these names so the
+# public reference stays focused.
 EXCLUDE_SYMBOLS        = tycho::detail::internal::*
 EXCLUDE_PATTERNS       = */detail/utils/internal_*
 
