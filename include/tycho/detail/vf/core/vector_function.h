@@ -22,6 +22,10 @@
 
 namespace tycho::vf {
 
+/// @brief Base class for all Tycho VectorFunctions via CRTP.
+///
+/// Smoke-test docstring for documentation pipeline verification.
+/// Full VectorFunction rollout follows in Task 8.
 template <class Derived, int IR, int OR, DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
           DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct VectorFunction : DenseSecondDerivatives<Derived, IR, OR, Jm, Hm> {

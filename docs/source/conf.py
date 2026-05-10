@@ -28,7 +28,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.mathjax",
     "sphinx.ext.doctest",
-    # "breathe",   # enabled in Task 3
+    "breathe",
 ]
 
 templates_path = ["_templates"]
@@ -74,6 +74,13 @@ intersphinx_mapping = {
 # Strict mode (enabled in CI; relaxed locally if desired)
 nitpicky = True
 nitpick_ignore = []
+# Suppress Breathe-emitted reference warnings for symbols not yet documented.
+# Coverage expands in Task 8 (VectorFunction docstring rollout); these resolve
+# naturally as more public symbols receive @brief / @param documentation.
+nitpick_ignore_regex = [
+    ("cpp:identifier", r".*"),
+]
+suppress_warnings = ["ref.ref"]
 
 # -- HTML output -------------------------------------------------------------
 html_theme = "pydata_sphinx_theme"
@@ -110,9 +117,14 @@ doctest_global_setup = """
 import numpy as np
 """
 
-# -- Breathe (enabled in Task 3) ---------------------------------------------
-# breathe_projects = {"tycho": _resolve("@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml", "")}
-# breathe_default_project = "tycho"
-# breathe_default_members = ("members", "undoc-members")
-# breathe_show_define_initializer = True
-# breathe_show_enumvalue_initializer = True
+# -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
+# breathe_projects.tycho is set via:
+#   - CMake configure_file substitution (in Task 4) → "@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml"
+#   - `-D breathe_projects.tycho=<path>` on the sphinx-build CLI for direct invocations
+#   - Default fallback to "../build/doxygen/xml" relative to docs/source/, useful for
+#     post-CMake local previews
+breathe_projects = {"tycho": _resolve("@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml", "../build/doxygen/xml")}
+breathe_default_project = "tycho"
+breathe_default_members = ("members", "undoc-members")
+breathe_show_define_initializer = True
+breathe_show_enumvalue_initializer = True

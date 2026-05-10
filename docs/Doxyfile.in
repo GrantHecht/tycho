@@ -1,0 +1,63 @@
+# docs/Doxyfile.in — Configured by CMake into docs/build/Doxyfile.
+# Manual substitution (for pre-Task-4 local runs):
+#   sed "s|@PROJECT_SOURCE_DIR@|$PWD|g; s|@PROJECT_VERSION@|0.1.dev|g; s|@CMAKE_CURRENT_BINARY_DIR@|<out-dir>|g" Doxyfile.in > Doxyfile
+PROJECT_NAME           = "Tycho"
+PROJECT_NUMBER         = "@PROJECT_VERSION@"
+OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen
+CREATE_SUBDIRS         = NO
+
+# Input
+INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp
+# Note on detail/ — many public-facing types live in include/tycho/detail/<subsys>/
+# (e.g., detail/vf/core/vector_function.h). We scan all of include/tycho/ and use
+# @internal blocks + EXCLUDE_SYMBOLS for truly-internal helpers.
+EXCLUDE_SYMBOLS        = tycho::detail::internal::*
+EXCLUDE_PATTERNS       = */detail/utils/internal_*
+
+# Documentation discipline
+EXTRACT_ALL            = NO         # only commented entities render
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+EXTRACT_LOCAL_CLASSES  = NO
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+INTERNAL_DOCS          = NO         # @internal blocks hidden by default
+JAVADOC_AUTOBRIEF      = NO         # explicit @brief required (see spec §7)
+
+# Cross-references and includes
+SHORT_NAMES            = NO
+INHERIT_DOCS           = YES
+INLINE_INHERITED_MEMB  = NO
+SHOW_USED_FILES        = NO
+SHOW_FILES             = NO
+
+# Source browser
+SOURCE_BROWSER         = NO
+INLINE_SOURCES         = NO
+
+# Output formats — XML only (Breathe consumes XML, not HTML)
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_PROGRAMLISTING     = YES
+
+# Preprocessor
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+SKIP_FUNCTION_MACROS   = YES
+PREDEFINED             = TYCHO_DOXYGEN=1
+
+# Warnings — permissive initially; tightened per-subsystem in Task 8
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = NO
+
+# Aliases (per spec §7)
+ALIASES += "vfthreadsafe=@note This function is thread-safe."
+ALIASES += "vfnotthreadsafe=@note This function is **not** thread-safe; one instance per worker."
