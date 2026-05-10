@@ -4,8 +4,8 @@ import numpy as np
 
 import tychopy as ast
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -167,7 +167,7 @@ class test_Delta3Launch(unittest.TestCase):
 
         M0 = -0.05
         OEF = [at, et, istart, Ot, Wt, M0]
-        yf = ast.Astro.classic_to_cartesian(OEF, mu)
+        yf = ast.astro.classic_to_cartesian(OEF, mu)
 
         ts = np.linspace(0, tf_phase4, 100)
 
@@ -254,7 +254,9 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.add_phase(phase3)
         ocp.add_phase(phase4)
 
-        ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+        ocp.add_forward_link_equal_con(
+            phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10], auto_scale="auto"
+        )
         ocp.optimizer.set_opt_ls_mode("L1")
         ocp.optimizer.max_ls_iters = 2
         ocp.optimizer.print_level = 3
@@ -280,7 +282,7 @@ class test_Delta3Launch(unittest.TestCase):
         MassError = abs(FinalMassKg - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertTrue(Mconv, "Problem Meshs did not converge converge")

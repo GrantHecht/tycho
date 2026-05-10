@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as ast
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 
 class ODE(oc.ODEBase):
@@ -192,7 +192,7 @@ class test_ObjScaling(unittest.TestCase):
         ocp.add_phase(phase1)
         ocp.add_phase(phase2)
 
-        ocp.add_forward_link_equal_con(phase1, phase2, range(0, 3))
+        ocp.add_forward_link_equal_con(phase1, phase2, range(0, 3), auto_scale="auto")
 
         ocp.set_auto_scaling(True, True)
         ocp.set_num_partitions(1, 1)

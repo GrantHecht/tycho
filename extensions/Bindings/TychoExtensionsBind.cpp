@@ -19,17 +19,17 @@
 
 namespace tycho {
 
-void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod);
+void extensions_build(FunctionRegistry &reg, nb::module_ &extmod);
 
 template <> struct TychoBind<CR3BP_FDiff> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CR3BP_FDiff>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<CR3BP_FDiff>(obj);
     }
 };
 
 template <> struct TychoBind<ModifiedDynamics_FDiff> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ModifiedDynamics_FDiff>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<ModifiedDynamics_FDiff>(obj);
     }
@@ -37,11 +37,11 @@ template <> struct TychoBind<ModifiedDynamics_FDiff> {
 
 } // namespace tycho
 
-void tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
+void tycho::extensions_build(FunctionRegistry &reg, nb::module_ &extmod) {
 
     extmod.def("cpp_cr3bp", [](double mu) {
         // Example of how to write CR3BP dynamics as C++ vector function and bind it to python
-        // After compilation can import in python w/ tycho.Extensions.cpp_cr3bp(mu)
+        // After compilation can import in python w/ tychopy.extensions.cpp_cr3bp(mu)
         // Docs on CPP vector function interface forthcoming but in general it mimics python
 
         auto args = Arguments<7>();
@@ -74,6 +74,6 @@ void tycho::ExtensionsBuild(FunctionRegistry &reg, nb::module_ &extmod) {
         return GenericFunction<-1, -1>(ode); // Wrap as dynamic sized generic vector function
     });
 
-    reg.Build_Register<CR3BP_FDiff>(extmod, "cpp_cr3bp_fdiff");
-    reg.Build_Register<ModifiedDynamics_FDiff>(extmod, "ModifiedDynamics_FDiff");
+    reg.build_register<CR3BP_FDiff>(extmod, "cpp_cr3bp_fdiff");
+    reg.build_register<ModifiedDynamics_FDiff>(extmod, "ModifiedDynamics_FDiff");
 }

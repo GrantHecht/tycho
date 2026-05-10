@@ -1,5 +1,50 @@
 # Binding Layer Developer Guide
 
+> **⚠️ Partial-staleness notice (post snake_case rename PR).**
+> Sections of this guide were authored before the Python-side rename of
+> aggregate `*Build` helpers and the `TychoBind<T>::Build` →
+> `::build` rename. The following are known to be stale and will be
+> rewritten in the deferred sub-aggregate-rename follow-up PR:
+>
+> - **Section 2** — the `NB_MODULE` example still calls
+>   `VectorFunctionBuild`, `OptimalControlBuild`, `SolversBuild`,
+>   `UtilsBuild`, `AstroBuild`, `ExtensionsBuild`. Real code now uses
+>   the snake_case forms (`vector_functions_build`, `optimal_control_build`,
+>   `solvers_build`, `utils_build`, `astro_build`, `extensions_build`).
+> - **Section 11** — example file path
+>   `tychopy/VectorFunctions/__init__.py` is stale; the snake_case path
+>   is `tychopy/vector_functions/__init__.py`.
+> - **Section 4** — the `bind::*Build` free-function helpers
+>   (`DenseBaseBuild`, `SegBuild`, `GenericBuild`, `ODEPhaseBuildImpl`,
+>   etc.) documented here are intentionally still PascalCase per the
+>   deferred sub-aggregate-rename plan. This section is accurate to
+>   current code and is listed here only to flag the asymmetry: the
+>   trait-method `::build` is lower-case but these free-function helpers
+>   remain `*Build`.
+> - **Section 9** — Python module paths (`tychopy/VectorFunctions/`,
+>   `tychopy/Astro/`, `tychopy/OptimalControl/`). Real paths are now all
+>   snake_case (`tychopy/vector_functions/`, `tychopy/astro/`,
+>   `tychopy/optimal_control/`). The `ODEBaseClass.py` reference in §9
+>   is now `ode_base_class.py`. The `_vec6_wrap` example in §9 also
+>   uses an outdated `hasattr(arr_or_func, "eval")` discriminator; real
+>   code at `tychopy/astro/__init__.py` uses
+>   `hasattr(arr_or_func, "input_rows")` because Segment / Element /
+>   Arguments deliberately omit `eval`.
+> - **Section 12 (file listing)** — both the directory tree and the per-file
+>   table retain the PascalCase `*Build` aggregate names and
+>   `TychoBind<X>::Build` references. The listing is also missing
+>   `astro/kepler_integrator.cpp` and
+>   `optimal_control/generic_odes_integrator_part{1..4,6}.cpp`
+>   from the Kepler-binding split. The
+>   `generic_odes_build_part5.cpp` row was never split out — the on-disk
+>   numbering jumps from `part4` to `part6`.
+>
+> Section 3 has been updated to use the snake_case `::build` and
+> `build_register` trait names. The actual code under `src/bindings/`,
+> `extensions/`, and `tychopy/` is already on the new names. When in
+> doubt, trust the source over this document until the follow-up PR
+> lands.
+
 This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
 
 This guide assumes familiarity with the [VectorFunction Developer Guide](VectorFunction.md). The binding layer is the bridge between that C++ system and the Python API users interact with.
@@ -98,12 +143,12 @@ The `FunctionRegistry` constructor creates four submodules:
 
 | Python path | C++ variable | Purpose |
 |---|---|---|
-| `_tychopy.VectorFunctions` | `reg.vfmod` | Vector/scalar function types and free functions |
-| `_tychopy.OptimalControl` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
-| `_tychopy.Solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
-| `_tychopy.Extensions` | `reg.extmod` | User-defined extension types |
+| `_tychopy.vector_functions` | `reg.vfmod` | Vector/scalar function types and free functions |
+| `_tychopy.optimal_control` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
+| `_tychopy.solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
+| `_tychopy.extensions` | `reg.extmod` | User-defined extension types |
 
-The `Astro` submodule is created inside `AstroBuild()` rather than in the registry constructor.
+The `astro` submodule is created inside `astro_build()` rather than in the registry constructor.
 
 ### The `FunctionRegistry` Struct
 
@@ -157,12 +202,12 @@ Full and partial specializations are defined in `*_bind.h` headers throughout `s
 ```cpp
 // Full specialization (src/bindings/optimal_control/ode_phase_bind.h)
 template <> struct TychoBind<ODEPhaseBase> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 // Partial specialization (same file)
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
-    static void Build(nb::module_ &m) {
+    static void build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
         bind::ODEPhaseBuildImpl<DODE>(phase);
         // ...
@@ -171,7 +216,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
 
 // Partial specialization for VectorFunction types (common_functions_bind.h)
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
         bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
         bind::SegBuild<Segment<IR, OR, ST>>(obj);
@@ -179,39 +224,39 @@ template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
 };
 ```
 
-### `Build()` Signatures
+### `build()` Signatures
 
 Two signatures are used depending on whether the type's Python name is fixed or caller-determined:
 
 ```cpp
-static void Build(nb::module_ &m);                    // Name is hardcoded inside
-static void Build(nb::module_ &m, const char *name);  // Name provided by caller
+static void build(nb::module_ &m);                    // Name is hardcoded inside
+static void build(nb::module_ &m, const char *name);  // Name provided by caller
 ```
 
-### `FunctionRegistry::Build_Register<T>()`
+### `FunctionRegistry::build_register<T>()`
 
 This is the primary entry point for registering VectorFunction types. It:
 
-1. Calls `TychoBind<T>::Build(m, name)` to create the `nb::class_<T>` and define its methods.
+1. Calls `TychoBind<T>::build(m, name)` to create the `nb::class_<T>` and define its methods.
 2. Calls `RegSelector<T::IRC, T::ORC>::Register<T>(this)` to register implicit conversions to the type-erased base classes.
 
-Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::Build`:
+Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::build`:
 
 ```cpp
-// Overload 1: name hardcoded in TychoBind<Derived>::Build(m) — no name argument needed
+// Overload 1: name hardcoded in TychoBind<Derived>::build(m) — no name argument needed
 template <class Derived>
-    requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
-void Build_Register(nb::module_ &m);
+    requires requires(nb::module_ &m) { TychoBind<Derived>::build(m); }
+void build_register(nb::module_ &m);
 
 // Overload 2: name passed explicitly; type registered into the registry's root module
 template <class Derived>
-    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-void Build_Register(const char *name);
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+void build_register(const char *name);
 
 // Overload 3: name and target module both passed explicitly (most common)
 template <class Derived>
-    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-void Build_Register(nb::module_ &m, const char *name);
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+void build_register(nb::module_ &m, const char *name);
 ```
 
 All three overloads call `RegSelector<Derived::IRC, Derived::ORC>::Register<Derived>(this)` after building to register implicit conversions.
@@ -679,7 +724,7 @@ add_custom_command(TARGET pytychosrc POST_BUILD
 
 The `tychopy/` package provides a pure-Python layer over the `_tychopy` extension module. Its main roles are:
 
-1. **Re-export** -- make C++ types available as `tychopy.VectorFunctions.Arguments` instead of `_tychopy.VectorFunctions.Arguments`.
+1. **Re-export** -- make C++ types available as `tychopy.vector_functions.Arguments` instead of `_tychopy.vector_functions.Arguments`.
 2. **Coerce types** -- wrap functions that accept fixed-size Eigen types (e.g., `Vector6<double>`) to also accept Python lists and tuples.
 3. **Add pure-Python extensions** -- like `ODEBase`, `CR3BPFrame`, and mesh error plotting.
 
@@ -689,11 +734,11 @@ Imports `_tychopy` and each subpackage:
 
 ```python
 import _tychopy as _tychopy
-import tychopy.Astro
-import tychopy.OptimalControl
-import tychopy.Solvers
-import tychopy.Utils
-import tychopy.VectorFunctions
+import tychopy.astro
+import tychopy.optimal_control
+import tychopy.solvers
+import tychopy.utils
+import tychopy.vector_functions
 ```
 
 ### `tychopy/VectorFunctions/__init__.py` -- `cross` wrapper
@@ -701,7 +746,7 @@ import tychopy.VectorFunctions
 The C++ `cross(a, b)` function expects VectorFunction types. When the first argument is a Python list or tuple (a constant vector), nanobind's fixed-size Eigen caster may reject it. The wrapper coerces it:
 
 ```python
-_cross_cpp = _tychopy.VectorFunctions.cross
+_cross_cpp = _tychopy.vector_functions.cross
 
 def cross(a, b):
     if isinstance(a, (list, tuple)):
@@ -722,8 +767,8 @@ def _vec6_wrap(fn):
     wrapper.__name__ = fn.__name__
     return wrapper
 
-cartesian_to_classic = _vec6_wrap(_tychopy.Astro.cartesian_to_classic)
-classic_to_cartesian = _vec6_wrap(_tychopy.Astro.classic_to_cartesian)
+cartesian_to_classic = _vec6_wrap(_tychopy.astro.cartesian_to_classic)
+classic_to_cartesian = _vec6_wrap(_tychopy.astro.classic_to_cartesian)
 # ... etc.
 ```
 
@@ -855,7 +900,7 @@ reg.Build_Register<MyNewFunction>(reg.vfmod, "MyNewFunction");
 5. **Re-export in Python** -- add to `tychopy/VectorFunctions/__init__.py`:
 
 ```python
-MyNewFunction = _tychopy.VectorFunctions.MyNewFunction
+MyNewFunction = _tychopy.vector_functions.MyNewFunction
 ```
 
 ### Adding a New ODE
@@ -867,7 +912,7 @@ Use `BuildGenODEModule` for a generic ODE (accepts any VectorFunction as dynamic
 tycho::bind::BuildGenODEModule<BaseType, XV, UV, PV>("my_ode", reg.ocmod, reg);
 ```
 
-This creates a submodule `_tychopy.OptimalControl.my_ode` with `ode`, `integrator`, and `phase` classes.
+This creates a submodule `_tychopy.optimal_control.my_ode` with `ode`, `integrator`, and `phase` classes.
 
 ### Adding a New Type Caster
 

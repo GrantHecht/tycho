@@ -39,14 +39,14 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         # block); nanobind translates std::invalid_argument to ValueError.
         rv = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0])
         with self.assertRaises(ValueError):
-            typy.Astro.propagate_cartesian(rv, float("nan"), 398600.4418)
+            typy.astro.propagate_cartesian(rv, float("nan"), 398600.4418)
 
     def test_propagate_cartesian_raises_on_nonpositive_mu(self):
         rv = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0])
         with self.assertRaises(ValueError):
-            typy.Astro.propagate_cartesian(rv, 100.0, -1.0)
+            typy.astro.propagate_cartesian(rv, 100.0, -1.0)
         with self.assertRaises(ValueError):
-            typy.Astro.propagate_cartesian(rv, 100.0, 0.0)
+            typy.astro.propagate_cartesian(rv, 100.0, 0.0)
 
     def test_propagate_cartesian_runtime_error_message_lists_causes(self):
         # Force a NaN-poisoned output by handing the kernel a NaN-component
@@ -61,16 +61,16 @@ class TestKeplerPropagateErrors(unittest.TestCase):
             (RuntimeError, ValueError),
             r"propagate_cartesian|V0 must be finite",
         ):
-            typy.Astro.propagate_cartesian(rv, 100.0, 398600.4418)
+            typy.astro.propagate_cartesian(rv, 100.0, 398600.4418)
 
     # ----- propagate_classic -----
 
     def test_propagate_classic_raises_on_nonpositive_mu(self):
         oe = np.array([7000.0, 0.01, 0.5, 0.0, 0.0, 0.0])
         with self.assertRaisesRegex(ValueError, r"propagate_classic.*mu"):
-            typy.Astro.propagate_classic(oe, 100.0, -1.0)
+            typy.astro.propagate_classic(oe, 100.0, -1.0)
         with self.assertRaisesRegex(ValueError, r"propagate_classic.*mu"):
-            typy.Astro.propagate_classic(oe, 100.0, 0.0)
+            typy.astro.propagate_classic(oe, 100.0, 0.0)
 
     def test_propagate_classic_raises_on_zero_semi_major_axis(self):
         # a == 0 produces 1/0 in the analytic mean-motion formula; the
@@ -78,12 +78,12 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         # specific message instead of misattributing to LCD non-convergence.
         oe = np.array([0.0, 0.01, 0.5, 0.0, 0.0, 0.0])
         with self.assertRaisesRegex(ValueError, r"semi-major axis"):
-            typy.Astro.propagate_classic(oe, 100.0, 398600.4418)
+            typy.astro.propagate_classic(oe, 100.0, 398600.4418)
 
     def test_propagate_classic_raises_on_nan_semi_major_axis(self):
         oe = np.array([math.nan, 0.01, 0.5, 0.0, 0.0, 0.0])
         with self.assertRaisesRegex(ValueError, r"semi-major axis"):
-            typy.Astro.propagate_classic(oe, 100.0, 398600.4418)
+            typy.astro.propagate_classic(oe, 100.0, 398600.4418)
 
     # ----- propagate_modified -----
 
@@ -91,9 +91,9 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         # MEE elements: p=7000, f=0.01, g=0.0, h=0.0, k=0.0, L=0.0
         mee = np.array([7000.0, 0.01, 0.0, 0.0, 0.0, 0.0])
         with self.assertRaisesRegex(ValueError, r"propagate_modified.*mu"):
-            typy.Astro.propagate_modified(mee, 100.0, -1.0)
+            typy.astro.propagate_modified(mee, 100.0, -1.0)
         with self.assertRaisesRegex(ValueError, r"propagate_modified.*mu"):
-            typy.Astro.propagate_modified(mee, 100.0, 0.0)
+            typy.astro.propagate_modified(mee, 100.0, 0.0)
 
 
 if __name__ == "__main__":

@@ -23,13 +23,27 @@ namespace nanobind {
 namespace detail {
 
 // ---------------------------------------------------------------------------
-// Eigen::Tensor<Scalar, N>
+// Eigen::Tensor<Scalar, N>  (ColMajor — Eigen's default storage)
 //
-// Python numpy array (C-contiguous, CPU) <-> Eigen::Tensor.
-// Data is copied in both directions; Eigen::Tensor owns its buffer.
+// numpy ndarrays are C-contiguous (row-major) with shape (d0, d1, …). The
+// Eigen::Tensor types used inside tycho's interp tables are ColMajor for
+// cache-friendly inner-loop access. This caster does the layout conversion at
+// the binding boundary so the algorithm can stay layout-natural.
+//
+// Conversion idiom (Eigen Tensor docs): map numpy bytes as a RowMajor view,
+// then `swap_layout()` reinterprets the same data as ColMajor with reversed
+// dimensions (e.g. shape (nx, ny, nz) becomes (nz, ny, nx)). Apply
+// `shuffle({N-1, …, 1, 0})` to reverse the dimension order back to (nx, ny, nz)
+// while preserving the (i, j, k) → numpy[i, j, k] index semantics.
+//
+// Cost: one O(N) copy on construction (same as the prior — broken — flat
+// memcpy). The interp inner loops then run on a layout the algorithm prefers.
+//
+// Future bindings for ColMajor-array languages (Julia, Fortran) can specialize
+// their own caster: they would fill the tensor without the swap_layout dance,
+// since their source layout already matches Eigen::Tensor's default.
 // ---------------------------------------------------------------------------
 template <typename Scalar, int N> struct type_caster<Eigen::Tensor<Scalar, N>> {
-    // NB_TYPE_CASTER cannot handle template types with commas; use alias.
     using TensorType = Eigen::Tensor<Scalar, N>;
     NB_TYPE_CASTER(TensorType, const_name("numpy.ndarray"))
 
@@ -41,21 +55,37 @@ template <typename Scalar, int N> struct type_caster<Eigen::Tensor<Scalar, N>> {
         Array arr = (Array &&)caster.value;
         if ((int)arr.ndim() != N)
             return false;
+
         Eigen::array<Eigen::Index, N> dims;
         for (int i = 0; i < N; ++i)
             dims[i] = (Eigen::Index)arr.shape(i);
-        value.resize(dims);
-        std::memcpy(value.data(), arr.data(), value.size() * sizeof(Scalar));
+
+        Eigen::array<Eigen::Index, N> reverse_perm;
+        for (int i = 0; i < N; ++i)
+            reverse_perm[i] = N - 1 - i;
+
+        Eigen::TensorMap<const Eigen::Tensor<Scalar, N, Eigen::RowMajor>> rowmajor_view(
+            const_cast<const Scalar *>(arr.data()), dims);
+        value = rowmajor_view.swap_layout().shuffle(reverse_perm);
         return true;
     }
 
-    static handle from_cpp(const Eigen::Tensor<Scalar, N> &tensor, rv_policy policy,
-                           cleanup_list *cleanup) {
+    static handle from_cpp(const TensorType &tensor, rv_policy policy, cleanup_list *cleanup) {
         size_t shape[N];
-        for (int i = 0; i < N; ++i)
+        Eigen::array<Eigen::Index, N> dims;
+        Eigen::array<Eigen::Index, N> reverse_perm;
+        for (int i = 0; i < N; ++i) {
             shape[i] = (size_t)tensor.dimension(i);
-        Scalar *data = new Scalar[tensor.size()];
-        std::memcpy(data, tensor.data(), tensor.size() * sizeof(Scalar));
+            dims[i] = tensor.dimension(i);
+            reverse_perm[i] = N - 1 - i;
+        }
+
+        // ColMajor tensor → RowMajor (C-contiguous) numpy buffer.
+        // swap_layout() + shuffle() inverts the from_python conversion.
+        Eigen::Tensor<Scalar, N, Eigen::RowMajor> rowmajor_buf =
+            tensor.swap_layout().shuffle(reverse_perm);
+        Scalar *data = new Scalar[rowmajor_buf.size()];
+        std::memcpy(data, rowmajor_buf.data(), rowmajor_buf.size() * sizeof(Scalar));
         nb::capsule deleter(data, [](void *p) noexcept { delete[] (Scalar *)p; });
         return nb::ndarray<nb::numpy, Scalar>(data, N, shape, deleter).release();
     }
@@ -469,7 +499,7 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
 // ---------------------------------------------------------------------------
 template <> struct type_caster<tycho::oc::ScaleType> {
     NB_TYPE_CASTER(tycho::oc::ScaleType,
-                   const_name("Union[float, numpy.ndarray, OptimalControl.ScaleModes, str, None]"))
+                   const_name("Union[float, numpy.ndarray, optimal_control.ScaleModes, str, None]"))
 
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         if (src.is_none()) {

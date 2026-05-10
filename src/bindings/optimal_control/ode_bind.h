@@ -17,8 +17,6 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 // Free-function binding helpers for StaticODE_Expression, ODEBase, and GenericODE.
-// Replaces the out-of-class StaticODE_Expression::Build(), ODEBase::BuildODEModule(), and
-// GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
 #include "dense_function_base_bind.h"
 #include "ode_sizes_bind.h"
@@ -42,9 +40,9 @@ void StaticODE_ExpressionBuild(nb::module_ &m, const char *name) {
 template <class BaseType, class Derived, int _XV, int _UV, int _PV>
 void BuildODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg) {
     auto odemod = mod.def_submodule(name);
-    reg.template Build_Register<Derived>(odemod, "ode");
-    reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
-    TychoBind<ODEPhase<Derived>>::Build(odemod);
+    reg.template build_register<Derived>(odemod, "ode");
+    reg.template build_register<Integrator<Derived>>(odemod, "integrator");
+    TychoBind<ODEPhase<Derived>>::build(odemod);
 }
 
 template <class BaseType, class Derived, int _XV, int _UV, int _PV>
@@ -62,7 +60,7 @@ void BuildGenODEModule(const char *name, nb::module_ &mod, FunctionRegistry &reg
     obj.def(nb::init<BaseType, int, int>());
     obj.def(nb::init<BaseType, int>());
     obj.def(nb::init<BaseType>());
-    TychoBind<ODEPhase<Derived>>::Build(odemod);
+    TychoBind<ODEPhase<Derived>>::build(odemod);
     obj.def("phase", [](const Derived &od, TranscriptionModes Tmode) {
         return std::make_shared<ODEPhase<Derived>>(od, Tmode);
     });
@@ -110,7 +108,7 @@ template <class BaseType, int _XV, int _UV, int _PV>
 void BuildGenODEIntegrator(const char *name, nb::module_ &mod, FunctionRegistry &reg) {
     using Derived = GenericODE<BaseType, _XV, _UV, _PV>;
     auto odemod = nb::borrow<nb::module_>(mod.attr(name));
-    reg.template Build_Register<Integrator<Derived>>(odemod, "integrator");
+    reg.template build_register<Integrator<Derived>>(odemod, "integrator");
 }
 
 } // namespace tycho::bind
@@ -121,7 +119,7 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 template <int OR> struct TychoBind<InterpFunction<OR>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<InterpFunction<OR>>(m, name);
         if constexpr (OR == -1) {
             obj.def(nb::init<std::shared_ptr<LGLInterpTable>, Eigen::VectorXi>());

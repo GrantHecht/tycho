@@ -4,8 +4,8 @@ import _tychopy as ast
 import matplotlib.pyplot as plt
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -182,7 +182,7 @@ class test_Reentry(unittest.TestCase):
         Flag1 = phase.solve_optimize()
 
         self.assertEqual(
-            Flag1, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag1, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertLess(
@@ -206,7 +206,7 @@ class test_Reentry(unittest.TestCase):
         Flag2 = phase.optimize()
 
         self.assertEqual(
-            Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag2, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
         self.assertLess(
             phase.optimizer.last_iter_num,

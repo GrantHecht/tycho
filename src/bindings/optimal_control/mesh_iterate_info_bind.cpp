@@ -22,7 +22,7 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<MeshIterateInfo>::Build(nb::module_ &m) {
+void TychoBind<MeshIterateInfo>::build(nb::module_ &m) {
     auto obj = nb::class_<MeshIterateInfo>(m, "MeshIterateInfo");
 
     obj.def_ro("times", &MeshIterateInfo::times_);

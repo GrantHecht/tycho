@@ -30,8 +30,8 @@ mpl.rcParams.update(params)
 
 ################################################################################
 ## Setup
-oc = typy.OptimalControl
-vf = typy.VectorFunctions
+oc = typy.optimal_control
+vf = typy.vector_functions
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes
@@ -63,7 +63,7 @@ class Zermelo(oc.ODEBase):
         xD = vMax * vf.cos(th) + wx
         yD = vMax * vf.sin(th) + wy
 
-        ode = vf.Stack([xD, yD])
+        ode = vf.stack([xD, yD])
 
         super().__init__(ode, Xvars, Uvars)
 

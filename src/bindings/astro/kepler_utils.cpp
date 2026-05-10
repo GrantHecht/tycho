@@ -24,30 +24,30 @@ using namespace tycho::astro;
 using namespace tycho::integrators;
 
 template <> struct TychoBind<ModifiedToCartesian> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<ModifiedToCartesian>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<ModifiedToCartesian>(obj);
     }
 };
 
 template <> struct TychoBind<CartesianToClassic> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CartesianToClassic>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<CartesianToClassic>(obj);
     }
 };
 
 template <> struct TychoBind<CartesianToMEE> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<CartesianToMEE>(m, name).def(nb::init<double>());
         bind::DenseBaseBuild<CartesianToMEE>(obj);
     }
 };
 
-void KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m);
+void kepler_utils_build(FunctionRegistry &reg, nb::module_ &m);
 } // namespace tycho
 
-void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
+void tycho::kepler_utils_build(FunctionRegistry &reg, nb::module_ &m) {
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////              Conversions                  /////////////////////////
@@ -80,19 +80,19 @@ void tycho::KeplerUtilsBuild(FunctionRegistry &reg, nb::module_ &m) {
         return GenericFunction<-1, -1>(ModifiedToCartesian(mu).eval(meelems));
     });
 
-    reg.Build_Register<ModifiedToCartesian>(m, "ModifiedToCartesian");
+    reg.build_register<ModifiedToCartesian>(m, "ModifiedToCartesian");
 
     m.def("cartesian_to_classic", [](const GenericFunction<-1, -1> &RV, double mu) {
         return GenericFunction<-1, -1>(CartesianToClassic(mu).eval(RV));
     });
 
-    reg.Build_Register<CartesianToClassic>(m, "CartesianToClassic");
+    reg.build_register<CartesianToClassic>(m, "CartesianToClassic");
 
     m.def("cartesian_to_modified", [](const GenericFunction<-1, -1> &RV, double mu) {
         return GenericFunction<-1, -1>(CartesianToMEE(mu).eval(RV));
     });
 
-    reg.Build_Register<CartesianToMEE>(m, "CartesianToMEE");
+    reg.build_register<CartesianToMEE>(m, "CartesianToMEE");
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////              Propagators                  /////////////////////////

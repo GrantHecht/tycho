@@ -46,7 +46,6 @@ TIMEOUT_OVERRIDES = {
     "MeshRefinement/Delta3Launch.py": 600,
     "MeshRefinement/Reentry.py": 600,
     "MeshRefinement/HyperSensLong.py": 900,
-    "UpdatedInterface/BettsLowThrust.py": 600,
 }
 
 # Ordered list of all examples to run, relative to EXAMPLES_DIR.
@@ -88,14 +87,6 @@ ALL_EXAMPLES = [
     "MeshRefinement/Delta3Launch.py",
     "MeshRefinement/HyperSensLong.py",
     "MeshRefinement/Reentry.py",
-    # --- Updated interface ---
-    "UpdatedInterface/GoddardRocket.py",
-    "UpdatedInterface/MultiPhaseCannon.py",
-    "UpdatedInterface/Reentry.py",
-    "UpdatedInterface/MinimumTimeToClimbTables.py",
-    "UpdatedInterface/MinimumTimeToClimb.py",
-    "UpdatedInterface/Delta3Launch.py",
-    "UpdatedInterface/BettsLowThrust.py",
 ]
 
 # Optional imports: if any listed module cannot be imported the example is
@@ -109,8 +100,6 @@ OPTIONAL_DEPS: dict[str, list[str]] = {
     "Reentry.py": ["mpl_toolkits.basemap"],
     "MeshRefinement/Delta3Launch.py": ["mpl_toolkits.basemap"],
     "MeshRefinement/Reentry.py": ["mpl_toolkits.basemap"],
-    "UpdatedInterface/BettsLowThrust.py": ["mpl_toolkits.basemap"],
-    "UpdatedInterface/Delta3Launch.py": ["mpl_toolkits.basemap"],
 }
 
 # Output directories that some examples assume already exist.
@@ -153,7 +142,7 @@ def _check_optional_deps() -> dict[str, bool]:
 def _build_env() -> dict[str, str]:
     """Subprocess environment: force non-interactive matplotlib backend and
     ensure examples/ is on PYTHONPATH so subdirectory scripts can import
-    helpers (e.g. UpdatedInterface/MinimumTimeToClimb.py → MinimumTimeToClimbTables)."""
+    helpers (e.g. MeshRefinement/Delta3Launch.py → tables-only helper modules)."""
     env = dict(os.environ)
     env["MPLBACKEND"] = "Agg"
     existing_pythonpath = env.get("PYTHONPATH", "")

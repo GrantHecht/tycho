@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as typy
-import tychopy.Astro.Constants as c
-from tychopy.Astro.AstroModels import CR3BP
-from tychopy.Astro.FramePlot import CRPlot
+import tychopy.astro.constants as c
+from tychopy.astro.astro_models import CR3BP
+from tychopy.astro.frame_plot import CRPlot
 
 """
 Find a heteroclinic connection between two orbit families in the EM-CR3BP.
@@ -30,9 +30,9 @@ https://engineering.purdue.edu/people/kathleen.howell.1/Publications/Dissertatio
 """
 
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
-sol = typy.Solvers
+vf = typy.vector_functions
+oc = typy.optimal_control
+sol = typy.solvers
 Args = vf.Arguments
 
 
@@ -198,7 +198,7 @@ def MakeHeteroclinic(ode, Man1, Man2, L1Orbit, L2Orbit):
     ocp.add_phase(phase2)
 
     # Enforce continuity in position and velocity between phases
-    ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6))
+    ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6), auto_scale="auto")
     ocp.set_adaptive_mesh()
 
     ocp.optimizer.set_eq_con_tol(1.0e-9)

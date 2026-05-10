@@ -36,8 +36,8 @@ import numpy as np
 
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 # ----------------------------- Non-dimensionalization -----------------------
@@ -258,9 +258,7 @@ def plot_results(Traj):
     axes[0].set_ylabel("Semi-latus rectum p")
     axes[0].grid(True)
     axes[0].legend()
-    axes[0].set_title(
-        "Betts low-thrust transfer — CentralShooting transcription"
-    )
+    axes[0].set_title("Betts low-thrust transfer — CentralShooting transcription")
 
     axes[1].plot(t_hr, T[8], label="u_r")
     axes[1].plot(t_hr, T[9], label="u_t")
@@ -309,9 +307,7 @@ if __name__ == "__main__":
 
     phase.add_boundary_value("Front", range(0, 8), X0[0:8])
     phase.add_equal_con("Path", Args(3).norm() - 1, [8, 9, 10])
-    phase.add_lu_func_bound(
-        "Path", RadFunc(mu), range(0, 6), Re, 10 * Re
-    )
+    phase.add_lu_func_bound("Path", RadFunc(mu), range(0, 6), Re, 10 * Re)
     phase.add_equal_con("Back", EqBCon(), range(0, 6))
     phase.add_inequal_con("Back", IqBCon(), range(0, 6))
     phase.add_lu_var_bound("ODEParams", 0, -50, 0)

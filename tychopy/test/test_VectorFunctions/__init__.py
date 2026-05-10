@@ -3,8 +3,8 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
 
 
@@ -33,8 +33,10 @@ class test_VectorFunctions(unittest.TestCase):
         def Adjoint(X):
             return Fun.adjointgradient(X, L)
 
-        JacFun = ast.VectorFunctions.PyVectorFunction(IRows, ORows, Value, jsize, jsize)
-        HessFun = ast.VectorFunctions.PyVectorFunction(
+        JacFun = ast.vector_functions.PyVectorFunction(
+            IRows, ORows, Value, jsize, jsize
+        )
+        HessFun = ast.vector_functions.PyVectorFunction(
             IRows, IRows, Adjoint, hsize, hsize
         )
 

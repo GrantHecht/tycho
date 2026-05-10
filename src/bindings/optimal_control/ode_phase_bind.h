@@ -16,10 +16,9 @@
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
 
-// TychoBind specializations for ODEPhase<DODE>, StateFunction<T>, LinkFunction<T>,
+// TychoBind specializations for ODEPhase<DODE>, StateFunction<T>,
 // FDDerivArbitrary<T>, ODEPhaseBase, LGLInterpTable, and OptimalControlProblemBase.
 
-#include "tycho/detail/optimal_control/core/link_function.h"
 #include "tycho/detail/optimal_control/core/state_function.h"
 #include "tycho/detail/optimal_control/phase/ode_phase.h"
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
@@ -50,7 +49,7 @@ template <class DODE, class PyClass> void ODEPhaseBuildImpl(PyClass &phase) {
 } // namespace bind
 
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
-    static void Build(nb::module_ &m) {
+    static void build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
 
         bind::ODEPhaseBuildImpl<DODE>(phase);
@@ -64,7 +63,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
 };
 
 template <class FuncType> struct TychoBind<StateFunction<FuncType>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<StateFunction<FuncType>>(m, name);
         obj.def(nb::init<FuncType, PhaseRegionFlags, Eigen::VectorXi, Eigen::VectorXi,
                          Eigen::VectorXi>());
@@ -74,22 +73,8 @@ template <class FuncType> struct TychoBind<StateFunction<FuncType>> {
     }
 };
 
-template <class FuncType> struct TychoBind<LinkFunction<FuncType>> {
-    static void Build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<LinkFunction<FuncType>>(m, name);
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>, Eigen::VectorXi>());
-        obj.def(
-            nb::init<FuncType, Eigen::Matrix<PhaseRegionFlags, -1, 1>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                     std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-        obj.def(nb::init<FuncType, LinkFlags, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>,
-                         std::vector<Eigen::VectorXi>, std::vector<Eigen::VectorXi>>());
-    }
-};
-
 template <class DType> struct TychoBind<FDDerivArbitrary<DType>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<FDDerivArbitrary<DType>>(m, name);
         obj.def(nb::init<int, const std::vector<DType> &>());
         obj.def("all_derivs", &FDDerivArbitrary<DType>::template allderiv_python<DType>);
@@ -99,15 +84,15 @@ template <class DType> struct TychoBind<FDDerivArbitrary<DType>> {
 
 // Forward declarations for out-of-line TychoBind implementations
 template <> struct TychoBind<ODEPhaseBase> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 template <> struct TychoBind<LGLInterpTable> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 template <> struct TychoBind<OptimalControlProblemBase> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho

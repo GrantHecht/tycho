@@ -12,8 +12,8 @@ import numpy as np
 
 import tychopy as typy
 
-oc = typy.OptimalControl
-vf = typy.VectorFunctions
+oc = typy.optimal_control
+vf = typy.vector_functions
 
 nSeg = 150
 tol = 1e-12
@@ -29,7 +29,7 @@ class Zermelo(oc.ODEBase):
         wx, wy = wFunc(xyt)
         xD = vMax * vf.cos(th) + wx
         yD = vMax * vf.sin(th) + wy
-        ode = vf.Stack([xD, yD])
+        ode = vf.stack([xD, yD])
         super().__init__(ode, Xvars, Uvars)
 
 

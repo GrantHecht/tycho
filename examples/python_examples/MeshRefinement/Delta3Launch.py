@@ -17,10 +17,10 @@ import numpy as np
 from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont have it
 
 import tychopy as typy
-from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 ############################################################################
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     ## eastward from KSC in and doesnt pass through earth when LERPed from KSC
     MF = -0.05
     OEF = [at, et, istart, Ot, Wt, MF]
-    yf = typy.Astro.classic_to_cartesian(OEF, mu)
+    yf = typy.astro.classic_to_cartesian(OEF, mu)
 
     ts = np.linspace(0, tf_phase4, 1000)
 
@@ -446,7 +446,9 @@ if __name__ == "__main__":
     ###########################################################################
 
     ## All phases continuous in everything but mass (var 6)
-    ocp.add_forward_link_equal_con(phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10])
+    ocp.add_forward_link_equal_con(
+        phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10], auto_scale="auto"
+    )
 
     ocp.optimizer.set_opt_ls_mode("L1")
     ocp.optimizer.set_soe_ls_mode("L1")

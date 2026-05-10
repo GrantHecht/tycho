@@ -36,7 +36,7 @@ namespace tycho {
 using namespace tycho::solvers;
 
 template <> struct TychoBind<Jet> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho

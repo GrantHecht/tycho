@@ -28,7 +28,7 @@ void ArgsSegBuildPart2(FunctionRegistry &reg, nb::module_ &m) {
     using SEG4 = Segment<-1, 4, -1>;
     using ELEM = Segment<-1, 1, -1>;
 
-    reg.Build_Register<ELEM>(m, "Element");
+    reg.build_register<ELEM>(m, "Element");
 }
 
 } // namespace tycho

@@ -23,7 +23,7 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<OptimizationProblem>::Build(nb::module_ &m) {
+void TychoBind<OptimizationProblem>::build(nb::module_ &m) {
     using VectorFunctionalX = OptimizationProblem::VectorFunctionalX;
     using ScalarFunctionalX = OptimizationProblem::ScalarFunctionalX;
     using VectorXi = OptimizationProblem::VectorXi;

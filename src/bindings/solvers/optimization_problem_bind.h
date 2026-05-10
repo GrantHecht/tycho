@@ -25,11 +25,11 @@ namespace tycho {
 using namespace tycho::solvers;
 
 template <> struct TychoBind<OptimizationProblemBase> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 template <> struct TychoBind<OptimizationProblem> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho

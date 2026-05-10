@@ -124,7 +124,7 @@ template <class DODE, class PyDODE> void IntegratorBuildConstructors(PyDODE &obj
 } // namespace bind
 
 template <class DODE> struct TychoBind<Integrator<DODE>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Integrator<DODE>>(m, name);
 
         using ODEStateD = typename DODE::template Input<double>;

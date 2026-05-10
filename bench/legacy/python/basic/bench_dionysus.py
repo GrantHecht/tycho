@@ -10,12 +10,12 @@ import time
 import numpy as np
 
 import tychopy as typy
-import tychopy.Astro.Constants as c
-from tychopy.Astro.AstroModels import MEETwoBody_CSI
-from tychopy.Astro.Extensions.ThrusterModels import CSIThruster
+import tychopy.astro.constants as c
+from tychopy.astro.astro_models import MEETwoBody_CSI
+from tychopy.astro.Extensions.ThrusterModels import CSIThruster
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 
 
 if __name__ == "__main__":

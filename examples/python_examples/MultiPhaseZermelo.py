@@ -28,8 +28,8 @@ params = {
 mpl.rcParams.update(params)
 ################################################################################
 ## Setup
-oc = typy.OptimalControl
-vf = typy.VectorFunctions
+oc = typy.optimal_control
+vf = typy.vector_functions
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes
@@ -61,7 +61,7 @@ class Zermelo(oc.ODEBase):
         xD = vMax * vf.cos(th) + wx
         yD = vMax * vf.sin(th) + wy
 
-        ode = vf.Stack([xD, yD])
+        ode = vf.stack([xD, yD])
 
         super().__init__(ode, Xvars, Uvars)
 
@@ -159,7 +159,7 @@ def navigate(Points, vM=1, wF=uniformWind):
     # Add a link constraint from the first phase to the last phase
     # This enforces that at the point between the phases the positions and time must be the
     # same as we assign it to state variables 0 and 1, and 2.
-    ocp.add_forward_link_equal_con(0, -1, [0, 1, 2])
+    ocp.add_forward_link_equal_con(0, -1, [0, 1, 2], auto_scale="auto")
 
     ocp.solve_optimize()
 

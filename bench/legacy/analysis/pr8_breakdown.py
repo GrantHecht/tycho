@@ -19,8 +19,8 @@ import numpy as np
 
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 
@@ -183,7 +183,7 @@ def build_delta3():
     y0[3] += 0.00001 / vstar
 
     oef = [at, et, inc, om, argp, -0.05]
-    yf = typy.Astro.classic_to_cartesian(oef, mu)
+    yf = typy.astro.classic_to_cartesian(oef, mu)
 
     times = np.linspace(0, tf_phase4, 1000)
     ig1, ig2, ig3, ig4 = [], [], [], []

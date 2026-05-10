@@ -4,6 +4,23 @@
 Optimal Control Phase Tutorial
 ==============================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename. They use pre-rename camelCase method names
+   (``addBoundaryValue``, ``addLUVarBound``, ``addLUNormBound``, ``addPhase``,
+   ``addEqualCon``, ``addInequalCon``, ``addStateObjective``,
+   ``setControlMode``, ``setAutoScaling``, ``XVec``, ``XVar``, ``UVar``,
+   etc.). The bindings now expose only snake_case forms
+   (``add_boundary_value``, ``add_lu_var_bound``, ``add_lu_norm_bound``,
+   ``add_phase``, ``add_equal_con``, ``add_inequal_con``,
+   ``add_state_objective``, ``set_control_mode``, ``set_auto_scaling``,
+   ``x_vec``, ``x_var``, ``u_var``). Copy-pasting will fail with
+   ``AttributeError``. For runnable, current code see scripts under
+   ``examples/python_examples/`` (each example exercises the phase
+   features described here against the current API). A faithful rewrite
+   of this tutorial is tracked separately.
+
 Like many other optimal control packages, ASSET divides a large, potentially heterogeneous optimal control
 problem into distinct phases. In ASSET, the dynamics along a phase of the trajectory are governed by one ODE and
 discretized using a single transcription scheme. We may apply custom constraints and objectives to phases and optimize them by themselves, or

@@ -28,7 +28,7 @@ using namespace tycho::oc;
 template <int _XV, int _UV, int _PV> struct TychoBind<ODEArguments<_XV, _UV, _PV>> {
     using Derived = ODEArguments<_XV, _UV, _PV>;
     using Base = typename Derived::Base;
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Derived, Base>(m, name);
         obj.def(nb::init<int, int, int>());
         obj.def(nb::init<int, int>());

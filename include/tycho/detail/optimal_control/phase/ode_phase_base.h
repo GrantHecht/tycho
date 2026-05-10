@@ -35,6 +35,7 @@
 #include <string>
 #include <type_traits>
 #include <typeinfo>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -290,8 +291,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /////////////////////////////////////////////////
     template <class FuncMap>
     void remove_func_impl(FuncMap &map, int index, const std::string &funcstr) {
-        this->reset_transcription();
-        this->invalidate_post_opt_info();
+        // Validate before any mutation: an out-of-range index throws, and
+        // pre-flipping reset_transcription_/post_opt_info_ would force a
+        // wasteful re-transcription on a subsequent solve() under the
+        // exception path.
         if (index == -1 && map.size() > 0) {
             index = map.rbegin()->first;
         }
@@ -300,17 +303,24 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             throw std::invalid_argument(
                 fmt::format("No {0:} with index {1:} exists in phase.", funcstr, index));
         }
+
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         map.erase(index);
     }
 
     template <class FuncType, class FuncMap>
     int add_func_impl(FuncType func, FuncMap &map, const std::string &funcstr) {
+        // Validate before any mutation: check_function_size can throw, and
+        // any state we mutate before the throw would leak into the phase
+        // and duplicate on retry.
+        int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
+        func.storage_index_ = index;
+        check_function_size(func, funcstr);
+
         this->reset_transcription();
         this->invalidate_post_opt_info();
-        int index = map.size() == 0 ? 0 : map.rbegin()->first + 1;
-        map[index] = func;
-        map[index].storage_index_ = index;
-        check_function_size(map.at(index), funcstr);
+        map[index] = std::move(func);
         return index;
     }
 

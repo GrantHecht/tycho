@@ -38,10 +38,10 @@ table. This problem (Form2) is much smaller and solves faster yielding the same 
 
 """
 norm = np.linalg.norm
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
-solvs = typy.Solvers
+solvs = typy.solvers
 
 ##############################################################################
 Lstar = 10.0  ## m

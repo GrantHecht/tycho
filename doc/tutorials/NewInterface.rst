@@ -3,11 +3,26 @@
 ======================
 Interface Enhancements
 ======================
+
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename and still use the pre-rename camelCase method names
+   (``addBoundaryValue``, ``addLUNormBound``, ``XVec()``, ``XVar()``, ``Phases``,
+   ``addForwardLinkEqualCon``, ``setControlMode``, ``setAutoScaling``, etc.).
+   The actual Python bindings expose only the snake_case forms
+   (``add_boundary_value``, ``add_lu_norm_bound``, ``x_vec()``, ``x_var()``,
+   ``phases``, ``add_forward_link_equal_con``, ``set_control_mode``,
+   ``set_auto_scaling``). Copy-pasting these samples will fail with
+   ``AttributeError``. For runnable, up-to-date code, see the scripts under
+   ``examples/python_examples/`` (each example exercises the interface
+   features described here against the current API). A faithful rewrite of
+   this tutorial is tracked separately.
+
 Beginning in version 0.5.0, we have made significant improvements to the ODE, phase and OCP interfaces
-in order to simplify the definition of more complex optimal control problems. Note that these changes are backwards
-compatible and the previous tutorials and any existing code will continue to work as is. We will be updating all existing
-tutorials to reflect the new changes at a later date, but for now we will provide a brief overview of the new features. A subset of
-the existing examples have been updated to reflect the new interface and can be found in the examples/UpdatedInterface folder on the repo.
+in order to simplify the definition of more complex optimal control problems. We will be updating all existing
+tutorials to reflect the new changes at a later date, but for now we will provide a brief overview of the new features.
+The Python examples under ``examples/python_examples/`` use this interface throughout.
 
 
 ODE Component Naming

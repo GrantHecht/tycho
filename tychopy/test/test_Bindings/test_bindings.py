@@ -1,5 +1,5 @@
 """
-Comprehensive tests for recently changed binding code in src/Bindings/.
+Comprehensive tests for recently changed binding code in src/bindings/.
 
 Covers:
   - PyVectorFunction compute paths (numpy, list, tuple) and thread_safe property
@@ -14,7 +14,7 @@ import unittest
 import _tychopy as ast
 import numpy as np
 
-vf = ast.VectorFunctions
+vf = ast.vector_functions
 Args = vf.Arguments
 
 try:
@@ -254,14 +254,14 @@ class TestTypeCasters(unittest.TestCase):
             # Arguments(n).vf() returns a Gen; calling jacobian returns float64.
             # Use LGLInterpTable or similar if available.  For now verify
             # via variable indexing if accessible.
-            oc = ast.OptimalControl
+            oc = ast.optimal_control
             phase = oc.LGLPhase(Args(2), 10)
             phase.set_control_bounds([0.0, 0.0], [1.0, 1.0])
             idx = phase.return_control_vars(0)
             self.assertEqual(
                 idx.dtype, np.int32, "VectorXi::from_cpp should emit np.int32"
             )
-        except Exception:
+        except (AttributeError, TypeError):
             self.skipTest("No accessible VectorXi-returning API for dtype check")
 
     def test_stack_list_arg(self):
@@ -278,6 +278,179 @@ class TestTypeCasters(unittest.TestCase):
         result = vf.stack(f, np.array([1.0, 2.0]))
         self.assertIsNotNone(result)
         self.assertEqual(result.output_rows(), 4)
+
+
+# ---------------------------------------------------------------------------
+# TestModuleLayoutHardBreak
+# ---------------------------------------------------------------------------
+
+
+class TestModuleLayoutHardBreak(unittest.TestCase):
+    """Pin the snake_case Python-module rename as a hard break with no
+    PascalCase aliases. If a future change adds a convenience alias
+    (e.g. resurrects ``_tychopy.OptimalControl`` or ``tychopy.Astro``)
+    these tests fail at CI time instead of silently softening the API.
+    """
+
+    PASCAL_NAMES = ["VectorFunctions", "OptimalControl", "Solvers", "Utils", "Astro"]
+
+    def test_no_pascalcase_underscore_tychopy_submodules(self):
+        import importlib
+
+        for name in self.PASCAL_NAMES:
+            with self.assertRaises(
+                (ImportError, ModuleNotFoundError, AttributeError),
+                msg=f"_tychopy.{name} should not be importable",
+            ):
+                importlib.import_module(f"_tychopy.{name}")
+
+    def test_no_pascalcase_tychopy_subpackages(self):
+        import importlib
+
+        for name in self.PASCAL_NAMES:
+            with self.assertRaises(
+                (ImportError, ModuleNotFoundError),
+                msg=f"tychopy.{name} should not be importable",
+            ):
+                importlib.import_module(f"tychopy.{name}")
+
+    def test_snake_case_paths_succeed(self):
+        import importlib
+
+        for name in ["vector_functions", "optimal_control", "solvers", "utils", "astro"]:
+            importlib.import_module(f"_tychopy.{name}")
+            importlib.import_module(f"tychopy.{name}")
+
+
+# ---------------------------------------------------------------------------
+# TestLegacyLinkAPIRemoved
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyLinkAPIRemoved(unittest.TestCase):
+    """Pin the legacy OCP link API removal as a hard break. PR #50
+    deleted ``LinkFlags``, ``LinkConstraint``, and ``LinkObjective``
+    from the ``_tychopy.optimal_control`` namespace and removed ~30
+    legacy ``add_link_*`` overloads taking a pre-built ``LinkConstraint``
+    object. If a future change reintroduces any of them as a
+    convenience alias these assertions fail at CI time instead of
+    silently re-softening the API.
+    """
+
+    LEGACY_NAMES = ["LinkFlags", "LinkConstraint", "LinkObjective"]
+
+    def test_legacy_classes_absent(self):
+        oc_mod = ast.optimal_control
+        for name in self.LEGACY_NAMES:
+            with self.assertRaises(
+                AttributeError,
+                msg=f"_tychopy.optimal_control.{name} should not exist",
+            ):
+                getattr(oc_mod, name)
+
+
+# ---------------------------------------------------------------------------
+# TestUncoveredLinkBindings
+# ---------------------------------------------------------------------------
+
+
+def _build_2phase_ocp():
+    """Two phases of the trivial ODE x' = u, with one link param.
+    Used by TestUncoveredLinkBindings to exercise each link binding.
+    """
+    oc = ast.optimal_control
+
+    class _SimpleODE(oc.ode_x_u.ode):
+        def __init__(self):
+            args = oc.ODEArguments(1, 1)
+            x_dot = args.u_var(0)
+            super().__init__(vf.stack([x_dot]), 1, 1)
+
+    ode = _SimpleODE()
+
+    n = 8
+    traj_a = [np.array([i / (n - 1), i / (n - 1), 1.0]) for i in range(n)]
+    traj_b = [np.array([1.0 + i / (n - 1), i / (n - 1) + 1.0, 1.0]) for i in range(n)]
+
+    p0 = ode.phase("LGL3", traj_a, n - 1)
+    p1 = ode.phase("LGL3", traj_b, n - 1)
+
+    ocp = oc.OptimalControlProblem()
+    ocp.add_phase(p0)
+    ocp.add_phase(p1)
+    ocp.set_link_params(np.array([0.0]))
+    return ocp
+
+
+class TestUncoveredLinkBindings(unittest.TestCase):
+    """Pin that the four link bindings with zero downstream callers
+    today are (a) registered AND (b) actually callable end-to-end. A
+    broken ``nb::overload_cast`` template arg compiles to a callable
+    attribute and only fails at call time with ``TypeError``, so a
+    pure ``hasattr``/``callable`` check would not catch it.
+    ``add_link_inequal_con``, ``add_link_objective``,
+    ``add_link_param_inequal_con``, and ``add_link_param_objective``
+    are bound in ``build_link_interface`` (see
+    ``src/bindings/optimal_control/optimal_control_problem_bind.cpp``)
+    but no test or example exercises them today. These tests construct
+    a 2-phase OCP and invoke each binding.
+    """
+
+    BINDINGS = [
+        "add_link_inequal_con",
+        "add_link_objective",
+        "add_link_param_inequal_con",
+        "add_link_param_objective",
+    ]
+
+    def test_bindings_registered(self):
+        ocp_class = ast.optimal_control.OptimalControlProblem
+        for name in self.BINDINGS:
+            self.assertTrue(
+                hasattr(ocp_class, name),
+                msg=f"OptimalControlProblem.{name} must be registered",
+            )
+            attr = getattr(ocp_class, name)
+            self.assertTrue(
+                callable(attr),
+                msg=f"OptimalControlProblem.{name} must be callable",
+            )
+
+    def test_add_link_inequal_con_packs_form_callable(self):
+        ocp = _build_2phase_ocp()
+        # IRows = 2: one var per phase. f(a, b) = a - b returns a length-1 vector.
+        cons_func = Args(2).head(1) - Args(2).tail(1)
+        idx = ocp.add_link_inequal_con(
+            cons_func,
+            [(0, "Back", [0], [], []), (1, "Front", [0], [], [])],
+        )
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_objective_packs_form_callable(self):
+        ocp = _build_2phase_ocp()
+        # Scalar function f(a, b) = (a - b) . (a - b)  — IRows = 2, ORows = 1.
+        diff = Args(2).head(1) - Args(2).tail(1)
+        obj_func = diff.dot(diff)
+        idx = ocp.add_link_objective(
+            obj_func,
+            [(0, "Back", [0], [], []), (1, "Front", [0], [], [])],
+        )
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_param_inequal_con_callable(self):
+        ocp = _build_2phase_ocp()
+        # Single-link-param scalar function.
+        cons_func = Args(1).head(1)  # vector function with IRows = 1, ORows = 1
+        idx = ocp.add_link_param_inequal_con(cons_func, np.array([0], dtype=np.int32))
+        self.assertIsInstance(idx, int)
+
+    def test_add_link_param_objective_callable(self):
+        ocp = _build_2phase_ocp()
+        # Single-link-param scalar function f(p) = p . p.
+        a = Args(1)
+        obj_func = a.dot(a)
+        idx = ocp.add_link_param_objective(obj_func, np.array([0], dtype=np.int32))
+        self.assertIsInstance(idx, int)
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +497,7 @@ class TestParsePythonArgs(unittest.TestCase):
 
 class TestCartesianToMEEBindings(unittest.TestCase):
     """Cover both bindings on the new direct Cartesian->MEE conversion:
-    the numpy Vector6 overload (via tychopy.Astro._vec6_wrap) and the
+    the numpy Vector6 overload (via tychopy.astro._vec6_wrap) and the
     GenericFunction VF-composition overload registered in
     src/bindings/astro/kepler_utils.cpp.
     """
@@ -349,7 +522,7 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         numpy-input branch and the underlying
         cartesian_to_modified(Vector6, mu) / modified_to_cartesian(Vector6, mu)
         bindings."""
-        from tychopy import Astro as TyAstro
+        from tychopy import astro as TyAstro
 
         mee = np.asarray(TyAstro.cartesian_to_modified(self.RV, self.MU_EARTH))
         rv2 = np.asarray(TyAstro.modified_to_cartesian(mee, self.MU_EARTH))
@@ -359,7 +532,7 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         """cartesian_to_modified(VectorFunction(seg), mu) hits the
         GenericFunction VF-overload added in this PR (which constructs
         a CartesianToMEE and composes via .eval())."""
-        from tychopy import Astro as TyAstro
+        from tychopy import astro as TyAstro
 
         seg = Args(6).head(6)
         gen = TyAstro.cartesian_to_modified(vf.VectorFunction(seg), self.MU_EARTH)

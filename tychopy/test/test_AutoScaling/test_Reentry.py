@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as ast
-import tychopy.OptimalControl as oc
-import tychopy.VectorFunctions as vf
-from tychopy.VectorFunctions import Arguments as Args
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 ###################  ##################################
 
@@ -191,7 +191,7 @@ class test_Reentry(unittest.TestCase):
         Flag1 = phase.solve_optimize()
 
         self.assertEqual(
-            Flag1, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag1, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         Traj1 = phase.return_traj()
@@ -211,7 +211,7 @@ class test_Reentry(unittest.TestCase):
         Traj2 = phase.return_traj()
 
         self.assertEqual(
-            Flag2, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag2, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         Obj2 = Traj2[-1][1]

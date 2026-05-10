@@ -1,6 +1,21 @@
 Orbit Family Continuation
 ====================================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename. They use pre-rename module paths
+   (``from tycho.Astro.AstroModels import CR3BP``,
+   ``import tycho.Astro.Constants as c``) and camelCase identifiers
+   (``addBoundaryValue``, ``addEqualCon``, ``XVar``, ``setControlMode``).
+   The current paths are ``from tychopy.astro.astro_models import CR3BP``
+   and ``import tychopy.astro.constants as c``, and the snake_case bindings
+   expose ``add_boundary_value``, ``add_equal_con``, ``x_var``,
+   ``set_control_mode``. Copy-pasting will fail with ``AttributeError`` or
+   ``ModuleNotFoundError``. For runnable, current code see
+   ``examples/python_examples/Heteroclinic.py`` (CR3BP-class problem against
+   the current API). A faithful rewrite of this page is tracked separately.
+
 A use case familiar to all astrodynamicists is the generation of orbit families via continuation from an initial orbit.
 ASSET makes reconvergence of slightly perturbed solutions quick and simple by using common python idioms.
 The scenario we will investigate is in the Earth-Moon CR3BP, where we want to build the L1 Planar and Northern Halo families from two approximate initial conditions.

@@ -6,10 +6,10 @@ import _tychopy as ast
 import matplotlib.pyplot as plt
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
+vf = ast.vector_functions
+oc = ast.optimal_control
 Args = vf.Arguments
-solvs = ast.Solvers
+solvs = ast.solvers
 
 
 def RosenBrockObj(xy=Args(2)):
@@ -44,7 +44,7 @@ class test_RosenBrock(unittest.TestCase):
         SolError = np.linalg.norm(Fpoint - self.KnownSol)
 
         self.assertEqual(
-            Flag, ast.Solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
         )
 
         self.assertLess(

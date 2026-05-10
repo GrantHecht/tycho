@@ -17,9 +17,9 @@ import numpy as np
 
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
-sol = typy.Solvers
+vf = typy.vector_functions
+oc = typy.optimal_control
+sol = typy.solvers
 
 Args = vf.Arguments
 

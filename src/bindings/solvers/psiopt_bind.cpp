@@ -48,7 +48,7 @@ using namespace tycho::utils;
     obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result().field; } __VA_OPT__(, )  \
                                 __VA_ARGS__)
 
-void TychoBind<PSIOPT>::Build(nb::module_ &m) {
+void TychoBind<PSIOPT>::build(nb::module_ &m) {
     using BarrierModes = PSIOPT::BarrierModes;
     using LineSearchModes = PSIOPT::LineSearchModes;
     using QPPivotModes = PSIOPT::QPPivotModes;

@@ -22,13 +22,13 @@ namespace tycho {
 
 using namespace tycho::solvers;
 
-void SolversBuild(FunctionRegistry &reg, nb::module_ &m) {
+void solvers_build(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
     ensure_solver_initialized();
-    TychoBind<PSIOPT>::Build(sol);
-    TychoBind<OptimizationProblemBase>::Build(sol);
-    TychoBind<Jet>::Build(sol);
-    TychoBind<OptimizationProblem>::Build(sol);
+    TychoBind<PSIOPT>::build(sol);
+    TychoBind<OptimizationProblemBase>::build(sol);
+    TychoBind<Jet>::build(sol);
+    TychoBind<OptimizationProblem>::build(sol);
 }
 
 } // namespace tycho

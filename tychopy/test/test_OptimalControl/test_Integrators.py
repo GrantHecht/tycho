@@ -5,9 +5,9 @@ import _tychopy as ast
 import matplotlib.pyplot as plt
 import numpy as np
 
-vf = ast.VectorFunctions
-oc = ast.OptimalControl
-sol = ast.Solvers
+vf = ast.vector_functions
+oc = ast.optimal_control
+sol = ast.solvers
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -260,8 +260,8 @@ class test_Integrators(unittest.TestCase):
         """
         Tests: Serial and parallel STM computation
         """
-        ode = ast.Astro.Kepler.ode(1)
-        kprop = ast.Astro.Kepler.KeplerPropagator(1.0)  # Ground Truth
+        ode = ast.astro.kepler.ode(1)
+        kprop = ast.astro.kepler.KeplerPropagator(1.0)  # Ground Truth
 
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
@@ -341,7 +341,7 @@ class test_Integrators(unittest.TestCase):
 
         Events = [ApoApseEvent, PeriApseEvent, AllApseEvent]
 
-        ode = ast.Astro.Kepler.ode(1)
+        ode = ast.astro.kepler.ode(1)
 
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
@@ -450,7 +450,7 @@ class test_Integrators(unittest.TestCase):
         AllApseEvent = (ApseFunc(), 0, 0)
         Events = [AllApseEvent]
 
-        ode = ast.Astro.Kepler.ode(1)
+        ode = ast.astro.kepler.ode(1)
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
@@ -482,7 +482,7 @@ class test_Integrators(unittest.TestCase):
         concern moot. If a future binding rewrite breaks propagation,
         this test will catch it.
         """
-        ode = ast.Astro.Kepler.ode(1.0)
+        ode = ast.astro.kepler.ode(1.0)
         integ = ode.integrator(0.01)
         integ.set_abs_tol(1.0e-10)
 
@@ -501,12 +501,12 @@ class test_Integrators(unittest.TestCase):
 
     def test_BatchCalls2(self):
 
-        kprop = ast.Astro.Kepler.KeplerPropagator(1.0)  # Ground Truth
-        ode1 = ast.Astro.Kepler.ode(1)
-        ode2 = ast.OptimalControl.ode_6.ode(ode1.vf(), 6)
-        ode3 = ast.OptimalControl.ode_x.ode(ode1.vf(), 6)
-        ode4 = ast.OptimalControl.ode_x_u.ode(ode1.vf(), 6, 0)
-        ode5 = ast.OptimalControl.ode_x_u_p.ode(ode1.vf(), 6, 0, 0)
+        kprop = ast.astro.kepler.KeplerPropagator(1.0)  # Ground Truth
+        ode1 = ast.astro.kepler.ode(1)
+        ode2 = ast.optimal_control.ode_6.ode(ode1.vf(), 6)
+        ode3 = ast.optimal_control.ode_x.ode(ode1.vf(), 6)
+        ode4 = ast.optimal_control.ode_x_u.ode(ode1.vf(), 6, 0)
+        ode5 = ast.optimal_control.ode_x_u_p.ode(ode1.vf(), 6, 0, 0)
 
         for ode in [ode1, ode2, ode3, ode4, ode5]:
             integ = ode.integrator(0.001)
@@ -695,7 +695,7 @@ class TestBindingValidators(unittest.TestCase):
         # mid-call on the Kepler static-sized path, we exercise the
         # exception-propagation pathway of the binding return slot;
         # surviving this call without SIGSEGV is the pass condition.
-        kepler_ode = ast.Astro.Kepler.ode(1)  # mu=1 (dimensionless units)
+        kepler_ode = ast.astro.kepler.ode(1)  # mu=1 (dimensionless units)
         integ = kepler_ode.integrator(0.001)
         integ.set_abs_tol(1.0e-30)
         integ.set_rel_tol(1.0e-30)
@@ -765,7 +765,7 @@ class TestBindingValidators(unittest.TestCase):
             R, V = Args(7).tolist([(0, 3), (3, 3)])
             return R.dot(V)
 
-        ode = ast.Astro.Kepler.ode(1)
+        ode = ast.astro.kepler.ode(1)
         integ = ode.integrator(0.01)
         X0 = np.zeros(7)
         X0[0] = 1.0

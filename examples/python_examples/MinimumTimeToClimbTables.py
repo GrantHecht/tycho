@@ -15,7 +15,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tychopy.VectorFunctions as vf
+import tychopy.vector_functions as vf
 
 """
 Aerodynamic Data taken from ICLOS2s implentation of the problem

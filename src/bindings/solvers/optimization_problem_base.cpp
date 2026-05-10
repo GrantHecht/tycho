@@ -23,7 +23,7 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<OptimizationProblemBase>::Build(nb::module_ &m) {
+void TychoBind<OptimizationProblemBase>::build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
     obj.def_rw("jet_job_mode", &OptimizationProblemBase::jet_job_mode_);

@@ -3,6 +3,18 @@
 ODE Tutorial
 ============
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename. They use pre-rename camelCase identifiers
+   (``ast.VectorFunctions``, ``ast.OptimalControl``, ``XVar``, ``UVar``,
+   ``XVec``, etc.). The bindings now expose only snake_case forms
+   (``ast.vector_functions``, ``ast.optimal_control``, ``x_var``, ``u_var``,
+   ``x_vec``). Copy-pasting will fail with ``AttributeError``. For runnable,
+   current code see ``examples/python_examples/Brachistochrone.py`` and
+   ``BrysonDenham.py`` (both define ODEs against the current API). A
+   faithful rewrite of this tutorial is tracked separately.
+
 One of ASSET's primary goals is facilitating optimal control and integration of dynamical systems governed by ordinary differential equations (ODEs).
 In ASSET, an ODE is simply a VectorFunction adhering to the state-space formalism shown below. 
 That is, it is a VectorFunction that takes as arguments the state of the system, :math:`\vec{X}`, the current time,

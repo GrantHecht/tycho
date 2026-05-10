@@ -7,7 +7,7 @@
 PR #20 added Accelerate sparse solver improvements and PSIOPT benchmarks.
 During regression investigation, we identified the need for a large-scale
 benchmark based on the Betts (2009) low-thrust orbit transfer (example 6).
-The Python version exists at `examples/UpdatedInterface/BettsLowThrust.py`
+The Python version exists at `examples/python_examples/BettsLowThrust.py`
 and exercises the full solver stack: MEE dynamics with J2/J3/J4, LGL5
 collocation, adaptive mesh refinement, unit-vector control constraints.
 
@@ -131,7 +131,7 @@ Potential approaches:
 The MEE ODE definition and `make_betts_lt_phase()` builder are written and
 `#if 0`'d in `bench/cpp/bench_common.h` with comments explaining the issue.
 The code is functional but disabled due to memory cost. The Python example
-(`examples/UpdatedInterface/BettsLowThrust.py`) serves as the reference
+(`examples/python_examples/BettsLowThrust.py`) serves as the reference
 implementation.
 
 ### MT-METIS Tracking Context

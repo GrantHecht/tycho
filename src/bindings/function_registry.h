@@ -36,7 +36,7 @@ using namespace tycho::astro;
 using namespace tycho::integrators;
 using namespace tycho::utils;
 
-// Primary template — undefined; specializations in *Bind.h files
+// Primary template — undefined; specializations in *_bind.h files
 template <class T> struct TychoBind;
 
 #ifdef TYCHO_PYTHON_BINDINGS
@@ -62,13 +62,13 @@ struct FunctionRegistry {
 
     FunctionRegistry(nb::module_ &m)
         : mod(m), vfmod(m.def_submodule(
-                      "VectorFunctions",
+                      "vector_functions",
                       "SubModule Containing Vector and Scalar Function Types and Functions")),
           ocmod(
-              m.def_submodule("OptimalControl",
+              m.def_submodule("optimal_control",
                               "SubModule Containing Optimal Control ODEs, Phases, and Utilities")),
-          solmod(m.def_submodule("Solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
-          extmod(m.def_submodule("Extensions", "User Defined Extensions")),
+          solmod(m.def_submodule("solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
+          extmod(m.def_submodule("extensions", "User Defined Extensions")),
           vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction")),
           sfuncx(nb::class_<ScalarFunctionalX>(this->vfmod, "ScalarFunction")) {}
 
@@ -95,21 +95,21 @@ struct FunctionRegistry {
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived>
-        requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
-    void Build_Register(nb::module_ &m) {
-        TychoBind<Derived>::Build(m);
+        requires requires(nb::module_ &m) { TychoBind<Derived>::build(m); }
+    void build_register(nb::module_ &m) {
+        TychoBind<Derived>::build(m);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived>
-        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-    void Build_Register(const char *name) {
-        TychoBind<Derived>::Build(this->mod, name);
+        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+    void build_register(const char *name) {
+        TychoBind<Derived>::build(this->mod, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
     template <class Derived>
-        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-    void Build_Register(nb::module_ &m, const char *name) {
-        TychoBind<Derived>::Build(m, name);
+        requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+    void build_register(nb::module_ &m, const char *name) {
+        TychoBind<Derived>::build(m, name);
         RegSelector<Derived::IRC, Derived::ORC>::template Register<Derived>(this);
     }
 };

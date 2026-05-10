@@ -30,10 +30,10 @@ except ImportError:
     HAS_BASEMAP = False
 
 import tychopy as typy
-from tychopy.OptimalControl.MeshErrorPlots import PhaseMeshErrorPlot
+from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 
 """

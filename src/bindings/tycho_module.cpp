@@ -23,18 +23,18 @@
 #include "vf/tycho_vector_functions.h"
 
 namespace tycho {
-void VectorFunctionBuild(FunctionRegistry &reg, nb::module_ &m);
-void SolversBuild(FunctionRegistry &reg, nb::module_ &m);
-void OptimalControlBuild(FunctionRegistry &reg, nb::module_ &m);
-void UtilsBuild(nb::module_ &m);
-void AstroBuild(FunctionRegistry &reg, nb::module_ &m);
+void vector_functions_build(FunctionRegistry &reg, nb::module_ &m);
+void solvers_build(FunctionRegistry &reg, nb::module_ &m);
+void optimal_control_build(FunctionRegistry &reg, nb::module_ &m);
+void utils_build(nb::module_ &m);
+void astro_build(FunctionRegistry &reg, nb::module_ &m);
 // TYCHO_HAS_EXTENSIONS is defined by src/bindings/CMakeLists.txt when the
 // extensions/ subdirectory is built. The guard gates both the forward
 // declaration below and the call site further down so linking succeeds
 // when extensions are unbuilt. CMake prints a STATUS message at configure
 // time indicating which branch was taken.
 #ifdef TYCHO_HAS_EXTENSIONS
-void ExtensionsBuild(FunctionRegistry &reg, nb::module_ &m);
+void extensions_build(FunctionRegistry &reg, nb::module_ &m);
 #endif
 } // namespace tycho
 
@@ -168,14 +168,14 @@ NB_MODULE(_tychopy, m) {
     m.def("py_main", &main);
     m.def("software_info", &SoftwareInfo);
 
-    FunctionRegistry reg(m);     // Must be built first
-    VectorFunctionBuild(reg, m); // Must be built second
-    SolversBuild(reg, m);        // Builds Third so that PSIOPT shows up better in autocomplete
-    OptimalControlBuild(reg, m);
-    UtilsBuild(m);
-    AstroBuild(reg, m);
+    FunctionRegistry reg(m);        // Must be built first
+    vector_functions_build(reg, m); // Must be built second
+    solvers_build(reg, m);          // Builds Third so that PSIOPT shows up better in autocomplete
+    optimal_control_build(reg, m);
+    utils_build(m);
+    astro_build(reg, m);
 
 #ifdef TYCHO_HAS_EXTENSIONS
-    ExtensionsBuild(reg, reg.extmod);
+    extensions_build(reg, reg.extmod);
 #endif
 }

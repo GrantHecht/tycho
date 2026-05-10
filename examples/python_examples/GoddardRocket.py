@@ -16,10 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tychopy as typy
-
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
-Args = vf.Arguments
+import tychopy.optimal_control as oc
+import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 """
 Classic Goddard rocket problem with singular arc
@@ -35,21 +34,15 @@ W = 203000
 Lstar = 10000.0  ## feet
 Tstar = 60.0  ## sec
 Mstar = 1  ## slugs
-
 Vstar = Lstar / Tstar
-Fstar = Mstar * Lstar / (Tstar**2)
-Astar = Lstar / (Tstar**2)
-Rhostar = Mstar / (Lstar**3)
-BTUstar = 778.0 * Lstar * Fstar
-Mustar = (Lstar**3) / (Tstar**2)
-sigmastar = Mstar / Lstar
 
-rho0 = 0.002378 / Rhostar
-h_ref = 23800 / Lstar
-g = g0 / Astar
-Tmag = 200 / Fstar
-c = 1580.94 / Vstar
-sigma = 5.4915e-5 / sigmastar
+
+rho0 = 0.002378
+h_ref = 23800
+g = g0
+Tmag = 200
+c = 1580.94
+sigma = 5.4915e-5
 
 m0 = 3
 mf = 1
@@ -58,19 +51,24 @@ mf = 1
 class GoddardRocket(oc.ODEBase):
     def __init__(self, sigma, c, h_ref, Tmag, g):
         ############################################################
-        args = oc.ODEArguments(3, 1)
-        h, v, m = args.x_vec().tolist()
-        u = args.u_var(0)
+        XtU = oc.ODEArguments(3, 1)
+        h, v, m = XtU.x_vec().tolist()
+        u = XtU.u_var(0)
 
         hdot = v
-
         vdot = (u * Tmag - sigma * (v**2) * vf.exp(-h / h_ref)) / m - g
-
         mdot = -u * Tmag / c
 
         ode = vf.stack(hdot, vdot, mdot)
         ##############################################################
-        super().__init__(ode, 3, 1)
+        Vgroups = {}
+        Vgroups[("h", "altitude")] = h
+        Vgroups[("v", "velocity")] = v
+        Vgroups[("m", "mass")] = m
+        Vgroups[("t", "time")] = XtU.t_var()
+        Vgroups["u"] = u
+
+        super().__init__(ode, 3, 1, Vgroups=Vgroups)
 
 
 def PathCon(sigma, c, h_ref, Tmag, g):
@@ -85,10 +83,10 @@ def PathCon(sigma, c, h_ref, Tmag, g):
 def Plot(axs, Traj, label=""):
     T = np.array(Traj).T
 
-    axs[0].plot(T[3] * Tstar, T[0] * Lstar, label=label)
-    axs[1].plot(T[3] * Tstar, T[1] * Vstar)
-    axs[2].plot(T[3] * Tstar, T[2] * Mstar)
-    axs[3].plot(T[3] * Tstar, T[4] * Tmag * Fstar)
+    axs[0].plot(T[3], T[0], label=label)
+    axs[1].plot(T[3], T[1])
+    axs[2].plot(T[3], T[2])
+    axs[3].plot(T[3], T[4] * Tmag)
 
 
 if __name__ == "__main__":
@@ -102,15 +100,12 @@ if __name__ == "__main__":
 
     ode = GoddardRocket(sigma, c, h_ref, Tmag, g)
 
-    integ = ode.integrator(0.01, Ulaw(), [2])
+    units = ode.make_units(h=Lstar, v=Vstar, m=Mstar, t=Tstar)
 
-    X0 = np.zeros((5))
-    X0[0] = 0
-    X0[1] = 0
-    X0[2] = m0
-    X0[4] = 1
+    integ = ode.integrator(0.01, Ulaw(), "m")
 
-    TrajIG = integ.integrate_dense(X0, 60 / Tstar, 1000, StopFunc)
+    X0 = ode.make_input(h=0, v=0, m=m0, u=1)
+    TrajIG = integ.integrate_dense(X0, 60, 1000, StopFunc)
 
     """
     Single phase formualtion has a singular arc
@@ -118,10 +113,13 @@ if __name__ == "__main__":
 
     ##############################################################################
     phase = ode.phase("LGL3", TrajIG, 128)
-    phase.add_boundary_value("Front", range(0, 4), TrajIG[0][0:4])
-    phase.add_lu_var_bound("Path", 4, 0.0, 1.0, 1.0)
-    phase.add_value_objective("Back", 0, -1.0)
-    phase.add_boundary_value("Back", [1, 2], [0, mf])
+    phase.set_auto_scaling(True)
+    phase.set_units(units)
+
+    phase.add_boundary_value("Front", ["h", "v", "m", "t"], TrajIG[0][0:4])
+    phase.add_lu_var_bound("Path", "u", 0.0, 1.0, 1.0)
+    phase.add_value_objective("Back", "h", -1.0)
+    phase.add_boundary_value("Back", ["v", "m"], [0, mf])
     phase.optimize()
     Traj = phase.return_traj()
     ###############################################################################
@@ -138,31 +136,42 @@ if __name__ == "__main__":
     TrajIG3 = TrajIG[2 * n : -1]
 
     phase1 = ode.phase("LGL3", TrajIG1, 32)
-    phase1.add_boundary_value("Front", range(0, 4), TrajIG[0][0:4])
-    phase1.add_boundary_value("Path", [4], [1])
+    phase1.add_boundary_value("Front", ["h", "v", "m", "t"], TrajIG[0][0:4])
+    phase1.add_boundary_value("Path", "u", 1.0)
 
     phase2 = ode.phase("LGL3", TrajIG2, 32)
     # PathCon makse Control splines redundant for LGL>3
     phase2.set_control_mode("NoSpline")
-    phase2.add_lu_var_bound("Path", 4, 0.0, 1.0, 1.0)
-    phase2.add_equal_con("Path", PathCon(sigma, c, h_ref, Tmag, g), [0, 1, 2, 4])
+    phase2.add_lu_var_bound("Path", "u", 0.0, 1.0, 1.0)
+    phase2.add_equal_con(
+        "Path", PathCon(sigma, c, h_ref, Tmag, g), ["h", "v", "m", "u"]
+    )
 
     phase3 = ode.phase("LGL3", TrajIG3, 32)
-    phase3.add_boundary_value("Path", [4], [0])
-    phase3.add_boundary_value("Back", [1, 2], [0, mf])
-    phase3.add_value_objective("Back", 0, -1.0)
+    phase3.add_boundary_value("Path", "u", 0)
+    phase3.add_boundary_value("Back", ["v", "m"], [0, mf])
+    phase3.add_value_objective("Back", "h", -1.0)
 
     ocp = oc.OptimalControlProblem()
     ocp.add_phase(phase1)
     ocp.add_phase(phase2)
     ocp.add_phase(phase3)
 
-    ocp.add_forward_link_equal_con(phase1, phase3, range(0, 4))
+    ocp.add_forward_link_equal_con(phase1, phase3, ["h", "v", "m", "t"])
 
     phase1.add_lower_delta_time_bound(0)
     phase2.add_lower_delta_time_bound(0)
     phase3.add_lower_delta_time_bound(0)
 
+    ## Set each phase's units
+    phase1.set_units(units)
+    phase2.set_units(units)
+    phase3.set_units(units)
+
+    # Enable autoscaling for ocp and all constituent phases
+    ocp.set_auto_scaling(True, True)
+
+    ocp.set_num_partitions(8, 8)
     ocp.optimize()
 
     ##############################################################################
@@ -173,7 +182,7 @@ if __name__ == "__main__":
 
     Plot(axs, TrajIG, "Initial Guess")
     Plot(axs, Traj, "Single Phase")
-    Plot(axs, Traj2, "Multi-Phase")
+    Plot(axs, Traj2, "Multi Phase")
 
     axs[0].grid(True)
     axs[1].grid(True)

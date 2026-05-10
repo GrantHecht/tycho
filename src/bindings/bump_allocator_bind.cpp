@@ -23,7 +23,7 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<BumpAllocator>::Build(nb::module_ &m) {
+void TychoBind<BumpAllocator>::build(nb::module_ &m) {
     auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator");
     obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize));
     obj.def_static("resize", nb::overload_cast<int, int>(&BumpAllocator::resize));

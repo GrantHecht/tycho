@@ -1,6 +1,21 @@
 Delta 3 Multi-phase GTO Transfer
 ================================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename and the legacy OCP link-API removal (PR #50). They use
+   pre-rename identifiers (``ast.VectorFunctions``, ``ast.OptimalControl``,
+   ``addPhase``, ``addBoundaryValue``, ``addLUVarBound``, ``XVar``,
+   ``setControlMode``, ``setAutoScaling``, etc.) and the legacy
+   ``LinkConstraint`` / ``LinkFlags`` link API. The bindings now expose
+   only snake_case forms (``ast.vector_functions``, ``ast.optimal_control``,
+   ``add_phase``, ``add_boundary_value``, ``add_lu_var_bound``, ``x_var``,
+   ``set_control_mode``, ``set_auto_scaling``, ``add_forward_link_equal_con``).
+   Copy-pasting will fail with ``AttributeError`` or ``TypeError``. For
+   runnable, current code see ``examples/python_examples/Delta3Launch.py``.
+   A faithful rewrite of this page is tracked separately.
+
 .. figure:: _static/Delta_III.svg
     :width: 70%
     :align: right

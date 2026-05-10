@@ -21,8 +21,8 @@ import tychopy as typy
 
 ################################################################################
 ## Setup
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 
 Args = vf.Arguments
 
@@ -130,7 +130,12 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 
     # Forward the back state in each phase and the linkParams to the function
     for i in range(0, len(Trajs)):
-        ocp.add_link_equal_con(LinkFun, [(i, "Back", range(0, 7), [], [])], range(0, 7))
+        ocp.add_link_equal_con(
+            LinkFun,
+            [(i, "Back", range(0, 7), [], [])],
+            range(0, 7),
+            auto_scale="auto",
+        )
 
     ocp.add_link_param_equal_con(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
 
@@ -170,7 +175,7 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
         Flag = ocp.optimize()
         tf = time.perf_counter()
         print((tf - t0) * 1000.0)
-        if Flag == typy.Solvers.ConvergenceFlags.NOTCONVERGED:
+        if Flag == typy.solvers.ConvergenceFlags.NOTCONVERGED:
             ocp.solve_optimize()
 
         Data.append(

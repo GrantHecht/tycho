@@ -11,6 +11,17 @@ It uses a custom implementation of vector math formalisms to enable rapid implem
 The phase object is the core of the optimal control functionality, and by linking multiple phases together, the user can construct scenarios of arbitrary complexity.
 A newly developed high-performance interior-point optimizer (PSIOPT) is included with the library, which enables quick turnaround from concept to solution.
 
+.. warning::
+
+   Many code samples in this documentation pre-date the Tycho Python-API
+   snake_case rename and use camelCase identifiers (``addBoundaryValue``,
+   ``XVar``, ``setControlMode``, ``vf.Stack``, ``LinkConstraint``, etc.) and
+   old module paths (``tycho.Astro``, ``tycho.OptimalControl``). Copy-pasting
+   will fail with ``AttributeError``. For runnable, current code see the
+   scripts under ``examples/python_examples/``. Heavily-affected pages carry
+   their own per-file warning banners; in their absence, prefer the
+   snake_case API exposed by the runtime.
+
 .. toctree::
     :maxdepth: 2
     :caption: Contents:

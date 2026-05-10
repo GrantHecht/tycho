@@ -1,7 +1,26 @@
 ASSET Astro Library
 ===================
 
-Included with the ASSET install are a subset of dynamical models that are available for use through the Python interface. 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename. They use pre-rename module paths
+   (``from tycho.Astro.AstroModels import ...``,
+   ``import tycho.Astro.Constants as c``,
+   ``from tycho.Astro.Extensions.ThrusterModels import ...``). The current
+   import paths are
+   ``from tychopy.astro.astro_models import ...``,
+   ``import tychopy.astro.constants as c``, and
+   ``from tychopy.astro.Extensions.ThrusterModels import ...`` (note that
+   the per-subpackage ``Extensions/`` directory remains PascalCase per the
+   PR #50 design spec). Copy-pasting will fail with ``ModuleNotFoundError``.
+   For runnable, current code see scripts under ``examples/python_examples/``
+   that exercise these astrodynamical models against the live API
+   (e.g. ``Heteroclinic.py`` for CR3BP-class problems,
+   ``DionysusLowThrust.py`` and ``TopputtoLowThrust.py`` for low-thrust
+   variants). A faithful rewrite of this page is tracked separately.
+
+Included with the ASSET install are a subset of dynamical models that are available for use through the Python interface.
 These models include standard two-body, circular restricted three body problem (CR3BP), ephemeris, and low-thrust models.
 The Python implementation of these files can be found in asset/src/tycho/Astro.
 Below we will demonstrate some of the sample models that can be found.

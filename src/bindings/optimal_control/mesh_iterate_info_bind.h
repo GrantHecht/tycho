@@ -24,7 +24,7 @@ namespace tycho {
 using namespace tycho::oc;
 
 template <> struct TychoBind<MeshIterateInfo> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 } // namespace tycho
