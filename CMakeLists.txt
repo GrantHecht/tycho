@@ -66,7 +66,6 @@ endif()
 set(LINK_TIME_OPT FALSE)          ### DO LTO - Recommended for full release
 set(CLANG_MAX_INLINE_DEPTH 225)
 #set(BUILD_TYCHO_WHEEL TRUE)      ### CI Build for generic wheels
-#set(BUILD_SPHINX_DOCS TRUE)
 
 # Floating-point optimization policy.
 # STRICT: no fast-math relaxations
@@ -128,6 +127,9 @@ option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nan
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
 option(ENABLE_ENZYME_AD
     "Enable experimental Enzyme automatic differentiation (requires Clang + Enzyme plugin)"
+    OFF)
+option(BUILD_SPHINX_DOCS
+    "Build Sphinx documentation (requires sphinx, breathe, doxygen, pydata-sphinx-theme)"
     OFF)
 
 if(ENABLE_ENZYME_AD)
@@ -812,13 +814,13 @@ add_subdirectory(src)
 
 
 # Documentation
-# The asset_asrl-era doc/ scaffolding has been archived to doc-legacy/.
-# The new docs/source/ Sphinx project is wired up by a forthcoming
-# docs/CMakeLists.txt (see the documentation infrastructure plan).
-
 if(BUILD_SPHINX_DOCS)
-  # add_subdirectory(docs)
-  message(WARNING "BUILD_SPHINX_DOCS=ON but docs/CMakeLists.txt is not yet wired up; ignoring.")
+  find_package(Doxygen REQUIRED)
+  # find_package(Sphinx ...) is optional — docs/CMakeLists.txt uses
+  # ${Python_EXECUTABLE} -m sphinx directly, which works with any Python
+  # env that has sphinx installed (we rely on docs/requirements-docs.txt
+  # being installed into the active Python env).
+  add_subdirectory(docs)
 endif()
 
 

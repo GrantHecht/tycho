@@ -31,7 +31,14 @@ extensions = [
     "breathe",
 ]
 
-templates_path = ["_templates"]
+# When CMake substitutes @DOCS_SOURCE_DIR@, conf.py lives in the build dir but
+# templates/static assets live in the source tree. Resolve to absolute paths so
+# Sphinx finds them regardless of where conf.py is loaded from. The fallback
+# (relative path) is correct for direct sphinx-build invocations from the
+# source tree, when @DOCS_SOURCE_DIR@ has not been substituted.
+_DOCS_SOURCE_DIR = _resolve("@DOCS_SOURCE_DIR@", str(Path(__file__).parent.resolve()))
+
+templates_path = [str(Path(_DOCS_SOURCE_DIR) / "_templates")]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # MyST configuration
@@ -87,7 +94,7 @@ nitpick_ignore = [
 # -- HTML output -------------------------------------------------------------
 html_theme = "pydata_sphinx_theme"
 html_title = "Tycho"
-html_static_path = ["_static"]
+html_static_path = [str(Path(_DOCS_SOURCE_DIR) / "_static")]
 html_css_files = ["custom.css"]
 
 html_theme_options = {
