@@ -18,7 +18,6 @@ jobs:
       - name: Install deps
         shell: bash -el {0}
         run: |
-          sudo apt-get update && sudo apt-get install -y doxygen
           pip install -r docs/requirements-docs.txt
       - name: Run linkcheck (Sphinx only, no extension build)
         # Linkcheck doesn't need C++ build — we only check external links in
@@ -27,5 +26,6 @@ jobs:
         run: |
           # Suppress autodoc / breathe by using nitpicky off and disabling
           # extensions that need imports/Doxygen output.
-          sphinx-build -b linkcheck -D extensions=myst_parser,sphinx_design,sphinx_copybutton \
+          sphinx-build -b linkcheck \
+            -D extensions=myst_parser,sphinx_design,sphinx_copybutton,sphinx_togglebutton \
             docs/source /tmp/linkcheck

@@ -30,10 +30,15 @@ jobs:
           python-version: '3.13'
           activate-environment: tycho
 
+      - name: Install clang-21 via LLVM apt repo
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
+          sudo apt-get install -y libomp-dev lld
+
       - name: Install apt deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-21 ninja-build doxygen graphviz libomp-dev lld
+          sudo apt-get install -y ninja-build doxygen graphviz
 
       - name: Install MKL via apt repository
         run: |
@@ -63,7 +68,10 @@ jobs:
         shell: bash -el {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-clang-release -DBUILD_SPHINX_DOCS=ON
+          cmake --preset linux-clang-release \
+            -DBUILD_SPHINX_DOCS=ON \
+            -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21
           cmake --build build -j$(nproc) --target _tychopy
 
       - name: Build docs
@@ -74,13 +82,13 @@ jobs:
         shell: bash -el {0}
         run: cmake --build build --target tycho_docs_doctest
 
-      - name: Strict Doxygen check (VectorFunction subsystem)
+      - name: VectorFunction Doxygen sanity (gated for Task 8 strict mode)
         shell: bash -el {0}
-        # Gated for Task 8 rollout: when VectorFunction docstrings land in
-        # include/tycho/detail/vf/, this step should treat undocumented
-        # public symbols as errors. Initially a no-op (no public VF symbols
-        # are documented yet), so we keep WARN_AS_ERROR off until then.
-        # Task 8 will flip WARN_AS_ERROR=YES + WARN_IF_UNDOCUMENTED=YES here.
+        # This step currently RUNS Doxygen on the VF subsystem but does NOT enforce
+        # anything — WARN_AS_ERROR is off in the base Doxyfile. Task 8 will flip
+        # WARN_AS_ERROR=YES and WARN_IF_UNDOCUMENTED=YES so undocumented public VF
+        # symbols fail this step. Today it's a sanity check that confirms the
+        # subsystem-scoped Doxyfile config produces XML cleanly.
         run: |
           cp build/docs/Doxyfile /tmp/Doxyfile.vf-strict
           cat >> /tmp/Doxyfile.vf-strict <<EOF
@@ -101,3 +109,21 @@ jobs:
         with:
           name: docs-html-${{ github.event.pull_request.number }}
           path: build/docs/html
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4

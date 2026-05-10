@@ -7,6 +7,7 @@ on:
       - 'include/tycho/**'
       - 'tychopy/_stubs/**'
       - 'scripts/fix_stubs.py'
+      - '.github/workflows/stubs-drift.yml'
 
 jobs:
   drift-check:
@@ -18,10 +19,14 @@ jobs:
         with:
           python-version: '3.13'
           activate-environment: tycho
+      - name: Install clang-21 via LLVM apt repo
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
+          sudo apt-get install -y libomp-dev lld
       - name: Install apt + MKL
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-21 ninja-build libomp-dev lld
+          sudo apt-get install -y ninja-build
           wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
             | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
           echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
@@ -36,7 +41,9 @@ jobs:
         shell: bash -el {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-clang-release
+          cmake --preset linux-clang-release \
+            -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21
           cmake --build build -j$(nproc) --target _tychopy
           cmake --build build --target tychopy_stubs_snapshot
       - name: Fail on drift
