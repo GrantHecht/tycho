@@ -369,9 +369,9 @@ Suggested target paths:
 - `docs/superpowers/specs/2026-04-26-enzyme-trig-spike.md` ← `EnzymeTrig.md`
 - `docs/superpowers/specs/2026-04-26-enzyme-trig-findings-codex.md` ← `EnzymeTrigFindings.md`
 
-### 5.6 `doc/VectorFunction.md` mention of `tycho::math` — DONE (2026-04-27)
+### 5.6 `docs/dev/notes/VectorFunction.md` mention of `tycho::math` — DONE (2026-04-27)
 
-CLAUDE.md cites `doc/VectorFunction.md` as the canonical VF doc.
+CLAUDE.md cites `docs/dev/notes/VectorFunction.md` as the canonical VF doc.
 Whatever section there describes EnzymeAD usage should pick up the
 `tycho::math::cos / sin` opt-in pattern + the rule of thumb that's now
 in CLAUDE.md.

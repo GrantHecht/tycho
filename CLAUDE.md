@@ -93,6 +93,14 @@ extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Example programs
   cpp_examples/         C++ example programs
   python_examples/      Python example scripts (38 examples)
+docs/                   Documentation source tree
+  source/               Public Sphinx site source (Markdown + RST)
+  dev/                  Internal engineering notes (raw markdown, not rendered)
+    notes/              EnzymeAD work, build perf, design rationales
+    analysis/           Performance analyses
+    plans/              Engineering work plans
+  superpowers/specs/    Brainstorm specs (gitignored, local-only)
+doc-legacy/             Archived asset_asrl carryover (frozen, not rendered)
 notices/                Third-party license notices — DO NOT modify or delete
 ```
 
@@ -110,8 +118,8 @@ notices/                Third-party license notices — DO NOT modify or delete
 
 ## Technical Details
 
-- **VectorFunction implementation:** `doc/VectorFunction.md`
-- **Python bindings (nanobind):** `doc/Bindings.md`
+- **VectorFunction implementation:** `docs/dev/notes/VectorFunction.md`
+- **Python bindings (nanobind):** `docs/dev/notes/Bindings.md`
 
 ## Build System
 

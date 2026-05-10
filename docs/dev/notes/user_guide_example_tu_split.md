@@ -234,9 +234,9 @@ splitting, the critical path was the single `main.cpp` wall time.
 
 ## See also
 
-- `doc/build_performance_report_2026-04-18.md` — full build-perf analysis that
+- `docs/dev/notes/build_performance_report_2026-04-18.md` — full build-perf analysis that
   motivated this guide.
-- `doc/build_performance_analysis.md` — procedure for producing the
+- `docs/dev/notes/build_performance_analysis.md` — procedure for producing the
   measurements in that report.
 - `bench/build_perf/2026-04-18-baseline/` and `2026-04-18-phaseA{1,2,3}/` —
   raw measurement artefacts.

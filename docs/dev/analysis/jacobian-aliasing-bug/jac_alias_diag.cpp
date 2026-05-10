@@ -2,7 +2,7 @@
 // Jacobian Aliasing Diagnostic
 //
 // Reproduces the TwoFunctionSum Jacobian aliasing bug documented in
-// doc/analysis/jacobian-aliasing-bug/ANALYSIS.md
+// docs/dev/analysis/jacobian-aliasing-bug/ANALYSIS.md
 //
 // Tests several VectorFunction expression patterns and checks whether
 // their Jacobians are computed correctly. Prints pointer diagnostics

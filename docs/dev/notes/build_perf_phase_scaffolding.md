@@ -2,8 +2,8 @@
 
 **Status:** Design-only. No implementation planned at the time of writing.
 **Driver:** Follow-on to the Phase A / Phase D / Phase E build-performance
-work captured in `doc/build_performance_report_2026-04-18.md`,
-`doc/user_guide_example_tu_split.md`, and the artefacts under
+work captured in `docs/dev/notes/build_performance_report_2026-04-18.md`,
+`docs/dev/notes/user_guide_example_tu_split.md`, and the artefacts under
 `bench/build_perf/2026-04-18-*/`.
 
 ## Motivation
@@ -41,7 +41,7 @@ without re-deriving the analysis.
 ## What's in the 4.14 GB floor
 
 From the Phase D.0 clang diagnostics and the top-30 tables in
-`doc/build_performance_report_2026-04-18.md`:
+`docs/dev/notes/build_performance_report_2026-04-18.md`:
 
 | Contributor | Aggregate serial cost | How it enters main.cpp |
 |---|---:|---|
@@ -236,10 +236,10 @@ is a follow-on to Option 1, not a substitute.
 
 ## Cross-references
 
-- `doc/build_performance_report_2026-04-18.md` — full baseline analysis,
+- `docs/dev/notes/build_performance_report_2026-04-18.md` — full baseline analysis,
   top-30 tables, duplicate-symbol counts. The numbers quoted in this spec
   come from there.
-- `doc/user_guide_example_tu_split.md` — user-facing recipe for the Phase
+- `docs/dev/notes/user_guide_example_tu_split.md` — user-facing recipe for the Phase
   A pattern, with the "When NOT to split" entry describing why the
   unmodified builder-API path doesn't benefit from a companion `.cpp`.
 - `bench/build_perf/2026-04-18-baseline/` — baseline artefacts.

@@ -17,7 +17,7 @@
 // problem being well-posed.  MINDEG ordering is stable for this case.
 //
 // Concrete HyperSens VectorFunction lives in hypersens_ode.cpp; this TU
-// only sees the erased factory (see doc/user_guide_example_tu_split.md).
+// only sees the erased factory (see docs/dev/notes/user_guide_example_tu_split.md).
 //
 // Corresponds to the Python example in examples/MeshRefinement/HyperSensLong.py.
 ///////////////////////////////////////////////////////////////////////////////

@@ -881,7 +881,7 @@ implementation details (used by make_func_impl<LinkConstraint,...>).
 
 Capability preservation audit confirmed every legacy form maps to a
 new-API call before deletion (see
-doc/plans/2026-05-06-python-bindings-cleanup-design.md §
+docs/dev/plans/2026-05-06-python-bindings-cleanup-design.md §
 "Capability preservation audit").
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

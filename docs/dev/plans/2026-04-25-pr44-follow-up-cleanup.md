@@ -36,9 +36,9 @@ multiple files.
 
 - The PR itself: `gh pr view 44`
 - The deferred segmented-STM perf plan:
-  `doc/plans/2026-04-24-segmented-stm-main-thread-optimization.md`
+  `docs/dev/plans/2026-04-24-segmented-stm-main-thread-optimization.md`
 - The build-perf TU-split user guide:
-  `doc/user_guide_example_tu_split.md`
+  `docs/dev/notes/user_guide_example_tu_split.md`
 - Build-perf phase notes:
   `bench/build_perf/2026-04-18-baseline/`,
   `bench/build_perf/2026-04-18-phase{A1,A2,A3,C-deferred,D0-builder-survey,E-survey}/`
@@ -791,7 +791,7 @@ bracket, and reason string.
 
 ### 4.1 — Sweep `2026-04-24-segmented-stm-main-thread-optimization.md` for stale line anchors
 
-**File:** `doc/plans/2026-04-24-segmented-stm-main-thread-optimization.md`.
+**File:** `docs/dev/plans/2026-04-24-segmented-stm-main-thread-optimization.md`.
 
 **Problem.** The plan doc has 13+ hard-coded `integrator.h:NNN` line
 anchors. Several have already drifted against `HEAD` of
@@ -961,7 +961,7 @@ plan docs.
 
 ### Already-on-disk related artifacts
 
-- `doc/plans/2026-04-24-segmented-stm-main-thread-optimization.md` —
+- `docs/dev/plans/2026-04-24-segmented-stm-main-thread-optimization.md` —
   deferred performance optimization on the segmented-STM threadpool
   path. Note: this doc itself needs the line-anchor sweep in §4.1.
 - Commit `e121ed2` — `integrate_stm2` binding-cast fix (segfault on

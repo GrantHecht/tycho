@@ -6,7 +6,7 @@
 // instantiations for this ODE are emitted exactly once — in this TU — rather
 // than in main.cpp.
 //
-// See doc/user_guide_example_tu_split.md for the pattern rationale.
+// See docs/dev/notes/user_guide_example_tu_split.md for the pattern rationale.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "brachistochrone_ode.h"

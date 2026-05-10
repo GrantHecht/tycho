@@ -807,15 +807,18 @@ add_subdirectory(src)
 # add_subdirectory(extensions)
 # Unbuilt as a side-effect of cr3bp_model.h removal (Tycho_Extensions.h
 # referenced the deleted legacy CR3BP type). The extension mechanism
-# itself is under review; see
-# doc/plans/2026-04-14-cartesian-crtbp-dynamics-design.md.
+# itself is under review (see the cartesian-crtbp-dynamics design notes
+# under docs/dev/).
 
 
 # Documentation
-# READ: pip install sphinx,breathe,furo before trying to build docs
+# The asset_asrl-era doc/ scaffolding has been archived to doc-legacy/.
+# The new docs/source/ Sphinx project is wired up by a forthcoming
+# docs/CMakeLists.txt (see the documentation infrastructure plan).
 
 if(BUILD_SPHINX_DOCS)
-  add_subdirectory(doc)
+  # add_subdirectory(docs)
+  message(WARNING "BUILD_SPHINX_DOCS=ON but docs/CMakeLists.txt is not yet wired up; ignoring.")
 endif()
 
 

@@ -3,7 +3,7 @@
 **Branch:** `ivp-solver-modernization` (post-SP3 completion)
 **Commit:** `a3a8133`
 **System:** Linux, 16 cores, 31 GB RAM, clang preset `linux-clang-release`
-**Procedure:** `doc/build_performance_analysis.md`
+**Procedure:** `docs/dev/notes/build_performance_analysis.md`
 
 ## Top-line numbers
 

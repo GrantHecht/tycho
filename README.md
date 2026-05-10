@@ -157,7 +157,7 @@ Documentation is coming soon.
 
 Additional guides already available:
 
-- `doc/user_guide_example_tu_split.md` — how to structure a C++ program that
+- `docs/dev/notes/user_guide_example_tu_split.md` — how to structure a C++ program that
   builds against Tycho so each ODE lives in its own translation unit. Cuts
   per-TU peak memory in half and nearly doubles safe build parallelism on
   RAM-constrained hosts.

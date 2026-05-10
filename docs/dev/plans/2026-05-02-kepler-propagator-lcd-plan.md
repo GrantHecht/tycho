@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, Eigen 5, SymPy (existing `utils/CodeGen.py`), Google Test, Google Benchmark.
 
-**Spec:** `doc/plans/2026-05-02-kepler-propagator-lcd-design.md`
+**Spec:** `docs/dev/plans/2026-05-02-kepler-propagator-lcd-design.md`
 
 **Branch:** `feat/kepler-propagator-lcd` (already created off main).
 
@@ -2180,12 +2180,12 @@ cd .. && bench/bench_track.sh record && bench/bench_track.sh compare
 
 - [ ] **Step 3: Document results**
 
-For each benchmark in the kepler suite (existing + new), record `head` vs `baseline` numbers from `bench_track.sh compare` output. Save to `doc/plans/2026-05-02-kepler-propagator-lcd-bench.md` as a small results-only doc, suitable for inclusion in the eventual PR description.
+For each benchmark in the kepler suite (existing + new), record `head` vs `baseline` numbers from `bench_track.sh compare` output. Save to `docs/dev/plans/2026-05-02-kepler-propagator-lcd-bench.md` as a small results-only doc, suitable for inclusion in the eventual PR description.
 
 - [ ] **Step 4: Commit the results doc**
 
 ```bash
-git add doc/plans/2026-05-02-kepler-propagator-lcd-bench.md
+git add docs/dev/plans/2026-05-02-kepler-propagator-lcd-bench.md
 git commit -m "$(cat <<'EOF'
 docs(astro): bench results for LCD Kepler propagator rewrite
 

@@ -57,4 +57,4 @@ Phase A (example TU split across brachistochrone, hypersens, delta3_launch,
 zermelo + user guide) remains in place and is the entirety of the refactor
 merged on `build-perf-refactor`. See the phase artefacts in
 `bench/build_perf/2026-04-18-phaseA{1,2,3}/` and the report at
-`doc/build_performance_report_2026-04-18.md` for the delivered numbers.
+`docs/dev/notes/build_performance_report_2026-04-18.md` for the delivered numbers.
