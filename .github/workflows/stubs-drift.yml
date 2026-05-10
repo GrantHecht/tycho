@@ -1,0 +1,50 @@
+name: stubs-drift
+
+on:
+  pull_request:
+    paths:
+      - 'src/bindings/**'
+      - 'include/tycho/**'
+      - 'tychopy/_stubs/**'
+      - 'scripts/fix_stubs.py'
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+      - name: Install apt + MKL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-21 ninja-build libomp-dev lld
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update && sudo apt-get install -y intel-oneapi-mkl-devel
+      - name: Install Python deps
+        shell: bash -el {0}
+        run: |
+          conda install -n tycho -c conda-forge numpy scipy
+          pip install nanobind
+      - name: Build _tychopy + regenerate stubs
+        shell: bash -el {0}
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-clang-release
+          cmake --build build -j$(nproc) --target _tychopy
+          cmake --build build --target tychopy_stubs_snapshot
+      - name: Fail on drift
+        run: |
+          if ! git diff --quiet tychopy/_stubs/; then
+            echo "::error::Stub snapshot is stale."
+            echo "::error::Run 'cmake --build build --target tychopy_stubs_snapshot' locally and commit the result."
+            git diff tychopy/_stubs/
+            exit 1
+          fi
+          echo "Stubs are in sync."

@@ -1,0 +1,103 @@
+name: docs-build
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'include/tycho/**'
+      - 'src/bindings/**'
+      - 'tychopy/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - '.github/workflows/docs-build.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+
+      - name: Install apt deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-21 ninja-build doxygen graphviz libomp-dev lld
+
+      - name: Install MKL via apt repository
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel
+
+      - name: Install Python deps
+        shell: bash -el {0}
+        run: |
+          conda install -n tycho -c conda-forge numpy scipy matplotlib spiceypy
+          pip install -r docs/requirements-docs.txt
+
+      - name: Cache sphinx doctrees + ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/docs/.doctrees
+            ~/.ccache
+          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}
+          restore-keys: doctrees-${{ runner.os }}-
+
+      - name: Configure + build _tychopy
+        shell: bash -el {0}
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-clang-release -DBUILD_SPHINX_DOCS=ON
+          cmake --build build -j$(nproc) --target _tychopy
+
+      - name: Build docs
+        shell: bash -el {0}
+        run: cmake --build build -j2 --target tycho_docs
+
+      - name: Run doctests
+        shell: bash -el {0}
+        run: cmake --build build --target tycho_docs_doctest
+
+      - name: Strict Doxygen check (VectorFunction subsystem)
+        shell: bash -el {0}
+        # Gated for Task 8 rollout: when VectorFunction docstrings land in
+        # include/tycho/detail/vf/, this step should treat undocumented
+        # public symbols as errors. Initially a no-op (no public VF symbols
+        # are documented yet), so we keep WARN_AS_ERROR off until then.
+        # Task 8 will flip WARN_AS_ERROR=YES + WARN_IF_UNDOCUMENTED=YES here.
+        run: |
+          cp build/docs/Doxyfile /tmp/Doxyfile.vf-strict
+          cat >> /tmp/Doxyfile.vf-strict <<EOF
+          INPUT = ${{ github.workspace }}/include/tycho/vector_functions.h ${{ github.workspace }}/include/tycho/detail/vf
+          OUTPUT_DIRECTORY = /tmp/doxygen-vf-strict
+          EOF
+          doxygen /tmp/Doxyfile.vf-strict
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+      - name: Upload PR-preview artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html-${{ github.event.pull_request.number }}
+          path: build/docs/html
