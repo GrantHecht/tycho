@@ -124,11 +124,26 @@ install(TARGETS _tychopy LIBRARY DESTINATION .)
 # Dev-install shortcut: when PYTHON_LOCAL_INSTALL_DIR is set (e.g. by config_and_build.sh),
 # copy _tychopy and the Python package directly to site-packages after every build so that
 # changes are immediately usable without a separate pip install step.
+#
+# Stubs for the _tychopy extension are also copied to site-packages ROOT so
+# PEP 561 type-checkers (mypy/pyright) discover them next to _tychopy.cpython-*.so.
+# We source from the committed source-tree snapshot at tychopy/_stubs/ — same
+# files the wheel install rules use — so the dev and wheel installs stay
+# consistent. (The fresh stubs in ${_TYCHOPY_STUB_DIR} are still useful for
+# the snapshot-refresh target; dev installs rely on the committed snapshot.)
 if(PYTHON_LOCAL_INSTALL_DIR)
     add_custom_command(TARGET _tychopy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tychopy> ${PYTHON_LOCAL_INSTALL_DIR}/
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tychopy ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
+        # PEP 561 stubs at site-packages root (next to the .so).
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/_tychopy
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_SOURCE_DIR}/tychopy/_stubs/_tychopy.pyi
+                ${PYTHON_LOCAL_INSTALL_DIR}/
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/tychopy/_stubs/_tychopy
+                ${PYTHON_LOCAL_INSTALL_DIR}/_tychopy
         COMMENT "Installed _tychopy and tychopy package to ${PYTHON_LOCAL_INSTALL_DIR}"
     )
 endif()
@@ -157,11 +172,13 @@ nanobind_add_stub(_tychopy_stub
 
 # Submodule stubs. List matches the submodule names exposed in
 # src/bindings/tycho_module.cpp / function_registry.h (vector_functions,
-# optimal_control, solvers, astro, utils). Note: rk_coeffs_bind populates
-# the optimal_control submodule (no separate _tychopy.integrators), so
-# integrators is not a stub target. Add it here only if a future binding
-# defines `m.def_submodule("integrators", ...)`.
-set(_TYCHOPY_SUBMODULES vector_functions optimal_control solvers astro utils)
+# optimal_control, solvers, astro, utils, extensions). Note: rk_coeffs_bind
+# populates the optimal_control submodule (no separate _tychopy.integrators),
+# so integrators is not a stub target. Add it here only if a future binding
+# defines `m.def_submodule("integrators", ...)`. The `extensions` submodule
+# is always created by function_registry.h (may be empty if no user extension
+# is built — that's fine; its stub will simply be near-empty).
+set(_TYCHOPY_SUBMODULES vector_functions optimal_control solvers astro utils extensions)
 
 foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
     nanobind_add_stub(_tychopy_${_submod}_stub
@@ -181,25 +198,50 @@ foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
 endforeach()
 add_custom_target(tychopy_all_stubs DEPENDS ${_TYCHOPY_ALL_STUB_TARGETS})
 
-# Install stubs into site-packages alongside the .so.
-install(DIRECTORY "${_TYCHOPY_STUB_DIR}/"
-        DESTINATION "${PYTHON_LOCAL_INSTALL_DIR}"
-        FILES_MATCHING PATTERN "*.pyi")
-
-# py.typed marker (signals to type-checkers that the package ships type info).
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/py.typed" "")
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/py.typed"
-        DESTINATION "${PYTHON_LOCAL_INSTALL_DIR}")
-
 # Snapshot target: regenerate all stubs and copy them into the source tree at
 # tychopy/_stubs/. Run after changing any binding signature; commit the result.
 # CI checks for drift between this snapshot and the freshly-built stubs.
+#
+# The post-process step (scripts/fix_stubs.py) sanitises nanobind stubgen
+# output to work around two known upstream quirks:
+#   - bare `import <submodule>` lines for the file's own submodule
+#     (e.g. `import optimal_control` in _tychopy/optimal_control.pyi)
+#   - same-submodule type references using a truncated qualifier
+#     (e.g. `optimal_control.ScaleModes` instead of the unqualified `ScaleModes`)
+# Both stem from nanobind's std::variant type-name composition stripping the
+# package-root prefix; correcting them requires per-method nb::sig() overrides
+# on every binding (~35 sites for auto_scale alone), which doesn't scale.
 set(_TYCHOPY_SNAPSHOT_DIR "${PROJECT_SOURCE_DIR}/tychopy/_stubs")
 add_custom_target(tychopy_stubs_snapshot
     COMMAND ${CMAKE_COMMAND} -E rm -rf "${_TYCHOPY_SNAPSHOT_DIR}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${_TYCHOPY_SNAPSHOT_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${_TYCHOPY_STUB_DIR}" "${_TYCHOPY_SNAPSHOT_DIR}"
+    COMMAND ${Python_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/fix_stubs.py"
+            "${_TYCHOPY_SNAPSHOT_DIR}"
     DEPENDS tychopy_all_stubs
-    COMMENT "Refreshing tychopy/_stubs/ snapshot — commit the result"
+    COMMENT "Refreshing tychopy/_stubs/ snapshot (with fix_stubs.py post-process) — commit the result"
     VERBATIM)
+
+# Install stubs at site-packages ROOT (PEP 561 location for the _tychopy
+# extension module). Type-checkers look for `_tychopy.pyi` next to
+# `_tychopy.cpython-*.so` and a `_tychopy/` directory of submodule stubs at
+# the same level — NOT nested under tychopy/_stubs/. We source from the
+# committed snapshot in the source tree (kept in sync by the
+# tychopy_stubs_snapshot target above) so wheel builds never depend on a live
+# _tychopy import.
+#
+# For wheel builds (SKBUILD), `wheel.install-dir` defaults to "/" which maps
+# CMake DESTINATION "." onto site-packages root. For dev installs, the same
+# install rules + PYTHON_LOCAL_INSTALL_DIR land them next to the .so.
+install(FILES "${_TYCHOPY_SNAPSHOT_DIR}/_tychopy.pyi"
+        DESTINATION ".")
+install(DIRECTORY "${_TYCHOPY_SNAPSHOT_DIR}/_tychopy"
+        DESTINATION "."
+        FILES_MATCHING PATTERN "*.pyi")
+
+# py.typed marker (signals to type-checkers that the *tychopy* package ships
+# type info). PEP 561 requires this file to live INSIDE the package directory.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/py.typed" "")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/py.typed"
+        DESTINATION "tychopy")

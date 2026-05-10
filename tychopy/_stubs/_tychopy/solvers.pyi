@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 import enum
-from typing import overload
+from typing import Callable, overload
 
 import numpy
 

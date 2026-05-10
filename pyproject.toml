@@ -28,13 +28,16 @@ Homepage = "https://github.com/GrantHecht/tycho"
 cmake.build-type = "Release"
 # Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
 wheel.packages = ["tychopy"]
-# Type-info marker (py.typed) and committed nanobind stub snapshot (_stubs/*.pyi)
-# must travel inside the wheel so downstream IDEs/type-checkers see the API
-# surface. Without these include patterns, scikit-build-core's default filter
-# would not necessarily pick up non-.py files inside the package directory.
-wheel.include = [
-    "tychopy/py.typed",
-    "tychopy/_stubs/**/*.pyi",
+# Stubs for the _tychopy extension live in the source tree at tychopy/_stubs/
+# for review-diff convenience, but for PEP 561 they MUST land at site-packages
+# ROOT (next to _tychopy.cpython-*.so) — not nested under tychopy/_stubs/.
+# CMake install rules in src/bindings/CMakeLists.txt copy them to the correct
+# location at wheel-build time; we exclude the source-tree _stubs/ from the
+# wheel-packaged copy of tychopy/ to keep the wheel layout clean.
+# (tychopy/py.typed travels naturally via wheel.packages — it sits inside the
+# package directory.)
+wheel.exclude = [
+    "tychopy/_stubs/**",
 ]
 
 [tool.ruff]
