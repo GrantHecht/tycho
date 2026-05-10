@@ -114,7 +114,7 @@ Findings are referenced as `F1`–`F10` in §3 (tasks). Order is rough impact es
 
 ### Tier 3 — Conditional / contract-bearing changes
 
-**F7. Pre-call `setZero()` on stepper output buffers** (lines 90-91, 99-100, 179-182, 304-307, 445-446). The `vf::GenericFunction` concept does not guarantee whether `compute_jacobian` and `compute_jacobian_adjointgradient_adjointhessian` overwrite or accumulate into their outputs. Inspection of `generic_function.h:108-151` shows direct passthrough to the underlying VF's `compute_jacobian` / `compute_jacobian_adjointgradient_adjointhessian`, but composite VFs (sums, scaled, etc.) may legitimately accumulate. **Until the contract is documented and audited**, leave these in. Fix: separate task — audit the `GenericFunction` Jacobian/Hessian write contract end-to-end, document it in `doc/VectorFunction.md`, and only then decide whether the `setZero` calls are removable. If kept, they remain a correctness backstop with negligible cost relative to the AD work that follows.
+**F7. Pre-call `setZero()` on stepper output buffers** (lines 90-91, 99-100, 179-182, 304-307, 445-446). The `vf::GenericFunction` concept does not guarantee whether `compute_jacobian` and `compute_jacobian_adjointgradient_adjointhessian` overwrite or accumulate into their outputs. Inspection of `generic_function.h:108-151` shows direct passthrough to the underlying VF's `compute_jacobian` / `compute_jacobian_adjointgradient_adjointhessian`, but composite VFs (sums, scaled, etc.) may legitimately accumulate. **Until the contract is documented and audited**, leave these in. Fix: separate task — audit the `GenericFunction` Jacobian/Hessian write contract end-to-end, document it in `docs/dev/notes/VectorFunction.md`, and only then decide whether the `setZero` calls are removable. If kept, they remain a correctness backstop with negligible cost relative to the AD work that follows.
 
 **F8. SS-to-scalar lane unpack via triple-nested manual loop** (`stm_driver.h:110-115, 329-338`). Each `(l, k)[j]` access is a strided load (stride = vsize doubles within an SoA Eigen pack). Inherent to the layout — but the manual loop can be replaced with an `Eigen::Map<Eigen::Matrix<double, output_rows, input_rows, ColMajor>, 0, Eigen::Stride<vsize, 0>>` that lets Eigen vectorize the gather where possible. Likely a small win, mainly readability.
 
@@ -622,11 +622,11 @@ inline void unpack_lane(const Eigen::Matrix<DefaultSuperScalar, -1, -1> &src, in
 
 **Files:**
 - Read: `include/tycho/detail/vf/type_erasure/generic_function.h`, all VF `compute_jacobian_impl` / `compute_jacobian_adjointgradient_adjointhessian_impl` overrides under `include/tycho/detail/vf/`.
-- Modify: `doc/VectorFunction.md` — add a "Output buffer contract" section.
+- Modify: `docs/dev/notes/VectorFunction.md` — add a "Output buffer contract" section.
 - Modify: `include/tycho/detail/integrators/stm_driver.h` — only if audit confirms outputs are unconditionally overwritten.
 
 **Acceptance criteria:**
-- [ ] `doc/VectorFunction.md` documents whether the Jacobian/Hessian outputs are required to be zeroed by the caller, by the callee, or by neither.
+- [ ] `docs/dev/notes/VectorFunction.md` documents whether the Jacobian/Hessian outputs are required to be zeroed by the caller, by the callee, or by neither.
 - [ ] If the contract is "callee must overwrite":
   - [ ] All `setZero()` calls on `stepper_output*` / `stepper_jacobian*` / `stepper_grad*` / `stepper_hessian*` immediately before `stepper.compute_*` calls are removed.
   - [ ] Bench shows non-positive change.
@@ -689,7 +689,7 @@ Worth checking the `output_rows == input_rows - 1` invariant — it's the only c
 
 **Files:**
 - Update: `bench/results/` (committed bench JSONs from each Task)
-- Update: `doc/plans/2026-05-01-stm-driver-performance.md` — append a "Results" section with measured per-task deltas
+- Update: `docs/dev/plans/2026-05-01-stm-driver-performance.md` — append a "Results" section with measured per-task deltas
 - Open: PR against `main`
 
 **Acceptance criteria:**
@@ -835,7 +835,7 @@ bench/bench_track.sh compare
 - `bench/cpp/integrators/CMakeLists.txt` (bench registration)
 - `bench/cpp/integrators/bench_integrators.cpp` (existing bench, pattern reference)
 - `bench/bench_track.sh` (delta-tracking harness)
-- `doc/VectorFunction.md` (target for F7 contract documentation)
+- `docs/dev/notes/VectorFunction.md` (target for F7 contract documentation)
 
 ---
 
