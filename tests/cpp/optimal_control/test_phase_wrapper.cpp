@@ -440,3 +440,43 @@ TEST_F(PhaseWrapperTest, AddEqualConPartialMutationOnFuncSizeMismatch) {
            "would have been bumped to 1 or 2 because the failed inserts orphaned "
            "entries at 0 and 1.";
 }
+
+// Phase-side mutation safety mirror for an alternate region + alternate
+// method. The existing AddEqualConPartialMutationOnFuncSizeMismatch above
+// covers Front + add_equal_con; this exercises Path + add_inequal_con.
+// Both entry points share ODEPhaseBase::add_func_impl, but a future reorder
+// of the validation could regress one path without tripping the other.
+TEST_F(PhaseWrapperTest, AddInequalConPartialMutationOnFuncSizeMismatchPathRegion) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 32);
+
+    // Path region: check_function_size compares irows against
+    // xtu_vars + op_vars + sp_vars; with vars of size 2 and irows=4, mismatch.
+    auto args = Arguments<-1>(4);
+    auto bad_expr = args.head<-1>(2);
+    GenericFunction<-1, -1> bad_func(bad_expr);
+
+    Eigen::VectorXi vars(2);
+    vars << 0, 1;
+
+    EXPECT_THROW(phase.base().add_inequal_con(PhaseRegionFlags::Path, bad_func, vars,
+                                              ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_THROW(phase.base().add_inequal_con(PhaseRegionFlags::Path, bad_func, vars,
+                                              ScaleModes::AUTO),
+                 std::invalid_argument);
+
+    // Valid follow-up must land at index 0 — pre-fix would land at 1 or 2.
+    auto good_args = Arguments<-1>(2);
+    auto good_expr = good_args.head<-1>(1);
+    GenericFunction<-1, -1> good_func(good_expr);
+
+    Eigen::VectorXi good_vars(2);
+    good_vars << 0, 1;
+
+    int idx = phase.base().add_inequal_con(PhaseRegionFlags::Path, good_func, good_vars,
+                                           ScaleModes::AUTO);
+    EXPECT_EQ(idx, 0)
+        << "First valid add after failed adds must land at index 0; pre-fix it "
+           "would have been bumped because the failed inserts orphaned entries.";
+}

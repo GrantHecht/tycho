@@ -655,7 +655,13 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         auto args = Arguments<-1>(2 * vsize);
         auto func = args.head<-1>(vsize) - args.tail<-1>(vsize);
 
-        return this->add_link_equal_con(func, p0, reg0_t, v0, p1, reg1_t, v1, scale_t);
+        // Pass the wrapped int indices through, not the original p0/p1: the
+        // inner add_link_equal_con eventually reaches make_func_impl, which
+        // re-resolves the phase via get_phase_num and rejects negative values
+        // with its own "Function references non-existent phase" throw. Passing
+        // the already-wrapped positive ints keeps the negative-index wrap
+        // protection at the top of this function meaningful.
+        return this->add_link_equal_con(func, phase, reg0_t, v0, phase1, reg1_t, v1, scale_t);
     }
 
     std::vector<int> add_param_link_equal_con(PhaseRefType iphase_t, PhaseRefType fphase_t,

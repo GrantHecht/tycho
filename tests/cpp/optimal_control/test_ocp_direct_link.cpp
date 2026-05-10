@@ -45,6 +45,35 @@ std::vector<Eigen::VectorXd> make_linear_guess_dl(double x0, double xf, int n = 
     return traj;
 }
 
+// 2-state 1-control 1-param ODE for ODEParams-region link-API tests.
+ODE make_param_link_ode() {
+    return ODEBuilder(2, 1, 1)
+        .var_names({{"x", 0}, {"v", 1}, {"t", 2}, {"u", 3}, {"p", 4}})
+        .define([](auto &args) {
+            auto v = args.x_var(1);
+            auto u = args.u_var(0);
+            auto p = args.p_var(0);
+            return stack(v, u + p);
+        })
+        .build();
+}
+
+std::vector<Eigen::VectorXd> make_param_guess_dl(double x0, double xf, int n = 10) {
+    std::vector<Eigen::VectorXd> traj;
+    traj.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        double s = static_cast<double>(i) / (n - 1);
+        Eigen::VectorXd pt(5); // x, v, t, u, p
+        pt[0] = x0 + (xf - x0) * s;
+        pt[1] = (xf - x0);
+        pt[2] = s;
+        pt[3] = 0.0;
+        pt[4] = 0.0;
+        traj.push_back(pt);
+    }
+    return traj;
+}
+
 } // namespace
 
 class OcpDirectLinkTest : public OptimalControlTest {};
@@ -439,4 +468,190 @@ TEST_F(OcpDirectLinkTest, ParamLinkRejectsBadStartingPhaseWithoutPartialMutation
                                                      vars, ScaleModes::AUTO),
                  std::invalid_argument);
     EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+// ---------------------------------------------------------------------------
+// Negative-index wrap-around. The validation paths in
+// add_forward/direct/param_link_equal_con resolve negative indices via
+// `phases.size() + idx` before the bounds check. Existing tests cover only
+// positive indices; these pin the wrap branch and the bounds-check
+// fallthrough for unwrappable values.
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpDirectLinkTest, ForwardLinkAcceptsLegitimateNegativeIndices) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // -2, -1 wrap to 0, 1 on a 2-phase OCP; iphase < fphase passes; loop runs once.
+    EXPECT_NO_THROW(ocp.base().add_forward_link_equal_con(-2, -1, vars, ScaleModes::AUTO));
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before + 1);
+}
+
+TEST_F(OcpDirectLinkTest, DirectLinkAcceptsLegitimateNegativeIndices) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    EXPECT_NO_THROW(ocp.base().add_direct_link_equal_con(
+        -2, PhaseRegionFlags::Back, vars, -1, PhaseRegionFlags::Front, vars, ScaleModes::AUTO));
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before + 1);
+}
+
+TEST_F(OcpDirectLinkTest, ParamLinkAcceptsLegitimateNegativeIndicesWithODEParams) {
+    auto ode = make_param_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_param_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_param_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // -2, -1 wraps to 0, 1; ODEParams accept branch passes; loop runs once.
+    EXPECT_NO_THROW(ocp.base().add_param_link_equal_con(
+        -2, -1, PhaseRegionFlags::ODEParams, vars, ScaleModes::AUTO));
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before + 1);
+}
+
+TEST_F(OcpDirectLinkTest, ForwardLinkRejectsUnwrappableNegativeIphase) {
+    // The wrap math (phases.size() + idx) is shared across forward/direct/param
+    // helpers. One unwrap-fail case here pins the post-wrap bounds-check branch
+    // for the family.
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // -10 + 2 = -8 (still < 0); the post-wrap bounds branch must fire.
+    EXPECT_THROW(ocp.base().add_forward_link_equal_con(-10, 1, vars, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before);
+}
+
+// ---------------------------------------------------------------------------
+// add_param_link_equal_con happy-path with ODEParams. Existing tests cover
+// only the rejection paths (bad iphase/fphase, non-param region). MultiPhaseCannon
+// exercises the ODEParams accept branch via the single-shot
+// add_direct_link_equal_con but not the loop variant.
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpDirectLinkTest, ParamLinkAcceptsODEParamsLoopAcrossThreePhases) {
+    auto ode = make_param_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_param_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_param_guess_dl(1.0, 2.0), 8);
+    auto p2 = ode.phase(TranscriptionModes::LGL3, make_param_guess_dl(2.0, 3.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+    ocp.add_phase(p2);
+
+    Eigen::VectorXi vars(1);
+    vars << 0;
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // 3 phases, iphase=0, fphase=2 → loop runs i=0 and i=1: two link-equal
+    // constraints inserted.
+    EXPECT_NO_THROW(ocp.base().add_param_link_equal_con(
+        0, 2, PhaseRegionFlags::ODEParams, vars, ScaleModes::AUTO));
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before + 2);
+}
+
+// ---------------------------------------------------------------------------
+// Partial-mutation atomicity for the link-equal siblings. The existing
+// AddLinkEqualConPartialMutationOnVarsSizeMismatch pins link_equalities_;
+// these clones pin link_inequalities_ and link_objectives_. All three siblings
+// share OptimalControlProblem::add_func_impl, but a future reorder could
+// regress one without the others.
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpDirectLinkTest, AddLinkInequalConPartialMutationOnVarsSizeMismatch) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    auto args = Arguments<-1>(4);
+    auto bad_expr = args.head<-1>(2) - args.tail<-1>(2);
+    GenericFunction<-1, -1> bad_func(bad_expr);
+
+    Eigen::VectorXi v_one(1);
+    v_one << 0;
+
+    const auto before = ocp.base().link_inequalities_.size();
+
+    EXPECT_THROW(ocp.base().add_link_inequal_con(bad_func, 0, PhaseRegionFlags::Back, v_one, 1,
+                                                 PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_inequalities_.size(), before);
+
+    EXPECT_THROW(ocp.base().add_link_inequal_con(bad_func, 0, PhaseRegionFlags::Back, v_one, 1,
+                                                 PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_inequalities_.size(), before);
+}
+
+TEST_F(OcpDirectLinkTest, AddLinkObjectivePartialMutationOnFuncSizeMismatch) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    // ScalarFunctionalX = GenericFunction<-1, 1>: scalar output, IRows=4
+    // mismatched against indexing implying IRows=2.
+    auto args = Arguments<-1>(4);
+    GenericFunction<-1, 1> bad_obj(args.head<-1>(2).squared_norm());
+
+    Eigen::VectorXi v_one(1);
+    v_one << 0;
+
+    const auto before = ocp.base().link_objectives_.size();
+
+    EXPECT_THROW(ocp.base().add_link_objective(bad_obj, 0, PhaseRegionFlags::Back, v_one, 1,
+                                               PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_objectives_.size(), before);
+
+    EXPECT_THROW(ocp.base().add_link_objective(bad_obj, 0, PhaseRegionFlags::Back, v_one, 1,
+                                               PhaseRegionFlags::Front, v_one, ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_objectives_.size(), before);
 }
