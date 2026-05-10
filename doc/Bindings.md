@@ -11,11 +11,9 @@
 >   `UtilsBuild`, `AstroBuild`, `ExtensionsBuild`. Real code now uses
 >   the snake_case forms (`vector_functions_build`, `optimal_control_build`,
 >   `solvers_build`, `utils_build`, `astro_build`, `extensions_build`).
-> - **Sections 3, 11** — references to `TychoBind<T>::Build()` and
->   `Build_Register`. Real code now uses `TychoBind<T>::build()` and
->   `build_register`. Section 11's example file path
->   (`tychopy/VectorFunctions/__init__.py`) is also stale — the
->   snake_case path is `tychopy/vector_functions/__init__.py`.
+> - **Section 11** — example file path
+>   `tychopy/VectorFunctions/__init__.py` is stale; the snake_case path
+>   is `tychopy/vector_functions/__init__.py`.
 > - **Section 4** — the `bind::*Build` free-function helpers
 >   (`DenseBaseBuild`, `SegBuild`, `GenericBuild`, `ODEPhaseBuildImpl`,
 >   etc.) documented here are intentionally still PascalCase per the
@@ -41,9 +39,11 @@
 >   `generic_odes_build_part5.cpp` row was never split out — the on-disk
 >   numbering jumps from `part4` to `part6`.
 >
-> The actual code under `src/bindings/`, `extensions/`, and `tychopy/` is
-> already on the new names. When in doubt, trust the source over this
-> document until the follow-up PR lands.
+> Section 3 has been updated to use the snake_case `::build` and
+> `build_register` trait names. The actual code under `src/bindings/`,
+> `extensions/`, and `tychopy/` is already on the new names. When in
+> doubt, trust the source over this document until the follow-up PR
+> lands.
 
 This document provides a comprehensive, bottom-up explanation of Tycho's Python binding layer -- the system that maps every C++ `tycho::` type into the `_tychopy` Python extension module. After reading this guide, you should be able to understand, use, and extend the binding layer at every level: from the nanobind module entry point, through the `TychoBind<T>` trait dispatch, to the type casters that translate Python objects into Eigen vectors, and the pure-Python wrapper layer that smooths over remaining ergonomic gaps.
 
@@ -202,12 +202,12 @@ Full and partial specializations are defined in `*_bind.h` headers throughout `s
 ```cpp
 // Full specialization (src/bindings/optimal_control/ode_phase_bind.h)
 template <> struct TychoBind<ODEPhaseBase> {
-    static void Build(nb::module_ &m);
+    static void build(nb::module_ &m);
 };
 
 // Partial specialization (same file)
 template <class DODE> struct TychoBind<ODEPhase<DODE>> {
-    static void Build(nb::module_ &m) {
+    static void build(nb::module_ &m) {
         auto phase = nb::class_<ODEPhase<DODE>, ODEPhaseBase>(m, "phase");
         bind::ODEPhaseBuildImpl<DODE>(phase);
         // ...
@@ -216,7 +216,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
 
 // Partial specialization for VectorFunction types (common_functions_bind.h)
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
-    static void Build(nb::module_ &m, const char *name) {
+    static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<Segment<IR, OR, ST>>(m, name);
         bind::DenseBaseBuild<Segment<IR, OR, ST>>(obj);
         bind::SegBuild<Segment<IR, OR, ST>>(obj);
@@ -224,39 +224,39 @@ template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
 };
 ```
 
-### `Build()` Signatures
+### `build()` Signatures
 
 Two signatures are used depending on whether the type's Python name is fixed or caller-determined:
 
 ```cpp
-static void Build(nb::module_ &m);                    // Name is hardcoded inside
-static void Build(nb::module_ &m, const char *name);  // Name provided by caller
+static void build(nb::module_ &m);                    // Name is hardcoded inside
+static void build(nb::module_ &m, const char *name);  // Name provided by caller
 ```
 
-### `FunctionRegistry::Build_Register<T>()`
+### `FunctionRegistry::build_register<T>()`
 
 This is the primary entry point for registering VectorFunction types. It:
 
-1. Calls `TychoBind<T>::Build(m, name)` to create the `nb::class_<T>` and define its methods.
+1. Calls `TychoBind<T>::build(m, name)` to create the `nb::class_<T>` and define its methods.
 2. Calls `RegSelector<T::IRC, T::ORC>::Register<T>(this)` to register implicit conversions to the type-erased base classes.
 
-Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::Build`:
+Three overloads exist, distinguished by C++20 `requires` constraints on `TychoBind<Derived>::build`:
 
 ```cpp
-// Overload 1: name hardcoded in TychoBind<Derived>::Build(m) — no name argument needed
+// Overload 1: name hardcoded in TychoBind<Derived>::build(m) — no name argument needed
 template <class Derived>
-    requires requires(nb::module_ &m) { TychoBind<Derived>::Build(m); }
-void Build_Register(nb::module_ &m);
+    requires requires(nb::module_ &m) { TychoBind<Derived>::build(m); }
+void build_register(nb::module_ &m);
 
 // Overload 2: name passed explicitly; type registered into the registry's root module
 template <class Derived>
-    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-void Build_Register(const char *name);
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+void build_register(const char *name);
 
 // Overload 3: name and target module both passed explicitly (most common)
 template <class Derived>
-    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::Build(m, name); }
-void Build_Register(nb::module_ &m, const char *name);
+    requires requires(nb::module_ &m, const char *name) { TychoBind<Derived>::build(m, name); }
+void build_register(nb::module_ &m, const char *name);
 ```
 
 All three overloads call `RegSelector<Derived::IRC, Derived::ORC>::Register<Derived>(this)` after building to register implicit conversions.

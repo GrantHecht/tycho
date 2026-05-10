@@ -1,6 +1,22 @@
 Multi-Phase Zermelo's Problem
 ==============================
 
+.. warning::
+
+   The inline code samples below were authored prior to the Tycho Python-API
+   snake_case rename and the legacy OCP link-API removal (PR #50). They use
+   pre-rename camelCase identifiers (``addBoundaryValue``, ``addPhase``,
+   ``addLinkEqualCon`` taking a ``LinkFlags``/``LinkConstraint`` object,
+   ``setLinkParams``, ``setTraj``, ``setControlMode``, ``XVar``, etc.) and
+   the legacy ``LinkConstraint`` Python class. The bindings now expose
+   only snake_case forms (``add_boundary_value``, ``add_phase``,
+   ``add_forward_link_equal_con``, ``add_link_equal_con``,
+   ``set_link_params``, ``set_traj``, ``set_control_mode``, ``x_var``),
+   and the legacy ``LinkConstraint``-style API has been removed.
+   Copy-pasting will fail with ``AttributeError`` or ``TypeError``. For
+   runnable, current code see ``examples/python_examples/MultiPhaseZermelo.py``.
+   A faithful rewrite of this page is tracked separately.
+
 If you haven't explored :ref:`Zermelo's Problem`, it is highly recommended that you do so before going much further.
 It provides much needed background information about the problem, as well as the initial code that we will be modifying.
 
