@@ -247,28 +247,6 @@ class ODEBase:
     def xtup_vars(self):
         return self.ode.xtup_vars()
 
-    # Legacy camelCase aliases for backward compatibility
-    def XVars(self):
-        return self.ode.x_vars()
-
-    def UVars(self):
-        return self.ode.u_vars()
-
-    def PVars(self):
-        return self.ode.p_vars()
-
-    def TVar(self):
-        return self.ode.t_var()
-
-    def XtVars(self):
-        return self.ode.xt_vars()
-
-    def XtUVars(self):
-        return self.ode.xtu_vars()
-
-    def xtup_vars(self):
-        return self.ode.xtup_vars()
-
     def x_idxs(self, *args):
         if len(args) > 1:
             return self.ode.x_idxs(list(args))
@@ -292,15 +270,3 @@ class ODEBase:
             return self.ode.u_idxs(list(args))
         else:
             return self.ode.u_idxs(*args)
-
-    def Xidxs(self, *args):
-        return self.x_idxs(*args)
-
-    def Xtidxs(self, *args):
-        return self.xt_idxs(*args)
-
-    def XtUidxs(self, *args):
-        return self.xtu_idxs(*args)
-
-    def Uidxs(self, *args):
-        return self.u_idxs(*args)
