@@ -1,6 +1,5 @@
 # Configured by CMake; usable directly by sphinx-build with fallback defaults
 # when CMake variables are not yet substituted.
-import os
 from pathlib import Path
 
 

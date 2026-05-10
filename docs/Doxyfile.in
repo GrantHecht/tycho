@@ -1,6 +1,6 @@
-# docs/Doxyfile.in — Configured by CMake into docs/build/Doxyfile.
-# Manual substitution (for pre-Task-4 local runs):
-#   sed "s|@PROJECT_SOURCE_DIR@|$PWD|g; s|@PROJECT_VERSION@|0.1.dev|g; s|@CMAKE_CURRENT_BINARY_DIR@|<out-dir>|g" Doxyfile.in > Doxyfile
+# docs/Doxyfile.in — Configured by CMake into <build-dir>/docs/Doxyfile via
+# configure_file() in docs/CMakeLists.txt. For ad-hoc local Doxygen runs
+# outside CMake, the @VAR@ placeholders can be sed-substituted manually.
 PROJECT_NAME           = "Tycho"
 PROJECT_NUMBER         = "@PROJECT_VERSION@"
 OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen

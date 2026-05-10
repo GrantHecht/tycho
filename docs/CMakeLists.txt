@@ -7,6 +7,13 @@ set(DOCS_HTML_DIR    "${DOCS_BUILD_DIR}/html")
 set(DOCS_DOCTREE_DIR "${DOCS_BUILD_DIR}/.doctrees")
 set(DOXYGEN_OUTPUT_DIR "${DOCS_BUILD_DIR}/doxygen")
 
+if(NOT TARGET _tychopy)
+    message(FATAL_ERROR
+        "BUILD_SPHINX_DOCS=ON requires ENABLE_PYTHON_BINDINGS=ON "
+        "(autodoc imports tychopy to render the Python API reference). "
+        "Re-configure with -DENABLE_PYTHON_BINDINGS=ON.")
+endif()
+
 # 1) Substitute conf.py and Doxyfile.
 # CMake writes conf.py to the build dir; Sphinx is invoked with -c <build-dir>
 # so it picks up the substituted copy, not the source-tree conf.py (which
@@ -22,7 +29,9 @@ configure_file(
 
 # 2) Doxygen XML target.
 file(GLOB_RECURSE _TYCHO_PUBLIC_HEADERS
-    "${PROJECT_SOURCE_DIR}/include/tycho/*.h")
+    CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/include/tycho/*.h"
+    "${PROJECT_SOURCE_DIR}/include/tycho/*.hpp")
 
 add_custom_command(
     OUTPUT  "${DOXYGEN_OUTPUT_DIR}/xml/index.xml"
