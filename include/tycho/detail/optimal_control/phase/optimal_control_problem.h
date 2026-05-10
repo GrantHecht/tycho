@@ -504,8 +504,10 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
 
     template <class FuncMap>
     void remove_func_impl(FuncMap &map, int index, const std::string &funcstr) {
-        this->reset_transcription();
-        this->invalidate_post_opt_info();
+        // Validate before any mutation: an out-of-range index throws, and
+        // pre-flipping reset_transcription_/post_opt_info_ would force a
+        // wasteful re-transcription on a subsequent solve() under the
+        // exception path.
         if (index == -1 && map.size() > 0) {
             index = map.rbegin()->first;
         }
@@ -514,6 +516,9 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
             throw std::invalid_argument(fmt::format(
                 "No {0:} with index {1:} exists in Optimal Control Problem.", funcstr, index));
         }
+
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         map.erase(index);
     }
 
