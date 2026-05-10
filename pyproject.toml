@@ -28,6 +28,14 @@ Homepage = "https://github.com/GrantHecht/tycho"
 cmake.build-type = "Release"
 # Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
 wheel.packages = ["tychopy"]
+# Type-info marker (py.typed) and committed nanobind stub snapshot (_stubs/*.pyi)
+# must travel inside the wheel so downstream IDEs/type-checkers see the API
+# surface. Without these include patterns, scikit-build-core's default filter
+# would not necessarily pick up non-.py files inside the package directory.
+wheel.include = [
+    "tychopy/py.typed",
+    "tychopy/_stubs/**/*.pyi",
+]
 
 [tool.ruff]
 line-length = 88
