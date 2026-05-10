@@ -17,8 +17,6 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 // Free-function binding helpers for StaticODE_Expression, ODEBase, and GenericODE.
-// Replaces the out-of-class StaticODE_Expression::Build(), ODEBase::BuildODEModule(), and
-// GenericODE::BuildGenODEModule() definitions that were previously included from ODE.h.
 
 #include "dense_function_base_bind.h"
 #include "ode_sizes_bind.h"

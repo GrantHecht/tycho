@@ -15,5 +15,6 @@
 
 #pragma once
 #ifdef TYCHO_PYTHON_BINDINGS
-// VectorExpression::Build() moved to TychoBind<PyVectorFunction<>> in PythonFunctions.h
+// Type-erased Python VF binding lives in python_functions.h
+// (TychoBind<PyVectorFunction<>>::build).
 #endif // TYCHO_PYTHON_BINDINGS
