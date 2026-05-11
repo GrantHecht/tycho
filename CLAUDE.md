@@ -176,7 +176,36 @@ first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automati
 conda create -n tycho python=3.13
 conda activate tycho
 pip install numpy scipy matplotlib spiceypy
+# Linux only: keep conda's libstdc++ aligned with the system compiler.
+# Required when the build toolchain emits GLIBCXX symbols newer than what
+# conda's default libstdcxx ships (otherwise importing _tychopy fails with
+# 'GLIBCXX_X.Y.Z not found').
+conda install -c conda-forge "libstdcxx-ng>=15"
 ```
+
+**Linux libstdc++ note (bleeding-edge distros):** On systems whose system
+GCC is newer than what conda-forge currently ships (e.g. Fedora 44 with
+GCC 16, where conda-forge tops out at GCC 15 / GLIBCXX_3.4.34), the
+`_tychopy` extension may require a `GLIBCXX_3.4.X` symbol the conda env
+can't provide. Two workarounds until conda-forge catches up:
+
+1. `LD_PRELOAD=/usr/lib64/libstdc++.so.6 python -c 'import _tychopy'`
+   (force the loader to use system libstdc++ before conda's)
+2. Build wheels with `auditwheel repair` (production path; bundles
+   libstdc++ into the wheel for manylinux compatibility) — not yet wired
+   into the project's CI.
+
+This is a runtime concern only; `cmake --build build --target _tychopy`
+and `pip wheel .` both succeed regardless. See PR #51 discussion for
+detail.
+
+**Local wheel builds** (`pip wheel .`) restrict the CMake build to the
+`_tychopy` target via `[tool.scikit-build].cmake.targets` in
+`pyproject.toml`. Stub generation targets (added to `ALL` by
+`nanobind_add_stub`) import the freshly built `.so` and would fail under
+the libstdc++ mismatch above; the wheel ships the committed source-tree
+snapshot at `tychopy/_stubs/` instead. Refresh that snapshot via
+`ninja tychopy_stubs_snapshot` after editing any binding.
 
 ### macOS (Apple Silicon)
 
