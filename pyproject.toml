@@ -36,8 +36,17 @@ wheel.packages = ["tychopy"]
 # wheel-packaged copy of tychopy/ to keep the wheel layout clean.
 # (tychopy/py.typed travels naturally via wheel.packages — it sits inside the
 # package directory.)
+# Wheel contains only the Python extension (_tychopy.so), its stubs, and the
+# pure-Python tychopy/ package. The CMake install rules also produce a C++
+# distribution (headers under include/, package config under lib64/cmake/tycho/)
+# intended for `find_package(tycho)` consumers via `cmake --install`; those
+# artifacts are not Python-runtime-relevant and are filtered out of the wheel.
 wheel.exclude = [
     "tychopy/_stubs/**",
+    "include/**",
+    "lib/**",
+    "lib64/**",
+    "share/**",
 ]
 
 [tool.ruff]
