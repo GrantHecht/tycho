@@ -137,11 +137,26 @@ conda activate tycho
 Each platform has a corresponding CMake preset in `CMakePresets.json`. **Always use the
 preset for your platform** — do not configure manually.
 
-| Platform         | Configure preset        | Build parallelism |
-| ---------------- | ----------------------- | ----------------- |
-| macOS (Apple Si) | `macos-llvm-release`    | `-j6`             |
-| Linux / WSL2     | `linux-clang-release`   | `-j6`             |
-| Windows x64      | `x64-Clang-Release`     | `-j6`             |
+| Platform         | Configure preset            | Build parallelism |
+| ---------------- | --------------------------- | ----------------- |
+| macOS (Apple Si) | `macos-llvm-release`        | `-j6`             |
+| Linux / WSL2     | `linux-clang-conda`         | `-j6`             |
+| Windows x64      | `x64-Clang-Release`         | `-j6`             |
+
+**Linux preset choice:** `linux-clang-conda` uses the conda-forge clang
+toolchain installed into the `tycho` env (`clangxx_linux-64` +
+`libstdcxx-devel_linux-64` + `sysroot_linux-64`); the resulting `.so`
+links against conda's libstdc++ so it is guaranteed import-compatible
+with the conda env on any distro. This is the recommended default and is
+required for `pip wheel .` on bleeding-edge distros (Fedora 44+, anywhere
+the system GCC/libstdc++ is newer than what conda-forge ships). The
+legacy `linux-clang-release` preset (system `/usr/bin/clang++`) remains
+available — use it when (a) you specifically need system libstdc++
+features, (b) you are building with `ENABLE_ENZYME_AD=ON` and your
+Enzyme plugin was built against a specific system-clang version, or
+(c) conda-forge's clang is too old for some feature you need. On older
+distros where the system libstdc++ is already ≤ conda's, both presets
+produce equivalent wheels.
 
 **Note:** The `-j` values above are upper bounds — use lower values on
 RAM-constrained systems. The `heavy_compile` ninja job pool auto-throttles
@@ -171,41 +186,30 @@ cd build && ninja -j6 all      # safe — pool limits heavy TUs automatically
 The `dep/` submodules (eigen, fmt, nanobind) must be initialised before the
 first build. The cmake helpers in `cmake/git-submodule-*.cmake` do this automatically.
 
-**Python environment (all platforms) — conda env named `tycho`:**
+**Python environment — conda env named `tycho`:**
 ```bash
 conda create -n tycho python=3.13
 conda activate tycho
 pip install numpy scipy matplotlib spiceypy
-# Linux only: keep conda's libstdc++ aligned with the system compiler.
-# Required when the build toolchain emits GLIBCXX symbols newer than what
-# conda's default libstdcxx ships (otherwise importing _tychopy fails with
-# 'GLIBCXX_X.Y.Z not found').
-conda install -c conda-forge "libstdcxx-ng>=15"
+
+# Linux only: install the conda-forge clang toolchain. Used by the
+# linux-clang-conda preset and required for pip wheel . on bleeding-edge
+# distros (anywhere system libstdc++ is newer than conda-forge ships).
+conda install -c conda-forge \
+  clangxx_linux-64 clang_linux-64 \
+  libstdcxx-devel_linux-64 sysroot_linux-64
 ```
 
-**Linux libstdc++ note (bleeding-edge distros):** On systems whose system
-GCC is newer than what conda-forge currently ships (e.g. Fedora 44 with
-GCC 16, where conda-forge tops out at GCC 15 / GLIBCXX_3.4.34), the
-`_tychopy` extension may require a `GLIBCXX_3.4.X` symbol the conda env
-can't provide. Two workarounds until conda-forge catches up:
-
-1. `LD_PRELOAD=/usr/lib64/libstdc++.so.6 python -c 'import _tychopy'`
-   (force the loader to use system libstdc++ before conda's)
-2. Build wheels with `auditwheel repair` (production path; bundles
-   libstdc++ into the wheel for manylinux compatibility) — not yet wired
-   into the project's CI.
-
-This is a runtime concern only; `cmake --build build --target _tychopy`
-and `pip wheel .` both succeed regardless. See PR #51 discussion for
-detail.
-
-**Local wheel builds** (`pip wheel .`) restrict the CMake build to the
-`_tychopy` target via `[tool.scikit-build].cmake.targets` in
-`pyproject.toml`. Stub generation targets (added to `ALL` by
-`nanobind_add_stub`) import the freshly built `.so` and would fail under
-the libstdc++ mismatch above; the wheel ships the committed source-tree
-snapshot at `tychopy/_stubs/` instead. Refresh that snapshot via
-`ninja tychopy_stubs_snapshot` after editing any binding.
+**Local wheel builds** (`pip wheel .`) drive CMake via scikit-build-core
+and run the full `all` target (extension `.so` + nanobind stub
+generation). Stub generation imports the freshly built `.so`, so the
+build environment must produce an import-compatible binary — that is
+guaranteed when the `tycho` conda env is active and the conda clang
+toolchain (above) is installed, because scikit-build-core picks up
+`CC`/`CXX` from the activated env and links against conda's libstdc++.
+The wheel build does *not* go through `CMakePresets.json` (scikit-build-
+core ignores presets), so toolchain selection is by env var, not preset
+name.
 
 ### macOS (Apple Silicon)
 
@@ -237,9 +241,12 @@ source /opt/intel/oneapi/setvars.sh   # add to ~/.bashrc
 **First-time build:**
 ```bash
 mkdir build && conda activate tycho
-cmake --preset linux-clang-release
+cmake --preset linux-clang-conda      # recommended; uses conda toolchain
 cd build && ninja -j6 all
 ```
+
+To build with the system clang instead (e.g. for Enzyme), use
+`linux-clang-release` — see the "Linux preset choice" note above.
 
 ### Windows x64
 

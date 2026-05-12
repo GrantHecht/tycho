@@ -26,14 +26,6 @@ Homepage = "https://github.com/GrantHecht/tycho"
 
 [tool.scikit-build]
 cmake.build-type = "Release"
-# Wheel builds only need the _tychopy extension; stub generation targets
-# (added to the default `all` target by nanobind_add_stub) import the freshly
-# built .so, which can fail when the wheel-build env's loader resolves a
-# libstdc++ older than what the .so requires. The install rules ship the
-# committed source-tree snapshot at tychopy/_stubs/ — regeneration during
-# the wheel build is unnecessary. Developers refresh stubs explicitly via
-# `ninja tychopy_stubs_snapshot` and commit the result.
-cmake.targets = ["_tychopy"]
 # Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
 wheel.packages = ["tychopy"]
 # Stubs for the _tychopy extension live in the source tree at tychopy/_stubs/
