@@ -773,7 +773,12 @@ endif()
 ######## Find Correct Python Install Location  ############
 
 if(ENABLE_PYTHON_BINDINGS)
-    if(NOT PIP_INSTALL)
+    # SKBUILD is set by scikit-build-core when driving CMake via `pip wheel .`
+    # or `pip install .`; pip handles its own install layout, so the dev-build
+    # POST_BUILD copy in src/bindings/CMakeLists.txt must NOT fire.
+    # PIP_INSTALL is the legacy opt-out flag (never auto-set; honored for
+    # callers that pass -DPIP_INSTALL=ON explicitly).
+    if(NOT SKBUILD AND NOT PIP_INSTALL)
       if(NOT PYTHON_LOCAL_INSTALL_DIR)
         if(WIN32)
           set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})

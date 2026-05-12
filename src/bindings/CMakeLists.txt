@@ -123,9 +123,14 @@ install(TARGETS _tychopy LIBRARY DESTINATION .)
 
 # Dev-install shortcut for PYTHON_LOCAL_INSTALL_DIR (e.g. config_and_build.sh):
 # copies _tychopy.so + the pure-Python package + the committed stub snapshot
-# directly to site-packages after every build.
+# directly to site-packages after every build. Skipped under scikit-build-core
+# (see CMakeLists.txt:775 — SKBUILD guard).
 if(PYTHON_LOCAL_INSTALL_DIR)
     add_custom_command(TARGET _tychopy POST_BUILD
+        # Ensure dest exists — `python -m site --user-site` returns a path
+        # that may not exist yet on a fresh runner where no `pip install --user`
+        # has ever been run; `cmake -E copy ... dest/` requires dest to exist.
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${PYTHON_LOCAL_INSTALL_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_tychopy> ${PYTHON_LOCAL_INSTALL_DIR}/
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tychopy ${PYTHON_LOCAL_INSTALL_DIR}/tychopy
