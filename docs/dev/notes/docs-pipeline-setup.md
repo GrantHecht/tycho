@@ -33,18 +33,28 @@ only by the deploy job on `push: main` events, not by PR runs (the
 
 ## CI matrix
 
-- **`docs-build.yml`** — runs on every PR + push to main. Two jobs:
-  - `build` — builds `_tychopy` and the docs site; uploads the
-    `github-pages` artifact on main and a per-PR `docs-html-NNN`
-    artifact on PRs.
+- **`docs-build.yml`** — single heavy binding-CI lane. Runs on every PR
+  + push to main. Two jobs:
+  - `build` — builds `_tychopy`, regenerates the stub snapshot and
+    asserts no drift, builds the docs site, runs doctests, runs the
+    VF Doxygen subsystem-scoped sanity check, uploads artifacts.
+    Folding stub-drift detection into this job avoids duplicating the
+    `_tychopy` build across multiple workflows.
   - `deploy` — depends on `build`, gated on `push:main`. Uses
     `configure-pages` + `deploy-pages` to publish the artifact from
     the same workflow run.
+- **`stubs-drift.yml`** — fast PR gates (~30 s / job) that do NOT
+  require a binding build. Two jobs:
+  - `stub-sanity` — asserts committed stubs parse + `fix_stubs.py`
+    idempotency.
+  - `default-config-no-docs` — configure-only smoke that proves
+    `BUILD_SPHINX_DOCS=OFF` works on a runner without Doxygen.
+- **`wheel-layout.yml`** — Linux wheel build via `pip wheel .`,
+  asserts the `wheel.exclude` rules. Independent of `docs-build`
+  because it tests the scikit-build-core path specifically.
 - **`docs-linkcheck.yml`** — weekly cron (Mondays 06:00 UTC) plus
-  manual dispatch.
-- **`stubs-drift.yml`** — runs on PRs touching bindings, headers, or
-  the committed stub snapshot; fails if regenerated stubs differ from
-  the committed snapshot.
+  manual dispatch. Opens a GitHub issue on failure so silent cron
+  rot is visible.
 
 ## Local validation
 

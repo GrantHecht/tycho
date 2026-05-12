@@ -7,7 +7,10 @@ on:
       - 'include/tycho/**'
       - 'src/bindings/**'
       - 'tychopy/**'
+      - 'scripts/fix_stubs.py'
+      - 'scripts/check_stubs_size.py'
       - 'CMakeLists.txt'
+      - 'CMakePresets.json'
       - 'cmake/**'
       - '.github/workflows/docs-build.yml'
   push:
@@ -55,6 +58,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -n tycho -c conda-forge numpy scipy matplotlib spiceypy
+          pip install nanobind
           pip install -r docs/requirements-docs.txt
 
       - name: Cache sphinx doctrees
@@ -75,6 +79,22 @@ jobs:
             -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
             -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21
           cmake --build build -j$(nproc) --target _tychopy
+
+      - name: Regenerate stubs and assert no drift
+        # Runs BEFORE the slow docs build so drift failures surface fast.
+        # tychopy_stubs_snapshot includes check_stubs_size.py + fix_stubs.py
+        # as post-process steps.
+        shell: bash -el {0}
+        run: |
+          cmake --build build --target tychopy_stubs_snapshot
+          if ! git diff --quiet tychopy/_stubs/; then
+            echo "::error::Stub snapshot is stale. Drifted files:"
+            git diff --name-only tychopy/_stubs/ | sed 's/^/  /'
+            echo "::error::Run 'cmake --build build --target tychopy_stubs_snapshot' locally and commit the result."
+            git diff tychopy/_stubs/
+            exit 1
+          fi
+          echo "Stubs are in sync."
 
       - name: Build docs
         shell: bash -el {0}

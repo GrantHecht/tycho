@@ -1,10 +1,15 @@
 name: stubs-drift
 
+# Fast PR gates that do NOT require a _tychopy build. The actual stub-drift
+# assertion (regenerate + diff) runs in docs-build.yml's build job, which
+# already builds _tychopy for the Sphinx site — that is the single heavy
+# binding-CI lane. This workflow stays cheap (~30 s per job) so contributors
+# get fast feedback on stub-syntax / idempotency / default-config regressions
+# without waiting for the docs build.
+
 on:
   pull_request:
     paths:
-      - 'src/bindings/**'
-      - 'include/tycho/**'
       - 'tychopy/_stubs/**'
       - 'scripts/fix_stubs.py'
       - 'scripts/check_stubs_size.py'
@@ -18,19 +23,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  drift-check:
+  stub-sanity:
+    # Parse + idempotency checks operate on the committed snapshot only — no
+    # binding build needed. The actual drift assertion (regenerate + diff)
+    # lives in docs-build.yml.
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        with: {submodules: recursive}
-      - uses: conda-incubator/setup-miniconda@v3
+        with: {submodules: false}
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          activate-environment: tycho
       - name: Verify committed stubs parse
-        shell: bash -el {0}
         run: |
           python -c "
           import ast, pathlib, sys
@@ -43,45 +49,7 @@ jobs:
                   fail = True
           sys.exit(1 if fail else 0)
           "
-      - name: Install clang-21 via LLVM apt repo
-        run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
-          sudo apt-get install -y libomp-dev lld
-      - name: Install apt + MKL
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
-          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
-            | sudo tee /etc/apt/sources.list.d/oneAPI.list
-          sudo apt-get update && sudo apt-get install -y intel-oneapi-mkl-devel
-      - name: Install Python deps
-        shell: bash -el {0}
-        run: |
-          conda install -n tycho -c conda-forge numpy scipy
-          pip install nanobind
-      - name: Build _tychopy + regenerate stubs
-        shell: bash -el {0}
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-clang-release \
-            -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
-            -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21
-          cmake --build build -j$(nproc) --target _tychopy
-          cmake --build build --target tychopy_stubs_snapshot
-      - name: Fail on drift
-        run: |
-          if ! git diff --quiet tychopy/_stubs/; then
-            echo "::error::Stub snapshot is stale. Drifted files:"
-            git diff --name-only tychopy/_stubs/ | sed 's/^/  /'
-            echo "::error::Run 'cmake --build build --target tychopy_stubs_snapshot' locally and commit the result."
-            git diff tychopy/_stubs/
-            exit 1
-          fi
-          echo "Stubs are in sync."
       - name: fix_stubs.py is idempotent
-        shell: bash -el {0}
         run: |
           python scripts/fix_stubs.py tychopy/_stubs/
           if ! git diff --quiet tychopy/_stubs/; then
