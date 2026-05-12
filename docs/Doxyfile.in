@@ -8,9 +8,10 @@ CREATE_SUBDIRS         = NO
 INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp
-# Many public-facing types live under detail/<subsys>/ for template-impl
-# reasons; the EXCLUDE_* rules below reserve namespace + filename
-# conventions for truly-internal helpers.
+# Reserved for future internal helpers — no matching symbols/files exist
+# in include/tycho/ today. Kept as forward-looking guards so that adding
+# a tycho::detail::internal::* type or a detail/utils/internal_* header
+# automatically excludes it from the public Doxygen XML.
 EXCLUDE_SYMBOLS        = tycho::detail::internal::*
 EXCLUDE_PATTERNS       = */detail/utils/internal_*
 
@@ -23,7 +24,7 @@ EXTRACT_ANON_NSPACES   = NO
 HIDE_UNDOC_MEMBERS     = YES
 HIDE_UNDOC_CLASSES     = YES
 INTERNAL_DOCS          = NO         # @internal blocks hidden by default
-JAVADOC_AUTOBRIEF      = NO         # explicit @brief required (see spec §7)
+JAVADOC_AUTOBRIEF      = NO         # explicit @brief required — repo uses NumPy-style docstrings, not implicit-brief
 
 # Cross-references and includes
 SHORT_NAMES            = NO
@@ -56,6 +57,6 @@ WARN_IF_UNDOCUMENTED   = NO
 WARN_IF_DOC_ERROR      = YES
 WARN_AS_ERROR          = NO
 
-# Aliases (per spec §7)
+# Aliases for VF thread-safety annotations
 ALIASES += "vfthreadsafe=@note This function is thread-safe."
 ALIASES += "vfnotthreadsafe=@note This function is **not** thread-safe; one instance per worker."

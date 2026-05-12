@@ -1,11 +1,9 @@
 name: stubs-drift
 
-# Fast PR gates that do NOT require a _tychopy build. The actual stub-drift
-# assertion (regenerate + diff) runs in docs-build.yml's build job, which
-# already builds _tychopy for the Sphinx site — that is the single heavy
-# binding-CI lane. This workflow stays cheap (~30 s per job) so contributors
-# get fast feedback on stub-syntax / idempotency / default-config regressions
-# without waiting for the docs build.
+# PR gates that do NOT regenerate stubs (the regenerate + diff assertion
+# lives in docs-build.yml, which already builds _tychopy for the Sphinx
+# site). Two jobs of different shape — see per-job comments below. Heavy
+# binding work consolidates in docs-build.yml.
 
 on:
   pull_request:

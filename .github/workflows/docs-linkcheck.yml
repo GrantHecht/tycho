@@ -28,8 +28,10 @@ jobs:
         shell: bash -el {0}
         run: |
           # Suppress autodoc / breathe by using nitpicky off and disabling
-          # extensions that need imports/Doxygen output.
+          # extensions that need imports/Doxygen output. Linkcheck is
+          # intentionally less strict than the docs-build lane.
           sphinx-build -b linkcheck \
+            -D nitpicky=0 \
             -D extensions=myst_parser,sphinx_design,sphinx_copybutton,sphinx_togglebutton \
             docs/source /tmp/linkcheck
 

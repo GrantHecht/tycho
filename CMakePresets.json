@@ -37,7 +37,7 @@
         {
             "name": "linux-clang-conda",
             "displayName": "Linux Clang Release (conda toolchain)",
-            "description": "Release build using the conda-forge clang toolchain. Builds link against conda's libstdc++ (libstdcxx-devel_linux-64), guaranteeing ABI compatibility when importing _tychopy from the active conda env. Use this preset for `pip wheel .` and any build intended to be installed into the conda env. Requires `conda activate tycho` first.",
+            "description": "Release build using the conda-forge clang toolchain. Builds link against conda's libstdc++ (libstdcxx-devel_linux-64), guaranteeing ABI compatibility when importing _tychopy from the active conda env. Use this preset for `pip wheel .` and any build intended to be installed into the conda env. Requires `conda activate tycho` first. x86_64 only — the cached compiler paths hard-code `x86_64-conda-linux-gnu-clang`; aarch64 conda envs need a separate preset.",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "installDir": "${sourceDir}/build/install/${presetName}",
