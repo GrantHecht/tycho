@@ -35,15 +35,23 @@ jobs:
           python-version: '3.13'
           activate-environment: tycho
 
-      - name: Install clang-21 via LLVM apt repo
+      - name: Install conda clang toolchain
+        shell: bash -el {0}
+        # Match the wheel build's toolchain (see wheel-layout.yml) so the
+        # _tychopy.so built here links against conda's libstdc++. This is
+        # the same import-compatibility invariant CLAUDE.md documents for
+        # `pip wheel .`; using the system clang here would risk silent
+        # stubgen empty-output on libstdc++ mismatch.
         run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
-          sudo apt-get install -y libomp-dev lld
+          conda install -n tycho -c conda-forge -y \
+            clangxx_linux-64 clang_linux-64 \
+            libstdcxx-devel_linux-64 sysroot_linux-64 \
+            ninja
 
       - name: Install apt deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build doxygen graphviz
+          sudo apt-get install -y doxygen graphviz
 
       - name: Install MKL via apt repository
         run: |
@@ -74,10 +82,7 @@ jobs:
         shell: bash -el {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-clang-release \
-            -DBUILD_SPHINX_DOCS=ON \
-            -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
-            -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21
+          cmake --preset linux-clang-conda -DBUILD_SPHINX_DOCS=ON
           cmake --build build -j$(nproc) --target _tychopy
 
       - name: Regenerate stubs and assert no drift
@@ -117,6 +122,10 @@ jobs:
           OUTPUT_DIRECTORY = /tmp/doxygen-vf
           EOF
           doxygen /tmp/Doxyfile.vf
+          # Doxygen returns 0 even when WARN_AS_ERROR=NO suppresses real
+          # failures; assert XML was actually produced so a broken config
+          # cannot silently pass.
+          test -s /tmp/doxygen-vf/xml/index.xml
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'

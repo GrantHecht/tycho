@@ -187,16 +187,26 @@ add_custom_target(tychopy_all_stubs DEPENDS ${_TYCHOPY_ALL_STUB_TARGETS})
 # change; commit the result. scripts/check_stubs_size.py catches empty stubs
 # (stubgen ImportError); scripts/fix_stubs.py rewrites known nanobind quirks
 # (see its module docstring).
+#
+# Staging-then-rename: validate the new snapshot in tychopy/_stubs.staging/
+# before replacing tychopy/_stubs/. A mid-copy failure or a failed validation
+# step leaves the committed snapshot untouched, so a developer's working
+# tree is not left polluted (cmake -E rename is atomic within the same
+# filesystem, which PROJECT_SOURCE_DIR guarantees).
 set(_TYCHOPY_SNAPSHOT_DIR "${PROJECT_SOURCE_DIR}/tychopy/_stubs")
+set(_TYCHOPY_SNAPSHOT_STAGING "${PROJECT_SOURCE_DIR}/tychopy/_stubs.staging")
 add_custom_target(tychopy_stubs_snapshot
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_TYCHOPY_SNAPSHOT_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${_TYCHOPY_SNAPSHOT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_TYCHOPY_SNAPSHOT_STAGING}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${_TYCHOPY_SNAPSHOT_STAGING}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${_TYCHOPY_STUB_DIR}" "${_TYCHOPY_SNAPSHOT_DIR}"
+            "${_TYCHOPY_STUB_DIR}" "${_TYCHOPY_SNAPSHOT_STAGING}"
     COMMAND ${Python_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/check_stubs_size.py"
-            "${_TYCHOPY_SNAPSHOT_DIR}"
+            "${_TYCHOPY_SNAPSHOT_STAGING}"
     COMMAND ${Python_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/fix_stubs.py"
-            "${_TYCHOPY_SNAPSHOT_DIR}"
+            "${_TYCHOPY_SNAPSHOT_STAGING}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_TYCHOPY_SNAPSHOT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E rename
+            "${_TYCHOPY_SNAPSHOT_STAGING}" "${_TYCHOPY_SNAPSHOT_DIR}"
     DEPENDS tychopy_all_stubs
     COMMENT "Refreshing tychopy/_stubs/ snapshot (with fix_stubs.py post-process) — commit the result"
     VERBATIM)

@@ -68,6 +68,14 @@ jobs:
           fi
           echo "Inspecting $wheel"
           contents=$(python -m zipfile -l "$wheel" | awk 'NR>2 {print $1}')
+          # Guard against a future zipfile-format change that would yield
+          # empty $contents — the negative loop below would then trivially
+          # pass and only the positive assertion would catch it (with a
+          # cryptic message that hides the real cause).
+          if [ -z "$contents" ]; then
+            echo "::error::python -m zipfile -l produced no entries for $wheel"
+            exit 1
+          fi
           echo "Wheel contents:"
           echo "$contents" | sed 's/^/  /'
 
@@ -91,3 +99,28 @@ jobs:
           fi
 
           exit $fail
+
+      # Install a parallel system Python 3.13 so we can create a fresh
+      # venv outside the conda env. The wheel is cp313-cp313; ubuntu-latest's
+      # default Python is 3.12, which would refuse the wheel.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Smoke-test wheel import (fresh venv, no setvars.sh)
+        # This step deliberately does NOT source /opt/intel/oneapi/setvars.sh.
+        # setvars.sh exports LD_LIBRARY_PATH containing the same MKL/iomp5
+        # dirs that the wheel's .so bakes into RUNPATH, which would mask any
+        # rpath bug. The point of this gate is exactly to surface such a
+        # bug — the .so must import unaided by LD_LIBRARY_PATH.
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          python3.13 -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --upgrade pip
+          /tmp/wheel-venv/bin/pip install numpy
+          /tmp/wheel-venv/bin/pip install "$wheel"
+          so=$(ls /tmp/wheel-venv/lib/python3.13/site-packages/_tychopy*.so)
+          echo "Bundled .so RUNPATH (informational):"
+          readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
+          /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
