@@ -58,3 +58,21 @@ ninja tychopy_stubs_snapshot      # regenerate committed snapshot
 cd ..
 git status tychopy/_stubs/        # commit any changes
 ```
+
+## Nitpicky mode + content authoring
+
+`docs/source/conf.py` sets `nitpicky = True` and CI invokes Sphinx with
+`-W --keep-going -n`, so every undocumented cross-reference becomes a
+build failure. The current `nitpick_ignore` list is intentionally narrow
+(only `tycho` and `tycho::integrators` are exempted). As public-API
+docstring coverage expands, expect to either:
+
+- extend `nitpick_ignore` with each new namespace component that is
+  referenced before it's fully documented, or
+- relax to `nitpicky = False` once cross-reference coverage is broad
+  enough that nitpicky's signal-to-noise is no longer worth the
+  maintenance burden.
+
+This is a content-authoring concern, not an infrastructure concern —
+revisit when the first PR adding substantive C++ docstrings runs into
+the strict mode wall.

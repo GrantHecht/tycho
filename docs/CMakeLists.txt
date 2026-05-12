@@ -14,10 +14,8 @@ if(NOT TARGET _tychopy)
         "Re-configure with -DENABLE_PYTHON_BINDINGS=ON.")
 endif()
 
-# 1) Substitute conf.py and Doxyfile.
-# CMake writes conf.py to the build dir; Sphinx is invoked with -c <build-dir>
-# so it picks up the substituted copy, not the source-tree conf.py (which
-# retains @CMake_VAR@ placeholders for local sphinx-build invocations).
+# 1) Substitute conf.py and Doxyfile into the build dir; Sphinx is invoked
+#    with `-c <build-dir>` so it picks up the substituted copies.
 configure_file(
     "${DOCS_SOURCE_DIR}/conf.py"
     "${DOCS_BUILD_DIR}/conf.py"

@@ -30,11 +30,8 @@ extensions = [
     "breathe",
 ]
 
-# When CMake substitutes @DOCS_SOURCE_DIR@, conf.py lives in the build dir but
-# templates/static assets live in the source tree. Resolve to absolute paths so
-# Sphinx finds them regardless of where conf.py is loaded from. The fallback
-# (relative path) is correct for direct sphinx-build invocations from the
-# source tree, when @DOCS_SOURCE_DIR@ has not been substituted.
+# Resolve to absolute paths so Sphinx finds _templates/_static whether
+# conf.py is loaded from the source tree or the CMake build dir.
 _DOCS_SOURCE_DIR = _resolve("@DOCS_SOURCE_DIR@", str(Path(__file__).parent.resolve()))
 
 templates_path = [str(Path(_DOCS_SOURCE_DIR) / "_templates")]
@@ -79,12 +76,9 @@ intersphinx_mapping = {
 
 # Strict mode (enabled in CI; relaxed locally if desired)
 nitpicky = True
-# Breathe renders qualified C++ symbol names as a chain of cpp:identifier
-# cross-references (one per namespace component). When the namespace itself is
-# not yet documented in the cpp domain, Sphinx's nitpicky mode warns. Each
-# entry below is explicit and narrowly scoped to one specific namespace; the
-# list shrinks naturally as docstring coverage expands through Plans 2-5 of
-# the docs strategy umbrella.
+# Breathe renders qualified C++ symbol names as chains of cpp:identifier
+# cross-references; nitpicky mode warns when a namespace component is
+# undocumented. List shrinks as Doxygen coverage expands.
 nitpick_ignore = [
     ("cpp:identifier", "tycho"),
     ("cpp:identifier", "tycho::integrators"),
@@ -126,11 +120,8 @@ import numpy as np
 """
 
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
-# breathe_projects.tycho is set via:
-#   - CMake configure_file substitution (in Task 4) → "@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml"
-#   - `-D breathe_projects.tycho=<path>` on the sphinx-build CLI for direct invocations
-#   - Default fallback to "../build/doxygen/xml" relative to docs/source/, useful for
-#     post-CMake local previews
+# breathe_projects.tycho resolves to the CMake-substituted XML output dir;
+# falls back to ../build/doxygen/xml for direct sphinx-build invocations.
 breathe_projects = {"tycho": _resolve("@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml", "../build/doxygen/xml")}
 breathe_default_project = "tycho"
 breathe_default_members = ("members", "undoc-members")

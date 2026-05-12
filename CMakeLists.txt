@@ -809,17 +809,14 @@ add_subdirectory(src)
 # add_subdirectory(extensions)
 # Unbuilt as a side-effect of cr3bp_model.h removal (Tycho_Extensions.h
 # referenced the deleted legacy CR3BP type). The extension mechanism
-# itself is under review (see the cartesian-crtbp-dynamics design notes
-# under docs/dev/).
+# itself is under review.
 
 
 # Documentation
 if(BUILD_SPHINX_DOCS)
   find_package(Doxygen REQUIRED)
-  # find_package(Sphinx ...) is optional — docs/CMakeLists.txt uses
-  # ${Python_EXECUTABLE} -m sphinx directly, which works with any Python
-  # env that has sphinx installed (we rely on docs/requirements-docs.txt
-  # being installed into the active Python env).
+  # Sphinx is invoked via `${Python_EXECUTABLE} -m sphinx`; no find_package
+  # needed — relies on docs/requirements-docs.txt being installed.
   add_subdirectory(docs)
 endif()
 

@@ -11,7 +11,7 @@
 
 namespace tycho::integrators {
 
-/// Throw a descriptive runtime_error if any element of `v` is non-finite.
+/// @brief Throw a descriptive runtime_error if any element of `v` is non-finite.
 ///
 /// `site` names the production site (e.g. "AdaptiveDriver::stepper.step"); `t` is the
 /// current independent-variable value; `h` is the step size in flight.
@@ -51,9 +51,8 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
 /// @brief Error-norm aggregation strategy used by adaptive integrator step
 ///        controllers.
 ///
-/// Smoke-test docstring for documentation pipeline verification.
-/// Full integrator docstring rollout follows in Plan 5 of the docs
-/// strategy umbrella.
+/// RMS matches Julia's `ODE_DEFAULT_NORM`; MAX is the conservative L∞
+/// alternative for stiff problems.
 enum class ErrorNormType {
     RMS,   ///< @brief Root-mean-square of per-component errors.
     MAX    ///< @brief Maximum of per-component errors.

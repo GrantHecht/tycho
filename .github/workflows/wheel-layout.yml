@@ -1,0 +1,93 @@
+name: wheel-layout
+
+on:
+  pull_request:
+    paths:
+      - 'pyproject.toml'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - 'src/**'
+      - 'tychopy/**'
+      - '.github/workflows/wheel-layout.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: wheel-layout-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+
+      - name: Install conda clang toolchain
+        shell: bash -el {0}
+        # scikit-build-core picks CC/CXX from the activated conda env; the
+        # conda-forge clang toolchain pins libstdc++ so the wheel imports
+        # cleanly on any glibc-compatible distro.
+        run: |
+          conda install -n tycho -c conda-forge -y \
+            clangxx_linux-64 clang_linux-64 \
+            libstdcxx-devel_linux-64 sysroot_linux-64 \
+            ninja
+
+      - name: Install MKL via apt repository
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel
+
+      - name: Build wheel
+        shell: bash -el {0}
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          pip wheel . --no-deps -w /tmp/wheels
+
+      - name: Inspect wheel layout
+        shell: bash -el {0}
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          if [ -z "$wheel" ]; then
+            echo "::error::no wheel was built"
+            exit 1
+          fi
+          echo "Inspecting $wheel"
+          contents=$(python -m zipfile -l "$wheel" | awk 'NR>2 {print $1}')
+          echo "Wheel contents:"
+          echo "$contents" | sed 's/^/  /'
+
+          fail=0
+          # Negative assertions — these CMake-install prefixes must not leak
+          # into the wheel. Each represents a wheel.exclude rule that has
+          # silently broken if anything matches.
+          for pat in '^include/' '^lib/' '^lib64/' '^share/' '^bin/' '^tychopy/_stubs/'; do
+            if echo "$contents" | grep -qE "$pat"; then
+              echo "::error::wheel.exclude leak — entries match $pat:"
+              echo "$contents" | grep -E "$pat" | sed 's/^/  /'
+              fail=1
+            fi
+          done
+
+          # Positive assertion — the extension itself must be at wheel root
+          # (next to where stubs land for PEP 561 once py.typed returns).
+          if ! echo "$contents" | grep -qE '^_tychopy\.cpython-[^/]+\.so$'; then
+            echo "::error::wheel missing _tychopy.cpython-*.so at root"
+            fail=1
+          fi
+
+          exit $fail

@@ -242,10 +242,10 @@ else()
 
 endif()
 
-# Add MKL library paths to install rpath so installed/wheeled binaries can
-# locate libmkl_*.so and libiomp5.so at runtime. MKL_CORE_LIBRARY lives in
-# mkl/latest/lib; MKL_OMP_LIBRARY (libiomp5.so) lives in compiler/latest/lib
-# on oneAPI layouts — we need both directories on the rpath.
+# Add MKL library paths to install rpath. On oneAPI, MKL_CORE_LIBRARY
+# (libmkl_*.so) and MKL_OMP_LIBRARY (libiomp5.so) live in separate
+# directories (mkl/latest/lib vs compiler/latest/lib) — rpath needs both.
+set(MKL_RPATH_DIR "")
 if(MKL_CORE_LIBRARY)
   get_filename_component(MKL_RPATH_DIR ${MKL_CORE_LIBRARY} DIRECTORY)
   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH};${MKL_RPATH_DIR}")

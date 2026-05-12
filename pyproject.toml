@@ -19,7 +19,15 @@ dependencies = [
 
 [project.optional-dependencies]
 basemap = ["basemap"]
-docs = ["sphinx", "furo", "breathe", "exhale"]
+docs = [
+    "sphinx>=7.3,<9",
+    "pydata-sphinx-theme>=0.15",
+    "myst-parser>=2.0",
+    "sphinx-design>=0.5",
+    "sphinx-copybutton>=0.5",
+    "sphinx-togglebutton>=0.3",
+    "breathe>=4.35",
+]
 
 [project.urls]
 Homepage = "https://github.com/GrantHecht/tycho"
@@ -28,25 +36,20 @@ Homepage = "https://github.com/GrantHecht/tycho"
 cmake.build-type = "Release"
 # Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
 wheel.packages = ["tychopy"]
-# Stubs for the _tychopy extension live in the source tree at tychopy/_stubs/
-# for review-diff convenience, but for PEP 561 they MUST land at site-packages
-# ROOT (next to _tychopy.cpython-*.so) — not nested under tychopy/_stubs/.
-# CMake install rules in src/bindings/CMakeLists.txt copy them to the correct
-# location at wheel-build time; we exclude the source-tree _stubs/ from the
-# wheel-packaged copy of tychopy/ to keep the wheel layout clean.
-# (tychopy/py.typed travels naturally via wheel.packages — it sits inside the
-# package directory.)
-# Wheel contains only the Python extension (_tychopy.so), its stubs, and the
-# pure-Python tychopy/ package. The CMake install rules also produce a C++
-# distribution (headers under include/, package config under lib64/cmake/tycho/)
-# intended for `find_package(tycho)` consumers via `cmake --install`; those
-# artifacts are not Python-runtime-relevant and are filtered out of the wheel.
+# Stubs live in tychopy/_stubs/ in the source tree (review-diff friendly) but
+# PEP 561 requires them at site-packages root, next to _tychopy.cpython-*.so —
+# CMake install rules in src/bindings/CMakeLists.txt do that relocation.
+# Source-tree _stubs/ is excluded from the wheel-packaged copy of tychopy/.
+# include/, lib*/, share/ are CMake C++-distribution artifacts (for
+# find_package(tycho) consumers via `cmake --install`), not Python-runtime
+# files — filtered out so the wheel ships only Python deliverables.
 wheel.exclude = [
     "tychopy/_stubs/**",
     "include/**",
     "lib/**",
     "lib64/**",
     "share/**",
+    "bin/**",
 ]
 
 [tool.ruff]

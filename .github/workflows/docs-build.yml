@@ -20,6 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,14 +57,14 @@ jobs:
           conda install -n tycho -c conda-forge numpy scipy matplotlib spiceypy
           pip install -r docs/requirements-docs.txt
 
-      - name: Cache sphinx doctrees + ccache
+      - name: Cache sphinx doctrees
         uses: actions/cache@v4
         with:
-          path: |
-            build/docs/.doctrees
-            ~/.ccache
-          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}
-          restore-keys: doctrees-${{ runner.os }}-
+          path: build/docs/.doctrees
+          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
+          restore-keys: |
+            doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
+            doctrees-${{ runner.os }}-
 
       - name: Configure + build _tychopy
         shell: bash -el {0}
@@ -82,20 +84,19 @@ jobs:
         shell: bash -el {0}
         run: cmake --build build --target tycho_docs_doctest
 
-      - name: VectorFunction Doxygen sanity (gated for Task 8 strict mode)
+      - name: VectorFunction Doxygen subsystem-scoped run (non-enforcing)
         shell: bash -el {0}
-        # This step currently RUNS Doxygen on the VF subsystem but does NOT enforce
-        # anything — WARN_AS_ERROR is off in the base Doxyfile. Task 8 will flip
-        # WARN_AS_ERROR=YES and WARN_IF_UNDOCUMENTED=YES so undocumented public VF
-        # symbols fail this step. Today it's a sanity check that confirms the
-        # subsystem-scoped Doxyfile config produces XML cleanly.
+        # Runs Doxygen on the VF subsystem to confirm the subsystem-scoped
+        # config produces XML cleanly. Does NOT enforce warnings — the base
+        # Doxyfile keeps WARN_AS_ERROR=NO while public-API docstring coverage
+        # builds up; flip to YES once VF is fully documented.
         run: |
-          cp build/docs/Doxyfile /tmp/Doxyfile.vf-strict
-          cat >> /tmp/Doxyfile.vf-strict <<EOF
+          cp build/docs/Doxyfile /tmp/Doxyfile.vf
+          cat >> /tmp/Doxyfile.vf <<EOF
           INPUT = ${{ github.workspace }}/include/tycho/vector_functions.h ${{ github.workspace }}/include/tycho/detail/vf
-          OUTPUT_DIRECTORY = /tmp/doxygen-vf-strict
+          OUTPUT_DIRECTORY = /tmp/doxygen-vf
           EOF
-          doxygen /tmp/Doxyfile.vf-strict
+          doxygen /tmp/Doxyfile.vf
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'

@@ -1,6 +1,4 @@
-# docs/Doxyfile.in — Configured by CMake into <build-dir>/docs/Doxyfile via
-# configure_file() in docs/CMakeLists.txt. For ad-hoc local Doxygen runs
-# outside CMake, the @VAR@ placeholders can be sed-substituted manually.
+# Configured by CMake into <build-dir>/docs/Doxyfile via configure_file().
 PROJECT_NAME           = "Tycho"
 PROJECT_NUMBER         = "@PROJECT_VERSION@"
 OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen
@@ -10,18 +8,9 @@ CREATE_SUBDIRS         = NO
 INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp
-# Note on detail/ — many public-facing types live in include/tycho/detail/<subsys>/
-# (e.g., detail/vf/core/vector_function.h). We scan all of include/tycho/ and use
-# @internal blocks + the rules below for truly-internal helpers.
-#
-# Conventions (no symbols currently match — these reserve names for future use):
-#   - Implementation symbols we don't want documented live in the
-#     `tycho::detail::internal::*` namespace.
-#   - Internal implementation files use the `internal_*` filename prefix under
-#     detail/<subsys>/.
-# As VectorFunction / OptimalControl / Solvers / Astro internals are tightened
-# (Plans 2-5), genuinely-internal helpers should migrate into these names so the
-# public reference stays focused.
+# Many public-facing types live under detail/<subsys>/ for template-impl
+# reasons; the EXCLUDE_* rules below reserve namespace + filename
+# conventions for truly-internal helpers.
 EXCLUDE_SYMBOLS        = tycho::detail::internal::*
 EXCLUDE_PATTERNS       = */detail/utils/internal_*
 
@@ -60,7 +49,7 @@ EXPAND_ONLY_PREDEF     = NO
 SKIP_FUNCTION_MACROS   = YES
 PREDEFINED             = TYCHO_DOXYGEN=1
 
-# Warnings — permissive initially; tightened per-subsystem in Task 8
+# Warnings — permissive while public-API docstring coverage builds up.
 QUIET                  = NO
 WARNINGS               = YES
 WARN_IF_UNDOCUMENTED   = NO
