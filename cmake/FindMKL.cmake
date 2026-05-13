@@ -242,18 +242,24 @@ else()
 
 endif()
 
-# Add MKL library paths to install rpath. On oneAPI, MKL_CORE_LIBRARY
-# (libmkl_*.so) and MKL_OMP_LIBRARY (libiomp5.so) live in separate
-# directories (mkl/latest/lib vs compiler/latest/lib) — rpath needs both.
+# Add MKL library paths to both install AND build rpath. On oneAPI,
+# MKL_CORE_LIBRARY (libmkl_*.so) and MKL_OMP_LIBRARY (libiomp5.so) live
+# in separate directories (mkl/latest/lib vs compiler/latest/lib) —
+# rpath needs both. Appending to CMAKE_BUILD_RPATH makes the build-tree
+# _tychopy.so importable without LD_LIBRARY_PATH (required by nanobind
+# stubgen and by autodoc/doctests in the docs build, which import the
+# build-tree binary directly).
 set(MKL_RPATH_DIR "")
 if(MKL_CORE_LIBRARY)
   get_filename_component(MKL_RPATH_DIR ${MKL_CORE_LIBRARY} DIRECTORY)
   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH};${MKL_RPATH_DIR}")
+  set(CMAKE_BUILD_RPATH "${CMAKE_BUILD_RPATH};${MKL_RPATH_DIR}")
 endif()
 if(MKL_OMP_LIBRARY)
   get_filename_component(MKL_OMP_RPATH_DIR ${MKL_OMP_LIBRARY} DIRECTORY)
   if(NOT "${MKL_OMP_RPATH_DIR}" STREQUAL "${MKL_RPATH_DIR}")
     set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH};${MKL_OMP_RPATH_DIR}")
+    set(CMAKE_BUILD_RPATH "${CMAKE_BUILD_RPATH};${MKL_OMP_RPATH_DIR}")
   endif()
 endif()
 
