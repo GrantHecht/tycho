@@ -83,6 +83,13 @@ nitpick_ignore = [
     ("cpp:identifier", "tycho"),
     ("cpp:identifier", "tycho::integrators"),
 ]
+# External libraries that appear in our function signatures (Eigen, std,
+# etc.) — Doxygen is deliberately scoped to include/tycho/, so xrefs
+# into these namespaces will never resolve. Suppress to avoid noise.
+nitpick_ignore_regex = [
+    ("cpp:identifier", r"Eigen.*"),
+    ("cpp:identifier", r"std(::.*)?"),
+]
 
 # -- HTML output -------------------------------------------------------------
 html_theme = "pydata_sphinx_theme"
