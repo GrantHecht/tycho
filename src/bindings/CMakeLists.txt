@@ -167,8 +167,20 @@ file(MAKE_DIRECTORY "${_TYCHOPY_STUB_DIR}/_tychopy")
 # belong in build-system.requires when the wheel doesn't actually need
 # fresh stubs.
 
+# Wrapper: nanobind_add_stub unconditionally adds stub targets to the
+# default ALL (its EXCLUDE_FROM_ALL keyword is only honored under
+# INSTALL_TIME, see dep/nanobind/cmake/nanobind-config.cmake:725).
+# Override the property post-hoc so every stub target is opt-in via
+# tychopy_stubs_snapshot only. Centralizing the workaround here means
+# new stub additions can't accidentally bring back the always-ALL
+# behavior.
+function(tycho_add_stub name)
+    nanobind_add_stub(${name} ${ARGN})
+    set_target_properties(${name} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+
 # Top-level _tychopy.pyi
-nanobind_add_stub(_tychopy_stub
+tycho_add_stub(_tychopy_stub
     MODULE _tychopy
     OUTPUT "${_TYCHOPY_STUB_DIR}/_tychopy.pyi"
     PYTHON_PATH "$<TARGET_FILE_DIR:_tychopy>"
@@ -176,18 +188,13 @@ nanobind_add_stub(_tychopy_stub
     INCLUDE_PRIVATE FALSE
     EXCLUDE_DOCSTRINGS FALSE
 )
-# nanobind_add_stub unconditionally adds stub targets to the default ALL
-# target (its EXCLUDE_FROM_ALL flag is only honored under INSTALL_TIME,
-# see dep/nanobind/cmake/nanobind-config.cmake:725). Override here so
-# stub regen is opt-in via tychopy_stubs_snapshot only.
-set_target_properties(_tychopy_stub PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # rk_coeffs_bind populates _tychopy.optimal_control (no separate
 # _tychopy.integrators submodule), so integrators is not a stub target.
 set(_TYCHOPY_SUBMODULES vector_functions optimal_control solvers astro utils extensions)
 
 foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
-    nanobind_add_stub(_tychopy_${_submod}_stub
+    tycho_add_stub(_tychopy_${_submod}_stub
         MODULE _tychopy.${_submod}
         OUTPUT "${_TYCHOPY_STUB_DIR}/_tychopy/${_submod}.pyi"
         PYTHON_PATH "$<TARGET_FILE_DIR:_tychopy>"
@@ -195,7 +202,6 @@ foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
         INCLUDE_PRIVATE FALSE
         EXCLUDE_DOCSTRINGS FALSE
     )
-    set_target_properties(_tychopy_${_submod}_stub PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endforeach()
 
 # Aggregate target — builds all stubs in one shot.
@@ -211,10 +217,15 @@ add_custom_target(tychopy_all_stubs DEPENDS ${_TYCHOPY_ALL_STUB_TARGETS})
 # (see its module docstring).
 #
 # Staging-then-rename: validate the new snapshot in tychopy/_stubs.staging/
-# before replacing tychopy/_stubs/. A mid-copy failure or a failed validation
-# step leaves the committed snapshot untouched, so a developer's working
-# tree is not left polluted (cmake -E rename is atomic within the same
-# filesystem, which PROJECT_SOURCE_DIR guarantees).
+# before touching tychopy/_stubs/. The guarantee provided here is
+# "the committed snapshot is never partially overwritten by a failed
+# validation": if check_stubs_size.py or fix_stubs.py exits non-zero,
+# the live tychopy/_stubs/ tree is untouched. The replacement step itself
+# is *not* fully atomic — rm-then-rename leaves a brief window where the
+# live dir is absent (POSIX rename(2) cannot replace a non-empty target
+# directory). Acceptable because no concurrent process consumes the
+# snapshot mid-build; CI runs in fresh clones and dev workflow can
+# tolerate the millisecond window.
 set(_TYCHOPY_SNAPSHOT_DIR "${PROJECT_SOURCE_DIR}/tychopy/_stubs")
 set(_TYCHOPY_SNAPSHOT_STAGING "${PROJECT_SOURCE_DIR}/tychopy/_stubs.staging")
 add_custom_target(tychopy_stubs_snapshot
