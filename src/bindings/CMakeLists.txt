@@ -156,6 +156,17 @@ endif()
 set(_TYCHOPY_STUB_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 file(MAKE_DIRECTORY "${_TYCHOPY_STUB_DIR}/_tychopy")
 
+# Stub targets are EXCLUDE_FROM_ALL: stubs are review artifacts (committed
+# under tychopy/_stubs/), refreshed only when an author runs
+# `cmake --build build --target tychopy_stubs_snapshot` after a binding
+# change. Building stubs by default would (a) waste work on every
+# `cmake --build` and `pip wheel .` (the install rule reads from the
+# committed snapshot, not the build-tree regen), and (b) require numpy
+# in pip's isolated build env solely so stubgen can introspect
+# nanobind::ndarray signatures — a build-time dependency that does not
+# belong in build-system.requires when the wheel doesn't actually need
+# fresh stubs.
+
 # Top-level _tychopy.pyi
 nanobind_add_stub(_tychopy_stub
     MODULE _tychopy
@@ -165,6 +176,11 @@ nanobind_add_stub(_tychopy_stub
     INCLUDE_PRIVATE FALSE
     EXCLUDE_DOCSTRINGS FALSE
 )
+# nanobind_add_stub unconditionally adds stub targets to the default ALL
+# target (its EXCLUDE_FROM_ALL flag is only honored under INSTALL_TIME,
+# see dep/nanobind/cmake/nanobind-config.cmake:725). Override here so
+# stub regen is opt-in via tychopy_stubs_snapshot only.
+set_target_properties(_tychopy_stub PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # rk_coeffs_bind populates _tychopy.optimal_control (no separate
 # _tychopy.integrators submodule), so integrators is not a stub target.
@@ -179,6 +195,7 @@ foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
         INCLUDE_PRIVATE FALSE
         EXCLUDE_DOCSTRINGS FALSE
     )
+    set_target_properties(_tychopy_${_submod}_stub PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endforeach()
 
 # Aggregate target — builds all stubs in one shot.
