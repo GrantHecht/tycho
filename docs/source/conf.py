@@ -83,12 +83,12 @@ nitpick_ignore = [
     ("cpp:identifier", "tycho"),
     ("cpp:identifier", "tycho::integrators"),
 ]
-# External libraries that appear in our function signatures (Eigen, std,
-# etc.) — Doxygen is deliberately scoped to include/tycho/, so xrefs
-# into these namespaces will never resolve. Suppress to avoid noise.
+# External libraries that appear in our function signatures — Doxygen is
+# deliberately scoped to include/tycho/, so xrefs into these namespaces
+# will never resolve. Extend as new external-lib xrefs surface from
+# Breathe-rendered signatures; do not pre-populate.
 nitpick_ignore_regex = [
     ("cpp:identifier", r"Eigen.*"),
-    ("cpp:identifier", r"std(::.*)?"),
 ]
 
 # -- HTML output -------------------------------------------------------------
