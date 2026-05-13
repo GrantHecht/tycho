@@ -78,10 +78,15 @@ intersphinx_mapping = {
 nitpicky = True
 # Breathe renders qualified C++ symbol names as chains of cpp:identifier
 # cross-references; nitpicky mode warns when a namespace component is
-# undocumented. List shrinks as Doxygen coverage expands.
+# undocumented. The `tycho` / `tycho::integrators` entries shrink as
+# Doxygen coverage expands. The `Eigen` entries cover vendored Eigen
+# types that appear in templated signatures rendered by Breathe — Eigen
+# itself is not Doxygen-scanned by Tycho.
 nitpick_ignore = [
     ("cpp:identifier", "tycho"),
     ("cpp:identifier", "tycho::integrators"),
+    ("cpp:identifier", "Eigen"),
+    ("cpp:identifier", "Eigen::MatrixBase<Derived>"),
 ]
 
 # -- HTML output -------------------------------------------------------------
