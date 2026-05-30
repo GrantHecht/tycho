@@ -138,9 +138,12 @@ jobs:
           /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
 
   # ---------------------------------------------------------------------------
-  # Python unit-test suite (tychopy/test/) against the installed wheel. Like
-  # smoke-import, this runs unaided by setvars.sh, so a green run also proves
-  # the suite passes against the packaged artifact as a user would import it.
+  # Python unit-test suite against the installed wheel. The test tree is copied
+  # out of the checkout and run from /tmp so the source ./tychopy package is NOT
+  # on sys.path — both `import tychopy` (pure-Python layer) and `import _tychopy`
+  # (the .so) therefore resolve to the venv site-packages, i.e. the wheel. Like
+  # smoke-import, this runs unaided by setvars.sh, so a green run proves the
+  # suite passes against the packaged artifact exactly as a user would import it.
   # ---------------------------------------------------------------------------
   pytest:
     needs: build
@@ -159,15 +162,27 @@ jobs:
       - name: Install wheel + test dependencies
         run: |
           set -euo pipefail
-          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          # Expect exactly one wheel (mirrors the inspect-layout guard); a zero
+          # or multi-wheel artifact is a build bug, so fail loudly rather than
+          # silently picking one.
+          shopt -s nullglob
+          wheels=(/tmp/wheels/tychopy-*.whl)
+          [ "${#wheels[@]}" -eq 1 ] || { echo "::error::expected one wheel, found ${#wheels[@]}"; exit 1; }
+          wheel="${wheels[0]}"
           python3.13 -m venv /tmp/test-venv
           /tmp/test-venv/bin/pip install --upgrade pip
           # Test extra (pytest + numpy/scipy/matplotlib/spiceypy) from the
           # wheel's own [test] optional-dependency group, then the wheel.
           /tmp/test-venv/bin/pip install "${wheel}[test]"
-      - name: Run pytest suite
+      - name: Run pytest suite (against the installed wheel)
         env:
           MPLBACKEND: Agg
         run: |
           set -euo pipefail
-          /tmp/test-venv/bin/python -m pytest tychopy/test --durations=10
+          # Copy the tests (and any in-tree fixtures) out of the checkout, then
+          # run from /tmp so ./tychopy source is not importable — the suite must
+          # exercise the wheel's tychopy + _tychopy, not the source tree.
+          cp -r tychopy/test /tmp/suite
+          cd /tmp
+          /tmp/test-venv/bin/python -m pytest \
+            --import-mode=importlib /tmp/suite --durations=10
