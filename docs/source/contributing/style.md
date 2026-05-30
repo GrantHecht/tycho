@@ -1,7 +1,7 @@
 # Style Guide
 
 This guide is the single source of truth for code style in Tycho. The
-PR template links here directly; every PR is reviewed against the rules
+PR template references this page; every PR is reviewed against the rules
 on this page.
 
 ## Formatting
@@ -43,8 +43,8 @@ Configuration is in `pyproject.toml`. Line length is 88 (Black default).
 | Types and classes (C++ and Python)  | `PascalCase`           | `DenseFunction`, `ODEPhase`            |
 | Free functions, member functions    | `snake_case`           | `set_io_rows`, `add_equal_con`         |
 | Member variables (C++)              | `snake_case_` (trailing `_`) | `num_defects_`, `max_iter_`      |
-| Compile-time constants              | `kPascalCase`          | `kDefaultTol`                          |
-| Macros                              | `TYCHO_UPPER_SNAKE`    | `TYCHO_ASSERT`, `TYCHO_NOINLINE`       |
+| Compile-time constants              | `kPascalCase`          | `kRKWeightTol`, `kStumpffTaylorEps`    |
+| Macros                              | `TYCHO_UPPER_SNAKE`    | `TYCHO_ALWAYS_INLINE`, `TYCHO_NOINLINE`|
 
 The Python API exposes the C++ member-function names verbatim — so a
 C++ method `add_boundary_value(...)` becomes
@@ -54,8 +54,10 @@ exist for legacy nanobind methods named `adjointgradient`,
 
 ## C++ Docstring Style (Doxygen JavaDoc)
 
-Tycho uses **JavaDoc `@`-style** Doxygen comments — `@brief`, `@param`,
-`@return`, etc. — instead of the older backslash style (`\brief`, etc.).
+New and public code uses **JavaDoc `@`-style** Doxygen comments —
+`@brief`, `@param`, `@return`, etc. — in preference to the older
+backslash style (`\brief`, etc.); residual backslash-style comments are
+being migrated as files are touched.
 **Every public symbol declared in `include/tycho/`** must carry a
 docstring with at least `@brief`. Internal helpers in
 `include/tycho/detail/` should still be documented; private

@@ -578,6 +578,9 @@ Use descriptive commit messages with these prefixes:
 | `refactor:` | Code restructuring without behavior change |
 | `docs:` | Documentation-only changes |
 | `chore:` | Build system, CI, dependency, or tooling changes |
+| `build:` | Changes to the CMake build, presets, or scikit-build |
+| `ci:` | Changes to GitHub Actions workflows |
+| `test:` | New or updated tests |
 
 ## License and Notices
 

@@ -1,6 +1,6 @@
 # Testing
 
-Tycho has three layers of automated checks. Every pull request into
+Tycho has four layers of automated checks. Every pull request into
 `main` must clear all of them.
 
 | Layer                 | Tool                  | Scope                                                                |
@@ -39,7 +39,7 @@ conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
 Useful flags:
 
 - `--timeout SECONDS` — per-script timeout (default is generous).
-- `--filter SUBSTRING` — only run scripts whose name contains the
+- `--filter SUBSTRING` — only run scripts whose path contains the
   substring. Useful when iterating on a single example.
 
 All 32 scripts must exit zero. If your change breaks an example, fix
@@ -65,11 +65,13 @@ cd build && ninja -j6 brachistochrone_cpp
 ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
 ```
 
-Expected output:
+Expected result — PSIOPT prints its convergence banner and the reported
+objective settles near the known optimum (the exact stdout formatting may
+differ slightly between platforms):
 
 ```
 Optimal Solution Found
-objective ≈ 1.8013
+objective ≈ 1.8013 s
 ```
 
 A Builder-API variant is also available; `ninja brachistochrone_builder`

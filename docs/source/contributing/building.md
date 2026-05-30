@@ -174,11 +174,17 @@ env.
 The docs build is opt-in via the `BUILD_SPHINX_DOCS` CMake option.
 
 ```bash
-pip install -e ".[docs]"                       # installs Sphinx + theme + extensions
+pip install -e ".[docs]"                       # Sphinx + theme + extensions (also compiles _tychopy)
 cmake --preset <preset-name> -DBUILD_SPHINX_DOCS=ON
 cd build && ninja tycho_docs
 xdg-open docs/html/index.html                  # or `open` on macOS
 ```
+
+Because the build backend is scikit-build-core, the editable
+`pip install -e ".[docs]"` also compiles the `_tychopy` extension — it is
+not a docs-tooling-only install, so expect a multi-minute native build the
+first time and make sure the conda toolchain is active (see the platform
+sections above).
 
 Additional docs targets:
 
