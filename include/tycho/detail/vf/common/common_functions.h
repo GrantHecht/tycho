@@ -12,6 +12,8 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
+/// @file
+/// @brief Aggregate header pulling in the common VectorFunction building blocks.
 #pragma once
 
 #include "tycho/detail/vf/common/constant.h"

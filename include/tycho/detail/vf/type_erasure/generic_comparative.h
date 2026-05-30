@@ -47,30 +47,53 @@
 
 namespace tycho::vf {
 
-// GenericComparative<IR> has the same interface as GenericConditional<IR>
-// but is a distinct type so that Python bindings register "Comparative"
-// and "Conditional" as separate nanobind classes.
+/// @brief Type-erased boolean predicate, distinct from GenericConditional.
+///
+/// GenericComparative has the same interface and behaviour as GenericConditional
+/// but is a separate type so the Python bindings can register "Comparative" and
+/// "Conditional" as distinct nanobind classes. It wraps any value-typed predicate
+/// behind a uniform interface; copies are deep.
+/// @tparam IR  Compile-time input-row count (-1 for dynamic).
+/// @ingroup vf
 template <int IR> struct GenericComparative {
+    /// @brief Const reference to the fixed-size input vector accepted by compute().
     using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    static constexpr bool is_conditional = true;
-    static constexpr int IRC = IR;
+    static constexpr bool is_conditional = true; ///< @brief Trait flag: this is a conditional.
+    static constexpr int IRC = IR;               ///< @brief Compile-time input-row count.
 
+    /// @brief Type-erased storage holding the wrapped predicate.
     tycho::utils::TypeStorage<ConditionalBase<IR>> storage;
 
+    /// @brief Construct an empty predicate (no wrapped function).
     GenericComparative() = default;
 
+    /// @brief Construct by type-erasing an arbitrary predicate @p t.
+    /// @tparam T  Any type satisfying the conditional interface (input_rows, compute).
+    /// @param t   Predicate to wrap and store.
     template <class T> GenericComparative(const T &t) {
         storage.template emplace<ConditionalModel<IR, std::decay_t<T>>>(t);
     }
 
+    /// @brief Deep-copy constructor (clones the wrapped predicate).
     GenericComparative(const GenericComparative &) = default;
+    /// @brief Move constructor.
     GenericComparative(GenericComparative &&) noexcept = default;
+    /// @brief Deep-copy assignment (clones the wrapped predicate).
+    /// @return Reference to this object.
     GenericComparative &operator=(const GenericComparative &) = default;
+    /// @brief Move assignment.
+    /// @return Reference to this object.
     GenericComparative &operator=(GenericComparative &&) noexcept = default;
 
+    /// @brief Number of input rows the wrapped predicate accepts.
+    /// @return Input-row count.
     int input_rows() const { return storage.get().input_rows(); }
 
+    /// @brief Evaluate the wrapped predicate at @p x.
+    /// @tparam InTypeT  Eigen expression type of the input vector.
+    /// @param x  Input vector.
+    /// @return Boolean result of the predicate.
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
         InType xt(x.derived());
         return storage.get().compute(xt);

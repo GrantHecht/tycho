@@ -18,6 +18,14 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Trait: reports whether `T` is a SuperScalar (SIMD-lane-packed) scalar type.
+///
+/// Wraps the `IsSuperScalar<T>` concept as a `std::bool_constant` so it can be used in
+/// trait-style metaprogramming. SuperScalar scalars (packed `Eigen::Array` columns)
+/// drive the vectorized derivative paths.
+/// @tparam T  Candidate scalar type.
+/// @endinternal
 template <class T> struct Is_SuperScalar : std::bool_constant<IsSuperScalar<T>> {};
 
 } // namespace tycho::vf

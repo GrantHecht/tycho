@@ -43,32 +43,42 @@ namespace tycho::vf {
 
 // Notes: "time axis" must be monotonic increasing
 
-/*!
- * @brief
- *
- * @tparam DType Data Type: An Eigen::Matrix type
- * @tparam Accuracy O(h^Accuracy)
- * @tparam Order Take the "Order-th" derivative
- */
+/// @brief Finite-difference differentiation of data sampled on a uniform axis.
+///
+/// Differentiates a series of vector samples assumed equally spaced along a monotonic
+/// increasing axis, choosing forward, central, or backward stencils (from @ref FDCoeffs)
+/// depending on the sample's distance from the data boundaries.
+/// @tparam DType     Data type: an `Eigen::Matrix` type for each sample.
+/// @tparam Order     Derivative order to compute.
+/// @tparam Accuracy  Order of accuracy @f$ O(h^{\mathrm{Accuracy}}) @f$.
+/// @ingroup vf
 template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
   public:
+    /// @brief Stencil-coefficient table for the given direction and shift.
     template <FDCoeffType Dir, int Shift> using Coeffs = FDCoeffs<Order, Accuracy, Dir, Shift>;
+    /// @brief Scalar element type of the data samples.
     using Scalar = typename DType::Scalar;
 
-    int axis;
-    int length;
-    std::vector<Eigen::MatrixBase<DType>> data;
-    Scalar h;
+    int axis;   ///< Index of the independent (time) axis within each sample.
+    int length; ///< Number of samples.
+    std::vector<Eigen::MatrixBase<DType>> data; ///< The sampled data series.
+    Scalar h;                                   ///< Uniform spacing along the axis.
 
-    static constexpr int acc = 2 * ((Accuracy + 1) / 2);
-    static constexpr int ord = Order;
+    static constexpr int acc =
+        2 * ((Accuracy + 1) / 2);     ///< Accuracy rounded up to the nearest even number.
+    static constexpr int ord = Order; ///< Derivative order.
 
-    static constexpr int cent_sten_size =
-        ((ord / 2) == ((ord + 1) / 2)) ? (ord - 1 + acc) : (ord + acc);
-    static constexpr int fb_sten_size = acc + ord;
+    static constexpr int cent_sten_size = ((ord / 2) == ((ord + 1) / 2))
+                                              ? (ord - 1 + acc)
+                                              : (ord + acc); ///< Centered-stencil node count.
+    static constexpr int fb_sten_size = acc + ord; ///< Forward/backward-stencil node count.
 
+    /// @brief Sets the index of the independent (time) axis within each sample.
+    /// @param i  Axis index.
     inline void set_axis_id(int i) { this->axis = i; }
 
+    /// @brief Loads the sampled data series and derives the uniform spacing @ref h.
+    /// @param d  Samples to differentiate; must contain at least @ref fb_sten_size entries.
     inline void set_data(std::vector<Eigen::MatrixBase<DType>> d) {
         if (d.size() < this->fb_sten_size) {
             std::cout << "ERROR: Not enough data for desired derivative/accuracy" << std::endl;
@@ -80,6 +90,14 @@ template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
         }
     }
 
+    /// @brief Computes the finite-difference derivative at a single sample index.
+    ///
+    /// Selects a forward, central, or backward stencil based on @p i's distance from the
+    /// data boundaries and writes the result into @p dout.
+    /// @tparam DerivType  Output Eigen type.
+    /// @param i     Sample index at which to evaluate the derivative.
+    /// @param dout  Output buffer receiving the derivative.
+    /// @return The derivative at index @p i.
     template <class DerivType>
     inline DType deriv_at(const int i, Eigen::MatrixBase<DerivType> &dout) const {
         if (i < 0 || i > length - 1) {

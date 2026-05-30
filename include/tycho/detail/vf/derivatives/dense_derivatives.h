@@ -18,20 +18,51 @@
 
 namespace tycho::vf {
 
+/// @brief Selects how a VectorFunction's Jacobian and Hessian are evaluated.
+///
+/// This mode is passed as a template argument to a user `VectorFunction` to choose
+/// the derivative-evaluation strategy. The first template slot selects the Jacobian
+/// mode; the second (where present) selects the Hessian mode. The chosen mode
+/// determines which `DenseFirstDerivatives` / `DenseSecondDerivatives` specialization
+/// is instantiated.
+/// @ingroup vf
 enum class DenseDerivativeMode {
-    Analytic,
-    FDiffFwd,
-    FDiffCentArray,
-    EnzymeAD,
+    Analytic,       ///< Hand-written analytic derivatives supplied by the function itself.
+    FDiffFwd,       ///< Forward (first-order) finite-difference Jacobian.
+    FDiffCentArray, ///< Central finite-difference Jacobian via packed SuperScalar arrays.
+    EnzymeAD,       ///< Enzyme automatic differentiation (compiler-plugin AD).
 };
 
+/// @brief Mixes a chosen Jacobian-evaluation strategy into a dense VectorFunction.
+///
+/// The primary template provides the default (analytic) behavior by inheriting the
+/// base function directly; explicit specializations supply the finite-difference and
+/// Enzyme Jacobian implementations selected by @p JMode.
+/// @tparam Derived  The concrete VectorFunction type (CRTP self type).
+/// @tparam IR       Input dimension (rows of the argument), or `Eigen::Dynamic`.
+/// @tparam OR       Output dimension (rows of the result), or `Eigen::Dynamic`.
+/// @tparam JMode    Jacobian-evaluation mode selecting the specialization.
+/// @ingroup vf
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseFirstDerivatives : DenseFunctionBase<Derived, IR, OR> {
+    /// @brief The dense function base providing the primal `compute` interface.
     using Base = DenseFunctionBase<Derived, IR, OR>;
 };
 
+/// @brief Mixes chosen Jacobian and Hessian strategies into a dense VectorFunction.
+///
+/// Layers a Hessian-evaluation strategy on top of @ref DenseFirstDerivatives, which
+/// already supplies the Jacobian. The primary template defaults to analytic Hessians;
+/// finite-difference and Enzyme modes are provided by specializations.
+/// @tparam Derived  The concrete VectorFunction type (CRTP self type).
+/// @tparam IR       Input dimension (rows of the argument), or `Eigen::Dynamic`.
+/// @tparam OR       Output dimension (rows of the result), or `Eigen::Dynamic`.
+/// @tparam Jmode    Jacobian-evaluation mode (forwarded to @ref DenseFirstDerivatives).
+/// @tparam Hmode    Hessian-evaluation mode selecting the specialization.
+/// @ingroup vf
 template <class Derived, int IR, int OR, DenseDerivativeMode Jmode, DenseDerivativeMode Hmode>
 struct DenseSecondDerivatives : DenseFirstDerivatives<Derived, IR, OR, Jmode> {
+    /// @brief The first-derivative layer providing the Jacobian interface.
     using Base = DenseFirstDerivatives<Derived, IR, OR, Jmode>;
 };
 

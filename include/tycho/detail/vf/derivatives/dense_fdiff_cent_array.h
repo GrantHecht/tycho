@@ -18,27 +18,47 @@
 
 namespace tycho::vf {
 
-//! First derivatives using forward finite difference
-/*!
-  \tparam IR Input Rows
-  \tparam OR Output Rows
-*/
+/// @brief Central finite-difference Jacobian specialization of @ref DenseFirstDerivatives.
+///
+/// Approximates the Jacobian columnwise with a second-order central difference
+/// @f$ \partial f / \partial x_i \approx (f(x + h\,e_i) - f(x - h\,e_i)) / 2h @f$. The
+/// two perturbed evaluations per column are packed into a 2-lane SuperScalar array so
+/// both stencil nodes are computed in one function call.
+/// @tparam Derived  The concrete VectorFunction type (CRTP self type).
+/// @tparam IR       Input dimension (rows), or `Eigen::Dynamic`.
+/// @tparam OR       Output dimension (rows), or `Eigen::Dynamic`.
+/// @ingroup vf
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArray>
     : DenseFunctionBase<Derived, IR, OR> {
+    /// @brief The dense function base providing the primal `compute` interface.
     using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base)
 
+    /// @brief Constructs the mode with a default Jacobian step size of 1e-5.
     DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-5); }
 
-    //! Set step size for each input dimension
+    /// @brief Sets a per-input-dimension Jacobian finite-difference step size.
+    /// @param steps  Step size for each input dimension.
     void set_jac_fd_steps(const Input<double> &steps) { this->jac_fd_steps = steps; }
-    //! Set step size for all input dimensions
+    /// @brief Sets a single Jacobian finite-difference step size for all input dimensions.
+    /// @param step  Step size applied uniformly to every input dimension.
     void set_jac_fd_steps(double step) {
         this->jac_fd_steps.resize(this->input_rows());
         this->jac_fd_steps.setConstant(step);
     }
 
+    /// @brief Computes the function value and central finite-difference Jacobian.
+    /// @internal
+    /// Stores the primal in @p fx_ and the Jacobian in @p jx_, using 2-lane SuperScalar
+    /// arrays to evaluate the symmetric stencil nodes per column simultaneously.
+    /// @tparam InType   Eigen type of the input vector @p x.
+    /// @tparam OutType  Eigen type of the output vector @p fx_.
+    /// @tparam JacType  Eigen type of the Jacobian matrix @p jx_.
+    /// @param x    Input vector at which to evaluate.
+    /// @param fx_  Output function value, written in place.
+    /// @param jx_  Output Jacobian, written in place.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -64,6 +84,7 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
     }
 
   protected:
+    /// @brief Per-input-dimension Jacobian finite-difference step sizes.
     Eigen::VectorXd jac_fd_steps;
 };
 } // namespace tycho::vf
