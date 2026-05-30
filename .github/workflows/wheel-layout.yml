@@ -66,39 +66,12 @@ jobs:
             echo "::error::no wheel was built"
             exit 1
           fi
-          echo "Inspecting $wheel"
-          contents=$(python -m zipfile -l "$wheel" | awk 'NR>2 {print $1}')
-          # Guard against a future zipfile-format change that would yield
-          # empty $contents — the negative loop below would then trivially
-          # pass and only the positive assertion would catch it (with a
-          # cryptic message that hides the real cause).
-          if [ -z "$contents" ]; then
-            echo "::error::python -m zipfile -l produced no entries for $wheel"
-            exit 1
-          fi
-          echo "Wheel contents:"
-          echo "$contents" | sed 's/^/  /'
-
-          fail=0
-          # Negative assertions — these CMake-install prefixes must not leak
-          # into the wheel. Each represents a wheel.exclude rule that has
-          # silently broken if anything matches.
-          for pat in '^include/' '^lib/' '^lib64/' '^share/' '^bin/' '^tychopy/_stubs/'; do
-            if echo "$contents" | grep -qE "$pat"; then
-              echo "::error::wheel.exclude leak — entries match $pat:"
-              echo "$contents" | grep -E "$pat" | sed 's/^/  /'
-              fail=1
-            fi
-          done
-
-          # Positive assertion — the extension itself must be at wheel root
-          # (next to where stubs land for PEP 561 once py.typed returns).
-          if ! echo "$contents" | grep -qE '^_tychopy\.cpython-[^/]+\.so$'; then
-            echo "::error::wheel missing _tychopy.cpython-*.so at root"
-            fail=1
-          fi
-
-          exit $fail
+          # Layout assertions are implemented in Python (see the script
+          # for the negative/positive invariants). Avoids bash + awk
+          # gotchas — an inline `awk 'NR>2 {print $1}'` previously
+          # dropped the first zip entry because python -m zipfile -l
+          # emits only one header row, not two.
+          python scripts/inspect_wheel_layout.py "$wheel"
 
       # Install a parallel system Python 3.13 so we can create a fresh
       # venv outside the conda env. The wheel is cp313-cp313; ubuntu-latest's

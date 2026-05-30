@@ -67,11 +67,11 @@ autodoc_typehints = "description"
 
 # Intersphinx
 intersphinx_mapping = {
-    "python":     ("https://docs.python.org/3", None),
-    "numpy":      ("https://numpy.org/doc/stable/", None),
-    "scipy":      ("https://docs.scipy.org/doc/scipy/", None),
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
-    "spiceypy":   ("https://spiceypy.readthedocs.io/en/main/", None),
+    "spiceypy": ("https://spiceypy.readthedocs.io/en/main/", None),
 }
 
 # Strict mode (enabled in CI; relaxed locally if desired)
@@ -87,6 +87,13 @@ nitpick_ignore = [
     ("cpp:identifier", "tycho::integrators"),
     ("cpp:identifier", "Eigen"),
     ("cpp:identifier", "Eigen::MatrixBase<Derived>"),
+]
+# External libraries that appear in our function signatures — Doxygen is
+# deliberately scoped to include/tycho/, so xrefs into these namespaces
+# will never resolve. Extend as new external-lib xrefs surface from
+# Breathe-rendered signatures; do not pre-populate.
+nitpick_ignore_regex = [
+    ("cpp:identifier", r"Eigen(::.*)?"),
 ]
 
 # -- HTML output -------------------------------------------------------------
@@ -127,7 +134,9 @@ import numpy as np
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
 # breathe_projects.tycho resolves to the CMake-substituted XML output dir;
 # falls back to ../build/doxygen/xml for direct sphinx-build invocations.
-breathe_projects = {"tycho": _resolve("@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml", "../build/doxygen/xml")}
+breathe_projects = {
+    "tycho": _resolve("@CMAKE_CURRENT_BINARY_DIR@/doxygen/xml", "../build/doxygen/xml")
+}
 breathe_default_project = "tycho"
 breathe_default_members = ("members", "undoc-members")
 breathe_show_define_initializer = True

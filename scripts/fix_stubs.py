@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
-"""Post-process nanobind stubgen output for the _tychopy snapshot.
-
-nanobind's std::variant type-name composition strips the package-root prefix
-from references whose enclosing module is a sub-package of the file's own
-module, producing bogus `import <submodule>` lines and bare qualifiers like
-`optimal_control.ScaleModes` in `_tychopy/optimal_control.pyi`. Per-binding
-`nb::sig()` overrides would fix this principled-but-doesn't-scale across
-many call sites; this text-level post-processor stays in lockstep with the
-committed snapshot. Idempotent.
+"""Post-process nanobind stubgen output: drop bogus self-imports, strip
+self-qualifiers, ensure typing names are imported. Idempotent.
 """
 
 from __future__ import annotations
@@ -16,9 +9,9 @@ import re
 import sys
 from pathlib import Path
 
-# Submodules whose names nanobind stubgen may leak as bare qualifiers. Kept
-# in sync with _TYCHOPY_SUBMODULES in src/bindings/CMakeLists.txt; used by
-# main() as the precondition list for expected snapshot files.
+# Submodules whose names nanobind stubgen may leak as bare qualifiers.
+# Also the precondition list of expected snapshot files (main() asserts
+# every entry exists after the stubgen step).
 SUBMODULES = (
     "vector_functions",
     "optimal_control",
@@ -32,6 +25,16 @@ SUBMODULES = (
 # strings without the `typing.` prefix, so the stubgen-generated import line
 # may miss it. Same risk for other typing names referenced from signatures.
 TYPING_NAMES = ("Union", "Optional", "Any", "Callable", "Tuple", "List", "Dict")
+
+# Triple-quoted string content is stripped before searching the body for
+# typing-name tokens, so a docstring like `"""Pass Any value"""` does not
+# trigger a spurious `from typing import Any` insertion (which would break
+# the idempotency guarantee asserted by stubs-snapshot-sanity.yml).
+_TRIPLE_QUOTE_RE = re.compile(r'(?:"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')')
+
+
+def _strip_string_literals(text: str) -> str:
+    return _TRIPLE_QUOTE_RE.sub("", text)
 
 
 def fix_file(path: Path, own_submodule: str | None) -> bool:
@@ -78,18 +81,17 @@ def _find_missing_typing_imports(text: str) -> list[str]:
         for token in m.group(1).split(","):
             imported.add(token.strip())
 
-    # Exclude the import lines themselves so `Union` in `from typing import
-    # Union` doesn't count as a body reference.
+    # Exclude import lines and triple-quoted strings so a typing name that
+    # appears only in a docstring does not count as a body reference.
     body = "\n".join(
         ln for ln in text.splitlines() if not re.match(r"^from typing import\s", ln)
     )
+    body = _strip_string_literals(body)
 
     missing: list[str] = []
     for name in TYPING_NAMES:
         if name in imported:
             continue
-        # Word-boundary match catches both `Union[...]` and bare `Any` in
-        # `def f(x: Any) -> Any:`.
         if re.search(rf"\b{name}\b", body):
             missing.append(name)
     return missing
