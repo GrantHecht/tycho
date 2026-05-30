@@ -1,0 +1,51 @@
+name: stubs-snapshot-sanity
+
+# No-build gates over the committed nanobind stub snapshot: every .pyi must
+# parse and fix_stubs.py must be idempotent on a clean snapshot. The actual
+# drift assertion (regenerate + diff) lives in docs-build.yml so it can
+# reuse the binding build it already needs for the Sphinx site.
+
+on:
+  pull_request:
+    paths:
+      - 'tychopy/_stubs/**'
+      - 'scripts/fix_stubs.py'
+      - 'scripts/check_stubs_size.py'
+      - '.github/workflows/stubs-snapshot-sanity.yml'
+
+concurrency:
+  group: stubs-snapshot-sanity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stub-sanity:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: false}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify committed stubs parse
+        run: |
+          python -c "
+          import ast, pathlib, sys
+          fail = False
+          for p in pathlib.Path('tychopy/_stubs').rglob('*.pyi'):
+              try:
+                  ast.parse(p.read_text())
+              except SyntaxError as e:
+                  print(f'::error file={p}::SyntaxError: {e}')
+                  fail = True
+          sys.exit(1 if fail else 0)
+          "
+      - name: fix_stubs.py is idempotent
+        run: |
+          python scripts/fix_stubs.py tychopy/_stubs/
+          if ! git diff --quiet tychopy/_stubs/; then
+            echo "::error::fix_stubs.py is not idempotent — re-running on a clean snapshot produced a diff"
+            git diff tychopy/_stubs/
+            exit 1
+          fi
