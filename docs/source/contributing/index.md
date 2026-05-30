@@ -22,8 +22,8 @@ testing
 - **Style conventions** — the C++ and Python docstring rules every PR is
   checked against, plus naming and formatting. Start with the
   [Style guide](style.md).
-- **Testing and merge gates** — the pre-merge verification sequence every
-  PR must clear. Start with [Testing](testing.md).
+- **Testing** — how to run Tycho's Python unit tests, example suite, C++
+  unit tests, and benchmarks. Start with [Testing](testing.md).
 
 For internal engineering notes (build-performance analyses, AD design
 docs, ongoing work plans), see

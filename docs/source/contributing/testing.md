@@ -1,14 +1,73 @@
 # Testing
 
-Tycho has four layers of automated checks. Every pull request into
-`main` must clear all of them.
+Tycho's automated checks span both the Python API and the C++ core. Run
+the layers relevant to your change before opening a PR; the table below
+maps each one to its tool and scope.
 
-| Layer                 | Tool                  | Scope                                                                |
-| --------------------- | --------------------- | -------------------------------------------------------------------- |
-| C++ unit tests        | Google Test + CTest   | Subsystem-level correctness (`tests/cpp/`)                           |
-| Python examples       | `scripts/run_examples.py` | 32 example scripts under `examples/python_examples/`             |
-| C++ example regression| `brachistochrone_cpp` | End-to-end check that the C++ optimal-control path converges         |
-| Benchmarks            | `bench/bench_track.sh`| Performance regressions on the core solve paths                      |
+| Layer              | Tool                      | Scope                                                |
+| ------------------ | ------------------------- | ---------------------------------------------------- |
+| Python unit tests  | `pytest`                  | Python-API + bindings regression (`tychopy/test/`)   |
+| Python examples    | `scripts/run_examples.py` | 32 example scripts under `examples/python_examples/` |
+| C++ unit tests     | Google Test + CTest       | Subsystem-level correctness (`tests/cpp/`)           |
+| C++ benchmarks     | `bench/bench_track.sh`    | Performance regressions on the core solve paths      |
+
+## Python unit tests (pytest)
+
+The `pytest` suite under `tychopy/test/` exercises the Python API and the
+nanobind bindings against a built `_tychopy`. Tests are organised by
+subsystem — `test_VectorFunctions/`, `test_OptimalControl/`,
+`test_Astro/`, `test_AdaptiveMesh/`, `test_AutoScaling/`,
+`test_Bindings/`, and `test_FullProblems/`.
+
+`pytest` is not part of the default environment, so install it first (the
+other test dependencies — numpy, scipy, matplotlib, spiceypy — already
+ship with the standard `tycho` env):
+
+```bash
+conda run -n tycho pip install pytest
+```
+
+The full set is also codified as the `[test]` optional-dependency group in
+`pyproject.toml` — that is what CI installs against the built wheel. Avoid
+`pip install ".[test]"` in a source checkout, though: it would recompile
+`_tychopy` from scratch. Install the dependencies directly instead.
+
+Then run the suite from the repo root (the `tycho` env must already have a
+built/installed `_tychopy`):
+
+```bash
+conda run -n tycho python -m pytest tychopy/test
+```
+
+Useful invocations:
+
+- `python -m pytest tychopy/test/test_Bindings` — run a single subsystem.
+- `python -m pytest -k Reentry` — run only tests matching an expression.
+- `python -m pytest -q` — quieter, dot-style output.
+
+## Python examples (integration suite)
+
+The 32 Python scripts under `examples/python_examples/` double as Tycho's
+integration test suite. Each script is run by `scripts/run_examples.py`,
+which captures stdout / stderr and treats a non-zero exit code as a
+failure.
+
+```bash
+conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
+```
+
+Useful flags:
+
+- `--timeout SECONDS` — per-script timeout (default is generous).
+- `--filter SUBSTRING` — only run scripts whose path contains the
+  substring. Useful when iterating on a single example.
+
+The full example matrix requires a few extra optional dependencies:
+
+```bash
+conda run -n tycho pip install seaborn
+conda install -n tycho -c conda-forge basemap
+```
 
 ## C++ unit tests (Google Test)
 
@@ -22,65 +81,12 @@ ctest --output-on-failure
 ```
 
 `tycho_tests_light` is a fast-running subset; `tycho_tests` is the full
-suite. CTest will run both. The expectation is **all tests pass** — a
-single failure blocks merging.
+suite. CTest runs both.
 
-## Python examples (integration test suite)
+## C++ benchmarks
 
-The 32 Python scripts under `examples/python_examples/` double as
-Tycho's integration test suite. Each script is run by
-`scripts/run_examples.py`, which captures stdout / stderr and
-verifies a non-zero exit code becomes a test failure.
-
-```bash
-conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
-```
-
-Useful flags:
-
-- `--timeout SECONDS` — per-script timeout (default is generous).
-- `--filter SUBSTRING` — only run scripts whose path contains the
-  substring. Useful when iterating on a single example.
-
-All 32 scripts must exit zero. If your change breaks an example, fix
-the example in the same PR (or justify the breakage in the description
-and update the example accordingly).
-
-The full example matrix requires a few extra optional dependencies:
-
-```bash
-conda run -n tycho pip install seaborn
-conda install -n tycho -c conda-forge basemap
-```
-
-## C++ brachistochrone regression
-
-The brachistochrone example is the canonical end-to-end check for the
-C++ optimal-control path. C++ examples are not built by default; opt
-in via `BUILD_CPP_EXAMPLES=ON`.
-
-```bash
-cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON
-cd build && ninja -j6 brachistochrone_cpp
-./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
-```
-
-Expected result — PSIOPT prints its convergence banner and the reported
-objective settles near the known optimum (the exact stdout formatting may
-differ slightly between platforms):
-
-```
-Optimal Solution Found
-objective ≈ 1.8013 s
-```
-
-A Builder-API variant is also available; `ninja brachistochrone_builder`
-builds it under `examples/cpp_examples/builder/brachistochrone/`.
-
-## Benchmarks
-
-Performance regressions are caught by `bench/bench_track.sh`, which
-wraps Google Benchmark.
+Performance regressions are caught by `bench/bench_track.sh`, which wraps
+Google Benchmark.
 
 ```bash
 cmake --preset <preset> -DBUILD_CPP_BENCHMARKS=ON
@@ -91,48 +97,5 @@ bench/bench_track.sh record      # record current numbers
 bench/bench_track.sh compare     # diff against the baseline
 ```
 
-Any regression in benchmark numbers requires a written justification in
-the PR description. Hardware-specific guidance for reproducible runs
-lives in `bench/MACBENCH.md` (macOS) and `bench/WINBENCH.md` (Windows).
-
-## Pre-merge verification sequence
-
-Before opening a PR (or before flipping a draft to ready-for-review),
-run the four steps below in order. CI runs the same four checks; doing
-them locally first is faster than waiting for CI failures.
-
-1. **C++ unit tests**
-
-   ```bash
-   cd build && ctest --output-on-failure
-   ```
-   All tests must pass.
-
-2. **Python examples**
-
-   ```bash
-   conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
-   ```
-   All 32 examples must exit 0.
-
-3. **C++ brachistochrone**
-
-   ```bash
-   cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON
-   cd build && ninja -j6 brachistochrone_cpp
-   ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp
-   ```
-   Must print `Optimal Solution Found`, objective ≈ 1.8013 s.
-
-4. **Benchmarks**
-
-   ```bash
-   bench/bench_track.sh compare
-   ```
-   Any regressions must be justified in the PR description.
-
-## Merge policy
-
-All four steps above must pass before any pull request can be merged
-into `main`. Broken examples must be fixed in the same PR; benchmark
-regressions must be justified in the PR description.
+Hardware-specific guidance for reproducible runs lives in
+`bench/MACBENCH.md` (macOS) and `bench/WINBENCH.md` (Windows).

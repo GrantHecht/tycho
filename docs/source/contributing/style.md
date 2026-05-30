@@ -307,20 +307,3 @@ prefixes:
 | `test:`      | New or updated tests                                    |
 
 Subjects under ~70 characters; longer rationale belongs in the body.
-
-## Things flagged for human review
-
-Some areas of the codebase need explicit human review before
-merging. Please call them out in your PR description if your changes
-touch:
-
-- **PSIOPT internals** — algorithmic changes can silently degrade
-  convergence.
-- **Intel MKL or Apple Accelerate integration** — redistribution
-  terms and initialization order are sensitive.
-- **Public API changes** — any Python-facing rename or removal
-  breaks downstream user code.
-- **New third-party dependencies** — must add a license notice to
-  `notices/` and get approval first.
-- **PyPI / packaging** — changes to `setup.py`, `pyproject.toml`, or
-  wheel metadata.
