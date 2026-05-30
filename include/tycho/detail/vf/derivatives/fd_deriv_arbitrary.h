@@ -93,13 +93,15 @@ template <class DType> struct FDDerivArbitrary {
     }
 
     /*!
-     * @brief
+     * @brief Finite-difference derivative at a single sample index, written
+     *        into a caller-provided buffer.
      *
-     * @tparam Order
-     * @tparam Accuracy
-     * @tparam DerivType
-     * @param i
-     * @param dout
+     * @tparam DerivType Output Eigen::Matrix type.
+     * @param i Sample index at which to evaluate the derivative.
+     * @param dout Output buffer receiving the derivative.
+     * @param Order Order of the derivative to compute.
+     * @param Accuracy Finite-difference accuracy order (rounded up to the
+     *                 nearest even number).
      */
     template <class DerivType>
     inline void deriv_at(const int i, DerivType &dout, const int Order, const int Accuracy) const {
@@ -167,13 +169,15 @@ template <class DType> struct FDDerivArbitrary {
     }
 
     /*!
-     * @brief
+     * @brief Finite-difference derivative at a single sample index, returned
+     *        as a new vector.
      *
-     * @tparam Order
-     * @tparam Accuracy
-     * @tparam DerivType
-     * @param i
-     * @return DerivType
+     * @tparam DerivType Output Eigen::Matrix type.
+     * @param i Sample index at which to evaluate the derivative.
+     * @param Order Order of the derivative to compute.
+     * @param Accuracy Finite-difference accuracy order (rounded up to the
+     *                 nearest even number).
+     * @return The derivative at index @p i.
      */
     template <class DerivType>
     inline DerivType deriv_at(const int i, const int Order, const int Accuracy) const {
@@ -184,12 +188,13 @@ template <class DType> struct FDDerivArbitrary {
     }
 
     /*!
-     * @brief Calculate all derivatives at once
+     * @brief Calculate all derivatives at once, into a caller-provided vector.
      *
-     * @tparam Order
-     * @tparam Accuracy
-     * @tparam DerivType Output Eigen::Matrix type
-     * @param bulk reference vector of DerivType
+     * @tparam DerivType Output Eigen::Matrix type.
+     * @param bulk Output vector receiving one derivative per sample index.
+     * @param Order Order of the derivative to compute.
+     * @param Accuracy Finite-difference accuracy order (rounded up to the
+     *                 nearest even number).
      */
     template <class DerivType>
     inline void deriv(std::vector<DerivType> &bulk, const int Order, const int Accuracy) const {
@@ -200,12 +205,13 @@ template <class DType> struct FDDerivArbitrary {
     }
 
     /*!
-     * @brief Calculate all derivatives at once
+     * @brief Calculate all derivatives at once, returned as a new vector.
      *
-     * @tparam Order
-     * @tparam Accuracy
-     * @tparam DerivType
-     * @return std::vector<DerivType>
+     * @tparam DerivType Output Eigen::Matrix type.
+     * @param Order Order of the derivative to compute.
+     * @param Accuracy Finite-difference accuracy order (rounded up to the
+     *                 nearest even number).
+     * @return One derivative per sample index.
      */
     template <class DerivType>
     inline std::vector<DerivType> deriv(const int Order, const int Accuracy) const {
