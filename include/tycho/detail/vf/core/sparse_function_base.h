@@ -18,22 +18,44 @@
 
 namespace tycho::vf {
 
+/// @brief CRTP base for VectorFunctions whose Jacobian/Hessian are sparse.
+/// @ingroup vf
+///
+/// Mirrors `ComputableBase` but overrides the `Jacobian` and `Hessian`
+/// aliases with `Eigen::SparseMatrix` and provides cached sparsity templates.
+/// @tparam Derived  The concrete sparse VectorFunction (CRTP).
+/// @tparam IR  Input row count (`-1` if dynamic).
+/// @tparam OR  Output row count (`-1` if dynamic).
 template <class Derived, int IR, int OR>
 struct SparseFunctionBase : ComputableBase<Derived, IR, OR> {
-    using Base = ComputableBase<Derived, IR, OR>;
+    using Base = ComputableBase<Derived, IR, OR>; ///< @brief The CRTP compute base.
+    /// @brief Output vector type for scalar @p Scalar.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
+    /// @brief Input vector type for scalar @p Scalar.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
+    /// @brief Gradient vector type for scalar @p Scalar.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using Gradient = typename Base::template Gradient<Scalar>;
 
+    /// @brief Sparse Jacobian matrix type for scalar @p Scalar.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using Jacobian = Eigen::SparseMatrix<Scalar>;
+    /// @brief Sparse Hessian matrix type for scalar @p Scalar.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using Hessian = Eigen::SparseMatrix<Scalar>;
 
+    /// @brief Const reference to a sparse matrix expression.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using ConstMatrixBaseRef = const Eigen::SparseMatrixBase<Scalar> &;
+    /// @brief Mutable reference to a sparse matrix expression.
+    /// @tparam Scalar  Element scalar type.
     template <class Scalar> using MatrixBaseRef = Eigen::SparseMatrixBase<Scalar> &;
 
   protected:
-    mutable Jacobian<double> JacobianTemplate;
-    mutable Hessian<double> HessianTemplate;
+    mutable Jacobian<double> JacobianTemplate; ///< @brief Cached Jacobian sparsity pattern.
+    mutable Hessian<double> HessianTemplate;   ///< @brief Cached Hessian sparsity pattern.
 };
 
 } // namespace tycho::vf

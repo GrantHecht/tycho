@@ -16,18 +16,42 @@
 
 namespace tycho::vf {
 
+/// @brief Assignment tag selecting plain `target = value` semantics.
+/// @ingroup vf
 struct DirectAssignment {};
+
+/// @brief Assignment tag selecting `target += value` semantics.
+/// @ingroup vf
 struct PlusEqualsAssignment {};
+
+/// @brief Assignment tag selecting `target -= value` semantics.
+/// @ingroup vf
 struct MinusEqualsAssignment {};
+
+/// @brief Assignment tag selecting aliased `target = value` semantics.
+/// @ingroup vf
+///
+/// Used where the target may alias one of the operands, disabling the
+/// `noalias()` fast path.
 struct AliasedDirectAssignment {};
 
+/// @brief Assignment tag selecting scaled `target = scale * value` semantics.
+/// @ingroup vf
+/// @tparam Scalar  Numeric type of the scale factor.
 template <class Scalar> struct ScaledDirectAssignment {
-    Scalar value;
+    Scalar value; ///< @brief Scale factor applied to the assigned value.
+    /// @brief Constructs the tag from a scale factor.
+    /// @param v  Scale factor to store.
     ScaledDirectAssignment(Scalar v) : value(v) {}
 };
 
+/// @brief Assignment tag selecting scaled `target += scale * value` semantics.
+/// @ingroup vf
+/// @tparam Scalar  Numeric type of the scale factor.
 template <class Scalar> struct ScaledPlusEqualsAssignment {
-    Scalar value;
+    Scalar value; ///< @brief Scale factor applied to the accumulated value.
+    /// @brief Constructs the tag from a scale factor.
+    /// @param v  Scale factor to store.
     ScaledPlusEqualsAssignment(Scalar v) : value(v) {}
 };
 

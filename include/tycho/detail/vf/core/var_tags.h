@@ -40,50 +40,100 @@ namespace tycho::vf {
 
 // ---- Scalar tags ----
 
-// Compile-time variable index tag (base type for semantic tags).
+/// @brief Compile-time variable index tag (base type for semantic tags).
+/// @ingroup vf
+/// @tparam I  Non-negative variable index.
 template <int I> struct VarTag {
     static_assert(I >= 0, "Variable index must be non-negative");
-    static constexpr int index = I;
+    static constexpr int index = I; ///< @brief The stored variable index.
 };
 
+/// @brief State-variable tag at logical state index @p I.
+/// @ingroup vf
+/// @tparam I  State-variable index.
 template <int I> struct XVarTag : VarTag<I> {};
+/// @brief Control-variable tag at logical control index @p I.
+/// @ingroup vf
+/// @tparam I  Control-variable index.
 template <int I> struct UVarTag : VarTag<I> {};
+/// @brief Parameter-variable tag at logical parameter index @p I.
+/// @ingroup vf
+/// @tparam I  Parameter-variable index.
 template <int I> struct PVarTag : VarTag<I> {};
 
+/// @brief Tag denoting the scalar time variable.
+/// @ingroup vf
 struct TVarTag {};
 
+/// @brief Inline variable: the state-variable tag at index @p I.
+/// @tparam I  State-variable index.
 template <int I> inline constexpr XVarTag<I> XVar{};
+/// @brief Inline variable: the control-variable tag at index @p I.
+/// @tparam I  Control-variable index.
 template <int I> inline constexpr UVarTag<I> UVar{};
+/// @brief Inline variable: the parameter-variable tag at index @p I.
+/// @tparam I  Parameter-variable index.
 template <int I> inline constexpr PVarTag<I> PVar{};
+/// @brief Inline variable: the time-variable tag.
 inline constexpr TVarTag TVar{};
 
 // ---- Full-vector tags ----
 
+/// @brief Tag denoting the full state vector.
+/// @ingroup vf
 struct XVecTag {};
+/// @brief Tag denoting the full control vector.
+/// @ingroup vf
 struct UVecTag {};
+/// @brief Tag denoting the full parameter vector.
+/// @ingroup vf
 struct PVecTag {};
 
+/// @brief Inline variable: the full-state-vector tag.
 inline constexpr XVecTag XVec{};
+/// @brief Inline variable: the full-control-vector tag.
 inline constexpr UVecTag UVec{};
+/// @brief Inline variable: the full-parameter-vector tag.
 inline constexpr PVecTag PVec{};
 
 // ---- Sub-vector tags ----
 
+/// @brief Tag denoting a contiguous state sub-vector.
+/// @ingroup vf
+/// @tparam Start  Offset of the first element within the state vector.
+/// @tparam Size  Number of elements in the sub-vector.
 template <int Start, int Size> struct XSegTag {
     static_assert(Start >= 0, "XSeg start must be non-negative");
     static_assert(Size > 0, "XSeg size must be positive");
 };
+/// @brief Tag denoting a contiguous control sub-vector.
+/// @ingroup vf
+/// @tparam Start  Offset of the first element within the control vector.
+/// @tparam Size  Number of elements in the sub-vector.
 template <int Start, int Size> struct USegTag {
     static_assert(Start >= 0, "USeg start must be non-negative");
     static_assert(Size > 0, "USeg size must be positive");
 };
+/// @brief Tag denoting a contiguous parameter sub-vector.
+/// @ingroup vf
+/// @tparam Start  Offset of the first element within the parameter vector.
+/// @tparam Size  Number of elements in the sub-vector.
 template <int Start, int Size> struct PSegTag {
     static_assert(Start >= 0, "PSeg start must be non-negative");
     static_assert(Size > 0, "PSeg size must be positive");
 };
 
+/// @brief Inline variable: the state sub-vector tag.
+/// @tparam Start  Offset within the state vector.
+/// @tparam Size  Number of elements.
 template <int Start, int Size> inline constexpr XSegTag<Start, Size> XSeg{};
+/// @brief Inline variable: the control sub-vector tag.
+/// @tparam Start  Offset within the control vector.
+/// @tparam Size  Number of elements.
 template <int Start, int Size> inline constexpr USegTag<Start, Size> USeg{};
+/// @brief Inline variable: the parameter sub-vector tag.
+/// @tparam Start  Offset within the parameter vector.
+/// @tparam Size  Number of elements.
 template <int Start, int Size> inline constexpr PSegTag<Start, Size> PSeg{};
 
 } // namespace tycho::vf

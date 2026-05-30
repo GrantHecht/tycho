@@ -16,6 +16,13 @@
 
 namespace tycho::vf {
 
+/// @brief Injects the standard scalar-templated VF matrix type aliases.
+///
+/// Expands to `Output`, `Input`, `Gradient`, `Jacobian`, and `Hessian`
+/// member-template aliases that forward to the corresponding aliases on
+/// @p Base, so derived VectorFunction classes inherit them without
+/// re-declaration.
+/// @param Base  Base class providing the templated `Output`/`Input`/… aliases.
 #define VF_TYPE_ALIASES(Base)                                                                      \
     template <class Scalar> using Output = typename Base::template Output<Scalar>;                 \
     template <class Scalar> using Input = typename Base::template Input<Scalar>;                   \

@@ -44,6 +44,19 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Computes the matrix product `left * right` into `target` per @p Assignment.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen left-operand expression type.
+/// @tparam Right  Eigen right-operand expression type.
+/// @tparam Assignment  Assignment-tag type selecting `=`, `+=`, `-=`, or scaled.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param target_  Destination matrix.
+/// @param left  Left operand.
+/// @param right  Right operand.
+/// @param assign  Assignment-tag instance (carries scale for scaled tags).
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class Target, class Left, class Right, class Assignment, bool Aliased>
 void right_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
                                  const Eigen::EigenBase<Left> &left,
@@ -88,6 +101,21 @@ void right_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
     }
 }
 
+/// @internal
+/// @brief Right Jacobian product restricted to a compile-time sub-domain layout.
+/// @tparam INPUT_DOMAIN  Compile-time domain type providing `sub_domains`.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen left-operand expression type.
+/// @tparam Right  Eigen right-operand expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param sub_domains  Compile-time sub-domain layout instance.
+/// @param target_  Destination matrix.
+/// @param left  Left operand.
+/// @param right  Right operand.
+/// @param assign  Assignment-tag instance.
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class INPUT_DOMAIN, class Target, class Left, class Right, class Assignment, bool Aliased>
 void right_jacobian_product_constant_impl(const INPUT_DOMAIN &sub_domains,
                                           const Eigen::MatrixBase<Target> &target_,
@@ -109,6 +137,20 @@ void right_jacobian_product_constant_impl(const INPUT_DOMAIN &sub_domains,
         });
 }
 
+/// @internal
+/// @brief Right Jacobian product restricted to a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen left-operand expression type.
+/// @tparam Right  Eigen right-operand expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Destination matrix.
+/// @param left  Left operand.
+/// @param right  Right operand.
+/// @param assign  Assignment-tag instance.
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class Target, class Left, class Right, class Assignment, bool Aliased>
 void right_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
                                          const Eigen::MatrixBase<Target> &target_,
@@ -135,6 +177,19 @@ void right_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
 
 ///////////////////////////////////////////////////////////////////////////
 
+/// @internal
+/// @brief Computes the symmetric product `rightᵀ * left * right` into `target`.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen middle-operand expression type.
+/// @tparam Right  Eigen outer-operand expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param target_  Destination matrix.
+/// @param left  Middle (symmetric) operand.
+/// @param right  Outer operand applied on both sides.
+/// @param assign  Assignment-tag instance.
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class Target, class Left, class Right, class Assignment, bool Aliased>
 void symetric_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
                                     const Eigen::EigenBase<Left> &left,
@@ -187,6 +242,21 @@ void symetric_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
     }
 }
 
+/// @internal
+/// @brief Symmetric Jacobian product over a compile-time sub-domain layout.
+/// @tparam INPUT_DOMAIN  Compile-time domain type providing `sub_domains`.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen middle-operand expression type.
+/// @tparam Right  Eigen outer-operand expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param sub_domains  Compile-time sub-domain layout instance.
+/// @param target_  Destination matrix.
+/// @param left  Middle (symmetric) operand.
+/// @param right  Outer operand.
+/// @param assign  Assignment-tag instance.
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class INPUT_DOMAIN, class Target, class Left, class Right, class Assignment, bool Aliased>
 void symetric_jacobian_product_constant_impl(const INPUT_DOMAIN &sub_domains,
                                              const Eigen::MatrixBase<Target> &target_,
@@ -214,6 +284,20 @@ void symetric_jacobian_product_constant_impl(const INPUT_DOMAIN &sub_domains,
     }
 }
 
+/// @internal
+/// @brief Symmetric Jacobian product over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Left  Eigen middle-operand expression type.
+/// @tparam Right  Eigen outer-operand expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @tparam Aliased  Whether the operands may alias `target`.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Destination matrix.
+/// @param left  Middle (symmetric) operand.
+/// @param right  Outer operand.
+/// @param assign  Assignment-tag instance.
+/// @param aliased  Compile-time aliasing flag.
+/// @endinternal
 template <class Target, class Left, class Right, class Assignment, bool Aliased>
 void symetric_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
                                             const Eigen::MatrixBase<Target> &target_,
@@ -250,6 +334,15 @@ void symetric_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
 
 ////////////////////////////////////////////////////////////////////////////
 
+/// @internal
+/// @brief Accumulates `right` into `target` per @p Assignment.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam JacType  Eigen source expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @param target_  Destination matrix.
+/// @param right  Source matrix.
+/// @param assign  Assignment-tag instance.
+/// @endinternal
 template <class Target, class JacType, class Assignment>
 void accumulate_impl(const Eigen::MatrixBase<Target> &target_,
                      const Eigen::MatrixBase<JacType> &right, Assignment assign) {
@@ -269,6 +362,16 @@ void accumulate_impl(const Eigen::MatrixBase<Target> &target_,
     }
 }
 
+/// @internal
+/// @brief Accumulates a matrix column-block-wise over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam JacType  Eigen source expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Destination matrix.
+/// @param right  Source matrix.
+/// @param assign  Assignment-tag instance.
+/// @endinternal
 template <class Target, class JacType, class Assignment>
 void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                            const Eigen::MatrixBase<Target> &target_,
@@ -291,6 +394,16 @@ void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
     }
 }
 
+/// @internal
+/// @brief Accumulates a symmetric matrix block-wise over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam JacType  Eigen source expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Destination matrix.
+/// @param right  Source matrix.
+/// @param assign  Assignment-tag instance.
+/// @endinternal
 template <class Target, class JacType, class Assignment>
 void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                                     const Eigen::MatrixBase<Target> &target_,
@@ -339,6 +452,16 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_doma
     }
 }
 
+/// @internal
+/// @brief Accumulates a vector segment-wise over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam JacType  Eigen source expression type.
+/// @tparam Assignment  Assignment-tag type.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Destination vector.
+/// @param right  Source vector.
+/// @param assign  Assignment-tag instance.
+/// @endinternal
 template <class Target, class JacType, class Assignment>
 void accumulate_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                            const Eigen::MatrixBase<Target> &target_,
@@ -360,6 +483,14 @@ void accumulate_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
     }
 }
 
+/// @internal
+/// @brief Scales a vector in place segment-wise over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Scalar  Scale-factor type.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Vector to scale.
+/// @param s  Scale factor.
+/// @endinternal
 template <class Target, class Scalar>
 void scale_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                       const Eigen::MatrixBase<Target> &target_, Scalar s) {
@@ -377,6 +508,14 @@ void scale_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
     }
 }
 
+/// @internal
+/// @brief Scales a matrix in place column-block-wise over a runtime sub-domain layout.
+/// @tparam Target  Eigen destination expression type.
+/// @tparam Scalar  Scale-factor type.
+/// @param sub_domains  Runtime sub-domain layout (`{start, size}` columns).
+/// @param target_  Matrix to scale.
+/// @param s  Scale factor.
+/// @endinternal
 template <class Target, class Scalar>
 void scale_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                       const Eigen::MatrixBase<Target> &target_, Scalar s) {

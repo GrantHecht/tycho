@@ -80,30 +80,85 @@ template <class Derived, class Func, int IR, int OR> struct FunctionHolder;
 ///////////////////////////////////////////////////////////////////////////////////////
 template <class OuterFunc, class InnerFunc> struct NestedFunction;
 
+/// @brief Selects the result type and factory for composing two functions.
+///
+/// The primary template produces a `NestedFunction<OuterFunc, InnerFunc>`;
+/// specializations collapse trivial or fusible compositions (e.g. nesting on
+/// `Arguments`, or fusing two `Segment`s) into a simpler equivalent function.
+/// @internal
+/// @tparam OuterFunc  Outer (second-applied) function type.
+/// @tparam InnerFunc  Inner (first-applied) function type.
+/// @endinternal
 template <class OuterFunc, class InnerFunc> struct NestedFunctionSelector {
-    using type = NestedFunction<OuterFunc, InnerFunc>;
+    using type = NestedFunction<OuterFunc, InnerFunc>; ///< @brief Resulting nested function type.
+    /// @brief Builds the nested function from outer and inner functions.
+    /// @param ofunc  Outer function.
+    /// @param ifunc  Inner function.
+    /// @return The composed function.
     static decltype(auto) make_nested(OuterFunc ofunc, InnerFunc ifunc) {
         return type(ofunc, ifunc);
     }
 };
+/// @brief Specialization: nesting on identity `Arguments` returns the outer function.
+/// @internal
+/// @tparam OuterFunc  Outer function type.
+/// @tparam IR  Input row count of the inner `Arguments`.
+/// @endinternal
 template <class OuterFunc, int IR> struct NestedFunctionSelector<OuterFunc, Arguments<IR>> {
-    using type = OuterFunc;
+    using type = OuterFunc; ///< @brief Resulting (unwrapped) function type.
+    /// @brief Returns the outer function unchanged.
+    /// @param ofunc  Outer function.
+    /// @param ifunc  Inner identity `Arguments` (ignored).
+    /// @return The outer function.
     static decltype(auto) make_nested(OuterFunc ofunc, Arguments<IR> ifunc) { return ofunc; }
 };
+/// @brief Specialization: an outer identity `Arguments` returns the inner function.
+/// @internal
+/// @tparam InnerFunc  Inner function type.
+/// @tparam IR  Input row count of the outer `Arguments`.
+/// @endinternal
 template <class InnerFunc, int IR> struct NestedFunctionSelector<Arguments<IR>, InnerFunc> {
-    using type = InnerFunc;
+    using type = InnerFunc; ///< @brief Resulting (unwrapped) function type.
+    /// @brief Returns the inner function unchanged.
+    /// @param ofunc  Outer identity `Arguments` (ignored).
+    /// @param ifunc  Inner function.
+    /// @return The inner function.
     static decltype(auto) make_nested(Arguments<IR> ofunc, InnerFunc ifunc) { return ifunc; }
 };
+/// @brief Specialization: fuses two nested `Segment`s into a single `Segment`.
+/// @internal
+/// @tparam IR  Inner segment input rows.
+/// @tparam OR  Shared intermediate size (inner output / outer input).
+/// @tparam ST  Inner segment start offset.
+/// @tparam OR2  Outer segment output rows.
+/// @tparam ST2  Outer segment start offset.
+/// @endinternal
 template <int IR, int OR, int ST, int OR2, int ST2>
 struct NestedFunctionSelector<Segment<OR, OR2, ST2>, Segment<IR, OR, ST>> {
+    /// @brief Builds the fused segment with combined start offsets.
+    /// @param ofunc  Outer segment.
+    /// @param ifunc  Inner segment.
+    /// @return The single equivalent `Segment`.
     static decltype(auto) make_nested(Segment<OR, OR2, ST2> ofunc, Segment<IR, OR, ST> ifunc) {
         return Segment<IR, OR2, SZ_SUM<ST, ST2>::value>(ifunc.input_rows(), ofunc.output_rows(),
                                                         ifunc.seg_start_ + ofunc.seg_start_);
     }
 };
 
+/// @brief Specialization: fuses `Elements` selected from a `Segment` into shifted `Elements`.
+/// @internal
+/// @tparam IR  Inner segment input rows.
+/// @tparam OR  Shared intermediate size.
+/// @tparam ST  Inner segment start offset.
+/// @tparam EL1  First selected element index.
+/// @tparam ELS  Remaining selected element indices.
+/// @endinternal
 template <int IR, int OR, int ST, int EL1, int... ELS>
 struct NestedFunctionSelector<Elements<OR, EL1, ELS...>, Segment<IR, OR, ST>> {
+    /// @brief Builds the fused/shifted elements selection.
+    /// @param ofunc  Outer element selection.
+    /// @param ifunc  Inner segment.
+    /// @return The fused function (shifted `Elements`, or a `NestedFunction` fallback).
     static decltype(auto) make_nested(Elements<OR, EL1, ELS...> ofunc, Segment<IR, OR, ST> ifunc) {
         if constexpr (IR >= 0 && OR >= 0 && ST >= 0 && EL1 >= 0) {
             return Elements<IR, EL1 + ST, ELS + ST...>(ifunc.input_rows());
@@ -151,6 +206,9 @@ template <class Func, int MRows> struct MatrixScaled;
 
 template <class Func, class Value> struct StaticScaled;
 
+/// @brief CRTP marker base tagging a function as statically (compile-time) scaled.
+/// @ingroup vf
+/// @tparam Derived  The concrete statically-scaled function type (CRTP).
 template <class Derived> struct StaticScaleBase {};
 ///////////////////////////////////////////////////////////////////////////////////////
 
