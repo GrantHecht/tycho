@@ -6,7 +6,7 @@
 // compute_jacobian_adjointgradient_adjointhessian template instantiations
 // live in brachistochrone_ode.cpp so main.cpp does not re-instantiate them.
 //
-// See doc/user_guide_example_tu_split.md for the pattern rationale.
+// See docs/dev/notes/user_guide_example_tu_split.md for the pattern rationale.
 ///////////////////////////////////////////////////////////////////////////////
 
 #pragma once

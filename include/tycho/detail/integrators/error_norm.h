@@ -11,7 +11,7 @@
 
 namespace tycho::integrators {
 
-/// Throw a descriptive runtime_error if any element of `v` is non-finite.
+/// @brief Throw a descriptive runtime_error if any element of `v` is non-finite.
 ///
 /// `site` names the production site (e.g. "AdaptiveDriver::stepper.step"); `t` is the
 /// current independent-variable value; `h` is the step size in flight.
@@ -48,11 +48,15 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
     throw std::runtime_error(msg);
 }
 
-/// Error norm kind applied to scaled residuals.
+/// @brief Error-norm aggregation strategy used by adaptive integrator step
+///        controllers.
 ///
-///   RMS — sqrt(sum(res_i²) / n) — Julia's ODE_DEFAULT_NORM (default).
-///   MAX — max_i |res_i|.
-enum class ErrorNormType { RMS, MAX };
+/// RMS matches Julia's `ODE_DEFAULT_NORM`; MAX is the conservative L∞
+/// alternative for stiff problems.
+enum class ErrorNormType {
+    RMS,   ///< @brief Root-mean-square of per-component errors.
+    MAX    ///< @brief Maximum of per-component errors.
+};
 
 /// Compute element-wise scaled residuals per Julia's convention:
 ///

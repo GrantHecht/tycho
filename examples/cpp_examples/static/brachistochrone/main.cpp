@@ -10,7 +10,7 @@
 //
 // This TU compiles without seeing the concrete VectorFunction type — the ODE
 // is built in brachistochrone_ode.cpp and returned as a type-erased
-// GenericFunction<-1,-1>. See doc/user_guide_example_tu_split.md.
+// GenericFunction<-1,-1>. See docs/dev/notes/user_guide_example_tu_split.md.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "brachistochrone_ode.h"

@@ -1,0 +1,51 @@
+name: default-config-smoke
+
+# Guards the BUILD_SPHINX_DOCS=OFF (default) configure path: catches
+# accidental refactors that would silently make Doxygen a hard requirement
+# for every contributor. Runs on a runner without doxygen installed.
+
+on:
+  pull_request:
+    paths:
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/workflows/default-config-smoke.yml'
+
+concurrency:
+  group: default-config-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  default-config-no-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - name: Verify doxygen is absent
+        run: |
+          if command -v doxygen >/dev/null; then
+            echo "::error::doxygen unexpectedly installed — this lane cannot prove default-OFF works"
+            exit 1
+          fi
+      - name: Install clang-21 via LLVM apt repo
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
+          sudo apt-get install -y libomp-dev lld ninja-build
+      - name: Install MKL via apt repository
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel
+      - name: Configure with default flags (no BUILD_SPHINX_DOCS)
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-clang-release \
+            -DCMAKE_C_COMPILER=/usr/bin/clang-21 \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++-21 \
+            -B /tmp/build-smoke

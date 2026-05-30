@@ -16,12 +16,12 @@ host/toolchain configuration. See `report.md` for the narrative analysis.
 | `dup_tycho.txt` | Most-duplicated `tycho::`-prefixed weak symbols across all TUs |
 | `dup_symbols_all.txt` | Most-duplicated weak symbols across all TUs (includes fmt, stdlib boilerplate) |
 | `dup_symbols_bindings.txt` | Most-duplicated weak symbols within `src/bindings/*.cpp.o` only |
-| `report.md` | Narrative `doc/build_performance_report_2026-04-18.md` (copy) |
+| `report.md` | Narrative `docs/dev/notes/build_performance_report_2026-04-18.md` (copy) |
 | `env.txt` | Host, compiler, build options at snapshot time |
 
 ## Regenerating this baseline or a comparison snapshot
 
-Run the procedure in `doc/build_performance_analysis.md`. Copy the `/tmp/` outputs
+Run the procedure in `docs/dev/notes/build_performance_analysis.md`. Copy the `/tmp/` outputs
 into a sibling directory named `bench/build_perf/YYYY-MM-DD-<phase>/`. The key
 metrics to diff are phase-specific (see `/home/ghecht/.claude/plans/kind-prancing-crown.md`
 or the refactor plan's commit messages):

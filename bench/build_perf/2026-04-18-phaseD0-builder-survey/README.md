@@ -105,7 +105,7 @@ win at `-j2` with only one extra file.
 ## Decision
 
 Do not extend Phase D beyond the pilot. Builder-API examples stay monolithic.
-The `doc/user_guide_example_tu_split.md` user guide is updated with a candid
+The `docs/dev/notes/user_guide_example_tu_split.md` user guide is updated with a candid
 "When not to split" entry calling this out so downstream users don't sink time
 trying the same pattern in their own builder-API programs.
 
@@ -116,7 +116,7 @@ so the decision doesn't need to be re-derived by a future reader.
 ## If builder examples ever become the bottleneck again
 
 The full design-space analysis lives in
-`doc/build_perf_phase_scaffolding.md`. Summary: the 4.14 GB floor in
+`docs/dev/notes/build_perf_phase_scaffolding.md`. Summary: the 4.14 GB floor in
 main.cpp after the D.1 split decomposes into two template families —
 the `GenericFunction<-1,-1>` erasure chain (`make_shared<GFModel<T>>` +
 `GFStorage::emplace<T>` + GF ctor; ~1100 s aggregate serial in the perf

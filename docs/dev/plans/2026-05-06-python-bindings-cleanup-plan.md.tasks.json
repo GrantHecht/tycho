@@ -1,0 +1,60 @@
+{
+  "planPath": "docs/dev/plans/2026-05-06-python-bindings-cleanup-plan.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Snake_case rename \u2014 submodules, packages, files, all references",
+      "status": "completed",
+      "description": "**Goal:** Rename all PascalCase Python-facing modules, subpackages, and `.py` files to snake_case in one mechanical sweep. Foundational task \u2014 every subsequent task uses the renamed paths.\n\n**Files:** src/bindings/function_registry.h, src/bindings/utils_bind.cpp, src/bindings/astro/tycho_astro.cpp, src/bindings/astro/kepler_model.cpp; git mv 6 tychopy/ subdirs; git mv 10 .py files; sweep tychopy/, examples/, tychopy/test/, scripts/.\n\n**Verify:** `conda run -n tycho bash -c \"MPLBACKEND=Agg python scripts/run_examples.py\" && ctest --test-dir build --output-on-failure`\n\n```json:metadata\n{\"files\":[\"src/bindings/function_registry.h\",\"src/bindings/utils_bind.cpp\",\"src/bindings/astro/tycho_astro.cpp\",\"src/bindings/astro/kepler_model.cpp\",\"tychopy/\",\"examples/python_examples/\",\"tychopy/test/\",\"scripts/\"],\"verifyCommand\":\"conda run -n tycho bash -c \\\"MPLBACKEND=Agg python scripts/run_examples.py\\\" && ctest --test-dir build --output-on-failure\",\"acceptanceCriteria\":[\"snake_case _tychopy submodules importable\",\"PascalCase forms ImportError\",\"all 38 examples pass\",\"all C++ tests pass\",\"grep PascalCase submodules zero hits\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Drop duplicate PascalCase factory aliases",
+      "status": "completed",
+      "blockedBy": [
+        0
+      ],
+      "description": "**Goal:** Remove PascalCase mirrors of snake_case factory functions: Stack/StackScalar/Sum/SumElems/SumScalar from tychopy/vector_functions/__init__.py and ModifiedDynamics from tychopy/astro/__init__.py. Update in-tree call sites.\n\n**Verify:** `conda run -n tycho python -c \"from tychopy.vector_functions import stack, sum; print('ok')\" && examples PASS`\n\n```json:metadata\n{\"files\":[\"tychopy/vector_functions/__init__.py\",\"tychopy/astro/__init__.py\",\"tychopy/astro/astro_models.py\",\"tychopy/astro/Extensions/EPPRFrame.py\",\"tychopy/test/test_FullProblems/test_FreeFlyingRobot.py\",\"tychopy/test/test_Astro/test_vec6_dispatch.py\",\"examples/python_examples/MultiPhaseZermelo.py\",\"examples/python_examples/Zermelo.py\"],\"verifyCommand\":\"conda run -n tycho bash -c \\\"MPLBACKEND=Agg python scripts/run_examples.py\\\" && conda run -n tycho python -m pytest tychopy/test/\",\"acceptanceCriteria\":[\"snake_case factories importable\",\"PascalCase aliases ImportError\",\"examples pass\",\"tests pass\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Migrate C++ builder and tests to new OCP link API",
+      "status": "completed",
+      "blockedBy": [
+        0,
+        1
+      ],
+      "description": "**Goal:** Update ocp_wrapper.h and 2 C++ tests to call new add_forward_link_equal_con and add_direct_link_equal_con overloads with std::string(\"auto\") for ScaleType. Precondition for Task 5.\n\n**Verify:** `cd build && ninja -j6 all && ctest --test-dir . --output-on-failure`\n\n```json:metadata\n{\"files\":[\"include/tycho/detail/optimal_control/builder/ocp_wrapper.h\",\"tests/cpp/optimal_control/test_ocp_direct_link.cpp\",\"tests/cpp/optimal_control/test_ocp_phase_lifetime.cpp\"],\"verifyCommand\":\"cd build && ninja -j6 all && ctest --test-dir . --output-on-failure\",\"acceptanceCriteria\":[\"wrapper uses new API\",\"tests use 7-arg form\",\"C++ tests pass\",\"examples pass\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: Migrate Python examples and tests to new OCP link API; merge UpdatedInterface/",
+      "status": "completed",
+      "blockedBy": [
+        0,
+        1
+      ],
+      "description": "**Goal:** Eliminate every Python call to a legacy OCP link API form. Replace duplicated parent files with UpdatedInterface/ versions; inline-migrate parent-only legacy-API files by adding auto_scale='auto'; delete UpdatedInterface/ after merging.\n\n**Verify:** `conda run -n tycho bash -c \"MPLBACKEND=Agg python scripts/run_examples.py\" && conda run -n tycho python -m pytest tychopy/test/`\n\n```json:metadata\n{\"files\":[\"examples/python_examples/UpdatedInterface/\",\"examples/python_examples/MultiSpacecraftOptimization.py\",\"examples/python_examples/Heteroclinic.py\",\"examples/python_examples/MultiPhaseZermelo.py\",\"examples/python_examples/MeshRefinement/Delta3Launch.py\",\"tychopy/test/test_AdaptiveMesh/test_Delta3Launch.py\",\"tychopy/test/test_AutoScaling/test_ObjScaling.py\",\"tychopy/test/test_FullProblems/test_MultiPhaseCannon.py\",\"tychopy/test/test_FullProblems/test_Delta3Launch.py\"],\"verifyCommand\":\"conda run -n tycho bash -c \\\"MPLBACKEND=Agg python scripts/run_examples.py\\\" && conda run -n tycho python -m pytest tychopy/test/\",\"acceptanceCriteria\":[\"UpdatedInterface gone\",\"all 38 examples pass\",\"Python tests pass\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Remove legacy OCP link API (Python bindings + C++ class overloads)",
+      "status": "completed",
+      "blockedBy": [
+        2,
+        3
+      ],
+      "description": "**Goal:** Delete BuildOldLinkIterface() (~310 lines), rename build_new_link_interface \u2192 build_link_interface, delete LinkConstraint/LinkObjective nb::class_ registrations and Python aliases, delete legacy overloads from optimal_control_problem.h. Keep LinkConstraint/LinkObjective types as internal C++ implementation detail.\n\n**Verify:** `cd build && ninja -j6 all && ctest --test-dir . --output-on-failure && cd .. && conda run -n tycho bash -c \"MPLBACKEND=Agg python scripts/run_examples.py\"`\n\n```json:metadata\n{\"files\":[\"src/bindings/optimal_control/optimal_control_problem_bind.cpp\",\"src/bindings/optimal_control/tycho_optimal_control.cpp\",\"tychopy/optimal_control/__init__.py\",\"include/tycho/detail/optimal_control/phase/optimal_control_problem.h\"],\"verifyCommand\":\"cd build && ninja -j6 all && ctest --test-dir . --output-on-failure && cd .. && conda run -n tycho bash -c \\\"MPLBACKEND=Agg python scripts/run_examples.py\\\"\",\"acceptanceCriteria\":[\"legacy bindings deleted\",\"legacy C++ overloads deleted\",\"grep zero hits\",\"examples pass\",\"C++ tests pass\"]}\n```\n\n**Deferred from Task 3 review:**\n- Update docstring for `add_forward_link_equal_con` in ocp_wrapper.h to mention return is `std::vector<int>` (one index per consecutive phase pair).\n- Replace the 6 `std::string(\"auto\")` literals in ocp_wrapper.h with `ScaleModes::AUTO` enum literal (avoids string round-trip via strto_ScaleMode; safer typing). Verify `optimal_control_flags.h` is included or add it."
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: Internal C++ binding helper rename to snake_case",
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
+      "description": "**Goal:** Rename TychoBind<T>::Build \u2192 ::build, Build_Register \u2192 build_register, and *Build aggregate free functions to snake_case (vector_functions_build, solvers_build, optimal_control_build, utils_build, astro_build, extensions_build, kepler_utils_build, lambert_solvers_build). Internal-only \u2014 does not affect Python API.\n\n**Verify:** `cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \"import _tychopy; _tychopy.software_info()\"`\n\n```json:metadata\n{\"files\":[\"src/bindings/function_registry.h\",\"src/bindings/tycho_module.cpp\",\"src/bindings/bump_allocator_bind.cpp\",\"src/bindings/utils_bind.cpp\",\"src/bindings/astro/\",\"src/bindings/optimal_control/\",\"src/bindings/solvers/\",\"src/bindings/vf/\"],\"verifyCommand\":\"cd build && ninja -j6 all && cd .. && conda run -n tycho python -c \\\"import _tychopy; _tychopy.software_info()\\\" && ctest --test-dir build --output-on-failure\",\"acceptanceCriteria\":[\"TychoBind::Build \u2192 ::build\",\"Build_Register \u2192 build_register\",\"*Build \u2192 *_build\",\"build succeeds\",\"examples pass\",\"clang-format clean\"]}\n```\n\n**Deferred from Task 5 review:**\n- Delete 6 dead 2-arg add_link_param_{equal,inequal}_con and add_link_param_objective overloads in optimal_control_problem.h (located adjacent to the 3-arg ScaleType variants in each of the three blocks; grep for the wrapper signature `(VectorFunctionalX lc, VectorXi lpv, ScaleType scale_t)` for equal/inequal and `(ScalarFunctionalX lc, VectorXi lpv, ScaleType scale_t)` for objective). They have no Python bindings or C++ callers; functionally redundant with the 3-arg ScaleType variants.\n- Add explicit `#include \"tycho/detail/optimal_control/core/optimal_control_flags.h\"` to ocp_wrapper.h (currently relies on transitive include \u2014 fragile).\n\n**Scope clarification (from Task 6 code review):**\nThe rename was scoped to the 8 named top-level aggregate `*Build` free functions plus `TychoBind<T>::Build` and `Build_Register`. Sub-aggregate helpers (`VectorFunctionBuildPart1/2`, `ArgsSegBuildPart1-5`, `GenericODESBuildPart1-6`, `BulkOperationsBuild`, `FreeFunctionsBuild`, `MatrixFunctionBuild`, `RKFlagsBuild`, `GenericBuild`, `SegBuild`, `MinMaxBuild`, `ComparativeBuild`, `IfElseBuild`, `ConditionalBuild`, `DenseBaseBuild`, `DoubleMathBuild`, `UnaryMathBuild`, `BinaryMathBuild`, `BinaryOperatorsBuild`, `ConditionalOperatorsBuild`, `FunctionIndexingBuild`, `IntegratorBuildConstructors`, `ODEPhaseBuildImpl`, `ODESizeBuild`, `UnaryVectorOpBuild`, `UnaryScalarOpBuild`, `ProductBuild`) and the `FunctionRegistry::Register()` / `getXxxModule()` camelCase accessors remain PascalCase/camelCase. **Deferred to a follow-up PR** \u2014 these are internal C++ helpers that don't affect Python, and consolidating them would meaningfully expand the diff. The next cleanup PR can sweep them in one pass."
+    }
+  ],
+  "lastUpdated": "2026-05-07T02:44:42.726931+00:00"
+}

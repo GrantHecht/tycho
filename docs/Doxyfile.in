@@ -1,0 +1,62 @@
+# Configured by CMake into <build-dir>/docs/Doxyfile via configure_file().
+PROJECT_NAME           = "Tycho"
+PROJECT_NUMBER         = "@PROJECT_VERSION@"
+OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen
+CREATE_SUBDIRS         = NO
+
+# Input
+INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp
+# Reserved for future internal helpers — no matching symbols/files exist
+# in include/tycho/ today. Kept as forward-looking guards so that adding
+# a tycho::detail::internal::* type or a detail/utils/internal_* header
+# automatically excludes it from the public Doxygen XML.
+EXCLUDE_SYMBOLS        = tycho::detail::internal::*
+EXCLUDE_PATTERNS       = */detail/utils/internal_*
+
+# Documentation discipline
+EXTRACT_ALL            = NO         # only commented entities render
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+EXTRACT_LOCAL_CLASSES  = NO
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+INTERNAL_DOCS          = NO         # @internal blocks hidden by default
+JAVADOC_AUTOBRIEF      = NO         # explicit @brief required — repo uses NumPy-style docstrings, not implicit-brief
+
+# Cross-references and includes
+SHORT_NAMES            = NO
+INHERIT_DOCS           = YES
+INLINE_INHERITED_MEMB  = NO
+SHOW_USED_FILES        = NO
+SHOW_FILES             = NO
+
+# Source browser
+SOURCE_BROWSER         = NO
+INLINE_SOURCES         = NO
+
+# Output formats — XML only (Breathe consumes XML, not HTML)
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_PROGRAMLISTING     = YES
+
+# Preprocessor
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+SKIP_FUNCTION_MACROS   = YES
+PREDEFINED             = TYCHO_DOXYGEN=1
+
+# Warnings — permissive while public-API docstring coverage builds up.
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = NO
+
+# Aliases for VF thread-safety annotations
+ALIASES += "vfthreadsafe=@note This function is thread-safe."
+ALIASES += "vfnotthreadsafe=@note This function is **not** thread-safe; one instance per worker."

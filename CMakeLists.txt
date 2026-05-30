@@ -66,7 +66,6 @@ endif()
 set(LINK_TIME_OPT FALSE)          ### DO LTO - Recommended for full release
 set(CLANG_MAX_INLINE_DEPTH 225)
 #set(BUILD_TYCHO_WHEEL TRUE)      ### CI Build for generic wheels
-#set(BUILD_SPHINX_DOCS TRUE)
 
 # Floating-point optimization policy.
 # STRICT: no fast-math relaxations
@@ -128,6 +127,9 @@ option(OPTIMIZE_BINDINGS "Compile Python binding code at -O3 instead of -Os (nan
 option(COMPILE_TIME_TRACE "Enable Clang -ftime-trace for build profiling (Clang only)" OFF)
 option(ENABLE_ENZYME_AD
     "Enable experimental Enzyme automatic differentiation (requires Clang + Enzyme plugin)"
+    OFF)
+option(BUILD_SPHINX_DOCS
+    "Build Sphinx documentation (requires sphinx, breathe, doxygen, pydata-sphinx-theme)"
     OFF)
 
 if(ENABLE_ENZYME_AD)
@@ -771,7 +773,12 @@ endif()
 ######## Find Correct Python Install Location  ############
 
 if(ENABLE_PYTHON_BINDINGS)
-    if(NOT PIP_INSTALL)
+    # SKBUILD is set by scikit-build-core when driving CMake via `pip wheel .`
+    # or `pip install .`; pip handles its own install layout, so the dev-build
+    # POST_BUILD copy in src/bindings/CMakeLists.txt must NOT fire.
+    # PIP_INSTALL is the legacy opt-out flag (never auto-set; honored for
+    # callers that pass -DPIP_INSTALL=ON explicitly).
+    if(NOT SKBUILD AND NOT PIP_INSTALL)
       if(NOT PYTHON_LOCAL_INSTALL_DIR)
         if(WIN32)
           set(PYTHON_LOCAL_INSTALL_DIR ${Python_SITEARCH})
@@ -807,15 +814,15 @@ add_subdirectory(src)
 # add_subdirectory(extensions)
 # Unbuilt as a side-effect of cr3bp_model.h removal (Tycho_Extensions.h
 # referenced the deleted legacy CR3BP type). The extension mechanism
-# itself is under review; see
-# doc/plans/2026-04-14-cartesian-crtbp-dynamics-design.md.
+# itself is under review.
 
 
 # Documentation
-# READ: pip install sphinx,breathe,furo before trying to build docs
-
 if(BUILD_SPHINX_DOCS)
-  add_subdirectory(doc)
+  find_package(Doxygen REQUIRED)
+  # Sphinx is invoked via `${Python_EXECUTABLE} -m sphinx`; no find_package
+  # needed — relies on docs/requirements-docs.txt being installed.
+  add_subdirectory(docs)
 endif()
 
 

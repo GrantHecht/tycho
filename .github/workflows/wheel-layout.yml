@@ -1,0 +1,99 @@
+name: wheel-layout
+
+on:
+  pull_request:
+    paths:
+      - 'pyproject.toml'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - 'src/**'
+      - 'tychopy/**'
+      - '.github/workflows/wheel-layout.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: wheel-layout-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+
+      - name: Install conda clang toolchain
+        shell: bash -el {0}
+        # scikit-build-core picks CC/CXX from the activated conda env; the
+        # conda-forge clang toolchain pins libstdc++ so the wheel imports
+        # cleanly on any glibc-compatible distro.
+        run: |
+          conda install -n tycho -c conda-forge -y \
+            clangxx_linux-64 clang_linux-64 \
+            libstdcxx-devel_linux-64 sysroot_linux-64 \
+            ninja
+
+      - name: Install MKL via apt repository
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel
+
+      - name: Build wheel
+        shell: bash -el {0}
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          pip wheel . --no-deps -w /tmp/wheels
+
+      - name: Inspect wheel layout
+        shell: bash -el {0}
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          if [ -z "$wheel" ]; then
+            echo "::error::no wheel was built"
+            exit 1
+          fi
+          # Layout assertions are implemented in Python (see the script
+          # for the negative/positive invariants). Avoids bash + awk
+          # gotchas — an inline `awk 'NR>2 {print $1}'` previously
+          # dropped the first zip entry because python -m zipfile -l
+          # emits only one header row, not two.
+          python scripts/inspect_wheel_layout.py "$wheel"
+
+      # Install a parallel system Python 3.13 so we can create a fresh
+      # venv outside the conda env. The wheel is cp313-cp313; ubuntu-latest's
+      # default Python is 3.12, which would refuse the wheel.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Smoke-test wheel import (fresh venv, no setvars.sh)
+        # This step deliberately does NOT source /opt/intel/oneapi/setvars.sh.
+        # setvars.sh exports LD_LIBRARY_PATH containing the same MKL/iomp5
+        # dirs that the wheel's .so bakes into RUNPATH, which would mask any
+        # rpath bug. The point of this gate is exactly to surface such a
+        # bug — the .so must import unaided by LD_LIBRARY_PATH.
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          python3.13 -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --upgrade pip
+          /tmp/wheel-venv/bin/pip install numpy
+          /tmp/wheel-venv/bin/pip install "$wheel"
+          so=$(ls /tmp/wheel-venv/lib/python3.13/site-packages/_tychopy*.so)
+          echo "Bundled .so RUNPATH (informational):"
+          readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
+          /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"

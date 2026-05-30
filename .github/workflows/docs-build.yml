@@ -1,0 +1,167 @@
+name: docs-build
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'include/tycho/**'
+      - 'src/bindings/**'
+      - 'tychopy/**'
+      - 'scripts/fix_stubs.py'
+      - 'scripts/check_stubs_size.py'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - '.github/workflows/docs-build.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+
+      - name: Install conda clang toolchain
+        shell: bash -elo pipefail {0}
+        # Match the wheel build's toolchain (see wheel-layout.yml) so the
+        # _tychopy.so built here links against conda's libstdc++. This is
+        # the same import-compatibility invariant CLAUDE.md documents for
+        # `pip wheel .`; using the system clang here would risk silent
+        # stubgen empty-output on libstdc++ mismatch.
+        run: |
+          conda install -n tycho -c conda-forge -y \
+            clangxx_linux-64 clang_linux-64 \
+            libstdcxx-devel_linux-64 sysroot_linux-64 \
+            ninja
+
+      - name: Install apt deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Install MKL via apt repository
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel
+
+      - name: Install Python deps
+        shell: bash -elo pipefail {0}
+        run: |
+          conda install -n tycho -c conda-forge -y numpy scipy matplotlib spiceypy
+          pip install nanobind
+          pip install -r docs/requirements-docs.txt
+
+      - name: Cache sphinx doctrees
+        uses: actions/cache@v4
+        with:
+          path: build/docs/.doctrees
+          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
+          restore-keys: |
+            doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
+            doctrees-${{ runner.os }}-
+
+      - name: Configure + build _tychopy
+        shell: bash -elo pipefail {0}
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-clang-conda -DBUILD_SPHINX_DOCS=ON
+          cmake --build build -j$(nproc) --target _tychopy
+
+      - name: Regenerate stubs and assert no drift
+        # Runs BEFORE the slow docs build so drift failures surface fast.
+        # tychopy_stubs_snapshot includes check_stubs_size.py + fix_stubs.py
+        # as post-process steps.
+        shell: bash -elo pipefail {0}
+        run: |
+          cmake --build build --target tychopy_stubs_snapshot
+          if ! git diff --quiet tychopy/_stubs/; then
+            echo "::error::Stub snapshot is stale. Drifted files:"
+            git diff --name-only tychopy/_stubs/ | sed 's/^/  /'
+            echo "::error::Run 'cmake --build build --target tychopy_stubs_snapshot' locally and commit the result."
+            git diff tychopy/_stubs/
+            exit 1
+          fi
+          echo "Stubs are in sync."
+
+      - name: Build docs
+        shell: bash -elo pipefail {0}
+        run: cmake --build build -j2 --target tycho_docs
+
+      - name: Run doctests
+        shell: bash -elo pipefail {0}
+        run: cmake --build build --target tycho_docs_doctest
+
+      - name: VectorFunction Doxygen subsystem-scoped run
+        shell: bash -elo pipefail {0}
+        # Runs Doxygen on the VF subsystem and fails loud on any warning via
+        # WARN_LOGFILE. The base Doxyfile keeps WARN_AS_ERROR=NO during
+        # the docstring-coverage build-up; this subsystem-scoped run is the
+        # forward-pressure gate that catches new @-syntax mistakes and
+        # broken cross-refs as they land, without committing the whole
+        # codebase to WARN_AS_ERROR=YES today.
+        run: |
+          cp build/docs/Doxyfile /tmp/Doxyfile.vf
+          cat >> /tmp/Doxyfile.vf <<EOF
+          INPUT = ${{ github.workspace }}/include/tycho/vector_functions.h ${{ github.workspace }}/include/tycho/detail/vf
+          OUTPUT_DIRECTORY = /tmp/doxygen-vf
+          WARN_LOGFILE = /tmp/doxygen-vf/warnings.log
+          EOF
+          doxygen /tmp/Doxyfile.vf
+          # Doxygen exits 0 even when WARN_AS_ERROR=NO suppresses real
+          # failures; assert XML was actually produced AND that no warnings
+          # were captured so a broken config cannot silently pass.
+          test -s /tmp/doxygen-vf/xml/index.xml
+          if [ -s /tmp/doxygen-vf/warnings.log ]; then
+            echo "::error::Doxygen emitted warnings on VF subsystem:"
+            cat /tmp/doxygen-vf/warnings.log
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+      - name: Upload PR-preview artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html-${{ github.event.pull_request.number }}
+          path: build/docs/html
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4

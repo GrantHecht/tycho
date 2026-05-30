@@ -1,0 +1,50 @@
+name: docs-linkcheck
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  linkcheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.13'
+          activate-environment: tycho
+      - name: Install deps
+        shell: bash -el {0}
+        run: |
+          pip install -r docs/requirements-docs.txt
+      - name: Run linkcheck (Sphinx only, no extension build)
+        # Linkcheck doesn't need C++ build — we only check external links in
+        # the .md / .rst source. Skips autodoc imports that would need tychopy.
+        shell: bash -el {0}
+        run: |
+          # Suppress autodoc / breathe by using nitpicky off and disabling
+          # extensions that need imports/Doxygen output. Linkcheck is
+          # intentionally less strict than the docs-build lane.
+          sphinx-build -b linkcheck \
+            -D nitpicky=0 \
+            -D extensions=myst_parser,sphinx_design,sphinx_copybutton,sphinx_togglebutton \
+            docs/source /tmp/linkcheck
+
+      - name: Open issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `docs-linkcheck failed (run ${context.runId})`,
+              body: `Weekly linkcheck failed.\n\n[Run log](${url})\n\nFix the broken links in \`docs/source/\` or close this issue if the links are intentionally redirected.`,
+              labels: ['docs', 'ci-failure'],
+            });

@@ -266,7 +266,7 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 //    matter for a fused-iteration NLP solver that reads J and H
 //    in the same cache line.
 //
-// **Reference history.**  See `doc/EnzymeAD_FutureWork.md` for the
+// **Reference history.**  See `docs/dev/notes/EnzymeAD_FutureWork.md` for the
 // canonical revival commit chain (Phase 6 FoR-SIMD, Phase 7 FoF-SIMD,
 // Phase 7+ doubly-batched, archive); SHAs are kept there to avoid
 // rebase-rot in this header.
@@ -276,7 +276,7 @@ inline void enzyme_for_outer_wrapper_simd(const Derived* self,
 // test_enzyme_vectorized.cpp), the matching
 // `BM_Poly8x4_HessianFoFSIMD_singly|doubly` benches, and the
 // MEE-bench-in-its-own-TU `-O1` split pattern.  See
-// `doc/EnzymeAD_FutureWork.md` for the corresponding commits.
+// `docs/dev/notes/EnzymeAD_FutureWork.md` for the corresponding commits.
 //
 // =============================================================================
 #if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward) \
@@ -658,7 +658,7 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
   `#if defined(TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverForward)` blocks
   as a revival reference; the strategy itself is no longer cmake-
   selectable.  See the archive block above the FoF helpers for revival
-  conditions; `doc/EnzymeAD_FutureWork.md` carries the canonical commit
+  conditions; `docs/dev/notes/EnzymeAD_FutureWork.md` carries the canonical commit
   chain.
 */
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
