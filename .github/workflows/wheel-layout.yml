@@ -7,6 +7,7 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
+      - 'include/**'
       - 'src/**'
       - 'tychopy/**'
       - '.github/workflows/wheel-layout.yml'
@@ -18,7 +19,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build-and-inspect:
+  # ---------------------------------------------------------------------------
+  # Compile _tychopy into a wheel exactly once. Every downstream job consumes
+  # this artifact, so the (slow) C++ build never runs more than one time per
+  # workflow invocation.
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,13 +63,34 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           pip wheel . --no-deps -w /tmp/wheels
 
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels/tychopy-*.whl
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Static layout invariants on the packaged wheel (no import / no build).
+  # ---------------------------------------------------------------------------
+  inspect-layout:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4   # for scripts/inspect_wheel_layout.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels
       - name: Inspect wheel layout
-        shell: bash -el {0}
         run: |
           set -euo pipefail
           wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
           if [ -z "$wheel" ]; then
-            echo "::error::no wheel was built"
+            echo "::error::no wheel artifact found"
             exit 1
           fi
           # Layout assertions are implemented in Python (see the script
@@ -73,13 +100,25 @@ jobs:
           # emits only one header row, not two.
           python scripts/inspect_wheel_layout.py "$wheel"
 
-      # Install a parallel system Python 3.13 so we can create a fresh
-      # venv outside the conda env. The wheel is cp313-cp313; ubuntu-latest's
-      # default Python is 3.12, which would refuse the wheel.
+  # ---------------------------------------------------------------------------
+  # Prove the bundled .so imports with no LD_LIBRARY_PATH help, from a fresh
+  # venv outside the conda env.
+  # ---------------------------------------------------------------------------
+  smoke-import:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels
+      # The wheel is cp313-cp313; ubuntu-latest's default Python is 3.12,
+      # which would refuse the wheel.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-
       - name: Smoke-test wheel import (fresh venv, no setvars.sh)
         # This step deliberately does NOT source /opt/intel/oneapi/setvars.sh.
         # setvars.sh exports LD_LIBRARY_PATH containing the same MKL/iomp5
@@ -97,3 +136,38 @@ jobs:
           echo "Bundled .so RUNPATH (informational):"
           readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
           /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
+
+  # ---------------------------------------------------------------------------
+  # Python unit-test suite (tychopy/test/) against the installed wheel. Like
+  # smoke-import, this runs unaided by setvars.sh, so a green run also proves
+  # the suite passes against the packaged artifact as a user would import it.
+  # ---------------------------------------------------------------------------
+  pytest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4   # for the tychopy/test/ sources
+      - uses: actions/download-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install wheel + test dependencies
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          python3.13 -m venv /tmp/test-venv
+          /tmp/test-venv/bin/pip install --upgrade pip
+          # Test extra (pytest + numpy/scipy/matplotlib/spiceypy) from the
+          # wheel's own [test] optional-dependency group, then the wheel.
+          /tmp/test-venv/bin/pip install "${wheel}[test]"
+      - name: Run pytest suite
+        env:
+          MPLBACKEND: Agg
+        run: |
+          set -euo pipefail
+          /tmp/test-venv/bin/python -m pytest tychopy/test --durations=10
