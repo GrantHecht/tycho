@@ -5,12 +5,10 @@ Run as ``python scripts/inspect_wheel_layout.py <wheel-path>``.
 
 Assertions:
 
-* Negative: no entries start with ``include/``, ``lib/``, ``lib64/``,
-  ``share/``, ``bin/``, or ``tychopy/_stubs/``. These are CMake C++
-  distribution prefixes (for ``find_package(tycho)`` consumers via
-  ``cmake --install``) that must not leak into the Python wheel.
-  The negative list mirrors ``[tool.scikit-build] wheel.exclude`` in
-  ``pyproject.toml`` — both must stay in lockstep.
+* Negative: no entries start with any prefix derived from
+  ``[tool.scikit-build].wheel.exclude`` in ``pyproject.toml``. These are
+  CMake C++ distribution prefixes (for ``find_package(tycho)`` consumers
+  via ``cmake --install``) that must not leak into the Python wheel.
 * Positive: exactly one ``_tychopy.cpython-*.so`` at the wheel root
   (PEP 561 layout next to the stubs).
 
@@ -26,14 +24,19 @@ import sys
 import zipfile
 from pathlib import Path
 
-BAD_PREFIXES = (
-    "include/",
-    "lib/",
-    "lib64/",
-    "share/",
-    "bin/",
-    "tychopy/_stubs/",
-)
+import tomllib
+
+_PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+def _load_bad_prefixes() -> tuple[str, ...]:
+    with _PYPROJECT.open("rb") as f:
+        data = tomllib.load(f)
+    excludes = data["tool"]["scikit-build"]["wheel"]["exclude"]
+    return tuple(e.removesuffix("/**").rstrip("/") + "/" for e in excludes)
+
+
+BAD_PREFIXES = _load_bad_prefixes()
 SO_PATTERN = re.compile(r"^_tychopy\.cpython-[^/]+\.so$")
 
 

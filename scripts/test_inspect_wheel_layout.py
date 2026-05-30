@@ -13,8 +13,10 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import tomllib
 
 SCRIPT = Path(__file__).parent / "inspect_wheel_layout.py"
+PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
 def _make_wheel(tmp_path: Path, names: list[str]) -> Path:
@@ -122,3 +124,20 @@ def test_usage_error_no_args() -> None:
     )
     assert result.returncode == 2
     assert "usage:" in result.stderr
+
+
+def test_bad_prefixes_matches_pyproject() -> None:
+    # Guard against silent divergence between the inspector's BAD_PREFIXES
+    # and pyproject.toml's wheel.exclude. The script derives the tuple at
+    # import time; this test asserts the derivation gives the expected
+    # shape (so a future "I'll just hand-edit it" change breaks loudly).
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        import inspect_wheel_layout
+    finally:
+        sys.path.pop(0)
+    with PYPROJECT.open("rb") as f:
+        data = tomllib.load(f)
+    excludes = data["tool"]["scikit-build"]["wheel"]["exclude"]
+    expected = tuple(e.removesuffix("/**").rstrip("/") + "/" for e in excludes)
+    assert inspect_wheel_layout.BAD_PREFIXES == expected
