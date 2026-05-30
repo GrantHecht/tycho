@@ -24,6 +24,13 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in"
     "${DOCS_BUILD_DIR}/Doxyfile"
     @ONLY)
+# Strict, VF-subsystem-scoped Doxygen config: enforces full docstring coverage
+# (undocumented public symbol => hard failure). Consumed by the docs-build CI
+# gate and by the local strict-check command in docs/source/contributing.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.vf-strict.in"
+    "${DOCS_BUILD_DIR}/Doxyfile.vf-strict"
+    @ONLY)
 
 # 2) Doxygen XML target.
 file(GLOB_RECURSE _TYCHO_PUBLIC_HEADERS
