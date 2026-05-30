@@ -124,7 +124,7 @@ install(TARGETS _tychopy LIBRARY DESTINATION .)
 # Dev-install shortcut for PYTHON_LOCAL_INSTALL_DIR (e.g. config_and_build.sh):
 # copies _tychopy.so + the pure-Python package + the committed stub snapshot
 # directly to site-packages after every build. Skipped under scikit-build-core
-# (see CMakeLists.txt:775 — SKBUILD guard).
+# (see the SKBUILD guard in the root CMakeLists.txt).
 if(PYTHON_LOCAL_INSTALL_DIR)
     add_custom_command(TARGET _tychopy POST_BUILD
         # Ensure dest exists — `python -m site --user-site` returns a path
@@ -255,6 +255,6 @@ install(DIRECTORY "${_TYCHOPY_SNAPSHOT_DIR}/_tychopy"
 # NOTE: no py.typed marker is shipped. The committed snapshot under
 # tychopy/_stubs/_tychopy/*.pyi imports nested submodules (kepler, ode_6,
 # ode_x, …) that nanobind_add_stub does not yet generate as separate .pyi
-# files; shipping py.typed today would cause downstream type-checkers to
-# emit reportMissingImports on every consumer. The full nested-stub fix is
-# scoped to the VectorFunction binding-docstring refresh.
+# files; shipping py.typed today would emit reportMissingImports on every
+# downstream consumer. Add py.typed once the nested-submodule stubgen +
+# fix_stubs.py extensions land.
