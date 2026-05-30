@@ -150,34 +150,56 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
 
 template <class Derived, class Func1, class Func2> struct FunctionCrossProduct_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction computing the 3D cross product @f$f_1(x)\times f_2(x)@f$.
+/// @tparam Func1  VectorFunction producing the first (3-vector) operand.
+/// @tparam Func2  VectorFunction producing the second (3-vector) operand.
 template <class Func1, class Func2>
 struct FunctionCrossProduct
     : FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2> {
+    /// @brief Convenience alias for the underlying cross-product implementation.
     using Base = FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 };
 
+/// @internal
+/// @brief Shared implementation of the function-cross-product VectorFunction.
+///
+/// Evaluates both 3-vector operand functions, forms their cross product, and
+/// assembles the corresponding Jacobian and adjoint derivatives.
+/// @tparam Derived  CRTP host type (@ref FunctionCrossProduct).
+/// @tparam Func1    VectorFunction producing the first operand.
+/// @tparam Func2    VectorFunction producing the second operand.
+/// @endinternal
 template <class Derived, class Func1, class Func2>
 struct FunctionCrossProduct_Impl
     : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
-    Func1 func1;
-    Func2 func2;
+    Func1 func1; ///< VectorFunction producing the first operand.
+    Func2 func2; ///< VectorFunction producing the second operand.
 
+    /// @brief Input-domain descriptor (union of the two operands' domains).
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
 #if defined(_WIN32)
-    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        Func1::is_vectorizable &&
+        Func2::is_vectorizable; ///< Vectorizable iff both operands are (Windows only).
 #else
-    static constexpr bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false; ///< Vectorization disabled off Windows.
 #endif
 
+    /// @brief Default constructor; leaves the operand functions unset.
     FunctionCrossProduct_Impl() {}
+    /// @brief Construct from the first and second operand functions.
+    /// @param f1  VectorFunction producing the first operand.
+    /// @param f2  VectorFunction producing the second operand.
     FunctionCrossProduct_Impl(Func1 f1, Func2 f2) : func1(f1), func2(f2) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         this->set_io_rows(irtemp, 3);

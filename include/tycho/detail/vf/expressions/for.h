@@ -34,7 +34,10 @@ template <class Derived, int N, class StartFunc, class BodyFunc> struct For_Impl
 */
 template <int N, class StartFunc, class BodyFunc>
 struct For : For_Impl<For<N, StartFunc, BodyFunc>, N, StartFunc, BodyFunc> {
+    /// @brief CRTP implementation base generating the unrolled loop.
     using Base = For_Impl<For<N, StartFunc, BodyFunc>, N, StartFunc, BodyFunc>;
+    /// @brief Construct the loop from its starting function.
+    /// @param f  Starting function forwarded to the implementation base.
     For(StartFunc f) : Base::For_Impl(f) {};
 };
 
@@ -47,11 +50,24 @@ struct For : For_Impl<For<N, StartFunc, BodyFunc>, N, StartFunc, BodyFunc> {
 template <class Derived, int N, class StartFunc, class BodyFunc>
 struct For_Impl : NestedFunction_Impl<Derived, decltype(BodyFunc::template Definition<N>()),
                                       For_Impl<Derived, N - 1, StartFunc, BodyFunc>> {
+    /// @internal
+    /// @brief Outer function for this level: the body's definition at iteration N.
+    /// @endinternal
     using OFuncType = decltype(BodyFunc::template Definition<N>());
+    /// @internal
+    /// @brief Inner function: the recursively-nested loop of one fewer iteration.
+    /// @endinternal
     using IFuncType = For_Impl<Derived, N - 1, StartFunc, BodyFunc>;
+    /// @internal
+    /// @brief NestedFunction base composing the body over the inner loop.
+    /// @endinternal
     using Base = NestedFunction_Impl<Derived, OFuncType, IFuncType>;
 
     For_Impl() {};
+    /// @internal
+    /// @brief Construct from the starting function, seeding the inner recursion.
+    /// @param f  Starting function affected by the loop.
+    /// @endinternal
     For_Impl(StartFunc f) : Base::NestedFunction_Impl(OFuncType(), IFuncType(f)) {};
 };
 
@@ -62,10 +78,20 @@ struct For_Impl : NestedFunction_Impl<Derived, decltype(BodyFunc::template Defin
 template <class Derived, class StartFunc, class BodyFunc>
 struct For_Impl<Derived, 0, StartFunc, BodyFunc>
     : NestedFunction_Impl<Derived, decltype(BodyFunc::template Definition<0>()), StartFunc> {
+    /// @internal
+    /// @brief Outer function at the base case: the body's definition at iteration 0.
+    /// @endinternal
     using OFuncType = decltype(BodyFunc::template Definition<0>());
+    /// @internal
+    /// @brief NestedFunction base composing the body over the starting function.
+    /// @endinternal
     using Base = NestedFunction_Impl<Derived, OFuncType, StartFunc>;
 
     For_Impl() {};
+    /// @internal
+    /// @brief Construct the base case from the starting function.
+    /// @param inner  Starting function affected by the loop.
+    /// @endinternal
     For_Impl(StartFunc inner) : Base::NestedFunction_Impl(OFuncType(), inner) {};
 };
 

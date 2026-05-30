@@ -26,7 +26,7 @@ namespace tycho::vf {
 /// functions read the partially built vector and append further outputs. All
 /// scratch (the chained input vector and the per-function Jacobian/gradient/
 /// Hessian temporaries) is taken from the thread-local
-/// @ref tycho::utils::BumpAllocator, so no heap allocation occurs per call.
+/// `tycho::utils::BumpAllocator`, so no heap allocation occurs per call.
 ///
 /// @tparam OuterFunc    Final function consuming the fully assembled vector.
 /// @tparam InnerFunc1   First inner function; defines the chain input rows.
@@ -43,7 +43,7 @@ struct NestedCallAndAppendChain2
 
     VF_TYPE_ALIASES(Base);
 
-    OuterFunc outer_func_;  ///< @brief Outer function applied to the assembled vector.
+    OuterFunc outer_func_;   ///< @brief Outer function applied to the assembled vector.
     InnerFunc1 inner_func1_; ///< @brief First inner function (maps the chain input).
 
     std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.
@@ -443,7 +443,7 @@ struct NestedCallAndAppendChain
 
     VF_TYPE_ALIASES(Base);
 
-    OuterFunc outer_func_;  ///< @brief Outer function applied to the assembled vector.
+    OuterFunc outer_func_;   ///< @brief Outer function applied to the assembled vector.
     InnerFunc1 inner_func1_; ///< @brief First inner function (maps the chain input).
 
     std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.

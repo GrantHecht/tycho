@@ -89,14 +89,15 @@ struct InverseNormPower : IntegralNorm_Impl<InverseNormPower<IR, PW>, IR, -PW> {
 /// @endinternal
 template <class Derived, int USZ, int Power>
 struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, USZ, 1>;
     VF_TYPE_ALIASES(Base);
     using Base::compute;
 
-    static constexpr int power = Power; ///< The integer power applied to the norm.
-    static constexpr int pp2 = power - 2;             ///< Helper exponent @f$Power-2@f$.
-    static constexpr int pp4 = power - 4;             ///< Helper exponent @f$Power-4@f$.
-    static constexpr int ppm2 = power * (power - 2);  ///< Helper coefficient @f$Power(Power-2)@f$.
+    static constexpr int power = Power;              ///< The integer power applied to the norm.
+    static constexpr int pp2 = power - 2;            ///< Helper exponent @f$Power-2@f$.
+    static constexpr int pp4 = power - 4;            ///< Helper exponent @f$Power-4@f$.
+    static constexpr int ppm2 = power * (power - 2); ///< Helper coefficient @f$Power(Power-2)@f$.
     // double IntegralNorm_Scale = 1.0;
     static constexpr bool is_vectorizable = true; ///< Norm powers support SuperScalar evaluation.
 

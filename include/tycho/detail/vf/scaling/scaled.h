@@ -308,6 +308,13 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     /// @return True if the wrapped function reports itself linear.
     bool is_linear() const { return func_.is_linear(); }
 
+    /// @internal
+    /// @brief Evaluate the wrapped function and scale its value by the factor.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -315,6 +322,15 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         this->func_.compute(x, fx_);
         fx *= Scalar(this->scale_value_);
     }
+    /// @internal
+    /// @brief Evaluate value and Jacobian, scaling both by the factor.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -325,6 +341,26 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
         fx *= Scalar(this->scale_value_);
         this->func_.scale_jacobian(jx, Scalar(this->scale_value_));
     }
+    /// @internal
+    /// @brief Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian, scaled.
+    ///
+    /// The adjoint variables are pre-scaled so the wrapped function's reverse
+    /// pass yields already-scaled gradient and Hessian; the value and Jacobian
+    /// are then scaled directly.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -348,6 +384,23 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Forward a right-Jacobian product to the wrapped function.
+    ///
+    /// Resolves the left operand to a dense or diagonal reference before
+    /// delegating, so a diagonal scale matrix is multiplied efficiently.
+    ///
+    /// @tparam Target      Concrete Eigen target buffer type.
+    /// @tparam Left        Concrete Eigen left-operand type.
+    /// @tparam Right       Concrete Eigen right-operand type.
+    /// @tparam Assignment  Assignment policy (direct or plus-equals).
+    /// @tparam Aliased     True when the operands alias the target.
+    /// @param  target_     Destination buffer for the product.
+    /// @param  left        Left operand of the product.
+    /// @param  right       Right operand of the product.
+    /// @param  assign      Assignment policy instance.
+    /// @param  aliased     Aliasing flag instance.
+    /// @endinternal
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
     inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                        CEigRef<Right> right, Assignment assign,
@@ -362,35 +415,96 @@ struct Scaled_Impl : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivati
             this->func_.right_jacobian_product(target_, left_ref, right_ref, assign, aliased);
         }
     }
+    /// @internal
+    /// @brief Forward a symmetric Jacobian product to the wrapped function.
+    /// @tparam Target      Concrete Eigen target buffer type.
+    /// @tparam Left        Concrete Eigen left-operand type.
+    /// @tparam Right       Concrete Eigen right-operand type.
+    /// @tparam Assignment  Assignment policy (direct or plus-equals).
+    /// @tparam Aliased     True when the operands alias the target.
+    /// @param  target_     Destination buffer for the product.
+    /// @param  left        Left operand of the product.
+    /// @param  right       Right operand of the product.
+    /// @param  assign      Assignment policy instance.
+    /// @param  aliased     Aliasing flag instance.
+    /// @endinternal
     template <class Target, class Left, class Right, class Assignment, bool Aliased>
     inline void symetric_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                           CEigRef<Right> right, Assignment assign,
                                           std::bool_constant<Aliased> aliased) const {
         this->func_.symetric_jacobian_product(target_, left, right, assign, aliased);
     }
+    /// @internal
+    /// @brief Forward a Jacobian accumulation to the wrapped function.
+    /// @tparam Target      Concrete Eigen target buffer type.
+    /// @tparam JacType     Concrete Eigen Jacobian source type.
+    /// @tparam Assignment  Assignment policy (direct or plus-equals).
+    /// @param  target_     Destination buffer.
+    /// @param  right       Jacobian contribution to accumulate.
+    /// @param  assign      Assignment policy instance.
+    /// @endinternal
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
                                     Assignment assign) const {
         this->func_.accumulate_jacobian(target_, right, assign);
     }
+    /// @internal
+    /// @brief Forward a gradient accumulation to the wrapped function.
+    /// @tparam Target      Concrete Eigen target buffer type.
+    /// @tparam JacType     Concrete Eigen gradient source type.
+    /// @tparam Assignment  Assignment policy (direct or plus-equals).
+    /// @param  target_     Destination buffer.
+    /// @param  right       Gradient contribution to accumulate.
+    /// @param  assign      Assignment policy instance.
+    /// @endinternal
     template <class Target, class JacType, class Assignment>
     inline void accumulate_gradient(CMatRef<Target> target_, CMatRef<JacType> right,
                                     Assignment assign) const {
         this->func_.accumulate_gradient(target_, right, assign);
     }
+    /// @internal
+    /// @brief Forward a Hessian accumulation to the wrapped function.
+    /// @tparam Target      Concrete Eigen target buffer type.
+    /// @tparam JacType     Concrete Eigen Hessian source type.
+    /// @tparam Assignment  Assignment policy (direct or plus-equals).
+    /// @param  target_     Destination buffer.
+    /// @param  right       Hessian contribution to accumulate.
+    /// @param  assign      Assignment policy instance.
+    /// @endinternal
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
                                    Assignment assign) const {
         this->func_.accumulate_hessian(target_, right, assign);
     }
+    /// @internal
+    /// @brief Forward a scalar Jacobian scaling to the wrapped function.
+    /// @tparam Target  Concrete Eigen target buffer type.
+    /// @tparam Scalar  Scalar factor type.
+    /// @param  target_ Jacobian buffer to scale in place.
+    /// @param  s       Scalar factor.
+    /// @endinternal
     template <class Target, class Scalar>
     inline void scale_jacobian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_jacobian(target_, s);
     }
+    /// @internal
+    /// @brief Forward a scalar gradient scaling to the wrapped function.
+    /// @tparam Target  Concrete Eigen target buffer type.
+    /// @tparam Scalar  Scalar factor type.
+    /// @param  target_ Gradient buffer to scale in place.
+    /// @param  s       Scalar factor.
+    /// @endinternal
     template <class Target, class Scalar>
     inline void scale_gradient(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_gradient(target_, s);
     }
+    /// @internal
+    /// @brief Forward a scalar Hessian scaling to the wrapped function.
+    /// @tparam Target  Concrete Eigen target buffer type.
+    /// @tparam Scalar  Scalar factor type.
+    /// @param  target_ Hessian buffer to scale in place.
+    /// @param  s       Scalar factor.
+    /// @endinternal
     template <class Target, class Scalar>
     inline void scale_hessian(CMatRef<Target> target_, Scalar s) const {
         this->func_.scale_hessian(target_, s);

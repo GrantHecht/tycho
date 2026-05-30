@@ -19,32 +19,54 @@ namespace tycho::vf {
 
 template <class Derived, class VecFunc, class ScalFunc> struct VectorScalarFunctionDivision_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction dividing a vector function by a scalar function @f$v(x)/s(x)@f$.
+/// @tparam VecFunc   Vector-valued VectorFunction numerator.
+/// @tparam ScalFunc  Scalar-valued VectorFunction denominator.
 template <class VecFunc, class ScalFunc>
 struct VectorScalarFunctionDivision
     : VectorScalarFunctionDivision_Impl<VectorScalarFunctionDivision<VecFunc, ScalFunc>, VecFunc,
                                         ScalFunc> {
+    /// @brief Convenience alias for the underlying vector-scalar-division implementation.
     using Base = VectorScalarFunctionDivision_Impl<VectorScalarFunctionDivision<VecFunc, ScalFunc>,
                                                    VecFunc, ScalFunc>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of the vector-divided-by-scalar-function VectorFunction.
+///
+/// Computes the elementwise quotient of a vector-valued function by a
+/// scalar-valued function and assembles the corresponding derivatives.
+/// @tparam Derived   CRTP host type (@ref VectorScalarFunctionDivision).
+/// @tparam VecFunc   Vector-valued VectorFunction numerator.
+/// @tparam ScalFunc  Scalar-valued VectorFunction denominator.
+/// @endinternal
 template <class Derived, class VecFunc, class ScalFunc>
 struct VectorScalarFunctionDivision_Impl
     : VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC>;
     VF_TYPE_ALIASES(Base);
 
     using Base::compute;
 
-    VecFunc vectorfunc;
-    ScalFunc scalarfunc;
+    VecFunc vectorfunc;  ///< The vector-valued numerator function.
+    ScalFunc scalarfunc; ///< The scalar-valued denominator function.
 
+    /// @brief Input-domain descriptor (union of the two operands' domains).
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename VecFunc::INPUT_DOMAIN, typename ScalFunc::INPUT_DOMAIN>;
-    static constexpr bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        VecFunc::is_vectorizable &&
+        ScalFunc::is_vectorizable; ///< Vectorizable iff both operands are.
 
+    /// @brief Default constructor; leaves the operand functions unset.
     VectorScalarFunctionDivision_Impl() {}
+    /// @brief Construct from the vector-valued numerator and scalar-valued denominator.
+    /// @param f1  The vector-valued numerator function.
+    /// @param f2  The scalar-valued denominator function.
     VectorScalarFunctionDivision_Impl(VecFunc f1, ScalFunc f2)
         : vectorfunc(std::move(f1)), scalarfunc(std::move(f2)) {
         int irtemp = std::max(this->vectorfunc.input_rows(), this->scalarfunc.input_rows());
@@ -61,12 +83,22 @@ struct VectorScalarFunctionDivision_Impl
         }
     }
 
+    /// @brief True when the numerator is a (possibly scaled) segment selector.
     static constexpr bool vectorfunc_is_segment =
         Is_Segment<VecFunc>::value || Is_ScaledSegment<VecFunc>::value;
+    /// @brief True when the denominator is a (possibly scaled) segment selector.
     static constexpr bool scalarfunc_is_segment =
         Is_Segment<ScalFunc>::value || Is_ScaledSegment<ScalFunc>::value;
+    /// @brief True when both operands are segment selectors (enables a fast path).
     static constexpr bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
 
+    /// @internal
+    /// @brief Evaluate the numerator and divide it by the scalar denominator.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -82,6 +114,15 @@ struct VectorScalarFunctionDivision_Impl
 
         // f/g
     }
+    /// @internal
+    /// @brief Evaluate the quotient and its Jacobian via the quotient rule.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -115,6 +156,21 @@ struct VectorScalarFunctionDivision_Impl
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(1, irows));
     }
+    /// @internal
+    /// @brief Evaluate the quotient, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

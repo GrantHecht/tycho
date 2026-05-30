@@ -20,32 +20,54 @@ namespace tycho::vf {
 
 template <class Derived, class VecFunc, class ScalFunc> struct VectorScalarFunctionProduct_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction scaling a vector function by a scalar function @f$s(x)\,v(x)@f$.
+/// @tparam VecFunc   Vector-valued VectorFunction factor.
+/// @tparam ScalFunc  Scalar-valued VectorFunction factor.
 template <class VecFunc, class ScalFunc>
 struct VectorScalarFunctionProduct
     : VectorScalarFunctionProduct_Impl<VectorScalarFunctionProduct<VecFunc, ScalFunc>, VecFunc,
                                        ScalFunc> {
+    /// @brief Convenience alias for the underlying vector-scalar-product implementation.
     using Base = VectorScalarFunctionProduct_Impl<VectorScalarFunctionProduct<VecFunc, ScalFunc>,
                                                   VecFunc, ScalFunc>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of the vector-times-scalar-function VectorFunction.
+///
+/// Computes the elementwise product of a vector-valued function with a
+/// scalar-valued function and assembles the corresponding derivatives.
+/// @tparam Derived   CRTP host type (@ref VectorScalarFunctionProduct).
+/// @tparam VecFunc   Vector-valued VectorFunction factor.
+/// @tparam ScalFunc  Scalar-valued VectorFunction factor.
+/// @endinternal
 template <class Derived, class VecFunc, class ScalFunc>
 struct VectorScalarFunctionProduct_Impl
     : VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, SZ_MAX<VecFunc::IRC, ScalFunc::IRC>::value, VecFunc::ORC>;
     VF_TYPE_ALIASES(Base);
 
     using Base::compute;
 
-    VecFunc vectorfunc;
-    ScalFunc scalarfunc;
+    VecFunc vectorfunc;  ///< The vector-valued factor function.
+    ScalFunc scalarfunc; ///< The scalar-valued factor function.
 
+    /// @brief Input-domain descriptor (union of the two factors' domains).
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename VecFunc::INPUT_DOMAIN, typename ScalFunc::INPUT_DOMAIN>;
-    static constexpr bool is_vectorizable = VecFunc::is_vectorizable && ScalFunc::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        VecFunc::is_vectorizable &&
+        ScalFunc::is_vectorizable; ///< Vectorizable iff both factors are.
 
+    /// @brief Default constructor; leaves the factor functions unset.
     VectorScalarFunctionProduct_Impl() {}
+    /// @brief Construct from the vector-valued and scalar-valued factor functions.
+    /// @param f1  The vector-valued factor function.
+    /// @param f2  The scalar-valued factor function.
     VectorScalarFunctionProduct_Impl(VecFunc f1, ScalFunc f2)
         : vectorfunc(std::move(f1)), scalarfunc(std::move(f2)) {
         int irtemp = std::max(this->vectorfunc.input_rows(), this->scalarfunc.input_rows());
@@ -62,12 +84,22 @@ struct VectorScalarFunctionProduct_Impl
         }
     }
 
+    /// @brief True when the vector factor is a (possibly scaled) segment selector.
     static constexpr bool vectorfunc_is_segment =
         Is_Segment<VecFunc>::value || Is_ScaledSegment<VecFunc>::value;
+    /// @brief True when the scalar factor is a (possibly scaled) segment selector.
     static constexpr bool scalarfunc_is_segment =
         Is_Segment<ScalFunc>::value || Is_ScaledSegment<ScalFunc>::value;
+    /// @brief True when both factors are segment selectors (enables a fast path).
     static constexpr bool is_prod_of_segments = vectorfunc_is_segment && scalarfunc_is_segment;
 
+    /// @internal
+    /// @brief Evaluate the vector factor and scale it by the scalar factor.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -78,6 +110,15 @@ struct VectorScalarFunctionProduct_Impl
         this->scalarfunc.compute(x, fxs);
         fx *= fxs[0];
     }
+    /// @internal
+    /// @brief Evaluate the scaled vector and its Jacobian via the product rule.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -99,6 +140,21 @@ struct VectorScalarFunctionProduct_Impl
         using JType = typename ScalFunc::template Jacobian<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<JType>(1, irows));
     }
+    /// @internal
+    /// @brief Evaluate the scaled vector, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
