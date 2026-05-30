@@ -42,7 +42,7 @@ struct For : For_Impl<For<N, StartFunc, BodyFunc>, N, StartFunc, BodyFunc> {
 /*!
   Uses template recursion to generate a function with the same effect as a for
   loop. The i-th level in the recursion inherits from the NestedFunction of
-  BodyFunc::Definition<i> with For_Impl<i-1, StartFunc, BodyFunc>.
+  `BodyFunc::Definition<i>` with `For_Impl<i-1, StartFunc, BodyFunc>`.
 */
 template <class Derived, int N, class StartFunc, class BodyFunc>
 struct For_Impl : NestedFunction_Impl<Derived, decltype(BodyFunc::template Definition<N>()),

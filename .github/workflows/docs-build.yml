@@ -65,7 +65,7 @@ jobs:
       - name: Install Python deps
         shell: bash -elo pipefail {0}
         run: |
-          conda install -n tycho -c conda-forge numpy scipy matplotlib spiceypy
+          conda install -n tycho -c conda-forge -y numpy scipy matplotlib spiceypy
           pip install nanobind
           pip install -r docs/requirements-docs.txt
 
