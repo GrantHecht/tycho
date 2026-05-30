@@ -97,8 +97,8 @@ class PSIOPT {
     void set_max_iterations(int n);
 
     /// @brief Run the optimizer.
-    /// @param  x0  Initial decision vector, shape (nx).
-    /// @return     Exit code; ::ConvergedOptimal on success.
+    /// @param  x0  Initial decision vector, shape (n,).
+    /// @return     Exit code; tycho::ExitCode::ConvergedOptimal on success.
     /// @throws std::runtime_error if the linear-solver factorization fails.
     ExitCode solve(Eigen::Ref<const Eigen::VectorXd> x0);
 
@@ -160,8 +160,8 @@ A change to one must be mirrored to the other.
 ```
 
 For every Python-facing symbol that originates from C++ (i.e., every
-public nanobind binding in `src/bindings/`), there are *two* separate
-docstrings that document the same logical function:
+public nanobind binding in `src/bindings/`), there should be *two*
+separate docstrings that document the same logical function:
 
 1. The **C++ Doxygen docstring** in `include/tycho/...` — describes
    the symbol for C++ users browsing the C++ reference.
@@ -169,6 +169,13 @@ docstrings that document the same logical function:
    `R"doc(...)doc"` argument inside the `.def(..., R"doc(...)doc")`
    call in `src/bindings/...` — describes the same symbol for Python
    users browsing the Python reference.
+
+```{note}
+This is the go-forward convention: most existing bindings do not yet
+carry an `R"doc(...)doc"` Python docstring, and are being migrated as
+files are touched (the same incremental approach as the JavaDoc
+migration above). **New and updated bindings must supply both.**
+```
 
 These document the *same logical function* but for different audiences
 and type systems. If you edit one, edit the other. The PR template
@@ -216,6 +223,9 @@ nb::class_<PSIOPT>(m, "PSIOPT",
 ```
 
 ### Example: pure-Python module
+
+The `make_kepler_phase` / `make_cr3bp_phase` helpers below are illustrative
+(not shipped APIs) — they exist only to show docstring structure.
 
 ```python
 def make_kepler_phase(mu: float, t0: float, t1: float) -> ODEPhase:

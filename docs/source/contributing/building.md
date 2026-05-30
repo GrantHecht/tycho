@@ -186,6 +186,11 @@ not a docs-tooling-only install, so expect a multi-minute native build the
 first time and make sure the conda toolchain is active (see the platform
 sections above).
 
+The `[docs]` extra is mirrored by `docs/requirements-docs.txt`, which is the
+pinned list the docs CI (`.github/workflows/docs-build.yml`) installs. If you
+are reproducing the CI docs build rather than developing locally, install that
+file instead: `pip install -r docs/requirements-docs.txt`.
+
 Additional docs targets:
 
 - `tycho_doxygen` — Doxygen XML output only (fast, no Sphinx)

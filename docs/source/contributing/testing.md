@@ -7,7 +7,7 @@ maps each one to its tool and scope.
 | Layer              | Tool                      | Scope                                                |
 | ------------------ | ------------------------- | ---------------------------------------------------- |
 | Python unit tests  | `pytest`                  | Python-API + bindings regression (`tychopy/test/`)   |
-| Python examples    | `scripts/run_examples.py` | 32 example scripts under `examples/python_examples/` |
+| Python examples    | `scripts/run_examples.py` | 32 example scripts (incl. `MeshRefinement/` subdir)  |
 | C++ unit tests     | Google Test + CTest       | Subsystem-level correctness (`tests/cpp/`)           |
 | C++ benchmarks     | `bench/bench_track.sh`    | Performance regressions on the core solve paths      |
 
@@ -47,10 +47,11 @@ Useful invocations:
 
 ## Python examples (integration suite)
 
-The 32 Python scripts under `examples/python_examples/` double as Tycho's
-integration test suite. Each script is run by `scripts/run_examples.py`,
-which captures stdout / stderr and treats a non-zero exit code as a
-failure.
+The 32 example scripts enumerated by `scripts/run_examples.py` (under
+`examples/python_examples/`, including the `MeshRefinement/` subdirectory)
+double as Tycho's integration test suite. Each script is run by that
+runner, which captures stdout / stderr and treats a non-zero exit code as
+a failure.
 
 ```bash
 conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
