@@ -18,30 +18,52 @@
 
 namespace tycho::vf {
 
+/// @brief Call-and-append composition chain using bump-allocated scratch buffers.
+///
+/// Evaluates a chain of inner functions that each append their output to a
+/// growing intermediate vector, then feeds the assembled vector to an outer
+/// function. The first inner function maps the original input; subsequent inner
+/// functions read the partially built vector and append further outputs. All
+/// scratch (the chained input vector and the per-function Jacobian/gradient/
+/// Hessian temporaries) is taken from the thread-local
+/// @ref tycho::utils::BumpAllocator, so no heap allocation occurs per call.
+///
+/// @tparam OuterFunc    Final function consuming the fully assembled vector.
+/// @tparam InnerFunc1   First inner function; defines the chain input rows.
+/// @tparam InnerFuncs   Remaining inner functions appended in order.
+/// @ingroup vf
 template <class OuterFunc, class InnerFunc1, class... InnerFuncs>
 struct NestedCallAndAppendChain2
     : VectorFunction<NestedCallAndAppendChain2<OuterFunc, InnerFunc1, InnerFuncs...>,
                      InnerFunc1::IRC, OuterFunc::ORC> {
+    /// @brief VectorFunction base: inner-1 input rows to outer output rows.
     using Base = VectorFunction<NestedCallAndAppendChain2<OuterFunc, InnerFunc1, InnerFuncs...>,
                                 InnerFunc1::IRC, OuterFunc::ORC>;
     using Base::compute;
 
     VF_TYPE_ALIASES(Base);
 
-    OuterFunc outer_func_;
-    InnerFunc1 inner_func1_;
+    OuterFunc outer_func_;  ///< @brief Outer function applied to the assembled vector.
+    InnerFunc1 inner_func1_; ///< @brief First inner function (maps the chain input).
 
-    std::tuple<InnerFuncs...> inner_funcs_;
+    std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.
 
+    /// @brief Input-domain descriptor inherited from the first inner function.
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
     static constexpr bool is_vectorizable =
-        InnerFunc1::is_vectorizable && OuterFunc::is_vectorizable;
+        InnerFunc1::is_vectorizable &&
+        OuterFunc::is_vectorizable; ///< @brief True only if every stage is vectorizable.
 
-    static constexpr int SizeInnerFuncs = sizeof...(InnerFuncs);
+    static constexpr int SizeInnerFuncs =
+        sizeof...(InnerFuncs); ///< @brief Count of inner functions beyond the first.
 
+    /// @brief Default-construct an empty chain.
     NestedCallAndAppendChain2() {}
 
+    /// @brief Construct from an outer function and a tuple of inner functions.
+    /// @param outer_func_  Final function consuming the assembled vector.
+    /// @param inner_funct  Tuple of all inner functions (first plus the rest).
     NestedCallAndAppendChain2(OuterFunc outer_func_,
                               std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func_(std::move(outer_func_)) {
@@ -56,6 +78,11 @@ struct NestedCallAndAppendChain2
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @brief Assemble the chained vector and evaluate the outer function.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -78,6 +105,18 @@ struct NestedCallAndAppendChain2
             Impl, tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(
                       this->outer_func_.input_rows(), 1));
     }
+    /// @brief Assemble the chained vector and evaluate value plus Jacobian.
+    ///
+    /// Computes each stage's Jacobian into bump-allocated temporaries, then
+    /// applies the chain rule via reverse right-Jacobian products to fold them
+    /// into the outer Jacobian columns.
+    ///
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -157,6 +196,25 @@ struct NestedCallAndAppendChain2
         );
     }
 
+    /// @brief Assemble the chain and evaluate value, Jacobian, adjoint gradient,
+    ///        and adjoint Hessian (bump-allocated scratch variant).
+    ///
+    /// Runs the forward chain, then a reverse sweep accumulating adjoint
+    /// gradients and Hessians across stages via right-Jacobian products and
+    /// the per-stage `accumulate_*` operations.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -362,36 +420,64 @@ struct NestedCallAndAppendChain2
     }
 };
 
+/// @brief Call-and-append composition chain using stack-allocated scratch.
+///
+/// Functionally equivalent to @ref NestedCallAndAppendChain2 — inner functions
+/// successively append outputs to an intermediate vector that the outer function
+/// then consumes — but holds the per-stage temporaries as ordinary stack
+/// locals rather than drawing them from the bump allocator. A compile-time
+/// @ref ReverseAlg flag selects an alternative reverse-mode Hessian assembly.
+///
+/// @tparam OuterFunc    Final function consuming the fully assembled vector.
+/// @tparam InnerFunc1   First inner function; defines the chain input rows.
+/// @tparam InnerFuncs   Remaining inner functions appended in order.
+/// @ingroup vf
 template <class OuterFunc, class InnerFunc1, class... InnerFuncs>
 struct NestedCallAndAppendChain
     : VectorFunction<NestedCallAndAppendChain<OuterFunc, InnerFunc1, InnerFuncs...>,
                      InnerFunc1::IRC, OuterFunc::ORC> {
+    /// @brief VectorFunction base: inner-1 input rows to outer output rows.
     using Base = VectorFunction<NestedCallAndAppendChain<OuterFunc, InnerFunc1, InnerFuncs...>,
                                 InnerFunc1::IRC, OuterFunc::ORC>;
     using Base::compute;
 
     VF_TYPE_ALIASES(Base);
 
-    OuterFunc outer_func_;
-    InnerFunc1 inner_func1_;
+    OuterFunc outer_func_;  ///< @brief Outer function applied to the assembled vector.
+    InnerFunc1 inner_func1_; ///< @brief First inner function (maps the chain input).
 
-    std::tuple<InnerFuncs...> inner_funcs_;
+    std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.
 
+    /// @brief Input-domain descriptor inherited from the first inner function.
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
-    static constexpr bool ReverseAlg = false;
-    static constexpr int SizeInnerFuncs = sizeof...(InnerFuncs);
+    static constexpr bool ReverseAlg =
+        false; ///< @brief Select the reverse-mode Hessian assembly path when true.
+    static constexpr int SizeInnerFuncs =
+        sizeof...(InnerFuncs); ///< @brief Count of inner functions beyond the first.
 
+    /// @brief Default-construct an empty chain.
     NestedCallAndAppendChain() {}
+    /// @brief Construct from an outer function and the inner functions as a pack.
+    /// @param outer_func_   Final function consuming the assembled vector.
+    /// @param inner_func1_  First inner function.
+    /// @param inner_funcs_  Remaining inner functions.
     NestedCallAndAppendChain(OuterFunc outer_func_, InnerFunc1 inner_func1_,
                              InnerFuncs... inner_funcs_)
         : outer_func_(std::move(outer_func_)), inner_func1_(std::move(inner_func1_)),
           inner_funcs_(inner_funcs_...) {}
+    /// @brief Construct from an outer function, first inner, and rest as a tuple.
+    /// @param outer_func_   Final function consuming the assembled vector.
+    /// @param inner_func1_  First inner function.
+    /// @param inner_funcs_  Tuple of the remaining inner functions.
     NestedCallAndAppendChain(OuterFunc outer_func_, InnerFunc1 inner_func1_,
                              std::tuple<InnerFuncs...> inner_funcs_)
         : outer_func_(std::move(outer_func_)), inner_func1_(std::move(inner_func1_)),
           inner_funcs_(inner_funcs_) {}
 
+    /// @brief Construct from an outer function and a tuple of all inner functions.
+    /// @param outer_func_  Final function consuming the assembled vector.
+    /// @param inner_funct  Tuple of all inner functions (first plus the rest).
     NestedCallAndAppendChain(OuterFunc outer_func_,
                              std::tuple<InnerFunc1, InnerFuncs...> inner_funct)
         : outer_func_(std::move(outer_func_)) {
@@ -404,6 +490,11 @@ struct NestedCallAndAppendChain
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @brief Assemble the chained vector and evaluate the outer function.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -427,6 +518,17 @@ struct NestedCallAndAppendChain
 
         this->outer_func_.compute(xchain, fx_);
     }
+    /// @brief Assemble the chained vector and evaluate value plus Jacobian.
+    ///
+    /// Computes each stage's Jacobian into stack locals, then folds them into
+    /// the outer Jacobian columns via reverse right-Jacobian products.
+    ///
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -491,6 +593,26 @@ struct NestedCallAndAppendChain
             jx_o.template leftCols<Base::IRC>(this->input_rows());
     }
 
+    /// @brief Assemble the chain and evaluate value, Jacobian, adjoint gradient,
+    ///        and adjoint Hessian (stack-scratch variant).
+    ///
+    /// Runs the forward chain, then a reverse sweep accumulating adjoint
+    /// gradients and Hessians. When @ref ReverseAlg is true an alternative
+    /// reverse-mode Hessian path is used; otherwise an explicit total-Jacobian
+    /// (`j0s`) assembly folds the stage Hessians into @p adjhess_.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

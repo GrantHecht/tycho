@@ -19,33 +19,78 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Forward declaration of the function-composition implementation.
+/// @tparam Derived    CRTP most-derived type (the user-facing @ref NestedFunction).
+/// @tparam OuterFunc  Outer function applied last.
+/// @tparam InnerFunc  Inner function applied first.
+/// @endinternal
 template <class Derived, class OuterFunc, class InnerFunc> struct NestedFunction_Impl;
 
+/// @brief Function composition: `f(x) = OuterFunc(InnerFunc(x))`.
+///
+/// The return type of `.eval()` / function-of-function composition in the DSL.
+/// Evaluates @p InnerFunc on the input, feeds the result to @p OuterFunc, and
+/// applies the chain rule for the Jacobian/gradient/Hessian.
+///
+/// @tparam OuterFunc  Outer function applied last.
+/// @tparam InnerFunc  Inner function applied first.
+/// @ingroup vf
 template <class OuterFunc, class InnerFunc>
 struct NestedFunction
     : NestedFunction_Impl<NestedFunction<OuterFunc, InnerFunc>, OuterFunc, InnerFunc> {
+    /// @brief Composition implementation base.
     using Base = NestedFunction_Impl<NestedFunction<OuterFunc, InnerFunc>, OuterFunc, InnerFunc>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
 //////////////////////////////////////////////////////////////////////
+/// @internal
+/// @brief CRTP implementation of @ref NestedFunction composition.
+///
+/// Holds the outer and inner functions, validates that the inner output size
+/// matches the outer input size, and implements the chain-rule derivative
+/// assembly (using bump-allocated scratch for the intermediate value and
+/// Jacobian/gradient/Hessian buffers). A `Segment` outer function is handled by
+/// a cheaper slice path.
+///
+/// @tparam Derived    CRTP most-derived type (the user-facing @ref NestedFunction).
+/// @tparam OuterFunc  Outer function applied last.
+/// @tparam InnerFunc  Inner function applied first.
+/// @endinternal
 template <class Derived, class OuterFunc, class InnerFunc>
 struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::ORC> {
+    /// @internal
+    /// @brief VectorFunction base: inner input rows to outer output rows.
+    /// @endinternal
     using Base = VectorFunction<Derived, InnerFunc::IRC, OuterFunc::ORC>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
-    OuterFunc outer_func_;
-    InnerFunc inner_func_;
+    OuterFunc outer_func_; ///< @brief Outer function applied last.
+    InnerFunc inner_func_; ///< @brief Inner function applied first.
 
+    /// @internal
+    /// @brief Input-domain descriptor inherited from the inner function.
+    /// @endinternal
     using INPUT_DOMAIN = typename InnerFunc::INPUT_DOMAIN;
     static constexpr bool is_linear_function =
-        OuterFunc::is_linear_function && InnerFunc::is_linear_function;
+        OuterFunc::is_linear_function &&
+        InnerFunc::is_linear_function; ///< @brief True if both stages are linear.
     static constexpr bool is_vectorizable =
-        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+        OuterFunc::is_vectorizable &&
+        InnerFunc::is_vectorizable; ///< @brief True if both stages are vectorizable.
 
+    /// @internal
+    /// @brief Default-construct an empty composition.
+    /// @endinternal
     NestedFunction_Impl() {}
+    /// @internal
+    /// @brief Construct from outer and inner functions, validating sizes.
+    /// @param ofunc  Outer function (applied last).
+    /// @param ifunc  Inner function (applied first).
+    /// @endinternal
     NestedFunction_Impl(OuterFunc ofunc, InnerFunc ifunc)
         : outer_func_(std::move(ofunc)), inner_func_(std::move(ifunc)) {
         if (this->inner_func_.output_rows() != this->outer_func_.input_rows()) {
@@ -62,6 +107,13 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Evaluate the composition: `fx = OuterFunc(InnerFunc(x))`.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -82,6 +134,20 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
         using FType = typename InnerFunc::template Output<Scalar>;
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
+    /// @internal
+    /// @brief Evaluate value and chain-rule Jacobian of the composition.
+    ///
+    /// Computes the inner Jacobian, the outer Jacobian at the inner output, and
+    /// folds them via a right-Jacobian product. A `Segment` outer function uses
+    /// a cheaper slice path.
+    ///
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -133,6 +199,27 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
                 tycho::utils::TempSpec<OJXType>(outer_OR, outer_IR));
         }
     }
+    /// @internal
+    /// @brief Value, Jacobian, adjoint gradient, and adjoint Hessian of the composition.
+    ///
+    /// Runs the inner and outer passes and applies the second-order chain rule:
+    /// the outer Hessian is pulled back through the inner Jacobian and combined
+    /// with the inner Hessian over the inner function's input sub-domains. A
+    /// `Segment` outer function uses a cheaper slice path.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -255,24 +342,56 @@ struct NestedFunction_Impl : VectorFunction<Derived, InnerFunc::IRC, OuterFunc::
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
 
+/// @internal
+/// @brief Specialization of @ref NestedFunction_Impl for a @ref Segment inner function.
+///
+/// When the inner function is a plain segment, composition is a direct slice of
+/// the input columns/rows rather than a full chain-rule product, so the
+/// derivative assembly is specialized for that cheaper path.
+///
+/// @tparam Derived    CRTP most-derived type.
+/// @tparam OuterFunc  Outer function applied to the sliced input.
+/// @tparam IR         Parent input-row count.
+/// @tparam OR         Segment output-row count.
+/// @tparam ST         Segment start index.
+/// @endinternal
 template <class Derived, class OuterFunc, int IR, int OR, int ST>
 struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     : VectorFunction<Derived, IR, OuterFunc::ORC>, SegStartHolder<ST> {
+    /// @internal
+    /// @brief VectorFunction base: parent input rows to outer output rows.
+    /// @endinternal
     using Base = VectorFunction<Derived, IR, OuterFunc::ORC>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
+    /// @internal
+    /// @brief The segment inner-function type.
+    /// @endinternal
     using InnerFunc = Segment<IR, OR, ST>;
 
-    OuterFunc outer_func_;
+    OuterFunc outer_func_; ///< @brief Outer function applied to the sliced input.
 
+    /// @internal
+    /// @brief Input-domain descriptor inherited from the segment.
+    /// @endinternal
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
     static constexpr bool is_linear_function =
-        OuterFunc::is_linear_function && InnerFunc::is_linear_function;
+        OuterFunc::is_linear_function &&
+        InnerFunc::is_linear_function; ///< @brief True if the outer function is linear.
     static constexpr bool is_vectorizable =
-        OuterFunc::is_vectorizable && InnerFunc::is_vectorizable;
+        OuterFunc::is_vectorizable &&
+        InnerFunc::is_vectorizable; ///< @brief True if the outer function is vectorizable.
 
+    /// @internal
+    /// @brief Default-construct an empty segment-composition.
+    /// @endinternal
     NestedFunction_Impl() {}
+    /// @internal
+    /// @brief Construct from an outer function and a segment, validating sizes.
+    /// @param ofunc  Outer function (applied to the sliced input).
+    /// @param ifunc  The segment selecting the outer function's inputs.
+    /// @endinternal
     NestedFunction_Impl(OuterFunc ofunc, Segment<IR, OR, ST> ifunc) {
         this->outer_func_ = ofunc;
         this->set_seg_start(ifunc.seg_start_);
@@ -292,6 +411,13 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Evaluate the outer function on the sliced input.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Parent input vector.
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         // typedef typename InType::Scalar Scalar;
@@ -301,6 +427,15 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
 
         this->outer_func_.compute(x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx);
     }
+    /// @internal
+    /// @brief Evaluate value and Jacobian, writing into the sliced columns.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Parent input vector.
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer; the sliced columns are written.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -314,6 +449,25 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
             x.template segment<InnerFunc::ORC>(this->seg_start_, size), fx,
             jx.template middleCols<InnerFunc::ORC>(this->seg_start_, size));
     }
+    /// @internal
+    /// @brief Value, Jacobian, adjoint gradient, and adjoint Hessian via the sliced input.
+    ///
+    /// Forwards to the outer function on the selected columns/rows, scattering
+    /// the derivatives into the sliced sub-blocks.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Parent input vector.
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer; sliced columns written.
+    /// @param  adjgrad_ Adjoint-gradient accumulator; sliced rows written.
+    /// @param  adjhess_ Adjoint-Hessian accumulator; sliced block written.
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -337,6 +491,15 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
             adjvars);
     }
 
+    /// @internal
+    /// @brief Accumulate the outer Jacobian into the sliced columns of a target.
+    /// @tparam Target      Concrete Eigen target/output block type.
+    /// @tparam JacType     Concrete Eigen source-Jacobian type.
+    /// @tparam Assignment  Assignment policy.
+    /// @param  target_  Destination block.
+    /// @param  right    Source Jacobian.
+    /// @param  assign   Assignment-policy tag instance.
+    /// @endinternal
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
                                     Assignment assign) const {
@@ -353,6 +516,15 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         }
     }
 
+    /// @internal
+    /// @brief Accumulate the outer Hessian into the sliced block of a target.
+    /// @tparam Target      Concrete Eigen target/output block type.
+    /// @tparam JacType     Concrete Eigen source-Hessian type.
+    /// @tparam Assignment  Assignment policy.
+    /// @param  target_  Destination block.
+    /// @param  right    Source Hessian.
+    /// @param  assign   Assignment-policy tag instance.
+    /// @endinternal
     template <class Target, class JacType, class Assignment>
     inline void accumulate_hessian(CMatRef<Target> target_, CMatRef<JacType> right,
                                    Assignment assign) const {

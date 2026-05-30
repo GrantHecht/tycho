@@ -18,33 +18,79 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Forward declaration of the CwiseFunctionProduct implementation base.
+/// @tparam Derived  CRTP-derived product type.
+/// @tparam Func1    First operand function.
+/// @tparam Func2    Second operand function.
+/// @endinternal
 template <class Derived, class Func1, class Func2> struct CwiseFunctionProduct_Impl;
 
+/// @brief VectorFunction evaluating the element-wise product @f$ f_1 \odot f_2 @f$.
+///
+/// Both operands must share the same input and output sizes; the result has the same
+/// output size, with element @f$ i @f$ equal to @f$ f_{1,i}(x)\,f_{2,i}(x) @f$. Forwards
+/// all compute machinery to CwiseFunctionProduct_Impl.
+/// @tparam Func1  First operand function.
+/// @tparam Func2  Second operand function.
+/// @ingroup vf
 template <class Func1, class Func2>
 struct CwiseFunctionProduct
     : CwiseFunctionProduct_Impl<CwiseFunctionProduct<Func1, Func2>, Func1, Func2> {
+    /// @brief CRTP implementation base providing the compute/derivative methods.
     using Base = CwiseFunctionProduct_Impl<CwiseFunctionProduct<Func1, Func2>, Func1, Func2>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief CRTP implementation base for CwiseFunctionProduct.
+/// @tparam Derived  CRTP-derived product type (CwiseFunctionProduct<Func1, Func2>).
+/// @tparam Func1    First operand function.
+/// @tparam Func2    Second operand function.
+/// @endinternal
 template <class Derived, class Func1, class Func2>
 struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
                                                   SZ_MAX<Func1::ORC, Func2::ORC>::value> {
+    /// @internal
+    /// @brief VectorFunction base sized to the larger of the two operands' I/O rows.
+    /// @endinternal
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value,
                                 SZ_MAX<Func1::ORC, Func2::ORC>::value>;
     VF_TYPE_ALIASES(Base);
 
     using Base::compute;
 
+    /// @internal
+    /// @brief First operand function.
+    /// @endinternal
     Func1 func1;
+    /// @internal
+    /// @brief Second operand function.
+    /// @endinternal
     Func2 func2;
 
+    /// @internal
+    /// @brief Composite input domain merging both operands' domains.
+    /// @endinternal
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
+    /// @internal
+    /// @brief True only when both operands are SIMD-vectorizable.
+    /// @endinternal
     static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
+    /// @internal
+    /// @brief Default constructor; leaves both operands default-constructed.
+    /// @endinternal
     CwiseFunctionProduct_Impl() {}
+    /// @internal
+    /// @brief Construct from two operands, validating sizes and configuring I/O.
+    ///
+    /// Throws std::invalid_argument if the operands' input or output sizes disagree.
+    /// @param f1  First operand function.
+    /// @param f2  Second operand function.
+    /// @endinternal
     CwiseFunctionProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         if (this->func1.output_rows() != this->func2.output_rows()) {
@@ -69,6 +115,13 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Evaluate the element-wise product of the two operands.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the element-wise product.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -85,6 +138,15 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         const int orows = this->output_rows();
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1));
     }
+    /// @internal
+    /// @brief Evaluate the element-wise product and its Jacobian via the product rule.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @tparam JacType  Eigen type of the Jacobian.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the element-wise product.
+    /// @param jx_  Jacobian reference.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -110,6 +172,21 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
         tycho::utils::BumpAllocator::allocate_run(Impl, tycho::utils::TempSpec<FType>(orows, 1),
                                                   tycho::utils::TempSpec<JType>(orows, irows));
     }
+    /// @internal
+    /// @brief Evaluate the product, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen type of the input vector.
+    /// @tparam OutType      Eigen type of the output.
+    /// @tparam JacType      Eigen type of the Jacobian.
+    /// @tparam AdjGradType  Eigen type of the adjoint gradient.
+    /// @tparam AdjHessType  Eigen type of the adjoint Hessian.
+    /// @tparam AdjVarType   Eigen type of the adjoint (dual) variables.
+    /// @param x        Input vector.
+    /// @param fx_      Output reference receiving the element-wise product.
+    /// @param jx_      Jacobian reference.
+    /// @param adjgrad_ Adjoint gradient reference.
+    /// @param adjhess_ Adjoint Hessian reference.
+    /// @param adjvars  Adjoint (dual) variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

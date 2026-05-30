@@ -18,23 +18,43 @@
 
 namespace tycho::vf {
 
+/// @cond INTERNAL
 //! Declaration of \struct NormalizedPower_Impl
 template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
+/// @endcond
 
+/// @ingroup vf
+/// @brief Vector-normalizing VectorFunction @f$x/\|x\|_2@f$ returning the unit direction.
+/// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
 template <int IR> struct Normalized : NormalizedPower_Impl<Normalized<IR>, IR, 1> {
+    /// @brief Convenience alias for the underlying normalized-power implementation.
     using Base = NormalizedPower_Impl<Normalized<IR>, IR, 1>;
 
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @ingroup vf
+/// @brief Vector divided by an integer power of its norm, @f$x/\|x\|_2^{PW}@f$.
+/// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
+/// @tparam PW  Integer power of the norm in the denominator.
 template <int IR, int PW>
 struct NormalizedPower : NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW> {
+    /// @brief Convenience alias for the underlying normalized-power implementation.
     using Base = NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of @ref Normalized and @ref NormalizedPower.
+///
+/// Computes @f$x/\|x\|_2^{PW}@f$ with analytic first and second derivatives,
+/// specialising small integer powers for speed.
+/// @tparam Derived  CRTP host type (@ref Normalized or @ref NormalizedPower).
+/// @tparam IR       Compile-time input/output row count.
+/// @tparam PW       Integer power of the norm in the denominator.
+/// @endinternal
 template <class Derived, int IR, int PW>
 struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     using Base = VectorFunction<Derived, IR, IR>;

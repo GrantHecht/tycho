@@ -44,6 +44,11 @@ struct ParsedInput
         // this->set_input_domain(irr, func_.input_domain());
     }
 
+    /// @brief Gather inner inputs from @p x and evaluate the inner function.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
@@ -59,6 +64,13 @@ struct ParsedInput
             this->func_.compute(xin, fx_);
         }
     }
+    /// @brief Evaluate value and Jacobian, scattering columns to outer indices.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -83,6 +95,23 @@ struct ParsedInput
             }
         }
     }
+    /// @brief Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian.
+    ///
+    /// Inner derivatives are computed on the gathered inputs, then scattered
+    /// back to the outer columns/rows named by @ref varlocs_.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

@@ -18,33 +18,57 @@
 
 namespace tycho::vf {
 
+/// @cond INTERNAL
 template <class Derived, class Func1, class Func2> struct FunctionDotProduct_Impl;
+/// @endcond
 
+/// @ingroup vf
+/// @brief VectorFunction computing the inner product @f$f_1(x)^T f_2(x)@f$.
+///
+/// Both operands must produce vectors of equal length; the single scalar output
+/// is their Euclidean dot product. Provides analytic Jacobian and adjoint Hessian.
+/// @tparam Func1  Left operand VectorFunction.
+/// @tparam Func2  Right operand VectorFunction.
 template <class Func1, class Func2>
 struct FunctionDotProduct
     : FunctionDotProduct_Impl<FunctionDotProduct<Func1, Func2>, Func1, Func2> {
+    /// @brief Convenience alias for the underlying dot-product implementation.
     using Base = FunctionDotProduct_Impl<FunctionDotProduct<Func1, Func2>, Func1, Func2>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of @ref FunctionDotProduct.
+/// @tparam Derived  CRTP host type (@ref FunctionDotProduct).
+/// @tparam Func1    Left operand function.
+/// @tparam Func2    Right operand function.
+/// @endinternal
 template <class Derived, class Func1, class Func2>
 struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 1> {
+    /// @brief Convenience alias for the VectorFunction CRTP base.
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 1>;
     VF_TYPE_ALIASES(Base);
 
     using Base::compute;
 
+    /// @brief True if both operands are plain segments, enabling the direct-segment fast path.
     static constexpr bool IsSegmentOp = Is_Segment<Func1>::value && Is_Segment<Func2>::value;
+    /// @brief True if both operands are vectorizable, enabling SuperScalar evaluation.
     static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
 
+    /// @brief Combined input domain of the two operands.
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
-    Func1 func1;
-    Func2 func2;
+    Func1 func1; ///< Left operand function.
+    Func2 func2; ///< Right operand function.
 
+    /// @brief Default constructor; leaves operands default-constructed.
     FunctionDotProduct_Impl() {}
+    /// @brief Construct from the two operand functions, validating their shapes.
+    /// @param f1  Left operand function.
+    /// @param f2  Right operand function.
     FunctionDotProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         if (this->func1.output_rows() != this->func2.output_rows()) {
@@ -70,6 +94,13 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                                {this->func1.input_domain(), this->func2.input_domain()});
     }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Evaluate the dot product into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -83,11 +114,13 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                                                         this->func2.output_rows()));
         } else {
 
+            /// @cond INTERNAL
             auto Impl = [&](auto &fx1, auto &fx2) {
                 this->func1.compute(x, fx1);
                 this->func2.compute(x, fx2);
                 fx[0] = fx1.dot(fx2);
             };
+            /// @endcond
 
             const int orows = this->func1.output_rows();
 
@@ -100,6 +133,15 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the dot product and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -125,6 +167,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
         } else {
 
+            /// @cond INTERNAL
             auto Impl = [&](auto &fx1, auto &fx2, auto &jx1, auto &jx2) {
                 this->func1.compute_jacobian(x, fx1, jx1);
                 this->func2.compute_jacobian(x, fx2, jx2);
@@ -135,6 +178,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                 this->func2.right_jacobian_product(
                     jx_, fx1.transpose(), jx2, PlusEqualsAssignment(), std::bool_constant<false>());
             };
+            /// @endcond
 
             const int orows = this->func1.output_rows();
             const int irows = this->func1.input_rows();
@@ -152,6 +196,21 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                                                       tycho::utils::TempSpec<JType2>(orows, irows));
         }
     }
+    /// @internal
+    /// @brief Evaluate the dot product, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output scalar (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to accumulate.
+    /// @param adjhess_ Output adjoint Hessian to accumulate.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -197,6 +256,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
 
         } else {
 
+            /// @cond INTERNAL
             auto Impl = [&](auto &fx1, auto &fx2, auto &jx1, auto &jx2, auto &gx2, auto &hx2,
                             auto &adjtemp) {
                 this->func2.compute(x, adjtemp);
@@ -256,6 +316,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                 this->func2.right_jacobian_product(
                     jx_, fx1.transpose(), jx2, PlusEqualsAssignment(), std::bool_constant<false>());
             };
+            /// @endcond
 
             const int orows = this->func1.output_rows();
             const int irows = this->func1.input_rows();
