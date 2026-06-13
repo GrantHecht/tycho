@@ -12,6 +12,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "regression_utils.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace tycho;
@@ -27,6 +28,24 @@ static void expect_vector_match(const Eigen::VectorXd &actual, const Eigen::Vect
     ASSERT_EQ(actual.size(), golden.size()) << label << ": size mismatch";
     for (int i = 0; i < actual.size(); ++i) {
         EXPECT_NEAR(actual[i], golden[i], tol) << label << ": element " << i;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Helper: compare against golden with combined relative + absolute bounds,
+// i.e. |actual - golden| <= atol + rtol * |golden| (numpy allclose semantics).
+// Use this when the state vector mixes magnitudes (e.g. km-scale positions
+// alongside near-zero components), where a single absolute tolerance cannot be
+// both tight on the small elements and loose enough for the large ones.
+///////////////////////////////////////////////////////////////////////////////
+static void expect_vector_close(const Eigen::VectorXd &actual, const Eigen::VectorXd &golden,
+                                double rtol, double atol, const std::string &label) {
+    ASSERT_EQ(actual.size(), golden.size()) << label << ": size mismatch";
+    for (int i = 0; i < actual.size(); ++i) {
+        const double bound = atol + rtol * std::abs(golden[i]);
+        EXPECT_LE(std::abs(actual[i] - golden[i]), bound)
+            << label << ": element " << i << " (actual=" << actual[i]
+            << ", golden=" << golden[i] << ", bound=" << bound << ")";
     }
 }
 
@@ -198,9 +217,17 @@ TEST_F(RegressionIVPTest, Case06_Batch_DOPRI87) {
     ASSERT_EQ(static_cast<int>(xfs.size()), static_cast<int>(golden_xfs.size()))
         << "Batch result count mismatch";
     for (size_t i = 0; i < xfs.size(); ++i) {
-        // SuperScalar path may introduce small FP differences from instruction ordering
+        // The SuperScalar batch path differs from the scalar golden by FP
+        // instruction-ordering noise. These state vectors mix km-scale
+        // positions (~6800-7400) with near-zero components (~1e-10), so a
+        // single absolute tolerance cannot fit both: the position drift alone
+        // reaches ~1e-11. Compare with combined relative+absolute bounds —
+        // 1e-12 relative (consistent with the other cases' tightness on
+        // unit-magnitude states) plus a 1e-10 absolute floor for the
+        // near-zero elements. The previous 1e-14 absolute tol was below the
+        // ULP distance at km magnitudes and inherently un-satisfiable.
         Eigen::VectorXd xf_dyn = xfs[i]; // Convert fixed to dynamic for comparison
-        expect_vector_match(xf_dyn, golden_xfs[i], 1e-14,
+        expect_vector_close(xf_dyn, golden_xfs[i], 1e-12, 1e-10,
                             "Case06_batch_" + std::to_string(i));
     }
 }
