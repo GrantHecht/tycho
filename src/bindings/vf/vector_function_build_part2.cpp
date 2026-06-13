@@ -26,7 +26,34 @@ template <class FType> void DefineListEval(nb::class_<FType> &obj) {
 
     obj.def("__call__", [](const FType &fun, const std::vector<GenS> &funcs) {
         return FType(fun.eval(DynamicStack(funcs)));
-    });
+    },
+        R"doc(Compose this function by substituting a list of scalar functions as its input.
+
+The argument functions are vertically stacked — their outputs are concatenated in
+order to form a single input vector — and the result is used as the input to this
+function.  Concretely, if ``funcs = [g0, g1, ...]`` and the shared domain of all
+``gi`` is ``x``, then the returned function computes ``self([g0(x); g1(x); ...])``.
+
+All functions in ``funcs`` must share the same input size, and their concatenated
+output size must equal ``self.input_rows()``.
+
+Parameters
+----------
+funcs : list[ScalarFunction]
+    Homogeneous list of scalar-output (1-output-row) VectorFunctions whose
+    stacked outputs form the input to this function.
+
+Returns
+-------
+VectorFunction
+    A new VectorFunction representing the composition.
+
+Raises
+------
+ValueError
+    If the stacked output size does not match ``self.input_rows()``, or if the
+    functions in ``funcs`` do not share a common input size.
+)doc");
     obj.def("__call__", [](const FType &fun, const std::vector<Gen> &funcs) {
         return FType(fun.eval(DynamicStack(funcs)));
     });

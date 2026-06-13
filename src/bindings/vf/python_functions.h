@@ -133,7 +133,32 @@ template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
         if constexpr (ORR != 1) {
             obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
                     nb::arg("o_rows"), nb::arg("func"), nb::arg("jstepsize") = 1.0e-6,
-                    nb::arg("hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple());
+                    nb::arg("hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple(),
+                    R"doc(Wrap a Python callable as a VectorFunction using finite-difference derivatives.
+
+The callable is invoked with a 1-D NumPy array of length ``i_rows`` (plus any
+extra positional arguments in ``args``) and must return a 1-D array of length
+``o_rows``.  Jacobians and Hessians are approximated by forward finite differences
+with step sizes ``jstepsize`` and ``hstepsize`` respectively.
+
+Note: ``PyVectorFunction`` always acquires the Python GIL and cannot execute in
+parallel.  Use ``NumbaVectorFunction`` for thread-safe (GIL-free) evaluation.
+
+Parameters
+----------
+i_rows : int
+    Number of input components (input vector length).
+o_rows : int
+    Number of output components (output vector length).
+func : callable
+    Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
+jstepsize : float, optional
+    Finite-difference step size used for Jacobian approximation (default 1e-6).
+hstepsize : float, optional
+    Finite-difference step size used for Hessian approximation (default 1e-4).
+args : tuple, optional
+    Extra positional arguments forwarded to ``func`` after the input vector.
+)doc");
         } else {
             obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
                     nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 1.0e-4,
@@ -158,7 +183,30 @@ template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
     static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
-                         double>());
+                         double>(),
+                R"doc(Wrap a Numba JIT-compiled function pointer as a thread-safe VectorFunction.
+
+The function pointer must have the C signature
+``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
+integer holding its address (as returned by ``numba.extending.get_cython_function_address``
+or equivalent).  Derivatives are approximated by forward finite differences with
+the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
+Python GIL and is safe to call from multiple threads in parallel.
+
+Parameters
+----------
+i_rows : int
+    Number of input components (input vector length).
+o_rows : int
+    Number of output components (output vector length).
+func : int
+    Integer address of a C function with signature
+    ``void(double*, double*, int, int)``.
+jstepsize : float
+    Finite-difference step size used for Jacobian approximation.
+hstepsize : float
+    Finite-difference step size used for Hessian approximation.
+)doc");
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
 
         if constexpr (ORR == 1) {
