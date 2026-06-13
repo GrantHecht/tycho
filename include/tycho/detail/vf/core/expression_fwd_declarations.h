@@ -260,8 +260,6 @@ template <class Func> struct SignFunction;
 
 template <class Func> struct FunctionPlusVector;
 
-template <class Func> struct VectorMinusFunction;
-
 ///////////////////////////////////////////////////////////////////////////////////////
 
 template <class Func> struct CwiseScaled;

@@ -19,37 +19,27 @@
 
 namespace tycho::vf {
 
-template <class Derived, class Func, bool NegateFunction> struct FunctionVectorSum_Impl;
+template <class Derived, class Func> struct FunctionVectorSum_Impl;
 
 /// @ingroup vf
 /// @brief VectorFunction adding a constant offset vector to a function @f$f(x)+v@f$.
 /// @tparam Func  Wrapped VectorFunction whose output the offset is added to.
 template <class Func>
-struct FunctionPlusVector : FunctionVectorSum_Impl<FunctionPlusVector<Func>, Func, false> {
+struct FunctionPlusVector : FunctionVectorSum_Impl<FunctionPlusVector<Func>, Func> {
     /// @brief Convenience alias for the underlying function-vector-sum implementation.
-    using Base = FunctionVectorSum_Impl<FunctionPlusVector<Func>, Func, false>;
-    using Base::Base;
-};
-/// @ingroup vf
-/// @brief VectorFunction subtracting a function from a constant vector @f$v-f(x)@f$.
-/// @tparam Func  Wrapped VectorFunction subtracted from the offset.
-template <class Func>
-struct VectorMinusFunction : FunctionVectorSum_Impl<VectorMinusFunction<Func>, Func, true> {
-    /// @brief Convenience alias for the underlying function-vector-sum implementation.
-    using Base = FunctionVectorSum_Impl<VectorMinusFunction<Func>, Func, true>;
+    using Base = FunctionVectorSum_Impl<FunctionPlusVector<Func>, Func>;
     using Base::Base;
 };
 
 /// @internal
-/// @brief Shared implementation of function-plus/minus-constant-vector VectorFunctions.
+/// @brief Shared implementation of function-plus-constant-vector VectorFunctions.
 ///
 /// Forwards all derivative work to the wrapped function and adds a constant
 /// offset vector to the value; derivatives are unchanged by the constant.
-/// @tparam Derived         CRTP host type (@ref FunctionPlusVector or @ref VectorMinusFunction).
-/// @tparam Func            Wrapped VectorFunction.
-/// @tparam NegateFunction  When true the function is subtracted from the offset.
+/// @tparam Derived  CRTP host type (@ref FunctionPlusVector).
+/// @tparam Func     Wrapped VectorFunction.
 /// @endinternal
-template <class Derived, class Func, bool NegateFunction>
+template <class Derived, class Func>
 struct FunctionVectorSum_Impl
     : VectorFunction<Derived, Func::IRC, Func::ORC, DenseDerivativeMode::Analytic> {
     /// @brief Convenience alias for the VectorFunction CRTP base class.

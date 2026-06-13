@@ -77,9 +77,9 @@ std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, b
 
 /// @brief Finite-difference differentiation of data sampled on an arbitrary (non-uniform) axis.
 ///
-/// Unlike @ref FinDiffDerivUniform, the samples need not be equally spaced: stencil
-/// weights are solved per evaluation from the actual node offsets via a Vandermonde
-/// system, choosing forward, central, or backward stencils near the boundaries.
+/// The samples need not be equally spaced: stencil weights are solved per
+/// evaluation from the actual node offsets via a Vandermonde system, choosing
+/// forward, central, or backward stencils near the boundaries.
 /// @tparam DType  Data type: an `Eigen::Matrix` type for each sample.
 /// @ingroup vf
 template <class DType> struct FDDerivArbitrary {
