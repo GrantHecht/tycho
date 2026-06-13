@@ -56,7 +56,27 @@ template <class T> void UnaryScalarOpBuild(nb::module_ &m) {
         nb::object fun = nb::cast(cfun);
         return fun.attr(name)();
     };
-    m.def("sin", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "sin"); });
+    m.def(
+        "sin", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "sin"); },
+        R"doc(Elementwise sine of a scalar VectorFunction (argument in radians).
+
+Parameters
+----------
+fun : VectorFunction
+    Scalar-valued (output dimension 1) VectorFunction.
+
+Returns
+-------
+VectorFunction
+    A new scalar VectorFunction evaluating ``sin(fun(x))``.
+
+Examples
+--------
+>>> x = vf.Arguments(1)[0]
+>>> f = vf.sin(x)
+>>> f.output_rows()
+1
+)doc");
     m.def("cos", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "cos"); });
     m.def("tan", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "tan"); });
 
@@ -314,8 +334,31 @@ void ProductBuild(nb::module_ &m) {
         return fun1.attr("dot")(fun2);
     };
 
-    m.def("dot",
-          [dotOpLam](const SEG2 &f1, const Vector2<double> &f2) { return dotOpLam(f1, f2); });
+    m.def(
+        "dot", [dotOpLam](const SEG2 &f1, const Vector2<double> &f2) { return dotOpLam(f1, f2); },
+        R"doc(Dot product of two equal-length vector quantities.
+
+Each operand may be a VectorFunction or a constant array, but at least one must
+be a VectorFunction, and both must have the same output dimension. The accepted
+operand-type combinations are listed in the overload signatures.
+
+Parameters
+----------
+a, b : VectorFunction or array_like, shape (n,)
+    The two operands.
+
+Returns
+-------
+VectorFunction
+    Scalar VectorFunction evaluating the dot product ``a(x) . b(x)``.
+
+Examples
+--------
+>>> v = vf.Arguments(3)
+>>> f = vf.dot(v, v)          # squared norm of the 3-vector
+>>> f.output_rows()
+1
+)doc");
     m.def("dot",
           [dotOpLam](const SEG3 &f1, const Vector3<double> &f2) { return dotOpLam(f1, f2); });
     m.def("dot", [dotOpLam](const SEG &f1, const Vector3<double> &f2) { return dotOpLam(f1, f2); });

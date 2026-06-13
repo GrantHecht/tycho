@@ -1,3 +1,5 @@
+"""SubModule Containing Vector and Scalar Function Types and Functions"""
+
 from collections.abc import Sequence
 import enum
 from typing import Annotated, overload
@@ -258,7 +260,20 @@ class VectorFunction:
     def dot(self, arg: Segment, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -615,7 +630,20 @@ class ScalarFunction:
     def __pow__(self, arg: int, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -866,7 +894,20 @@ class Segment:
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -1124,7 +1165,20 @@ class Element:
     def __pow__(self, arg: int, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: Element, /) -> ScalarFunction: ...
+    def dot(self, arg: Element, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -1384,7 +1438,20 @@ class Arguments:
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: Arguments, /) -> ScalarFunction: ...
+    def dot(self, arg: Arguments, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -1625,7 +1692,20 @@ class Segment2:
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: Segment2, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment2, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -1854,7 +1934,20 @@ class Segment3:
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
 
     @overload
-    def dot(self, arg: Segment3, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment3, /) -> ScalarFunction:
+        """
+        Dot product of this VectorFunction with another equal-length one.
+
+        Parameters
+        ----------
+        other : VectorFunction or array_like, shape (n,)
+            Right-hand operand; must have the same output dimension as ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        """
 
     @overload
     def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
@@ -2380,7 +2473,31 @@ def cwise_quotient(arg0: VectorFunction, arg1: Segment, /) -> object: ...
 def cwise_quotient(arg0: VectorFunction, arg1: VectorFunction, /) -> object: ...
 
 @overload
-def dot(arg0: Segment2, arg1: Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')], /) -> object: ...
+def dot(arg0: Segment2, arg1: Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')], /) -> object:
+    """
+    Dot product of two equal-length vector quantities.
+
+    Each operand may be a VectorFunction or a constant array, but at least one must
+    be a VectorFunction, and both must have the same output dimension. The accepted
+    operand-type combinations are listed in the overload signatures.
+
+    Parameters
+    ----------
+    a, b : VectorFunction or array_like, shape (n,)
+        The two operands.
+
+    Returns
+    -------
+    VectorFunction
+        Scalar VectorFunction evaluating the dot product ``a(x) . b(x)``.
+
+    Examples
+    --------
+    >>> v = vf.Arguments(3)
+    >>> f = vf.dot(v, v)          # squared norm of the 3-vector
+    >>> f.output_rows()
+    1
+    """
 
 @overload
 def dot(arg0: Segment3, arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> object: ...
@@ -2476,7 +2593,27 @@ def quat_rotate(arg0: VectorFunction, arg1: Segment, /) -> VectorFunction: ...
 def quat_rotate(arg0: VectorFunction, arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
 
 @overload
-def sin(arg: Element, /) -> object: ...
+def sin(arg: Element, /) -> object:
+    """
+    Elementwise sine of a scalar VectorFunction (argument in radians).
+
+    Parameters
+    ----------
+    fun : VectorFunction
+        Scalar-valued (output dimension 1) VectorFunction.
+
+    Returns
+    -------
+    VectorFunction
+        A new scalar VectorFunction evaluating ``sin(fun(x))``.
+
+    Examples
+    --------
+    >>> x = vf.Arguments(1)[0]
+    >>> f = vf.sin(x)
+    >>> f.output_rows()
+    1
+    """
 
 @overload
 def sin(arg: ScalarFunction, /) -> object: ...

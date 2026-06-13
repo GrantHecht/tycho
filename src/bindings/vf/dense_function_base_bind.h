@@ -600,8 +600,21 @@ template <class Derived, class PYClass> void BinaryMathBuild(PYClass &obj) {
             });
     }
 
-    obj.def("dot",
-            [](const Derived &seg1, const Derived &seg2) { return GenS(dot_product(seg1, seg2)); });
+    obj.def(
+        "dot",
+        [](const Derived &seg1, const Derived &seg2) { return GenS(dot_product(seg1, seg2)); },
+        R"doc(Dot product of this VectorFunction with another equal-length one.
+
+Parameters
+----------
+other : VectorFunction or array_like, shape (n,)
+    Right-hand operand; must have the same output dimension as ``self``.
+
+Returns
+-------
+VectorFunction
+    Scalar VectorFunction evaluating ``self(x) . other(x)``.
+)doc");
     obj.def("cwise_product", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));
     });

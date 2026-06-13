@@ -125,6 +125,7 @@ copybutton_prompt_is_regexp = True
 # -- Doctest -----------------------------------------------------------------
 doctest_global_setup = """
 import numpy as np
+from tychopy import vector_functions as vf
 """
 
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------

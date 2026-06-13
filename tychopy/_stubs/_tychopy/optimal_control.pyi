@@ -1,3 +1,5 @@
+"""SubModule Containing Optimal Control ODEs, Phases, and Utilities"""
+
 from collections.abc import Sequence
 import enum
 from typing import Annotated, Union, overload
@@ -187,6 +189,8 @@ class EventPack:
     def stop_count(self, arg: int, /) -> None: ...
 
 class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
+    """Base Class for All Optimal Control Phases"""
+
     def enable_vectorization(self, arg: bool, /) -> None: ...
 
     @overload
