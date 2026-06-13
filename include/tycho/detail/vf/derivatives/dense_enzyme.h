@@ -749,7 +749,8 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::EnzymeAD>
 /// 1. fx and jx come from the JMode-driven first-derivative path
 ///    (DenseFirstDerivatives<..., JMode>::compute_jacobian_impl).
 /// 2. The adjoint gradient gx = J^T lam is computed from jx by direct
-///    matrix multiply — Enzyme already produced jx, no need to recompute.
+///    matrix multiply — the JMode first-derivative path already produced jx
+///    (via Enzyme or finite differences, per JMode), no need to recompute.
 /// 3. The adjoint Hessian hx is the column-by-column derivative of
 ///    g(x) = J(x)^T lam with respect to x.  CMakeLists.txt unconditionally
 ///    defines `TYCHO_ENZYME_HESSIAN_STRATEGY_ForwardOverReverse`; there is

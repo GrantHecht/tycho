@@ -26,7 +26,7 @@ namespace tycho::vf {
 /// @tparam OR2    Compile-time output rows of the second operand.
 /// @param f1  Left operand (3-vector valued function).
 /// @param f2  Right operand (3-vector valued function).
-/// @return A FunctionCrossProduct expression evaluating the elementwise cross product.
+/// @return A FunctionCrossProduct expression evaluating the 3D vector cross product.
 template <class Func1, int IR1, int OR1, class Func2, int IR2, int OR2>
 auto cross_product(const DenseFunctionBase<Func1, IR1, OR1> &f1,
                    const DenseFunctionBase<Func2, IR2, OR2> &f2) {

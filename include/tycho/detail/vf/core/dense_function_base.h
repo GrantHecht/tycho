@@ -468,7 +468,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /// @return Expression of the element-wise inverse.
     decltype(auto) cwise_inverse() const { return CwiseInverse<Derived>(this->derived()); }
     /// @brief Sum of all output coefficients into a scalar.
-    /// @return Scalar expression of the sum (the function itself when `OR == 1`).
+    /// @return Scalar expression of the sum (a copy of the function when `OR == 1`).
     decltype(auto) sum() const {
         if constexpr (OR == 1)
             return Derived(this->derived());

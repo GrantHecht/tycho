@@ -403,8 +403,8 @@ decltype(auto) operator*(const DenseFunctionBase<SFunc, IR2, 1> &sf,
 /// @tparam IR1    Compile-time input rows of the second function.
 /// @tparam SFunc  Derived type of the first scalar function.
 /// @tparam IR2    Compile-time input rows of the first function.
-/// @param sf  First scalar-valued function.
-/// @param vf  Second scalar-valued function.
+/// @param sf  First scalar-valued function (the @p SFunc operand).
+/// @param vf  Second scalar-valued function (the @p VFunc operand).
 /// @return A VectorScalarFunctionProduct expression of the two scalar functions.
 template <class VFunc, int IR1, class SFunc, int IR2>
 decltype(auto) operator*(const DenseFunctionBase<SFunc, IR2, 1> &sf,

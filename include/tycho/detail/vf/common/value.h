@@ -61,7 +61,7 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
     /// @tparam JacType  Eigen Jacobian matrix expression type.
     /// @param x    Input vector (unused).
     /// @param fx_  Output vector to fill with the stored value.
-    /// @param jx_  Jacobian buffer; left unchanged (zero).
+    /// @param jx_  Jacobian buffer; not written (a constant's Jacobian is zero).
     /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
@@ -72,10 +72,10 @@ template <int OSZ> struct Value : VectorFunction<Value<OSZ>, OSZ, OSZ> {
         fx = this->value_;
     }
 
-    /// @brief Re-argues this Value against another function, returning a copy.
+    /// @brief Re-argues this Value against another function, returning a fresh Value.
     ///
     /// A constant Value does not depend on its argument, so re-arguing simply
-    /// yields a fresh Value of the same size.
+    /// yields a default-constructed Value of the same size.
     /// @tparam Func     Wrapped function type of the new argument.
     /// @tparam FuncIRC  Compile-time input row count of the new argument.
     /// @tparam ii       Compile-time output row count of the new argument.

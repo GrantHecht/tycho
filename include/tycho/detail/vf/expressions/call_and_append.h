@@ -452,7 +452,7 @@ struct NestedCallAndAppendChain
     using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
 
     static constexpr bool ReverseAlg =
-        false; ///< @brief Select the reverse-mode Hessian assembly path when true.
+        false; ///< @brief Hessian-assembly mode tag; fixed to false (forward assembly) here.
     static constexpr int SizeInnerFuncs =
         sizeof...(InnerFuncs); ///< @brief Count of inner functions beyond the first.
 

@@ -21,8 +21,10 @@ namespace tycho::vf {
 /// @brief CRTP base for VectorFunctions whose Jacobian/Hessian are sparse.
 /// @ingroup vf
 ///
-/// Mirrors `ComputableBase` but overrides the `Jacobian` and `Hessian`
-/// aliases with `Eigen::SparseMatrix` and provides cached sparsity templates.
+/// The sparse counterpart to `DenseFunctionBase`: it extends `ComputableBase`
+/// with `Jacobian` and `Hessian` aliases backed by `Eigen::SparseMatrix`
+/// (rather than the dense matrices `DenseFunctionBase` supplies) and provides
+/// cached sparsity templates.
 /// @tparam Derived  The concrete sparse VectorFunction (CRTP).
 /// @tparam IR  Input row count (`-1` if dynamic).
 /// @tparam OR  Output row count (`-1` if dynamic).

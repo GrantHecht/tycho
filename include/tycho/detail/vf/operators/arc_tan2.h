@@ -35,8 +35,8 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
     /// @internal
     /// @brief Compute @f$\operatorname{atan2}(yy, xx)@f$, looping per lane for SuperScalar types.
     /// @tparam Scalar  Arithmetic scalar type (plain double or a SuperScalar pack).
-    /// @param yy  Numerator (the @f$y@f$ argument).
-    /// @param xx  Denominator (the @f$x@f$ argument).
+    /// @param yy  The @f$y@f$ argument (opposite component).
+    /// @param xx  The @f$x@f$ argument (adjacent component).
     /// @return The quadrant-aware arctangent @f$\operatorname{atan2}(yy, xx)@f$.
     /// @endinternal
     template <class Scalar> static Scalar calc_arc_tan2(Scalar yy, Scalar xx) {
@@ -144,14 +144,14 @@ struct ArcTan2Op : VectorFunction<ArcTan2Op, 2, 1, DenseDerivativeMode::Analytic
 
 /// @internal
 /// @brief Builder that composes @ref ArcTan2Op over two scalar operand functions.
-/// @tparam YFunc  Numerator operand function (the @f$y@f$ argument).
-/// @tparam XFunc  Denominator operand function (the @f$x@f$ argument).
+/// @tparam YFunc  The @f$y@f$-argument operand function.
+/// @tparam XFunc  The @f$x@f$-argument operand function.
 /// @endinternal
 template <class YFunc, class XFunc> struct ArcTan2Impl {
     /// @internal
     /// @brief Stack @p yf and @p xf and feed the 2-vector through @ref ArcTan2Op.
-    /// @param yf  Numerator operand function.
-    /// @param xf  Denominator operand function.
+    /// @param yf  The @f$y@f$-argument operand function.
+    /// @param xf  The @f$x@f$-argument operand function.
     /// @return A VectorFunction evaluating @f$\operatorname{atan2}(yf, xf)@f$.
     /// @endinternal
     static auto Definition(YFunc yf, XFunc xf) { return ArcTan2Op().eval(StackedOutputs{yf, xf}); }

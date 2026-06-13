@@ -80,7 +80,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
         this->cachedata();
     }
 
-    /// @brief Deep-clone copy constructor from the same GenericFunction type.
+    /// @brief Shared-ownership copy constructor from the same GenericFunction type.
+    ///
+    /// Copies the `GFStorage` handle (an O(1) refcount increment), so the copy
+    /// shares ownership of the underlying erased function rather than deep-cloning
+    /// it. (The cross-size constructor below does deep-clone into dynamic storage.)
     /// @param obj  Source function to copy (must be non-empty).
     GenericFunction(const GenericFunction<IR, OR> &obj) {
         if (!obj.func_.empty()) {

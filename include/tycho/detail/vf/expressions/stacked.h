@@ -32,9 +32,9 @@ struct StackTwoOutputs_Impl;
 /// @brief Vertically stacks several functions' outputs: `f(x) = [f1(x); f2(x); ...]`.
 ///
 /// All stacked functions share the same input @p x; their outputs are
-/// concatenated into one output vector. The variadic form recursively pairs
-/// itself with `StackedOutputs<Funcs...>` for the tail. The return type of
-/// `vf.stack(...)`.
+/// concatenated into one output vector. The variadic form recursively pairs the
+/// head two functions (`StackedOutputs<Func1, Func2>`) with the stacked tail
+/// (`StackedOutputs<Funcs...>`). The return type of `vf.stack(...)`.
 ///
 /// @tparam Func1  First (top) stacked function.
 /// @tparam Func2  Second stacked function.

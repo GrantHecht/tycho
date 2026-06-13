@@ -77,7 +77,7 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     /// @tparam JacType  Eigen Jacobian matrix expression type.
     /// @param x    Input vector (unused).
     /// @param fx_  Output vector to fill with the constant value.
-    /// @param jx_  Jacobian buffer; left unchanged (zero).
+    /// @param jx_  Jacobian buffer; not written (a constant's Jacobian is zero).
     /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
@@ -100,9 +100,9 @@ template <int IR, int OR> struct Constant : VectorFunction<Constant<IR, OR>, IR,
     /// @tparam AdjVarType   Eigen adjoint-variable vector expression type.
     /// @param x        Input vector (unused).
     /// @param fx_      Output vector to fill with the constant value.
-    /// @param jx_      Jacobian buffer; left unchanged (zero).
-    /// @param adjgrad_ Adjoint-gradient buffer; left unchanged (zero).
-    /// @param adjhess_ Adjoint-Hessian buffer; left unchanged (zero).
+    /// @param jx_      Jacobian buffer; not written (zero for a constant).
+    /// @param adjgrad_ Adjoint-gradient buffer; not written (zero for a constant).
+    /// @param adjhess_ Adjoint-Hessian buffer; not written (zero for a constant).
     /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector (unused).
     /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,

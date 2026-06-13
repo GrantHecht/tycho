@@ -378,10 +378,10 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
     using INPUT_DOMAIN = typename Segment<IR, OR, ST>::INPUT_DOMAIN;
     static constexpr bool is_linear_function =
         OuterFunc::is_linear_function &&
-        InnerFunc::is_linear_function; ///< @brief True if the outer function is linear.
+        InnerFunc::is_linear_function; ///< @brief True iff both outer and inner functions are linear.
     static constexpr bool is_vectorizable =
         OuterFunc::is_vectorizable &&
-        InnerFunc::is_vectorizable; ///< @brief True if the outer function is vectorizable.
+        InnerFunc::is_vectorizable; ///< @brief True iff both outer and inner functions are vectorizable.
 
     /// @internal
     /// @brief Default-construct an empty segment-composition.

@@ -229,7 +229,8 @@ concept HasDiagonalHess =
 /// @ingroup vf
 ///
 /// Requires the size constants, sizing accessors, vectorization/linearity
-/// flags, the scalar-templated matrix aliases, and an `INPUT_DOMAIN` member.
+/// flags, the scalar-templated `Output`/`Input`/`Jacobian` aliases, and an
+/// `INPUT_DOMAIN` member.
 /// @tparam T  Candidate VectorFunction type.
 template <typename T>
 concept DenseVectorFunction = requires(const T &t) {

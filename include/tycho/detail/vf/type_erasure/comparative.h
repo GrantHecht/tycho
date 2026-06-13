@@ -21,8 +21,8 @@ namespace tycho::vf {
 /// @brief Selects whether a ComparativeFunction computes a minimum or maximum.
 /// @ingroup vf
 enum class ComparativeFlags {
-    MinFlag, ///< @brief Take the element-wise minimum across the operand functions.
-    MaxFlag, ///< @brief Take the element-wise maximum across the operand functions.
+    MinFlag, ///< @brief Take the scalar minimum across the operand functions.
+    MaxFlag, ///< @brief Take the scalar maximum across the operand functions.
 };
 
 ////////////////////////////////////////////////////////////////////////////////

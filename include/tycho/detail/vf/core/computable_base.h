@@ -77,8 +77,9 @@ namespace tycho::vf {
 /// supplies the CRTP `derived()` cast, holds (for dynamic-sized functions) the
 /// runtime input/output sizes via @ref InputOutputSize, defines the default set
 /// of compile-time `constexpr` trait flags used by the expression system (e.g.
-/// @ref is_vectorizable), and implements `compute` / `adjointgradient` in terms
-/// of the derived class's `compute_impl`. It also provides the `constraints`
+/// @ref is_vectorizable), and implements `compute` in terms of the derived
+/// class's `compute_impl` (the adjoint-gradient entry points route to the
+/// derived class's `compute_adjointgradient`). It also provides the `constraints`
 /// interface by which a VectorFunction is invoked by the PSIOPT optimizer.
 ///
 /// @tparam Derived  CRTP derived (user) function type.

@@ -84,12 +84,12 @@ auto atan(const tycho::vf::DenseFunctionBase<Derived, IR, 1> &func) {
 
 /// @brief Two-argument arctangent of scalar-valued VectorFunctions, @f$ \operatorname{atan2}(y, x)
 /// @f$.
-/// @tparam Derived1  Derived type of the numerator (y) function.
-/// @tparam IR1       Compile-time input rows of the numerator.
-/// @tparam Derived2  Derived type of the denominator (x) function.
-/// @tparam IR2       Compile-time input rows of the denominator.
-/// @param yf  Numerator (y) scalar function.
-/// @param xf  Denominator (x) scalar function.
+/// @tparam Derived1  Derived type of the @f$y@f$-argument function.
+/// @tparam IR1       Compile-time input rows of the @f$y@f$ function.
+/// @tparam Derived2  Derived type of the @f$x@f$-argument function.
+/// @tparam IR2       Compile-time input rows of the @f$x@f$ function.
+/// @param yf  The @f$y@f$-argument scalar function.
+/// @param xf  The @f$x@f$-argument scalar function.
 /// @return An expression evaluating the quadrant-aware arctangent of @p yf over @p xf.
 template <class Derived1, int IR1, class Derived2, int IR2>
 auto atan2(const tycho::vf::DenseFunctionBase<Derived1, IR1, 1> &yf,

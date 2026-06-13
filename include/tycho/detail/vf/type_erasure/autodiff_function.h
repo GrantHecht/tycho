@@ -23,7 +23,8 @@ namespace tycho::vf {
 /// ADFun forwards the primal value of @p Func but overrides its derivative modes
 /// to finite differencing (central-difference array Jacobian, forward-difference
 /// Hessian). It is primarily a debugging/validation aid: the test() helpers
-/// compare the wrapped function's analytic Jacobian and Hessian against the
+/// compare the wrapped function's own Jacobian and Hessian (computed with
+/// whatever derivative mode @p Func was configured with) against the
 /// finite-difference reference. The "AD" name is historical; this path is
 /// finite-difference, not algorithmic differentiation.
 /// @tparam Func  The wrapped VectorFunction whose value is evaluated.

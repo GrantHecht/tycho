@@ -97,7 +97,6 @@ template <class DType, int Order, int Accuracy> struct FinDiffDerivUniform {
     /// @tparam DerivType  Output Eigen type.
     /// @param i     Sample index at which to evaluate the derivative.
     /// @param dout  Output buffer receiving the derivative.
-    /// @return The derivative at index @p i.
     template <class DerivType>
     inline DType deriv_at(const int i, Eigen::MatrixBase<DerivType> &dout) const {
         if (i < 0 || i > length - 1) {
