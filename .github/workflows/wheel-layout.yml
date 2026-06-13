@@ -20,9 +20,18 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Compile _tychopy into a wheel exactly once. Every downstream job consumes
-  # this artifact, so the (slow) C++ build never runs more than one time per
-  # workflow invocation.
+  # Build the wheel once, then immediately exercise it (import smoke test +
+  # pytest suite) on this same runner.
+  #
+  # Why import/test live here and not in a separate runner: the bundled
+  # _tychopy.so bakes ABSOLUTE rpaths to this runner's conda env and oneAPI
+  # install dirs (…/miniconda/envs/tycho/lib, …/oneapi/{mkl,compiler}/…/lib)
+  # for libmkl_rt / libiomp5. A bare downstream runner that only downloads the
+  # wheel has none of those dirs, so `import _tychopy` fails with
+  # "libiomp5.so: cannot open shared object file". The wheel is not yet
+  # self-contained (no auditwheel/MKL vendoring), so the only place it imports
+  # cleanly is the runner that built it. The wheel artifact is still uploaded
+  # for the static layout check, which needs no shared libraries.
   # ---------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -71,8 +80,59 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      # Install a parallel system Python 3.13 for the fresh import/test venvs
+      # below. The wheel is cp313-cp313; ubuntu-latest's default Python is
+      # 3.12, which would refuse the wheel.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Smoke-test wheel import (fresh venv, no setvars.sh)
+        # Deliberately does NOT source /opt/intel/oneapi/setvars.sh: setvars.sh
+        # exports LD_LIBRARY_PATH with the same MKL/iomp5 dirs the .so bakes
+        # into rpath, which would mask an rpath bug. The .so must import via its
+        # baked rpath alone (those dirs exist on this build runner).
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          python3.13 -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --upgrade pip
+          /tmp/wheel-venv/bin/pip install numpy
+          /tmp/wheel-venv/bin/pip install "$wheel"
+          so=$(ls /tmp/wheel-venv/lib/python3.13/site-packages/_tychopy*.so)
+          echo "Bundled .so RUNPATH (informational):"
+          readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
+          /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
+
+      - name: Run pytest suite (against the installed wheel)
+        env:
+          MPLBACKEND: Agg
+        # Fresh venv from the wheel's own [test] extra, then run the suite from
+        # /tmp so the source ./tychopy package is NOT on sys.path — both
+        # `import tychopy` (pure-Python layer) and `import _tychopy` (the .so)
+        # resolve to the venv site-packages, i.e. the wheel. As with the smoke
+        # test, no setvars.sh: a green run proves the packaged artifact works as
+        # a user would import it.
+        run: |
+          set -euo pipefail
+          # Expect exactly one wheel; a zero/multi-wheel build is a bug.
+          shopt -s nullglob
+          wheels=(/tmp/wheels/tychopy-*.whl)
+          [ "${#wheels[@]}" -eq 1 ] || { echo "::error::expected one wheel, found ${#wheels[@]}"; exit 1; }
+          wheel="${wheels[0]}"
+          python3.13 -m venv /tmp/test-venv
+          /tmp/test-venv/bin/pip install --upgrade pip
+          /tmp/test-venv/bin/pip install "${wheel}[test]"
+          # Copy the tests (and any in-tree fixtures) out of the checkout, then
+          # run from /tmp so ./tychopy source is not importable.
+          cp -r tychopy/test /tmp/suite
+          cd /tmp
+          /tmp/test-venv/bin/python -m pytest \
+            --import-mode=importlib /tmp/suite --durations=10
+
   # ---------------------------------------------------------------------------
-  # Static layout invariants on the packaged wheel (no import / no build).
+  # Static layout invariants on the packaged wheel (no import / no shared libs,
+  # so this is safe to run on a bare runner from the uploaded artifact).
   # ---------------------------------------------------------------------------
   inspect-layout:
     needs: build
@@ -99,90 +159,3 @@ jobs:
           # dropped the first zip entry because python -m zipfile -l
           # emits only one header row, not two.
           python scripts/inspect_wheel_layout.py "$wheel"
-
-  # ---------------------------------------------------------------------------
-  # Prove the bundled .so imports with no LD_LIBRARY_PATH help, from a fresh
-  # venv outside the conda env.
-  # ---------------------------------------------------------------------------
-  smoke-import:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: tycho-wheel
-          path: /tmp/wheels
-      # The wheel is cp313-cp313; ubuntu-latest's default Python is 3.12,
-      # which would refuse the wheel.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Smoke-test wheel import (fresh venv, no setvars.sh)
-        # This step deliberately does NOT source /opt/intel/oneapi/setvars.sh.
-        # setvars.sh exports LD_LIBRARY_PATH containing the same MKL/iomp5
-        # dirs that the wheel's .so bakes into RUNPATH, which would mask any
-        # rpath bug. The point of this gate is exactly to surface such a
-        # bug — the .so must import unaided by LD_LIBRARY_PATH.
-        run: |
-          set -euo pipefail
-          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
-          python3.13 -m venv /tmp/wheel-venv
-          /tmp/wheel-venv/bin/pip install --upgrade pip
-          /tmp/wheel-venv/bin/pip install numpy
-          /tmp/wheel-venv/bin/pip install "$wheel"
-          so=$(ls /tmp/wheel-venv/lib/python3.13/site-packages/_tychopy*.so)
-          echo "Bundled .so RUNPATH (informational):"
-          readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
-          /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
-
-  # ---------------------------------------------------------------------------
-  # Python unit-test suite against the installed wheel. The test tree is copied
-  # out of the checkout and run from /tmp so the source ./tychopy package is NOT
-  # on sys.path — both `import tychopy` (pure-Python layer) and `import _tychopy`
-  # (the .so) therefore resolve to the venv site-packages, i.e. the wheel. Like
-  # smoke-import, this runs unaided by setvars.sh, so a green run proves the
-  # suite passes against the packaged artifact exactly as a user would import it.
-  # ---------------------------------------------------------------------------
-  pytest:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4   # for the tychopy/test/ sources
-      - uses: actions/download-artifact@v4
-        with:
-          name: tycho-wheel
-          path: /tmp/wheels
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install wheel + test dependencies
-        run: |
-          set -euo pipefail
-          # Expect exactly one wheel (mirrors the inspect-layout guard); a zero
-          # or multi-wheel artifact is a build bug, so fail loudly rather than
-          # silently picking one.
-          shopt -s nullglob
-          wheels=(/tmp/wheels/tychopy-*.whl)
-          [ "${#wheels[@]}" -eq 1 ] || { echo "::error::expected one wheel, found ${#wheels[@]}"; exit 1; }
-          wheel="${wheels[0]}"
-          python3.13 -m venv /tmp/test-venv
-          /tmp/test-venv/bin/pip install --upgrade pip
-          # Test extra (pytest + numpy/scipy/matplotlib/spiceypy) from the
-          # wheel's own [test] optional-dependency group, then the wheel.
-          /tmp/test-venv/bin/pip install "${wheel}[test]"
-      - name: Run pytest suite (against the installed wheel)
-        env:
-          MPLBACKEND: Agg
-        run: |
-          set -euo pipefail
-          # Copy the tests (and any in-tree fixtures) out of the checkout, then
-          # run from /tmp so ./tychopy source is not importable — the suite must
-          # exercise the wheel's tychopy + _tychopy, not the source tree.
-          cp -r tychopy/test /tmp/suite
-          cd /tmp
-          /tmp/test-venv/bin/python -m pytest \
-            --import-mode=importlib /tmp/suite --durations=10

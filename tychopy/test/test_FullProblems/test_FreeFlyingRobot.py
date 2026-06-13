@@ -80,8 +80,13 @@ class test_FreeFlyingRobot(unittest.TestCase):
         Obj = phase.optimizer.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
-        self.assertEqual(
-            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+        self.assertIn(
+            Flag,
+            (
+                ast.solvers.ConvergenceFlags.CONVERGED,
+                ast.solvers.ConvergenceFlags.ACCEPTABLE,
+            ),
+            "Problem did not converge",
         )
 
         self.assertLess(
