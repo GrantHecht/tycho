@@ -28,6 +28,13 @@ docs = [
     "sphinx-togglebutton>=0.3",
     "breathe>=4.35",
 ]
+test = [
+    "pytest>=7",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "spiceypy",
+]
 
 [project.urls]
 Homepage = "https://github.com/GrantHecht/tycho"

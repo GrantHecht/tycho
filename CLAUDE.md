@@ -92,7 +92,7 @@ bench/                  Benchmark suite and tracking
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Example programs
   cpp_examples/         C++ example programs
-  python_examples/      Python example scripts (38 examples)
+  python_examples/      Python example scripts (32 examples)
 docs/                   Documentation source tree
   source/               Public Sphinx site source (Markdown + RST)
   dev/                  Internal engineering notes (raw markdown, not rendered)
@@ -534,6 +534,8 @@ clearly self-contained.
 - Member functions: `snake_case` (e.g., `set_io_rows()`, `add_equal_con()`)
 - Member variables: `snake_case_` with trailing underscore (e.g., `num_defects_`)
 - Free functions: `snake_case`
+- Compile-time constants: `kPascalCase` (e.g., `kRKWeightTol`, `kStumpffTaylorEps`)
+- Macros: `TYCHO_UPPER_SNAKE` (e.g., `TYCHO_ALWAYS_INLINE`, `TYCHO_NOINLINE`)
 
 **Python API:** All method and property names exposed via nanobind use `snake_case`,
 matching the C++ member function names (e.g., `phase.add_boundary_value()`,
@@ -578,6 +580,9 @@ Use descriptive commit messages with these prefixes:
 | `refactor:` | Code restructuring without behavior change |
 | `docs:` | Documentation-only changes |
 | `chore:` | Build system, CI, dependency, or tooling changes |
+| `build:` | Changes to the CMake build, presets, or scikit-build |
+| `ci:` | Changes to GitHub Actions workflows |
+| `test:` | New or updated tests |
 
 ## License and Notices
 

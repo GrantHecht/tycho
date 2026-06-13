@@ -7,6 +7,7 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
+      - 'include/**'
       - 'src/**'
       - 'tychopy/**'
       - '.github/workflows/wheel-layout.yml'
@@ -18,7 +19,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build-and-inspect:
+  # ---------------------------------------------------------------------------
+  # Build the wheel once, then immediately exercise it (import smoke test +
+  # pytest suite) on this same runner.
+  #
+  # Why import/test live here and not in a separate runner: the bundled
+  # _tychopy.so bakes ABSOLUTE rpaths to this runner's conda env and oneAPI
+  # install dirs (…/miniconda/envs/tycho/lib, …/oneapi/{mkl,compiler}/…/lib)
+  # for libmkl_rt / libiomp5. A bare downstream runner that only downloads the
+  # wheel has none of those dirs, so `import _tychopy` fails with
+  # "libiomp5.so: cannot open shared object file". The wheel is not yet
+  # self-contained (no auditwheel/MKL vendoring), so the only place it imports
+  # cleanly is the runner that built it. The wheel artifact is still uploaded
+  # for the static layout check, which needs no shared libraries.
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,35 +72,26 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           pip wheel . --no-deps -w /tmp/wheels
 
-      - name: Inspect wheel layout
-        shell: bash -el {0}
-        run: |
-          set -euo pipefail
-          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
-          if [ -z "$wheel" ]; then
-            echo "::error::no wheel was built"
-            exit 1
-          fi
-          # Layout assertions are implemented in Python (see the script
-          # for the negative/positive invariants). Avoids bash + awk
-          # gotchas — an inline `awk 'NR>2 {print $1}'` previously
-          # dropped the first zip entry because python -m zipfile -l
-          # emits only one header row, not two.
-          python scripts/inspect_wheel_layout.py "$wheel"
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels/tychopy-*.whl
+          if-no-files-found: error
+          retention-days: 1
 
-      # Install a parallel system Python 3.13 so we can create a fresh
-      # venv outside the conda env. The wheel is cp313-cp313; ubuntu-latest's
-      # default Python is 3.12, which would refuse the wheel.
+      # Install a parallel system Python 3.13 for the fresh import/test venvs
+      # below. The wheel is cp313-cp313; ubuntu-latest's default Python is
+      # 3.12, which would refuse the wheel.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Smoke-test wheel import (fresh venv, no setvars.sh)
-        # This step deliberately does NOT source /opt/intel/oneapi/setvars.sh.
-        # setvars.sh exports LD_LIBRARY_PATH containing the same MKL/iomp5
-        # dirs that the wheel's .so bakes into RUNPATH, which would mask any
-        # rpath bug. The point of this gate is exactly to surface such a
-        # bug — the .so must import unaided by LD_LIBRARY_PATH.
+        # Deliberately does NOT source /opt/intel/oneapi/setvars.sh: setvars.sh
+        # exports LD_LIBRARY_PATH with the same MKL/iomp5 dirs the .so bakes
+        # into rpath, which would mask an rpath bug. The .so must import via its
+        # baked rpath alone (those dirs exist on this build runner).
         run: |
           set -euo pipefail
           wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
@@ -97,3 +103,59 @@ jobs:
           echo "Bundled .so RUNPATH (informational):"
           readelf -d "$so" | grep -E 'RPATH|RUNPATH' || true
           /tmp/wheel-venv/bin/python -c "import _tychopy; import tychopy; print(_tychopy.__file__)"
+
+      - name: Run pytest suite (against the installed wheel)
+        env:
+          MPLBACKEND: Agg
+        # Fresh venv from the wheel's own [test] extra, then run the suite from
+        # /tmp so the source ./tychopy package is NOT on sys.path — both
+        # `import tychopy` (pure-Python layer) and `import _tychopy` (the .so)
+        # resolve to the venv site-packages, i.e. the wheel. As with the smoke
+        # test, no setvars.sh: a green run proves the packaged artifact works as
+        # a user would import it.
+        run: |
+          set -euo pipefail
+          # Expect exactly one wheel; a zero/multi-wheel build is a bug.
+          shopt -s nullglob
+          wheels=(/tmp/wheels/tychopy-*.whl)
+          [ "${#wheels[@]}" -eq 1 ] || { echo "::error::expected one wheel, found ${#wheels[@]}"; exit 1; }
+          wheel="${wheels[0]}"
+          python3.13 -m venv /tmp/test-venv
+          /tmp/test-venv/bin/pip install --upgrade pip
+          /tmp/test-venv/bin/pip install "${wheel}[test]"
+          # Copy the tests (and any in-tree fixtures) out of the checkout, then
+          # run from /tmp so ./tychopy source is not importable.
+          cp -r tychopy/test /tmp/suite
+          cd /tmp
+          /tmp/test-venv/bin/python -m pytest \
+            --import-mode=importlib /tmp/suite --durations=10
+
+  # ---------------------------------------------------------------------------
+  # Static layout invariants on the packaged wheel (no import / no shared libs,
+  # so this is safe to run on a bare runner from the uploaded artifact).
+  # ---------------------------------------------------------------------------
+  inspect-layout:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4   # for scripts/inspect_wheel_layout.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: tycho-wheel
+          path: /tmp/wheels
+      - name: Inspect wheel layout
+        run: |
+          set -euo pipefail
+          wheel=$(ls /tmp/wheels/tychopy-*.whl | head -1)
+          if [ -z "$wheel" ]; then
+            echo "::error::no wheel artifact found"
+            exit 1
+          fi
+          # Layout assertions are implemented in Python (see the script
+          # for the negative/positive invariants). Avoids bash + awk
+          # gotchas — an inline `awk 'NR>2 {print $1}'` previously
+          # dropped the first zip entry because python -m zipfile -l
+          # emits only one header row, not two.
+          python scripts/inspect_wheel_layout.py "$wheel"
