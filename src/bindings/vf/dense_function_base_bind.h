@@ -71,10 +71,13 @@ ndarray, shape (2, k), dtype int
     row 1 contains the corresponding lengths.
 )doc");
     obj.def("is_linear", &Derived::is_linear,
-            R"doc(Whether this VectorFunction is known to be linear at compile time.
+            R"doc(Whether this VectorFunction is known to be linear.
 
 A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
 this flag to skip second-derivative computations for linear expressions.
+For type-erased ``GenericFunction`` objects this value is determined at
+construction time and cached; for concrete (statically-typed) functions
+it is a compile-time constant propagated through the type system.
 
 Returns
 -------
@@ -177,14 +180,17 @@ Raises
 ValueError
     If ``x`` has the wrong length.
 )doc");
-    obj.def("compute", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
+    obj.def("compute", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); },
+            R"doc(Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.)doc");
 
     obj.def("__call__",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) { return compute_body(f, x); },
             R"doc(Evaluate the function at a point (``f(x)``).
 
-Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-argument for functional composition — see :meth:`eval` for that overload.
+Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+To compose with another VectorFunction use :meth:`eval` or pass a
+VectorFunction argument — those are handled by separate ``__call__``
+overloads.
 
 Parameters
 ----------
@@ -196,7 +202,8 @@ Returns
 ndarray, shape (output_rows,)
     Output vector ``f(x)``.
 )doc");
-    obj.def("__call__", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); });
+    obj.def("__call__", [=](const Derived &f, Eigen::VectorXd x) { return compute_body(f, x); },
+            R"doc(Overload accepting a Python list or tuple; see :meth:`compute`.)doc");
 
     obj.def("jacobian",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) {
@@ -220,7 +227,8 @@ Raises
 ValueError
     If ``x`` has the wrong length.
 )doc");
-    obj.def("jacobian", [=](const Derived &f, Eigen::VectorXd x) { return jacobian_body(f, x); });
+    obj.def("jacobian", [=](const Derived &f, Eigen::VectorXd x) { return jacobian_body(f, x); },
+            R"doc(Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.)doc");
 
     obj.def("compute_jacobian",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x) {
@@ -228,8 +236,8 @@ ValueError
             },
             R"doc(Evaluate the function and its Jacobian simultaneously.
 
-Computing both at once is cheaper than two separate calls because internal
-temporary buffers are shared.
+For many derivative modes this avoids redundant function evaluations
+compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
 Parameters
 ----------
@@ -249,7 +257,8 @@ ValueError
     If ``x`` has the wrong length.
 )doc");
     obj.def("compute_jacobian",
-            [=](const Derived &f, Eigen::VectorXd x) { return compute_jacobian_body(f, x); });
+            [=](const Derived &f, Eigen::VectorXd x) { return compute_jacobian_body(f, x); },
+            R"doc(Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.)doc");
 
     obj.def("adjointgradient",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
@@ -279,7 +288,7 @@ ValueError
 )doc");
     obj.def("adjointgradient", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
         return adjointgradient_body(f, x, lm);
-    });
+    }, R"doc(Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.)doc");
 
     obj.def("adjointhessian",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
@@ -309,7 +318,7 @@ ValueError
 )doc");
     obj.def("adjointhessian", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
         return adjointhessian_body(f, x, lm);
-    });
+    }, R"doc(Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.)doc");
 
     obj.def("computeall",
             [=](const Derived &f, ConstEigenRef<Eigen::VectorXd> x,
@@ -346,7 +355,7 @@ ValueError
 )doc");
     obj.def("computeall", [=](const Derived &f, Eigen::VectorXd x, Eigen::VectorXd lm) {
         return computeall_body(f, x, lm);
-    });
+    }, R"doc(Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.)doc");
 
     obj.def("vf", &Derived::template make_generic<GenericFunction<-1, -1>>,
             R"doc(Type-erase this expression into a generic VectorFunction.
@@ -554,7 +563,7 @@ VectorFunction
 )doc");
         obj.def("normalized_power3", [](const Derived &a, Eigen::VectorXd b, double s) {
             return Gen(((a + b).template normalized_power<3>()) * s);
-        });
+        }, R"doc(Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.)doc");
         ////////////////////////////////////////////////////////////////////
         if constexpr (OR > 0) { // already constant size
 
@@ -659,7 +668,14 @@ VectorFunction
 )doc");
 
             obj.def("normalized_power3",
-                    [](const Derived &a) { return Gen(a.template normalized_power<3>()); });
+                    [](const Derived &a) { return Gen(a.template normalized_power<3>()); },
+                    R"doc(Output divided by the cubed Euclidean norm: ``self(x) / ||self(x)||³``.
+
+Returns
+-------
+VectorFunction
+    Expression evaluating ``self(x) / ||self(x)||₂³``.
+)doc");
 
         } else {
             /// Try to fit these to constant size 2,3 if possible
@@ -678,73 +694,73 @@ VectorFunction
                     return GenS(Norm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`norm`.)doc");
             obj.def("squared_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(SquaredNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`squared_norm`.)doc");
             obj.def("cubed_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(NormPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`cubed_norm`.)doc");
             obj.def("inverse_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(InverseNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`inverse_norm`.)doc");
             obj.def("inverse_squared_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(InverseSquaredNorm<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`inverse_squared_norm`.)doc");
             obj.def("inverse_cubed_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(InverseNormPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`inverse_cubed_norm`.)doc");
             obj.def("inverse_four_norm", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return GenS(InverseNormPower<size.value, 4>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`inverse_four_norm`.)doc");
             obj.def("normalized", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return Gen(Normalized<size.value>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`normalized`.)doc");
             obj.def("normalized_power2", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return Gen(NormalizedPower<size.value, 2>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`normalized_power2`.)doc");
             obj.def("normalized_power3", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return Gen(NormalizedPower<size.value, 3>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`normalized_power3`.)doc");
             obj.def("normalized_power4", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return Gen(NormalizedPower<size.value, 4>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`normalized_power4`.)doc");
             obj.def("normalized_power5", [SizeSwitch](const Derived &fun) {
                 auto Lam = [](const Derived &funt, auto size) {
                     return Gen(NormalizedPower<size.value, 5>(funt.output_rows()).eval(funt));
                 };
                 return SizeSwitch(fun, Lam);
-            });
+            }, R"doc(Dynamic-size dispatch overload; see :meth:`normalized_power5`.)doc");
         }
     }
 
@@ -1052,24 +1068,20 @@ ScalarFunction
     obj.def(
         "__getitem__", [](const Derived &a, int elem) { return ElemRetType(a.coeff(elem)); },
         nb::is_operator(),
-        R"doc(Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        R"doc(Extract a single output element by integer index (``self[i]``).
+
+A ``slice`` argument is handled by a sibling overload and raises
+``ValueError`` if the slice is empty, backward, or non-contiguous.
 
 Parameters
 ----------
-index : int or slice
-    Integer index selects a single scalar output.  A ``slice`` selects a
-    contiguous sub-vector (step must be 1 and the slice must be non-empty
-    and forward-only).
+index : int
+    Zero-based index of the output element to select.
 
 Returns
 -------
 VectorFunction
-    Scalar expression for integer index; sub-vector expression for a slice.
-
-Raises
-------
-ValueError
-    If the index is out of range, the slice is empty, backward, or non-contiguous.
+    Scalar expression for the selected output element.
 )doc");
     obj.def(
         "__getitem__",
@@ -1147,9 +1159,12 @@ Returns
 VectorFunction
     Expression whose output is ``self(x)[-2:]``.
 )doc");
-        obj.def("segment2", seg2);
-        obj.def("head2", head2);
-        obj.def("tail2", tail2);
+        obj.def("segment2", seg2,
+                R"doc(Alias for :meth:`segment_2`.)doc");
+        obj.def("head2", head2,
+                R"doc(Alias for :meth:`head_2`.)doc");
+        obj.def("tail2", tail2,
+                R"doc(Alias for :meth:`tail_2`.)doc");
     }
     if constexpr (OR < 0 || OR > 3) {
         using Seg3RetType = typename std::conditional<is_seg, SEG3, GenericFunction<-1, -1>>::type;
@@ -1189,9 +1204,12 @@ Returns
 VectorFunction
     Expression whose output is ``self(x)[-3:]``.
 )doc");
-        obj.def("segment3", seg3);
-        obj.def("head3", head3);
-        obj.def("tail3", tail3);
+        obj.def("segment3", seg3,
+                R"doc(Alias for :meth:`segment_3`.)doc");
+        obj.def("head3", head3,
+                R"doc(Alias for :meth:`head_3`.)doc");
+        obj.def("tail3", tail3,
+                R"doc(Alias for :meth:`tail_3`.)doc");
     }
 }
 
@@ -1242,31 +1260,31 @@ VectorFunction
         if constexpr (!is_seg3)
             obj.def("cross", [](const Derived &seg1, const SEG3 &seg2) {
                 return Gen(cross_product(seg1, seg2));
-            });
+            }, R"doc(Overload for a fixed-size-3 segment right-hand operand; see :meth:`cross`.)doc");
         if constexpr (!is_gen)
             obj.def("cross", [](const Derived &seg1, const Gen &seg2) {
                 return Gen(cross_product(seg1, seg2));
-            });
+            }, R"doc(Overload for a generic VectorFunction right-hand operand; see :meth:`cross`.)doc");
 
         obj.def("cross", [](const Derived &seg1, const Vector3<double> &seg2) {
             return Gen(cross_product(seg1, Constant<-1, 3>(seg1.input_rows(), seg2)));
-        });
+        }, R"doc(Overload accepting a constant 3-element array right-hand operand; see :meth:`cross`.)doc");
 
         obj.def("cross", [](const Derived &seg1, const Derived &seg2) {
             return Gen(cross_product(seg1, seg2));
-        });
+        }, R"doc(Overload for two operands of the same concrete type; see :meth:`cross`.)doc");
     }
 
     if constexpr (OR != 1) {
         if constexpr (!is_seg)
             obj.def("dot", [](const Derived &seg1, const SEG &seg2) {
                 return GenS(dot_product(seg1, seg2));
-            });
+            }, R"doc(Overload for a generic segment right-hand operand; see :meth:`dot`.)doc");
 
         if constexpr (!is_gen)
             obj.def("dot", [](const Derived &seg1, const Gen &seg2) {
                 return GenS(dot_product(seg1, seg2));
-            });
+            }, R"doc(Overload for a generic VectorFunction right-hand operand; see :meth:`dot`.)doc");
 
         ///////////////////////////////////////////////////////////////////////
         ///////////////////////////////////////////////////////////////////////
@@ -1276,13 +1294,14 @@ VectorFunction
                     [](const Derived &seg1, const SEG &seg2) {
                         return Gen(CwiseFunctionProduct<Derived, SEG>(seg1, seg2));
                     },
-                    R"doc(Element-wise product of this VectorFunction with another.
+                    R"doc(Element-wise product of this VectorFunction with a segment VectorFunction.
 
 Parameters
 ----------
-other : VectorFunction or array_like, shape (n,)
+other : Segment VectorFunction, shape (n,)
     Right-hand operand; must have the same output dimension as ``self``.
-    Accepts a VectorFunction of any concrete type or a constant vector.
+    This overload accepts a generic segment; sibling overloads handle
+    other concrete VectorFunction types or a constant vector.
 
 Returns
 -------
@@ -1292,7 +1311,7 @@ VectorFunction
         if constexpr (!is_gen)
             obj.def("cwise_product", [](const Derived &seg1, const Gen &seg2) {
                 return Gen(CwiseFunctionProduct<Derived, Gen>(seg1, seg2));
-            });
+            }, R"doc(Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_product`.)doc");
 
         ///////////////////////////////////////////////////////////////////////////
         ///////////////////////////////////////////////////////////////////////////
@@ -1302,13 +1321,14 @@ VectorFunction
                     [](const Derived &seg1, const SEG &seg2) {
                         return Gen(cwise_quotient(seg1, seg2));
                     },
-                    R"doc(Element-wise quotient of this VectorFunction divided by another.
+                    R"doc(Element-wise quotient of this VectorFunction divided by a segment VectorFunction.
 
 Parameters
 ----------
-other : VectorFunction or array_like, shape (n,)
+other : Segment VectorFunction, shape (n,)
     Divisor; must have the same output dimension as ``self``.
-    Accepts a VectorFunction of any concrete type or a constant vector.
+    This overload accepts a generic segment; sibling overloads handle
+    other concrete VectorFunction types or a constant vector divisor.
 
 Returns
 -------
@@ -1318,7 +1338,7 @@ VectorFunction
         if constexpr (!is_gen)
             obj.def("cwise_quotient", [](const Derived &seg1, const Gen &seg2) {
                 return Gen(cwise_quotient(seg1, seg2));
-            });
+            }, R"doc(Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_quotient`.)doc");
     }
 
     obj.def(
@@ -1338,25 +1358,25 @@ ScalarFunction
 )doc");
     obj.def("cwise_product", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));
-    });
+    }, R"doc(Overload for two operands of the same concrete type; see :meth:`cwise_product`.)doc");
 
     obj.def("cwise_quotient", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(cwise_quotient(seg1, seg2));
-    });
+    }, R"doc(Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.)doc");
 
     //////////////////////////////////////
     obj.def("dot", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         return GenS(dot_product(seg1, Constant<-1, Derived::ORC>(seg1.input_rows(), seg2)));
-    });
+    }, R"doc(Overload accepting a constant vector right-hand operand; see :meth:`dot`.)doc");
 
     obj.def("cwise_product", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         return BinGen(RowScaled<Derived>(seg1, seg2));
-    });
+    }, R"doc(Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.)doc");
 
     obj.def("cwise_quotient", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
         Eigen::VectorXd seg2i = seg2.cwiseInverse();
         return BinGen(RowScaled<Derived>(seg1, seg2i));
-    });
+    }, R"doc(Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.)doc");
 }
 
 template <class Derived, class PYClass> void BinaryOperatorsBuild(PYClass &obj) {
@@ -1385,27 +1405,31 @@ template <class Derived, class PYClass> void BinaryOperatorsBuild(PYClass &obj) 
     if constexpr (!is_arglike) {
 
         obj.def("eval", [](const Derived &a, const ELEM &b) { return BinGen(a.eval(b)); },
-                R"doc(Compose this VectorFunction with an inner VectorFunction: ``self(g(.))``.
+                R"doc(Compose this VectorFunction with a scalar-segment inner function: ``self(g(.))``.
 
 Substitutes the inner function ``g`` into the input of ``self``, forming
 the composition ``x ↦ self(g(x))``.  The inner function's output dimension
-must match ``self``'s input dimension.
+must match ``self``'s input dimension.  Sibling overloads accept other
+inner-function types (generic segment, fixed-size segments, GenericFunction).
 
 Parameters
 ----------
-g : VectorFunction
-    Inner function whose output feeds ``self``'s input.  Accepts all
-    concrete VectorFunction types (scalar, segment, generic, etc.).
+g : Segment (scalar, ``Segment[-1, 1, -1]``)
+    Inner function whose output feeds ``self``'s input.
 
 Returns
 -------
 VectorFunction
     Expression evaluating ``self(g(x))``.
 )doc");
-        obj.def("eval", [](const Derived &a, const SEG &b) { return BinGen(a.eval(b)); });
-        obj.def("eval", [](const Derived &a, const SEG2 &b) { return BinGen(a.eval(b)); });
-        obj.def("eval", [](const Derived &a, const SEG3 &b) { return BinGen(a.eval(b)); });
-        obj.def("eval", [](const Derived &a, const Gen &b) { return BinGen(a.eval(b)); });
+        obj.def("eval", [](const Derived &a, const SEG &b) { return BinGen(a.eval(b)); },
+                R"doc(Overload for a generic segment inner function; see :meth:`eval`.)doc");
+        obj.def("eval", [](const Derived &a, const SEG2 &b) { return BinGen(a.eval(b)); },
+                R"doc(Overload for a fixed-size-2 segment inner function; see :meth:`eval`.)doc");
+        obj.def("eval", [](const Derived &a, const SEG3 &b) { return BinGen(a.eval(b)); },
+                R"doc(Overload for a fixed-size-3 segment inner function; see :meth:`eval`.)doc");
+        obj.def("eval", [](const Derived &a, const Gen &b) { return BinGen(a.eval(b)); },
+                R"doc(Overload for a generic VectorFunction inner function; see :meth:`eval`.)doc");
 
         /////////////////////////////////////////////////////
         obj.def(
@@ -1440,7 +1464,26 @@ VectorFunction
         ///////////////////////////////////////////////////////////////
         obj.def("eval", [](const Derived &a, int ir, Eigen::VectorXi v) {
             return BinGen(ParsedInput<Derived, -1, Derived::ORC>(a, v, ir));
-        });
+        },
+                R"doc(Compose this function with a remapped-input projection.
+
+Creates the composition ``x ↦ self(x[v[0]], x[v[1]], …, x[v[k-1]])`` where
+``x`` is a vector of length ``ir``.  Use this to route selected elements of a
+larger input vector into the inputs of ``self``.
+
+Parameters
+----------
+ir : int
+    Total number of inputs in the outer (ambient) vector ``x``.
+v : array_like of int, shape (input_rows,)
+    Index vector; ``v[i]`` is the position in ``x`` of the ``i``-th input
+    of ``self``.
+
+Returns
+-------
+VectorFunction
+    Expression evaluating ``self(x[v])``, with ``input_rows`` equal to ``ir``.
+)doc");
     }
 
     obj.def(
@@ -1473,7 +1516,8 @@ VectorFunction
             // Scalar outer function: ``g(self(x))`` with scalar result.
             return GenS(b.eval(a));
         },
-        nb::is_operator());
+        nb::is_operator(),
+        R"doc(Overload for a scalar outer function; see :meth:`apply`.)doc");
 
     obj.def(
         "__add__", [](const Derived &a, const Derived &b) { return BinGen(a + b); },

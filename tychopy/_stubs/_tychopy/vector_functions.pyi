@@ -19,6 +19,18 @@ import _tychopy.optimal_control.ode_x_u_p
 
 
 class VectorFunction:
+    """
+    The central symbolic, differentiable vector-to-vector map in Tycho.
+
+    A ``VectorFunction`` represents a differentiable mapping
+    ``f : R^n -> R^m`` that can be evaluated, differentiated (Jacobian,
+    adjoint gradient, adjoint Hessian), and composed with other
+    VectorFunctions to build dynamics, constraints, and objectives for
+    optimal control problems. Concrete expressions are constructed by
+    indexing and operating on ``Arguments`` objects; the result is
+    implicitly convertible to ``VectorFunction`` for use in phase APIs.
+    """
+
     @overload
     def __init__(self, arg: VectorFunction) -> None:
         """
@@ -208,10 +220,13 @@ class VectorFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -242,15 +257,20 @@ class VectorFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -264,7 +284,8 @@ class VectorFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: VectorFunction, /) -> VectorFunction:
@@ -331,16 +352,91 @@ class VectorFunction:
         """
 
     @overload
-    def __call__(self, arg: Sequence[VectorFunction], /) -> VectorFunction: ...
+    def __call__(self, arg: Sequence[VectorFunction], /) -> VectorFunction:
+        """
+        Compose this function by substituting a list of vector-output functions as its input.
+
+        The functions in ``funcs`` are vertically stacked and their concatenated outputs
+        are used as the input to this function.  Equivalent to the scalar-list overload
+        but accepts VectorFunctions with any output dimension.
+
+        Parameters
+        ----------
+        funcs : list[VectorFunction]
+            List of VectorFunctions whose stacked outputs form the input to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: VectorFunction, /, *args) -> VectorFunction: ...
+    def __call__(self, arg0: VectorFunction, /, *args) -> VectorFunction:
+        """
+        Compose this function with a variadic sequence of VectorFunctions.
+
+        Convenience variadic form of the list overload.  All positional arguments after
+        ``self`` are stacked in order and used as the input to this function.
+
+        Parameters
+        ----------
+        first : VectorFunction
+            First function in the stack; its ``input_rows()`` sets the shared domain size.
+        *args : VectorFunction
+            Additional VectorFunctions to stack after ``first``.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: float, /, *args) -> VectorFunction: ...
+    def __call__(self, arg0: float, /, *args) -> VectorFunction:
+        """
+        Compose this function, prepending a scalar constant to the stacked input.
+
+        The scalar ``first`` is promoted to a constant scalar VectorFunction whose domain
+        size is inferred from the first VectorFunction in ``*args``, then stacked with the
+        remaining arguments to form the full input.
+
+        Parameters
+        ----------
+        first : float
+            Scalar constant prepended to the input stack.
+        *args : VectorFunction
+            VectorFunctions whose stacked outputs (together with ``first``) form the input
+            to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: numpy.ndarray, /, *args) -> VectorFunction: ...
+    def __call__(self, arg0: numpy.ndarray, /, *args) -> VectorFunction:
+        """
+        Compose this function, prepending a constant vector to the stacked input.
+
+        The array ``first`` is promoted to a constant vector VectorFunction whose domain
+        size is inferred from the first VectorFunction in ``*args``, then stacked with the
+        remaining arguments to form the full input.
+
+        Parameters
+        ----------
+        first : array_like
+            Constant vector prepended to the input stack.
+        *args : VectorFunction
+            VectorFunctions whose stacked outputs (together with ``first``) form the input
+            to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -365,15 +461,18 @@ class VectorFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -394,7 +493,10 @@ class VectorFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -424,7 +526,10 @@ class VectorFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -454,7 +559,10 @@ class VectorFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -491,7 +599,10 @@ class VectorFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -538,32 +649,47 @@ class VectorFunction:
         """
 
     @overload
-    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction: ...
+    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction:
+        """
+        Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.
+        """
 
     @overload
-    def normalized_power3(self) -> VectorFunction: ...
+    def normalized_power3(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power3`."""
 
-    def norm(self) -> ScalarFunction: ...
+    def norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`norm`."""
 
-    def squared_norm(self) -> ScalarFunction: ...
+    def squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`squared_norm`."""
 
-    def cubed_norm(self) -> ScalarFunction: ...
+    def cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`cubed_norm`."""
 
-    def inverse_norm(self) -> ScalarFunction: ...
+    def inverse_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_norm`."""
 
-    def inverse_squared_norm(self) -> ScalarFunction: ...
+    def inverse_squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_squared_norm`."""
 
-    def inverse_cubed_norm(self) -> ScalarFunction: ...
+    def inverse_cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_cubed_norm`."""
 
-    def inverse_four_norm(self) -> ScalarFunction: ...
+    def inverse_four_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_four_norm`."""
 
-    def normalized(self) -> VectorFunction: ...
+    def normalized(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized`."""
 
-    def normalized_power2(self) -> VectorFunction: ...
+    def normalized_power2(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power2`."""
 
-    def normalized_power4(self) -> VectorFunction: ...
+    def normalized_power4(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power4`."""
 
-    def normalized_power5(self) -> VectorFunction: ...
+    def normalized_power5(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power5`."""
 
     @overload
     def cross(self, arg: Segment, /) -> VectorFunction:
@@ -586,16 +712,26 @@ class VectorFunction:
         """
 
     @overload
-    def cross(self, arg: Segment3, /) -> VectorFunction: ...
+    def cross(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for a fixed-size-3 segment right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
+    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction:
+        """
+        Overload accepting a constant 3-element array right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cross(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cross`.
+        """
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment, /) -> ScalarFunction:
+        """Overload for a generic segment right-hand operand; see :meth:`dot`."""
 
     @overload
     def dot(self, arg: VectorFunction, /) -> ScalarFunction:
@@ -614,18 +750,22 @@ class VectorFunction:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def cwise_product(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise product of this VectorFunction with another.
+        Element-wise product of this VectorFunction with a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Right-hand operand; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector.
 
         Returns
         -------
@@ -634,21 +774,28 @@ class VectorFunction:
         """
 
     @overload
-    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
     def cwise_quotient(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise quotient of this VectorFunction divided by another.
+        Element-wise quotient of this VectorFunction divided by a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Divisor; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector divisor.
 
         Returns
         -------
@@ -657,10 +804,16 @@ class VectorFunction:
         """
 
     @overload
-    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     __array_ufunc__: None = None
 
@@ -940,24 +1093,20 @@ class VectorFunction:
     @overload
     def __getitem__(self, arg: int, /) -> ScalarFunction:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -998,11 +1147,14 @@ class VectorFunction:
             Expression whose output is ``self(x)[-2:]``.
         """
 
-    def segment2(self, arg: int, /) -> VectorFunction: ...
+    def segment2(self, arg: int, /) -> VectorFunction:
+        """Alias for :meth:`segment_2`."""
 
-    def head2(self) -> VectorFunction: ...
+    def head2(self) -> VectorFunction:
+        """Alias for :meth:`head_2`."""
 
-    def tail2(self) -> VectorFunction: ...
+    def tail2(self) -> VectorFunction:
+        """Alias for :meth:`tail_2`."""
 
     def segment_3(self, arg: int, /) -> VectorFunction:
         """
@@ -1039,26 +1191,29 @@ class VectorFunction:
             Expression whose output is ``self(x)[-3:]``.
         """
 
-    def segment3(self, arg: int, /) -> VectorFunction: ...
+    def segment3(self, arg: int, /) -> VectorFunction:
+        """Alias for :meth:`segment_3`."""
 
-    def head3(self) -> VectorFunction: ...
+    def head3(self) -> VectorFunction:
+        """Alias for :meth:`head_3`."""
 
-    def tail3(self) -> VectorFunction: ...
+    def tail3(self) -> VectorFunction:
+        """Alias for :meth:`tail_3`."""
 
     @overload
     def eval(self, arg: Element, /) -> VectorFunction:
         """
-        Compose this VectorFunction with an inner VectorFunction: ``self(g(.))``.
+        Compose this VectorFunction with a scalar-segment inner function: ``self(g(.))``.
 
         Substitutes the inner function ``g`` into the input of ``self``, forming
         the composition ``x ↦ self(g(x))``.  The inner function's output dimension
-        must match ``self``'s input dimension.
+        must match ``self``'s input dimension.  Sibling overloads accept other
+        inner-function types (generic segment, fixed-size segments, GenericFunction).
 
         Parameters
         ----------
-        g : VectorFunction
-            Inner function whose output feeds ``self``'s input.  Accepts all
-            concrete VectorFunction types (scalar, segment, generic, etc.).
+        g : Segment (scalar, ``Segment[-1, 1, -1]``)
+            Inner function whose output feeds ``self``'s input.
 
         Returns
         -------
@@ -1067,19 +1222,45 @@ class VectorFunction:
         """
 
     @overload
-    def eval(self, arg: Segment, /) -> VectorFunction: ...
+    def eval(self, arg: Segment, /) -> VectorFunction:
+        """Overload for a generic segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: Segment2, /) -> VectorFunction: ...
+    def eval(self, arg: Segment2, /) -> VectorFunction:
+        """Overload for a fixed-size-2 segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: Segment3, /) -> VectorFunction: ...
+    def eval(self, arg: Segment3, /) -> VectorFunction:
+        """Overload for a fixed-size-3 segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def eval(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction inner function; see :meth:`eval`.
+        """
 
     @overload
-    def eval(self, arg0: int, arg1: numpy.ndarray, /) -> VectorFunction: ...
+    def eval(self, arg0: int, arg1: numpy.ndarray, /) -> VectorFunction:
+        """
+        Compose this function with a remapped-input projection.
+
+        Creates the composition ``x ↦ self(x[v[0]], x[v[1]], …, x[v[k-1]])`` where
+        ``x`` is a vector of length ``ir``.  Use this to route selected elements of a
+        larger input vector into the inputs of ``self``.
+
+        Parameters
+        ----------
+        ir : int
+            Total number of inputs in the outer (ambient) vector ``x``.
+        v : array_like of int, shape (input_rows,)
+            Index vector; ``v[i]`` is the position in ``x`` of the ``i``-th input
+            of ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Expression evaluating ``self(x[v])``, with ``input_rows`` equal to ``ir``.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -1103,9 +1284,20 @@ class VectorFunction:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
 class ScalarFunction:
+    """
+    A VectorFunction specialization whose output is a single scalar value.
+
+    ``ScalarFunction`` is a ``VectorFunction`` with exactly one output row
+    (``m == 1``). All VectorFunction operations are available; in addition a
+    ``ScalarFunction`` can be used directly wherever a scalar objective or
+    scalar constraint value is expected. Any ``ScalarFunction`` is implicitly
+    convertible to ``VectorFunction``.
+    """
+
     @overload
     def __init__(self, arg: ScalarFunction) -> None:
         """
@@ -1189,10 +1381,13 @@ class ScalarFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -1223,15 +1418,20 @@ class ScalarFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -1245,7 +1445,8 @@ class ScalarFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: VectorFunction, /) -> ScalarFunction:
@@ -1312,16 +1513,91 @@ class ScalarFunction:
         """
 
     @overload
-    def __call__(self, arg: Sequence[VectorFunction], /) -> ScalarFunction: ...
+    def __call__(self, arg: Sequence[VectorFunction], /) -> ScalarFunction:
+        """
+        Compose this function by substituting a list of vector-output functions as its input.
+
+        The functions in ``funcs`` are vertically stacked and their concatenated outputs
+        are used as the input to this function.  Equivalent to the scalar-list overload
+        but accepts VectorFunctions with any output dimension.
+
+        Parameters
+        ----------
+        funcs : list[VectorFunction]
+            List of VectorFunctions whose stacked outputs form the input to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: VectorFunction, /, *args) -> ScalarFunction: ...
+    def __call__(self, arg0: VectorFunction, /, *args) -> ScalarFunction:
+        """
+        Compose this function with a variadic sequence of VectorFunctions.
+
+        Convenience variadic form of the list overload.  All positional arguments after
+        ``self`` are stacked in order and used as the input to this function.
+
+        Parameters
+        ----------
+        first : VectorFunction
+            First function in the stack; its ``input_rows()`` sets the shared domain size.
+        *args : VectorFunction
+            Additional VectorFunctions to stack after ``first``.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: float, /, *args) -> ScalarFunction: ...
+    def __call__(self, arg0: float, /, *args) -> ScalarFunction:
+        """
+        Compose this function, prepending a scalar constant to the stacked input.
+
+        The scalar ``first`` is promoted to a constant scalar VectorFunction whose domain
+        size is inferred from the first VectorFunction in ``*args``, then stacked with the
+        remaining arguments to form the full input.
+
+        Parameters
+        ----------
+        first : float
+            Scalar constant prepended to the input stack.
+        *args : VectorFunction
+            VectorFunctions whose stacked outputs (together with ``first``) form the input
+            to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
-    def __call__(self, arg0: numpy.ndarray, /, *args) -> ScalarFunction: ...
+    def __call__(self, arg0: numpy.ndarray, /, *args) -> ScalarFunction:
+        """
+        Compose this function, prepending a constant vector to the stacked input.
+
+        The array ``first`` is promoted to a constant vector VectorFunction whose domain
+        size is inferred from the first VectorFunction in ``*args``, then stacked with the
+        remaining arguments to form the full input.
+
+        Parameters
+        ----------
+        first : array_like
+            Constant vector prepended to the input stack.
+        *args : VectorFunction
+            VectorFunctions whose stacked outputs (together with ``first``) form the input
+            to this function.
+
+        Returns
+        -------
+        VectorFunction
+            A new VectorFunction representing the composition.
+        """
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1346,15 +1622,18 @@ class ScalarFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -1375,7 +1654,10 @@ class ScalarFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -1405,7 +1687,10 @@ class ScalarFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1435,7 +1720,10 @@ class ScalarFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -1472,7 +1760,10 @@ class ScalarFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -1903,34 +2194,49 @@ class ScalarFunction:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
-    def cwise_product(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def cwise_product(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def cwise_quotient(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def eval(self, arg: Element, /) -> ScalarFunction:
         """
-        Compose this VectorFunction with an inner VectorFunction: ``self(g(.))``.
+        Compose this VectorFunction with a scalar-segment inner function: ``self(g(.))``.
 
         Substitutes the inner function ``g`` into the input of ``self``, forming
         the composition ``x ↦ self(g(x))``.  The inner function's output dimension
-        must match ``self``'s input dimension.
+        must match ``self``'s input dimension.  Sibling overloads accept other
+        inner-function types (generic segment, fixed-size segments, GenericFunction).
 
         Parameters
         ----------
-        g : VectorFunction
-            Inner function whose output feeds ``self``'s input.  Accepts all
-            concrete VectorFunction types (scalar, segment, generic, etc.).
+        g : Segment (scalar, ``Segment[-1, 1, -1]``)
+            Inner function whose output feeds ``self``'s input.
 
         Returns
         -------
@@ -1939,19 +2245,45 @@ class ScalarFunction:
         """
 
     @overload
-    def eval(self, arg: Segment, /) -> ScalarFunction: ...
+    def eval(self, arg: Segment, /) -> ScalarFunction:
+        """Overload for a generic segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: Segment2, /) -> ScalarFunction: ...
+    def eval(self, arg: Segment2, /) -> ScalarFunction:
+        """Overload for a fixed-size-2 segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: Segment3, /) -> ScalarFunction: ...
+    def eval(self, arg: Segment3, /) -> ScalarFunction:
+        """Overload for a fixed-size-3 segment inner function; see :meth:`eval`."""
 
     @overload
-    def eval(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def eval(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Overload for a generic VectorFunction inner function; see :meth:`eval`.
+        """
 
     @overload
-    def eval(self, arg0: int, arg1: numpy.ndarray, /) -> ScalarFunction: ...
+    def eval(self, arg0: int, arg1: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Compose this function with a remapped-input projection.
+
+        Creates the composition ``x ↦ self(x[v[0]], x[v[1]], …, x[v[k-1]])`` where
+        ``x`` is a vector of length ``ir``.  Use this to route selected elements of a
+        larger input vector into the inputs of ``self``.
+
+        Parameters
+        ----------
+        ir : int
+            Total number of inputs in the outer (ambient) vector ``x``.
+        v : array_like of int, shape (input_rows,)
+            Index vector; ``v[i]`` is the position in ``x`` of the ``i``-th input
+            of ``self``.
+
+        Returns
+        -------
+        VectorFunction
+            Expression evaluating ``self(x[v])``, with ``input_rows`` equal to ``ir``.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -1975,7 +2307,8 @@ class ScalarFunction:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -2089,24 +2422,20 @@ class ScalarFunction:
     @overload
     def __getitem__(self, arg: int, /) -> ScalarFunction:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -2141,6 +2470,16 @@ class ScalarFunction:
     def __ge__(self, arg: ScalarFunction, /) -> Conditional: ...
 
 class Segment:
+    """
+    A contiguous sub-vector view of a VectorFunction's input.
+
+    ``Segment(input_rows, output_rows, start)`` extracts ``output_rows``
+    consecutive components of the input vector beginning at index ``start``,
+    producing a new vector-valued VectorFunction. It is the standard mechanism for
+    slicing the symbolic input — obtained by indexing ``Arguments`` objects (e.g.
+    ``x[2:5]``) or by calling ``.segment(start, size)`` on any VectorFunction.
+    """
+
     def __init__(self, arg0: int, arg1: int, arg2: int, /) -> None:
         """
         Construct a Segment by specifying input size, segment length, and start index.
@@ -2206,10 +2545,13 @@ class Segment:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -2240,15 +2582,20 @@ class Segment:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -2262,7 +2609,8 @@ class Segment:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -2287,15 +2635,18 @@ class Segment:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -2316,7 +2667,10 @@ class Segment:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -2346,7 +2700,10 @@ class Segment:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -2376,7 +2733,10 @@ class Segment:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -2413,7 +2773,10 @@ class Segment:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -2632,47 +2995,77 @@ class Segment:
         """
 
     @overload
-    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction: ...
+    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction:
+        """
+        Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.
+        """
 
     @overload
-    def normalized_power3(self) -> VectorFunction: ...
+    def normalized_power3(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power3`."""
 
-    def norm(self) -> ScalarFunction: ...
+    def norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`norm`."""
 
-    def squared_norm(self) -> ScalarFunction: ...
+    def squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`squared_norm`."""
 
-    def cubed_norm(self) -> ScalarFunction: ...
+    def cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`cubed_norm`."""
 
-    def inverse_norm(self) -> ScalarFunction: ...
+    def inverse_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_norm`."""
 
-    def inverse_squared_norm(self) -> ScalarFunction: ...
+    def inverse_squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_squared_norm`."""
 
-    def inverse_cubed_norm(self) -> ScalarFunction: ...
+    def inverse_cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_cubed_norm`."""
 
-    def inverse_four_norm(self) -> ScalarFunction: ...
+    def inverse_four_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_four_norm`."""
 
-    def normalized(self) -> VectorFunction: ...
+    def normalized(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized`."""
 
-    def normalized_power2(self) -> VectorFunction: ...
+    def normalized_power2(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power2`."""
 
-    def normalized_power4(self) -> VectorFunction: ...
+    def normalized_power4(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power4`."""
 
-    def normalized_power5(self) -> VectorFunction: ...
+    def normalized_power5(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power5`."""
 
     @overload
-    def cross(self, arg: Segment3, /) -> VectorFunction: ...
+    def cross(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for a fixed-size-3 segment right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cross(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
+    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction:
+        """
+        Overload accepting a constant 3-element array right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Segment, /) -> VectorFunction: ...
+    def cross(self, arg: Segment, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cross`.
+        """
 
     @overload
-    def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def dot(self, arg: Segment, /) -> ScalarFunction:
@@ -2691,25 +3084,46 @@ class Segment:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
-    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: Segment, /) -> VectorFunction: ...
+    def cwise_product(self, arg: Segment, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: Segment, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: Segment, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -2733,7 +3147,8 @@ class Segment:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -2847,24 +3262,20 @@ class Segment:
     @overload
     def __getitem__(self, arg: int, /) -> Element:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -2905,11 +3316,14 @@ class Segment:
             Expression whose output is ``self(x)[-2:]``.
         """
 
-    def segment2(self, arg: int, /) -> Segment2: ...
+    def segment2(self, arg: int, /) -> Segment2:
+        """Alias for :meth:`segment_2`."""
 
-    def head2(self) -> Segment2: ...
+    def head2(self) -> Segment2:
+        """Alias for :meth:`head_2`."""
 
-    def tail2(self) -> Segment2: ...
+    def tail2(self) -> Segment2:
+        """Alias for :meth:`tail_2`."""
 
     def segment_3(self, arg: int, /) -> Segment3:
         """
@@ -2946,11 +3360,14 @@ class Segment:
             Expression whose output is ``self(x)[-3:]``.
         """
 
-    def segment3(self, arg: int, /) -> Segment3: ...
+    def segment3(self, arg: int, /) -> Segment3:
+        """Alias for :meth:`segment_3`."""
 
-    def head3(self) -> Segment3: ...
+    def head3(self) -> Segment3:
+        """Alias for :meth:`head_3`."""
 
-    def tail3(self) -> Segment3: ...
+    def tail3(self) -> Segment3:
+        """Alias for :meth:`tail_3`."""
 
     @overload
     def tolist(self) -> list[Element]:
@@ -2968,12 +3385,56 @@ class Segment:
         """
 
     @overload
-    def tolist(self, arg: Sequence[int], /) -> list[Element]: ...
+    def tolist(self, arg: Sequence[int], /) -> list[Element]:
+        """
+        Split selected output components into a list of scalar element functions.
+
+        Returns one scalar-valued VectorFunction for each index in *coeffs*, each
+        extracting the corresponding output component.
+
+        Parameters
+        ----------
+        coeffs : list of int
+            Output-component indices to extract, in the requested order.
+
+        Returns
+        -------
+        list of Element
+            A list of scalar Element functions, one per entry in *coeffs*.
+        """
 
     @overload
-    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]: ...
+    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]:
+        """
+        Split the function into a mixed list of element and segment functions.
+
+        Each entry in *seglist* is a ``(start, size)`` pair. A pair with ``size == 1``
+        produces a scalar Element function; ``size == 2`` or ``3`` produces a
+        fixed-width Segment; any other size produces a dynamic-length Segment.
+
+        Parameters
+        ----------
+        seglist : list of (int, int)
+            List of ``(start, size)`` pairs specifying which contiguous slices of the
+            output vector to extract.
+
+        Returns
+        -------
+        list of Element or Segment
+            A heterogeneous list of VectorFunctions, one per entry in *seglist*.
+        """
 
 class Element:
+    """
+    A contiguous sub-vector view of a VectorFunction's input.
+
+    ``Segment(input_rows, output_rows, start)`` extracts ``output_rows``
+    consecutive components of the input vector beginning at index ``start``,
+    producing a new vector-valued VectorFunction. It is the standard mechanism for
+    slicing the symbolic input — obtained by indexing ``Arguments`` objects (e.g.
+    ``x[2:5]``) or by calling ``.segment(start, size)`` on any VectorFunction.
+    """
+
     def __init__(self, arg0: int, arg1: int, arg2: int, /) -> None:
         """
         Construct a Segment by specifying input size, segment length, and start index.
@@ -3039,10 +3500,13 @@ class Element:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -3073,15 +3537,20 @@ class Element:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -3095,7 +3564,8 @@ class Element:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -3120,15 +3590,18 @@ class Element:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -3149,7 +3622,10 @@ class Element:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -3179,7 +3655,10 @@ class Element:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -3209,7 +3688,10 @@ class Element:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -3246,7 +3728,10 @@ class Element:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -3683,19 +4168,34 @@ class Element:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
-    def cwise_product(self, arg: Element, /) -> ScalarFunction: ...
+    def cwise_product(self, arg: Element, /) -> ScalarFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: Element, /) -> ScalarFunction: ...
+    def cwise_quotient(self, arg: Element, /) -> ScalarFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -3719,7 +4219,8 @@ class Element:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -3833,24 +4334,20 @@ class Element:
     @overload
     def __getitem__(self, arg: int, /) -> Element:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -3912,12 +4409,56 @@ class Element:
         """
 
     @overload
-    def tolist(self, arg: Sequence[int], /) -> list[Element]: ...
+    def tolist(self, arg: Sequence[int], /) -> list[Element]:
+        """
+        Split selected output components into a list of scalar element functions.
+
+        Returns one scalar-valued VectorFunction for each index in *coeffs*, each
+        extracting the corresponding output component.
+
+        Parameters
+        ----------
+        coeffs : list of int
+            Output-component indices to extract, in the requested order.
+
+        Returns
+        -------
+        list of Element
+            A list of scalar Element functions, one per entry in *coeffs*.
+        """
 
     @overload
-    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]: ...
+    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]:
+        """
+        Split the function into a mixed list of element and segment functions.
+
+        Each entry in *seglist* is a ``(start, size)`` pair. A pair with ``size == 1``
+        produces a scalar Element function; ``size == 2`` or ``3`` produces a
+        fixed-width Segment; any other size produces a dynamic-length Segment.
+
+        Parameters
+        ----------
+        seglist : list of (int, int)
+            List of ``(start, size)`` pairs specifying which contiguous slices of the
+            output vector to extract.
+
+        Returns
+        -------
+        list of Element or Segment
+            A heterogeneous list of VectorFunctions, one per entry in *seglist*.
+        """
 
 class Arguments:
+    """
+    The identity VectorFunction — the symbolic input vector for building expressions.
+
+    ``Arguments(n)`` is the identity map on ``n``-dimensional inputs: it returns
+    its input unchanged. It is the standard starting point for constructing
+    VectorFunction expressions — use indexing (``x[i]``, ``x[i:j]``) or methods
+    such as ``x.constant(v)`` to derive sub-expressions and build up dynamics,
+    constraints, and objectives.
+    """
+
     def __init__(self, arg: int, /) -> None:
         """
         Construct an identity-passthrough VectorFunction for a given input size.
@@ -3963,7 +4504,23 @@ class Arguments:
         """
 
     @overload
-    def constant(self, arg: float, /) -> ScalarFunction: ...
+    def constant(self, arg: float, /) -> ScalarFunction:
+        """
+        Build a scalar constant VectorFunction whose output is a fixed scalar.
+
+        Creates a scalar-output VectorFunction that returns *v* for any input, with
+        input dimension matching this ``Arguments`` object.
+
+        Parameters
+        ----------
+        v : float
+            Fixed scalar output value.
+
+        Returns
+        -------
+        ScalarFunction
+            Constant scalar function with ``input_rows`` matching this object.
+        """
 
     def input_rows(self) -> int:
         """
@@ -4016,10 +4573,13 @@ class Arguments:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -4050,15 +4610,20 @@ class Arguments:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -4072,7 +4637,8 @@ class Arguments:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -4097,15 +4663,18 @@ class Arguments:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -4126,7 +4695,10 @@ class Arguments:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -4156,7 +4728,10 @@ class Arguments:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -4186,7 +4761,10 @@ class Arguments:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -4223,7 +4801,10 @@ class Arguments:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -4436,32 +5017,47 @@ class Arguments:
         """
 
     @overload
-    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction: ...
+    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction:
+        """
+        Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.
+        """
 
     @overload
-    def normalized_power3(self) -> VectorFunction: ...
+    def normalized_power3(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power3`."""
 
-    def norm(self) -> ScalarFunction: ...
+    def norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`norm`."""
 
-    def squared_norm(self) -> ScalarFunction: ...
+    def squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`squared_norm`."""
 
-    def cubed_norm(self) -> ScalarFunction: ...
+    def cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`cubed_norm`."""
 
-    def inverse_norm(self) -> ScalarFunction: ...
+    def inverse_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_norm`."""
 
-    def inverse_squared_norm(self) -> ScalarFunction: ...
+    def inverse_squared_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_squared_norm`."""
 
-    def inverse_cubed_norm(self) -> ScalarFunction: ...
+    def inverse_cubed_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_cubed_norm`."""
 
-    def inverse_four_norm(self) -> ScalarFunction: ...
+    def inverse_four_norm(self) -> ScalarFunction:
+        """Dynamic-size dispatch overload; see :meth:`inverse_four_norm`."""
 
-    def normalized(self) -> VectorFunction: ...
+    def normalized(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized`."""
 
-    def normalized_power2(self) -> VectorFunction: ...
+    def normalized_power2(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power2`."""
 
-    def normalized_power4(self) -> VectorFunction: ...
+    def normalized_power4(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power4`."""
 
-    def normalized_power5(self) -> VectorFunction: ...
+    def normalized_power5(self) -> VectorFunction:
+        """Dynamic-size dispatch overload; see :meth:`normalized_power5`."""
 
     @overload
     def cross(self, arg: Segment, /) -> VectorFunction:
@@ -4484,22 +5080,38 @@ class Arguments:
         """
 
     @overload
-    def cross(self, arg: Segment3, /) -> VectorFunction: ...
+    def cross(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for a fixed-size-3 segment right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cross(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
+    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction:
+        """
+        Overload accepting a constant 3-element array right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Arguments, /) -> VectorFunction: ...
+    def cross(self, arg: Arguments, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cross`.
+        """
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment, /) -> ScalarFunction:
+        """Overload for a generic segment right-hand operand; see :meth:`dot`."""
 
     @overload
-    def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def dot(self, arg: Arguments, /) -> ScalarFunction:
@@ -4518,18 +5130,22 @@ class Arguments:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def cwise_product(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise product of this VectorFunction with another.
+        Element-wise product of this VectorFunction with a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Right-hand operand; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector.
 
         Returns
         -------
@@ -4538,24 +5154,34 @@ class Arguments:
         """
 
     @overload
-    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: Arguments, /) -> VectorFunction: ...
+    def cwise_product(self, arg: Arguments, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
     def cwise_quotient(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise quotient of this VectorFunction divided by another.
+        Element-wise quotient of this VectorFunction divided by a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Divisor; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector divisor.
 
         Returns
         -------
@@ -4564,13 +5190,22 @@ class Arguments:
         """
 
     @overload
-    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: Arguments, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: Arguments, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -4594,7 +5229,8 @@ class Arguments:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -4708,24 +5344,20 @@ class Arguments:
     @overload
     def __getitem__(self, arg: int, /) -> Element:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -4766,11 +5398,14 @@ class Arguments:
             Expression whose output is ``self(x)[-2:]``.
         """
 
-    def segment2(self, arg: int, /) -> Segment2: ...
+    def segment2(self, arg: int, /) -> Segment2:
+        """Alias for :meth:`segment_2`."""
 
-    def head2(self) -> Segment2: ...
+    def head2(self) -> Segment2:
+        """Alias for :meth:`head_2`."""
 
-    def tail2(self) -> Segment2: ...
+    def tail2(self) -> Segment2:
+        """Alias for :meth:`tail_2`."""
 
     def segment_3(self, arg: int, /) -> Segment3:
         """
@@ -4807,11 +5442,14 @@ class Arguments:
             Expression whose output is ``self(x)[-3:]``.
         """
 
-    def segment3(self, arg: int, /) -> Segment3: ...
+    def segment3(self, arg: int, /) -> Segment3:
+        """Alias for :meth:`segment_3`."""
 
-    def head3(self) -> Segment3: ...
+    def head3(self) -> Segment3:
+        """Alias for :meth:`head_3`."""
 
-    def tail3(self) -> Segment3: ...
+    def tail3(self) -> Segment3:
+        """Alias for :meth:`tail_3`."""
 
     @overload
     def tolist(self) -> list[Element]:
@@ -4829,12 +5467,56 @@ class Arguments:
         """
 
     @overload
-    def tolist(self, arg: Sequence[int], /) -> list[Element]: ...
+    def tolist(self, arg: Sequence[int], /) -> list[Element]:
+        """
+        Split selected output components into a list of scalar element functions.
+
+        Returns one scalar-valued VectorFunction for each index in *coeffs*, each
+        extracting the corresponding output component.
+
+        Parameters
+        ----------
+        coeffs : list of int
+            Output-component indices to extract, in the requested order.
+
+        Returns
+        -------
+        list of Element
+            A list of scalar Element functions, one per entry in *coeffs*.
+        """
 
     @overload
-    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]: ...
+    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]:
+        """
+        Split the function into a mixed list of element and segment functions.
+
+        Each entry in *seglist* is a ``(start, size)`` pair. A pair with ``size == 1``
+        produces a scalar Element function; ``size == 2`` or ``3`` produces a
+        fixed-width Segment; any other size produces a dynamic-length Segment.
+
+        Parameters
+        ----------
+        seglist : list of (int, int)
+            List of ``(start, size)`` pairs specifying which contiguous slices of the
+            output vector to extract.
+
+        Returns
+        -------
+        list of Element or Segment
+            A heterogeneous list of VectorFunctions, one per entry in *seglist*.
+        """
 
 class Segment2:
+    """
+    A contiguous sub-vector view of a VectorFunction's input.
+
+    ``Segment(input_rows, output_rows, start)`` extracts ``output_rows``
+    consecutive components of the input vector beginning at index ``start``,
+    producing a new vector-valued VectorFunction. It is the standard mechanism for
+    slicing the symbolic input — obtained by indexing ``Arguments`` objects (e.g.
+    ``x[2:5]``) or by calling ``.segment(start, size)`` on any VectorFunction.
+    """
+
     def __init__(self, arg0: int, arg1: int, arg2: int, /) -> None:
         """
         Construct a Segment by specifying input size, segment length, and start index.
@@ -4900,10 +5582,13 @@ class Segment2:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -4934,15 +5619,20 @@ class Segment2:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -4956,7 +5646,8 @@ class Segment2:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -4981,15 +5672,18 @@ class Segment2:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -5010,7 +5704,10 @@ class Segment2:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -5040,7 +5737,10 @@ class Segment2:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -5070,7 +5770,10 @@ class Segment2:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -5107,7 +5810,10 @@ class Segment2:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -5326,10 +6032,21 @@ class Segment2:
         """
 
     @overload
-    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction: ...
+    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction:
+        """
+        Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.
+        """
 
     @overload
-    def normalized_power3(self) -> VectorFunction: ...
+    def normalized_power3(self) -> VectorFunction:
+        """
+        Output divided by the cubed Euclidean norm: ``self(x) / ||self(x)||³``.
+
+        Returns
+        -------
+        VectorFunction
+            Expression evaluating ``self(x) / ||self(x)||₂³``.
+        """
 
     def norm(self) -> ScalarFunction:
         """
@@ -5442,10 +6159,14 @@ class Segment2:
         """
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment, /) -> ScalarFunction:
+        """Overload for a generic segment right-hand operand; see :meth:`dot`."""
 
     @overload
-    def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def dot(self, arg: Segment2, /) -> ScalarFunction:
@@ -5464,18 +6185,22 @@ class Segment2:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def cwise_product(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise product of this VectorFunction with another.
+        Element-wise product of this VectorFunction with a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Right-hand operand; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector.
 
         Returns
         -------
@@ -5484,24 +6209,34 @@ class Segment2:
         """
 
     @overload
-    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: Segment2, /) -> VectorFunction: ...
+    def cwise_product(self, arg: Segment2, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
     def cwise_quotient(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise quotient of this VectorFunction divided by another.
+        Element-wise quotient of this VectorFunction divided by a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Divisor; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector divisor.
 
         Returns
         -------
@@ -5510,13 +6245,22 @@ class Segment2:
         """
 
     @overload
-    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: Segment2, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: Segment2, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -5540,7 +6284,8 @@ class Segment2:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -5654,24 +6399,20 @@ class Segment2:
     @overload
     def __getitem__(self, arg: int, /) -> Element:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -5693,12 +6434,56 @@ class Segment2:
         """
 
     @overload
-    def tolist(self, arg: Sequence[int], /) -> list[Element]: ...
+    def tolist(self, arg: Sequence[int], /) -> list[Element]:
+        """
+        Split selected output components into a list of scalar element functions.
+
+        Returns one scalar-valued VectorFunction for each index in *coeffs*, each
+        extracting the corresponding output component.
+
+        Parameters
+        ----------
+        coeffs : list of int
+            Output-component indices to extract, in the requested order.
+
+        Returns
+        -------
+        list of Element
+            A list of scalar Element functions, one per entry in *coeffs*.
+        """
 
     @overload
-    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]: ...
+    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]:
+        """
+        Split the function into a mixed list of element and segment functions.
+
+        Each entry in *seglist* is a ``(start, size)`` pair. A pair with ``size == 1``
+        produces a scalar Element function; ``size == 2`` or ``3`` produces a
+        fixed-width Segment; any other size produces a dynamic-length Segment.
+
+        Parameters
+        ----------
+        seglist : list of (int, int)
+            List of ``(start, size)`` pairs specifying which contiguous slices of the
+            output vector to extract.
+
+        Returns
+        -------
+        list of Element or Segment
+            A heterogeneous list of VectorFunctions, one per entry in *seglist*.
+        """
 
 class Segment3:
+    """
+    A contiguous sub-vector view of a VectorFunction's input.
+
+    ``Segment(input_rows, output_rows, start)`` extracts ``output_rows``
+    consecutive components of the input vector beginning at index ``start``,
+    producing a new vector-valued VectorFunction. It is the standard mechanism for
+    slicing the symbolic input — obtained by indexing ``Arguments`` objects (e.g.
+    ``x[2:5]``) or by calling ``.segment(start, size)`` on any VectorFunction.
+    """
+
     def __init__(self, arg0: int, arg1: int, arg2: int, /) -> None:
         """
         Construct a Segment by specifying input size, segment length, and start index.
@@ -5764,10 +6549,13 @@ class Segment3:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -5798,15 +6586,20 @@ class Segment3:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -5820,7 +6613,8 @@ class Segment3:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -5845,15 +6639,18 @@ class Segment3:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -5874,7 +6671,10 @@ class Segment3:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -5904,7 +6704,10 @@ class Segment3:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -5934,7 +6737,10 @@ class Segment3:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -5971,7 +6777,10 @@ class Segment3:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -6190,10 +6999,21 @@ class Segment3:
         """
 
     @overload
-    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction: ...
+    def normalized_power3(self, arg0: numpy.ndarray, arg1: float, /) -> VectorFunction:
+        """
+        Scaled shifted normalized-power-3: ``s * (self(x) + b) / ||self(x) + b||³``; see :meth:`normalized_power3`.
+        """
 
     @overload
-    def normalized_power3(self) -> VectorFunction: ...
+    def normalized_power3(self) -> VectorFunction:
+        """
+        Output divided by the cubed Euclidean norm: ``self(x) / ||self(x)||³``.
+
+        Returns
+        -------
+        VectorFunction
+            Expression evaluating ``self(x) / ||self(x)||₂³``.
+        """
 
     def norm(self) -> ScalarFunction:
         """
@@ -6326,19 +7146,32 @@ class Segment3:
         """
 
     @overload
-    def cross(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cross(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
+    def cross(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction:
+        """
+        Overload accepting a constant 3-element array right-hand operand; see :meth:`cross`.
+        """
 
     @overload
-    def cross(self, arg: Segment3, /) -> VectorFunction: ...
+    def cross(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cross`.
+        """
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction: ...
+    def dot(self, arg: Segment, /) -> ScalarFunction:
+        """Overload for a generic segment right-hand operand; see :meth:`dot`."""
 
     @overload
-    def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def dot(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def dot(self, arg: Segment3, /) -> ScalarFunction:
@@ -6357,18 +7190,22 @@ class Segment3:
         """
 
     @overload
-    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction: ...
+    def dot(self, arg: numpy.ndarray, /) -> ScalarFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`dot`.
+        """
 
     @overload
     def cwise_product(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise product of this VectorFunction with another.
+        Element-wise product of this VectorFunction with a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Right-hand operand; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector.
 
         Returns
         -------
@@ -6377,24 +7214,34 @@ class Segment3:
         """
 
     @overload
-    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_product(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: Segment3, /) -> VectorFunction: ...
+    def cwise_product(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_product`.
+        """
 
     @overload
-    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_product(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector right-hand operand; see :meth:`cwise_product`.
+        """
 
     @overload
     def cwise_quotient(self, arg: Segment, /) -> VectorFunction:
         """
-        Element-wise quotient of this VectorFunction divided by another.
+        Element-wise quotient of this VectorFunction divided by a segment VectorFunction.
 
         Parameters
         ----------
-        other : VectorFunction or array_like, shape (n,)
+        other : Segment VectorFunction, shape (n,)
             Divisor; must have the same output dimension as ``self``.
-            Accepts a VectorFunction of any concrete type or a constant vector.
+            This overload accepts a generic segment; sibling overloads handle
+            other concrete VectorFunction types or a constant vector divisor.
 
         Returns
         -------
@@ -6403,13 +7250,22 @@ class Segment3:
         """
 
     @overload
-    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Overload for a generic VectorFunction right-hand operand; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: Segment3, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: Segment3, /) -> VectorFunction:
+        """
+        Overload for two operands of the same concrete type; see :meth:`cwise_quotient`.
+        """
 
     @overload
-    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def cwise_quotient(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Overload accepting a constant vector divisor; see :meth:`cwise_quotient`.
+        """
 
     @overload
     def apply(self, arg: VectorFunction, /) -> VectorFunction:
@@ -6433,7 +7289,8 @@ class Segment3:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """Overload for a scalar outer function; see :meth:`apply`."""
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -6547,24 +7404,20 @@ class Segment3:
     @overload
     def __getitem__(self, arg: int, /) -> Element:
         """
-        Extract a single output element or a contiguous slice (``self[i]`` or ``self[i:j]``).
+        Extract a single output element by integer index (``self[i]``).
+
+        A ``slice`` argument is handled by a sibling overload and raises
+        ``ValueError`` if the slice is empty, backward, or non-contiguous.
 
         Parameters
         ----------
-        index : int or slice
-            Integer index selects a single scalar output.  A ``slice`` selects a
-            contiguous sub-vector (step must be 1 and the slice must be non-empty
-            and forward-only).
+        index : int
+            Zero-based index of the output element to select.
 
         Returns
         -------
         VectorFunction
-            Scalar expression for integer index; sub-vector expression for a slice.
-
-        Raises
-        ------
-        ValueError
-            If the index is out of range, the slice is empty, backward, or non-contiguous.
+            Scalar expression for the selected output element.
         """
 
     @overload
@@ -6605,11 +7458,14 @@ class Segment3:
             Expression whose output is ``self(x)[-2:]``.
         """
 
-    def segment2(self, arg: int, /) -> Segment2: ...
+    def segment2(self, arg: int, /) -> Segment2:
+        """Alias for :meth:`segment_2`."""
 
-    def head2(self) -> Segment2: ...
+    def head2(self) -> Segment2:
+        """Alias for :meth:`head_2`."""
 
-    def tail2(self) -> Segment2: ...
+    def tail2(self) -> Segment2:
+        """Alias for :meth:`tail_2`."""
 
     @overload
     def tolist(self) -> list[Element]:
@@ -6627,10 +7483,44 @@ class Segment3:
         """
 
     @overload
-    def tolist(self, arg: Sequence[int], /) -> list[Element]: ...
+    def tolist(self, arg: Sequence[int], /) -> list[Element]:
+        """
+        Split selected output components into a list of scalar element functions.
+
+        Returns one scalar-valued VectorFunction for each index in *coeffs*, each
+        extracting the corresponding output component.
+
+        Parameters
+        ----------
+        coeffs : list of int
+            Output-component indices to extract, in the requested order.
+
+        Returns
+        -------
+        list of Element
+            A list of scalar Element functions, one per entry in *coeffs*.
+        """
 
     @overload
-    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]: ...
+    def tolist(self, arg: Sequence[tuple[int, int]], /) -> list[object]:
+        """
+        Split the function into a mixed list of element and segment functions.
+
+        Each entry in *seglist* is a ``(start, size)`` pair. A pair with ``size == 1``
+        produces a scalar Element function; ``size == 2`` or ``3`` produces a
+        fixed-width Segment; any other size produces a dynamic-length Segment.
+
+        Parameters
+        ----------
+        seglist : list of (int, int)
+            List of ``(start, size)`` pairs specifying which contiguous slices of the
+            output vector to extract.
+
+        Returns
+        -------
+        list of Element or Segment
+            A heterogeneous list of VectorFunctions, one per entry in *seglist*.
+        """
 
 @overload
 def stack(arg: Sequence[ScalarFunction], /) -> VectorFunction:
@@ -6645,7 +7535,7 @@ def stack(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     ----------
     funcs : list[VectorFunction]
         Scalar-output (output dimension 1) functions sharing the same input
-        dimension.  The list must be non-empty.
+        dimension.
 
     Returns
     -------
@@ -6656,8 +7546,7 @@ def stack(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     Raises
     ------
     ValueError
-        If any two functions have mismatched input dimensions, or the list is
-        empty.
+        If any two functions have mismatched input dimensions.
 
     Examples
     --------
@@ -6698,7 +7587,7 @@ def stack_scalar(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     ----------
     funcs : list[VectorFunction]
         Scalar-output (output dimension 1) functions sharing the same input
-        dimension.  The list must be non-empty.
+        dimension.
 
     Returns
     -------
@@ -6709,8 +7598,7 @@ def stack_scalar(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     Raises
     ------
     ValueError
-        If any two functions have mismatched input dimensions, or the list is
-        empty.
+        If any two functions have mismatched input dimensions.
     """
 
 @overload
@@ -6816,9 +7704,9 @@ def sum_elems(arg: Sequence[Element], /) -> ScalarFunction:
 
     Parameters
     ----------
-    funcs : list[VectorFunction]
-        Single-element segment VectorFunctions sharing the same input dimension.
-        The list must contain at least one element.
+    funcs : list[Segment]
+        Single-element segment VectorFunctions (output dimension 1) sharing the
+        same input dimension.  The list must contain at least one element.
 
     Returns
     -------
@@ -6834,10 +7722,57 @@ def sum_elems(arg: Sequence[Element], /) -> ScalarFunction:
     """
 
 @overload
-def sum_elems(arg0: Sequence[Element], arg1: Sequence[float], /) -> ScalarFunction: ...
+def sum_elems(arg0: Sequence[Element], arg1: Sequence[float], /) -> ScalarFunction:
+    """
+    Weighted sum of several scalar segment-output VectorFunctions.
+
+    Scales each function in *funcs* by the corresponding entry in *scales* and
+    returns their sum as a single scalar-output VectorFunction.  All segments
+    must share the same input dimension.  Equivalent to
+    ``sum_elems([s * f for s, f in zip(scales, funcs)])``.
+
+    Parameters
+    ----------
+    funcs : list[Segment]
+        Single-element segment VectorFunctions sharing the same input dimension.
+        The list must contain at least one element.
+    scales : list[float]
+        Scalar multiplier for each function.  Must have at least as many entries
+        as *funcs*; no length check is performed — passing a shorter *scales*
+        causes undefined behavior.
+
+    Returns
+    -------
+    VectorFunction
+        A scalar-output VectorFunction whose value is
+        ``scales[0]*funcs[0](x) + scales[1]*funcs[1](x) + ...``.
+
+    Raises
+    ------
+    ValueError
+        If the list is empty or any two elements have mismatched input
+        dimensions.
+    """
 
 @overload
-def normalize(arg: numpy.ndarray, /) -> numpy.ndarray: ...
+def normalize(arg: numpy.ndarray, /) -> numpy.ndarray:
+    """
+    Normalize a constant vector to unit length.
+
+    Divides the input array by its Euclidean (L2) norm. This overload acts on a
+    plain NumPy array rather than a VectorFunction; for the VectorFunction variant
+    see the overloads that accept a VectorFunction argument.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Non-zero vector to normalize.
+
+    Returns
+    -------
+    numpy.ndarray, shape (n,)
+        Unit vector in the direction of *x*, i.e. ``x / ||x||_2``.
+    """
 
 @overload
 def normalize(arg: Arguments, /) -> object:
@@ -6935,7 +7870,23 @@ def normalize(arg: VectorFunction, /) -> object:
     """
 
 @overload
-def normalized(arg: numpy.ndarray, /) -> numpy.ndarray: ...
+def normalized(arg: numpy.ndarray, /) -> numpy.ndarray:
+    """
+    Normalize a constant vector to unit length.
+
+    Alias for :func:`normalize` when given a plain array. Divides the input by
+    its Euclidean (L2) norm.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Non-zero vector to normalize.
+
+    Returns
+    -------
+    numpy.ndarray, shape (n,)
+        Unit vector in the direction of *x*, i.e. ``x / ||x||_2``.
+    """
 
 @overload
 def normalized(arg: Arguments, /) -> object:
@@ -7403,15 +8354,16 @@ def cross(arg0: VectorFunction, arg1: VectorFunction, /) -> object: ...
 @overload
 def doublecross(arg0: Segment3, arg1: Segment3, arg2: Segment3, /) -> VectorFunction:
     """
-    Double (iterated) cross product of three 3-vector quantities.
+    Double (iterated) cross product of three 3-element Segment VectorFunctions.
 
-    Computes ``(a x b) x c``, where each argument must produce a 3-element output
-    vector.
+    Computes ``(a x b) x c``.  This overload requires all three arguments to be
+    fixed 3-element ``Segment`` types (``Segment<-1, 3, -1>``); for general
+    VectorFunctions use the overload that accepts plain ``VectorFunction`` arguments.
 
     Parameters
     ----------
-    a, b, c : VectorFunction
-        Three 3-vector-valued VectorFunctions.
+    a, b, c : Segment
+        Three fixed 3-element segment VectorFunctions (output dimension 3).
 
     Returns
     -------
@@ -8048,7 +9000,12 @@ def pow(arg0: Element, arg1: float, /) -> object:
     """
     Raise a scalar VectorFunction to a real power.
 
-    Equivalent to the method form ``fun.pow(power)`` and the ``**`` operator.
+    Equivalent to the method form ``fun.pow(power)``.  Note that the ``**``
+    operator may dispatch to a different expression for certain integer exponents:
+    for example, ``f ** 2`` uses the ``.square()`` path (a ``CwiseSquare``
+    expression) rather than ``CwisePow``, so the symbolic expression trees produced
+    by ``vf.pow(f, 2)`` and ``f ** 2`` are not identical, even though they evaluate
+    to the same values and derivatives.
 
     Parameters
     ----------
@@ -8061,7 +9018,8 @@ def pow(arg0: Element, arg1: float, /) -> object:
     Returns
     -------
     VectorFunction
-        A new scalar VectorFunction evaluating ``fun(x) ** power``.
+        A new scalar VectorFunction evaluating ``fun(x) ** power`` via the
+        ``CwisePow`` expression.
     """
 
 @overload
@@ -8203,25 +9161,160 @@ def ifelse(arg0: Conditional, arg1: ScalarFunction, arg2: ScalarFunction, /) -> 
     """
 
 @overload
-def ifelse(arg0: Conditional, arg1: float, arg2: ScalarFunction, /) -> ScalarFunction: ...
+def ifelse(arg0: Conditional, arg1: float, arg2: ScalarFunction, /) -> ScalarFunction:
+    """
+    Build a scalar VectorFunction that returns a constant when the predicate is true, else a scalar function.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    tfv : float
+        Constant value returned when *test* is true.
+    ff : GenericFunction (scalar)
+        Function evaluated when *test* is false.
+
+    Returns
+    -------
+    GenericFunction (scalar)
+        Scalar function returning *tfv* when ``test(x)`` is true, else ``ff(x)``.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: ScalarFunction, arg2: float, /) -> ScalarFunction: ...
+def ifelse(arg0: Conditional, arg1: ScalarFunction, arg2: float, /) -> ScalarFunction:
+    """
+    Build a scalar VectorFunction that returns a scalar function when the predicate is true, else a constant.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    tf : GenericFunction (scalar)
+        Function evaluated when *test* is true.
+    ffv : float
+        Constant value returned when *test* is false.
+
+    Returns
+    -------
+    GenericFunction (scalar)
+        Scalar function returning ``tf(x)`` when ``test(x)`` is true, else *ffv*.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: float, arg2: float, /) -> ScalarFunction: ...
+def ifelse(arg0: Conditional, arg1: float, arg2: float, /) -> ScalarFunction:
+    """
+    Build a scalar VectorFunction that selects between two scalar constants based on a predicate.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    tfv : float
+        Constant value returned when *test* is true.
+    ffv : float
+        Constant value returned when *test* is false.
+
+    Returns
+    -------
+    GenericFunction (scalar)
+        Scalar function returning *tfv* when ``test(x)`` is true, else *ffv*.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: VectorFunction, arg2: VectorFunction, /) -> VectorFunction: ...
+def ifelse(arg0: Conditional, arg1: VectorFunction, arg2: VectorFunction, /) -> VectorFunction:
+    """
+    Build a vector-valued VectorFunction that selects between two vector-valued branches based on a predicate.
+
+    At each evaluation point the predicate *test* is checked. If true, *tf* is
+    evaluated; otherwise *ff* is evaluated. Both branch functions must share the
+    same input and output dimensions as one another, and their input dimension
+    must match that of *test*. Derivatives are taken from the active branch
+    only, so the result is piecewise differentiable across the switching
+    boundary.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    tf : GenericFunction
+        Vector-valued function evaluated when *test* is true.
+    ff : GenericFunction
+        Vector-valued function evaluated when *test* is false.
+
+    Returns
+    -------
+    GenericFunction
+        Vector function returning ``tf(x)`` when ``test(x)`` is true, else ``ff(x)``.
+
+    Raises
+    ------
+    ValueError
+        If *test*, *tf*, and *ff* do not share the same input dimension, or if
+        *tf* and *ff* have different output dimensions.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: numpy.ndarray, arg2: VectorFunction, /) -> VectorFunction: ...
+def ifelse(arg0: Conditional, arg1: numpy.ndarray, arg2: VectorFunction, /) -> VectorFunction:
+    """
+    Build a vector-valued VectorFunction that returns a constant vector when the predicate is true, else a vector-valued function.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    v : array_like
+        Constant vector returned when *test* is true; must have the same length
+        as ``ff.output_rows()``.
+    ff : GenericFunction
+        Vector-valued function evaluated when *test* is false.
+
+    Returns
+    -------
+    GenericFunction
+        Vector function returning *v* when ``test(x)`` is true, else ``ff(x)``.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: VectorFunction, arg2: numpy.ndarray, /) -> VectorFunction: ...
+def ifelse(arg0: Conditional, arg1: VectorFunction, arg2: numpy.ndarray, /) -> VectorFunction:
+    """
+    Build a vector-valued VectorFunction that returns a vector-valued function when the predicate is true, else a constant vector.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    tf : GenericFunction
+        Vector-valued function evaluated when *test* is true.
+    v : array_like
+        Constant vector returned when *test* is false; must have the same length
+        as ``tf.output_rows()``.
+
+    Returns
+    -------
+    GenericFunction
+        Vector function returning ``tf(x)`` when ``test(x)`` is true, else *v*.
+    """
 
 @overload
-def ifelse(arg0: Conditional, arg1: numpy.ndarray, arg2: numpy.ndarray, /) -> VectorFunction: ...
+def ifelse(arg0: Conditional, arg1: numpy.ndarray, arg2: numpy.ndarray, /) -> VectorFunction:
+    """
+    Build a vector-valued VectorFunction that selects between two constant vectors based on a predicate.
+
+    Parameters
+    ----------
+    test : Conditional
+        Predicate that selects the active branch.
+    v1 : array_like
+        Constant vector returned when *test* is true.
+    v2 : array_like
+        Constant vector returned when *test* is false; must have the same length
+        as *v1*.
+
+    Returns
+    -------
+    GenericFunction
+        Vector function returning *v1* when ``test(x)`` is true, else *v2*.
+    """
 
 @overload
 def arctan2(arg0: ScalarFunction, arg1: ScalarFunction, /) -> ScalarFunction:
@@ -8281,6 +9374,25 @@ def divtest(arg0: VectorFunction, arg1: ScalarFunction, /) -> VectorFunction:
 def divtest(arg0: VectorFunction, arg1: Element, /) -> VectorFunction: ...
 
 class ColMatrix:
+    """
+    Column-major matrix view of a VectorFunction.
+
+    A ``ColMatrix`` wraps a flat VectorFunction whose output has length
+    ``rows * cols`` and interprets that output as a column-major (Fortran-order)
+    matrix.  The object supports matrix algebra — products, sums, scalar
+    multiplication, transpose, and inverse — all expressed symbolically as new
+    VectorFunctions so that derivatives propagate through them automatically.
+
+    Construct a ``ColMatrix`` either from a backing VectorFunction with explicit
+    shape, or from a Python list of same-length VectorFunctions that are stacked
+    into columns.
+
+    See Also
+    --------
+    RowMatrix : Row-major counterpart.
+    matmul : Free-function matrix product for mixed operand types.
+    """
+
     @overload
     def __init__(self, arg0: VectorFunction, arg1: int, arg2: int, /) -> None:
         """
@@ -8304,28 +9416,46 @@ class ColMatrix:
         """
 
     @overload
-    def __init__(self, arg: Sequence[VectorFunction], /) -> None: ...
+    def __init__(self, arg: Sequence[VectorFunction], /) -> None:
+        """
+        Construct a ColMatrix from a list of column VectorFunctions.
+
+        Each element of ``colfuns`` becomes one column of the resulting matrix.
+        All functions must share the same output length (which becomes the number
+        of rows); the number of columns equals ``len(colfuns)``.
+
+        Parameters
+        ----------
+        colfuns : list of VectorFunction
+            Column vectors to stack.  Every element must have the same
+            ``output_rows()``.
+
+        Raises
+        ------
+        ValueError
+            If ``colfuns`` is empty or if the functions do not all have the same
+            output length.
+        """
 
     @overload
     def __mul__(self, arg: ColMatrix, /) -> ColMatrix:
         """
-        Matrix product of two column-major matrix VectorFunctions (``self @ other``).
+        Matrix product of two ColMatrix VectorFunctions (``self @ other``).
 
         Computes ``M1(x) @ M2(x)`` where both factors are evaluated at the same input
         ``x``.  The inner dimension of ``M1`` must equal the outer dimension of ``M2``.
+        Other right-hand-factor types (``RowMatrix``, plain ``VectorFunction``, ``float``)
+        are handled by separate overloads.
 
         Parameters
         ----------
-        other : ColMatrix or RowMatrix or VectorFunction or float
-            Right-hand factor.  When ``other`` is a plain VectorFunction it is treated
-            as a column vector; when it is a ``float`` every element is scaled by that
-            constant.
+        other : ColMatrix
+            Right-hand ColMatrix factor.
 
         Returns
         -------
-        ColMatrix or VectorFunction
-            Column-major matrix (or flat VectorFunction when ``other`` is a column
-            vector) representing the product.
+        ColMatrix
+            Column-major matrix representing the product.
 
         Raises
         ------
@@ -8334,13 +9464,54 @@ class ColMatrix:
         """
 
     @overload
-    def __mul__(self, arg: RowMatrix, /) -> ColMatrix: ...
+    def __mul__(self, arg: RowMatrix, /) -> ColMatrix:
+        """
+        Matrix product of a ColMatrix with a RowMatrix VectorFunction (``self @ other``).
+
+        Overload of ``__mul__`` accepting a ``RowMatrix`` right-hand factor.
+        See the primary ``__mul__`` overload for full documentation.
+        """
 
     @overload
-    def __mul__(self, arg: float, /) -> ColMatrix: ...
+    def __mul__(self, arg: float, /) -> ColMatrix:
+        """
+        Scalar multiplication (``self * scale``).
+
+        Parameters
+        ----------
+        scale : float
+            Scalar factor applied to every element of the matrix function.
+
+        Returns
+        -------
+        ColMatrix
+            A new ColMatrix scaled by ``scale``.
+        """
 
     @overload
-    def __mul__(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def __mul__(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Matrix-vector product of a ColMatrix and a column VectorFunction (``self @ v``).
+
+        Treats ``v`` as a column vector and returns ``M(x) @ v(x)`` as a flat
+        VectorFunction.  The output length of ``v`` must equal the number of columns
+        of ``self``.
+
+        Parameters
+        ----------
+        v : VectorFunction
+            Column vector whose ``output_rows()`` equals ``self.cols``.
+
+        Returns
+        -------
+        VectorFunction
+            Flat VectorFunction of length ``self.rows`` representing the product.
+
+        Raises
+        ------
+        ValueError
+            If the inner dimension does not match.
+        """
 
     def __rmul__(self, arg: float, /) -> ColMatrix:
         """
@@ -8382,7 +9553,28 @@ class ColMatrix:
         """
 
     @overload
-    def __add__(self, arg: ColMatrix, /) -> ColMatrix: ...
+    def __add__(self, arg: ColMatrix, /) -> ColMatrix:
+        """
+        Element-wise sum of two ColMatrix VectorFunctions (``self + other``).
+
+        Computes ``M1(x) + M2(x)`` pointwise.  Both matrix functions must have the
+        same shape.
+
+        Parameters
+        ----------
+        other : ColMatrix
+            Right-hand summand with the same number of rows and columns as ``self``.
+
+        Returns
+        -------
+        ColMatrix
+            A new ColMatrix evaluating the element-wise sum.
+
+        Raises
+        ------
+        ValueError
+            If the two matrix functions do not have the same shape.
+        """
 
     def __radd__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], /) -> ColMatrix:
         """
@@ -8434,8 +9626,10 @@ class ColMatrix:
         Transpose this ColMatrix VectorFunction.
 
         Returns a RowMatrix VectorFunction whose (i, j) entry equals the (j, i) entry
-        of ``self``.  The transposed matrix shares the same backing VectorFunction;
-        no copy of the output data is made at evaluation time.
+        of ``self``.  Construction is O(1): the transposed view shares the same backing
+        VectorFunction object (reference-shared, not copied).  No output data is
+        copied or recomputed during evaluation; the flat output buffer is simply
+        reinterpreted with swapped row/column counts.
 
         Returns
         -------
@@ -8459,6 +9653,25 @@ class ColMatrix:
         """
 
 class RowMatrix:
+    """
+    Row-major matrix view of a VectorFunction.
+
+    A ``RowMatrix`` wraps a flat VectorFunction whose output has length
+    ``rows * cols`` and interprets that output as a row-major (C-order) matrix.
+    Like ``ColMatrix``, it supports symbolic matrix algebra — products, sums,
+    scalar multiplication, transpose, and inverse — all expressed as new
+    VectorFunctions so that derivatives propagate through them automatically.
+
+    Construct a ``RowMatrix`` either from a backing VectorFunction with explicit
+    shape, or from a Python list of same-length VectorFunctions that are stacked
+    into rows.
+
+    See Also
+    --------
+    ColMatrix : Column-major counterpart.
+    matmul : Free-function matrix product for mixed operand types.
+    """
+
     @overload
     def __init__(self, arg0: VectorFunction, arg1: int, arg2: int, /) -> None:
         """
@@ -8482,28 +9695,46 @@ class RowMatrix:
         """
 
     @overload
-    def __init__(self, arg: Sequence[VectorFunction], /) -> None: ...
+    def __init__(self, arg: Sequence[VectorFunction], /) -> None:
+        """
+        Construct a RowMatrix from a list of row VectorFunctions.
+
+        Each element of ``rowfuns`` becomes one row of the resulting matrix.
+        All functions must share the same output length (which becomes the number
+        of columns); the number of rows equals ``len(rowfuns)``.
+
+        Parameters
+        ----------
+        rowfuns : list of VectorFunction
+            Row vectors to stack.  Every element must have the same
+            ``output_rows()``.
+
+        Raises
+        ------
+        ValueError
+            If ``rowfuns`` is empty or if the functions do not all have the same
+            output length.
+        """
 
     @overload
     def __mul__(self, arg: ColMatrix, /) -> ColMatrix:
         """
-        Matrix product of this row-major matrix VectorFunction with another (``self @ other``).
+        Matrix product of this RowMatrix with a ColMatrix (``self @ other``).
 
         Computes ``M1(x) @ M2(x)`` where both factors are evaluated at the same input
         ``x``.  The inner dimension of ``M1`` must equal the outer dimension of ``M2``.
+        Other right-hand-factor types (``RowMatrix``, plain ``VectorFunction``, ``float``)
+        are handled by separate overloads.
 
         Parameters
         ----------
-        other : ColMatrix or RowMatrix or VectorFunction or float
-            Right-hand factor.  When ``other`` is a plain VectorFunction it is treated
-            as a column vector; when it is a ``float`` every element is scaled by that
-            constant.
+        other : ColMatrix
+            Right-hand ColMatrix factor.
 
         Returns
         -------
         ColMatrix
-            The matrix product, always returned as a column-major matrix (or a flat
-            VectorFunction when ``other`` is a column vector).
+            The matrix product returned as a column-major matrix.
 
         Raises
         ------
@@ -8512,13 +9743,55 @@ class RowMatrix:
         """
 
     @overload
-    def __mul__(self, arg: RowMatrix, /) -> ColMatrix: ...
+    def __mul__(self, arg: RowMatrix, /) -> ColMatrix:
+        """
+        Matrix product of two RowMatrix VectorFunctions (``self @ other``).
+
+        Overload of ``__mul__`` when both factors are ``RowMatrix`` instances.
+        The result is always returned as a ``ColMatrix``.
+        See the primary ``__mul__`` overload for full documentation.
+        """
 
     @overload
-    def __mul__(self, arg: float, /) -> RowMatrix: ...
+    def __mul__(self, arg: float, /) -> RowMatrix:
+        """
+        Scalar multiplication (``self * scale``).
+
+        Parameters
+        ----------
+        scale : float
+            Scalar factor applied to every element of the matrix function.
+
+        Returns
+        -------
+        RowMatrix
+            A new RowMatrix scaled by ``scale``.
+        """
 
     @overload
-    def __mul__(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def __mul__(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Matrix-vector product of a RowMatrix and a column VectorFunction (``self @ v``).
+
+        Treats ``v`` as a column vector and returns ``M(x) @ v(x)`` as a flat
+        VectorFunction.  The output length of ``v`` must equal the number of columns
+        of ``self``.
+
+        Parameters
+        ----------
+        v : VectorFunction
+            Column vector whose ``output_rows()`` equals ``self.cols``.
+
+        Returns
+        -------
+        VectorFunction
+            Flat VectorFunction of length ``self.rows`` representing the product.
+
+        Raises
+        ------
+        ValueError
+            If the inner dimension does not match.
+        """
 
     def __rmul__(self, arg: float, /) -> RowMatrix:
         """
@@ -8541,13 +9814,14 @@ class RowMatrix:
         Element-wise sum of two RowMatrix VectorFunctions (``self + other``).
 
         Computes ``M1(x) + M2(x)`` pointwise.  Both matrix functions must have the
-        same shape.
+        same shape.  Adding a constant numpy matrix offset is handled by a separate
+        overload.
 
         Parameters
         ----------
-        other : RowMatrix or array_like, shape (rows, cols)
-            Right-hand summand.  When ``other`` is a constant numpy matrix it is
-            broadcast as a fixed offset.
+        other : RowMatrix
+            Right-hand RowMatrix summand with the same number of rows and columns as
+            ``self``.
 
         Returns
         -------
@@ -8561,7 +9835,29 @@ class RowMatrix:
         """
 
     @overload
-    def __add__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], /) -> RowMatrix: ...
+    def __add__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], /) -> RowMatrix:
+        """
+        Add a constant matrix offset to a RowMatrix VectorFunction (``self + mshift``).
+
+        Adds the constant numpy matrix ``mshift`` element-wise to the matrix produced
+        by ``self`` at every evaluation point.  The dimensions must match exactly.
+        The constant is converted to row-major storage internally.
+
+        Parameters
+        ----------
+        mshift : array_like, shape (rows, cols)
+            Constant matrix offset with the same shape as ``self``.
+
+        Returns
+        -------
+        RowMatrix
+            A new RowMatrix evaluating ``M(x) + mshift``.
+
+        Raises
+        ------
+        ValueError
+            If ``mshift`` does not have the same number of rows and columns as ``self``.
+        """
 
     __array_ufunc__: None = None
 
@@ -8613,8 +9909,10 @@ class RowMatrix:
         Transpose this RowMatrix VectorFunction.
 
         Returns a ColMatrix VectorFunction whose (i, j) entry equals the (j, i) entry
-        of ``self``.  The transposed matrix shares the same backing VectorFunction;
-        no copy of the output data is made at evaluation time.
+        of ``self``.  Construction is O(1): the transposed view shares the same backing
+        VectorFunction object (reference-shared, not copied).  No output data is
+        copied or recomputed during evaluation; the flat output buffer is simply
+        reinterpreted with swapped row/column counts.
 
         Returns
         -------
@@ -8671,36 +9969,118 @@ def matmul(arg0: ColMatrix, arg1: ColMatrix, /) -> ColMatrix:
     """
 
 @overload
-def matmul(arg0: ColMatrix, arg1: RowMatrix, /) -> ColMatrix: ...
+def matmul(arg0: ColMatrix, arg1: RowMatrix, /) -> ColMatrix:
+    """
+    Overload of ``matmul`` for a ColMatrix left factor and a RowMatrix right factor.
+
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: ColMatrix, arg1: VectorFunction, /) -> VectorFunction: ...
+def matmul(arg0: ColMatrix, arg1: VectorFunction, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a ColMatrix left factor and a VectorFunction column vector.
+
+    Treats ``m2`` as a column vector and returns the matrix-vector product as a
+    flat VectorFunction.  See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: ColMatrix, arg1: numpy.ndarray, /) -> VectorFunction: ...
+def matmul(arg0: ColMatrix, arg1: numpy.ndarray, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a ColMatrix left factor and a constant numpy vector.
+
+    Multiplies the matrix VectorFunction ``m1`` by the fixed column vector ``v``,
+    returning a flat VectorFunction of length ``m1.rows``.
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: RowMatrix, arg1: ColMatrix, /) -> ColMatrix: ...
+def matmul(arg0: RowMatrix, arg1: ColMatrix, /) -> ColMatrix:
+    """
+    Overload of ``matmul`` for a RowMatrix left factor and a ColMatrix right factor.
+
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: RowMatrix, arg1: RowMatrix, /) -> ColMatrix: ...
+def matmul(arg0: RowMatrix, arg1: RowMatrix, /) -> ColMatrix:
+    """
+    Overload of ``matmul`` for two RowMatrix factors.
+
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: RowMatrix, arg1: VectorFunction, /) -> VectorFunction: ...
+def matmul(arg0: RowMatrix, arg1: VectorFunction, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a RowMatrix left factor and a VectorFunction column vector.
+
+    Treats ``m2`` as a column vector and returns the matrix-vector product as a
+    flat VectorFunction.  See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: RowMatrix, arg1: numpy.ndarray, /) -> VectorFunction: ...
+def matmul(arg0: RowMatrix, arg1: numpy.ndarray, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a RowMatrix left factor and a constant numpy vector.
+
+    Multiplies the matrix VectorFunction ``m1`` by the fixed column vector ``v``,
+    returning a flat VectorFunction of length ``m1.rows``.
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(2, 2), order='F')], arg1: VectorFunction, /) -> VectorFunction: ...
+def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(2, 2), order='F')], arg1: VectorFunction, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a constant 2×2 matrix and a VectorFunction column vector.
+
+    Scales the VectorFunction ``vec`` by the fixed 2×2 matrix ``mat``, returning a
+    flat VectorFunction of length 2.  Uses a specialized 2×2 kernel for efficiency.
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3, 3), order='F')], arg1: VectorFunction, /) -> VectorFunction: ...
+def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3, 3), order='F')], arg1: VectorFunction, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for a constant 3×3 matrix and a VectorFunction column vector.
+
+    Scales the VectorFunction ``vec`` by the fixed 3×3 matrix ``mat``, returning a
+    flat VectorFunction of length 3.  Uses a specialized 3×3 kernel for efficiency.
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 @overload
-def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], arg1: VectorFunction, /) -> VectorFunction: ...
+def matmul(arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], arg1: VectorFunction, /) -> VectorFunction:
+    """
+    Overload of ``matmul`` for an arbitrary constant matrix and a VectorFunction column vector.
+
+    Scales the VectorFunction ``vec`` by the fixed matrix ``mat`` using a general
+    kernel.  The number of columns of ``mat`` must equal ``vec.output_rows()``.
+    See the primary ``matmul`` overload for full documentation.
+    """
 
 class Conditional:
+    """
+    Type-erased boolean predicate over an input vector.
+
+    A ``Conditional`` wraps any comparison or logical combination of
+    scalar-valued VectorFunctions behind a single uniform interface. It is the
+    predicate type that drives :func:`ifelse` branching.
+
+    Leaf predicates are formed by applying comparison operators (``<``, ``<=``,
+    ``>``, ``>=``) to pairs of scalar VectorFunctions; these operators
+    return ``Conditional`` objects. Leaf predicates can then be combined with
+    ``&`` (:meth:`__and__`) and ``|`` (:meth:`__or__`) to build compound
+    logical expressions. The resulting ``Conditional`` can be passed to
+    :func:`ifelse` to select between two VectorFunction branches.
+
+    ``compute(x)`` evaluates the predicate at the input vector *x* and returns
+    the resulting ``bool``. Derivatives are not defined on ``Conditional``
+    itself — they are computed from whichever branch is active in the enclosing
+    :func:`ifelse` or ``min`` / ``max`` expression.
+    """
+
     def compute(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> bool:
         """
         Evaluate the conditional predicate at a given input vector.
@@ -8787,27 +10167,181 @@ class Conditional:
         """
 
     @overload
-    def ifelse(self, arg0: float, arg1: ScalarFunction, /) -> ScalarFunction: ...
+    def ifelse(self, arg0: float, arg1: ScalarFunction, /) -> ScalarFunction:
+        """
+        Build a scalar VectorFunction that returns a constant when the predicate is true, else a scalar function.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        tfv : float
+            Constant value returned when *test* is true.
+        ff : GenericFunction (scalar)
+            Function evaluated when *test* is false.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning *tfv* when ``test(x)`` is true, else ``ff(x)``.
+        """
 
     @overload
-    def ifelse(self, arg0: ScalarFunction, arg1: float, /) -> ScalarFunction: ...
+    def ifelse(self, arg0: ScalarFunction, arg1: float, /) -> ScalarFunction:
+        """
+        Build a scalar VectorFunction that returns a scalar function when the predicate is true, else a constant.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        tf : GenericFunction (scalar)
+            Function evaluated when *test* is true.
+        ffv : float
+            Constant value returned when *test* is false.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning ``tf(x)`` when ``test(x)`` is true, else *ffv*.
+        """
 
     @overload
-    def ifelse(self, arg0: float, arg1: float, /) -> ScalarFunction: ...
+    def ifelse(self, arg0: float, arg1: float, /) -> ScalarFunction:
+        """
+        Build a scalar VectorFunction that selects between two scalar constants based on a predicate.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        tfv : float
+            Constant value returned when *test* is true.
+        ffv : float
+            Constant value returned when *test* is false.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning *tfv* when ``test(x)`` is true, else *ffv*.
+        """
 
     @overload
-    def ifelse(self, arg0: VectorFunction, arg1: VectorFunction, /) -> VectorFunction: ...
+    def ifelse(self, arg0: VectorFunction, arg1: VectorFunction, /) -> VectorFunction:
+        """
+        Build a vector-valued VectorFunction that selects between two vector-valued branches based on a predicate.
+
+        At each evaluation point the predicate *test* is checked. If true, *tf* is
+        evaluated; otherwise *ff* is evaluated. Both branch functions must share the
+        same input and output dimensions as one another, and their input dimension
+        must match that of *test*. Derivatives are taken from the active branch
+        only, so the result is piecewise differentiable across the switching
+        boundary.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        tf : GenericFunction
+            Vector-valued function evaluated when *test* is true.
+        ff : GenericFunction
+            Vector-valued function evaluated when *test* is false.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning ``tf(x)`` when ``test(x)`` is true, else ``ff(x)``.
+
+        Raises
+        ------
+        ValueError
+            If *test*, *tf*, and *ff* do not share the same input dimension, or if
+            *tf* and *ff* have different output dimensions.
+        """
 
     @overload
-    def ifelse(self, arg0: numpy.ndarray, arg1: VectorFunction, /) -> VectorFunction: ...
+    def ifelse(self, arg0: numpy.ndarray, arg1: VectorFunction, /) -> VectorFunction:
+        """
+        Build a vector-valued VectorFunction that returns a constant vector when the predicate is true, else a vector-valued function.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        v : array_like
+            Constant vector returned when *test* is true; must have the same length
+            as ``ff.output_rows()``.
+        ff : GenericFunction
+            Vector-valued function evaluated when *test* is false.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning *v* when ``test(x)`` is true, else ``ff(x)``.
+        """
 
     @overload
-    def ifelse(self, arg0: VectorFunction, arg1: numpy.ndarray, /) -> VectorFunction: ...
+    def ifelse(self, arg0: VectorFunction, arg1: numpy.ndarray, /) -> VectorFunction:
+        """
+        Build a vector-valued VectorFunction that returns a vector-valued function when the predicate is true, else a constant vector.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        tf : GenericFunction
+            Vector-valued function evaluated when *test* is true.
+        v : array_like
+            Constant vector returned when *test* is false; must have the same length
+            as ``tf.output_rows()``.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning ``tf(x)`` when ``test(x)`` is true, else *v*.
+        """
 
     @overload
-    def ifelse(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> VectorFunction: ...
+    def ifelse(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> VectorFunction:
+        """
+        Build a vector-valued VectorFunction that selects between two constant vectors based on a predicate.
+
+        Parameters
+        ----------
+        test : Conditional
+            Predicate that selects the active branch.
+        v1 : array_like
+            Constant vector returned when *test* is true.
+        v2 : array_like
+            Constant vector returned when *test* is false; must have the same length
+            as *v1*.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning *v1* when ``test(x)`` is true, else *v2*.
+        """
 
 class Comparative:
+    """
+    Type-erased predicate used as the branch selector for min/max VectorFunctions.
+
+    A ``Comparative`` wraps a pairwise min or max comparison between two
+    scalar-valued (or vector-valued) VectorFunctions behind a uniform boolean
+    interface. It is produced internally by the ``min`` and ``max``
+    methods on ``Comparative`` and is distinct from :class:`Conditional` so
+    that the two types are separately registered in the Python module.
+
+    At each evaluation point ``compute(x)`` returns the boolean result of the
+    underlying comparison (i.e. which operand is selected). The associated
+    ``min`` / ``max`` combinators return a new VectorFunction (not a
+    ``Comparative``) whose value and derivatives track the selected branch.
+
+    The ``Comparative`` object itself is rarely needed directly — it surfaces
+    only when you want to inspect the switching predicate independently of the
+    enclosing min/max function.
+    """
+
     def compute(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> bool:
         """
         Evaluate the comparative function at a given input vector.
@@ -8820,8 +10354,9 @@ class Comparative:
         Returns
         -------
         bool
-            Result of the underlying comparison predicate at *x* (which operand the
-            min/max selects).
+            ``True`` if the first operand (*f1*) is selected (i.e. ``f1(x)`` wins
+            the min/max comparison); ``False`` if the second operand (*f2*) is
+            selected.
         """
 
     @overload
@@ -8853,19 +10388,103 @@ class Comparative:
         """
 
     @overload
-    def max(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def max(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """
+        Return a VectorFunction evaluating the pointwise maximum of a scalar constant and a scalar function.
+
+        Parameters
+        ----------
+        v1 : float
+            Constant scalar to compare against.
+        f2 : GenericFunction (scalar)
+            Scalar function operand.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning ``max(v1, f2(x))``.
+        """
 
     @overload
-    def max(self, arg: float, /) -> ScalarFunction: ...
+    def max(self, arg: float, /) -> ScalarFunction:
+        """
+        Return a VectorFunction evaluating the pointwise maximum of a scalar function and a scalar constant.
+
+        Parameters
+        ----------
+        f1 : GenericFunction (scalar)
+            Scalar function operand.
+        v2 : float
+            Constant scalar to compare against.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning ``max(f1(x), v2)``.
+        """
 
     @overload
-    def max(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def max(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise maximum of two vector-valued functions.
+
+        Both operands must have the same input dimension and the same output
+        dimension. The element-wise maximum is taken independently for each output
+        component. Derivatives track whichever branch is selected per component.
+
+        Parameters
+        ----------
+        f1 : GenericFunction
+            First vector-valued operand.
+        f2 : GenericFunction
+            Second vector-valued operand.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise maximum of *f1* and *f2*.
+
+        Raises
+        ------
+        ValueError
+            If *f1* and *f2* have different input or output dimensions.
+        """
 
     @overload
-    def max(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def max(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise maximum of a constant vector and a vector-valued function.
+
+        Parameters
+        ----------
+        v1 : array_like
+            Constant vector; must have the same length as ``f2.output_rows()``.
+        f2 : GenericFunction
+            Vector-valued function operand.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise maximum of *v1* and *f2(x)*.
+        """
 
     @overload
-    def max(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def max(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise maximum of a vector-valued function and a constant vector.
+
+        Parameters
+        ----------
+        f1 : GenericFunction
+            Vector-valued function operand.
+        v2 : array_like
+            Constant vector; must have the same length as ``f1.output_rows()``.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise maximum of *f1(x)* and *v2*.
+        """
 
     @overload
     def min(self, arg: ScalarFunction, /) -> ScalarFunction:
@@ -8896,21 +10515,136 @@ class Comparative:
         """
 
     @overload
-    def min(self, arg: ScalarFunction, /) -> ScalarFunction: ...
+    def min(self, arg: ScalarFunction, /) -> ScalarFunction:
+        """
+        Return a VectorFunction evaluating the pointwise minimum of a scalar constant and a scalar function.
+
+        Parameters
+        ----------
+        v1 : float
+            Constant scalar to compare against.
+        f2 : GenericFunction (scalar)
+            Scalar function operand.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning ``min(v1, f2(x))``.
+        """
 
     @overload
-    def min(self, arg: float, /) -> ScalarFunction: ...
+    def min(self, arg: float, /) -> ScalarFunction:
+        """
+        Return a VectorFunction evaluating the pointwise minimum of a scalar function and a scalar constant.
+
+        Parameters
+        ----------
+        f1 : GenericFunction (scalar)
+            Scalar function operand.
+        v2 : float
+            Constant scalar to compare against.
+
+        Returns
+        -------
+        GenericFunction (scalar)
+            Scalar function returning ``min(f1(x), v2)``.
+        """
 
     @overload
-    def min(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def min(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise minimum of two vector-valued functions.
+
+        Both operands must have the same input dimension and the same output
+        dimension. The element-wise minimum is taken independently for each output
+        component. Derivatives track whichever branch is selected per component.
+
+        Parameters
+        ----------
+        f1 : GenericFunction
+            First vector-valued operand.
+        f2 : GenericFunction
+            Second vector-valued operand.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise minimum of *f1* and *f2*.
+
+        Raises
+        ------
+        ValueError
+            If *f1* and *f2* have different input or output dimensions.
+        """
 
     @overload
-    def min(self, arg: VectorFunction, /) -> VectorFunction: ...
+    def min(self, arg: VectorFunction, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise minimum of a constant vector and a vector-valued function.
+
+        Parameters
+        ----------
+        v1 : array_like
+            Constant vector; must have the same length as ``f2.output_rows()``.
+        f2 : GenericFunction
+            Vector-valued function operand.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise minimum of *v1* and *f2(x)*.
+        """
 
     @overload
-    def min(self, arg: numpy.ndarray, /) -> VectorFunction: ...
+    def min(self, arg: numpy.ndarray, /) -> VectorFunction:
+        """
+        Return a VectorFunction evaluating the element-wise minimum of a vector-valued function and a constant vector.
+
+        Parameters
+        ----------
+        f1 : GenericFunction
+            Vector-valued function operand.
+        v2 : array_like
+            Constant vector; must have the same length as ``f1.output_rows()``.
+
+        Returns
+        -------
+        GenericFunction
+            Vector function returning the element-wise minimum of *f1(x)* and *v2*.
+        """
 
 class PyVectorFunction:
+    """
+    VectorFunction defined by an arbitrary Python callable, with finite-difference derivatives.
+
+    Wrap any Python function ``f(x, *args)`` as a first-class VectorFunction that can
+    be used anywhere in the Tycho optimal-control and trajectory-design API.  The
+    callable receives a 1-D NumPy array ``x`` of length ``i_rows`` (plus any extra
+    positional arguments supplied via ``args``) and must return a 1-D array-like of
+    length ``o_rows``.  Jacobians and Hessians are approximated automatically using
+    forward finite differences.
+
+    Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
+    cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+    the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
+
+    Parameters
+    ----------
+    i_rows : int
+        Number of input components (length of the input vector passed to ``func``).
+    o_rows : int
+        Number of output components (length of the array returned by ``func``).
+        Omitted for the scalar-output variant; fixed to 1.
+    func : callable
+        Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
+    jstepsize : float, optional
+        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    hstepsize : float, optional
+        Forward finite-difference step size for Hessian approximation (default 1e-4).
+    args : tuple, optional
+        Extra positional arguments forwarded to ``func`` after the input vector.
+    """
+
     def __init__(self, i_rows: int, o_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
         """
         Wrap a Python callable as a VectorFunction using finite-difference derivatives.
@@ -8990,10 +10724,13 @@ class PyVectorFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -9024,15 +10761,20 @@ class PyVectorFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -9046,7 +10788,8 @@ class PyVectorFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9071,15 +10814,18 @@ class PyVectorFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -9100,7 +10846,10 @@ class PyVectorFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -9130,7 +10879,10 @@ class PyVectorFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9160,7 +10912,10 @@ class PyVectorFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -9197,7 +10952,10 @@ class PyVectorFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -9215,13 +10973,67 @@ class PyVectorFunction:
         """
 
     @property
-    def thread_safe(self) -> bool: ...
+    def thread_safe(self) -> bool:
+        """
+        Whether this function is safe to call from multiple threads simultaneously.
+
+        Always ``False`` for ``PyVectorFunction`` — every evaluation acquires the Python
+        GIL, so parallel calls are serialized.  Attempting to set this to ``True`` raises
+        ``ValueError``.  Use ``NumbaVectorFunction`` for genuinely thread-safe evaluation.
+        """
 
     @thread_safe.setter
     def thread_safe(self, arg: bool, /) -> None: ...
 
 class PyScalarFunction:
-    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None: ...
+    """
+    VectorFunction defined by an arbitrary Python callable, with finite-difference derivatives.
+
+    Wrap any Python function ``f(x, *args)`` as a first-class VectorFunction that can
+    be used anywhere in the Tycho optimal-control and trajectory-design API.  The
+    callable receives a 1-D NumPy array ``x`` of length ``i_rows`` (plus any extra
+    positional arguments supplied via ``args``) and must return a 1-D array-like of
+    length ``o_rows``.  Jacobians and Hessians are approximated automatically using
+    forward finite differences.
+
+    Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
+    cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+    the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
+
+    Parameters
+    ----------
+    i_rows : int
+        Number of input components (length of the input vector passed to ``func``).
+    o_rows : int
+        Number of output components (length of the array returned by ``func``).
+        Omitted for the scalar-output variant; fixed to 1.
+    func : callable
+        Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
+    jstepsize : float, optional
+        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    hstepsize : float, optional
+        Forward finite-difference step size for Hessian approximation (default 1e-4).
+    args : tuple, optional
+        Extra positional arguments forwarded to ``func`` after the input vector.
+    """
+
+    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
+        """
+        Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
+
+        Parameters
+        ----------
+        i_rows : int
+            Number of input components (length of the input vector passed to ``func``).
+        func : callable
+            Python function ``f(x, *args) -> float`` implementing the scalar VectorFunction.
+        jstepsize : float, optional
+            Forward finite-difference step size for Jacobian approximation (default 1e-6).
+        hstepsize : float, optional
+            Forward finite-difference step size for Hessian approximation (default 1e-4).
+        args : tuple, optional
+            Extra positional arguments forwarded to ``func`` after the input vector.
+        """
 
     def input_rows(self) -> int:
         """
@@ -9274,10 +11086,13 @@ class PyScalarFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -9308,15 +11123,20 @@ class PyScalarFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -9330,7 +11150,8 @@ class PyScalarFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9355,15 +11176,18 @@ class PyScalarFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -9384,7 +11208,10 @@ class PyScalarFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -9414,7 +11241,10 @@ class PyScalarFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9444,7 +11274,10 @@ class PyScalarFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -9481,7 +11314,10 @@ class PyScalarFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -9513,23 +11349,62 @@ class PyScalarFunction:
         """
 
     @property
-    def thread_safe(self) -> bool: ...
+    def thread_safe(self) -> bool:
+        """
+        Whether this function is safe to call from multiple threads simultaneously.
+
+        Always ``False`` for ``PyVectorFunction`` — every evaluation acquires the Python
+        GIL, so parallel calls are serialized.  Attempting to set this to ``True`` raises
+        ``ValueError``.  Use ``NumbaVectorFunction`` for genuinely thread-safe evaluation.
+        """
 
     @thread_safe.setter
     def thread_safe(self, arg: bool, /) -> None: ...
 
 class NumbaVectorFunction:
+    """
+    VectorFunction defined by a Numba JIT-compiled C callback, with finite-difference derivatives.
+
+    Wrap a Numba ``@cfunc``-decorated (or any compatible C-ABI) function as a
+    first-class VectorFunction that can be used anywhere in the Tycho
+    optimal-control and trajectory-design API.  The function pointer must have
+    the C signature ``void f(double* x, double* fx, int i_rows, int o_rows)`` and
+    is passed as the integer address returned by, for example, the ``.address``
+    attribute of a Numba ``@cfunc`` object.
+
+    Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
+    ``NumbaVectorFunction`` instances can safely be evaluated in parallel across
+    PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+    Hessians are approximated automatically using forward finite differences.
+
+    Parameters
+    ----------
+    i_rows : int
+        Number of input components (length of the ``x`` buffer passed to the callback).
+    o_rows : int
+        Number of output components (length of the ``fx`` buffer filled by the callback).
+        Omitted for the scalar-output (``ORR == 1``) and fully-static variants.
+    func : int
+        Integer address of a C function with signature
+        ``void(double*, double*, int, int)``.
+    jstepsize : float, optional
+        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    hstepsize : float, optional
+        Forward finite-difference step size for Hessian approximation (default 1e-6).
+    """
+
     @overload
     def __init__(self, arg0: int, arg1: int, arg2: int, arg3: float, arg4: float, /) -> None:
         """
-        Wrap a Numba JIT-compiled function pointer as a thread-safe VectorFunction.
+        Wrap a Numba JIT-compiled function pointer as a VectorFunction.
 
         The function pointer must have the C signature
         ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
         integer holding its address (e.g. the ``.address`` attribute of a Numba
-        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
-        the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
-        Python GIL and is safe to call from multiple threads in parallel.
+        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite
+        differences with the given step sizes.  Unlike ``PyVectorFunction``, evaluation
+        does not hold the Python GIL and is safe to call from multiple threads in parallel
+        once ``thread_safe`` is set to ``True`` (default ``False``).
 
         Parameters
         ----------
@@ -9550,7 +11425,15 @@ class NumbaVectorFunction:
     def __init__(self, arg0: int, arg1: int, arg2: int, /) -> None: ...
 
     @property
-    def thread_safe(self) -> bool: ...
+    def thread_safe(self) -> bool:
+        """
+        Whether this function is safe to call from multiple threads simultaneously.
+
+        Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+        parallel without acquiring the Python GIL.  The underlying C callback must
+        itself be thread-safe (i.e., it must not use shared mutable state).
+        Defaults to ``False``.
+        """
 
     @thread_safe.setter
     def thread_safe(self, arg: bool, /) -> None: ...
@@ -9606,10 +11489,13 @@ class NumbaVectorFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -9640,15 +11526,20 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -9662,7 +11553,8 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9687,15 +11579,18 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -9716,7 +11611,10 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -9746,7 +11644,10 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -9776,7 +11677,10 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -9813,7 +11717,10 @@ class NumbaVectorFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -9831,17 +11738,49 @@ class NumbaVectorFunction:
         """
 
 class NumbaScalarFunction:
+    """
+    VectorFunction defined by a Numba JIT-compiled C callback, with finite-difference derivatives.
+
+    Wrap a Numba ``@cfunc``-decorated (or any compatible C-ABI) function as a
+    first-class VectorFunction that can be used anywhere in the Tycho
+    optimal-control and trajectory-design API.  The function pointer must have
+    the C signature ``void f(double* x, double* fx, int i_rows, int o_rows)`` and
+    is passed as the integer address returned by, for example, the ``.address``
+    attribute of a Numba ``@cfunc`` object.
+
+    Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
+    ``NumbaVectorFunction`` instances can safely be evaluated in parallel across
+    PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+    Hessians are approximated automatically using forward finite differences.
+
+    Parameters
+    ----------
+    i_rows : int
+        Number of input components (length of the ``x`` buffer passed to the callback).
+    o_rows : int
+        Number of output components (length of the ``fx`` buffer filled by the callback).
+        Omitted for the scalar-output (``ORR == 1``) and fully-static variants.
+    func : int
+        Integer address of a C function with signature
+        ``void(double*, double*, int, int)``.
+    jstepsize : float, optional
+        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    hstepsize : float, optional
+        Forward finite-difference step size for Hessian approximation (default 1e-6).
+    """
+
     @overload
     def __init__(self, arg0: int, arg1: int, arg2: int, arg3: float, arg4: float, /) -> None:
         """
-        Wrap a Numba JIT-compiled function pointer as a thread-safe VectorFunction.
+        Wrap a Numba JIT-compiled function pointer as a VectorFunction.
 
         The function pointer must have the C signature
         ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
         integer holding its address (e.g. the ``.address`` attribute of a Numba
-        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
-        the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
-        Python GIL and is safe to call from multiple threads in parallel.
+        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite
+        differences with the given step sizes.  Unlike ``PyVectorFunction``, evaluation
+        does not hold the Python GIL and is safe to call from multiple threads in parallel
+        once ``thread_safe`` is set to ``True`` (default ``False``).
 
         Parameters
         ----------
@@ -9868,7 +11807,15 @@ class NumbaScalarFunction:
     def __init__(self, arg0: int, arg1: int, /) -> None: ...
 
     @property
-    def thread_safe(self) -> bool: ...
+    def thread_safe(self) -> bool:
+        """
+        Whether this function is safe to call from multiple threads simultaneously.
+
+        Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+        parallel without acquiring the Python GIL.  The underlying C callback must
+        itself be thread-safe (i.e., it must not use shared mutable state).
+        Defaults to ``False``.
+        """
 
     @thread_safe.setter
     def thread_safe(self, arg: bool, /) -> None: ...
@@ -9924,10 +11871,13 @@ class NumbaScalarFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -9958,15 +11908,20 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -9980,7 +11935,8 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10005,15 +11961,18 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -10034,7 +11993,10 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -10064,7 +12026,10 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10094,7 +12059,10 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -10131,7 +12099,10 @@ class NumbaScalarFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -10163,6 +12134,15 @@ class NumbaScalarFunction:
         """
 
 class ConstantVector:
+    """
+    A VectorFunction that always returns the same fixed output vector.
+
+    Regardless of the input, ``Constant`` evaluates to a compile-time or
+    runtime-specified constant vector. Its Jacobian and Hessian are identically
+    zero. Construct one via ``Arguments.constant(v)`` or directly with
+    ``ConstantVector(input_rows, v)`` / ``ConstantScalar(input_rows, v)``.
+    """
+
     def __init__(self, arg0: int, arg1: numpy.ndarray, /) -> None:
         """
         Construct a constant VectorFunction with a given input size and fixed output vector.
@@ -10227,10 +12207,13 @@ class ConstantVector:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -10261,15 +12244,20 @@ class ConstantVector:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -10283,7 +12271,8 @@ class ConstantVector:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10308,15 +12297,18 @@ class ConstantVector:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -10337,7 +12329,10 @@ class ConstantVector:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -10367,7 +12362,10 @@ class ConstantVector:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10397,7 +12395,10 @@ class ConstantVector:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -10434,7 +12435,10 @@ class ConstantVector:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -10452,6 +12456,15 @@ class ConstantVector:
         """
 
 class ConstantScalar:
+    """
+    A VectorFunction that always returns the same fixed output vector.
+
+    Regardless of the input, ``Constant`` evaluates to a compile-time or
+    runtime-specified constant vector. Its Jacobian and Hessian are identically
+    zero. Construct one via ``Arguments.constant(v)`` or directly with
+    ``ConstantVector(input_rows, v)`` / ``ConstantScalar(input_rows, v)``.
+    """
+
     def __init__(self, arg0: int, arg1: numpy.ndarray, /) -> None:
         """
         Construct a constant VectorFunction with a given input size and fixed output vector.
@@ -10516,10 +12529,13 @@ class ConstantScalar:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -10550,15 +12566,20 @@ class ConstantScalar:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -10572,7 +12593,8 @@ class ConstantScalar:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10597,15 +12619,18 @@ class ConstantScalar:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -10626,7 +12651,10 @@ class ConstantScalar:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -10656,7 +12684,10 @@ class ConstantScalar:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10686,7 +12717,10 @@ class ConstantScalar:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -10723,7 +12757,10 @@ class ConstantScalar:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -10755,6 +12792,17 @@ class ConstantScalar:
         """
 
 class IOScaled:
+    """
+    An input/output scaling wrapper that non-dimensionalizes a VectorFunction.
+
+    ``IOScaled(func, input_scales, output_scales)`` multiplies each input
+    component by the corresponding entry of ``input_scales`` before passing it to
+    *func*, and multiplies each output component by the corresponding entry of
+    ``output_scales`` after evaluation. Jacobian, adjoint gradient, and adjoint
+    Hessian are all transformed consistently. Use this to rescale poorly-conditioned
+    dynamics or constraint functions before handing them to PSIOPT.
+    """
+
     def __init__(self, arg0: VectorFunction, arg1: numpy.ndarray, arg2: numpy.ndarray, /) -> None:
         """
         Construct an IO-scaled wrapper around a VectorFunction.
@@ -10837,10 +12885,13 @@ class IOScaled:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -10871,15 +12922,20 @@ class IOScaled:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -10893,7 +12949,8 @@ class IOScaled:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -10918,15 +12975,18 @@ class IOScaled:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -10947,7 +13007,10 @@ class IOScaled:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -10977,7 +13040,10 @@ class IOScaled:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -11007,7 +13073,10 @@ class IOScaled:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -11044,7 +13113,10 @@ class IOScaled:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> VectorFunction:
         """
@@ -11067,14 +13139,77 @@ class InterpType(enum.Enum):
     Linear = 1
 
 class InterpTable1D:
-    @overload
-    def __init__(self, ts: numpy.ndarray, vs: numpy.ndarray, kind: str = 'cubic') -> None: ...
+    """
+    Lookup-table VectorFunction that interpolates tabulated data over one independent variable.
+
+    ``InterpTable1D`` stores a set of sample points and associated values and evaluates
+    them at arbitrary query points via cubic (Hermite) or linear interpolation.  The
+    table can hold either a single scalar channel (``vlen == 1``) or multiple parallel
+    channels stacked as rows in a matrix.  Once constructed it can be used as a plain
+    callable for immediate numeric evaluation, or composed with a scalar VectorFunction
+    (or a scalar ``Segment``) via ``__call__`` to produce a new VectorFunction suitable
+    for use in an optimal-control problem.  Derivatives are evaluated analytically.
+
+    Available interpolation kinds: ``"cubic"`` (default, C1 Hermite spline) and
+    ``"linear"`` (piecewise linear, C0).
+    """
 
     @overload
-    def __init__(self, ts: numpy.ndarray, vs: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], axis: int = 0, kind: str = 'cubic') -> None: ...
+    def __init__(self, ts: numpy.ndarray, vs: numpy.ndarray, kind: str = 'cubic') -> None:
+        """
+        Construct a 1-D interpolation table from a 1-D value array.
+
+        Parameters
+        ----------
+        ts : array_like, shape (N,)
+            Strictly ascending sample coordinates.  Must have at least 5 elements.
+        vs : array_like, shape (N,)
+            Scalar values at each sample point.
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        """
 
     @overload
-    def __init__(self, vts: list[numpy.ndarray], tvar: int = -1, kind: str = 'cubic') -> None: ...
+    def __init__(self, ts: numpy.ndarray, vs: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], axis: int = 0, kind: str = 'cubic') -> None:
+        """
+        Construct a 1-D interpolation table from a 2-D value matrix.
+
+        Parameters
+        ----------
+        ts : array_like, shape (N,)
+            Strictly ascending sample coordinates.  Must have at least 5 elements.
+        vs : array_like, shape (N, C) or (C, N)
+            Multi-channel tabulated values.  ``axis`` selects which dimension
+            contains the sample axis (``0`` for rows, ``1`` for columns).
+        axis : int, optional
+            Axis of ``vs`` that corresponds to the sample coordinates.
+            ``0`` (default) means rows are samples; ``1`` means columns are samples.
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        """
+
+    @overload
+    def __init__(self, vts: list[numpy.ndarray], tvar: int = -1, kind: str = 'cubic') -> None:
+        """
+        Construct a 1-D interpolation table from a list of value-plus-time vectors.
+
+        Each element of ``vts`` is a vector whose components are the channel values
+        together with the independent coordinate at that sample.  The coordinate
+        component is identified by ``tvar`` and stripped before storing the channels.
+
+        Parameters
+        ----------
+        vts : list of array_like
+            List of length N; each element is a 1-D array of the same length.
+            One element per sample, with the independent coordinate embedded at
+            position ``tvar``.  All vectors must be the same length (>= 2).
+        tvar : int, optional
+            Index of the independent-coordinate component within each vector.
+            Negative values count from the end (default ``-1`` selects the last
+            component).
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        """
 
     @overload
     def __init__(self, ts: numpy.ndarray, vs: numpy.ndarray, kind: InterpType = InterpType.Cubic) -> None: ...
@@ -11086,135 +13221,864 @@ class InterpTable1D:
     def __init__(self, vts: list[numpy.ndarray], tvar: int = -1, kind: InterpType = InterpType.Cubic) -> None: ...
 
     @overload
-    def interp(self, arg: float, /) -> numpy.ndarray: ...
+    def interp(self, t: float) -> numpy.ndarray:
+        """
+        Evaluate the table at a single coordinate value.
+
+        Parameters
+        ----------
+        t : float
+            Query coordinate.  Must lie within the table's coordinate range.
+
+        Returns
+        -------
+        numpy.ndarray, shape (vlen,)
+            Interpolated channel values at ``t``.
+
+        Raises
+        ------
+        ValueError
+            If ``t`` is outside the table's coordinate range.
+        """
 
     @overload
-    def interp(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def interp(self, t_vals: numpy.ndarray) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Evaluate the table at multiple coordinate values.
+
+        Parameters
+        ----------
+        t_vals : array_like, shape (M,)
+            Query coordinates.  Each must lie within the table's coordinate range.
+
+        Returns
+        -------
+        numpy.ndarray, shape (vlen, M)
+            Interpolated channel values; column ``i`` corresponds to ``t_vals[i]``.
+        """
 
     @overload
-    def __call__(self, arg: float, /) -> numpy.ndarray: ...
+    def __call__(self, arg: float, /) -> numpy.ndarray:
+        """
+        Evaluate the table numerically — scalar coordinate.
+
+        Equivalent to :py:meth:`interp(t) <InterpTable1D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def __call__(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Evaluate the table numerically — vector of coordinates.
+
+        Equivalent to :py:meth:`interp(t_vals) <InterpTable1D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg: ScalarFunction, /) -> object: ...
+    def __call__(self, arg: ScalarFunction, /) -> object:
+        """
+        Compose the table with a scalar VectorFunction to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        t : VectorFunction (scalar output)
+            Scalar-output VectorFunction whose result is used as the query coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            If ``vlen == 1``: scalar VectorFunction evaluating the table at ``t(x)``.
+            If ``vlen > 1``: vector VectorFunction (output size = ``vlen``) evaluating
+            all channels at ``t(x)``.
+        """
 
     @overload
-    def __call__(self, arg: Element, /) -> object: ...
+    def __call__(self, arg: Element, /) -> object:
+        """
+        Compose the table with a scalar Segment to produce a new VectorFunction.
 
-    def interp_deriv1(self, arg: float, /) -> tuple[numpy.ndarray, numpy.ndarray]: ...
+        Parameters
+        ----------
+        t : Segment (scalar output)
+            Scalar-output ``Segment`` (a single element of a state/control vector)
+            whose value is used as the query coordinate.
 
-    def interp_deriv2(self, arg: float, /) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]: ...
+        Returns
+        -------
+        VectorFunction
+            Scalar or vector VectorFunction as described in the ``GenericFunction``
+            overload above, depending on ``vlen``.
+        """
 
-    def sf(self) -> ScalarFunction: ...
+    def interp_deriv1(self, t: float) -> tuple[numpy.ndarray, numpy.ndarray]:
+        """
+        Evaluate the table and its first derivative at a single coordinate.
 
-    def vf(self) -> VectorFunction: ...
+        Parameters
+        ----------
+        t : float
+            Query coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(v, dv_dt)`` where both arrays have shape ``(vlen,)``.
+            ``v`` is the interpolated value and ``dv_dt`` its derivative with respect
+            to ``t``.
+        """
+
+    def interp_deriv2(self, t: float) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]:
+        """
+        Evaluate the table, its first derivative, and its second derivative.
+
+        Parameters
+        ----------
+        t : float
+            Query coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
+            ``(v, dv_dt, d2v_dt2)`` where all arrays have shape ``(vlen,)``.
+            For linear interpolation the second derivative is not computed; its
+            contents are undefined — do not rely on them being zero.
+        """
+
+    def sf(self) -> ScalarFunction:
+        """
+        Return a scalar VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a single-element input (the coordinate)
+        and produces a single-element output (the interpolated value).  Raises
+        ``ValueError`` if the table stores more than one channel (``vlen > 1``);
+        use :py:meth:`vf` in that case.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar-in, scalar-out VectorFunction backed by this table.
+        """
+
+    def vf(self) -> VectorFunction:
+        """
+        Return a vector VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a single-element input (the coordinate)
+        and produces a ``vlen``-element output (all interpolated channels).  Works
+        for both scalar (``vlen == 1``) and multi-channel tables.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar-in, ``vlen``-out VectorFunction backed by this table.
+        """
 
 class InterpTable2D:
+    """
+    Lookup-table VectorFunction that interpolates tabulated scalar data over two independent variables.
+
+    ``InterpTable2D`` stores a 2-D grid of scalar samples and evaluates them at
+    arbitrary ``(x, y)`` query points via bicubic or bilinear interpolation.  The
+    output is always a single scalar.  Once constructed the table can be used as a
+    plain callable for immediate numeric evaluation, or composed with two scalar
+    VectorFunctions (or a 2-element ``Segment``) via ``__call__`` to produce a new
+    scalar VectorFunction suitable for use in an optimal-control problem.  Derivatives
+    are evaluated analytically.
+
+    Available interpolation kinds: ``"cubic"`` (default, bicubic) and ``"linear"``
+    (bilinear).
+    """
+
     @overload
-    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: str = 'cubic') -> None: ...
+    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: str = 'cubic') -> None:
+        """
+        Construct a 2-D interpolation table.
+
+        Parameters
+        ----------
+        xs : array_like, shape (Nx,)
+            Strictly ascending x-coordinates.  Must have at least 5 elements.
+            Correspond to **columns** of ``z``.
+        ys : array_like, shape (Ny,)
+            Strictly ascending y-coordinates.  Must have at least 5 elements.
+            Correspond to **rows** of ``z``.
+        z : array_like, shape (Ny, Nx)
+            Scalar values on the ``(xs, ys)`` grid in row-major order.
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        """
 
     @overload
     def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: InterpType = InterpType.Cubic) -> None: ...
 
     @overload
-    def interp(self, arg0: float, arg1: float, /) -> float: ...
+    def interp(self, x: float, y: float) -> float:
+        """
+        Evaluate the table at a single ``(x, y)`` point.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's x range.
+        y : float
+            Y-coordinate within the table's y range.
+
+        Returns
+        -------
+        float
+            Interpolated scalar value at ``(x, y)``.
+
+        Raises
+        ------
+        ValueError
+            If ``x`` or ``y`` is outside the table's range.
+        """
 
     @overload
-    def interp(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')]: ...
+    def interp(self, x_vals: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], y_vals: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')]:
+        """
+        Evaluate the table element-wise over two matrices of coordinates.
 
-    def interp_deriv1(self, arg0: float, arg1: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')]]: ...
+        Parameters
+        ----------
+        x_vals : array_like, shape (M, K)
+            X-coordinates of the query points.
+        y_vals : array_like, shape (M, K)
+            Y-coordinates of the query points; must have the same shape as ``x_vals``.
 
-    def interp_deriv2(self, arg0: float, arg1: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(2, 2), order='F')]]: ...
+        Returns
+        -------
+        numpy.ndarray, shape (M, K)
+            Interpolated scalar values at each ``(x_vals[i,j], y_vals[i,j])``.
+        """
 
-    def find_elem(self, arg0: numpy.ndarray, arg1: float, /) -> int: ...
+    def interp_deriv1(self, x: float, y: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')]]:
+        """
+        Evaluate the table and its first partial derivatives at ``(x, y)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray]
+            ``(z, dz_dxy)`` where ``dz_dxy`` is a length-2 array containing
+            ``[dz/dx, dz/dy]``.
+        """
+
+    def interp_deriv2(self, x: float, y: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(2), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(2, 2), order='F')]]:
+        """
+        Evaluate the table, first, and second partial derivatives at ``(x, y)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray, numpy.ndarray]
+            ``(z, dz_dxy, d2z_dxy2)`` where ``dz_dxy`` has shape ``(2,)`` containing
+            ``[dz/dx, dz/dy]``, and ``d2z_dxy2`` is a ``(2, 2)`` symmetric Hessian
+            matrix.  For linear interpolation the diagonal second derivatives
+            (d²z/dx², d²z/dy²) are zero, but the off-diagonal cross-derivative
+            (d²z/dxdy) is in general non-zero.
+        """
+
+    def find_elem(self, vals: numpy.ndarray, v: float) -> int:
+        """
+        Binary-search helper: find the raw interval index for ``v`` in ``vals``.
+
+        Parameters
+        ----------
+        vals : array_like, shape (N,)
+            Sorted coordinate vector to search (e.g. the internal ``xs_`` or ``ys_``
+            array).
+        v : float
+            Value to locate.
+
+        Returns
+        -------
+        int
+            Raw upper-bound-based index: ``upper_bound(vals, v) - vals.begin() - 1``.
+            This may be negative or greater than ``N-2`` when ``v`` is outside the
+            sample range; no clamping is applied here.  Clamping to ``[0, N-2]``
+            happens later in ``get_xyelems``.
+        """
 
     @overload
-    def __call__(self, arg0: float, arg1: float, /) -> float: ...
+    def __call__(self, arg0: float, arg1: float, /) -> float:
+        """
+        Evaluate the table numerically at a single ``(x, y)`` point.
+
+        Equivalent to :py:meth:`interp(x, y) <InterpTable2D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')]: ...
+    def __call__(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')]:
+        """
+        Evaluate the table numerically over matrices of coordinates.
+
+        Equivalent to :py:meth:`interp(x_vals, y_vals) <InterpTable2D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, /) -> ScalarFunction:
+        """
+        Compose the table with two scalar VectorFunctions to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : VectorFunction (scalar output)
+            VectorFunction providing the x-coordinate.
+        y : VectorFunction (scalar output)
+            VectorFunction providing the y-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``table(x(v), y(v))``.
+        """
 
     @overload
-    def __call__(self, arg0: Element, arg1: Element, /) -> ScalarFunction: ...
+    def __call__(self, arg0: Element, arg1: Element, /) -> ScalarFunction:
+        """
+        Compose the table with two scalar Segments to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : Segment (scalar output)
+            Scalar ``Segment`` providing the x-coordinate.
+        y : Segment (scalar output)
+            Scalar ``Segment`` providing the y-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at the two segment values.
+        """
 
     @overload
-    def __call__(self, arg: Segment2, /) -> ScalarFunction: ...
+    def __call__(self, arg: Segment2, /) -> ScalarFunction:
+        """
+        Compose the table with a 2-element Segment to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        xy : Segment (2-element output)
+            Two-element ``Segment`` whose first element is the x-coordinate and
+            second element is the y-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at ``(xy[0], xy[1])``.
+        """
 
     @overload
-    def __call__(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Compose the table with a 2-output VectorFunction to produce a new VectorFunction.
 
-    def sf(self) -> ScalarFunction: ...
+        Parameters
+        ----------
+        xy : VectorFunction (2-element output)
+            Two-output VectorFunction whose first output is the x-coordinate and
+            second output is the y-coordinate.
 
-    def vf(self) -> VectorFunction: ...
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at ``(xy(v)[0], xy(v)[1])``.
+        """
+
+    def sf(self) -> ScalarFunction:
+        """
+        Return a scalar VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a 2-element input ``[x, y]`` and returns
+        a single scalar output.  Equivalent to :py:meth:`vf` for 2-D tables.
+
+        Returns
+        -------
+        VectorFunction
+            2-in, 1-out VectorFunction backed by this table.
+        """
+
+    def vf(self) -> VectorFunction:
+        """
+        Return a vector VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a 2-element input ``[x, y]`` and returns
+        a single scalar output (output size is dynamic, but 1 at runtime).  Use
+        :py:meth:`sf` when a statically-typed 1-output ``GenericFunction<-1,1>``
+        is required.
+
+        Returns
+        -------
+        VectorFunction
+            2-in, dynamic-out VectorFunction backed by this table (1 output at runtime).
+        """
 
 class InterpTable3D:
+    """
+    Lookup-table VectorFunction that interpolates tabulated scalar data over three independent variables.
+
+    ``InterpTable3D`` stores a 3-D grid of scalar samples (a rank-3 tensor) and
+    evaluates them at arbitrary ``(x, y, z)`` query points via tricubic or trilinear
+    interpolation.  The output is always a single scalar.  Once constructed the table
+    can be used as a plain callable for immediate numeric evaluation, or composed with
+    three scalar VectorFunctions (or a 3-element ``Segment``) via ``__call__`` to
+    produce a new scalar VectorFunction suitable for use in an optimal-control problem.
+    Derivatives are evaluated analytically.
+
+    Available interpolation kinds: ``"cubic"`` (default, tricubic) and ``"linear"``
+    (trilinear).  The ``cache`` option pre-computes and stores the per-cell polynomial
+    coefficients to accelerate repeated evaluations at the cost of additional memory.
+    """
+
     @overload
-    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, fs: numpy.ndarray, kind: str = 'cubic', cache: bool = False) -> None: ...
+    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, fs: numpy.ndarray, kind: str = 'cubic', cache: bool = False) -> None:
+        """
+        Construct a 3-D interpolation table.
+
+        Parameters
+        ----------
+        xs : array_like, shape (Nx,)
+            Strictly ascending x-coordinates.  Must have at least 5 elements.
+            Correspond to the first dimension of ``fs``.
+        ys : array_like, shape (Ny,)
+            Strictly ascending y-coordinates.  Must have at least 5 elements.
+            Correspond to the second dimension of ``fs``.
+        zs : array_like, shape (Nz,)
+            Strictly ascending z-coordinates.  Must have at least 5 elements.
+            Correspond to the third dimension of ``fs``.
+        fs : array_like, shape (Nx, Ny, Nz)
+            Scalar values on the ``(xs, ys, zs)`` grid in NumPy meshgrid ``ij``
+            format (first index = x, second = y, third = z).
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        cache : bool, optional
+            If ``True``, pre-compute and cache all per-cell polynomial coefficients
+            at construction time.  Speeds up repeated queries; uses more memory.
+            Default is ``False``.
+        """
 
     @overload
     def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, fs: numpy.ndarray, kind: InterpType = InterpType.Cubic, cache: bool = False) -> None: ...
 
-    def interp(self, arg0: float, arg1: float, arg2: float, /) -> float: ...
+    def interp(self, x: float, y: float, z: float) -> float:
+        """
+        Evaluate the table at a single ``(x, y, z)`` point.
 
-    def interp_deriv1(self, arg0: float, arg1: float, arg2: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')]]: ...
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's x range.
+        y : float
+            Y-coordinate within the table's y range.
+        z : float
+            Z-coordinate within the table's z range.
 
-    def interp_deriv2(self, arg0: float, arg1: float, arg2: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(3, 3), order='F')]]: ...
+        Returns
+        -------
+        float
+            Interpolated scalar value at ``(x, y, z)``.
+
+        Raises
+        ------
+        ValueError
+            If any coordinate is outside the table's range.
+        """
+
+    def interp_deriv1(self, x: float, y: float, z: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')]]:
+        """
+        Evaluate the table and its first partial derivatives at ``(x, y, z)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+        z : float
+            Z-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray]
+            ``(f, df_dxyz)`` where ``df_dxyz`` has shape ``(3,)`` containing
+            ``[df/dx, df/dy, df/dz]``.
+        """
+
+    def interp_deriv2(self, x: float, y: float, z: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(3, 3), order='F')]]:
+        """
+        Evaluate the table, first, and second partial derivatives at ``(x, y, z)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+        z : float
+            Z-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray, numpy.ndarray]
+            ``(f, df_dxyz, d2f_dxyz2)`` where ``df_dxyz`` has shape ``(3,)`` and
+            ``d2f_dxyz2`` is a symmetric ``(3, 3)`` Hessian matrix.
+        """
 
     @overload
-    def __call__(self, arg0: float, arg1: float, arg2: float, /) -> float: ...
+    def __call__(self, arg0: float, arg1: float, arg2: float, /) -> float:
+        """
+        Evaluate the table numerically at a single ``(x, y, z)`` point.
+
+        Equivalent to :py:meth:`interp(x, y, z) <InterpTable3D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, arg2: ScalarFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, arg2: ScalarFunction, /) -> ScalarFunction:
+        """
+        Compose the table with three scalar VectorFunctions to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : VectorFunction (scalar output)
+            VectorFunction providing the x-coordinate.
+        y : VectorFunction (scalar output)
+            VectorFunction providing the y-coordinate.
+        z : VectorFunction (scalar output)
+            VectorFunction providing the z-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``table(x(v), y(v), z(v))``.
+        """
 
     @overload
-    def __call__(self, arg0: Element, arg1: Element, arg2: Element, /) -> ScalarFunction: ...
+    def __call__(self, arg0: Element, arg1: Element, arg2: Element, /) -> ScalarFunction:
+        """
+        Compose the table with three scalar Segments to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : Segment (scalar output)
+            Scalar ``Segment`` providing the x-coordinate.
+        y : Segment (scalar output)
+            Scalar ``Segment`` providing the y-coordinate.
+        z : Segment (scalar output)
+            Scalar ``Segment`` providing the z-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at the three segment values.
+        """
 
     @overload
-    def __call__(self, arg: Segment3, /) -> ScalarFunction: ...
+    def __call__(self, arg: Segment3, /) -> ScalarFunction:
+        """
+        Compose the table with a 3-element Segment to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        xyz : Segment (3-element output)
+            Three-element ``Segment`` whose components supply the ``(x, y, z)``
+            coordinates in order.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at ``(xyz[0], xyz[1], xyz[2])``.
+        """
 
     @overload
-    def __call__(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Compose the table with a 3-output VectorFunction to produce a new VectorFunction.
 
-    def sf(self) -> ScalarFunction: ...
+        Parameters
+        ----------
+        xyz : VectorFunction (3-element output)
+            Three-output VectorFunction whose outputs supply the ``(x, y, z)``
+            coordinates in order.
 
-    def vf(self) -> VectorFunction: ...
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at ``(xyz(v)[0], xyz(v)[1], xyz(v)[2])``.
+        """
+
+    def sf(self) -> ScalarFunction:
+        """
+        Return a scalar VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a 3-element input ``[x, y, z]`` and returns
+        a single scalar output.
+
+        Returns
+        -------
+        VectorFunction
+            3-in, 1-out VectorFunction backed by this table.
+        """
+
+    def vf(self) -> VectorFunction:
+        """
+        Return a vector VectorFunction that wraps this table (output size 1).
+
+        The returned VectorFunction takes a 3-element input ``[x, y, z]`` and returns
+        a single scalar output (output size 1).
+
+        Returns
+        -------
+        VectorFunction
+            3-in, 1-out VectorFunction backed by this table.
+        """
 
 class InterpTable4D:
+    """
+    Lookup-table VectorFunction that interpolates tabulated scalar data over four independent variables.
+
+    ``InterpTable4D`` stores a 4-D grid of scalar samples (a rank-4 tensor) and
+    evaluates them at arbitrary ``(x, y, z, w)`` query points via quadricubic or
+    quadrilinear interpolation.  The output is always a single scalar.  Once
+    constructed the table can be used as a plain callable for immediate numeric
+    evaluation, or composed with four scalar VectorFunctions (or a 4-element
+    ``Segment``) via ``__call__`` to produce a new scalar VectorFunction suitable
+    for use in an optimal-control problem.  Derivatives are evaluated analytically.
+
+    Available interpolation kinds: ``"cubic"`` (default, quadricubic) and ``"linear"``
+    (quadrilinear).  The ``cache`` option pre-computes and stores the per-cell
+    polynomial coefficients to accelerate repeated evaluations at the cost of
+    additional memory.
+    """
+
     @overload
-    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, ws: numpy.ndarray, fs: numpy.ndarray, kind: str = 'cubic', cache: bool = False) -> None: ...
+    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, ws: numpy.ndarray, fs: numpy.ndarray, kind: str = 'cubic', cache: bool = False) -> None:
+        """
+        Construct a 4-D interpolation table.
+
+        Parameters
+        ----------
+        xs : array_like, shape (Nx,)
+            Strictly ascending x-coordinates.  Must have at least 5 elements.
+            Correspond to the first dimension of ``fs``.
+        ys : array_like, shape (Ny,)
+            Strictly ascending y-coordinates.  Must have at least 5 elements.
+            Correspond to the second dimension of ``fs``.
+        zs : array_like, shape (Nz,)
+            Strictly ascending z-coordinates.  Must have at least 5 elements.
+            Correspond to the third dimension of ``fs``.
+        ws : array_like, shape (Nw,)
+            Strictly ascending w-coordinates.  Must have at least 5 elements.
+            Correspond to the fourth dimension of ``fs``.
+        fs : array_like, shape (Nx, Ny, Nz, Nw)
+            Scalar values on the ``(xs, ys, zs, ws)`` grid in NumPy meshgrid ``ij``
+            format (first index = x, second = y, third = z, fourth = w).
+        kind : str, optional
+            Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        cache : bool, optional
+            If ``True``, pre-compute and cache all per-cell polynomial coefficients
+            at construction time.  Speeds up repeated queries; uses more memory.
+            Default is ``False``.
+        """
 
     @overload
     def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, zs: numpy.ndarray, ws: numpy.ndarray, fs: numpy.ndarray, kind: InterpType = InterpType.Cubic, cache: bool = False) -> None: ...
 
-    def interp(self, arg0: float, arg1: float, arg2: float, arg3: float, /) -> float: ...
+    def interp(self, x: float, y: float, z: float, w: float) -> float:
+        """
+        Evaluate the table at a single ``(x, y, z, w)`` point.
 
-    def interp_deriv1(self, arg0: float, arg1: float, arg2: float, arg3: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(4), order='C')]]: ...
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's x range.
+        y : float
+            Y-coordinate within the table's y range.
+        z : float
+            Z-coordinate within the table's z range.
+        w : float
+            W-coordinate within the table's w range.
 
-    def interp_deriv2(self, arg0: float, arg1: float, arg2: float, arg3: float, /) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(4), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')]]: ...
+        Returns
+        -------
+        float
+            Interpolated scalar value at ``(x, y, z, w)``.
+
+        Raises
+        ------
+        ValueError
+            If any coordinate is outside the table's range.
+        """
+
+    def interp_deriv1(self, x: float, y: float, z: float, w: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(4), order='C')]]:
+        """
+        Evaluate the table and its first partial derivatives at ``(x, y, z, w)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+        z : float
+            Z-coordinate within the table's range.
+        w : float
+            W-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray]
+            ``(f, df_dxyzw)`` where ``df_dxyzw`` has shape ``(4,)`` containing
+            ``[df/dx, df/dy, df/dz, df/dw]``.
+        """
+
+    def interp_deriv2(self, x: float, y: float, z: float, w: float) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(4), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')]]:
+        """
+        Evaluate the table, first, and second partial derivatives at ``(x, y, z, w)``.
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate within the table's range.
+        y : float
+            Y-coordinate within the table's range.
+        z : float
+            Z-coordinate within the table's range.
+        w : float
+            W-coordinate within the table's range.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray, numpy.ndarray]
+            ``(f, df_dxyzw, d2f_dxyzw2)`` where ``df_dxyzw`` has shape ``(4,)``
+            and ``d2f_dxyzw2`` is a symmetric ``(4, 4)`` Hessian matrix.
+        """
 
     @overload
-    def __call__(self, arg0: float, arg1: float, arg2: float, arg3: float, /) -> float: ...
+    def __call__(self, arg0: float, arg1: float, arg2: float, arg3: float, /) -> float:
+        """
+        Evaluate the table numerically at a single ``(x, y, z, w)`` point.
+
+        Equivalent to :py:meth:`interp(x, y, z, w) <InterpTable4D.interp>`.
+        """
 
     @overload
-    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, arg2: ScalarFunction, arg3: ScalarFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, arg2: ScalarFunction, arg3: ScalarFunction, /) -> ScalarFunction:
+        """
+        Compose the table with four scalar VectorFunctions to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : VectorFunction (scalar output)
+            VectorFunction providing the x-coordinate.
+        y : VectorFunction (scalar output)
+            VectorFunction providing the y-coordinate.
+        z : VectorFunction (scalar output)
+            VectorFunction providing the z-coordinate.
+        w : VectorFunction (scalar output)
+            VectorFunction providing the w-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating ``table(x(v), y(v), z(v), w(v))``.
+        """
 
     @overload
-    def __call__(self, arg0: Element, arg1: Element, arg2: Element, arg3: Element, /) -> ScalarFunction: ...
+    def __call__(self, arg0: Element, arg1: Element, arg2: Element, arg3: Element, /) -> ScalarFunction:
+        """
+        Compose the table with four scalar Segments to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        x : Segment (scalar output)
+            Scalar ``Segment`` providing the x-coordinate.
+        y : Segment (scalar output)
+            Scalar ``Segment`` providing the y-coordinate.
+        z : Segment (scalar output)
+            Scalar ``Segment`` providing the z-coordinate.
+        w : Segment (scalar output)
+            Scalar ``Segment`` providing the w-coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at the four segment values.
+        """
 
     @overload
-    def __call__(self, arg: Segment, /) -> ScalarFunction: ...
+    def __call__(self, arg: Segment, /) -> ScalarFunction:
+        """
+        Compose the table with a dynamically-sized Segment to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        xyzw : Segment (dynamic size)
+            A ``Segment`` whose first four components supply the ``(x, y, z, w)``
+            coordinates in order.  The size is not checked at compile time; the
+            caller is responsible for ensuring at least four components are present.
+
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at
+            ``(xyzw[0], xyzw[1], xyzw[2], xyzw[3])``.
+        """
 
     @overload
-    def __call__(self, arg: VectorFunction, /) -> ScalarFunction: ...
+    def __call__(self, arg: VectorFunction, /) -> ScalarFunction:
+        """
+        Compose the table with a 4-output VectorFunction to produce a new VectorFunction.
 
-    def sf(self) -> ScalarFunction: ...
+        Parameters
+        ----------
+        xyzw : VectorFunction (4-element output)
+            Four-output VectorFunction whose outputs supply the ``(x, y, z, w)``
+            coordinates in order.
 
-    def vf(self) -> VectorFunction: ...
+        Returns
+        -------
+        VectorFunction
+            Scalar VectorFunction evaluating the table at
+            ``(xyzw(v)[0], xyzw(v)[1], xyzw(v)[2], xyzw(v)[3])``.
+        """
+
+    def sf(self) -> ScalarFunction:
+        """
+        Return a scalar VectorFunction that wraps this table.
+
+        The returned VectorFunction takes a 4-element input ``[x, y, z, w]`` and
+        returns a single scalar output.
+
+        Returns
+        -------
+        VectorFunction
+            4-in, 1-out VectorFunction backed by this table.
+        """
+
+    def vf(self) -> VectorFunction:
+        """
+        Return a vector VectorFunction that wraps this table (output size 1).
+
+        The returned VectorFunction takes a 4-element input ``[x, y, z, w]`` and
+        returns a single scalar output (output size 1).
+
+        Returns
+        -------
+        VectorFunction
+            4-in, 1-out VectorFunction backed by this table.
+        """
 
 def scalar_dynamic_stack_test(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     """

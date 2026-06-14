@@ -69,8 +69,26 @@ struct FunctionRegistry {
                               "SubModule Containing Optimal Control ODEs, Phases, and Utilities")),
           solmod(m.def_submodule("solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
           extmod(m.def_submodule("extensions", "User Defined Extensions")),
-          vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction")),
-          sfuncx(nb::class_<ScalarFunctionalX>(this->vfmod, "ScalarFunction")) {}
+          vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction",
+              R"doc(The central symbolic, differentiable vector-to-vector map in Tycho.
+
+A ``VectorFunction`` represents a differentiable mapping
+``f : R^n -> R^m`` that can be evaluated, differentiated (Jacobian,
+adjoint gradient, adjoint Hessian), and composed with other
+VectorFunctions to build dynamics, constraints, and objectives for
+optimal control problems. Concrete expressions are constructed by
+indexing and operating on ``Arguments`` objects; the result is
+implicitly convertible to ``VectorFunction`` for use in phase APIs.
+)doc")),
+          sfuncx(nb::class_<ScalarFunctionalX>(this->vfmod, "ScalarFunction",
+              R"doc(A VectorFunction specialization whose output is a single scalar value.
+
+``ScalarFunction`` is a ``VectorFunction`` with exactly one output row
+(``m == 1``). All VectorFunction operations are available; in addition a
+``ScalarFunction`` can be used directly wherever a scalar objective or
+scalar constraint value is expected. Any ``ScalarFunction`` is implicitly
+convertible to ``VectorFunction``.
+)doc")) {}
 
     nb::module_ &getVectorFunctionsModule() { return this->vfmod; }
     nb::module_ &getOptimalControlModule() { return this->ocmod; }

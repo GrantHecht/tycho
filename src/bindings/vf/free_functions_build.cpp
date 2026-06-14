@@ -437,7 +437,12 @@ VectorFunction
         },
         R"doc(Raise a scalar VectorFunction to a real power.
 
-Equivalent to the method form ``fun.pow(power)`` and the ``**`` operator.
+Equivalent to the method form ``fun.pow(power)``.  Note that the ``**``
+operator may dispatch to a different expression for certain integer exponents:
+for example, ``f ** 2`` uses the ``.square()`` path (a ``CwiseSquare``
+expression) rather than ``CwisePow``, so the symbolic expression trees produced
+by ``vf.pow(f, 2)`` and ``f ** 2`` are not identical, even though they evaluate
+to the same values and derivatives.
 
 Parameters
 ----------
@@ -450,7 +455,8 @@ power : float
 Returns
 -------
 VectorFunction
-    A new scalar VectorFunction evaluating ``fun(x) ** power``.
+    A new scalar VectorFunction evaluating ``fun(x) ** power`` via the
+    ``CwisePow`` expression.
 )doc");
 
     m.def(
@@ -618,15 +624,16 @@ Examples
             auto f1 = FunctionCrossProduct<SEG3, SEG3>(seg1, seg2);
             return Gen(FunctionCrossProduct<decltype(f1), SEG3>(f1, seg3));
         },
-        R"doc(Double (iterated) cross product of three 3-vector quantities.
+        R"doc(Double (iterated) cross product of three 3-element Segment VectorFunctions.
 
-Computes ``(a x b) x c``, where each argument must produce a 3-element output
-vector.
+Computes ``(a x b) x c``.  This overload requires all three arguments to be
+fixed 3-element ``Segment`` types (``Segment<-1, 3, -1>``); for general
+VectorFunctions use the overload that accepts plain ``VectorFunction`` arguments.
 
 Parameters
 ----------
-a, b, c : VectorFunction
-    Three 3-vector-valued VectorFunctions.
+a, b, c : Segment
+    Three fixed 3-element segment VectorFunctions (output dimension 3).
 
 Returns
 -------
@@ -930,8 +937,41 @@ void tycho::FreeFunctionsBuild(FunctionRegistry &reg, nb::module_ &m) {
 
     /////////////////////////////////////////////////////////////////////
 
-    m.def("normalize", [](const VectorX<double> &x) { return x.normalized(); });
-    m.def("normalized", [](const VectorX<double> &x) { return x.normalized(); });
+    m.def(
+        "normalize", [](const VectorX<double> &x) { return x.normalized(); },
+        R"doc(Normalize a constant vector to unit length.
+
+Divides the input array by its Euclidean (L2) norm. This overload acts on a
+plain NumPy array rather than a VectorFunction; for the VectorFunction variant
+see the overloads that accept a VectorFunction argument.
+
+Parameters
+----------
+x : array_like, shape (n,)
+    Non-zero vector to normalize.
+
+Returns
+-------
+numpy.ndarray, shape (n,)
+    Unit vector in the direction of *x*, i.e. ``x / ||x||_2``.
+)doc");
+    m.def(
+        "normalized", [](const VectorX<double> &x) { return x.normalized(); },
+        R"doc(Normalize a constant vector to unit length.
+
+Alias for :func:`normalize` when given a plain array. Divides the input by
+its Euclidean (L2) norm.
+
+Parameters
+----------
+x : array_like, shape (n,)
+    Non-zero vector to normalize.
+
+Returns
+-------
+numpy.ndarray, shape (n,)
+    Unit vector in the direction of *x*, i.e. ``x / ||x||_2``.
+)doc");
 
     /*
      These methods are already bound member functions for all valid asset vector functions in their

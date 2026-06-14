@@ -37,6 +37,13 @@ template <class Derived, class Func1, class Func2, bool DoDifference> struct Two
 template <class Derived, class Func1, class Func2, class... Funcs> struct MultiFunctionSum_Impl;
 
 /// @brief Elementwise sum of two functions: `f(x) = f1(x) + f2(x)`.
+///
+/// Both functions must have the same input and output row counts; the result
+/// @f$ f(x) = f_1(x) + f_2(x) @f$ is computed by evaluating each addend
+/// independently and accumulating their outputs and Jacobians.
+/// Produced by the `+` operator on a VectorFunction pair or by @ref make_sum /
+/// @ref sum.
+///
 /// @tparam Func1  First addend.
 /// @tparam Func2  Second addend.
 /// @ingroup vf
@@ -49,6 +56,12 @@ struct TwoFunctionSum : TwoFunctionSum_Impl<TwoFunctionSum<Func1, Func2>, Func1,
 };
 
 /// @brief Elementwise difference of two functions: `f(x) = f1(x) - f2(x)`.
+///
+/// Computes @f$ f(x) = f_1(x) - f_2(x) @f$ with the same I/O size constraints
+/// as @ref TwoFunctionSum; the subtrahend's Jacobian and adjoint quantities are
+/// accumulated with a minus sign. Produced by the `-` operator on a
+/// VectorFunction pair.
+///
 /// @tparam Func1  Minuend.
 /// @tparam Func2  Subtrahend.
 /// @ingroup vf
@@ -62,6 +75,12 @@ struct FunctionDifference
 };
 
 /// @brief Elementwise sum of three or more functions: `f(x) = f1(x) + f2(x) + ...`.
+///
+/// Variadic extension of @ref TwoFunctionSum; all addends must share the same
+/// input and output sizes.  Each addend's Jacobian is accumulated in turn using
+/// domain-aware zeroing to avoid redundant clears.  Produced by @ref make_sum or
+/// @ref sum when called with three or more arguments.
+///
 /// @tparam Func1  First addend.
 /// @tparam Func2  Second addend.
 /// @tparam Funcs  Remaining addends.
