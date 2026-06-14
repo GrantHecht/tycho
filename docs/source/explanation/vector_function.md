@@ -289,7 +289,7 @@ over computing them separately.
 ### Finite differences (`FDiffFwd`, `FDiffCentArray`)
 
 `FDiffFwd` approximates $\partial f / \partial x_i \approx (f(x + h e_i) -
-f(x))/h`; `FDiffCentArray` uses the higher-accuracy central stencil $(f(x + h
+f(x))/h$; `FDiffCentArray` uses the higher-accuracy central stencil $(f(x + h
 e_i) - f(x - h e_i))/(2h)$ at the cost of more evaluations. These modes need only
 `compute_impl` and work for *any* function — including ones that call external
 libraries whose derivatives you cannot obtain otherwise. They trade accuracy for
