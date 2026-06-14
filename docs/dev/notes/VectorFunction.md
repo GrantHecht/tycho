@@ -109,7 +109,8 @@ VectorFunctions must be callable with **multiple scalar types** — `double` and
 
 ```cpp
 template <class InType, class OutType>
-inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const;
+inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                         const Eigen::MatrixBase<OutType> &fx_) const;
 ```
 
 Virtual functions cannot be templates in C++. So the two main architectural options are:
@@ -159,7 +160,7 @@ C++23 introduces "deducing this" (explicit object parameters, [P0847](https://wg
 template <class Derived, int IR, int OR>
 struct ComputableBase : CRTPBase<Derived> {
     template <class InType, class OutType>
-    void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
+    void compute(const Eigen::MatrixBase<InType> &x, const Eigen::MatrixBase<OutType> &fx_) {
         if constexpr (!Derived::is_vectorizable) { /* ... */ }
         this->derived().compute_impl(x, fx_);
     }
@@ -169,8 +170,8 @@ struct ComputableBase : CRTPBase<Derived> {
 template <int IR, int OR>
 struct ComputableBase {
     template <class Self, class InType, class OutType>
-    void compute(this Self const& self, ConstVectorBaseRef<InType> x,
-                 ConstVectorBaseRef<OutType> fx_) {
+    void compute(this Self const& self, const Eigen::MatrixBase<InType> &x,
+                 const Eigen::MatrixBase<OutType> &fx_) {
         if constexpr (!Self::is_vectorizable) { /* ... */ }
         self.compute_impl(x, fx_);
     }
@@ -202,7 +203,7 @@ Concrete types would simplify from `VectorFunction<Norm<IR>, IR, 1>` to `VectorF
       return SEGOP::make_nested(Segment<OR,SZ,ST>(...), self);
   }
   ```
-- The **`DENSE_FUNCTION_BASE_TYPES` macro** propagates type aliases using `Derived` and would need rewriting (though it would get simpler).
+- The **`VF_TYPE_ALIASES` macro** propagates type aliases using `Derived` and would need rewriting (though it would get simpler).
 
 **Summary of pros and cons:**
 
@@ -296,14 +297,14 @@ Here's a complete C++ VectorFunction that computes `f(x) = [x_0^2, x_1^2, ..., x
 
 ```cpp
 #include <tycho/tycho.h>
-
-namespace tycho {
+using namespace tycho;
+using namespace tycho::vf;
 
 // Square each element of the input vector
 template <int IR>
 struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     using Base = VectorFunction<CwiseSquareExample<IR>, IR, IR>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     // Enable batch evaluation with DefaultSuperScalar
     static const bool is_vectorizable = true;
@@ -313,22 +314,22 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
 
     // --- Required: compute f(x) ---
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.array().square();
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             const Eigen::MatrixBase<OutType> &fx_) const {
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        fx = x.array().square().matrix();
     }
 
     // --- Analytic Jacobian: diag(2*x) ---
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x,
-                                      ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
+                                      const Eigen::MatrixBase<OutType> &fx_,
+                                      const Eigen::MatrixBase<JacType> &jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
 
-        fx = x.array().square();
+        fx = x.array().square().matrix();
         jx.diagonal() = x * Scalar(2.0);
     }
 
@@ -336,25 +337,23 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     template <class InType, class OutType, class JacType,
               class AdjGradType, class AdjHessType, class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_,
-        ConstVectorBaseRef<AdjVarType> adjvars) const {
+        const Eigen::MatrixBase<InType> &x, const Eigen::MatrixBase<OutType> &fx_,
+        const Eigen::MatrixBase<JacType> &jx_, const Eigen::MatrixBase<AdjGradType> &adjgrad_,
+        const Eigen::MatrixBase<AdjHessType> &adjhess_,
+        const Eigen::MatrixBase<AdjVarType> &adjvars) const {
 
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
+        Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
+        Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        fx = x.array().square();
+        fx = x.array().square().matrix();
         jx.diagonal() = x * Scalar(2.0);
         adjgrad = jx.transpose() * adjvars;
         adjhess.diagonal() = adjvars * Scalar(2.0);
     }
 };
-
-} // namespace tycho
 ```
 
 ### Using EnzymeAD Instead of Manual Derivatives
@@ -367,7 +366,7 @@ template <int IR>
 struct CwiseSquareEnzyme : VectorFunction<CwiseSquareEnzyme<IR>, IR, IR,
                                           EnzymeAD, EnzymeAD> {
     using Base = VectorFunction<CwiseSquareEnzyme<IR>, IR, IR, EnzymeAD, EnzymeAD>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     static const bool is_vectorizable = true;
 
@@ -377,10 +376,10 @@ struct CwiseSquareEnzyme : VectorFunction<CwiseSquareEnzyme<IR>, IR, IR,
     // Only compute_impl is needed -- Enzyme generates Jacobians and Hessians
     // at compile time via LLVM IR differentiation (no dual numbers required).
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.array().square();
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             const Eigen::MatrixBase<OutType> &fx_) const {
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        fx = x.array().square().matrix();
     }
 };
 ```
@@ -514,8 +513,8 @@ differentiate. If a `compute_impl` body marked `is_vectorizable = true` calls
 #include <tycho/math.h>
 
 template <class InType, class OutType>
-inline void compute_impl(ConstVectorBaseRef<InType> x,
-                         ConstVectorBaseRef<OutType> fx_) const {
+inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                         const Eigen::MatrixBase<OutType> &fx_) const {
     using tycho::math::cos;   // ADL hits both double (-> std::cos) and
     using tycho::math::sin;   // Eigen::Array<double, W, 1> (-> per-lane libm).
     // ...
