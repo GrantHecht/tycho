@@ -30,7 +30,35 @@ namespace tycho {
 template <class Func> struct TychoBind<IOScaled<Func>> {
     static void build(nb::module_ &m, const char *name) {
         auto obj = nb::class_<IOScaled<Func>>(m, name);
-        obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>());
+        obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>(),
+                R"doc(Construct an IO-scaled wrapper around a VectorFunction.
+
+Each input component is multiplied by the corresponding entry of ``input_scales``
+before being passed to the wrapped function, and each output component is
+multiplied by the corresponding entry of ``output_scales`` after evaluation.
+Jacobian rows are scaled by ``output_scales`` and columns by ``input_scales``;
+the adjoint gradient and Hessian are transformed consistently.
+
+Parameters
+----------
+func : VectorFunction
+    The function whose input and output are to be scaled.
+input_scales : array_like, shape (input_rows,)
+    Per-component scale factors applied to the input before evaluation.
+output_scales : array_like, shape (output_rows,)
+    Per-component scale factors applied to the output after evaluation.
+
+Returns
+-------
+IOScaled
+    Wrapped function with scaled input and output.
+
+Notes
+-----
+The scale-vector lengths are not validated against ``func``'s dimensions;
+supplying ``input_scales`` or ``output_scales`` of the wrong length leads to
+undefined behavior at evaluation time.
+)doc");
         bind::DenseBaseBuild<IOScaled<Func>>(obj);
     }
 };
@@ -113,9 +141,43 @@ void tycho::vector_functions_build(FunctionRegistry &reg, nb::module_ &m) {
 
     mod.def("scalar_dynamic_stack_test", [](const std::vector<GenericFunction<-1, 1>> &funcs) {
         return GenericFunction<-1, -1>(DynamicStackedOutputs<GenericFunction<-1, 1>>{funcs});
-    });
+    },
+        R"doc(Internal testing helper: stack a list of scalar functions into a VectorFunction.
+
+Constructs a ``DynamicStackedOutputs`` from a homogeneous list of scalar-output
+(1-output-row) VectorFunctions and type-erases the result to ``VectorFunction``.
+This function exists to exercise the dynamic-stacking code path from Python tests;
+it is not part of the public API.
+
+Parameters
+----------
+funcs : list[ScalarFunction]
+    Non-empty list of scalar-output VectorFunctions sharing the same input size.
+
+Returns
+-------
+VectorFunction
+    A VectorFunction whose output is the vertical concatenation of all inputs.
+)doc");
 
     mod.def("dynamic_stack_test", [](const std::vector<GenericFunction<-1, -1>> &funcs) {
         return GenericFunction<-1, -1>(DynamicStackedOutputs<GenericFunction<-1, -1>>{funcs});
-    });
+    },
+        R"doc(Internal testing helper: stack a list of VectorFunctions into a VectorFunction.
+
+Constructs a ``DynamicStackedOutputs`` from a homogeneous list of multi-output
+VectorFunctions and type-erases the result to ``VectorFunction``.  This function
+exists to exercise the dynamic-stacking code path from Python tests; it is not
+part of the public API.
+
+Parameters
+----------
+funcs : list[VectorFunction]
+    Non-empty list of VectorFunctions sharing the same input size.
+
+Returns
+-------
+VectorFunction
+    A VectorFunction whose output is the vertical concatenation of all inputs.
+)doc");
 }

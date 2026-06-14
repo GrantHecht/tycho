@@ -1,11 +1,17 @@
+"""Contains miscilanaeous utilities"""
+
 from typing import overload
 
 
 def get_core_count() -> int: ...
 
-def set_num_threads(n: int) -> None: ...
+def set_num_threads(n: int) -> None:
+    """
+    Set the number of threads for parallel work. n=1 for single-threaded mode, n>1 to use n threads.
+    """
 
-def get_num_threads() -> int: ...
+def get_num_threads() -> int:
+    """Get the current thread count setting. 1 = single-threaded mode."""
 
 class BumpAllocator:
     @overload

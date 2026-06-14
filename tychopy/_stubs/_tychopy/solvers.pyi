@@ -1,3 +1,5 @@
+"""SubModule Containing PSIOPT,NLP, and Solver Flags"""
+
 from collections.abc import Callable, Sequence
 import enum
 from typing import Callable, overload

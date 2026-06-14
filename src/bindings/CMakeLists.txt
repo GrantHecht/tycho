@@ -180,13 +180,16 @@ function(tycho_add_stub name)
 endfunction()
 
 # Top-level _tychopy.pyi
+# Note: INCLUDE_PRIVATE and EXCLUDE_DOCSTRINGS are boolean *flags* in
+# nanobind_add_stub (nanobind-config.cmake) — passing them at all turns them
+# ON regardless of any trailing TRUE/FALSE token. We want nanobind's defaults
+# (private members excluded, docstrings included so they reach the .pyi for
+# IDE hover), so neither flag is passed.
 tycho_add_stub(_tychopy_stub
     MODULE _tychopy
     OUTPUT "${_TYCHOPY_STUB_DIR}/_tychopy.pyi"
     PYTHON_PATH "$<TARGET_FILE_DIR:_tychopy>"
     DEPENDS _tychopy
-    INCLUDE_PRIVATE FALSE
-    EXCLUDE_DOCSTRINGS FALSE
 )
 
 # rk_coeffs_bind populates _tychopy.optimal_control (no separate
@@ -199,8 +202,6 @@ foreach(_submod IN LISTS _TYCHOPY_SUBMODULES)
         OUTPUT "${_TYCHOPY_STUB_DIR}/_tychopy/${_submod}.pyi"
         PYTHON_PATH "$<TARGET_FILE_DIR:_tychopy>"
         DEPENDS _tychopy
-        INCLUDE_PRIVATE FALSE
-        EXCLUDE_DOCSTRINGS FALSE
     )
 endforeach()
 

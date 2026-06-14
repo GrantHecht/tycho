@@ -1,3 +1,5 @@
+"""Tycho"""
+
 from . import (
     astro as astro,
     extensions as extensions,
